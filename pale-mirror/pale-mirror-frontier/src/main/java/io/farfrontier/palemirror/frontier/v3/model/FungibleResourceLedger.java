@@ -45,12 +45,37 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
     public FungibleResourceLedger reserve(ClaimAllocation claim, SubjectId accountId) {
         Objects.requireNonNull(claim, "claim allocation"); CustodyAccount account = requireAccount(accountId);
         requireNoPhysicalBinding(account.id(), "reserve");
-        if (claims.containsKey(claim.id()) || account.claimQuantities().containsKey(claim.id()) || availableFor(account, claim) < claim.quantity()) {
-            throw new IllegalArgumentException("claim allocation is not backed by one exact account balance");
+        Reservation reservation = reserve(account, claim);
+        return withAccount(reservation.account(), reservation.claims(), bindings);
+    }
+
+    /**
+     * Reserves a portion already held under one live physical authority without dropping it to
+     * COLD custody.  The physical stacks do not change; their retained binding allocations are
+     * deterministically extended at the same authority epoch.
+     */
+    public FungibleResourceLedger reserveBound(ClaimAllocation claim, SubjectId accountId, long authorityEpoch) {
+        Objects.requireNonNull(claim, "claim allocation"); CustodyAccount account = requireAccount(accountId);
+        if (authorityEpoch < 1) throw new IllegalArgumentException("bound claim authority epoch must be positive");
+        List<PhysicalStackBinding> current = bindings.values().stream().filter(binding -> binding.accountId().equals(account.id())).toList();
+        if (current.isEmpty() || current.stream().anyMatch(binding -> binding.authorityEpoch() != authorityEpoch)) {
+            throw new IllegalArgumentException("bound claim does not own the current physical custody");
         }
-        Map<SubjectId, ClaimAllocation> nextClaims = new HashMap<>(claims); nextClaims.put(claim.id(), claim);
-        Map<SubjectId, Integer> quantities = new HashMap<>(account.claimQuantities()); quantities.put(claim.id(), claim.quantity());
-        return withAccount(new CustodyAccount(account.id(), account.custody(), account.lotQuantities(), quantities), nextClaims, bindings);
+        Reservation reservation = reserve(account, claim);
+        Map<SubjectId, PhysicalStackBinding> next = withoutBindingsFor(account.id());
+        int remaining = claim.quantity();
+        for (PhysicalStackBinding binding : current.stream().sorted(java.util.Comparator.comparing(PhysicalStackBinding::id)).toList()) {
+            int available = compatibleBindingStock(binding) - compatibleBindingClaims(binding, claim);
+            int allocated = Math.min(remaining, available);
+            Map<SubjectId, Integer> bindingClaims = new HashMap<>(binding.claimQuantities());
+            if (allocated > 0) bindingClaims.put(claim.id(), allocated);
+            PhysicalStackBinding retained = new PhysicalStackBinding(binding.id(), binding.accountId(), binding.address(), binding.authorityEpoch(),
+                    binding.itemKind(), binding.lotQuantities(), bindingClaims);
+            next.put(retained.id(), retained);
+            remaining -= allocated;
+        }
+        if (remaining != 0) throw new IllegalArgumentException("bound claim is not backed by its current physical stack layout");
+        return withAccount(reservation.account(), reservation.claims(), next);
     }
 
     /** Exact zero-sum custody transfer; the caller names both lot and claim portions. */
@@ -317,6 +342,10 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
                 boundLots.computeIfAbsent(account.id(), ignored -> new HashMap<>()).merge(id, quantity, Integer::sum); });
             binding.claimQuantities().forEach((id, quantity) -> { ClaimAllocation claim = claims.get(id); if (claim == null || !claim.itemKind().equals(binding.itemKind())) throw new IllegalArgumentException("physical stack binding has incompatible claim evidence");
                 boundClaims.computeIfAbsent(account.id(), ignored -> new HashMap<>()).merge(id, quantity, Integer::sum); });
+            int boundClaimsAtStack = binding.claimQuantities().values().stream().mapToInt(Integer::intValue).sum();
+            if (boundClaimsAtStack > binding.quantity()) {
+                throw new IllegalArgumentException("physical stack binding claims exceed its exact stack quantity");
+            }
         }
         boundLots.forEach((account, quantities) -> {
             if (!accounts.get(account).lotQuantities().equals(quantities)) {
@@ -330,8 +359,33 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
 
     private ResourceLot requireLot(SubjectId id) { ResourceLot lot = lots.get(Objects.requireNonNull(id, "resource lot")); if (lot == null) throw new IllegalArgumentException("unknown resource lot"); return lot; }
     private CustodyAccount requireAccount(SubjectId id) { CustodyAccount account = accounts.get(Objects.requireNonNull(id, "custody account")); if (account == null) throw new IllegalArgumentException("unknown custody account"); return account; }
+    private Reservation reserve(CustodyAccount account, ClaimAllocation claim) {
+        if (claims.containsKey(claim.id()) || account.claimQuantities().containsKey(claim.id()) || availableFor(account, claim) < claim.quantity()
+                || availableFor(account, claim) - claimedFor(account, claim) < claim.quantity()) {
+            throw new IllegalArgumentException("claim allocation is not backed by one exact account balance");
+        }
+        Map<SubjectId, ClaimAllocation> nextClaims = new HashMap<>(claims); nextClaims.put(claim.id(), claim);
+        Map<SubjectId, Integer> quantities = new HashMap<>(account.claimQuantities()); quantities.put(claim.id(), claim.quantity());
+        return new Reservation(new CustodyAccount(account.id(), account.custody(), account.lotQuantities(), quantities), nextClaims);
+    }
     private Integer availableFor(CustodyAccount account, ClaimAllocation claim) {
         return account.lotQuantities().entrySet().stream().filter(entry -> { ResourceLot lot = lots.get(entry.getKey()); return lot.economicOwnerId().equals(claim.economicOwnerId()) && lot.itemKind().equals(claim.itemKind()); }).mapToInt(Map.Entry::getValue).sum();
+    }
+    private int claimedFor(CustodyAccount account, ClaimAllocation claim) {
+        return account.claimQuantities().entrySet().stream().filter(entry -> {
+            ClaimAllocation current = claims.get(entry.getKey());
+            return current.economicOwnerId().equals(claim.economicOwnerId()) && current.itemKind().equals(claim.itemKind());
+        }).mapToInt(Map.Entry::getValue).sum();
+    }
+    private int compatibleBindingStock(PhysicalStackBinding binding) {
+        return binding.lotQuantities().entrySet().stream().filter(entry -> requireLot(entry.getKey()).itemKind().equals(binding.itemKind()))
+                .mapToInt(Map.Entry::getValue).sum();
+    }
+    private int compatibleBindingClaims(PhysicalStackBinding binding, ClaimAllocation claim) {
+        return binding.claimQuantities().entrySet().stream().filter(entry -> {
+            ClaimAllocation current = claims.get(entry.getKey());
+            return current.economicOwnerId().equals(claim.economicOwnerId()) && current.itemKind().equals(claim.itemKind());
+        }).mapToInt(Map.Entry::getValue).sum();
     }
     private FungibleResourceLedger withAccount(CustodyAccount account, Map<SubjectId, ClaimAllocation> nextClaims, Map<SubjectId, PhysicalStackBinding> nextBindings) { return withAccount(account, nextClaims, nextBindings, lots); }
     private FungibleResourceLedger withAccount(CustodyAccount account, Map<SubjectId, ClaimAllocation> nextClaims, Map<SubjectId, PhysicalStackBinding> nextBindings, Map<SubjectId, ResourceLot> nextLots) {
@@ -390,6 +444,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         if (!requested.isEmpty()) requireSubset(source, requested, label);
     }
     private static int sum(Map<SubjectId, Integer> quantities) { return quantities.values().stream().mapToInt(Integer::intValue).sum(); }
+    private record Reservation(CustodyAccount account, Map<SubjectId, ClaimAllocation> claims) { }
     private static <T> void requireKeys(Map<SubjectId, T> values, java.util.function.Function<T, SubjectId> id, String label) {
         values.forEach((key, value) -> { if (value == null || !key.equals(id.apply(value))) throw new IllegalArgumentException(label + " map key does not match identity"); });
     }

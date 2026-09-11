@@ -92,6 +92,26 @@ class FungibleResourceLedgerTest {
     }
 
     @Test
+    void boundReservationExtendsTheCurrentLeaseLayoutWithoutOpeningColdCustody() {
+        FungibleResourceLedger hot = issue(10).rebind(DEPOT_ACCOUNT, 7L, List.of(
+                binding("binding:one", 7L, 6, new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(DEPOT, 0))),
+                binding("binding:two", 7L, 4, new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(DEPOT, 1)))));
+        ClaimAllocation claim = new ClaimAllocation(new SubjectId("claim:hot-production"), new SubjectId("job:production-hot"), OWNER,
+                "minecraft:bread", 7);
+
+        FungibleResourceLedger reserved = hot.reserveBound(claim, DEPOT_ACCOUNT, 7L);
+
+        assertEquals(Map.of(claim.id(), 7), reserved.accounts().get(DEPOT_ACCOUNT).claimQuantities());
+        assertEquals(7L, reserved.bindings().get(new SubjectId("binding:one")).authorityEpoch());
+        assertEquals(Map.of(claim.id(), 6), reserved.bindings().get(new SubjectId("binding:one")).claimQuantities());
+        assertEquals(Map.of(claim.id(), 1), reserved.bindings().get(new SubjectId("binding:two")).claimQuantities());
+        assertThrows(IllegalStateException.class, () -> reserved.destroy(DEPOT_ACCOUNT, Map.of(LOT, 1), Map.of()));
+        assertThrows(IllegalArgumentException.class, () -> hot.reserveBound(claim, DEPOT_ACCOUNT, 6L));
+        assertThrows(IllegalArgumentException.class, () -> hot.reserveBound(new ClaimAllocation(new SubjectId("claim:over-hot"),
+                new SubjectId("job:over-hot"), OWNER, "minecraft:bread", 11), DEPOT_ACCOUNT, 7L));
+    }
+
+    @Test
     void hotVanillaSplitAndMergeRebindOneLotWithoutStackIdentityOrQuantityDrift() {
         FungibleResourceLedger issued = issue(10);
         List<FungiblePhysicalObservation.Stack> splitStacks = List.of(
