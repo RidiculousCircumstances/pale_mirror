@@ -343,9 +343,10 @@ public final class FrontierSceneBehaviors {
                 case UNKNOWN_AFTER_RESTART -> assault.status() == SettlementAssaultStatus.UNKNOWN_AFTER_RESTART;
                 case CONFLICT -> assault.status() == SettlementAssaultStatus.CONFLICT;
                 // A CLOSED lease is the retained receipt for a completed epoch.  It remains
-                // inspectable while the same COLD assault enters its next, distinct HOT epoch.
+                // inspectable while the next COLD epoch either reaches HOT, resolves, or
+                // truthfully conflicts after its independent battlefield validation.
                 case CLOSED -> assault.status() == SettlementAssaultStatus.COLD_COMBAT || assault.status() == SettlementAssaultStatus.HOT
-                        || assault.status() == SettlementAssaultStatus.RESOLVED;
+                        || assault.status() == SettlementAssaultStatus.RESOLVED || assault.status() == SettlementAssaultStatus.CONFLICT;
             };
             if (!valid) throw new IllegalArgumentException("assault scene lease and canonical lifecycle disagree");
             Set<SubjectId> values = new HashSet<>(assault.attackerIds()); values.addAll(assault.defenderIds()); return Set.copyOf(values);

@@ -26,6 +26,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class SettlementAssaultTest {
@@ -114,6 +115,12 @@ class SettlementAssaultTest {
         assertEquals(1, restored.strategicPlans().settlementAssaults().get(assault.id()).nextStrikeEpoch());
         assertEquals(PhysicalIntentStatus.CONFIRMED, restored.physicalIntents().get(intent.id()).status());
         assertEquals(observation, restored.physicalObservations().get(observation.id()));
+
+        // The closed receipt owns its completed HOT epoch, not the outcome of a later COLD
+        // admission.  A later ordinary battlefield validation may conflict without making the
+        // already durable release internally inconsistent or quarantining its runtime.
+        assertDoesNotThrow(() -> restored.withStrategicPlans(restored.strategicPlans()
+                .transitionSettlementAssault(assault.id(), SettlementAssaultStatus.CONFLICT)));
 
         SettlementAssaultSceneCandidate nextCandidate = restored.coldSettlementAssaultSceneCandidates().stream()
                 .filter(value -> value.assaultId().equals(assault.id())).findFirst().orElseThrow();
