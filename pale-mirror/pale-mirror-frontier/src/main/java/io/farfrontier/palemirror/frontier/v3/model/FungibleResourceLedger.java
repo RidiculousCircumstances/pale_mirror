@@ -130,6 +130,81 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
     }
 
     /**
+     * Delivers one complete COLD cargo account into a container and discharges its shipment
+     * claims.  A lot may change economic owner only after it is isolated in the cargo account:
+     * otherwise a partial shipment could silently retitle the sender's retained portion.
+     */
+    public FungibleResourceLedger deliverCargoToContainer(SubjectId cargoAccountId, CustodyAccount destination, SubjectId destinationOwner) {
+        CustodyAccount cargo = requireAccount(cargoAccountId); Objects.requireNonNull(destination, "cargo destination");
+        Objects.requireNonNull(destinationOwner, "cargo destination owner");
+        requireNoPhysicalBinding(cargo.id(), "cargo delivery");
+        CustodyAccount currentDestination = accounts.get(destination.id());
+        if (cargo.id().equals(destination.id()) || currentDestination != null && !currentDestination.equals(destination)) {
+            throw new IllegalArgumentException("cargo delivery has an invalid destination account");
+        }
+        if (currentDestination == null && (!destination.lotQuantities().equals(cargo.lotQuantities()) || !destination.claimQuantities().isEmpty())) {
+            throw new IllegalArgumentException("new cargo destination does not retain exactly the delivered lots");
+        }
+        if (currentDestination != null) requireNoPhysicalBinding(currentDestination.id(), "cargo delivery");
+        for (Map.Entry<SubjectId, Integer> entry : cargo.lotQuantities().entrySet()) {
+            ResourceLot lot = requireLot(entry.getKey());
+            boolean retitled = !lot.economicOwnerId().equals(destinationOwner);
+            boolean elsewhere = accounts.values().stream().filter(account -> !account.id().equals(cargo.id()))
+                    .anyMatch(account -> account.lotQuantities().containsKey(lot.id()));
+            if (retitled && (entry.getValue() != lot.quantity() || elsewhere)) {
+                throw new IllegalArgumentException("cargo delivery cannot retitle an unisolated lot");
+            }
+        }
+        Map<SubjectId, ResourceLot> nextLots = new HashMap<>(lots);
+        cargo.lotQuantities().keySet().forEach(lotId -> {
+            ResourceLot lot = requireLot(lotId);
+            if (!lot.economicOwnerId().equals(destinationOwner)) nextLots.put(lotId, lot.withEconomicOwner(destinationOwner));
+        });
+        Map<SubjectId, ClaimAllocation> nextClaims = new HashMap<>(claims);
+        cargo.claimQuantities().keySet().forEach(nextClaims::remove);
+        Map<SubjectId, CustodyAccount> nextAccounts = new HashMap<>(accounts);
+        nextAccounts.remove(cargo.id());
+        nextAccounts.put(destination.id(), currentDestination == null ? destination : accountWithAdded(currentDestination, cargo.lotQuantities(), Map.of()));
+        return new FungibleResourceLedger(nextLots, nextClaims, nextAccounts, bindings);
+    }
+
+    /**
+     * Folds a COLD cargo account into a receiver that is already HOT, replacing only its current
+     * fenced layout. The receipt must cover both the retained receiver stock and the arrival, so
+     * there is no interval in which either side becomes spendable COLD.
+     */
+    public FungibleResourceLedger deliverObservedCargoToBoundContainer(SubjectId cargoAccountId, SubjectId destinationAccountId,
+                                                                        SubjectId destinationOwner, long authorityEpoch,
+                                                                        List<FungiblePhysicalObservation.Stack> observed) {
+        CustodyAccount cargo = requireAccount(cargoAccountId); CustodyAccount destination = requireAccount(destinationAccountId);
+        Objects.requireNonNull(destinationOwner, "observed cargo destination owner");
+        requireNoPhysicalBinding(cargo.id(), "observed cargo delivery");
+        List<PhysicalStackBinding> current = bindings.values().stream().filter(binding -> binding.accountId().equals(destination.id())).toList();
+        if (authorityEpoch < 1 || current.isEmpty() || current.stream().anyMatch(binding -> binding.authorityEpoch() != authorityEpoch)) {
+            throw new IllegalArgumentException("observed cargo delivery has no current receiver authority");
+        }
+        for (Map.Entry<SubjectId, Integer> entry : cargo.lotQuantities().entrySet()) {
+            ResourceLot lot = requireLot(entry.getKey());
+            boolean retitled = !lot.economicOwnerId().equals(destinationOwner);
+            boolean elsewhere = accounts.values().stream().filter(account -> !account.id().equals(cargo.id()))
+                    .anyMatch(account -> account.lotQuantities().containsKey(lot.id()));
+            if (retitled && (entry.getValue() != lot.quantity() || elsewhere)) {
+                throw new IllegalArgumentException("observed cargo delivery cannot retitle an unisolated lot");
+            }
+        }
+        Map<SubjectId, ResourceLot> nextLots = new HashMap<>(lots);
+        cargo.lotQuantities().keySet().forEach(lotId -> {
+            ResourceLot lot = requireLot(lotId);
+            if (!lot.economicOwnerId().equals(destinationOwner)) nextLots.put(lotId, lot.withEconomicOwner(destinationOwner));
+        });
+        Map<SubjectId, ClaimAllocation> nextClaims = new HashMap<>(claims); cargo.claimQuantities().keySet().forEach(nextClaims::remove);
+        Map<SubjectId, CustodyAccount> nextAccounts = new HashMap<>(accounts); nextAccounts.remove(cargo.id());
+        nextAccounts.put(destination.id(), accountWithAdded(destination, cargo.lotQuantities(), Map.of()));
+        FungibleResourceLedger combined = new FungibleResourceLedger(nextLots, nextClaims, nextAccounts, withoutBindingsFor(bindings, destination.id()));
+        return combined.rebind(destination.id(), authorityEpoch, FungiblePhysicalObservation.bind(combined, destination.id(), authorityEpoch, observed));
+    }
+
+    /**
      * Commits one observed partial physical handoff as one canonical transaction. The source
      * fence and both replacement layouts are checked together, so releasing a visible stack
      * cannot open an interim COLD-spending window before its player/hopper/drop custody exists.

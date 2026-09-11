@@ -81,6 +81,7 @@ final class PhysicalEffectObservationPayloadCodec {
             FrontierWorldPayloadCodecs.writeSubject(output, issue.workerId()); FrontierWorldPayloadCodecs.writeSubject(output, issue.itemId());
             FrontierWorldPayloadCodecs.writeSubject(output, issue.sourceSlot().containerId()); output.writeByte(issue.sourceSlot().slot());
         }
+        else if (observation instanceof FungibleCargoHandoffObservation cargo) writeFungibleCargo(output, cargo);
         else throw new IllegalArgumentException("unknown physical effect observation");
     }
 
@@ -121,6 +122,7 @@ final class PhysicalEffectObservationPayloadCodec {
             case 19 -> new SettlementServiceInputIssueObservation(id(input), intent(input), FrontierWorldPayloadCodecs.readSubject(input).value(),
                     FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldPayloadCodecs.readSubject(input).value(),
                     new InventoryCustody.ContainerSlot(FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedByte()));
+            case 20 -> fungibleCargo(input);
             default -> throw new IllegalArgumentException("unknown physical effect observation kind");
         };
     }
@@ -138,6 +140,24 @@ final class PhysicalEffectObservationPayloadCodec {
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) placements.add(new CargoHandoffPlacement(
                 FrontierWorldPayloadCodecs.readSubject(input).value(), new InventoryCustody.ContainerSlot(FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedByte())));
         return new CargoHandoffObservation(id, intent, cargo, placements);
+    }
+    private static void writeFungibleCargo(DataOutputStream output, FungibleCargoHandoffObservation cargo) throws IOException {
+        output.writeByte(20); ids(output, cargo); FrontierWorldPayloadCodecs.writeSubject(output, cargo.cargoId()); output.writeLong(cargo.authorityEpoch());
+        output.writeByte(cargo.stacks().size());
+        for (FungiblePhysicalObservation.Stack stack : cargo.stacks()) {
+            if (!(stack.address() instanceof PhysicalStackAddress.ContainerSlot slot)) throw new IllegalArgumentException("fungible cargo receipt has no container slot");
+            FrontierWorldPayloadCodecs.writeSubject(output, slot.slot().containerId()); output.writeByte(slot.slot().slot());
+            FrontierWorldPayloadCodecs.writeString(output, stack.itemKind()); output.writeByte(stack.quantity());
+        }
+    }
+    private static FungibleCargoHandoffObservation fungibleCargo(DataInputStream input) throws IOException {
+        PhysicalObservationId id = id(input); PhysicalIntentId intent = intent(input); var cargo = FrontierWorldPayloadCodecs.readSubject(input).value(); long epoch = input.readLong();
+        java.util.ArrayList<FungiblePhysicalObservation.Stack> stacks = new java.util.ArrayList<>();
+        for (int index = 0, count = input.readUnsignedByte(); index < count; index++) {
+            InventoryCustody.ContainerSlot slot = new InventoryCustody.ContainerSlot(FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedByte());
+            stacks.add(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(slot), FrontierWorldPayloadCodecs.readString(input), input.readUnsignedByte()));
+        }
+        return new FungibleCargoHandoffObservation(id, intent, cargo, epoch, stacks);
     }
     private static void writeRepair(DataOutputStream output, StructuralRepairObservation value) throws IOException {
         output.writeByte(1); ids(output, value); FrontierWorldPayloadCodecs.writeSubject(output, value.itemId()); FrontierWorldPayloadCodecs.writePosition(output, value.position());

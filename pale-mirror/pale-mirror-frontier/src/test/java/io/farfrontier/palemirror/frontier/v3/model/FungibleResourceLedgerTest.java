@@ -177,6 +177,29 @@ class FungibleResourceLedgerTest {
     }
 
     @Test
+    void cargoDeliveryRetitlesOnlyAnIsolatedLotAndDischargesItsShipmentClaim() {
+        SubjectId cargoId = new SubjectId("cargo:bread-shipment");
+        SubjectId cargoAccountId = new SubjectId("custody:cargo-bread-shipment");
+        SubjectId receiver = new SubjectId("container:hive-store");
+        SubjectId hive = new SubjectId("hive:one");
+        SubjectId claimId = new SubjectId("claim:bread-shipment");
+        ResourceLot child = new ResourceLot(new SubjectId("lot:bread-shipment"), OWNER, "minecraft:bread", 4, "bootstrap", List.of(LOT));
+        FungibleResourceLedger loaded = issue(10).split(DEPOT_ACCOUNT, LOT, child, 4).reserve(new ClaimAllocation(claimId,
+                new SubjectId("contract:bread-shipment"), OWNER, "minecraft:bread", 4), DEPOT_ACCOUNT)
+                .transferToNewAccount(DEPOT_ACCOUNT, new CustodyAccount(cargoAccountId, new ResourceCustody.Cargo(cargoId), Map.of(child.id(), 4), Map.of(claimId, 4)));
+        CustodyAccount destination = new CustodyAccount(new SubjectId("custody:hive-store"), new ResourceCustody.Container(receiver), Map.of(child.id(), 4), Map.of());
+
+        FungibleResourceLedger delivered = loaded.deliverCargoToContainer(cargoAccountId, destination, hive);
+
+        assertEquals(hive, delivered.lots().get(child.id()).economicOwnerId());
+        assertEquals(Map.of(child.id(), 4), delivered.accounts().get(destination.id()).lotQuantities());
+        assertEquals(6, delivered.totalQuantity(OWNER, "minecraft:bread"));
+        assertEquals(4, delivered.totalQuantity(hive, "minecraft:bread"));
+        assertEquals(Map.of(), delivered.claims());
+        assertThrows(IllegalArgumentException.class, () -> issue(10).deliverCargoToContainer(DEPOT_ACCOUNT, destination, hive));
+    }
+
+    @Test
     void oneContainerAccountReconcilesSeveralResourceKindsWithoutCrossKindMerging() {
         SubjectId carrotId = new SubjectId("lot:carrot");
         ResourceLot carrot = new ResourceLot(carrotId, OWNER, "minecraft:carrot", 4, "bootstrap", List.of());

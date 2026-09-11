@@ -17,6 +17,9 @@ import io.farfrontier.palemirror.frontier.v3.model.CargoHandoffPlacement;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurface;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
+import io.farfrontier.palemirror.frontier.v3.model.FungibleCargoHandoffObservation;
+import io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalObservation;
+import io.farfrontier.palemirror.frontier.v3.model.FungibleResourceLedger;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
@@ -84,7 +87,7 @@ final class FrontierV3CargoHandoffExecutor {
         }
         if (intent.status() == PhysicalIntentStatus.PREPARED) {
             if (!transition(runtime, intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty(), "running")) return;
-            if (!writeInitialCargo(chest, state, operation.cargoId())) {
+            if (!writeInitialCargo(chest, state, operation.cargoId(), target.containerId())) {
                 transition(runtime, intent.id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty(), "conflict");
                 return;
             }
@@ -93,9 +96,9 @@ final class FrontierV3CargoHandoffExecutor {
                             () -> transition(runtime, intent.id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty(), "conflict"));
             return;
         }
-        Optional<CargoHandoffObservation> observed = observation(chest, state, intent, operation.cargoId(), target.containerId());
+        Optional<PhysicalEffectObservation> observed = observation(chest, state, intent, operation.cargoId(), target.containerId());
         if (observed.isPresent()) {
-            transition(runtime, intent.id(), PhysicalIntentStatus.CONFIRMED, observed.map(value -> (PhysicalEffectObservation) value), "confirmed");
+            transition(runtime, intent.id(), PhysicalIntentStatus.CONFIRMED, observed, "confirmed");
         } else {
             transition(runtime, intent.id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty(), "conflict");
         }
@@ -113,9 +116,10 @@ final class FrontierV3CargoHandoffExecutor {
         return FrontierV3ContainerSurfaceExecutor.activeChest(level, target.position(), target.containerId());
     }
 
-    private static boolean writeInitialCargo(ChestBlockEntity chest, FrontierWorldState state, SubjectId cargoId) {
+    private static boolean writeInitialCargo(ChestBlockEntity chest, FrontierWorldState state, SubjectId cargoId, SubjectId targetContainerId) {
         CargoBatch cargo = state.inventory().cargo().get(cargoId);
         if (cargo == null) throw new IllegalStateException("prepared cargo hand-off has no cargo");
+        if (cargo.fungibleContents()) return writeInitialFungibleCargo(chest, state, cargo, targetContainerId);
         List<ExactItemStack> items = cargo.itemIds().stream().map(state.inventory().items()::get)
                 .sorted(Comparator.comparing(ExactItemStack::id)).toList();
         for (int index = 0; index < items.size(); index++) {
@@ -126,10 +130,42 @@ final class FrontierV3CargoHandoffExecutor {
         return true;
     }
 
-    private static Optional<CargoHandoffObservation> observation(ChestBlockEntity chest, FrontierWorldState state,
-                                                                   PhysicalIntent intent, SubjectId cargoId, SubjectId containerId) {
+    private static boolean writeInitialFungibleCargo(ChestBlockEntity chest, FrontierWorldState state, CargoBatch cargo, SubjectId targetContainerId) {
+        FungibleResourceLedger resources = state.inventory().fungibleResources();
+        var source = resources.accounts().values().stream().filter(account -> account.custody()
+                instanceof io.farfrontier.palemirror.frontier.v3.model.ResourceCustody.Cargo custody && custody.cargoId().equals(cargo.id())).findFirst().orElse(null);
+        if (source == null || resources.bindings().values().stream().anyMatch(binding -> binding.accountId().equals(source.id()))) return false;
+        var receiver = resources.accounts().values().stream().filter(account -> account.custody()
+                instanceof io.farfrontier.palemirror.frontier.v3.model.ResourceCustody.Container container && container.containerId().equals(targetContainerId)).findFirst().orElse(null);
+        List<FungiblePhysicalObservation.Stack> before = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(chest, state, targetContainerId);
+        if (receiver == null) {
+            if (!before.isEmpty()) return false;
+        } else {
+            long epoch = receiverEpoch(resources, receiver.id());
+            try { FungiblePhysicalObservation.bind(resources, receiver.id(), epoch, before); }
+            catch (IllegalArgumentException invalid) { return false; }
+        }
+        java.util.Map<String, Integer> quantities = new java.util.TreeMap<>();
+        source.lotQuantities().forEach((lotId, quantity) -> quantities.merge(resources.lots().get(lotId).itemKind(), quantity, Integer::sum));
+        int slot = 0;
+        for (var entry : quantities.entrySet()) {
+            ResourceLocation itemId = ResourceLocation.tryParse(entry.getKey());
+            if (itemId == null || !BuiltInRegistries.ITEM.containsKey(itemId)) return false;
+            for (int remaining = entry.getValue(); remaining > 0; remaining -= Math.min(64, remaining)) {
+                while (slot < chest.getContainerSize() && !chest.getItem(slot).isEmpty()) slot++;
+                if (slot == chest.getContainerSize()) return false;
+                chest.setItem(slot++, new ItemStack(BuiltInRegistries.ITEM.get(itemId), Math.min(64, remaining)));
+            }
+        }
+        chest.setChanged();
+        return true;
+    }
+
+    private static Optional<PhysicalEffectObservation> observation(ChestBlockEntity chest, FrontierWorldState state,
+                                                                     PhysicalIntent intent, SubjectId cargoId, SubjectId containerId) {
         CargoBatch cargo = state.inventory().cargo().get(cargoId);
         if (cargo == null) return Optional.empty();
+        if (cargo.fungibleContents()) return fungibleObservation(chest, state, intent, cargo, containerId).map(value -> value);
         List<ExactItemStack> items = cargo.itemIds().stream().map(state.inventory().items()::get)
                 .sorted(Comparator.comparing(ExactItemStack::id)).toList();
         List<CargoHandoffPlacement> placements = new ArrayList<>();
@@ -140,6 +176,32 @@ final class FrontierV3CargoHandoffExecutor {
         }
         return Optional.of(new CargoHandoffObservation(new PhysicalObservationId("observation:" + intent.id().value().replace(':', '-')),
                 intent.id(), cargoId, placements));
+    }
+
+    private static Optional<FungibleCargoHandoffObservation> fungibleObservation(ChestBlockEntity chest, FrontierWorldState state,
+                                                                                     PhysicalIntent intent, CargoBatch cargo, SubjectId containerId) {
+        FungibleResourceLedger resources = state.inventory().fungibleResources();
+        var account = resources.accounts().values().stream().filter(value -> value.custody()
+                instanceof io.farfrontier.palemirror.frontier.v3.model.ResourceCustody.Cargo custody && custody.cargoId().equals(cargo.id())).findFirst().orElse(null);
+        if (account == null || resources.bindings().values().stream().anyMatch(binding -> binding.accountId().equals(account.id()))) return Optional.empty();
+        var receiver = resources.accounts().values().stream().filter(value -> value.custody()
+                instanceof io.farfrontier.palemirror.frontier.v3.model.ResourceCustody.Container container && container.containerId().equals(containerId)).findFirst().orElse(null);
+        long epoch = receiver == null ? 1L : receiverEpoch(resources, receiver.id());
+        List<FungiblePhysicalObservation.Stack> stacks = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(chest, state, containerId);
+        try {
+            if (receiver == null) FungiblePhysicalObservation.bind(resources, account.id(), epoch, stacks);
+            return Optional.of(new FungibleCargoHandoffObservation(new PhysicalObservationId("observation:" + intent.id().value().replace(':', '-')),
+                    intent.id(), cargo.id(), epoch, stacks));
+        } catch (IllegalArgumentException invalid) {
+            return Optional.empty();
+        }
+    }
+
+    private static long receiverEpoch(FungibleResourceLedger resources, SubjectId receiverAccountId) {
+        List<Long> epochs = resources.bindings().values().stream().filter(binding -> binding.accountId().equals(receiverAccountId))
+                .map(io.farfrontier.palemirror.frontier.v3.model.PhysicalStackBinding::authorityEpoch).distinct().toList();
+        if (epochs.size() != 1 || epochs.getFirst() < 1) throw new IllegalStateException("fungible receiver has no one current physical authority");
+        return epochs.getFirst();
     }
 
     private static boolean transition(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntentId intentId,

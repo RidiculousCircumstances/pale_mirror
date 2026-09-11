@@ -31,6 +31,11 @@ public record ResourceLot(SubjectId id, SubjectId economicOwnerId, String itemKi
         return new ResourceLot(id, economicOwnerId, itemKind, nextQuantity, provenance, lineage);
     }
 
+    /** A completed cargo hand-off changes economic owner without changing fungible lineage. */
+    public ResourceLot withEconomicOwner(SubjectId nextOwner) {
+        return new ResourceLot(id, Objects.requireNonNull(nextOwner, "next resource owner"), itemKind, quantity, provenance, lineage);
+    }
+
     public ResourceLot splitChild(SubjectId childId, int childQuantity) {
         if (childQuantity < 1 || childQuantity >= quantity) throw new IllegalArgumentException("resource lot split must leave a source remainder");
         java.util.ArrayList<SubjectId> next = new java.util.ArrayList<>(lineage); next.add(id);

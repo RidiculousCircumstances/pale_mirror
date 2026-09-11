@@ -28,6 +28,23 @@ final class FrontierWorldPhysicalObservationValidation {
             }
             if (observation instanceof CargoHandoffObservation cargo) {
                 FrontierCargoValidation.validateObservation(bootstrap, operations, contracts, inventory, intent, cargo);
+            } else if (observation instanceof FungibleCargoHandoffObservation cargo) {
+                RouteOperation operation = operations.get(intent.causeSubjectId());
+                if (intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_HANDOFF || operation == null
+                        || !operation.cargoId().equals(cargo.cargoId()) || inventory.cargo().containsKey(cargo.cargoId())) {
+                    throw new IllegalArgumentException("fungible cargo receipt has no completed route hand-off");
+                }
+                SupplyContract contract = contracts.values().stream().filter(value -> value.cargoId().equals(cargo.cargoId())).findFirst()
+                        .orElseThrow(() -> new IllegalArgumentException("fungible cargo receipt has no contract"));
+                SubjectId receiver = FrontierCargoValidation.receiverStore(bootstrap, operation);
+                if (contract.status() != ContractStatus.DELIVERED || cargo.stacks().stream().anyMatch(stack -> !(stack.address()
+                        instanceof PhysicalStackAddress.ContainerSlot slot) || !slot.slot().containerId().equals(receiver))) {
+                    throw new IllegalArgumentException("fungible cargo receipt has a foreign receiver");
+                }
+                CustodyAccount account = inventory.fungibleResources().accounts().values().stream().filter(value -> value.custody()
+                        instanceof ResourceCustody.Container container && container.containerId().equals(receiver)).findFirst()
+                        .orElseThrow(() -> new IllegalArgumentException("fungible cargo receipt has no receiver account"));
+                FungiblePhysicalObservation.bind(inventory.fungibleResources(), account.id(), cargo.authorityEpoch(), cargo.stacks());
             } else if (observation instanceof ExplosionObservation explosion) {
                 ExplosionStateSupport.validateReceipt(intent, explosion);
             } else if (observation instanceof SceneStrikeObservation strike) {

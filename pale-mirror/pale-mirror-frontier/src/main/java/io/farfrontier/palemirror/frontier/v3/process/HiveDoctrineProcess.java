@@ -33,6 +33,10 @@ public final class HiveDoctrineProcess {
         return state.inventory().items().values().stream().anyMatch(item -> item.itemKind().equals("minecraft:rotten_flesh")
                 && item.custody() instanceof InventoryCustody.ContainerSlot slot && state.isHiveStore(slot.containerId())
                 && item.count() > 0 && item.economicOwnerId().equals(state.bootstrap().hive().id())
-        );
+        ) || state.inventory().fungibleResources().accounts().values().stream().anyMatch(account -> account.custody() instanceof ResourceCustody.Container container
+                && state.isHiveStore(container.containerId()) && account.lotQuantities().entrySet().stream().anyMatch(entry -> {
+                    ResourceLot lot = state.inventory().fungibleResources().lots().get(entry.getKey());
+                    return lot.economicOwnerId().equals(state.bootstrap().hive().id()) && lot.itemKind().equals("minecraft:rotten_flesh") && entry.getValue() > 0;
+                }));
     }
 }

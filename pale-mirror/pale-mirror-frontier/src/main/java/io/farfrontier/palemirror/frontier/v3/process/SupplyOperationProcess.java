@@ -320,7 +320,6 @@ public final class SupplyOperationProcess {
         CargoBatch cargo = state.inventory().cargo().get(operation.cargoId());
         if (cargo == null) throw new IllegalStateException("arrived operation has no cargo");
         if (state.inventory().surfaces().get(receiver).status() == ContainerSurfaceStatus.ACTIVE) {
-            if (cargo.fungibleContents()) return List.of(schedule(operationProgress(operation, Math.addExact(now, 100L))));
             PhysicalIntentId intentId = cargoHandoffIntent(operation).id();
             return state.physicalIntents().containsKey(intentId) ? List.of() : List.of(new ProposedEvent(operation.settlementId(), new PhysicalIntentPrepared(cargoHandoffIntent(operation))));
         }

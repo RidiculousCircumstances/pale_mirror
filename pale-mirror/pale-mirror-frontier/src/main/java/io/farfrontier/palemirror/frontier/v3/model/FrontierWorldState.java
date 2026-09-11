@@ -957,6 +957,27 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_LOADING) return CargoLoadingStateSupport.complete(this, current, evidence, next);
         if (HiveNutrientTransferStateSupport.isEndpointIntent(current)) return HiveNutrientTransferStateSupport.completeEndpoint(this, current, evidence, next);
         if (HumanEquipmentStateSupport.owns(current)) return HumanEquipmentStateSupport.complete(this, current, evidence, next);
+        if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_HANDOFF
+                && evidence instanceof FungibleCargoHandoffObservation cargo) {
+            RouteOperation operation = operations.get(current.causeSubjectId());
+            if (operation == null || !operation.cargoId().equals(cargo.cargoId())) throw new IllegalArgumentException("fungible cargo hand-off observation does not match its route operation");
+            SubjectId receiver = FrontierCargoValidation.receiverStore(bootstrap, operation);
+            if (cargo.stacks().stream().anyMatch(stack -> !(stack.address() instanceof PhysicalStackAddress.ContainerSlot slot)
+                    || !slot.slot().containerId().equals(receiver))) {
+                throw new IllegalArgumentException("fungible cargo hand-off observation targets a foreign hive receiver");
+            }
+            SupplyContract contract = contracts.values().stream().filter(value -> value.cargoId().equals(cargo.cargoId())).findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("fungible cargo hand-off has no supply contract"));
+            if (contract.status() != ContractStatus.LOADED || !inventory.cargo().get(cargo.cargoId()).fungibleContents()) {
+                throw new IllegalArgumentException("only loaded fungible cargo can complete hand-off");
+            }
+            Map<SubjectId, SupplyContract> nextContracts = new LinkedHashMap<>(contracts); nextContracts.put(contract.id(), contract.withStatus(ContractStatus.DELIVERED));
+            next.put(intentId, current.withStatus(nextStatus, java.util.Optional.of(cargo.id())));
+            Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(physicalObservations); observations.put(cargo.id(), cargo);
+            return next(actorLocations, structureConditions, infection,
+                    inventory.completeObservedFungibleCargoHandoff(cargo.cargoId(), receiver, cargo.authorityEpoch(), cargo.stacks()), productionJobs,
+                    nextContracts, operations, next, observations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+        }
         if (current.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_HANDOFF || !(evidence instanceof CargoHandoffObservation cargo)) {
             throw new IllegalArgumentException("physical intent kind has no matching confirmation evidence");
         }

@@ -571,27 +571,30 @@ class FrontierWorldRuntimeDefinitionTest {
     @Test
     void physicalIntentRequiresSequentialExecutionAndAnObservedPostcondition() {
         var engine = FrontierEngines.create(materializedSupplyConfiguration(new WorldId("frontier:intent-lifecycle"), 91L));
+        assertEquals(ContainerSurfaceStatus.ACTIVE, new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState()).inventory().surfaces()
+                .get(new SubjectId("container:hive-west-store")).status());
         FrontierWorldState prepared = advanceUntil(engine, 12_000L, candidate -> candidate.physicalIntents()
                 .containsKey(new PhysicalIntentId("intent:cargo-handoff-supply-1-2")));
         PhysicalIntentId id = new PhysicalIntentId("intent:cargo-handoff-supply-1-2");
-        CargoHandoffObservation observation = new CargoHandoffObservation(new PhysicalObservationId("observation:cargo-handoff-supply-1-1"), id,
-                new SubjectId("cargo:supply-1-2"), List.of(new CargoHandoffPlacement(new SubjectId("item:production-1-1-bread"),
-                new InventoryCustody.ContainerSlot(new SubjectId("container:hive-west-store"), 0))));
+        FungibleCargoHandoffObservation observation = fungibleCargoObservation("observation:cargo-handoff-supply-1-1", id,
+                new SubjectId("cargo:supply-1-2"), new SubjectId("container:hive-west-store"));
 
         assertThrows(IllegalArgumentException.class, () -> prepared.transitionPhysicalIntent(id, PhysicalIntentStatus.CONFIRMED,
                 Optional.of(observation)));
         FrontierWorldState running = prepared.transitionPhysicalIntent(id, PhysicalIntentStatus.RUNNING, Optional.empty());
-        CargoHandoffObservation foreignStore = new CargoHandoffObservation(new PhysicalObservationId("observation:cargo-handoff-foreign-store"), id,
-                new SubjectId("cargo:supply-1-2"), List.of(new CargoHandoffPlacement(new SubjectId("item:production-1-1-bread"),
-                new InventoryCustody.ContainerSlot(new SubjectId("container:hive-east-store"), 0))));
+        FungibleCargoHandoffObservation foreignStore = fungibleCargoObservation("observation:cargo-handoff-foreign-store", id,
+                new SubjectId("cargo:supply-1-2"), new SubjectId("container:hive-east-store"));
         assertThrows(IllegalArgumentException.class, () -> running.transitionPhysicalIntent(id, PhysicalIntentStatus.CONFIRMED, Optional.of(foreignStore)));
         FrontierWorldState confirmed = running.transitionPhysicalIntent(id, PhysicalIntentStatus.CONFIRMED,
                 Optional.of(observation));
         assertEquals(PhysicalIntentStatus.CONFIRMED, confirmed.physicalIntents().get(id).status());
         assertEquals(Optional.of(new PhysicalObservationId("observation:cargo-handoff-supply-1-1")), confirmed.physicalIntents().get(id).postconditionObservationId());
         assertEquals(ContractStatus.DELIVERED, confirmed.contracts().get(new SubjectId("contract:supply-1-2")).status());
-        assertEquals(new InventoryCustody.ContainerSlot(new SubjectId("container:hive-west-store"), 0),
-                confirmed.inventory().items().get(new SubjectId("item:production-1-1-bread")).custody());
+        SubjectId receiver = new SubjectId("container:hive-west-store");
+        CustodyAccount account = confirmed.inventory().fungibleResources().accounts().values().stream().filter(value -> value.custody()
+                instanceof ResourceCustody.Container container && container.containerId().equals(receiver)).findFirst().orElseThrow();
+        assertEquals(64, account.lotQuantities().values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(1, confirmed.inventory().fungibleResources().bindings().values().stream().filter(value -> value.accountId().equals(account.id())).count());
         assertEquals(observation, confirmed.physicalObservations().get(observation.id()));
         assertEquals(confirmed, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(confirmed)));
     }
@@ -618,9 +621,8 @@ class FrontierWorldRuntimeDefinitionTest {
                 .containsKey(new PhysicalIntentId("intent:cargo-handoff-supply-1-2")));
         PhysicalIntentId intentId = new PhysicalIntentId("intent:cargo-handoff-supply-1-2");
         submitPhysicalTransition(completedEngine, "frontier:supply-task-completed", "command:supply-running", intentId, PhysicalIntentStatus.RUNNING, Optional.empty());
-        CargoHandoffObservation observation = new CargoHandoffObservation(new PhysicalObservationId("observation:supply-task-completed"), intentId,
-                new SubjectId("cargo:supply-1-2"), List.of(new CargoHandoffPlacement(new SubjectId("item:production-1-1-bread"),
-                new InventoryCustody.ContainerSlot(new SubjectId("container:hive-west-store"), 0))));
+        FungibleCargoHandoffObservation observation = fungibleCargoObservation("observation:supply-task-completed", intentId,
+                new SubjectId("cargo:supply-1-2"), new SubjectId("container:hive-west-store"));
         submitPhysicalTransition(completedEngine, "frontier:supply-task-completed", "command:supply-confirmed", intentId, PhysicalIntentStatus.CONFIRMED, Optional.of(observation));
         FrontierWorldState completed = new FrontierWorldStateCodec().decode(completedEngine.checkpoint().canonicalState());
         assertEquals(StrategicTaskStatus.COMPLETED, supplyTask(completed).status());
@@ -817,6 +819,13 @@ class FrontierWorldRuntimeDefinitionTest {
         return new io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<>(base.worldId(), state, base.initialInstant(),
                 base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(),
                 base.initialSchedules(), base.transactionCommitter());
+    }
+
+    private static FungibleCargoHandoffObservation fungibleCargoObservation(String observationId, PhysicalIntentId intentId,
+                                                                              SubjectId cargoId, SubjectId receiver) {
+        return new FungibleCargoHandoffObservation(new PhysicalObservationId(observationId), intentId, cargoId, 1L,
+                List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(receiver, 0)),
+                        "minecraft:bread", 64)));
     }
 
     /** Mirrors the real server's one-tick cadence and waits for a durable domain result. */
