@@ -292,6 +292,24 @@ class StrategicObjectiveProcessTest {
         assertTrue(clear.strategicPlans().infectionKnowledge().known(settlement.id()).isEmpty());
     }
 
+    @Test
+    void canonicalDecisionAuthoritiesPersistAndRejectForeignOrStaleObjectiveStamps() {
+        FrontierWorldState state = initial("frontier:decision-authority", 492L);
+        Settlement settlement = state.bootstrap().settlements().getFirst(); SubjectId owner = settlement.id();
+        assertEquals(13, state.strategicPlans().decisionAuthorities().authorities().size());
+        DecisionAuthority current = state.strategicPlans().requireDecisionAuthority(owner);
+        StrategicObjective stale = new StrategicObjective(new SubjectId("objective:stale-authority"), owner,
+                StrategicObjectiveKind.SETTLEMENT_CONTAIN_LOCAL_INFECTION, java.util.Optional.of(InfectionCell.at(settlement.anchor())),
+                java.util.Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE, current.ownerId(), current.reconsiderationEpoch());
+        FrontierWorldState reconsidered = state.withStrategicPlans(state.strategicPlans().reconsider(owner, List.of(), List.of()));
+        assertThrows(IllegalArgumentException.class, () -> StrategicObjectiveProcess.reduceObjective(reconsidered, owner, new StrategicObjectiveSelected(stale)));
+        StrategicObjective foreign = new StrategicObjective(new SubjectId("objective:foreign-authority"), owner,
+                StrategicObjectiveKind.SETTLEMENT_CONTAIN_LOCAL_INFECTION, java.util.Optional.of(InfectionCell.at(settlement.anchor())),
+                java.util.Optional.empty(), 2, StrategicObjectiveStatus.ACTIVE, state.bootstrap().hive().id(), 0L);
+        assertThrows(IllegalArgumentException.class, () -> StrategicObjectiveProcess.reduceObjective(state, owner, new StrategicObjectiveSelected(foreign)));
+        assertEquals(reconsidered, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(reconsidered)));
+    }
+
     private static FrontierWorldState initial(String world, long seed) {
         return FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId(world), seed));
     }

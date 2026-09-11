@@ -23,7 +23,7 @@ public final class StrategicPlanStateCodec {
         for (StrategicObjective objective : plans.objectives().values().stream().sorted(Comparator.comparing(StrategicObjective::id)).toList()) {
             writeSubject(output, objective.id()); writeSubject(output, objective.ownerId()); output.writeByte(objective.kind().wireTag());
             writeTarget(output, objective.infectionTarget()); writeOptionalSubject(output, objective.resourceSiteTarget());
-            output.writeInt(objective.decisionOrdinal()); output.writeByte(objective.status().wireTag());
+            output.writeInt(objective.decisionOrdinal()); output.writeByte(objective.status().wireTag()); writeSubject(output, objective.authorityId()); output.writeLong(objective.authorityEpoch());
         }
         writeCount(output, plans.tasks().size());
         for (StrategicTask task : plans.tasks().values().stream().sorted(Comparator.comparing(StrategicTask::id)).toList()) {
@@ -32,7 +32,7 @@ public final class StrategicPlanStateCodec {
             writeCount(output, task.requirements().size());
             for (StrategicTaskRequirement requirement : task.requirements()) output.writeByte(requirement.wireTag());
             writeCount(output, task.dependencies().size()); for (SubjectId dependency : task.dependencies()) writeSubject(output, dependency);
-            output.writeByte(task.status().wireTag()); writeOptionalPosition(output, task.operationObservationPosition());
+            output.writeByte(task.status().wireTag()); writeOptionalPosition(output, task.operationObservationPosition()); writeSubject(output, task.authorityId()); output.writeLong(task.authorityEpoch());
         }
         writeCount(output, plans.routePatrols().size());
         for (RoutePatrol patrol : plans.routePatrols().values().stream().sorted(Comparator.comparing(RoutePatrol::taskId)).toList()) {
@@ -69,6 +69,12 @@ public final class StrategicPlanStateCodec {
             output.writeByte(assault.status().wireTag()); output.writeInt(assault.nextStrikeEpoch());
             output.writeBoolean(assault.outcome().isPresent()); if (assault.outcome().isPresent()) output.writeByte(assault.outcome().orElseThrow().wireTag());
         }
+        writeCount(output, plans.decisionAuthorities().authorities().size());
+        for (DecisionAuthority authority : plans.decisionAuthorities().authorities().values().stream().sorted(Comparator.comparing(DecisionAuthority::ownerId)).toList()) {
+            writeSubject(output, authority.ownerId()); output.writeByte(FrontierWireTags.tag(authority.kind()));
+            FrontierWorldStateCodec.writeString(output, authority.policy().id()); output.writeInt(authority.policy().version());
+            output.writeLong(authority.reconsiderationEpoch()); writeSubjects(output, authority.commitmentIds()); writeSubjects(output, authority.provenanceIds());
+        }
         writeCount(output, plans.infectionKnowledge().entries().size());
         for (Map.Entry<SubjectId, Map<InfectionCell, SettlementInfectionKnowledge.KnownInfection>> settlement : plans.infectionKnowledge().entries().entrySet().stream()
                 .sorted(Map.Entry.comparingByKey()).toList()) {
@@ -98,29 +104,38 @@ public final class StrategicPlanStateCodec {
     }
 
     public static StrategicPlanState read(DataInputStream input) throws IOException {
-        return read(input, false, true, true, true, true, true, true, true, FrontierWorldStateCodec.VERSION);
+        return read(input, false, true, true, true, true, true, true, true, true, FrontierWorldStateCodec.VERSION);
     }
 
     /** Version 66 and earlier described one-to-one bread conversion as requiring a spare slot. */
     static StrategicPlanState read(DataInputStream input, boolean migrateLegacyProductionSlotRequirement) throws IOException {
-        return read(input, migrateLegacyProductionSlotRequirement, true, true, true, true, true, true, true, FrontierWorldStateCodec.VERSION);
+        return read(input, migrateLegacyProductionSlotRequirement, true, true, true, true, true, true, true, true, FrontierWorldStateCodec.VERSION);
     }
 
     static StrategicPlanState read(DataInputStream input, boolean migrateLegacyProductionSlotRequirement, boolean hasInfectionKnowledge,
                                    boolean hasHiveOperationKnowledge, boolean hasOperationObservationPosition) throws IOException {
-        return read(input, migrateLegacyProductionSlotRequirement, hasInfectionKnowledge, hasHiveOperationKnowledge, hasOperationObservationPosition, true, true, true, true,
+        return read(input, migrateLegacyProductionSlotRequirement, hasInfectionKnowledge, hasHiveOperationKnowledge, hasOperationObservationPosition, true, true, true, true, true,
                 FrontierWorldStateCodec.VERSION);
+    }
+
+    /** Kept package-visible for old-layout rejection tests; it never admits a legacy snapshot. */
+    static StrategicPlanState read(DataInputStream input, boolean migrateLegacyProductionSlotRequirement, boolean hasInfectionKnowledge,
+                                   boolean hasHiveOperationKnowledge, boolean hasOperationObservationPosition, boolean hasHiveTerritoryKnowledge,
+                                   boolean hasHiveDoctrine, boolean hasHiveSettlementKnowledge, boolean hasSettlementAssaults, int snapshotVersion) throws IOException {
+        return read(input, migrateLegacyProductionSlotRequirement, hasInfectionKnowledge, hasHiveOperationKnowledge, hasOperationObservationPosition,
+                hasHiveTerritoryKnowledge, hasHiveDoctrine, hasHiveSettlementKnowledge, hasSettlementAssaults, false, snapshotVersion);
     }
 
     static StrategicPlanState read(DataInputStream input, boolean migrateLegacyProductionSlotRequirement, boolean hasInfectionKnowledge,
                                    boolean hasHiveOperationKnowledge, boolean hasOperationObservationPosition, boolean hasHiveTerritoryKnowledge,
-                                   boolean hasHiveDoctrine, boolean hasHiveSettlementKnowledge, boolean hasSettlementAssaults, int snapshotVersion) throws IOException {
+                                   boolean hasHiveDoctrine, boolean hasHiveSettlementKnowledge, boolean hasSettlementAssaults,
+                                   boolean hasDecisionAuthorities, int snapshotVersion) throws IOException {
         // Frontier v3 deliberately has no in-place world migration.  This nested codec is not
         // a second admission path around FrontierWorldStateCodec: every field below belongs to
         // the one current snapshot layout.
         if (snapshotVersion != FrontierWorldStateCodec.VERSION || migrateLegacyProductionSlotRequirement
                 || !hasInfectionKnowledge || !hasHiveOperationKnowledge || !hasOperationObservationPosition
-                || !hasHiveTerritoryKnowledge || !hasHiveDoctrine || !hasHiveSettlementKnowledge || !hasSettlementAssaults) {
+                || !hasHiveTerritoryKnowledge || !hasHiveDoctrine || !hasHiveSettlementKnowledge || !hasSettlementAssaults || !hasDecisionAuthorities) {
             throw new IllegalArgumentException("strategic plan requires the fresh current-schema layout");
         }
         Map<SubjectId, StrategicObjective> objectives = new LinkedHashMap<>();
@@ -128,15 +143,15 @@ public final class StrategicPlanStateCodec {
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId id = readSubject(input), owner = readSubject(input); int kind = input.readUnsignedByte(); Optional<InfectionCell> target = readTarget(input);
             Optional<SubjectId> resourceSiteTarget = readOptionalSubject(input);
-            int ordinal = input.readInt(), status = input.readUnsignedByte();
-            encodedObjectives.add(new RawObjective(id, owner, kind, target, resourceSiteTarget, ordinal, status));
+            int ordinal = input.readInt(), status = input.readUnsignedByte(); SubjectId authority = readSubject(input); long authorityEpoch = input.readLong();
+            encodedObjectives.add(new RawObjective(id, owner, kind, target, resourceSiteTarget, ordinal, status, authority, authorityEpoch));
         }
         boolean preAssaultOrdinals = usesPreAssaultOrdinals(snapshotVersion, encodedObjectives);
         for (RawObjective encoded : encodedObjectives) {
             StrategicObjectiveKind objectiveKind = objectiveKind(encoded.kind(), preAssaultOrdinals);
             StrategicObjectiveStatus objectiveStatus = FrontierWireTags.require(StrategicObjectiveStatus.class, encoded.status());
             StrategicObjective objective = new StrategicObjective(encoded.id(), encoded.owner(), objectiveKind, encoded.target(), encoded.resourceSiteTarget(),
-                    encoded.decisionOrdinal(), objectiveStatus);
+                    encoded.decisionOrdinal(), objectiveStatus, encoded.authorityId(), encoded.authorityEpoch());
             if (encoded.kind() >= StrategicObjectiveKind.values().length || encoded.status() >= StrategicObjectiveStatus.values().length
                     || objectives.put(encoded.id(), objective) != null) {
                 throw new IllegalArgumentException("invalid or duplicate strategic objective");
@@ -148,6 +163,7 @@ public final class StrategicPlanStateCodec {
             Optional<SubjectId> operationTarget = readOptionalSubject(input); Optional<SubjectId> resourceSiteTarget = readOptionalSubject(input);
             List<StrategicTaskRequirement> requirements = readRequirements(input); List<SubjectId> dependencies = readDependencies(input); int status = input.readUnsignedByte();
             Optional<BlockPosition> operationObservationPosition = hasOperationObservationPosition ? readOptionalPosition(input) : Optional.empty();
+            SubjectId authority = readSubject(input); long authorityEpoch = input.readLong();
             StrategicTaskKind taskKind = taskKind(kind, preAssaultOrdinals);
             if (migrateLegacyProductionSlotRequirement && kind < StrategicTaskKind.values().length && taskKind == StrategicTaskKind.PRODUCE_BREAD) {
                 List<StrategicTaskRequirement> legacy = List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP,
@@ -156,7 +172,7 @@ public final class StrategicPlanStateCodec {
             }
             if (kind >= StrategicTaskKind.values().length || status >= StrategicTaskStatus.values().length
                     || tasks.put(id, new StrategicTask(id, objective, owner, taskKind, target, operationTarget, resourceSiteTarget,
-                    requirements, dependencies, FrontierWireTags.require(StrategicTaskStatus.class, status), operationObservationPosition)) != null) {
+                    requirements, dependencies, FrontierWireTags.require(StrategicTaskStatus.class, status), operationObservationPosition, authority, authorityEpoch)) != null) {
                 throw new IllegalArgumentException("invalid or duplicate strategic task");
             }
         }
@@ -209,6 +225,14 @@ public final class StrategicPlanStateCodec {
                 throw new IllegalArgumentException("invalid or duplicate settlement assault");
             }
         }
+        Map<SubjectId, DecisionAuthority> authorities = new LinkedHashMap<>();
+        for (int index = 0, count = readCount(input); index < count; index++) {
+            SubjectId owner = readSubject(input); int kind = input.readUnsignedByte();
+            DecisionAuthorityKind authorityKind = FrontierWireTags.require(DecisionAuthorityKind.class, kind);
+            DecisionPolicyDescriptor policy = new DecisionPolicyDescriptor(FrontierWorldStateCodec.readString(input), input.readInt());
+            DecisionAuthority authority = new DecisionAuthority(owner, authorityKind, policy, input.readLong(), readSubjects(input), readSubjects(input));
+            if (authorities.put(owner, authority) != null) throw new IllegalArgumentException("duplicate decision authority");
+        }
         Map<SubjectId, Map<InfectionCell, SettlementInfectionKnowledge.KnownInfection>> knowledge = new LinkedHashMap<>();
         if (hasInfectionKnowledge) for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId settlement = readSubject(input); Map<InfectionCell, SettlementInfectionKnowledge.KnownInfection> cells = new LinkedHashMap<>();
@@ -242,7 +266,7 @@ public final class StrategicPlanStateCodec {
         if (hasHiveDoctrine) { int kind = input.readUnsignedByte(); if (kind >= HiveDoctrine.values().length) throw new IllegalArgumentException("unknown hive doctrine");
             doctrine = new HiveDoctrineState(FrontierWireTags.require(HiveDoctrine.class, kind), input.readLong()); }
         return new StrategicPlanState(objectives, tasks, patrols, engagements, new SettlementInfectionKnowledge(knowledge), new HiveOperationKnowledge(hiveKnowledge),
-                new HiveTerritoryKnowledge(territory), new HiveSettlementKnowledge(settlementSightings), doctrine, assaults);
+                new HiveTerritoryKnowledge(territory), new HiveSettlementKnowledge(settlementSightings), doctrine, assaults, new DecisionAuthorityState(authorities));
     }
 
     /**
@@ -291,7 +315,7 @@ public final class StrategicPlanStateCodec {
     }
 
     private record RawObjective(SubjectId id, SubjectId owner, int kind, Optional<InfectionCell> target,
-                                Optional<SubjectId> resourceSiteTarget, int decisionOrdinal, int status) { }
+                                Optional<SubjectId> resourceSiteTarget, int decisionOrdinal, int status, SubjectId authorityId, long authorityEpoch) { }
 
     private static List<StrategicTaskRequirement> readRequirements(DataInputStream input) throws IOException {
         List<StrategicTaskRequirement> values = new ArrayList<>();
@@ -302,6 +326,12 @@ public final class StrategicPlanStateCodec {
         return values;
     }
     private static List<SubjectId> readDependencies(DataInputStream input) throws IOException {
+        List<SubjectId> values = new ArrayList<>(); for (int index = 0, count = readCount(input); index < count; index++) values.add(readSubject(input)); return values;
+    }
+    private static void writeSubjects(DataOutputStream output, List<SubjectId> values) throws IOException {
+        writeCount(output, values.size()); for (SubjectId value : values) writeSubject(output, value);
+    }
+    private static List<SubjectId> readSubjects(DataInputStream input) throws IOException {
         List<SubjectId> values = new ArrayList<>(); for (int index = 0, count = readCount(input); index < count; index++) values.add(readSubject(input)); return values;
     }
     private static void writeTarget(DataOutputStream output, Optional<InfectionCell> target) throws IOException {

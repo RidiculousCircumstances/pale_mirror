@@ -377,7 +377,7 @@ class HiveSettlementAssaultProcessTest {
             }
         }
         HiveSettlementKnowledge.Sighting sighting = new HiveSettlementKnowledge.Sighting(settlement.id(), scout.id(), settlement.anchor(), 100L);
-        StrategicPlanState plans = StrategicPlanState.empty().withHiveSettlementKnowledge(new HiveSettlementKnowledge(java.util.Map.of(settlement.id(), sighting)))
+        StrategicPlanState plans = state.strategicPlans().withHiveSettlementKnowledge(new HiveSettlementKnowledge(java.util.Map.of(settlement.id(), sighting)))
                 .withHiveDoctrine(new HiveDoctrineState(HiveDoctrine.INTERDICT, 100L));
         if (territory) {
             InfectionCell cell = InfectionCell.at(settlement.anchor());

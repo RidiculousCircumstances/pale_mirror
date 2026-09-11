@@ -200,6 +200,8 @@ public final class FrontierWireTags {
                     tag(3, SettlementProvisionStatus.RATIONED), tag(4, SettlementProvisionStatus.SHORTAGE), tag(5, SettlementProvisionStatus.CONFLICT)),
             entry(SettlementQuarantineStatus.class,
                     tag(0, SettlementQuarantineStatus.NORMAL), tag(1, SettlementQuarantineStatus.QUARANTINED)),
+            entry(DecisionAuthorityKind.class,
+                    tag(0, DecisionAuthorityKind.SETTLEMENT), tag(1, DecisionAuthorityKind.HIVEMIND)),
             entry(StrategicObjectiveKind.class,
                     tag(0, StrategicObjectiveKind.SETTLEMENT_CONTAIN_LOCAL_INFECTION), tag(1, StrategicObjectiveKind.HIVE_EXPAND_INFECTION),
                     tag(2, StrategicObjectiveKind.HIVE_GROW_ORGANISM), tag(3, StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION),

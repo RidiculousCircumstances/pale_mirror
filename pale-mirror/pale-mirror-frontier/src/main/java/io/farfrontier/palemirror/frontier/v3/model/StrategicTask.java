@@ -10,13 +10,16 @@ import java.util.Optional;
 public record StrategicTask(SubjectId id, SubjectId objectiveId, SubjectId ownerId, StrategicTaskKind kind,
                      Optional<InfectionCell> infectionTarget, Optional<SubjectId> operationTarget, Optional<SubjectId> resourceSiteTarget,
                      List<StrategicTaskRequirement> requirements,
-                     List<SubjectId> dependencies, StrategicTaskStatus status, Optional<BlockPosition> operationObservationPosition) {
+                     List<SubjectId> dependencies, StrategicTaskStatus status, Optional<BlockPosition> operationObservationPosition,
+                     SubjectId authorityId, long authorityEpoch) {
     public StrategicTask {
         Objects.requireNonNull(id, "task id"); Objects.requireNonNull(objectiveId, "task objective");
         Objects.requireNonNull(ownerId, "task owner"); Objects.requireNonNull(kind, "task kind");
         Objects.requireNonNull(infectionTarget, "task infection target"); Objects.requireNonNull(operationTarget, "task operation target");
         Objects.requireNonNull(resourceSiteTarget, "task resource-site target"); Objects.requireNonNull(status, "task status");
         Objects.requireNonNull(operationObservationPosition, "task operation observation position");
+        Objects.requireNonNull(authorityId, "task decision authority");
+        if (authorityEpoch < 0L) throw new IllegalArgumentException("task decision epoch must be non-negative");
         requirements = List.copyOf(requirements); dependencies = List.copyOf(dependencies);
         if (kind != StrategicTaskKind.GROW_HIVE_ORGANISM && kind != StrategicTaskKind.INTERCEPT_ROUTE_OPERATION
                 && kind != StrategicTaskKind.ASSAULT_SETTLEMENT
@@ -54,19 +57,27 @@ public record StrategicTask(SubjectId id, SubjectId objectiveId, SubjectId owner
     public StrategicTask(SubjectId id, SubjectId objectiveId, SubjectId ownerId, StrategicTaskKind kind,
                   Optional<InfectionCell> infectionTarget, List<StrategicTaskRequirement> requirements,
                   List<SubjectId> dependencies, StrategicTaskStatus status) {
-        this(id, objectiveId, ownerId, kind, infectionTarget, Optional.empty(), Optional.empty(), requirements, dependencies, status, Optional.empty());
+        this(id, objectiveId, ownerId, kind, infectionTarget, Optional.empty(), Optional.empty(), requirements, dependencies, status, Optional.empty(), ownerId, 0L);
     }
     public StrategicTask(SubjectId id, SubjectId objectiveId, SubjectId ownerId, StrategicTaskKind kind,
                   Optional<InfectionCell> infectionTarget, Optional<SubjectId> operationTarget,
                   List<StrategicTaskRequirement> requirements, List<SubjectId> dependencies, StrategicTaskStatus status) {
-        this(id, objectiveId, ownerId, kind, infectionTarget, operationTarget, Optional.empty(), requirements, dependencies, status, Optional.empty());
+        this(id, objectiveId, ownerId, kind, infectionTarget, operationTarget, Optional.empty(), requirements, dependencies, status, Optional.empty(), ownerId, 0L);
     }
     public StrategicTask(SubjectId id, SubjectId objectiveId, SubjectId ownerId, StrategicTaskKind kind,
                   Optional<InfectionCell> infectionTarget, Optional<SubjectId> operationTarget, Optional<SubjectId> resourceSiteTarget,
                   List<StrategicTaskRequirement> requirements, List<SubjectId> dependencies, StrategicTaskStatus status) {
-        this(id, objectiveId, ownerId, kind, infectionTarget, operationTarget, resourceSiteTarget, requirements, dependencies, status, Optional.empty());
+        this(id, objectiveId, ownerId, kind, infectionTarget, operationTarget, resourceSiteTarget, requirements, dependencies, status, Optional.empty(), ownerId, 0L);
+    }
+    public StrategicTask(SubjectId id, SubjectId objectiveId, SubjectId ownerId, StrategicTaskKind kind,
+                         Optional<InfectionCell> infectionTarget, Optional<SubjectId> operationTarget, Optional<SubjectId> resourceSiteTarget,
+                         List<StrategicTaskRequirement> requirements, List<SubjectId> dependencies, StrategicTaskStatus status,
+                         Optional<BlockPosition> operationObservationPosition) {
+        this(id, objectiveId, ownerId, kind, infectionTarget, operationTarget, resourceSiteTarget, requirements, dependencies, status,
+                operationObservationPosition, ownerId, 0L);
     }
     public StrategicTask withStatus(StrategicTaskStatus nextStatus) {
-        return new StrategicTask(id, objectiveId, ownerId, kind, infectionTarget, operationTarget, resourceSiteTarget, requirements, dependencies, nextStatus, operationObservationPosition);
+        return new StrategicTask(id, objectiveId, ownerId, kind, infectionTarget, operationTarget, resourceSiteTarget, requirements, dependencies,
+                nextStatus, operationObservationPosition, authorityId, authorityEpoch);
     }
 }

@@ -51,7 +51,7 @@ final class FrontierWorldInitialState {
         return new FrontierWorldState(bootstrap, actors, structures, infection, new ExactInventory(containers, items, Map.of(), Map.of(), Map.of(), Map.of(),
                 ContainerSurfaceManifest.initial(bootstrap), EconomicLedger.bootstrap(bootstrap), resources),
                 Map.of(), Map.of(), Map.of(), Map.of(), LogisticsHistory.empty(), Map.of(), Map.of(), Map.of(), colony,
-                Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), RouteTopology.initial(), StrategicPlanState.empty(), population, CompanyRegistry.empty(),
+                Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), RouteTopology.initial(), StrategicPlanState.initial(bootstrap), population, CompanyRegistry.empty(),
                 ResourceSiteState.initial(bootstrap), PhysicalReplicaCustodyState.empty());
     }
 

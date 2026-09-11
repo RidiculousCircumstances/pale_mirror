@@ -100,11 +100,13 @@ public final class StrategicObjectiveProcess {
                 .filter(task -> task.status() == StrategicTaskStatus.PENDING || task.status() == StrategicTaskStatus.ACTIVE)
                 .sorted(Comparator.comparing(StrategicTask::id)).map(task -> new ProposedEvent(hive, new StrategicTaskTransition(task.id(), StrategicTaskStatus.BLOCKED))).toList();
         int ordinal = FrontierWorldScheduleSupport.ordinal(action.id().value());
+        DecisionAuthority authority = state.strategicPlans().requireDecisionAuthority(hive);
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:" + action.id().value().substring("schedule:".length())), hive,
-                StrategicObjectiveKind.HIVE_ASSAULT_SETTLEMENT, Optional.empty(), ordinal, StrategicObjectiveStatus.ACTIVE);
+                StrategicObjectiveKind.HIVE_ASSAULT_SETTLEMENT, Optional.empty(), Optional.empty(), ordinal, StrategicObjectiveStatus.ACTIVE,
+                authority.ownerId(), authority.reconsiderationEpoch());
         StrategicTask task = new StrategicTask(new SubjectId("task:" + objective.id().value().substring("objective:".length())), objective.id(), hive,
-                StrategicTaskKind.ASSAULT_SETTLEMENT, Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD,
-                StrategicTaskRequirement.AVAILABLE_HIVE_BOMBER), List.of(), StrategicTaskStatus.PENDING);
+                StrategicTaskKind.ASSAULT_SETTLEMENT, Optional.empty(), Optional.empty(), Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD,
+                StrategicTaskRequirement.AVAILABLE_HIVE_BOMBER), List.of(), StrategicTaskStatus.PENDING, Optional.empty(), authority.ownerId(), authority.reconsiderationEpoch());
         List<ProposedEvent> events = new java.util.ArrayList<>(preempted);
         events.add(new ProposedEvent(hive, new StrategicObjectiveSelected(objective)));
         events.add(new ProposedEvent(hive, new StrategicTaskPlanned(task)));
@@ -137,7 +139,7 @@ public final class StrategicObjectiveProcess {
         }
         int ordinal = FrontierWorldScheduleSupport.ordinal(action.id().value());
         Candidate candidate = new Candidate(StrategicObjectiveKind.SETTLEMENT_HARVEST_RESOURCE_SITE, Optional.empty(), Optional.of(lifecycle.siteId()), FixedScalar.SCALE);
-        StrategicObjective objective = objective(owner, candidate, ordinal); StrategicTask task = task(state, objective);
+        StrategicObjective objective = objective(state, owner, candidate, ordinal); StrategicTask task = task(state, objective);
         return List.of(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
                 new ProposedEvent(task.id(), new ScheduleEffect.Created(ResourceSiteHarvestProcess.start(task, Math.addExact(action.dueAt().ticks(), 100L)))));
     }
@@ -190,7 +192,7 @@ public final class StrategicObjectiveProcess {
         List<ProposedEvent> preempted = new java.util.ArrayList<>(preemptForInterception(state, owner, candidate));
         candidate.filter(value -> emergencyFoodCandidate(state, owner, value)).ifPresent(ignored -> preempted.addAll(preemptForEmergencyProvision(state, owner)));
         if (candidate.isEmpty()) return concatenate(observedAndHealth, next);
-        Candidate value = candidate.orElseThrow(); StrategicObjective objective = objective(owner, value, ordinal, eventIdentity);
+        Candidate value = candidate.orElseThrow(); StrategicObjective objective = objective(state, owner, value, ordinal, eventIdentity);
         if (state.strategicPlans().hasActiveObjective(owner, objective.lane()) && preempted.isEmpty()) {
             return concatenate(observedAndHealth, next);
         }
@@ -359,8 +361,8 @@ public final class StrategicObjectiveProcess {
                 state.inventory().fungibleResources().lots().get(entry.getKey()).itemKind().equals("minecraft:rotten_flesh") && entry.getValue() >= 64));
         return capacity && biomass ? Optional.of(new Candidate(StrategicObjectiveKind.HIVE_GROW_ORGANISM, Optional.empty(), FixedScalar.SCALE)) : Optional.empty();
     }
-    private static StrategicObjective objective(SubjectId owner, Candidate candidate, int ordinal) {
-        return objective(owner, candidate, ordinal, null);
+    private static StrategicObjective objective(FrontierWorldState state, SubjectId owner, Candidate candidate, int ordinal) {
+        return objective(state, owner, candidate, ordinal, null);
     }
     private static ScheduleId interceptOpportunityId(HiveOperationKnowledge.Sighting sighting) {
         String suffix = sighting.operationId().value().replace(':', '-') + "-" + sighting.scoutId().value().replace(':', '-')
@@ -374,11 +376,12 @@ public final class StrategicObjectiveProcess {
                 + "-" + sighting.observedAt();
         return new ScheduleId("schedule:objective-assault-opportunity-" + suffix);
     }
-    private static StrategicObjective objective(SubjectId owner, Candidate candidate, int ordinal, String eventIdentity) {
+    private static StrategicObjective objective(FrontierWorldState state, SubjectId owner, Candidate candidate, int ordinal, String eventIdentity) {
         String stem = eventIdentity == null ? owner.value().replace(':', '-') + "-" + candidate.kind().name().toLowerCase(java.util.Locale.ROOT) + "-" + ordinal
                 : eventIdentity.substring("schedule:".length());
+        DecisionAuthority authority = state.strategicPlans().requireDecisionAuthority(owner);
         return new StrategicObjective(new SubjectId("objective:" + stem), owner, candidate.kind(), candidate.target(), candidate.resourceSiteTarget(), ordinal,
-                StrategicObjectiveStatus.ACTIVE);
+                StrategicObjectiveStatus.ACTIVE, authority.ownerId(), authority.reconsiderationEpoch());
     }
     private static void requireKnownRouteTrigger(String trigger) {
         if (!trigger.equals("loss") && !trigger.equals("failure") && !trigger.equals("confirmed")) {
@@ -424,7 +427,8 @@ public final class StrategicObjectiveProcess {
             throw new IllegalArgumentException("hive interception requires one exact scout sighting");
         }
         return new StrategicTask(new SubjectId("task:" + objective.id().value().substring("objective:".length())), objective.id(), objective.ownerId(), kind,
-                objective.infectionTarget(), operation, objective.resourceSiteTarget(), requirements, dependencies(state, objective), StrategicTaskStatus.PENDING, observation);
+                objective.infectionTarget(), operation, objective.resourceSiteTarget(), requirements, dependencies(state, objective), StrategicTaskStatus.PENDING, observation,
+                objective.authorityId(), objective.authorityEpoch());
     }
     /** The patrol cause is an exact retained failed operation, never a nearest visible route. */
     private static Optional<RouteLoss> failedRouteLoss(FrontierWorldState state, SubjectId settlementId) {
@@ -455,13 +459,13 @@ public final class StrategicObjectiveProcess {
                         .thenComparing(StrategicTask::id)).map(StrategicTask::id).limit(1).toList();
     }
     private static StrategicTask cargoPreparationTask(FrontierWorldState state, StrategicObjective objective) {
-        return new StrategicTask(taskId(objective, "prepare"), objective.id(), objective.ownerId(), StrategicTaskKind.PREPARE_BREAD_CARGO, Optional.empty(),
-                List.of(StrategicTaskRequirement.EXACT_BREAD_CARGO), dependencies(state, objective), StrategicTaskStatus.PENDING);
+        return new StrategicTask(taskId(objective, "prepare"), objective.id(), objective.ownerId(), StrategicTaskKind.PREPARE_BREAD_CARGO, Optional.empty(), Optional.empty(), Optional.empty(),
+                List.of(StrategicTaskRequirement.EXACT_BREAD_CARGO), dependencies(state, objective), StrategicTaskStatus.PENDING, Optional.empty(), objective.authorityId(), objective.authorityEpoch());
     }
     private static StrategicTask deliveryTask(StrategicObjective objective, StrategicTask preparation) {
-        return new StrategicTask(taskId(objective, "deliver"), objective.id(), objective.ownerId(), StrategicTaskKind.DELIVER_BREAD_TO_HIVE, Optional.empty(),
+        return new StrategicTask(taskId(objective, "deliver"), objective.id(), objective.ownerId(), StrategicTaskKind.DELIVER_BREAD_TO_HIVE, Optional.empty(), Optional.empty(), Optional.empty(),
                 List.of(StrategicTaskRequirement.PASSABLE_SUPPLY_ROUTE, StrategicTaskRequirement.AVAILABLE_HAULER, StrategicTaskRequirement.AVAILABLE_GUARD),
-                List.of(preparation.id()), StrategicTaskStatus.PENDING);
+                List.of(preparation.id()), StrategicTaskStatus.PENDING, Optional.empty(), objective.authorityId(), objective.authorityEpoch());
     }
     private static SubjectId taskId(StrategicObjective objective, String phase) {
         return new SubjectId("task:" + objective.id().value().substring("objective:".length()) + "-" + phase);

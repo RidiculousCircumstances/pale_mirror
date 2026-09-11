@@ -8,12 +8,14 @@ import java.util.Optional;
 /** A deterministic strategic decision, retained until its durable task graph reaches a terminal state. */
 public record StrategicObjective(SubjectId id, SubjectId ownerId, StrategicObjectiveKind kind,
                           Optional<InfectionCell> infectionTarget, Optional<SubjectId> resourceSiteTarget,
-                          int decisionOrdinal, StrategicObjectiveStatus status) {
+                          int decisionOrdinal, StrategicObjectiveStatus status, SubjectId authorityId, long authorityEpoch) {
     public StrategicObjective {
         Objects.requireNonNull(id, "objective id"); Objects.requireNonNull(ownerId, "objective owner");
         Objects.requireNonNull(kind, "objective kind"); Objects.requireNonNull(infectionTarget, "infection target");
         Objects.requireNonNull(resourceSiteTarget, "objective resource-site target");
         Objects.requireNonNull(status, "objective status");
+        Objects.requireNonNull(authorityId, "objective decision authority");
+        if (authorityEpoch < 0L) throw new IllegalArgumentException("objective decision epoch must be non-negative");
         if (decisionOrdinal <= 0) throw new IllegalArgumentException("objective decision ordinal must be positive");
         if (kind != StrategicObjectiveKind.HIVE_GROW_ORGANISM && kind != StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION
                 && kind != StrategicObjectiveKind.HIVE_ASSAULT_SETTLEMENT
@@ -35,10 +37,14 @@ public record StrategicObjective(SubjectId id, SubjectId ownerId, StrategicObjec
     }
     public StrategicObjective(SubjectId id, SubjectId ownerId, StrategicObjectiveKind kind, Optional<InfectionCell> infectionTarget,
                        int decisionOrdinal, StrategicObjectiveStatus status) {
-        this(id, ownerId, kind, infectionTarget, Optional.empty(), decisionOrdinal, status);
+        this(id, ownerId, kind, infectionTarget, Optional.empty(), decisionOrdinal, status, ownerId, 0L);
+    }
+    public StrategicObjective(SubjectId id, SubjectId ownerId, StrategicObjectiveKind kind, Optional<InfectionCell> infectionTarget,
+                              Optional<SubjectId> resourceSiteTarget, int decisionOrdinal, StrategicObjectiveStatus status) {
+        this(id, ownerId, kind, infectionTarget, resourceSiteTarget, decisionOrdinal, status, ownerId, 0L);
     }
     public StrategicObjectiveLane lane() { return StrategicObjectiveLane.forKind(kind); }
     public StrategicObjective withStatus(StrategicObjectiveStatus nextStatus) {
-        return new StrategicObjective(id, ownerId, kind, infectionTarget, resourceSiteTarget, decisionOrdinal, nextStatus);
+        return new StrategicObjective(id, ownerId, kind, infectionTarget, resourceSiteTarget, decisionOrdinal, nextStatus, authorityId, authorityEpoch);
     }
 }
