@@ -54,10 +54,10 @@ final class SettlementProvisionPayloadCodecs {
         @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
             SettlementProvisionConsumed consumed = (SettlementProvisionConsumed) payload;
             FrontierWorldPayloadCodecs.writeSubject(output, consumed.settlementId()); FrontierWorldPayloadCodecs.writeSubject(output, consumed.itemId());
-            FrontierWorldStateCodec.writeCount(output, consumed.count());
+            FrontierWorldStateCodec.writeCount(output, consumed.count()); output.writeBoolean(consumed.fungibleContents());
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new SettlementProvisionConsumed(
-                FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldStateCodec.readCount(input))); }
+                FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldStateCodec.readCount(input), input.readBoolean())); }
     }; }
 
     static PayloadCodec resolved() { return new PayloadCodec() {
@@ -80,7 +80,12 @@ final class SettlementProvisionPayloadCodecs {
         for (SubjectId recipient : provision.recipientIds()) FrontierWorldPayloadCodecs.writeSubject(output, recipient);
         FrontierWorldStateCodec.writeCount(output, provision.allocations().size());
         for (SettlementRationAllocation allocation : provision.allocations()) {
-            FrontierWorldPayloadCodecs.writeSubject(output, allocation.itemId()); FrontierWorldStateCodec.writeCount(output, allocation.recipientIds().size());
+            FrontierWorldPayloadCodecs.writeSubject(output, allocation.itemId()); output.writeBoolean(allocation.fungible());
+            if (allocation.fungible()) {
+                FrontierWorldPayloadCodecs.writeSubject(output, allocation.fungibleSource().orElseThrow().accountId());
+                FrontierWorldPayloadCodecs.writeSubject(output, allocation.fungibleSource().orElseThrow().claimId());
+            }
+            FrontierWorldStateCodec.writeCount(output, allocation.recipientIds().size());
             for (SubjectId recipient : allocation.recipientIds()) FrontierWorldPayloadCodecs.writeSubject(output, recipient);
         }
         FrontierWorldStateCodec.writeCount(output, provision.nextAllocation()); output.writeByte(provision.status().wireTag()); output.writeBoolean(provision.activeIntentId().isPresent());
@@ -93,11 +98,15 @@ final class SettlementProvisionPayloadCodecs {
         for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) recipients.add(FrontierWorldPayloadCodecs.readSubject(input).value());
         List<SettlementRationAllocation> allocations = new ArrayList<>();
         for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) {
-            SubjectId item = FrontierWorldPayloadCodecs.readSubject(input).value(); List<SubjectId> allocationRecipients = new ArrayList<>();
+            SubjectId item = FrontierWorldPayloadCodecs.readSubject(input).value(); boolean fungible = input.readBoolean();
+            SettlementRationAllocation.FungibleSource source = fungible ? new SettlementRationAllocation.FungibleSource(
+                    FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldPayloadCodecs.readSubject(input).value()) : null;
+            List<SubjectId> allocationRecipients = new ArrayList<>();
             for (int recipient = 0, recipientCount = FrontierWorldStateCodec.readCount(input); recipient < recipientCount; recipient++) {
                 allocationRecipients.add(FrontierWorldPayloadCodecs.readSubject(input).value());
             }
-            allocations.add(new SettlementRationAllocation(item, allocationRecipients));
+            allocations.add(fungible ? new SettlementRationAllocation(item, allocationRecipients, Optional.of(source))
+                    : new SettlementRationAllocation(item, allocationRecipients));
         }
         int next = FrontierWorldStateCodec.readCount(input); int status = input.readUnsignedByte(); boolean active = input.readBoolean();
         if (status >= SettlementProvisionStatus.values().length) throw new IllegalArgumentException("unknown settlement provision status");

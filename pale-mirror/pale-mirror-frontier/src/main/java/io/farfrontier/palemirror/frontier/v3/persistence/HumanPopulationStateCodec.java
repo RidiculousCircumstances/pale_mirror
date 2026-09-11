@@ -59,7 +59,12 @@ final class HumanPopulationStateCodec {
             for (SubjectId recipient : provision.recipientIds()) FrontierWorldStateCodec.writeString(output, recipient.value());
             FrontierWorldStateCodec.writeCount(output, provision.allocations().size());
             for (SettlementRationAllocation allocation : provision.allocations()) {
-                FrontierWorldStateCodec.writeString(output, allocation.itemId().value()); FrontierWorldStateCodec.writeCount(output, allocation.recipientIds().size());
+                FrontierWorldStateCodec.writeString(output, allocation.itemId().value()); output.writeBoolean(allocation.fungible());
+                if (allocation.fungible()) {
+                    FrontierWorldStateCodec.writeString(output, allocation.fungibleSource().orElseThrow().accountId().value());
+                    FrontierWorldStateCodec.writeString(output, allocation.fungibleSource().orElseThrow().claimId().value());
+                }
+                FrontierWorldStateCodec.writeCount(output, allocation.recipientIds().size());
                 for (SubjectId recipient : allocation.recipientIds()) FrontierWorldStateCodec.writeString(output, recipient.value());
             }
             FrontierWorldStateCodec.writeCount(output, provision.nextAllocation()); output.writeByte(provision.status().wireTag()); output.writeBoolean(provision.activeIntentId().isPresent());
@@ -151,7 +156,10 @@ final class HumanPopulationStateCodec {
             } else recipients.addAll(legacyRecipients(residents, settlement, required));
             java.util.List<SettlementRationAllocation> allocations = new java.util.ArrayList<>();
             for (int allocation = 0, allocationCount = FrontierWorldStateCodec.readCount(input); allocation < allocationCount; allocation++) {
-                SubjectId item = new SubjectId(FrontierWorldStateCodec.readString(input)); java.util.List<SubjectId> allocationRecipients = new java.util.ArrayList<>();
+                SubjectId item = new SubjectId(FrontierWorldStateCodec.readString(input)); boolean fungible = input.readBoolean();
+                SettlementRationAllocation.FungibleSource source = fungible ? new SettlementRationAllocation.FungibleSource(
+                        new SubjectId(FrontierWorldStateCodec.readString(input)), new SubjectId(FrontierWorldStateCodec.readString(input))) : null;
+                java.util.List<SubjectId> allocationRecipients = new java.util.ArrayList<>();
                 if (hasNutrition) {
                     for (int recipient = 0, recipientCount = FrontierWorldStateCodec.readCount(input); recipient < recipientCount; recipient++) {
                         allocationRecipients.add(new SubjectId(FrontierWorldStateCodec.readString(input)));
@@ -160,7 +168,8 @@ final class HumanPopulationStateCodec {
                     int legacyCount = FrontierWorldStateCodec.readCount(input); int start = allocations.stream().mapToInt(SettlementRationAllocation::count).sum();
                     allocationRecipients.addAll(recipients.subList(start, Math.min(Math.addExact(start, legacyCount), recipients.size())));
                 }
-                allocations.add(new SettlementRationAllocation(item, allocationRecipients));
+                allocations.add(fungible ? new SettlementRationAllocation(item, allocationRecipients, java.util.Optional.of(source))
+                        : new SettlementRationAllocation(item, allocationRecipients));
             }
             int next = FrontierWorldStateCodec.readCount(input); int status = input.readUnsignedByte(); boolean active = input.readBoolean();
             if (status >= SettlementProvisionStatus.values().length) throw new IllegalArgumentException("unknown settlement provision status");

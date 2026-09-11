@@ -24,6 +24,7 @@ import io.farfrontier.palemirror.frontier.v3.persistence.SnapshotRecord;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -56,6 +57,23 @@ class SettlementProvisionProcessTest {
         assertTrue(settled.humanPopulation().residents().values().stream().filter(resident -> resident.settlementId().equals(settlement.id()))
                 .allMatch(resident -> settled.humanPopulation().nutrition(resident.id()).status() == ResidentNutritionStatus.NOURISHED));
         assertEquals(provision, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(settled)).humanPopulation().provision(settlement.id()));
+    }
+
+    @Test
+    void coldFungibleFoodCycleClaimsAndConsumesOneLotWithoutInventingAStackIdentity() {
+        WorldId world = new WorldId("frontier:provision-fungible-cold");
+        FrontierWorldState initial = withFungibleBread(base(world).initialState());
+        var engine = FrontierEngines.create(configuration(world, initial)); advance(engine, 102L);
+
+        FrontierWorldState settled = state(engine); Settlement settlement = settled.bootstrap().settlements().getFirst();
+        SettlementProvision provision = settled.humanPopulation().provision(settlement.id());
+        SubjectId breadLot = new SubjectId("lot:provision-fungible-bread");
+        assertEquals(SettlementProvisionStatus.SECURE, provision.status());
+        assertEquals(64 - settlement.residents().size(), settled.inventory().fungibleResources().lots().get(breadLot).quantity());
+        assertTrue(settled.inventory().fungibleResources().claims().isEmpty(), "the consumed allocation releases its transient claim");
+        assertTrue(settled.inventory().items().values().stream().noneMatch(item -> item.itemKind().equals(SettlementProvisionProcess.BREAD)),
+                "ordinary food never needs a permanent exact stack identity");
+        assertEquals(settled, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(settled)));
     }
 
     @Test
@@ -262,6 +280,14 @@ class SettlementProvisionProcessTest {
 
     private static FrontierWorldState withBread(FrontierWorldState state, boolean active) {
         return withBreadCount(state, active, 64);
+    }
+
+    private static FrontierWorldState withFungibleBread(FrontierWorldState state) {
+        SubjectId settlement = state.bootstrap().settlements().getFirst().id(); SubjectId wheat = new SubjectId("lot:bootstrap-1-wheat");
+        SubjectId account = new SubjectId("custody:container-1-depot"); SubjectId bread = new SubjectId("lot:provision-fungible-bread");
+        FungibleResourceLedger resources = state.inventory().fungibleResources().transformCold(account, Map.of(wheat, 64), Map.of(),
+                new ResourceLot(bread, settlement, SettlementProvisionProcess.BREAD, 64, "test-provision", List.of(wheat)));
+        return state.withInventory(state.inventory().withFungibleResources(resources));
     }
 
     private static FrontierWorldState withBreadCount(FrontierWorldState state, boolean active, int count) {

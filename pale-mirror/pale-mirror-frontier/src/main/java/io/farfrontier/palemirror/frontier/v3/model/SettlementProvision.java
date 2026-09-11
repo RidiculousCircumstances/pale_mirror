@@ -29,8 +29,8 @@ public record SettlementProvision(SubjectId settlementId, int cycleOrdinal, long
             throw new IllegalArgumentException("settlement provision allocation retention limit exceeded");
         }
         if (nextAllocation < 0 || nextAllocation > allocations.size()) throw new IllegalArgumentException("invalid provision allocation cursor");
-        if (allocations.stream().map(SettlementRationAllocation::itemId).distinct().count() != allocations.size()) {
-            throw new IllegalArgumentException("one provision cycle may allocate each exact item once");
+        if (allocations.stream().map(SettlementRationAllocation::identity).distinct().count() != allocations.size()) {
+            throw new IllegalArgumentException("one provision cycle may allocate each exact item or claim once");
         }
         List<SubjectId> allocatedRecipients = allocations.stream().flatMap(allocation -> allocation.recipientIds().stream()).toList();
         if (allocatedRecipients.stream().distinct().count() != allocatedRecipients.size() || !recipientIds.containsAll(allocatedRecipients)) {
