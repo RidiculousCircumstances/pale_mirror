@@ -57,7 +57,8 @@ public final class FrontierV3CargoCarrierGameTests {
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime = runtime("frontier:scene-cargo-test");
         FrontierWorldState state = state(runtime); SceneLease lease = lease(state, origin, "lease:frontier-v3-cargo-test");
         prepareSupport(level, cargoPosition(origin, lease));
-        var expected = state.inventory().cargo().get(FrontierSceneBehaviors.logistics(lease).cargoId()).itemIds().stream().map(state.inventory().items()::get)
+        var cargo = state.inventory().cargo().get(FrontierSceneBehaviors.logistics(lease).cargoId());
+        var expected = cargo.itemIds().stream().map(state.inventory().items()::get)
                 .sorted(java.util.Comparator.comparing(value -> value.id())).toList();
         helper.assertValueEqual(FrontierV3CargoCarrierExecutor.materializeForFixture(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
                 "a prepared loaded scene must create one exact cargo carrier");
@@ -65,13 +66,13 @@ public final class FrontierV3CargoCarrierGameTests {
             try {
                 Entity carrier = level.getEntity(FrontierV3CargoCarrierExecutor.id(lease));
                 helper.assertTrue(carrier instanceof MinecartChest, "the graybox carrier must be a visible chest minecart");
-                helper.assertTrue(FrontierV3CargoCarrierExecutor.owned(carrier, lease, expected), "the carrier must hold only canonical tagged cargo");
+                helper.assertTrue(FrontierV3CargoCarrierExecutor.owned(state, carrier, lease, cargo, expected), "the carrier must hold only canonical tagged cargo");
                 helper.assertTrue(FrontierV3CargoCarrierPresentation.attached(carrier, lease),
                         "one exact local caption must ride with the real cargo carrier rather than becoming a detached HUD");
                 helper.assertValueEqual(FrontierV3CargoCarrierExecutor.materializeForFixture(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
                         "recovery must reuse the exact carrier rather than duplicate cargo");
                 helper.assertValueEqual(level.getEntitiesOfClass(MinecartChest.class, carrier.getBoundingBox().inflate(8.0D),
-                                candidate -> FrontierV3CargoCarrierExecutor.owned(candidate, lease, expected)).size(), 1,
+                                candidate -> FrontierV3CargoCarrierExecutor.owned(state, candidate, lease, cargo, expected)).size(), 1,
                         "one HOT lease must retain exactly one owned cargo carrier, independently of a parallel scene's cart");
                 carrier.discard(); runtime.shutdown(); helper.succeed();
             } catch (RuntimeException failure) { discard(level, lease); runtime.shutdown(); throw failure; }

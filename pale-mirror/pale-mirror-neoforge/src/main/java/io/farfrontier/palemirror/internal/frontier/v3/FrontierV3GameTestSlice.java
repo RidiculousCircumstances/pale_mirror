@@ -25,6 +25,7 @@ public final class FrontierV3GameTestSlice {
                     || batchName.equals("pm-frontier-v3-resource-observation");
             case ECONOMY -> batchName.equals("pm-frontier-v3-exact-consumption") || batchName.equals("pm-frontier-v3-production")
                     || batchName.equals("pm-frontier-v3-cargo-loading") || batchName.equals("pm-frontier-v3-hive-nutrient")
+                    || batchName.equals("pm-frontier-v3-player-withdrawal")
                     || batchName.equals("pm-frontier-v3-object-boards") || batchName.equals("pm-frontier-v3-equipment-issue")
                     || batchName.equals("pm-frontier-v3-equipment-return") || batchName.equals("pm-frontier-v3-equipment-death")
                     || batchName.equals("pm-frontier-v3-resource-recovery") || batchName.equals("pm-frontier-v3-reference-custody");
