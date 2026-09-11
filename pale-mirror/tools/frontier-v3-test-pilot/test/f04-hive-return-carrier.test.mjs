@@ -11,7 +11,7 @@ const positions = Object.freeze(ids.map((id, index) => ({ id, x: -360 + index, y
 function snapshot(returnedMembers, survivorPositions = positions) {
   return { kind: 'hive_mobilization', id: 'mobilization:development-hive-mobilization', status: 'ok', mobilizationStatus: 'RETURNING',
     survivors: 4, returnedMembers, returnComplete: false, survivorPositions,
-    physicalSurvivors: survivorPositions.map(value => ({ id: value.id, observed: { x: value.x, y: value.y, z: value.z } })) };
+    physicalSurvivors: survivorPositions.map(value => ({ id: value.id, observed: { x: value.x, y: value.y + 1, z: value.z } })) };
 }
 
 const declarationSource = await readFile(new URL('../scenarios/disposable-hive-return-restart.json', import.meta.url));

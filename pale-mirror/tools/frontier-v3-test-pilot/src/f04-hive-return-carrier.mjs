@@ -72,7 +72,9 @@ function normalizeSurvivors(values) {
 }
 function observedBodies(snapshot) {
   const bodies = normalizeSurvivors(snapshot?.physicalSurvivors?.map(value => ({ id: value?.id, ...value?.observed })));
-  return bodies.length === 4 && bodies.every(validSurvivor) && sameIds(normalizeSurvivors(snapshot.survivorPositions), bodies);
+  const canonical = normalizeSurvivors(snapshot.survivorPositions);
+  return bodies.length === 4 && bodies.every(validSurvivor) && sameIds(canonical, bodies)
+    && canonical.every((value, index) => value.x === bodies[index].x && value.y + 1 === bodies[index].y && value.z === bodies[index].z);
 }
 
 function validSurvivor(value) { return typeof value.id === 'string' && Number.isInteger(value.x) && Number.isInteger(value.y) && Number.isInteger(value.z); }
