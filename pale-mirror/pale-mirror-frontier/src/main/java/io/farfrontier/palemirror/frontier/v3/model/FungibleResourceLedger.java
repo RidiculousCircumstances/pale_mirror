@@ -496,7 +496,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
                 ClaimAllocation claim = claims.get(id);
                 if (claim == null) throw new IllegalArgumentException("custody account references an unknown claim");
                 claimTotals.merge(id, quantity, Integer::sum);
-                int compatible = account.lotQuantities().entrySet().filter(entry -> {
+                int compatible = account.lotQuantities().entrySet().stream().filter(entry -> {
                     ResourceLot lot = lots.get(entry.getKey());
                     return lot.economicOwnerId().equals(claim.economicOwnerId()) && lot.itemKind().equals(claim.itemKind());
                 }).mapToInt(Map.Entry::getValue).sum();
