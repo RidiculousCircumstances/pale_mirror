@@ -33,7 +33,7 @@ public final class FrontierWorldProcessCatalog {
             "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled");
     private static final Set<String> PHYSICAL = types(
             "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition",
-            "frontier.structure_damaged", "frontier.resource_deposited", "frontier.fungible_stack_layout_observed", "frontier.exact_item_custody_changed",
+            "frontier.structure_damaged", "frontier.resource_deposited", "frontier.fungible_stack_layout_observed", "frontier.fungible_resource_handoff_observed", "frontier.exact_item_custody_changed",
             "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed", "frontier.container_surface_transition",
             "frontier.cargo_carrier_released");
     private static final Set<String> REPLICA_CUSTODY = types(
@@ -268,7 +268,7 @@ public final class FrontierWorldProcessCatalog {
 
     private static Set<String> physicalCommands() { return types(
             "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
-            "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.resource_deposited", "frontier.fungible_stack_layout_observed", "frontier.exact_item_custody_changed",
+            "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.resource_deposited", "frontier.fungible_stack_layout_observed", "frontier.fungible_resource_handoff_observed", "frontier.exact_item_custody_changed",
             "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed", "frontier.container_surface_transition",
             "frontier.cargo_carrier_released"); }
     private static Set<String> replicaCustodyCommands() { return REPLICA_CUSTODY; }
@@ -355,7 +355,7 @@ public final class FrontierWorldProcessCatalog {
             case "physical-observation" -> types(
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
                     "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
-                    "frontier.resource_deposited", "frontier.fungible_stack_layout_observed", "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed",
+                    "frontier.resource_deposited", "frontier.fungible_stack_layout_observed", "frontier.fungible_resource_handoff_observed", "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed",
                     "frontier.container_surface_transition", "frontier.cargo_carrier_released", "frontier.route_construction_material_loaded",
                     "frontier.route_maintenance_material_loaded",
                     "frontier.resident_born", "frontier.resident_migrated",

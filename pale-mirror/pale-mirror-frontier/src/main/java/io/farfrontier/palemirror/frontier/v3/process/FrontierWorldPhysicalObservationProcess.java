@@ -148,6 +148,24 @@ public final class FrontierWorldPhysicalObservationProcess {
         return state.withInventory(state.inventory().withFungibleResources(ledger.rebind(account.id(), observed.authorityEpoch(), bindings)));
     }
 
+    static CommandPlan planFungibleHandoff(FrontierWorldState state, FungibleResourceHandoffObserved observed) {
+        CustodyAccount source = state.inventory().fungibleResources().accounts().get(observed.sourceAccountId());
+        if (source == null) return new CommandPlan.Rejected(new CommandRejection(RejectionCode.REJECTED_BY_POLICY,
+                "fungible handoff has an unknown source account"));
+        SubjectId owner = owner(state, source);
+        try { reduceFungibleHandoff(state, owner, observed); }
+        catch (IllegalArgumentException invalid) { return new CommandPlan.Rejected(new CommandRejection(RejectionCode.REJECTED_BY_POLICY, invalid.getMessage())); }
+        return new CommandPlan.Accepted(List.of(new ProposedEvent(owner, observed)));
+    }
+
+    static FrontierWorldState reduceFungibleHandoff(FrontierWorldState state, SubjectId subject, FungibleResourceHandoffObserved observed) {
+        FungibleResourceLedger ledger = state.inventory().fungibleResources(); CustodyAccount source = ledger.accounts().get(observed.sourceAccountId());
+        if (source == null || !subject.equals(owner(state, source))) throw new IllegalArgumentException("fungible handoff has no owning subject");
+        FungibleResourceLedger transferred = ledger.transferObservedToNewAccount(observed.sourceAccountId(), observed.destinationAccount(), observed.sourceEpoch(),
+                observed.destinationEpoch(), observed.lotQuantities(), observed.claimQuantities(), observed.remainingSource(), observed.destinationBindings());
+        return state.withInventory(state.inventory().withFungibleResources(transferred));
+    }
+
     private static SubjectId owner(FrontierWorldState state, CustodyAccount account) {
         if (account.custody() instanceof ResourceCustody.Container container) {
             ContainerRecord record = state.inventory().containers().get(container.containerId());

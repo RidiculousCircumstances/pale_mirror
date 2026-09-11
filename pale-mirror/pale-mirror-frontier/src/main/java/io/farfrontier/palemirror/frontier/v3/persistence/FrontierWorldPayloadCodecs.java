@@ -14,7 +14,8 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     static PayloadCodecs physicalCodecs() { return new PayloadCodecs(List.of(
             new PhysicalIntentPreparedCodec(), new PhysicalIntentTransitionCodec(), new StructureDamagedCodec(),
             PhysicalDeltaPayloadCodecs.single(), PhysicalDeltaPayloadCodecs.batch(), new ExactItemCustodyChangedCodec(), new ExactItemDestroyedCodec(),
-            new InventoryConflictObservedCodec(), new ContainerSurfaceTransitionCodec(), new ResourceDepositedCodec(), new FungibleStackLayoutObservedCodec(), new CargoCarrierReleasedPayloadCodec())); }
+            new InventoryConflictObservedCodec(), new ContainerSurfaceTransitionCodec(), new ResourceDepositedCodec(), new FungibleStackLayoutObservedCodec(),
+            new FungibleResourceHandoffObservedCodec(), new CargoCarrierReleasedPayloadCodec())); }
     static PayloadCodecs replicaCustodyCodecs() { return new PayloadCodecs(PhysicalReplicaCustodyPayloadCodecs.codecs()); }
     static PayloadCodecs ambientCodecs() { return new PayloadCodecs(List.of(new AmbientActorDiedCodec(),
             new AmbientActorObservedCodec(), AmbientLeasePayloadCodecs.prepared(), AmbientLeasePayloadCodecs.transition(), AmbientLeasePayloadCodecs.released(),
@@ -188,6 +189,18 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             for (int index = 0; index < count; index++) stacks.add(new FungiblePhysicalObservation.Stack(readPhysicalStackAddress(input), readString(input), input.readUnsignedByte()));
             return new FungibleStackLayoutObserved(account, epoch, stacks);
         }); }
+    }
+    private static final class FungibleResourceHandoffObservedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.fungible_resource_handoff_observed"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
+            FungibleResourceHandoffObserved observed = (FungibleResourceHandoffObserved) payload;
+            writeSubject(output, observed.sourceAccountId()); writeFungibleAccount(output, observed.destinationAccount());
+            output.writeLong(observed.sourceEpoch()); output.writeLong(observed.destinationEpoch()); writeFungibleQuantities(output, observed.lotQuantities());
+            writeFungibleQuantities(output, observed.claimQuantities()); writeFungibleBindings(output, observed.remainingSource()); writeFungibleBindings(output, observed.destinationBindings());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new FungibleResourceHandoffObserved(readSubject(input).value(),
+                readFungibleAccount(input), input.readLong(), input.readLong(), readFungibleQuantities(input), readFungibleQuantities(input),
+                readFungibleBindings(input), readFungibleBindings(input))); }
     }
     private static final class ContractCreatedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.supply_contract_created"; } @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> writeContract(output, ((SupplyContractCreated) payload).contract())); }
@@ -837,6 +850,50 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             case 3 -> new PhysicalStackAddress.WorldEntity(java.util.UUID.fromString(readString(input)));
             default -> throw new IllegalArgumentException("unknown physical stack address");
         };
+    } private static void writeFungibleAccount(DataOutputStream output, CustodyAccount account) throws IOException {
+        writeSubject(output, account.id()); writeResourceCustody(output, account.custody()); writeFungibleQuantities(output, account.lotQuantities());
+        writeFungibleQuantities(output, account.claimQuantities());
+    } private static CustodyAccount readFungibleAccount(DataInputStream input) throws IOException {
+        return new CustodyAccount(readSubject(input).value(), readResourceCustody(input), readFungibleQuantities(input), readFungibleQuantities(input));
+    } private static void writeResourceCustody(DataOutputStream output, ResourceCustody custody) throws IOException {
+        switch (custody) {
+            case ResourceCustody.Container container -> { output.writeByte(0); writeSubject(output, container.containerId()); }
+            case ResourceCustody.Player player -> { output.writeByte(1); writeString(output, player.playerId().toString()); }
+            case ResourceCustody.Cargo cargo -> { output.writeByte(2); writeSubject(output, cargo.cargoId()); }
+            case ResourceCustody.WorldCarrier carrier -> { output.writeByte(3); writeString(output, carrier.carrierId().toString()); }
+            case ResourceCustody.Actor actor -> { output.writeByte(4); writeSubject(output, actor.actorId()); }
+        }
+    } private static ResourceCustody readResourceCustody(DataInputStream input) throws IOException {
+        return switch (input.readUnsignedByte()) {
+            case 0 -> new ResourceCustody.Container(readSubject(input).value());
+            case 1 -> new ResourceCustody.Player(java.util.UUID.fromString(readString(input)));
+            case 2 -> new ResourceCustody.Cargo(readSubject(input).value());
+            case 3 -> new ResourceCustody.WorldCarrier(java.util.UUID.fromString(readString(input)));
+            case 4 -> new ResourceCustody.Actor(readSubject(input).value());
+            default -> throw new IllegalArgumentException("unknown resource custody");
+        };
+    } private static void writeFungibleQuantities(DataOutputStream output, java.util.Map<SubjectId, Integer> quantities) throws IOException {
+        output.writeShort(quantities.size());
+        for (java.util.Map.Entry<SubjectId, Integer> entry : quantities.entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).toList()) {
+            writeSubject(output, entry.getKey()); output.writeShort(entry.getValue());
+        }
+    } private static java.util.Map<SubjectId, Integer> readFungibleQuantities(DataInputStream input) throws IOException {
+        java.util.Map<SubjectId, Integer> quantities = new java.util.LinkedHashMap<>();
+        for (int index = 0, count = input.readUnsignedShort(); index < count; index++) {
+            SubjectId id = readSubject(input).value(); if (quantities.put(id, input.readUnsignedShort()) != null) throw new IllegalArgumentException("duplicate fungible quantity identity");
+        }
+        return quantities;
+    } private static void writeFungibleBindings(DataOutputStream output, java.util.List<PhysicalStackBinding> bindings) throws IOException {
+        output.writeShort(bindings.size());
+        for (PhysicalStackBinding binding : bindings) {
+            writeSubject(output, binding.id()); writeSubject(output, binding.accountId()); writePhysicalStackAddress(output, binding.address()); output.writeLong(binding.authorityEpoch());
+            writeString(output, binding.itemKind()); writeFungibleQuantities(output, binding.lotQuantities()); writeFungibleQuantities(output, binding.claimQuantities());
+        }
+    } private static java.util.List<PhysicalStackBinding> readFungibleBindings(DataInputStream input) throws IOException {
+        java.util.ArrayList<PhysicalStackBinding> bindings = new java.util.ArrayList<>();
+        for (int index = 0, count = input.readUnsignedShort(); index < count; index++) bindings.add(new PhysicalStackBinding(readSubject(input).value(),
+                readSubject(input).value(), readPhysicalStackAddress(input), input.readLong(), readString(input), readFungibleQuantities(input), readFungibleQuantities(input)));
+        return bindings;
     } public static void writeSubject(DataOutputStream output, io.farfrontier.palemirror.frontier.v3.api.SubjectId value) throws IOException { writeString(output, value.value()); }
     static SubjectIdHolder readSubject(DataInputStream input) throws IOException { return new SubjectIdHolder(new io.farfrontier.palemirror.frontier.v3.api.SubjectId(readString(input))); }
     public static void writeString(DataOutputStream output, String value) throws IOException {

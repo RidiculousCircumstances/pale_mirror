@@ -37,6 +37,9 @@ final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule 
         if (command.payload() instanceof FungibleStackLayoutObserved observed) {
             return FrontierWorldPhysicalObservationProcess.planFungibleLayout(state, observed);
         }
+        if (command.payload() instanceof FungibleResourceHandoffObserved observed) {
+            return FrontierWorldPhysicalObservationProcess.planFungibleHandoff(state, observed);
+        }
         if (command.payload() instanceof ExactItemCustodyChanged changed) {
             ExactItemStack item = state.inventory().items().get(changed.itemId());
             if (item == null || !item.custody().equals(changed.from())) {
@@ -94,6 +97,7 @@ final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule 
             case PhysicalDeltasObserved observed -> FrontierWorldPhysicalObservationProcess.reduce(state, event.subject(), observed);
             case ResourceDeposited deposited -> FrontierWorldPhysicalObservationProcess.reduceResourceDeposit(state, event.subject(), deposited);
             case FungibleStackLayoutObserved observed -> FrontierWorldPhysicalObservationProcess.reduceFungibleLayout(state, event.subject(), observed);
+            case FungibleResourceHandoffObserved observed -> FrontierWorldPhysicalObservationProcess.reduceFungibleHandoff(state, event.subject(), observed);
             case ExactItemCustodyChanged changed -> reduceCustodyChanged(state, event.subject(), changed);
             case ExactItemDestroyed destroyed -> reduceDestroyed(state, event.subject(), destroyed);
             case CargoCarrierReleased released -> reduceCarrierReleased(state, event.subject(), released);

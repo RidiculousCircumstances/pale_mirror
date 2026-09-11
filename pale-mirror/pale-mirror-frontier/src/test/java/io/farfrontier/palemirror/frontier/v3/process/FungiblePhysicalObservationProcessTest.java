@@ -16,13 +16,16 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackBinding;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceCustody;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceLot;
+import io.farfrontier.palemirror.frontier.v3.model.FungibleResourceHandoffObserved;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -48,8 +51,19 @@ class FungiblePhysicalObservationProcessTest {
         assertEquals(2, afterSplit.inventory().fungibleResources().bindings().size());
         assertInstanceOf(CommandResult.Rejected.class, engine.submit(command(engine, world, "stale", observation(accountId, 3L, "minecraft:bread", 6, 4))));
         assertInstanceOf(CommandResult.Rejected.class, engine.submit(command(engine, world, "mixed", observation(accountId, 4L, "minecraft:carrot", 6, 4))));
-        assertEquals(10, new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState())
-                .inventory().fungibleResources().totalQuantity(owner, "minecraft:bread"));
+        SubjectId playerAccount = new SubjectId("custody:physical-player"); UUID player = UUID.fromString("00000000-0000-0000-0000-000000000099");
+        CustodyAccount destination = new CustodyAccount(playerAccount, new ResourceCustody.Player(player), Map.of(lotId, 4), Map.of());
+        PhysicalStackBinding remaining = new PhysicalStackBinding(new SubjectId("binding:physical-remainder"), accountId,
+                new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(container, 1)), 4L, "minecraft:bread", Map.of(lotId, 6), Map.of());
+        PhysicalStackBinding playerBinding = new PhysicalStackBinding(new SubjectId("binding:physical-player"), playerAccount,
+                new PhysicalStackAddress.PlayerSlot(player, 0), 5L, "minecraft:bread", Map.of(lotId, 4), Map.of());
+        FungibleResourceHandoffObserved handoff = new FungibleResourceHandoffObserved(accountId, destination, 4L, 5L, Map.of(lotId, 4), Map.of(),
+                List.of(remaining), List.of(playerBinding));
+        assertEquals(handoff, FrontierWorldRuntimeDefinition.payloadCodecs().decode(handoff.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(handoff)));
+        assertInstanceOf(CommandResult.Accepted.class, engine.submit(command(engine, world, "handoff", handoff)));
+        FrontierWorldState transferred = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertEquals(Map.of(lotId, 4), transferred.inventory().fungibleResources().accounts().get(playerAccount).lotQuantities());
+        assertEquals(10, transferred.inventory().fungibleResources().totalQuantity(owner, "minecraft:bread"));
     }
 
     private static FungibleStackLayoutObserved observation(SubjectId account, long epoch, String kind, int first, int second) {
@@ -59,7 +73,7 @@ class FungiblePhysicalObservationProcessTest {
     }
 
     private static FrontierCommand command(io.farfrontier.palemirror.frontier.v3.api.FrontierEngine<?> engine, WorldId world, String id,
-                                           FungibleStackLayoutObserved payload) {
+                                           io.farfrontier.palemirror.frontier.v3.api.FrontierPayload payload) {
         CommandId command = new CommandId("command:fungible-" + id); var checkpoint = engine.checkpoint();
         return new FrontierCommand(1, command, world, checkpoint.revision(), checkpoint.instant(), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,
                 CauseChain.root(command), payload);
