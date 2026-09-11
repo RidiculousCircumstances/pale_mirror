@@ -1,6 +1,6 @@
 # PM-F02C-COLD-ADMISSION-FINAL-27: verify the bounded COLD admission correction
 
-Specification revision: 2. Status: `EXECUTING_FINAL_VERIFICATION`.
+Specification revision: 3. Status: `TERMINAL_PRODUCT_RED`.
 Parent slice: F0.2C. Risk: critical-code. Engineer: supervising root.
 Executor: one fresh `gpt-5.6-terra`, reasoning `high`, routed as
 `/root/f02c_shared_assault_challenge24/terra_cold_admission_final27`.
@@ -95,3 +95,47 @@ intermediate design decision.
 Assignment epoch: `2026-09-11T00:53:20Z`. The supervisor performs one bounded
 liveness check after each complete ten-minute silence interval and one economy
 audit after one hour if still active.
+
+## Terminal review
+
+Exact clean checkpoint `e5284b782c68af29319e7c11ba75947421dc0254`
+passed the complete critical gate from `2026-09-11T00:54:40Z` to `00:58:48Z`:
+exit 0 in 248 seconds, 71 tasks, 303/303 GameTests, all-dimensions-saved and
+packaged JAR SHA-256
+`fdc030b130c78726e0ad0b0f4d50fc565670e974a7d2ddee775cde0f404cf6c7`.
+This result is accepted and reusable only for this exact candidate.
+
+The sole R14 reached a real client, private Xvfb/GLX, fixture readiness, visit,
+28-member settlement-assault HOT lease and current physical bodies at revision
+35. It then failed before the first strike or restart. The server watchdog
+observed a 60-second server tick in the ordinary production path:
+
+```text
+ServerLifecycle.runPhysicalTurn
+  -> PhysicalExecutorRegistry.tick
+  -> AmbientActorExecutor.tick
+  -> AmbientAdmissionPolicy.begin / Session.refresh
+  -> SceneAdmission.reservationAdmission
+  -> SettlementAssaultBattlefield.providerView
+  -> GrayboxPlan.compile / addRoutes
+  -> RouteNetwork.footprint / compileSurfaceCells
+```
+
+The later 300-second lifecycle-barrier timeout and carrier exit 1 are
+consequences. No strike, graceful restart, re-observation, release or next-COLD
+receipt is accepted. Fresh terminal review classifies this as a product runtime
+failure at the ambient-to-scene admission versus physical-provider boundary,
+not a display, carrier, test-method or COLD-progress failure. It does not prove
+that `Set.copyOf` alone consumed the tick or identify a collision/GC mechanism.
+
+Retained evidence is under
+`/home/rd/proj/pm-f02c-cold-admission-final-27-tmp` and the worktree's
+`pale-mirror/build/f02c-native`. The checksum inventory is complete except that
+its `r14-command.txt` entry predates cleanup annotation: listed
+`e73df025...`, actual
+`6eaae4051fa81f0aa7e6306f10e9198ac6940bfff72d083fab6e645b662a51f0`;
+that command receipt also lacks a complete outer end/duration. This limits
+delivery bookkeeping but does not weaken the retained watchdog stack, manifest
+or server log. Independent review found zero task-owned process, listener or X27
+socket. Preserve the 7.3 MiB in-checkout failed world with the reviewed evidence;
+do not rerun R14.
