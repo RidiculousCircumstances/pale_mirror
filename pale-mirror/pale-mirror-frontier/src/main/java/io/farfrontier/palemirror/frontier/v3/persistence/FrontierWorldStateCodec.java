@@ -289,7 +289,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         }
         writeCount(output, colony.growthJobs().size());
         for (HiveGrowthJob job : colony.growthJobs().values().stream().sorted(Comparator.comparing(HiveGrowthJob::id)).toList()) {
-            writeString(output, job.id().value()); writeString(output, job.hiveId().value()); writeString(output, job.nestId().value()); writeString(output, job.consumedItemId().value()); writeString(output, job.consumptionIntentId().value());
+            writeString(output, job.id().value()); writeString(output, job.hiveId().value()); writeString(output, job.nestId().value()); writeString(output, job.consumedItemId().value()); writeHiveGrowthInputHold(output, job.inputHold()); writeString(output, job.consumptionIntentId().value());
             HiveOrgan organ = job.organ(); writeString(output, organ.id().value()); output.writeByte(organ.kind().wireTag()); writePosition(output, organ.anchor());
             Bioform bioform = job.bioform(); writeString(output, bioform.id().value()); BioformProfileStateCodec.write(output, bioform);
         }
@@ -331,11 +331,11 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         }
         Map<SubjectId, HiveGrowthJob> jobs = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
-            SubjectId id = new SubjectId(readString(input)); SubjectId hive = new SubjectId(readString(input)); SubjectId nest = new SubjectId(readString(input)); SubjectId item = new SubjectId(readString(input));
+            SubjectId id = new SubjectId(readString(input)); SubjectId hive = new SubjectId(readString(input)); SubjectId nest = new SubjectId(readString(input)); SubjectId item = new SubjectId(readString(input)); HiveGrowthInputHold hold = readHiveGrowthInputHold(input, item);
             io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId consumption = new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(readString(input));
             SubjectId organId = new SubjectId(readString(input)); int kind = input.readUnsignedByte(); BlockPosition anchor = readPosition(input);
             SubjectId bioformId = new SubjectId(readString(input)); Bioform bioform = BioformProfileStateCodec.read(input, bioformId, hive, nest);
-            if (jobs.put(id, new HiveGrowthJob(id, hive, nest, item, consumption,
+            if (jobs.put(id, new HiveGrowthJob(id, hive, nest, item, hold, consumption,
                     new HiveOrgan(organId, hive, nest, FrontierWireTags.require(HiveOrganKind.class, kind), anchor, java.util.Optional.empty()),
                     bioform)) != null) throw new IllegalArgumentException("invalid or duplicate hive growth job");
         }
@@ -370,6 +370,19 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         Map<SubjectId, BioformLifecycle> lifecycles = BioformLifecycleStateCodec.read(input);
         Map<SubjectId, HiveMobilization> mobilizations = HiveMobilizationStateCodec.read(input);
         return new HiveColony(organs, bioforms, jobs, transfers, receipts, lifecycles, mobilizations);
+    }
+    private static void writeHiveGrowthInputHold(DataOutputStream output, HiveGrowthInputHold hold) throws IOException {
+        if (hold instanceof HiveGrowthInputHold.Exact) output.writeByte(0);
+        else if (hold instanceof HiveGrowthInputHold.FungibleCold cold) {
+            output.writeByte(1); writeString(output, cold.accountId().value()); writeString(output, cold.claimId().value());
+        } else throw new IllegalArgumentException("unknown hive growth input hold");
+    }
+    private static HiveGrowthInputHold readHiveGrowthInputHold(DataInputStream input, SubjectId itemId) throws IOException {
+        return switch (input.readUnsignedByte()) {
+            case 0 -> new HiveGrowthInputHold.Exact(itemId);
+            case 1 -> new HiveGrowthInputHold.FungibleCold(itemId, new SubjectId(readString(input)), new SubjectId(readString(input)));
+            default -> throw new IllegalArgumentException("unknown hive growth input hold");
+        };
     }
     private static void writeEconomicLedger(DataOutputStream output, EconomicLedger ledger) throws IOException {
         writeCount(output, ledger.accounts().size());

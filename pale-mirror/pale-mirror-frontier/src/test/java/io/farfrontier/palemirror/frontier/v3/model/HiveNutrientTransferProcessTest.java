@@ -11,14 +11,42 @@ import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HiveNutrientTransferProcessTest {
+    @Test
+    void coldFungibleBiomassIsClaimedAndConsumedWithoutAStableStackIdentity() {
+        FrontierWorldState baseline = growthTaskState();
+        SubjectId hive = baseline.bootstrap().hive().id(), west = new SubjectId("container:hive-west-store");
+        SubjectId lotId = new SubjectId("lot:hive-west-biomass"), accountId = new SubjectId("custody:hive-west-biomass");
+        ResourceLot biomass = new ResourceLot(lotId, hive, "minecraft:rotten_flesh", 64, "bootstrap", List.of());
+        CustodyAccount account = new CustodyAccount(accountId, new ResourceCustody.Container(west), Map.of(lotId, 64), Map.of());
+        ExactInventory inventory = baseline.inventory().withoutItem(new SubjectId("item:bootstrap-hive-biomass"))
+                .withFungibleResources(FungibleResourceLedger.empty().issue(biomass, account));
+        FrontierWorldState pending = baseline.withInventory(inventory);
+        StrategicTask task = pending.strategicPlans().tasks().get(new SubjectId("task:hive-nutrient"));
+
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> events = HiveGrowthProcess.planStart(pending, HiveGrowthProcess.start(task, 100L));
+        HiveGrowthJob job = ((HiveGrowthStarted) events.stream().filter(event -> event.payload() instanceof HiveGrowthStarted).findFirst().orElseThrow().payload()).job();
+        HiveGrowthInputHold.FungibleCold hold = assertInstanceOf(HiveGrowthInputHold.FungibleCold.class, job.inputHold());
+        FrontierWorldState active = pending.withStrategicPlans(pending.strategicPlans().transitionTask(task.id(), StrategicTaskStatus.ACTIVE));
+        FrontierWorldState started = HiveGrowthProcess.reduceStarted(active, hive, new HiveGrowthStarted(job));
+        FrontierWorldState consumed = HiveGrowthProcess.reduceConsumed(started, hive, new HiveGrowthBiomassConsumed(job.id(), job.consumedItemId()));
+
+        assertEquals(64, started.inventory().fungibleResources().claims().get(hold.claimId()).quantity());
+        assertFalse(consumed.inventory().fungibleResources().lots().containsKey(lotId));
+        assertFalse(consumed.inventory().fungibleResources().claims().containsKey(hold.claimId()));
+        assertEquals(job, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(started)).hiveColony().growthJobs().get(job.id()));
+    }
+
     @Test
     void coldTransferMovesTheSameExactNutrientAcrossNamedStoresAndRetainsItsReceipt() {
         FrontierWorldState baseline = growthTaskState();

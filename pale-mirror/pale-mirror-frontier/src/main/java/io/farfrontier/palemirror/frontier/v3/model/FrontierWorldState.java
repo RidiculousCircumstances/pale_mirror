@@ -996,6 +996,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
     }
     public FrontierWorldState startHiveGrowth(HiveGrowthJob job) { return HiveGrowthStateSupport.start(this, job); } public FrontierWorldState completeHiveGrowth(SubjectId jobId) { return HiveGrowthStateSupport.complete(this, jobId); }
     public FrontierWorldState consumeHiveGrowthBiomass(SubjectId jobId, SubjectId itemId) { return HiveGrowthStateSupport.consume(this, jobId, itemId); }
+    public FrontierWorldState startFungibleHiveGrowth(HiveGrowthJob job) { return HiveGrowthStateSupport.startFungible(this, job); }
+    public FrontierWorldState consumeFungibleHiveGrowthBiomass(SubjectId jobId) { return HiveGrowthStateSupport.consumeFungible(this, jobId); }
     public FrontierWorldState cancelHiveGrowth(SubjectId jobId) { return HiveGrowthStateSupport.cancel(this, jobId); }
     private static void validateFungibleProductionHold(ProductionJob job, Settlement settlement, FungibleResourceLedger resources,
                                                        SubjectId accountId, SubjectId claimId, boolean bound, long epoch) {
