@@ -28,6 +28,7 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /** Loaded-world negative evidence and bounded multi-scope scheduling for the F0.2B adapter. */
@@ -122,7 +123,8 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
         FrontierWorldState before = base.initialState();
         SubjectId store = new SubjectId("container:hive-east-store");
-        ExactItemStack biomass = before.inventory().items().get(new SubjectId("item:bootstrap-hive-biomass"));
+        ExactItemStack biomass = exactHiveBiomass(before, store);
+        before = before.withInventory(before.inventory().withFungibleResources(FungibleResourceLedger.empty()).store(biomass));
         PhysicalReplicaRecord replica = PhysicalReplicaRecord.expected(store, ReferenceContainerCustody.semanticKind(before, store), 0L,
                 ReferenceContainerCustody.canonicalFingerprint(before, store), ReferenceContainerCustody.provenance(store));
         PhysicalReplicaCustodyState custody = PhysicalReplicaCustodyState.empty().declare(replica)
@@ -197,7 +199,8 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
                 StrategicTaskKind.GROW_HIVE_ORGANISM, Optional.empty(), List.of(StrategicTaskRequirement.EXACT_HIVE_BIOMASS), List.of(), StrategicTaskStatus.PENDING);
         state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task));
         state = held(state, east);
-        ExactItemStack biomass = state.inventory().items().get(new SubjectId("item:bootstrap-hive-biomass"));
+        ExactItemStack biomass = exactHiveBiomass(state, east);
+        state = state.withInventory(state.inventory().withFungibleResources(FungibleResourceLedger.empty()).store(biomass));
         HiveNutrientTransfer transfer = HiveNutrientTransferProcess.create(state, task, biomass, new SubjectId("container:hive-west-store"), 0);
         state = HiveNutrientTransferProcess.reduceStarted(state, hive, transfer);
         var departure = HiveNutrientTransferStateSupport.departureIntent(state, transfer);
@@ -218,6 +221,53 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
         recovered.shutdown(); runtime.shutdown(); helper.succeed();
     }
 
+    /** A HOT hive source becomes COLD cargo only after its named physical stack is removed. */
+    @GameTest(batch = "pm-frontier-v3-reference-conflict-restart", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void fungibleNutrientEndpointTransfersOneHotSourceToColdCargo(GameTestHelper helper) {
+        WorldId world = new WorldId("frontier:reference-fungible-nutrient-boundary");
+        SubjectId east = new SubjectId("container:hive-east-store"), west = new SubjectId("container:hive-west-store");
+        FrontierWorldState state = activated(FrontierWorldState.initial(FrontierBootstrapper.create(world, 91L)), east);
+        SubjectId hive = state.bootstrap().hive().id(), lotId = new SubjectId("lot:reference-hive-biomass");
+        SubjectId accountId = new SubjectId("custody:reference-hive-biomass");
+        ResourceLot biomass = new ResourceLot(lotId, hive, "minecraft:rotten_flesh", 64, "reference", List.of());
+        CustodyAccount account = new CustodyAccount(accountId, new ResourceCustody.Container(east), Map.of(lotId, 64), Map.of());
+        FungibleResourceLedger cold = FungibleResourceLedger.empty().issue(biomass, account);
+        FungiblePhysicalObservation.Stack stack = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                new InventoryCustody.ContainerSlot(east, 0)), biomass.itemKind(), 64);
+        FungibleResourceLedger hot = cold.rebind(accountId, 1L, FungiblePhysicalObservation.bind(cold, accountId, 1L, List.of(stack)));
+        StrategicObjective objective = new StrategicObjective(new SubjectId("objective:reference-fungible-nutrient"), hive,
+                StrategicObjectiveKind.HIVE_GROW_ORGANISM, Optional.empty(), 2, StrategicObjectiveStatus.ACTIVE);
+        StrategicTask task = new StrategicTask(new SubjectId("task:reference-fungible-nutrient"), objective.id(), hive,
+                StrategicTaskKind.GROW_HIVE_ORGANISM, Optional.empty(), List.of(StrategicTaskRequirement.EXACT_HIVE_BIOMASS),
+                List.of(), StrategicTaskStatus.PENDING);
+        state = held(state.withInventory(state.inventory().withFungibleResources(hot))
+                .withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task)), east);
+        HiveNutrientTransfer transfer = HiveNutrientTransferProcess.create(state, task,
+                new FungibleResourceCustodySupport.LotAtContainer(accountId, biomass, 64), west, 0);
+        state = HiveNutrientTransferProcess.reduceStarted(state, hive, transfer);
+        var departure = HiveNutrientTransferStateSupport.departureIntent(state, transfer);
+        state = state.preparePhysicalIntent(departure);
+
+        ChestBlockEntity chest = chest(helper, position(state, east), east);
+        chest.setItem(0, new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.ROTTEN_FLESH, 64)); chest.setChanged();
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(world, state);
+        FrontierV3HiveNutrientEndpointExecutor.tick(helper.getLevel(), runtime);
+        FrontierWorldState confirmed = runtime.decodedState().orElseThrow();
+        helper.assertTrue(chest.getItem(0).isEmpty() && confirmed.physicalIntents().get(departure.id()).status()
+                        == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED,
+                "the endpoint removes one verified HOT source only after its RUNNING record is durable");
+        helper.assertTrue(confirmed.inventory().fungibleResources().accounts().values().stream().anyMatch(value -> value.custody()
+                        instanceof ResourceCustody.Cargo cargo && cargo.cargoId().equals(transfer.cargoId())
+                        && value.lotQuantities().equals(Map.of(lotId, 64)))
+                        && !confirmed.inventory().fungibleResources().accounts().containsKey(accountId)
+                        && confirmed.inventory().fungibleResources().bindings().isEmpty(),
+                "the exact removed portion has one COLD cargo owner and no surviving source binding");
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> recovered = recovered(world, runtime.checkpointImage().orElseThrow());
+        helper.assertValueEqual(confirmed, recovered.decodedState().orElseThrow(),
+                "the confirmed fungible source departure survives immediate replay without duplicate cargo");
+        recovered.shutdown(); runtime.shutdown(); helper.succeed();
+    }
+
     private static FrontierWorldState activated(FrontierWorldState state, SubjectId containerId) {
         java.util.Map<SubjectId, ContainerSurface> surfaces = new LinkedHashMap<>(state.inventory().surfaces());
         surfaces.put(containerId, new ContainerSurface(containerId, surfaces.get(containerId).position(), ContainerSurfaceStatus.ACTIVE));
@@ -229,6 +279,11 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
     private static BlockPos position(FrontierWorldState state, SubjectId containerId) {
         BlockPosition value = state.inventory().surfaces().get(containerId).position();
         return new BlockPos(value.x(), value.y(), value.z());
+    }
+
+    private static ExactItemStack exactHiveBiomass(FrontierWorldState state, SubjectId store) {
+        return new ExactItemStack(new SubjectId("item:bootstrap-hive-biomass"), state.bootstrap().hive().id(), "minecraft:rotten_flesh", 64,
+                new InventoryCustody.ContainerSlot(store, 0));
     }
 
     private static FrontierWorldState held(FrontierWorldState state, SubjectId containerId) {
