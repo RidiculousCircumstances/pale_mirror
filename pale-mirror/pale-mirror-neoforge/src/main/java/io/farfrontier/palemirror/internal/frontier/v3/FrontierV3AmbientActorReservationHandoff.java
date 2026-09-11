@@ -7,14 +7,16 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
 
 import java.util.Optional;
+import java.util.function.Predicate;
 
 /** Bounded exact ambient-to-scene hand-off, separate from ordinary ambient body behavior. */
 final class FrontierV3AmbientActorReservationHandoff {
     private FrontierV3AmbientActorReservationHandoff() { }
 
     static void run(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState initialState,
-                    FrontierV3AmbientAdmissionPolicy.Session admissionPolicy) {
-        admissionPolicy.scan(initialState.actorLocations().keySet(), () -> runtime.decodedState().orElse(null),
+                    FrontierV3AmbientAdmissionPolicy.Session admissionPolicy, Predicate<SubjectId> eligibleActor) {
+        admissionPolicy.scan(initialState.actorLocations().keySet().stream().filter(eligibleActor).toList(),
+                () -> runtime.decodedState().orElse(null),
                 selection -> execute(level, runtime, selection));
     }
 

@@ -33,16 +33,34 @@ final class FrontierV3AmbientCarrierRecognition {
 
     static boolean recognizes(FrontierWorldState state, ManagedCarrier carrier, FrontierSceneAdmission.ProviderSource providerSource) {
         Objects.requireNonNull(state, "state"); Objects.requireNonNull(carrier, "carrier"); Objects.requireNonNull(providerSource, "provider source");
-        SubjectId actorId;
-        try { actorId = new SubjectId(carrier.actorId()); } catch (IllegalArgumentException invalid) { return false; }
+        SubjectId actorId = actorId(carrier);
+        if (actorId == null || !recognizesOwnership(state, carrier, actorId)) return false;
         var provider = providerSource.provider(state);
         if (provider.isEmpty()) return false;
+        return !FrontierSceneAdmission.reserved(state, actorId, ignored -> provider);
+    }
+
+    /**
+     * Exact non-geometric ownership proof used solely to retain a restored Entity until the
+     * projection owner has published its first compatible provider.  It grants no ambient
+     * execution or scene-admission authority; those remain behind {@link #recognizes}.
+     */
+    static boolean recognizesOwnership(FrontierWorldState state, ManagedCarrier carrier) {
+        Objects.requireNonNull(state, "state"); Objects.requireNonNull(carrier, "carrier");
+        SubjectId actorId = actorId(carrier);
+        return actorId != null && recognizesOwnership(state, carrier, actorId);
+    }
+
+    private static boolean recognizesOwnership(FrontierWorldState state, ManagedCarrier carrier, SubjectId actorId) {
         var location = state.actorLocations().get(actorId); var lease = state.ambientLeases().get(actorId);
         return location != null && location.condition().status() == ActorLifeStatus.ALIVE
                 && lease != null && lease.status() != AmbientLeaseStatus.CLOSED
-                && !FrontierSceneAdmission.reserved(state, actorId, ignored -> provider)
                 && FrontierV3AmbientActorExecutor.entityId(state, actorId).equals(carrier.entityId())
                 && carrier.ownedBy(actorId, FrontierV3AmbientActorExecutor.bioform(state, actorId));
+    }
+
+    private static SubjectId actorId(ManagedCarrier carrier) {
+        try { return new SubjectId(carrier.actorId()); } catch (IllegalArgumentException invalid) { return null; }
     }
 
     /** Exact read-only facts adapted from a joining Minecraft entity. */

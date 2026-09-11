@@ -100,9 +100,9 @@ final class FrontierV3AmbientActorExecutor {
     /**
      * Noncanonical, bounded bridge across {@code EntityJoinLevelEvent} and the global UUID
      * index.  {@link Entity#isAddedToLevel()} becomes true before that index is necessarily
-     * published, so it is deliberately not completion evidence.  A live candidate stays here
-     * until the index names that exact Java object (or it is removed); failing closed is safer
-     * than recreating its deterministic UUID.
+     * published, so it is deliberately not completion evidence. A live candidate stays here
+     * until strict projection recognition completes its exact hand-off (or it is removed);
+     * failing closed is safer than recreating its deterministic UUID.
      */
     private static final Map<FrontierV3ServerRuntime<?, ?>, Map<UUID, PendingAdmission>> PENDING_ADMISSIONS = new IdentityHashMap<>();
     /**
@@ -113,8 +113,11 @@ final class FrontierV3AmbientActorExecutor {
     private FrontierV3AmbientActorExecutor() { }
 
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
-        cleanPending(level, runtime);
+        cleanPending(runtime);
         FrontierWorldState state = runtime.decodedState().orElse(null);
+        if (state == null) return;
+        reclaimProjectedPending(runtime, state);
+        state = runtime.decodedState().orElse(null);
         if (state == null) return;
         FrontierV3AmbientAdmissionPolicy.Session admissionPolicy = admissionPolicy(runtime, state);
         // A successor scene cannot begin until the outgoing ambient authority has closed.  This
@@ -123,7 +126,9 @@ final class FrontierV3AmbientActorExecutor {
         // reserved exact identity first, then let the bounded ambient pass handle voluntary
         // movement and new admissions.  Each transfer remains durable and independently
         // validates its exact body before discard.
-        FrontierV3AmbientActorReservationHandoff.run(level, runtime, state, admissionPolicy);
+        FrontierWorldState handoffState = state;
+        FrontierV3AmbientActorReservationHandoff.run(level, runtime, handoffState, admissionPolicy,
+                actorId -> pending(runtime, entityId(handoffState, actorId)) == null);
         state = runtime.decodedState().orElse(null);
         if (state == null) return;
         int admitted = 0;
@@ -136,6 +141,15 @@ final class FrontierV3AmbientActorExecutor {
             if (state == null) return;
             var location = state.actorLocations().get(actorId);
             if (location == null || location.condition().status() != ActorLifeStatus.ALIVE) {
+                forgetColdDemand(runtime, actorId);
+                FrontierV3AmbientActorCaches.forgetObserved(runtime, actorId);
+                continue;
+            }
+            // A pre-projection exact body has one temporary authority only: its pending
+            // admission.  Until the projection-owned provider recognizes that same body,
+            // no ordinary UNKNOWN/PREPARED branch may reclaim it, materialize a replacement,
+            // or otherwise advance its lease.
+            if (pending(runtime, entityId(state, actorId)) != null) {
                 forgetColdDemand(runtime, actorId);
                 FrontierV3AmbientActorCaches.forgetObserved(runtime, actorId);
                 continue;
@@ -426,7 +440,8 @@ final class FrontierV3AmbientActorExecutor {
     /** Retains only an exact expected body during the short join-to-index hand-off. */
     static JoinDisposition observeJoin(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity) {
         FrontierWorldState state = runtime.decodedState().orElse(null);
-        if (state == null || !FrontierV3AmbientCarrierRecognition.recognizes(runtime, entity)) return JoinDisposition.NOT_MANAGED;
+        if (state == null || !FrontierV3AmbientCarrierRecognition.recognizesOwnership(state,
+                FrontierV3AmbientCarrierRecognition.ManagedCarrier.from(entity))) return JoinDisposition.NOT_MANAGED;
         String rawActorId = entity.getPersistentData().getString(ACTOR_KEY);
         if (rawActorId.isBlank()) return JoinDisposition.NOT_MANAGED;
         SubjectId actorId;
@@ -441,11 +456,31 @@ final class FrontierV3AmbientActorExecutor {
                     entity.getUUID(), actorId.value());
             return JoinDisposition.DUPLICATE_UNINDEXED;
         }
+        // A persisted HOT body may still carry vanilla AI when the restart quarantines its
+        // lease. The short bootstrap bridge has no geometric authority, so hold it inert until
+        // projection-owned recognition has completed the durable reclaim.
+        if (entity instanceof Mob body) {
+            body.getNavigation().stop();
+            body.setNoAi(true);
+        }
         pending.put(entity.getUUID(), new PendingAdmission(entity));
-        if (state.ambientLeases().get(actorId) != null && state.ambientLeases().get(actorId).status() == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART) {
+        // The first startup Entity join can precede projection.  Retain only this exact body
+        // until the actor stage sees a compatible provider; it must not turn UNKNOWN into HOT
+        // from an unverified pre-projection callback.
+        if (FrontierV3AmbientCarrierRecognition.recognizes(runtime, entity)
+                && state.ambientLeases().get(actorId) != null && state.ambientLeases().get(actorId).status() == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART) {
             submit(runtime, "ambient-recovered", actorId.value(), new AmbientLeaseTransition(actorId, AmbientLeaseStatus.HOT));
         }
         return JoinDisposition.RETAINED;
+    }
+
+    /** True only for the exact bounded bridge installed by {@link #observeJoin}. */
+    static boolean retainsPendingJoin(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity) {
+        PendingAdmission pending = pending(runtime, entity.getUUID());
+        FrontierWorldState state = runtime.decodedState().orElse(null);
+        return pending != null && pending.entity() == entity && state != null
+                && FrontierV3AmbientCarrierRecognition.recognizesOwnership(state,
+                FrontierV3AmbientCarrierRecognition.ManagedCarrier.from(entity));
     }
 
     /** Compatibility entrypoint; exact join recognition lives in its bounded companion. */
@@ -780,18 +815,45 @@ final class FrontierV3AmbientActorExecutor {
         Map<UUID, PendingAdmission> pending = PENDING_ADMISSIONS.get(runtime);
         return pending == null ? null : pending.get(entityId);
     }
-    private static void cleanPending(ServerLevel level, FrontierV3ServerRuntime<?, ?> runtime) {
+    private static void cleanPending(FrontierV3ServerRuntime<?, ?> runtime) {
         Map<UUID, PendingAdmission> pending = PENDING_ADMISSIONS.get(runtime);
         if (pending == null) return;
-        pending.entrySet().removeIf(entry -> {
-            Entity candidate = entry.getValue().entity();
-            if (candidate.isRemoved()) return true;
-            // EntityJoinLevelEvent can run after isAddedToLevel() but before the global UUID
-            // index has published the exact body.  Never substitute a second deterministic
-            // identity during that interval; an unrelated indexed body is a visible conflict,
-            // not permission to forget the candidate.
-            return level.getEntity(entry.getKey()) == candidate;
-        });
+        // UUID indexing is not a hand-off: the entry remains the sole temporary authority
+        // until strict projection recognition completes, even after Minecraft indexes it.
+        pending.entrySet().removeIf(entry -> entry.getValue().entity().isRemoved());
+        if (pending.isEmpty()) PENDING_ADMISSIONS.remove(runtime);
+    }
+
+    /**
+     * Completes only restart recovery that was retained before the first projection turn. The
+     * strict provider proof keeps a stale/missing snapshot inert; this bounded bridge never
+     * compiles geometry and never promotes a foreign or scene-reserved carrier.
+     */
+    private static void reclaimProjectedPending(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state) {
+        Map<UUID, PendingAdmission> pending = PENDING_ADMISSIONS.get(runtime);
+        if (pending == null) return;
+        for (Map.Entry<UUID, PendingAdmission> entry : List.copyOf(pending.entrySet())) {
+            PendingAdmission admission = entry.getValue();
+            Entity entity = admission.entity();
+            if (entity.isRemoved() || !FrontierV3AmbientCarrierRecognition.recognizes(runtime, entity)) continue;
+            String rawActorId = entity.getPersistentData().getString(ACTOR_KEY);
+            SubjectId actorId;
+            try { actorId = new SubjectId(rawActorId); } catch (IllegalArgumentException invalid) { continue; }
+            if (state.ambientLeases().get(actorId) != null
+                    && state.ambientLeases().get(actorId).status() == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART) {
+                if (!(submit(runtime, "ambient-recovered", actorId.value(),
+                        new AmbientLeaseTransition(actorId, AmbientLeaseStatus.HOT))
+                        instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) continue;
+                state = runtime.decodedState().orElse(null);
+                if (state == null) return;
+                if (state.ambientLeases().get(actorId) == null
+                        || state.ambientLeases().get(actorId).status() != AmbientLeaseStatus.HOT) continue;
+            }
+            // Strict recognition plus the accepted recovery transition (when required) is the
+            // only hand-off out of this bounded bridge.  The ordinary loop may now process a
+            // PREPARED/HOT lease exactly once; an incompatible replacement remains pending.
+            pending.remove(entry.getKey(), admission);
+        }
         if (pending.isEmpty()) PENDING_ADMISSIONS.remove(runtime);
     }
     private static boolean drainAfterDemandHysteresis(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,

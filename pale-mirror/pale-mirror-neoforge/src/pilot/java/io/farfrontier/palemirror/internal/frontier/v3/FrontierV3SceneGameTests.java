@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierV3FixtureCatalog;
 
 import io.farfrontier.palemirror.PaleMirrorMod;
+import io.farfrontier.palemirror.internal.world.SourceGrayboxEntityAdmission;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
@@ -478,21 +479,68 @@ public final class FrontierV3SceneGameTests {
         helper.assertTrue(restored != null, "the restored owned-body fixture must be constructible");
         restored.setUUID(FrontierV3AmbientActorExecutor.entityId(initial, resident));
         restored.setPos(origin.getX() + 0.5D, origin.getY(), origin.getZ() + 0.5D);
+        restored.setNoAi(true);
         restored.getPersistentData().putString(FrontierV3AmbientActorExecutor.ACTOR_KEY, resident.value());
         restored.getPersistentData().putString(FrontierV3AmbientActorExecutor.KIND_KEY, "RESIDENT");
-        helper.assertTrue(level.addFreshEntity(restored), "the restored body fixture must enter the loaded world");
 
-        helper.assertValueEqual(FrontierV3AmbientActorExecutor.observeJoin(runtime, restored), FrontierV3AmbientActorExecutor.JoinDisposition.RETAINED,
-                "only the exact loaded owned body may reclaim an UNKNOWN ambient lease");
+        FrontierV3ServerLifecycle.JoinFirewallProof restoredProof = FrontierV3ServerLifecycle.observeSourceJoin(runtime, restored);
+        helper.assertValueEqual(restoredProof.lifecycleAdmission(), FrontierV3ServerLifecycle.EntityJoinAdmission.RETAINED,
+                "the exact restored body must enter lifecycle admission before Minecraft publishes its UUID index");
+        helper.assertTrue(restoredProof.verifiedV3Carrier()
+                        && !SourceGrayboxEntityAdmission.rejectsSourceMob(restoredProof, true, false),
+                "the ordinary source firewall must preserve only the exact deferred V3 body");
+        helper.assertTrue(FrontierV3GrayboxExecutor.admissionProvider(runtime, runtime.decodedState().orElseThrow()).isEmpty(),
+                "the bridge must not obtain a default or synchronous global provider before projection");
+        helper.assertValueEqual(state(runtime).ambientLeases().get(resident).status(), AmbientLeaseStatus.UNKNOWN_AFTER_RESTART,
+                "the pre-projection join must not mutate the durable UNKNOWN lease");
+        helper.assertTrue(level.addFreshEntity(restored),
+                "only the accepted ordinary lifecycle/firewall result may let the restored body enter the loaded world");
+
+        FrontierV3AftermathOwnerComposition.projection(level, runtime);
+        var structuralOwner = state(runtime).bootstrap().settlements().getFirst().structures().getFirst();
+        var projectedCell = FrontierV3GrayboxExecutor.admissionProvider(runtime, runtime.decodedState().orElseThrow())
+                .orElseThrow().cellAt(structuralOwner.anchor()).orElseThrow();
+        helper.assertValueEqual(projectedCell.ownerId(), structuralOwner.id(),
+                "the installed projection must identify the exact structural replacement source");
+        FrontierV3CommandSubmission.submit(runtime, "recovery-pending-structural-fence", structuralOwner.id().value(),
+                new io.farfrontier.palemirror.frontier.v3.model.StructureDamaged(structuralOwner.id(), projectedCell.position(),
+                        projectedCell.semanticPart(), "player:recovery-pending-structural-fence"));
+        FrontierV3AmbientActorExecutor.tick(level, runtime);
+        helper.assertValueEqual(state(runtime).ambientLeases().get(resident).status(), AmbientLeaseStatus.UNKNOWN_AFTER_RESTART,
+                "a structural replacement between projection and actor must keep the sole pending body inert");
+        helper.assertTrue(FrontierV3AmbientActorExecutor.retainsPendingJoin(runtime, restored),
+                "UUID indexing must not erase the sole pending authority before strict provider recognition");
+
+        long revisionBeforeCompatibleHandoff = runtime.canonicalState().orElseThrow().revision().value();
+        FrontierV3AftermathOwnerComposition.projection(level, runtime);
+        FrontierV3AmbientActorExecutor.tick(level, runtime);
         helper.assertValueEqual(state(runtime).ambientLeases().get(resident).status(), AmbientLeaseStatus.HOT,
-                "loaded-world reclaim must make the same canonical lease HOT");
+                "the next compatible projection must permit exactly the ordinary reclaim handoff");
+        helper.assertValueEqual(runtime.canonicalState().orElseThrow().revision().value(), revisionBeforeCompatibleHandoff + 1L,
+                "one compatible projection may submit exactly one UNKNOWN-to-HOT reclaim transition");
         helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state(runtime), resident,
                         new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(origin.getX(), origin.getY(), origin.getZ())), FrontierV3AmbientActorExecutor.Result.CURRENT,
                 "reclaim must retain the existing body instead of creating another one");
         helper.assertTrue(level.getEntity(restored.getUUID()) == restored, "the observed restored body remains the sole UUID owner");
-        FrontierV3AmbientActorExecutor.forget(runtime);
+        FrontierV3ServerLifecycle.releaseRuntime(runtime);
         restored.discard();
         helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-ambient-restart-reclaim", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void foreignSourceMobIsImmediatelyRejectedBeforeFirstProjection(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
+                FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:foreign-before-projection-game-test"), 91L), new EphemeralStore(), 10_000);
+        Zombie foreign = EntityType.ZOMBIE.create(level);
+        helper.assertTrue(foreign != null, "the foreign-mob fixture must be constructible");
+        FrontierV3ServerLifecycle.JoinFirewallProof foreignProof = FrontierV3ServerLifecycle.observeSourceJoin(runtime, foreign);
+        helper.assertValueEqual(foreignProof.lifecycleAdmission(), FrontierV3ServerLifecycle.EntityJoinAdmission.NOT_MANAGED,
+                "a foreign source mob must not acquire the deferred V3 bridge");
+        helper.assertTrue(!foreignProof.verifiedV3Carrier()
+                        && SourceGrayboxEntityAdmission.rejectsSourceMob(foreignProof, true, false),
+                "the ordinary source firewall must still reject a foreign mob immediately");
+        foreign.discard(); FrontierV3AmbientActorExecutor.forget(runtime); runtime.shutdown(); helper.succeed();
     }
 
     @GameTest(batch = "pm-frontier-v3-scene-restart-reclaim", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)

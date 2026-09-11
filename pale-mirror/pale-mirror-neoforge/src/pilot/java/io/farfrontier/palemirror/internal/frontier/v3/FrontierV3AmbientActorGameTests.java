@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierV3FixtureCatalog;
 
 import io.farfrontier.palemirror.PaleMirrorMod;
+import io.farfrontier.palemirror.internal.world.SourceGrayboxEntityAdmission;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord;
@@ -78,6 +79,7 @@ public final class FrontierV3AmbientActorGameTests {
                 "restart must retain a before-effect PREPARED lease for loaded-chunk inspection");
         helper.assertValueEqual(state(runtime).ambientLeases().get(resident).status(), AmbientLeaseStatus.PREPARED,
                 "prepared recovery must not turn an unacknowledged body into UNKNOWN");
+        publishProjectionBeforeManagedJoin(helper, level, runtime);
         helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state(runtime), resident,
                         bodyAt(origin)), FrontierV3AmbientActorExecutor.Result.APPLIED,
                 "a retained PREPARED lease may create exactly its expected loaded-world body");
@@ -155,8 +157,12 @@ public final class FrontierV3AmbientActorGameTests {
         BlockPos observed = helper.absolutePos(new BlockPos(2, 8, 0)); joining.setPos(observed.getX() + 0.5D, observed.getY(), observed.getZ() + 0.5D);
         joining.setNoAi(true); joining.getPersistentData().putString(FrontierV3AmbientActorExecutor.ACTOR_KEY, resident.value());
         joining.getPersistentData().putString(FrontierV3AmbientActorExecutor.KIND_KEY, "RESIDENT");
-        helper.assertValueEqual(FrontierV3AmbientActorExecutor.observeJoin(runtime, joining), FrontierV3AmbientActorExecutor.JoinDisposition.RETAINED,
+        FrontierV3ServerLifecycle.JoinFirewallProof joiningProof = FrontierV3ServerLifecycle.observeSourceJoin(runtime, joining);
+        helper.assertValueEqual(joiningProof.lifecycleAdmission(), FrontierV3ServerLifecycle.EntityJoinAdmission.RETAINED,
                 "an exact PREPARED managed body must be retained while its UUID is not yet indexed");
+        helper.assertTrue(joiningProof.verifiedV3Carrier()
+                        && !SourceGrayboxEntityAdmission.rejectsSourceMob(joiningProof, true, false),
+                "the ordinary source composition must preserve the exact retained bridge before its first projection");
         FrontierV3AmbientAdmissionDiagnostic diagnostic = FrontierV3AmbientActorExecutor.admissionDiagnostic(level, runtime, prepared, resident);
         helper.assertValueEqual(diagnostic.status(), "PENDING_UNINDEXED",
                 "the diagnostic must expose the pre-index bridge instead of claiming the actor is ready");
@@ -169,17 +175,22 @@ public final class FrontierV3AmbientActorGameTests {
         duplicate.setUUID(joining.getUUID()); duplicate.setPos(joining.position()); duplicate.setNoAi(true);
         duplicate.getPersistentData().putString(FrontierV3AmbientActorExecutor.ACTOR_KEY, resident.value());
         duplicate.getPersistentData().putString(FrontierV3AmbientActorExecutor.KIND_KEY, "RESIDENT");
-        helper.assertValueEqual(FrontierV3AmbientActorExecutor.observeJoin(runtime, duplicate),
-                FrontierV3AmbientActorExecutor.JoinDisposition.DUPLICATE_UNINDEXED,
+        FrontierV3ServerLifecycle.JoinFirewallProof duplicateProof = FrontierV3ServerLifecycle.observeSourceJoin(runtime, duplicate);
+        helper.assertValueEqual(duplicateProof.lifecycleAdmission(), FrontierV3ServerLifecycle.EntityJoinAdmission.DUPLICATE_UNINDEXED,
                 "a second unindexed body with the same exact UUID must be rejected before Minecraft admits it");
+        helper.assertTrue(SourceGrayboxEntityAdmission.rejectsSourceMob(duplicateProof, true, false),
+                "the ordinary source composition must still cancel a duplicate retained UUID");
         helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, runtime, prepared, resident, prepared.actorLocations().get(resident).body()),
                 FrontierV3AmbientActorExecutor.Result.PENDING,
                 "rejecting the later duplicate must retain the first exact body as the only pending admission");
+        helper.assertTrue(FrontierV3AmbientActorExecutor.retainsPendingJoin(runtime, joining),
+                "the exact unindexed body must remain strongly retained until lifecycle cleanup or strict handoff");
+        runtime.quarantine(new IllegalStateException("focused pending-admission cleanup"));
+        FrontierV3ServerLifecycle.releaseRuntime(runtime);
+        helper.assertFalse(FrontierV3AmbientActorExecutor.retainsPendingJoin(runtime, joining),
+                "the shared quarantine/stop cleanup must release the pending Entity reference");
         duplicate.discard();
-        joining.discard(); FrontierV3AmbientActorExecutor.tick(level, runtime);
-        helper.assertFalse(FrontierV3AmbientActorExecutor.admissionDiagnostic(level, runtime, prepared, resident).pending(),
-                "a discarded candidate must release only its volatile bridge and allow normal later admission");
-        FrontierV3AmbientActorExecutor.forget(runtime); runtime.shutdown(); helper.succeed();
+        joining.discard(); helper.succeed();
     }
 
     @GameTest(batch = "pm-frontier-v3-ambient-restart-absence", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
@@ -206,6 +217,7 @@ public final class FrontierV3AmbientActorGameTests {
                 "absence closes the failed HOT hand-off without inferring a death");
         AmbientActorLease fresh = AmbientActorProcess.nextLease(state(runtime), resident, runtime.checkpointImage().orElseThrow().instant());
         FrontierV3CommandSubmission.submit(runtime, "ambient-restart-absence-fresh", resident.value(), new AmbientLeasePrepared(fresh));
+        publishProjectionBeforeManagedJoin(helper, level, runtime);
         helper.assertFalse(FrontierV3AmbientActorExecutor.mayCreateFreshBody(true, false, true),
                 "production admission must defer while Minecraft has loaded blocks but is still restoring entity storage");
         helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state(runtime), resident, anchor), FrontierV3AmbientActorExecutor.Result.APPLIED,
@@ -472,6 +484,13 @@ public final class FrontierV3AmbientActorGameTests {
     /** Keeps a parallel GameTest fixture inside its own stock-template rectangle. */
     private static void prepareMotionArena(ServerLevel level, BlockPos origin, int length, int width) {
         for (int x = 0; x <= length; x++) for (int z = 0; z < width; z++) prepareFloor(level, origin.offset(x, 0, z));
+    }
+    /** Mirrors the registered production order: projection publishes before ambient Entity admission. */
+    private static void publishProjectionBeforeManagedJoin(GameTestHelper helper, ServerLevel level,
+                                                           FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
+        FrontierV3AftermathOwnerComposition.projection(level, runtime);
+        helper.assertTrue(FrontierV3GrayboxExecutor.admissionProvider(runtime, runtime.decodedState().orElseThrow()).isPresent(),
+                "the projection owner must publish provider truth before a restored ambient Entity joins");
     }
     private static BodyPosition bodyAt(BlockPos feet) { return new BodyPosition(feet.getX(), feet.getY(), feet.getZ()); }
     private static void driveMotion(GameTestHelper helper, ServerLevel level, net.minecraft.world.entity.Mob body, Vec3 target, int remaining, Runnable complete) {

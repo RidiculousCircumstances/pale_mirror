@@ -421,7 +421,7 @@ public final class FrontierV3ServerLifecycle {
         }
         if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.QUARANTINED) {
             PaleMirrorMod.LOGGER.error("Frontier v3 development runtime quarantined: {}", runtime.status().detail().orElse("unknown"));
-            RUNTIMES.remove(server); FAST_FORWARD_REMAINING.remove(server); FAST_FORWARD_TARGETS.remove(server); FAST_FORWARD_FAILURES.remove(server); FAST_FORWARD_OUTCOMES.remove(server); INITIAL_CANONICAL_HOLDS.remove(server);
+            releaseRuntime(server, runtime);
         }
     }
 
@@ -439,21 +439,34 @@ public final class FrontierV3ServerLifecycle {
 
     public static void stop(MinecraftServer server) {
         try {
-            FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.remove(server);
-            if (runtime != null) {
-                FrontierV3GrayboxExecutor.forget(runtime);
-                FrontierV3ResourceSiteExecutor.forget(runtime);
-                FrontierV3InfectionOverlayExecutor.forget(runtime);
-                FrontierV3ObjectBoardExecutor.forget(runtime);
-                FrontierV3AmbientActorExecutor.forget(runtime);
-                FrontierV3SceneExecutor.forget(runtime);
-                FrontierV3SettlementAssaultSceneExecutor.forget(runtime);
-                runtime.shutdown();
-            }
+            FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(server);
+            if (runtime != null) releaseRuntime(server, runtime);
         } finally {
             FrontierV3DiagnosticTrace.forget(server);
             STOPPING.remove(server); FAST_FORWARD_REMAINING.remove(server); FAST_FORWARD_TARGETS.remove(server); FAST_FORWARD_FAILURES.remove(server); FAST_FORWARD_OUTCOMES.remove(server); INITIAL_CANONICAL_HOLDS.remove(server);
         }
+    }
+
+    /** One lifecycle-owned release path for orderly stop and fail-closed quarantine. */
+    private static void releaseRuntime(MinecraftServer server,
+                                       FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
+        RUNTIMES.remove(server, runtime);
+        releaseRuntime(runtime);
+        FAST_FORWARD_REMAINING.remove(server); FAST_FORWARD_TARGETS.remove(server); FAST_FORWARD_FAILURES.remove(server);
+        FAST_FORWARD_OUTCOMES.remove(server); INITIAL_CANONICAL_HOLDS.remove(server);
+    }
+
+    /** Package seam for focused cleanup proof; all runtime-held Entity/cache state is released here. */
+    static void releaseRuntime(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
+        Objects.requireNonNull(runtime, "runtime");
+        FrontierV3GrayboxExecutor.forget(runtime);
+        FrontierV3ResourceSiteExecutor.forget(runtime);
+        FrontierV3InfectionOverlayExecutor.forget(runtime);
+        FrontierV3ObjectBoardExecutor.forget(runtime);
+        FrontierV3AmbientActorExecutor.forget(runtime);
+        FrontierV3SceneExecutor.forget(runtime);
+        FrontierV3SettlementAssaultSceneExecutor.forget(runtime);
+        runtime.shutdown();
     }
 
     private static void advanceQueuedCanonicalTime(MinecraftServer server, FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
@@ -533,6 +546,12 @@ public final class FrontierV3ServerLifecycle {
         if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) {
             return EntityJoinAdmission.NOT_MANAGED;
         }
+        return observeEntityJoin(runtime, entity);
+    }
+
+    /** Exact runtime delegate used by the production Entity callback and real-Entity recovery tests. */
+    static EntityJoinAdmission observeEntityJoin(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity) {
+        Objects.requireNonNull(runtime, "runtime"); Objects.requireNonNull(entity, "entity");
         return switch (FrontierV3AmbientActorExecutor.observeJoin(runtime, entity)) {
             case NOT_MANAGED -> EntityJoinAdmission.NOT_MANAGED;
             case RETAINED -> EntityJoinAdmission.RETAINED;
@@ -547,7 +566,20 @@ public final class FrontierV3ServerLifecycle {
      */
     public static JoinFirewallProof observeSourceJoin(ServerLevel level, Entity entity) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity");
-        return composeSourceJoin(() -> observeEntityJoin(level, entity), () -> recognizesManagedCarrier(level, entity));
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
+        if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) {
+            return new JoinFirewallProof(EntityJoinAdmission.NOT_MANAGED, false);
+        }
+        return observeSourceJoin(runtime, entity);
+    }
+
+    /** Exact Entity delegate of the production source-join composition for recovery tests. */
+    static JoinFirewallProof observeSourceJoin(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity) {
+        Objects.requireNonNull(runtime, "runtime"); Objects.requireNonNull(entity, "entity");
+        return composeSourceJoin(() -> observeEntityJoin(runtime, entity),
+                () -> FrontierV3AmbientActorExecutor.retainsPendingJoin(runtime, entity)
+                        || recognizesManagedAmbientCarrier(runtime, FrontierV3AmbientCarrierRecognition.ManagedCarrier.from(entity))
+                        || FrontierV3SceneExecutor.recognizes(runtime, entity));
     }
 
     /** Exact carrier delegate of {@link #observeSourceJoin(ServerLevel, Entity)} for focused runtime tests. */
