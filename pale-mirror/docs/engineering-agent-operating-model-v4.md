@@ -86,6 +86,13 @@ mutate the candidate or make the engineer a hidden second coder.
   invoking the instrumented seam separately before or after the subject does
   not measure the subject. Review this call-path wiring from stable source
   before authorizing an expensive lane.
+- An observation seam must be an actual production composition boundary or a
+  declared operational diagnostic, not a hidden static or thread-local hook
+  referenced only by tests. Test-only counters, fault switches and callbacks
+  must not enter the production JAR. When the claim is the absence of a
+  forbidden call or dependency, prefer a type/module boundary or a compiled
+  dependency rule paired with a real behavior test; retain the exact negative
+  mutation only when that rule itself is newly introduced.
 - The packet also states a semantic-change budget: which owner/status/identity
   rules may change and which accepted invariants are frozen. A builder may not
   weaken target uniqueness, assignment ownership, recovery custody or another

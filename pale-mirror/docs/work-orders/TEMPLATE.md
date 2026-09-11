@@ -30,6 +30,10 @@ revisions, close/supersede it instead of appending a troubleshooting history.
   observation seam/counter/receipt and the plausible bad behavior that must
   traverse that same seam. A separately invoked instrumented helper is not an
   observation of an uninstrumented production call.
+- State why the seam exists in production. Do not add a static or thread-local
+  callback referenced only by tests. For an absence-of-call claim, permit a
+  type/module or compiled-dependency boundary plus a real behavior test, and
+  keep any newly required negative mutation source-bound and reproducible.
 - Declare the semantic-change budget: owner/status/identity rules in scope and
   accepted invariants that remain frozen. If a fixture requires weakening a
   frozen production invariant to construct its state, return an architecture

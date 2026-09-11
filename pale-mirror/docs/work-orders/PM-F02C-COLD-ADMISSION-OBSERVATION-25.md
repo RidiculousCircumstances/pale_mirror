@@ -1,6 +1,6 @@
 # PM-F02C-COLD-ADMISSION-OBSERVATION-25: prove the real COLD admission bound
 
-Specification revision: 1. Status: `EXECUTING_METHOD_BUILD`.
+Specification revision: 2. Status: `METHOD_REJECTED_CONTEXT_CLOSED`.
 Parent slice: F0.2C. Risk: critical-code. Engineer: supervising root.
 Executor: `/root/f02c_shared_assault_challenge24/terra_cold_admission_observation25`,
 one fresh `gpt-5.6-terra`, reasoning `high`.
@@ -86,3 +86,33 @@ worktrees/evidence and unrelated services. Assignment/liveness epoch:
 `2026-09-11T00:02:57Z`; check after each ten complete minutes of silence, never
 sooner. The first economy audit is due at `2026-09-11T01:02:57Z` if execution
 remains active.
+
+## Terminal method review
+
+Candidate `c4b303bffd1d522ce87da41cfa8f316c54788c73`, parent
+`e5284b782c68af29319e7c11ba75947421dc0254`, tree
+`22f4924c111c90c1a28ee9d79462ff77d01581ed`, is clean and changes only the
+declared battlefield and test paths. The focused 1/1 XML is green and the
+test's scope encloses the actual synchronous `planProgress` call. Its exact
+advance and continuation assertions are sound, and frozen recovery,
+assignment, identity, lease and aftermath semantics remain byte-identical to
+the parent.
+
+The method is not admitted:
+
+1. The negative log fails at the provider-count assertion, but no exact
+   temporary mutation/diff, negative XML, observed count or source-bound
+   receipt survives. It cannot independently prove that the claimed old
+   candidate-derived eligibility produced that failure. The later restored
+   test is cache-reused from the earlier positive execution.
+2. The observation mechanism adds a package-private static `ThreadLocal`
+   callback to production `FrontierSettlementAssaultBattlefield`; only the test
+   references it, and it is present in the built production JAR. This is a
+   test-only control and hidden mutable domain side effect, not an operational
+   production seam. It violates this order's no-test-only-shortcut boundary and
+   the accepted F0 rule that test-only controls stay out of production output.
+
+No expensive work ran. Preserve the candidate as rejected evidence only; do
+not rerun it merely to improve receipt custody. This successor is terminal.
+The next method returns to `e5284b78` and proves the forbidden dependency
+structurally while exercising ordinary behavior, without production test hooks.
