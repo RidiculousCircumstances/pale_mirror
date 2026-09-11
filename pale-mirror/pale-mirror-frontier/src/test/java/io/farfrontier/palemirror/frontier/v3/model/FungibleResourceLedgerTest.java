@@ -1,6 +1,10 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.WorldId;
+import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
+import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
+import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -63,6 +67,21 @@ class FungibleResourceLedgerTest {
                 binding("binding:duplicate-address", 7L, 4, new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(DEPOT, 0))))));
         assertThrows(IllegalArgumentException.class, () -> issued.rebind(DEPOT_ACCOUNT, 7L, List.of(binding("binding:over", 7L, 11,
                 new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(DEPOT, 0))))));
+    }
+
+    @Test
+    void snapshotRoundTripPreservesLotsClaimsAccountsAndTransientBindingsExactly() {
+        WorldId world = new WorldId("frontier:fungible-ledger-round-trip");
+        FrontierWorldState baseline = new FrontierWorldStateCodec().decode(FrontierEngines
+                .create(FrontierWorldRuntimeDefinition.configuration(world, 17L)).checkpoint().canonicalState());
+        PhysicalStackBinding binding = binding("binding:snapshot", 3L, 10,
+                new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(DEPOT, 0)));
+        FungibleResourceLedger resources = issue(10)
+                .reserve(new ClaimAllocation(new SubjectId("claim:snapshot"), new SubjectId("process:snapshot"), OWNER, "minecraft:bread", 4), DEPOT_ACCOUNT)
+                .rebind(DEPOT_ACCOUNT, 3L, List.of(binding));
+        FrontierWorldState retained = baseline.withInventory(baseline.inventory().withFungibleResources(resources));
+
+        assertEquals(resources, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(retained)).inventory().fungibleResources());
     }
 
     private static FungibleResourceLedger issue(int quantity) {
