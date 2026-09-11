@@ -27,6 +27,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class SettlementAssaultTest {
@@ -102,6 +103,11 @@ class SettlementAssaultTest {
         state = state.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation));
         assertEquals(1, state.strategicPlans().settlementAssaults().get(assault.id()).nextStrikeEpoch(),
                 "one exact confirmed HOT receipt advances the retained COLD epoch once");
+        String frontPrefix = "front:" + assault.id().value().substring("assault:".length()).replace(':', '-');
+        OperationFrontEffectKey effect = new OperationFrontEffectKey(cause, new SubjectId(frontPrefix + "-attack"),
+                new SubjectId(frontPrefix + "-defence"), 0L);
+        assertFalse(state.strategicPlans().frontEffects().accepts(effect),
+                "the attack and defence allocations share one durable cross-front receipt");
         FrontierWorldState confirmed = state;
         assertThrows(IllegalArgumentException.class, () -> confirmed.preparePhysicalIntent(strike(confirmed, lease, cause, attacker, target)),
                 "the confirmed prior epoch cannot be prepared again while its HOT lease remains authoritative");
