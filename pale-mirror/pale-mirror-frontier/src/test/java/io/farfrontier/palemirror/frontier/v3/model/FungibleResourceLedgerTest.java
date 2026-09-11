@@ -79,11 +79,15 @@ class FungibleResourceLedgerTest {
         WorldId world = new WorldId("frontier:fungible-ledger-round-trip");
         FrontierWorldState baseline = new FrontierWorldStateCodec().decode(FrontierEngines
                 .create(FrontierWorldRuntimeDefinition.configuration(world, 17L)).checkpoint().canonicalState());
-        PhysicalStackBinding binding = binding("binding:snapshot", 3L, 10,
-                new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(DEPOT, 0)));
-        FungibleResourceLedger resources = issue(10)
-                .reserve(new ClaimAllocation(new SubjectId("claim:snapshot"), new SubjectId("process:snapshot"), OWNER, "minecraft:bread", 4), DEPOT_ACCOUNT)
-                .rebind(DEPOT_ACCOUNT, 3L, List.of(binding));
+        SubjectId containerId = new SubjectId("container:1-depot"); SubjectId owner = new SubjectId("settlement:1");
+        SubjectId lotId = new SubjectId("lot:snapshot"); SubjectId accountId = new SubjectId("custody:snapshot");
+        ResourceLot lot = new ResourceLot(lotId, owner, "minecraft:bread", 10, "snapshot", List.of());
+        CustodyAccount account = new CustodyAccount(accountId, new ResourceCustody.Container(containerId), Map.of(lotId, 10), Map.of());
+        PhysicalStackBinding binding = new PhysicalStackBinding(new SubjectId("binding:snapshot"), accountId,
+                new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(containerId, 1)), 3L, "minecraft:bread", Map.of(lotId, 10), Map.of());
+        FungibleResourceLedger resources = FungibleResourceLedger.empty().issue(lot, account)
+                .reserve(new ClaimAllocation(new SubjectId("claim:snapshot"), new SubjectId("process:snapshot"), owner, "minecraft:bread", 4), accountId)
+                .rebind(accountId, 3L, List.of(binding));
         FrontierWorldState retained = baseline.withInventory(baseline.inventory().withFungibleResources(resources));
 
         assertEquals(resources, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(retained)).inventory().fungibleResources());

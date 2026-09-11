@@ -90,6 +90,7 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
             requireDistinct(carrier.getValue(), "world carrier custody");
             for (SubjectId item : carrier.getValue()) require(items.get(item), new InventoryCustody.WorldCarrier(carrier.getKey()), "world carrier reverse custody");
         }
+        validateFungibleResourceCustody(containers, cargo, fungibleResources);
         if (!slots.equals(occupiedSlots)) throw new IllegalArgumentException("container slot index must exactly match exact item custody");
     }
 
@@ -435,6 +436,51 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         ContainerRecord container = containers.get(slot.containerId());
         if (container == null || slot.slot() >= container.slotCount() || !container.ownerId().equals(item.economicOwnerId())) {
             throw new IllegalArgumentException("stored item claim must belong to its target container owner");
+        }
+    }
+
+    private static void validateFungibleResourceCustody(Map<SubjectId, ContainerRecord> containers,
+                                                        Map<SubjectId, CargoBatch> cargo,
+                                                        FungibleResourceLedger fungibleResources) {
+        Map<ResourceCustody, SubjectId> accountsByCustody = new HashMap<>();
+        for (CustodyAccount account : fungibleResources.accounts().values()) {
+            if (accountsByCustody.put(account.custody(), account.id()) != null) {
+                throw new IllegalArgumentException("one physical/resource location must have one fungible custody account");
+            }
+            switch (account.custody()) {
+                case ResourceCustody.Container container -> {
+                    ContainerRecord record = containers.get(container.containerId());
+                    if (record == null) throw new IllegalArgumentException("fungible account references an unknown container");
+                    account.lotQuantities().keySet().forEach(id -> {
+                        if (!fungibleResources.lots().get(id).economicOwnerId().equals(record.ownerId())) {
+                            throw new IllegalArgumentException("container fungible account has a foreign economic owner");
+                        }
+                    });
+                }
+                case ResourceCustody.Cargo cargoCustody -> {
+                    CargoBatch batch = cargo.get(cargoCustody.cargoId());
+                    if (batch == null) throw new IllegalArgumentException("fungible account references an unknown cargo batch");
+                    account.lotQuantities().keySet().forEach(id -> {
+                        if (!fungibleResources.lots().get(id).economicOwnerId().equals(batch.ownerId())) {
+                            throw new IllegalArgumentException("cargo fungible account has a foreign economic owner");
+                        }
+                    });
+                }
+                case ResourceCustody.Actor ignored -> { }
+                case ResourceCustody.Player ignored -> { }
+                case ResourceCustody.WorldCarrier ignored -> { }
+            }
+        }
+        for (PhysicalStackBinding binding : fungibleResources.bindings().values()) {
+            CustodyAccount account = fungibleResources.accounts().get(binding.accountId());
+            if (binding.address() instanceof PhysicalStackAddress.ContainerSlot slot) {
+                ContainerRecord record = containers.get(slot.slot().containerId());
+                if (record == null || slot.slot().slot() >= record.slotCount()
+                        || !(account.custody() instanceof ResourceCustody.Container container)
+                        || !container.containerId().equals(slot.slot().containerId())) {
+                    throw new IllegalArgumentException("fungible physical binding has no matching owned container account");
+                }
+            }
         }
     }
 }
