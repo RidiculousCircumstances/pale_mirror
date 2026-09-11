@@ -431,9 +431,8 @@ public final class FrontierV3TestPilotClient {
     }
     private static void emitVisitIngress(String request) { JsonObject value = visitIngress.receipt(request);
         FrontierV3PilotSessionControl.stampDiagnostic(value, index + 1, currentCausalMilestone); PaleMirrorMod.LOGGER.info("PMV3_PILOT_DIAGNOSTIC {}", value); }
-    private static FrontierV3PilotDemandReceiptTransition.Correlation visitCorrelation() { try {
-        return new FrontierV3PilotDemandReceiptTransition.Correlation(FrontierV3PilotSessionControl.runId(), index + 1, java.util.UUID.randomUUID().toString());
-    } catch (IOException failure) { throw new IllegalStateException("pilot visit correlation is unavailable", failure); } }
+    private static FrontierV3PilotDemandReceiptTransition.Correlation visitCorrelation() { try { return new FrontierV3PilotDemandReceiptTransition.Correlation(
+            FrontierV3PilotSessionControl.runId(), index + 1, java.util.UUID.randomUUID().toString()); } catch (IOException failure) { throw new IllegalStateException("pilot visit correlation is unavailable", failure); } }
     private static void lookOperation(Minecraft minecraft, JsonObject action) {
         BlockPos anchor = operationAnchor(minecraft, action, action.has("anchor") ? action.get("anchor").getAsString() : "travelCargo");
         if (anchor == null) return;
