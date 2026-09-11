@@ -214,8 +214,7 @@ public final class FrontierSceneAdmission {
                 .filter(assault -> assault.status() != SettlementAssaultStatus.RESOLVED)
                 .forEach(assault -> reserved.addAll(assault.attackerIds()));
         java.util.List<SceneEngagementCandidate> engagementCandidates = state.coldEngagementSceneCandidates();
-        java.util.List<SettlementAssaultSceneCandidate> assaultCandidates = providerSource.provider(state)
-                .map(provider -> FrontierSettlementAssaultSceneSupport.candidates(state, provider)).orElseGet(java.util.List::of);
+        java.util.List<SettlementAssaultSceneCandidate> assaultCandidates = settlementAssaultCandidates(state, providerSource);
         engagementCandidates.forEach(candidate -> reserved.addAll(candidate.actorIds()));
         assaultCandidates.forEach(candidate -> reserved.addAll(candidate.memberPositions().keySet()));
         // A completed engineering assembly is the next exclusive physical owner, even before
@@ -233,6 +232,19 @@ public final class FrontierSceneAdmission {
         // a pre-lease COLD reservation: the loaded Villager must remain available for that
         // hand-off rather than be drained and respawned at a guessed canonical surface.
         return new ReservationAdmission(reserved, engagementCandidates, assaultCandidates);
+    }
+
+    /**
+     * The one provider-aware settlement-assault candidate boundary.  NeoForge scene admission
+     * supplies the immutable projection snapshot here; the pure-model convenience overload is
+     * deliberately not used by a registered physical turn.
+     */
+    public static java.util.List<SettlementAssaultSceneCandidate> settlementAssaultCandidates(FrontierWorldState state,
+                                                                                                 ProviderSource providerSource) {
+        Objects.requireNonNull(state, "state");
+        Objects.requireNonNull(providerSource, "provider source");
+        return providerSource.provider(state).map(provider -> FrontierSettlementAssaultSceneSupport.candidates(state, provider))
+                .orElseGet(java.util.List::of);
     }
 
     /** The sole bounded physical-provider boundary used by reservation admission. */

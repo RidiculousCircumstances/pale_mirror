@@ -46,16 +46,18 @@ public final class FrontierSettlementAssaultSceneSupport {
                 || !lease.handoffPosition().equals(assault.settlementAnchor()) || !targetIntact(state, assault)) {
             throw new IllegalArgumentException("assault scene must prepare one intact COLD battle at its retained anchor");
         }
-        SettlementAssaultSceneCandidate candidate = FrontierSettlementAssaultBattlefield.candidate(state, assault)
-                .orElseThrow(() -> new IllegalArgumentException("assault scene has no exact compiled battlefield"));
-        Set<SubjectId> expected = new HashSet<>(candidate.memberPositions().keySet());
+        // The registered NeoForge admission transaction already established that these exact
+        // support columns are serviceable through its compatible immutable projection provider.
+        // This pure reducer owns canonical identity, status, target and position checks; it must
+        // not rebuild a physical projection merely to repeat that observation.
+        Set<SubjectId> expected = new HashSet<>(assault.attackerIds());
+        expected.addAll(assault.defenderIds());
         Set<SubjectId> actual = new HashSet<>();
         Set<BlockPosition> floors = new HashSet<>();
         for (SceneMember member : lease.members()) {
             ActorLocation actor = state.actorLocations().get(member.actorId());
             BlockPosition floor = lease.memberPosition(member.actorId()).supportingSurface().support();
             if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE || !actor.supportingSurface().support().equals(floor)
-                    || !floor.equals(candidate.memberPositions().get(member.actorId()))
                     || !actual.add(member.actorId()) || !floors.add(floor)
                     || !FrontierSettlementAssaultBattlefield.localClearFloor(state,
                     FrontierWorldStateSupport.settlement(state.bootstrap(), assault.settlementId()), floor)) {

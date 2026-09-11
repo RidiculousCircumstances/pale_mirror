@@ -12,6 +12,7 @@ import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierGrayboxPlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseRecoveryUnresolved;
@@ -39,6 +40,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * Loaded-chunk executor for the cargo-free, typed settlement-assault scene.
@@ -71,14 +73,35 @@ final class FrontierV3SettlementAssaultSceneExecutor {
             execute(level, runtime, state, active.orElseThrow());
             return true;
         }
-        Optional<SettlementAssaultSceneCandidate> candidate = state.coldSettlementAssaultSceneCandidates().stream()
-                .filter(value -> FrontierV3SceneExecutor.demandExists(level, value.handoffPosition())).findFirst();
-        if (candidate.isEmpty()) return false;
-        SettlementAssaultSceneCandidate battle = candidate.orElseThrow();
-        SceneLease lease = lease(runtime, battle);
-        if (FrontierSceneAdmission.available(state, battle.memberPositions().keySet())) prepare(level, runtime, lease);
-        else handoff(level, runtime, state, lease);
-        return true;
+        return admit(runtime, state, position -> FrontierV3SceneExecutor.demandExists(level, position), (battle, lease) -> {
+            if (FrontierSceneAdmission.available(state, battle.memberPositions().keySet())) prepare(level, runtime, lease);
+            else handoff(level, runtime, state, lease);
+        });
+    }
+
+    /**
+     * Complete scene-admission composition: projection-owned candidate selection and the
+     * resulting prepare/handoff command share one no-derivation boundary.  A missing or stale
+     * cursor has no default-provider escape hatch, and an accidental reducer fallback fails
+     * closed before it can make the server tick compile global geometry.
+     */
+    static boolean admit(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
+                         Predicate<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> demanded,
+                         CandidateAdmission admission) {
+        return FrontierGrayboxPlan.withoutStructuralDerivation(() -> {
+            Optional<SettlementAssaultSceneCandidate> candidate = FrontierSceneAdmission.settlementAssaultCandidates(state,
+                            ignored -> FrontierV3GrayboxExecutor.admissionProvider(runtime, state)).stream()
+                    .filter(value -> demanded.test(value.handoffPosition())).findFirst();
+            if (candidate.isEmpty()) return false;
+            SettlementAssaultSceneCandidate battle = candidate.orElseThrow();
+            admission.admit(battle, lease(runtime, battle));
+            return true;
+        });
+    }
+
+    @FunctionalInterface
+    interface CandidateAdmission {
+        void admit(SettlementAssaultSceneCandidate candidate, SceneLease lease);
     }
 
     private static SceneLease lease(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SettlementAssaultSceneCandidate candidate) {
