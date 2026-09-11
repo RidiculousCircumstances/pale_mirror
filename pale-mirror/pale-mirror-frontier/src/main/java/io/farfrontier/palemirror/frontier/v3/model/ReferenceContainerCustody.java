@@ -77,8 +77,16 @@ public final class ReferenceContainerCustody {
         for (int slot = 0; slot < container.slotCount(); slot++) {
             ExactItemStack item = state.inventory().itemAt(containerId, slot).orElse(null);
             value.append(slot).append(':');
-            if (item == null) value.append("empty");
-            else value.append(item.id().value()).append(':').append(item.itemKind()).append(':').append(item.count());
+            if (item != null) value.append("exact:").append(item.id().value()).append(':').append(item.itemKind()).append(':').append(item.count());
+            else {
+                int currentSlot = slot;
+                PhysicalStackBinding binding = state.inventory().fungibleResources().bindings().values().stream()
+                        .filter(candidate -> candidate.address() instanceof PhysicalStackAddress.ContainerSlot address
+                                && address.slot().containerId().equals(containerId) && address.slot().slot() == currentSlot)
+                        .findFirst().orElse(null);
+                if (binding == null) value.append("empty");
+                else value.append("fungible:").append(binding.itemKind()).append(':').append(binding.quantity());
+            }
             value.append('|');
         }
         return sha256(value.toString());
@@ -94,21 +102,25 @@ public final class ReferenceContainerCustody {
             if (observed.slot() != slot) throw new IllegalArgumentException("observed reference slots are unordered");
             value.append(slot).append(':');
             if (observed.empty()) value.append("empty");
-            else value.append(observed.itemId()).append(':').append(observed.itemKind()).append(':').append(observed.count());
+            else if (observed.fungible()) value.append("fungible:").append(observed.itemKind()).append(':').append(observed.count());
+            else value.append("exact:").append(observed.itemId()).append(':').append(observed.itemKind()).append(':').append(observed.count());
             value.append('|');
         }
         return sha256(value.toString());
     }
 
-    public record ObservedSlot(int slot, String itemId, String itemKind, int count) {
+    public record ObservedSlot(int slot, String itemId, String itemKind, int count, boolean fungible) {
         public ObservedSlot {
             if (slot < 0 || count < 0) throw new IllegalArgumentException("observed slot is invalid");
             itemId = Objects.requireNonNull(itemId, "observed item id"); itemKind = Objects.requireNonNull(itemKind, "observed item kind");
-            if ((count == 0) != (itemId.isEmpty() && itemKind.isEmpty()) || (count > 0 && (itemId.isBlank() || itemKind.isBlank()))) {
+            if ((count == 0) != (itemId.isEmpty() && itemKind.isEmpty() && !fungible)
+                    || (count > 0 && (itemKind.isBlank() || (!fungible && itemId.isBlank()) || (fungible && !itemId.isEmpty())))) {
                 throw new IllegalArgumentException("observed slot identity is invalid");
             }
         }
-        public static ObservedSlot empty(int slot) { return new ObservedSlot(slot, "", "", 0); }
+        public ObservedSlot(int slot, String itemId, String itemKind, int count) { this(slot, itemId, itemKind, count, false); }
+        public static ObservedSlot empty(int slot) { return new ObservedSlot(slot, "", "", 0, false); }
+        public static ObservedSlot fungible(int slot, String itemKind, int count) { return new ObservedSlot(slot, "", itemKind, count, true); }
         public boolean empty() { return count == 0; }
     }
 

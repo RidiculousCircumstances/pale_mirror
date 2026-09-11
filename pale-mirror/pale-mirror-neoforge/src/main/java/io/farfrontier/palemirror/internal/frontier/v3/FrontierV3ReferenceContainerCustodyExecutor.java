@@ -20,7 +20,11 @@ import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyPayload
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyPayloads.ReplicaObserved;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaRecord;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaState;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackBinding;
 import io.farfrontier.palemirror.frontier.v3.model.ReferenceContainerCustody;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceCustody;
+import io.farfrontier.palemirror.frontier.v3.model.FungibleStackBindingsReleased;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
@@ -218,14 +222,28 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
             submit(runtime, "checkpoint-" + reason, lease.objectId(), lease.authorityEpoch(), new CustodyCheckpointed(lease.scopeId(),
                     lease.authorityEpoch(), lease.expectedCanonicalRevision(), lease.expectedReplicaRevision()));
         } else if (lease.status() == PhysicalCustodyLeaseStatus.CHECKPOINTED) {
-            submit(runtime, "release-" + reason, lease.objectId(), lease.authorityEpoch(), new CustodyReleased(lease.scopeId(),
-                    lease.authorityEpoch(), lease.expectedCanonicalRevision(), lease.expectedReplicaRevision()));
+            release(runtime, lease);
         } else if (lease.status() == PhysicalCustodyLeaseStatus.UNRESOLVED) {
             // Retained unresolved custody is deliberately local and cannot be fabricated closed.
         }
     }
 
     private static boolean release(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalCustodyLease lease) {
+        FrontierWorldState state = runtime.decodedState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
+        List<PhysicalStackBinding> bound = state.inventory().fungibleResources().bindings().values().stream()
+                .filter(binding -> state.inventory().fungibleResources().accounts().get(binding.accountId()).custody() instanceof ResourceCustody.Container container
+                        && container.containerId().equals(lease.objectId())).toList();
+        if (!bound.isEmpty()) {
+            if (bound.stream().anyMatch(binding -> binding.authorityEpoch() != lease.authorityEpoch())) {
+                throw new IllegalStateException("fungible resource binding cannot outlive its reference custody epoch");
+            }
+            SubjectId accountId = bound.getFirst().accountId();
+            if (bound.stream().anyMatch(binding -> !binding.accountId().equals(accountId))) {
+                throw new IllegalStateException("one reference container has multiple live fungible accounts");
+            }
+            return submit(runtime, "fungible-release", lease.objectId(), lease.authorityEpoch(),
+                    new FungibleStackBindingsReleased(accountId, lease.authorityEpoch()));
+        }
         return submit(runtime, "release-renew", lease.objectId(), lease.authorityEpoch(), new CustodyReleased(lease.scopeId(),
                 lease.authorityEpoch(), lease.expectedCanonicalRevision(), lease.expectedReplicaRevision()));
     }
@@ -315,11 +333,20 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
             if (stack.isEmpty()) slots.add(ReferenceContainerCustody.ObservedSlot.empty(slot));
             else {
                 CustomData custom = stack.get(DataComponents.CUSTOM_DATA);
+                int currentSlot = slot;
+                PhysicalStackBinding fungible = state.inventory().fungibleResources().bindings().values().stream()
+                        .filter(binding -> binding.address() instanceof PhysicalStackAddress.ContainerSlot address
+                                && address.slot().containerId().equals(containerId) && address.slot().slot() == currentSlot)
+                        .findFirst().orElse(null);
+                String kind = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+                if (custom == null && fungible != null && fungible.itemKind().equals(kind) && fungible.quantity() == stack.getCount()) {
+                    slots.add(ReferenceContainerCustody.ObservedSlot.fungible(slot, kind, stack.getCount()));
+                    continue;
+                }
                 String itemId = custom == null ? "foreign:" + BuiltInRegistries.ITEM.getKey(stack.getItem())
                         : custom.copyTag().getString(FrontierV3CargoHandoffExecutor.ITEM_ID_KEY);
                 if (itemId.isBlank()) itemId = "foreign:" + BuiltInRegistries.ITEM.getKey(stack.getItem());
-                slots.add(new ReferenceContainerCustody.ObservedSlot(slot, itemId,
-                        BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(), stack.getCount()));
+                slots.add(new ReferenceContainerCustody.ObservedSlot(slot, itemId, kind, stack.getCount()));
             }
         }
         String owner = chest.getPersistentData().getString(FrontierV3CargoHandoffExecutor.CONTAINER_ID_KEY);

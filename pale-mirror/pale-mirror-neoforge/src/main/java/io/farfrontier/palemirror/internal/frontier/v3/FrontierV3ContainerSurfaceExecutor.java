@@ -14,6 +14,10 @@ import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceActivationSta
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceTransition;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
+import io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalObservation;
+import io.farfrontier.palemirror.frontier.v3.model.FungibleResourceLedger;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceCustody;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierContainerSocketPlan;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxCell;
 import io.farfrontier.palemirror.frontier.v3.model.ProductionTransformationStateSupport;
@@ -24,6 +28,7 @@ import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.CustomData;
@@ -31,6 +36,9 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 
 import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Materializes one exact inventory surface at a time in naturally loaded chunks.
@@ -158,6 +166,7 @@ final class FrontierV3ContainerSurfaceExecutor {
             ExactItemStack item = state.inventory().itemAt(containerId, slot).orElse(null);
             if (item != null) chest.setItem(slot, FrontierV3CargoHandoffExecutor.materializedStack(item));
         }
+        if (!writeFungibleSlots(chest, state, containerId)) return false;
         chest.setChanged();
         return matchesCanonicalSlots(chest, state, containerId);
     }
@@ -179,6 +188,7 @@ final class FrontierV3ContainerSurfaceExecutor {
             ExactItemStack item = state.inventory().itemAt(containerId, slot).orElse(null);
             if (item != null) chest.setItem(slot, FrontierV3CargoHandoffExecutor.materializedStack(item));
         }
+        if (!writeFungibleSlots(chest, state, containerId)) return false;
         chest.setChanged();
         return matchesCanonicalSlots(chest, state, containerId);
     }
@@ -187,10 +197,9 @@ final class FrontierV3ContainerSurfaceExecutor {
         if (state.inventory().containers().get(containerId) == null) return false;
         for (int slot = 0; slot < chest.getContainerSize(); slot++) {
             ExactItemStack expected = state.inventory().itemAt(containerId, slot).orElse(null);
-            if (expected == null ? !chest.getItem(slot).isEmpty()
-                    : !FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(slot), expected)) return false;
+            if (expected != null && !FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(slot), expected)) return false;
         }
-        return true;
+        return matchesFungibleSlots(chest, state, containerId);
     }
 
     /**
@@ -200,12 +209,69 @@ final class FrontierV3ContainerSurfaceExecutor {
      * slot (and every approximate/foreign output) remains strict conflict evidence.
      */
     static boolean matchesCanonicalSlotsOrPendingProductionOutput(ChestBlockEntity chest, FrontierWorldState state, SubjectId containerId) {
+        if (matchesCanonicalSlots(chest, state, containerId)) return true;
         if (state.inventory().containers().get(containerId) == null) return false;
         for (int slot = 0; slot < chest.getContainerSize(); slot++) {
             ExactItemStack expected = state.inventory().itemAt(containerId, slot).orElse(null);
             if (expected == null ? chest.getItem(slot).isEmpty()
                     : FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(slot), expected)) continue;
             if (!pendingProductionOutputAt(state, containerId, slot, chest.getItem(slot))) return false;
+        }
+        return true;
+    }
+
+    static List<FungiblePhysicalObservation.Stack> observedFungibleSlots(ChestBlockEntity chest, FrontierWorldState state, SubjectId containerId) {
+        List<FungiblePhysicalObservation.Stack> observed = new java.util.ArrayList<>();
+        for (int slot = 0; slot < chest.getContainerSize(); slot++) {
+            if (state.inventory().itemAt(containerId, slot).isPresent()) continue;
+            ItemStack actual = chest.getItem(slot);
+            if (!actual.isEmpty()) observed.add(new FungiblePhysicalObservation.Stack(
+                    new PhysicalStackAddress.ContainerSlot(new io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.ContainerSlot(containerId, slot)),
+                    BuiltInRegistries.ITEM.getKey(actual.getItem()).toString(), actual.getCount()));
+        }
+        return List.copyOf(observed);
+    }
+
+    private static boolean matchesFungibleSlots(ChestBlockEntity chest, FrontierWorldState state, SubjectId containerId) {
+        FungibleResourceLedger resources = state.inventory().fungibleResources();
+        List<io.farfrontier.palemirror.frontier.v3.model.CustodyAccount> accounts = resources.accounts().values().stream()
+                .filter(account -> account.custody() instanceof ResourceCustody.Container value && value.containerId().equals(containerId)).toList();
+        if (accounts.size() > 1) return false;
+        List<FungiblePhysicalObservation.Stack> observed = observedFungibleSlots(chest, state, containerId);
+        if (accounts.isEmpty()) return observed.isEmpty();
+        long epoch = resources.bindings().values().stream().filter(binding -> binding.accountId().equals(accounts.getFirst().id()))
+                .mapToLong(io.farfrontier.palemirror.frontier.v3.model.PhysicalStackBinding::authorityEpoch).findFirst().orElse(1L);
+        try {
+            FungiblePhysicalObservation.bind(resources, accounts.getFirst().id(), epoch, observed);
+            return true;
+        } catch (IllegalArgumentException invalid) {
+            return false;
+        }
+    }
+
+    private static boolean writeFungibleSlots(ChestBlockEntity chest, FrontierWorldState state, SubjectId containerId) {
+        FungibleResourceLedger resources = state.inventory().fungibleResources();
+        List<io.farfrontier.palemirror.frontier.v3.model.CustodyAccount> accounts = resources.accounts().values().stream()
+                .filter(account -> account.custody() instanceof ResourceCustody.Container value && value.containerId().equals(containerId)).toList();
+        if (accounts.size() > 1) return false;
+        if (accounts.isEmpty()) return true;
+        Map<String, Integer> quantities = new LinkedHashMap<>();
+        accounts.getFirst().lotQuantities().entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
+            String kind = resources.lots().get(entry.getKey()).itemKind();
+            quantities.merge(kind, entry.getValue(), Integer::sum);
+        });
+        int slot = 0;
+        for (Map.Entry<String, Integer> entry : quantities.entrySet()) {
+            ResourceLocation id = ResourceLocation.tryParse(entry.getKey());
+            if (id == null || !BuiltInRegistries.ITEM.containsKey(id)) return false;
+            int remaining = entry.getValue();
+            while (remaining > 0) {
+                while (slot < chest.getContainerSize() && !chest.getItem(slot).isEmpty()) slot++;
+                if (slot == chest.getContainerSize()) return false;
+                int count = Math.min(64, remaining);
+                chest.setItem(slot++, new ItemStack(BuiltInRegistries.ITEM.get(id), count));
+                remaining -= count;
+            }
         }
         return true;
     }

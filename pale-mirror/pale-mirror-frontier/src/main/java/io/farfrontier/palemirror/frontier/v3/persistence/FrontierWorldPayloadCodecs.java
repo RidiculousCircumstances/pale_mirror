@@ -15,7 +15,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             new PhysicalIntentPreparedCodec(), new PhysicalIntentTransitionCodec(), new StructureDamagedCodec(),
             PhysicalDeltaPayloadCodecs.single(), PhysicalDeltaPayloadCodecs.batch(), new ExactItemCustodyChangedCodec(), new ExactItemDestroyedCodec(),
             new InventoryConflictObservedCodec(), new ContainerSurfaceTransitionCodec(), new ResourceDepositedCodec(), new FungibleStackLayoutObservedCodec(),
-            new FungibleResourceHandoffObservedCodec(), new CargoCarrierReleasedPayloadCodec())); }
+            new FungibleResourceHandoffObservedCodec(), new FungibleStackBindingsReleasedCodec(), new CargoCarrierReleasedPayloadCodec())); }
     static PayloadCodecs replicaCustodyCodecs() { return new PayloadCodecs(PhysicalReplicaCustodyPayloadCodecs.codecs()); }
     static PayloadCodecs ambientCodecs() { return new PayloadCodecs(List.of(new AmbientActorDiedCodec(),
             new AmbientActorObservedCodec(), AmbientLeasePayloadCodecs.prepared(), AmbientLeasePayloadCodecs.transition(), AmbientLeasePayloadCodecs.released(),
@@ -201,6 +201,15 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new FungibleResourceHandoffObserved(readSubject(input).value(),
                 readFungibleAccount(input), input.readLong(), input.readLong(), readFungibleQuantities(input), readFungibleQuantities(input),
                 readFungibleBindings(input), readFungibleBindings(input))); }
+    }
+    private static final class FungibleStackBindingsReleasedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.fungible_stack_bindings_released"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
+            FungibleStackBindingsReleased released = (FungibleStackBindingsReleased) payload;
+            writeSubject(output, released.accountId()); output.writeLong(released.authorityEpoch());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new FungibleStackBindingsReleased(
+                readSubject(input).value(), input.readLong())); }
     }
     private static final class ContractCreatedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.supply_contract_created"; } @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> writeContract(output, ((SupplyContractCreated) payload).contract())); }

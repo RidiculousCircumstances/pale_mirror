@@ -49,6 +49,33 @@ class ReferenceContainerCustodyTest {
     }
 
     @Test
+    void temporaryFungibleSlotBindingContributesKindAndCountButNeverAStackIdentity() {
+        FrontierWorldState baseline = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:reference-fungible"), 91L));
+        SubjectId depot = FrontierWorldState.depotId(new SubjectId("settlement:1"));
+        SubjectId lotId = new SubjectId("lot:reference-fungible");
+        SubjectId accountId = new SubjectId("custody:reference-fungible");
+        FungibleResourceLedger resources = FungibleResourceLedger.empty().issue(
+                new ResourceLot(lotId, new SubjectId("settlement:1"), "minecraft:bread", 10, "test", java.util.List.of()),
+                new CustodyAccount(accountId, new ResourceCustody.Container(depot), java.util.Map.of(lotId, 10), java.util.Map.of()))
+                .rebind(accountId, 1L, java.util.List.of(new PhysicalStackBinding(new SubjectId("binding:reference-fungible"), accountId,
+                        new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, 1)), 1L,
+                        "minecraft:bread", java.util.Map.of(lotId, 10), java.util.Map.of())));
+        FrontierWorldState state = baseline.withInventory(baseline.inventory().withFungibleResources(resources));
+        ArrayList<ReferenceContainerCustody.ObservedSlot> matching = new ArrayList<>();
+        for (int slot = 0; slot < state.inventory().containers().get(depot).slotCount(); slot++) {
+            ExactItemStack item = state.inventory().itemAt(depot, slot).orElse(null);
+            matching.add(item != null ? new ReferenceContainerCustody.ObservedSlot(slot, item.id().value(), item.itemKind(), item.count())
+                    : slot == 1 ? ReferenceContainerCustody.ObservedSlot.fungible(slot, "minecraft:bread", 10)
+                    : ReferenceContainerCustody.ObservedSlot.empty(slot));
+        }
+
+        String expected = ReferenceContainerCustody.canonicalFingerprint(state, depot);
+        assertEquals(expected, ReferenceContainerCustody.observedFingerprint(state, depot, matching));
+        matching.set(1, new ReferenceContainerCustody.ObservedSlot(1, "foreign:minecraft:bread", "minecraft:bread", 10));
+        assertNotEquals(expected, ReferenceContainerCustody.observedFingerprint(state, depot, matching));
+    }
+
+    @Test
     void unresolvedReferenceEpochBlocksItsObjectWithoutAuthorizingPhysicalMutation() {
         FrontierWorldState baseline = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:reference-unresolved"), 91L));
         SubjectId depot = FrontierWorldState.depotId(new SubjectId("settlement:1"));

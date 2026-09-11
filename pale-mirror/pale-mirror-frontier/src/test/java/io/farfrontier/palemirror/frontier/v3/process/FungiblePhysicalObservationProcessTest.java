@@ -20,6 +20,7 @@ import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackBinding;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceCustody;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceLot;
 import io.farfrontier.palemirror.frontier.v3.model.FungibleResourceHandoffObserved;
+import io.farfrontier.palemirror.frontier.v3.model.FungibleStackBindingsReleased;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import org.junit.jupiter.api.Test;
 
@@ -80,6 +81,12 @@ class FungiblePhysicalObservationProcessTest {
         FrontierWorldState restoredState = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         assertEquals(Map.of(lotId, 10), restoredState.inventory().fungibleResources().accounts().get(accountId).lotQuantities());
         assertEquals(10, restoredState.inventory().fungibleResources().totalQuantity(owner, "minecraft:bread"));
+        FungibleStackBindingsReleased released = new FungibleStackBindingsReleased(accountId, 4L);
+        assertEquals(released, FrontierWorldRuntimeDefinition.payloadCodecs().decode(released.type(),
+                FrontierWorldRuntimeDefinition.payloadCodecs().encode(released)));
+        assertInstanceOf(CommandResult.Accepted.class, engine.submit(command(engine, world, "released", released)));
+        FrontierWorldState releasedState = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertEquals(Map.of(), releasedState.inventory().fungibleResources().bindings());
     }
 
     private static FungibleStackLayoutObserved observation(SubjectId account, long epoch, String kind, int first, int second) {

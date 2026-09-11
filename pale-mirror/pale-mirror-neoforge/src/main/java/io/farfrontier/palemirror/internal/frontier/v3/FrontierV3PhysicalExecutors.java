@@ -34,7 +34,8 @@ final class FrontierV3PhysicalExecutors {
             // mistakes its own known recovery window for player/world tampering.
             executor("production-transformation", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("cargo-loading"), "production-transformation-effect", FrontierV3ProductionTransformationExecutor::tick),
             executor("container-surfaces", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("production-transformation"), "container-surface-effect", FrontierV3ContainerSurfaceExecutor::tick),
-            executor("reference-container-custody", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("container-surfaces"), "reference-container-custody", FrontierV3ReferenceContainerCustodyExecutor::tick),
+            executor("fungible-resource-observation", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("container-surfaces"), "fungible-resource-custody-observation", FrontierV3FungibleResourceObservationExecutor::tick),
+            executor("reference-container-custody", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("fungible-resource-observation"), "reference-container-custody", FrontierV3ReferenceContainerCustodyExecutor::tick),
             // Harvest changes both one PM-owned field and its exact chest slot, so it is an
             // effect after the container owner has established ACTIVE provenance, not projection.
             executor("resource-site-harvest", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("reference-container-custody"), "resource-site-harvest-effect", FrontierV3ResourceSiteHarvestExecutor::tick),

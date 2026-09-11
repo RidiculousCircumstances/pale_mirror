@@ -176,6 +176,22 @@ public final class FrontierWorldPhysicalObservationProcess {
         return state.withInventory(state.inventory().withFungibleResources(transferred));
     }
 
+    static CommandPlan planFungibleBindingRelease(FrontierWorldState state, FungibleStackBindingsReleased released) {
+        CustodyAccount account = state.inventory().fungibleResources().accounts().get(released.accountId());
+        if (account == null) return new CommandPlan.Rejected(new CommandRejection(RejectionCode.REJECTED_BY_POLICY,
+                "fungible binding release has an unknown custody account"));
+        SubjectId owner = owner(state, account);
+        try { reduceFungibleBindingRelease(state, owner, released); }
+        catch (IllegalArgumentException invalid) { return new CommandPlan.Rejected(new CommandRejection(RejectionCode.REJECTED_BY_POLICY, invalid.getMessage())); }
+        return new CommandPlan.Accepted(List.of(new ProposedEvent(owner, released)));
+    }
+
+    static FrontierWorldState reduceFungibleBindingRelease(FrontierWorldState state, SubjectId subject, FungibleStackBindingsReleased released) {
+        FungibleResourceLedger ledger = state.inventory().fungibleResources(); CustodyAccount account = ledger.accounts().get(released.accountId());
+        if (account == null || !subject.equals(owner(state, account))) throw new IllegalArgumentException("fungible binding release has no owning subject");
+        return state.withInventory(state.inventory().withFungibleResources(ledger.releaseBindings(released.accountId(), released.authorityEpoch())));
+    }
+
     private static CustodyAccount expectedDestination(CustodyAccount current, FungibleResourceHandoffObserved observed) {
         java.util.Map<SubjectId, Integer> lots = new java.util.HashMap<>(current.lotQuantities());
         observed.lotQuantities().forEach((id, quantity) -> lots.merge(id, quantity, Integer::sum));
