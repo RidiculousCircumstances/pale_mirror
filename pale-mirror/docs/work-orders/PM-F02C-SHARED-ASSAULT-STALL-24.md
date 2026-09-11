@@ -1,6 +1,6 @@
 # PM-F02C-SHARED-ASSAULT-STALL-24: bound the shared assault fixture path
 
-Specification revision: 2. Status: `METHOD_REJECTED_CORRECTION_AUTHORIZED`.
+Specification revision: 3. Status: `METHOD_REJECTED_CONTEXT_CLOSED`.
 Parent slice: F0.2C. Risk: critical-code. Engineer: supervising root.
 Executor: one fresh `gpt-5.6-terra`, reasoning `high`.
 
@@ -136,3 +136,33 @@ new reproduction, stack capture, aggregate/full test, GameTest, package,
 native, CI or publication. Commit the coherent correction, return one amended
 `METHOD_ADMISSION` packet and stop. A second method rejection closes this
 builder context.
+
+## Second method review and context closure
+
+Candidate `99863bc3ded674e50758e0d5d9d6f047b15eb64a`, parent
+`e5284b782c68af29319e7c11ba75947421dc0254`, tree
+`eaae2f1fd0404504a0a53527cc159d99d89e71c5`, is clean and its final named
+JUnit XML is current 1/1 green. It is not method-admitted:
+
+1. The `providerDerivations` counter supplied to
+   `FrontierSceneAdmission.reservationAdmission` is never supplied to the
+   preceding `HiveSettlementAssaultProcess.planProgress` call. The zero
+   assertion therefore cannot observe an old direct provider compilation
+   inside COLD eligibility; only the later explicit selector call can increment
+   it. This repeats the disconnected-oracle category.
+2. To construct the foreign-defender control, the candidate changes three
+   production owner rules: restart-unknown assaults cease occupying the normal
+   target slot, and their defenders cease holding `SETTLEMENT_DEFENCE`
+   assignments. That can expose an unresolved exact defender as `IDLE` to
+   unrelated work, route and field admission. These are out-of-scope recovery
+   and assignment semantic changes, not test scaffolding.
+3. The amended packet's final start timestamp follows its XML/log mtime, and
+   its tracked-tree fingerprint does not reproduce with the declared prior
+   serialization. Exact XML and patch hashes do match, so these are packet
+   integrity defects rather than evidence of a failed JUnit run.
+
+No full gate, GameTest, native, CI, package or deployment is authorized from
+this candidate. Preserve both private commits and receipts, but do not use
+`99863bc3` as the successor baseline. The useful bounded-owner WIP at
+`e5284b78` remains unaccepted and may be inherited by a fresh shortened order.
+This Terra context has consumed its sole correction and is terminal.

@@ -79,6 +79,19 @@ mutate the candidate or make the engineer a hidden second coder.
   names the exact symbol or assertion shape that must remain equivalent. Keep
   this to the minimum facts needed for the outcome; it is not permission to
   copy predecessor reasoning or prescribe the implementation.
+- For every method-risk claim, the context packet names the exact production
+  entrypoint, the observation seam used by the oracle and the plausible old or
+  mutated behavior that must cross that same seam. A counter, spy or receipt is
+  evidence only when the tested production invocation can physically reach it;
+  invoking the instrumented seam separately before or after the subject does
+  not measure the subject. Review this call-path wiring from stable source
+  before authorizing an expensive lane.
+- The packet also states a semantic-change budget: which owner/status/identity
+  rules may change and which accepted invariants are frozen. A builder may not
+  weaken target uniqueness, assignment ownership, recovery custody or another
+  production invariant merely to make a hand-built fixture constructible. Such
+  a need is an architecture exception and returns to the engineer instead of
+  becoming an incidental test-enabling production change.
 - A successor inherits bytes and machine evidence through one clean private
   checkpoint, not the predecessor's reasoning. Its order states which facts are
   accepted and must not be rediscovered, which claims remain open, and which
@@ -106,7 +119,10 @@ and terminal identities. Expected paths are navigation only.
 If two or more owners participate, name the seam. Its admission test must begin
 before either owner has manufactured the desired intermediate state and execute
 the real production composition/order. Static registry assertions, direct
-helper calls and preinstalled claims/receipts remain component evidence.
+helper calls and preinstalled claims/receipts remain component evidence. Every
+instrumented observation must be reachable from that exact composition; a
+separately invoked instrumented helper cannot establish how many times the
+production composition called an uninstrumented path.
 
 ## Event-driven lifecycle
 

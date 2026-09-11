@@ -26,6 +26,14 @@ revisions, close/supersede it instead of appending a troubleshooting history.
   contract on which the outcome depends, with an exact evidence handle and
   symbol/assertion shape. A commit or document pointer alone is insufficient
   when missing one field, bound or dimension can reproduce the rejected class.
+- For each method-risk claim, name the exact production entrypoint, the
+  observation seam/counter/receipt and the plausible bad behavior that must
+  traverse that same seam. A separately invoked instrumented helper is not an
+  observation of an uninstrumented production call.
+- Declare the semantic-change budget: owner/status/identity rules in scope and
+  accepted invariants that remain frozen. If a fixture requires weakening a
+  frozen production invariant to construct its state, return an architecture
+  exception rather than adapting production semantics to the fixture.
 - For a successor, name the clean inherited checkpoint, predecessor terminal
   state and process cleanup. Historical orders/logs remain references rather
   than startup context unless one unresolved fact explicitly requires them.
