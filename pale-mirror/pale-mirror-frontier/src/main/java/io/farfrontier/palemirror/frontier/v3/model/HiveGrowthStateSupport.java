@@ -24,8 +24,12 @@ final class HiveGrowthStateSupport {
         if (!(job.inputHold() instanceof HiveGrowthInputHold.FungibleCold held)) {
             throw new IllegalArgumentException("fungible hive growth has no fungible biomass hold");
         }
-        FungibleResourceLedger resources = state.inventory().fungibleResources().reserve(new ClaimAllocation(held.claimId(), job.id(), job.hiveId(),
-                "minecraft:rotten_flesh", 64), held.accountId());
+        ClaimAllocation claim = new ClaimAllocation(held.claimId(), job.id(), job.hiveId(), "minecraft:rotten_flesh", 64);
+        java.util.List<PhysicalStackBinding> bindings = state.inventory().fungibleResources().bindings().values().stream()
+                .filter(binding -> binding.accountId().equals(held.accountId())).toList();
+        FungibleResourceLedger resources = bindings.isEmpty()
+                ? state.inventory().fungibleResources().reserve(claim, held.accountId())
+                : state.inventory().fungibleResources().reserveBound(claim, held.accountId(), bindings.getFirst().authorityEpoch());
         return state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory().withFungibleResources(resources), state.productionJobs(), state.contracts(), state.operations(),
                 state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony().startGrowth(job), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
     }
@@ -55,19 +59,20 @@ final class HiveGrowthStateSupport {
                 state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony().consumeTransferredNutrient(jobId, held.itemId()), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
     }
 
-    static FrontierWorldState consumeObservedFungible(FrontierWorldState state, SubjectId jobId, FungibleResourceConsumedObservation observed) {
+    static FungibleConsumption consumeObservedFungible(FrontierWorldState state, SubjectId jobId, FungibleResourceConsumedObservation observed) {
         HiveGrowthJob job = state.hiveColony().growthJobs().get(Objects.requireNonNull(jobId, "fungible observed growth job id"));
         if (job == null || !(job.inputHold() instanceof HiveGrowthInputHold.FungibleCold held)
                 || !held.accountId().equals(observed.accountId()) || !held.itemId().equals(observed.lotId()) || !held.claimId().equals(observed.claimId())
                 || observed.consumedCount() != 64) throw new IllegalArgumentException("fungible observed biomass does not match its active job");
         FungibleResourceLedger resources = state.inventory().fungibleResources().destroyObserved(held.accountId(), observed.authorityEpoch(),
                 Map.of(held.itemId(), observed.consumedCount()), Map.of(held.claimId(), observed.consumedCount()), observed.remainingStacks());
-        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory().withFungibleResources(resources), state.productionJobs(), state.contracts(), state.operations(),
-                state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony().consumeTransferredNutrient(jobId, held.itemId()), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
+        return new FungibleConsumption(state.inventory().withFungibleResources(resources), state.hiveColony().consumeTransferredNutrient(jobId, held.itemId()));
     }
 
     static FrontierWorldState cancel(FrontierWorldState state, SubjectId jobId) {
         return state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(), state.contracts(), state.operations(),
                 state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony().cancelGrowth(jobId), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
     }
+
+    record FungibleConsumption(ExactInventory inventory, HiveColony colony) { }
 }

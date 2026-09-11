@@ -116,6 +116,41 @@ class HiveNutrientTransferProcessTest {
     }
 
     @Test
+    void hotFungibleBiomassReservesItsBoundPortionAndConsumesOnlyTheObservedStack() {
+        FrontierWorldState baseline = growthTaskState();
+        SubjectId hive = baseline.bootstrap().hive().id(), west = new SubjectId("container:hive-west-store");
+        SubjectId lotId = new SubjectId("lot:hive-west-biomass"), accountId = new SubjectId("custody:hive-west-biomass");
+        ResourceLot biomass = new ResourceLot(lotId, hive, "minecraft:rotten_flesh", 64, "bootstrap", List.of());
+        CustodyAccount account = new CustodyAccount(accountId, new ResourceCustody.Container(west), Map.of(lotId, 64), Map.of());
+        FungibleResourceLedger cold = FungibleResourceLedger.empty().issue(biomass, account);
+        FungiblePhysicalObservation.Stack sourceStack = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                new InventoryCustody.ContainerSlot(west, 0)), biomass.itemKind(), 64);
+        FungibleResourceLedger hot = cold.rebind(accountId, 11L, FungiblePhysicalObservation.bind(cold, accountId, 11L, List.of(sourceStack)));
+        FrontierWorldState sourceHeld = ReferenceContainerCustodyFixtures.observedAndHeld(baseline.withInventory(baseline.inventory().withFungibleResources(hot)), west);
+        StrategicTask task = sourceHeld.strategicPlans().tasks().get(new SubjectId("task:hive-nutrient"));
+
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planned = HiveGrowthProcess.planStart(sourceHeld, HiveGrowthProcess.start(task, 100L));
+        HiveGrowthJob job = ((HiveGrowthStarted) planned.stream().filter(event -> event.payload() instanceof HiveGrowthStarted).findFirst().orElseThrow().payload()).job();
+        var intent = ((PhysicalIntentPrepared) planned.stream().filter(event -> event.payload() instanceof PhysicalIntentPrepared).findFirst().orElseThrow().payload()).intent();
+        FrontierWorldState active = sourceHeld.withStrategicPlans(sourceHeld.strategicPlans().transitionTask(task.id(), StrategicTaskStatus.ACTIVE));
+        FrontierWorldState started = HiveGrowthProcess.reduceStarted(active, hive, new HiveGrowthStarted(job));
+        HiveGrowthInputHold.FungibleCold hold = assertInstanceOf(HiveGrowthInputHold.FungibleCold.class, job.inputHold());
+        assertEquals(64, started.inventory().fungibleResources().claims().get(hold.claimId()).quantity());
+        assertEquals(Map.of(hold.claimId(), 64), started.inventory().fungibleResources().bindings().values().iterator().next().claimQuantities());
+
+        FrontierWorldState prepared = HiveGrowthProcess.reducePrepared(started, hive, intent);
+        FrontierWorldState running = prepared.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
+        FungibleResourceConsumedObservation observed = new FungibleResourceConsumedObservation(new PhysicalObservationId("observation:fungible-hive-growth"),
+                intent.id(), accountId, lotId, hold.claimId(), 64, 11L, List.of());
+        FrontierWorldState consumed = running.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observed));
+
+        assertTrue(consumed.inventory().fungibleResources().lots().isEmpty());
+        assertTrue(consumed.inventory().fungibleResources().claims().isEmpty());
+        assertEquals(job, consumed.hiveColony().growthJobs().get(job.id()));
+        assertEquals(consumed, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(consumed)));
+    }
+
+    @Test
     void coldTransferMovesTheSameExactNutrientAcrossNamedStoresAndRetainsItsReceipt() {
         FrontierWorldState baseline = growthTaskState();
         StrategicTask task = baseline.strategicPlans().tasks().get(new SubjectId("task:hive-nutrient"));

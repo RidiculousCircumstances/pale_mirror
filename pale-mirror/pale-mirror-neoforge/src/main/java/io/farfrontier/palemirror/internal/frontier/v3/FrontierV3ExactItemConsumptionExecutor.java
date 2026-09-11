@@ -14,6 +14,16 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemConsumptionStateSupport;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemConsumedObservation;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
+import io.farfrontier.palemirror.frontier.v3.model.CustodyAccount;
+import io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalObservation;
+import io.farfrontier.palemirror.frontier.v3.model.FungibleResourceConsumedObservation;
+import io.farfrontier.palemirror.frontier.v3.model.HiveGrowthInputHold;
+import io.farfrontier.palemirror.frontier.v3.model.HiveGrowthJob;
+import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackBinding;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceCustody;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceLot;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierMedicalTreatmentSceneSupport;
@@ -25,8 +35,10 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
+import net.minecraft.core.registries.BuiltInRegistries;
 
 import java.util.Comparator;
+import java.util.List;
 import java.util.Optional;
 
 /** Removes one exact identity-tagged count only after durable admission and loaded-world inspection. */
@@ -45,6 +57,11 @@ final class FrontierV3ExactItemConsumptionExecutor {
     }
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, PhysicalIntent intent) {
+        FungibleTarget fungible = fungibleTarget(state, intent);
+        if (fungible != null) {
+            executeFungible(level, runtime, state, intent, fungible);
+            return;
+        }
         Target target = target(state, intent);
         if (target == null) { if (intent.status() == PhysicalIntentStatus.RUNNING) unknown(runtime, intent.id(), "target-conflict"); return; }
         if (!level.hasChunkAt(target.chestPosition())) return;
@@ -58,6 +75,71 @@ final class FrontierV3ExactItemConsumptionExecutor {
         if (!transition(runtime, intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty(), "running")) return;
         if (!consume(chest, target)) { unknown(runtime, intent.id(), "precondition-conflict"); return; }
         confirm(runtime, intent, target, chest);
+    }
+
+    private static FungibleTarget fungibleTarget(FrontierWorldState state, PhysicalIntent intent) {
+        HiveGrowthJob job = state.hiveColony().growthJobs().get(intent.causeSubjectId());
+        if (job == null || !(job.inputHold() instanceof HiveGrowthInputHold.FungibleCold held)
+                || !intent.subjectIds().equals(List.of(job.id(), held.itemId()))) return null;
+        CustodyAccount account = state.inventory().fungibleResources().accounts().get(held.accountId());
+        ResourceLot lot = state.inventory().fungibleResources().lots().get(held.itemId());
+        if (account == null || lot == null || !(account.custody() instanceof ResourceCustody.Container container)) return null;
+        List<PhysicalStackBinding> current = state.inventory().fungibleResources().bindings().values().stream()
+                .filter(binding -> binding.accountId().equals(account.id())).toList();
+        if (current.isEmpty()) return null;
+        long epoch = current.getFirst().authorityEpoch();
+        if (current.stream().anyMatch(binding -> binding.authorityEpoch() != epoch)) return null;
+        PhysicalStackBinding input = current.stream().filter(binding -> binding.lotQuantities().equals(java.util.Map.of(lot.id(), 64))
+                && binding.claimQuantities().equals(java.util.Map.of(held.claimId(), 64))
+                && binding.address() instanceof PhysicalStackAddress.ContainerSlot).findFirst().orElse(null);
+        if (input == null) return null;
+        InventoryCustody.ContainerSlot slot = ((PhysicalStackAddress.ContainerSlot) input.address()).slot();
+        var surface = state.inventory().surfaces().get(container.containerId());
+        if (surface == null || !slot.containerId().equals(container.containerId())) return null;
+        return new FungibleTarget(account, lot, held.claimId(), epoch, container.containerId(), slot.slot(),
+                new BlockPos(surface.position().x(), surface.position().y(), surface.position().z()));
+    }
+
+    private static void executeFungible(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                        FrontierWorldState state, PhysicalIntent intent, FungibleTarget target) {
+        if (!level.hasChunkAt(target.chestPosition())) return;
+        if (ReferenceContainerCustody.isReferenceContainer(state, target.containerId())
+                && !ReferenceContainerCustody.hasOperationalCustody(state, target.containerId())) return;
+        ChestBlockEntity chest = FrontierV3CargoHandoffExecutor.activeChest(level,
+                new FrontierV3CargoHandoffExecutor.StoreTarget(target.chestPosition(), target.containerId()));
+        if (chest == null) { unknown(runtime, intent.id(), "fungible-chest-conflict"); return; }
+        if (intent.status() == PhysicalIntentStatus.RUNNING || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) {
+            if (fungibleConsumed(chest, target)) confirmFungible(runtime, intent, target, chest);
+            else unknown(runtime, intent.id(), "fungible-restart-postcondition-conflict");
+            return;
+        }
+        if (!matchesFungibleInput(chest, target)) { unknown(runtime, intent.id(), "fungible-precondition-conflict"); return; }
+        if (!transition(runtime, intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty(), "fungible-running")) return;
+        chest.setItem(target.slot(), ItemStack.EMPTY); chest.setChanged();
+        if (!fungibleConsumed(chest, target)) { unknown(runtime, intent.id(), "fungible-physical-effect-conflict"); return; }
+        confirmFungible(runtime, intent, target, chest);
+    }
+
+    private static boolean matchesFungibleInput(ChestBlockEntity chest, FungibleTarget target) {
+        if (target.slot() < 0 || target.slot() >= chest.getContainerSize()) return false;
+        ItemStack stack = chest.getItem(target.slot());
+        return stack.getCount() == 64 && target.lot().itemKind().equals(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());
+    }
+
+    private static boolean fungibleConsumed(ChestBlockEntity chest, FungibleTarget target) {
+        return target.slot() >= 0 && target.slot() < chest.getContainerSize() && chest.getItem(target.slot()).isEmpty();
+    }
+
+    private static void confirmFungible(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent,
+                                        FungibleTarget target, ChestBlockEntity chest) {
+        FrontierWorldState current = runtime.decodedState().orElseThrow();
+        List<FungiblePhysicalObservation.Stack> remaining = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(chest, current, target.containerId());
+        PhysicalEffectObservation observation = new FungibleResourceConsumedObservation(
+                new PhysicalObservationId("observation:" + intent.id().value().replace(':', '-')), intent.id(), target.account().id(), target.lot().id(),
+                target.claimId(), 64, target.authorityEpoch(), remaining);
+        if (!transition(runtime, intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation), "fungible-confirmed")) {
+            throw new IllegalStateException("fungible consumption confirmation was rejected");
+        }
     }
 
     static boolean consume(ChestBlockEntity chest, Target target) {
@@ -109,4 +191,6 @@ final class FrontierV3ExactItemConsumptionExecutor {
     }
 
     record Target(ExactItemStack item, SubjectId containerId, int slot, BlockPos chestPosition, int count) { }
+    private record FungibleTarget(CustodyAccount account, ResourceLot lot, SubjectId claimId, long authorityEpoch,
+                                  SubjectId containerId, int slot, BlockPos chestPosition) { }
 }

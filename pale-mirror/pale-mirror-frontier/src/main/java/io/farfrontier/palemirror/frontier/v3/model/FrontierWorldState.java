@@ -333,6 +333,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 boolean reservedRouteMaintenanceCargo = RouteMaintenanceStateSupport.reservesSubject(routeMaintenances, intent, subject);
                 if (!hiveNutrientSubject && !expectedActors.contains(subject) && !inventory.cargo().containsKey(subject) && !operations.containsKey(subject) && !expectedStructures.contains(subject) && !inventory.items().containsKey(subject)
                         && !hiveColony.growthJobs().containsKey(subject) && !humanPopulation.birthJobs().containsKey(subject) && !productionJobs.containsKey(subject) && !contracts.containsKey(subject)
+                        && !inventory.fungibleResources().lots().containsKey(subject) && !inventory.fungibleResources().claims().containsKey(subject)
                         && !humanPopulation.provisions().containsKey(subject) && !humanPopulation.medicalOperations().containsKey(subject)
                         && !serviceWorks.containsKey(subject)
                         && productionJobs.values().stream().noneMatch(job -> job.outputItemId().equals(subject))
@@ -933,10 +934,9 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 }
                 next.put(intentId, current.withStatus(nextStatus, java.util.Optional.of(consumed.id())));
                 Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(physicalObservations); observations.put(consumed.id(), consumed);
-                FrontierWorldState consumedState = HiveGrowthStateSupport.consumeObservedFungible(this, current.causeSubjectId(), consumed);
-                return consumedState.next(consumedState.actorLocations, consumedState.structureConditions, consumedState.infection, consumedState.inventory,
-                        consumedState.productionJobs, consumedState.contracts, consumedState.operations, next, observations, consumedState.sceneLeases,
-                        consumedState.hiveColony, consumedState.structureDamage, consumedState.physicalDeltas, consumedState.ambientLeases);
+                HiveGrowthStateSupport.FungibleConsumption consumedState = HiveGrowthStateSupport.consumeObservedFungible(this, current.causeSubjectId(), consumed);
+                return next(actorLocations, structureConditions, infection, consumedState.inventory(), productionJobs, contracts, operations, next,
+                        observations, sceneLeases, consumedState.colony(), structureDamage, physicalDeltas, ambientLeases);
             }
             if (!(evidence instanceof ExactItemConsumedObservation consumed)) throw new IllegalArgumentException("exact consumption requires item observation evidence");
             SubjectId itemId = current.subjectIds().stream().filter(id -> !id.equals(current.causeSubjectId())).findFirst().orElseThrow();
