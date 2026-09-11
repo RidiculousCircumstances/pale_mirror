@@ -1,6 +1,6 @@
 # PM-F02C-CANONICAL-LOCAL-PROVIDER-29: one bounded canonical provider query
 
-Specification revision: 3. Status: `METHOD_ADMISSION_REVIEW`.
+Specification revision: 4. Status: `METHOD_REJECTED_CONTEXT_CLOSED`.
 Parent slice: F0.2C. Risk: critical-code. Engineer: supervising root.
 Executor: one fresh `gpt-5.6-terra`, reasoning `high`, routed as
 `/root/f02c_shared_assault_challenge24/terra_canonical_local_provider29`.
@@ -138,3 +138,27 @@ Fresh independent challenger
 `/root/f02c_shared_assault_challenge24/canonical_local_provider29_challenger`
 started read-only at `2026-09-11T02:19:27Z`. It may inspect only stable source
 and existing receipts and returns before any expensive work.
+
+## Terminal method review
+
+The independent challenger rejected exact clean `d76e8788`. Its findings match
+main's stable-diff review:
+
+- the classfile oracle inspects only direct references from the battlefield
+  outer class; full compilation restored in its nested view or called graybox
+  helper remains invisible;
+- every requested cell still scans every settlement supply route, and the loss
+  mask walks the complete physical-delta key set;
+- local semantics omit canonical route foundations and active-worksite staging;
+- production replacement history still combines lease release with physical
+  loss, while new replacement/equivalence checks invoke a helper directly;
+- task-root probe, complete receipt and source-bound negative provenance are
+  absent.
+
+No expensive work ran and no task-owned process remains. Scope preservation is
+sound but does not establish the provider contract. This successor repeated the
+same non-transitive proof and filtered-global-work category despite explicit
+acceptance text; it is execution nonconformance, not missing context. The
+circuit breaker closes this builder context and rejects all candidate bytes.
+The next order changes the owner seam: admission consumes a projection-owned
+point-query snapshot and cannot reconstruct projection geometry itself.
