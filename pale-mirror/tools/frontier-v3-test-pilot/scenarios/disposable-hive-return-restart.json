@@ -12,9 +12,9 @@
   ],
   "actions": [
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 417, "y": 64, "z": 420 }, "settleMs": 0 },
-    { "type": "wait_until_diagnostic", "view": "hive_mobilization", "id": "mobilization:development-hive-mobilization", "expect": { "status": "ok", "mobilizationStatus": "RETURNING", "survivors": 4 }, "timeoutMs": 60000 },
+    { "type": "wait_until_diagnostic", "view": "hive_mobilization", "id": "mobilization:development-hive-mobilization", "expect": { "status": "ok", "mobilizationStatus": "RETURNING", "survivors": 4, "hotMembers": 4 }, "timeoutMs": 60000 },
     { "type": "inspect", "view": "hive_mobilization", "id": "mobilization:development-hive-mobilization" },
-    { "type": "wait_until_diagnostic", "view": "hive_mobilization", "id": "mobilization:development-hive-mobilization", "expect": { "status": "ok", "mobilizationStatus": "RETURNING", "survivors": 4 }, "timeoutMs": 60000 },
+    { "type": "wait_until_diagnostic", "view": "hive_mobilization", "id": "mobilization:development-hive-mobilization", "expect": { "status": "ok", "mobilizationStatus": "RETURNING", "survivors": 4, "hotMembers": 4 }, "timeoutMs": 60000 },
     { "type": "inspect", "view": "hive_mobilization", "id": "mobilization:development-hive-mobilization" }
   ],
   "restart": { "mode": "graceful", "afterAction": 3,
