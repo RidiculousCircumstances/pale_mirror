@@ -1,6 +1,6 @@
 # PM-F02C-AMBIENT-ADMISSION-BOUND-28: bound physical-provider admission work
 
-Specification revision: 2. Status: `EXECUTING_METHOD_BUILD`.
+Specification revision: 3. Status: `METHOD_REJECTED_CONTEXT_CLOSED`.
 Parent slice: F0.2C. Risk: critical-code. Engineer: supervising root.
 Executor: one fresh `gpt-5.6-terra`, reasoning `high`, routed as
 `/root/f02c_shared_assault_challenge24/terra_ambient_admission_bound28`.
@@ -109,3 +109,33 @@ claim cannot be proved faithfully at the cheap tier, return `ARCHITECTURE` or
 Assignment epoch: `2026-09-11T01:29:37Z`. The supervisor performs one bounded
 liveness check after each complete ten-minute silence interval and one economy
 audit after one hour if still active.
+
+## Terminal review
+
+Candidate `ff9188a01836a165c54b5589d5c29868d0eae2b6`, parent `e5284b78`,
+tree `2443d32255406425fab8440cb91f0f212ad4b59f`, is rejected and must not be
+adopted. The clean three-path delta correctly routes the real admission
+composition through its new query and preserves several lease/candidate/loss
+checks, but the method and product semantics fail the order:
+
+- the oracle bounds returned cells rather than executed work, so a hidden full
+  compile followed by filtering still passes;
+- the new path still walks every settlement structure and hive organ and
+  rebuilds every settlement ingress/foundation collection;
+- its pointwise route-foundation rule can classify a lower declared route
+  surface as foundation beneath a higher deck, then collide with the later
+  surface insertion; the canonical full footprint explicitly preserves that
+  lower surface;
+- lease-only and unrelated replacement histories are not independently proved,
+  and the required task evidence root was never created.
+
+The focused XMLs are retained only as scoped component results: admission 1/1
+`6ced37a6d536f98d255f74092df7a05ff4b17f54d946e8f52b1542986d717de7`,
+graybox 16/16 `91d9e7c1cfbe7064e31194ffa264b9e92effae592c2037081818e64db59d3b6e`
+and assault 13/13 `bc3ef0e20ba2871eb3521d74122886e3d1c846b9f2e584ada1c8b36466bb16d6`.
+No aggregate, GameTest, Minecraft, native or CI work ran, and the challenger
+found no task-owned process. Because the active packet explicitly required a
+real work bound, regression-sensitive production composition, frozen route
+semantics and evidence custody, this is execution nonconformance rather than a
+context defect. It repeats the prior proof-category failure, closes this builder
+context and requires an owner-seam simplification before another implementation.
