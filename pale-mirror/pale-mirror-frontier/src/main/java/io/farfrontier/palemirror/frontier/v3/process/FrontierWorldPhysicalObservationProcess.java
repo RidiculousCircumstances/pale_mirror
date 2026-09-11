@@ -161,9 +161,27 @@ public final class FrontierWorldPhysicalObservationProcess {
     static FrontierWorldState reduceFungibleHandoff(FrontierWorldState state, SubjectId subject, FungibleResourceHandoffObserved observed) {
         FungibleResourceLedger ledger = state.inventory().fungibleResources(); CustodyAccount source = ledger.accounts().get(observed.sourceAccountId());
         if (source == null || !subject.equals(owner(state, source))) throw new IllegalArgumentException("fungible handoff has no owning subject");
-        FungibleResourceLedger transferred = ledger.transferObservedToNewAccount(observed.sourceAccountId(), observed.destinationAccount(), observed.sourceEpoch(),
-                observed.destinationEpoch(), observed.lotQuantities(), observed.claimQuantities(), observed.remainingSource(), observed.destinationBindings());
+        CustodyAccount existing = ledger.accounts().get(observed.destinationAccount().id());
+        FungibleResourceLedger transferred;
+        if (existing == null) {
+            transferred = ledger.transferObservedToNewAccount(observed.sourceAccountId(), observed.destinationAccount(), observed.sourceEpoch(),
+                    observed.destinationEpoch(), observed.lotQuantities(), observed.claimQuantities(), observed.remainingSource(), observed.destinationBindings());
+        } else {
+            if (!expectedDestination(existing, observed).equals(observed.destinationAccount())) {
+                throw new IllegalArgumentException("fungible handoff has a forged existing destination balance");
+            }
+            transferred = ledger.transferObservedToExistingAccount(observed.sourceAccountId(), existing.id(), observed.sourceEpoch(),
+                    observed.destinationEpoch(), observed.lotQuantities(), observed.claimQuantities(), observed.remainingSource(), observed.destinationBindings());
+        }
         return state.withInventory(state.inventory().withFungibleResources(transferred));
+    }
+
+    private static CustodyAccount expectedDestination(CustodyAccount current, FungibleResourceHandoffObserved observed) {
+        java.util.Map<SubjectId, Integer> lots = new java.util.HashMap<>(current.lotQuantities());
+        observed.lotQuantities().forEach((id, quantity) -> lots.merge(id, quantity, Integer::sum));
+        java.util.Map<SubjectId, Integer> claims = new java.util.HashMap<>(current.claimQuantities());
+        observed.claimQuantities().forEach((id, quantity) -> claims.merge(id, quantity, Integer::sum));
+        return new CustodyAccount(current.id(), current.custody(), lots, claims);
     }
 
     private static SubjectId owner(FrontierWorldState state, CustodyAccount account) {

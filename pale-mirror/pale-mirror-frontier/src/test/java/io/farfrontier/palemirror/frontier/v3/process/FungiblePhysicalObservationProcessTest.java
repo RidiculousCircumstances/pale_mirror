@@ -64,6 +64,22 @@ class FungiblePhysicalObservationProcessTest {
         FrontierWorldState transferred = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         assertEquals(Map.of(lotId, 4), transferred.inventory().fungibleResources().accounts().get(playerAccount).lotQuantities());
         assertEquals(10, transferred.inventory().fungibleResources().totalQuantity(owner, "minecraft:bread"));
+
+        CustodyAccount forgedDestination = new CustodyAccount(accountId, new ResourceCustody.Container(container), Map.of(lotId, 6), Map.of());
+        PhysicalStackBinding restored = new PhysicalStackBinding(new SubjectId("binding:physical-restored"), accountId,
+                new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(container, 3)), 4L, "minecraft:bread", Map.of(lotId, 10), Map.of());
+        FungibleResourceHandoffObserved forged = new FungibleResourceHandoffObserved(playerAccount, forgedDestination, 5L, 4L,
+                Map.of(lotId, 4), Map.of(), List.of(), List.of(restored));
+        assertInstanceOf(CommandResult.Rejected.class, engine.submit(command(engine, world, "forged-existing", forged)));
+
+        CustodyAccount finalDestination = new CustodyAccount(accountId, new ResourceCustody.Container(container), Map.of(lotId, 10), Map.of());
+        FungibleResourceHandoffObserved returned = new FungibleResourceHandoffObserved(playerAccount, finalDestination, 5L, 4L,
+                Map.of(lotId, 4), Map.of(), List.of(), List.of(restored));
+        CommandResult returnedResult = engine.submit(command(engine, world, "returned", returned));
+        assertInstanceOf(CommandResult.Accepted.class, returnedResult, returnedResult::toString);
+        FrontierWorldState restoredState = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertEquals(Map.of(lotId, 10), restoredState.inventory().fungibleResources().accounts().get(accountId).lotQuantities());
+        assertEquals(10, restoredState.inventory().fungibleResources().totalQuantity(owner, "minecraft:bread"));
     }
 
     private static FungibleStackLayoutObserved observation(SubjectId account, long epoch, String kind, int first, int second) {
