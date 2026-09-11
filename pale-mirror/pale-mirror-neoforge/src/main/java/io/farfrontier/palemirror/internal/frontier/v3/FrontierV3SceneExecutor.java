@@ -29,6 +29,8 @@ import io.farfrontier.palemirror.frontier.v3.process.FrontierDurationProcessDriv
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.OperationTravel;
+import io.farfrontier.palemirror.frontier.v3.model.OperationFront;
+import io.farfrontier.palemirror.frontier.v3.model.ActorDirective;
 import io.farfrontier.palemirror.frontier.v3.model.OperationTravelAdvanced;
 import io.farfrontier.palemirror.frontier.v3.model.LogisticsSceneCause;
 import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
@@ -433,7 +435,11 @@ final class FrontierV3SceneExecutor {
     private static void executeLocalGoals(ServerLevel level, FrontierWorldState state, SceneLease lease) {
         List<Body> bodies = lease.members().stream().map(member -> body(level, state, lease, member)).flatMap(Optional::stream)
                 .sorted(Comparator.comparing(value -> value.member().actorId())).toList();
-        for (Body actor : bodies) FrontierV3ControlledMobMotion.moveToward(level, actor.entity(), localTarget(state, actor, bodies, lease));
+        for (Body actor : bodies) {
+            Optional<ActorDirective> directive = logisticsDirective(state, lease, actor.member().actorId());
+            if (directive.isPresent() && !directive.orElseThrow().movement().permitsObservedSupport(supportPosition(actor.entity().blockPosition()))) continue;
+            FrontierV3ControlledMobMotion.moveToward(level, actor.entity(), localTarget(state, actor, bodies, lease));
+        }
     }
 
     /** Commits one reached physical grid step with the operation and its current HOT lease together. */
@@ -444,11 +450,14 @@ final class FrontierV3SceneExecutor {
         if (operation == null || operation.activeTravel().isEmpty()) return false;
         OperationTravel current = operation.activeTravel().orElseThrow();
         if (current.arrived()) return false;
+        OperationFront front = OperationFront.logistics(operation);
         OperationTravel next = translateTravel(current, current.nextHotCursor());
         for (SceneMember member : lease.members()) {
             Entity entity = level.getEntity(member.entityId());
             BodyPosition expected = next.formation().get(member.actorId());
+            ActorDirective directive = front.directive(operation, lease.id(), member.actorId());
             if (!(entity instanceof Mob body) || !owned(entity, state, lease, member)
+                    || !directive.movement().permitsObservedSupport(supportPosition(body.blockPosition()))
                     || body.getBlockX() != expected.x() || body.getBlockY() != expected.y() || body.getBlockZ() != expected.z()) return false;
         }
         if (!FrontierV3CargoCarrierExecutor.atDestination(level, state, lease, next.cargoAnchor().surface().support())) return false;
@@ -548,6 +557,7 @@ final class FrontierV3SceneExecutor {
         return new FixedPosition(new FixedScalar(Math.round(entity.getX() * FixedScalar.SCALE)),
                 new FixedScalar(Math.round(entity.getY() * FixedScalar.SCALE)), new FixedScalar(Math.round(entity.getZ() * FixedScalar.SCALE)));
     }
+    private static BlockPosition supportPosition(BlockPos position) { return new BlockPosition(position.getX(), position.getY(), position.getZ()); }
     private static FixedPosition position(BlockPos position) {
         return new FixedPosition(FixedScalar.whole(position.getX()), FixedScalar.whole(position.getY()), FixedScalar.whole(position.getZ()));
     }
@@ -564,7 +574,8 @@ final class FrontierV3SceneExecutor {
             if (operation != null && operation.activeTravel().isPresent()) {
                 OperationTravel travel = operation.activeTravel().orElseThrow();
                 if (!travel.arrived()) {
-                    BodyPosition target = operationTravelTargetPosition(travel, actor.member().actorId());
+                    ActorDirective directive = OperationFront.logistics(operation).directive(operation, lease.id(), actor.member().actorId());
+                    BlockPosition target = directive.movement().nextCheckpoint();
                     return new Vec3(target.x() + 0.5D, target.y(), target.z() + 0.5D);
                 }
             }
@@ -578,6 +589,13 @@ final class FrontierV3SceneExecutor {
         int phase = Math.floorMod(actor.member().actorId().value().hashCode(), 8);
         double angle = phase * Math.PI / 4.0D;
         return new Vec3(lease.handoffPosition().x() + 0.5D + Math.cos(angle) * 2.0D, actor.entity().getY(), lease.handoffPosition().z() + 0.5D + Math.sin(angle) * 2.0D);
+    }
+
+    private static Optional<ActorDirective> logisticsDirective(FrontierWorldState state, SceneLease lease, SubjectId actorId) {
+        if (FrontierSceneBehaviors.logistics(lease).engagementId().isPresent()) return Optional.empty();
+        RouteOperation operation = state.operations().get(FrontierSceneBehaviors.logistics(lease).operationId());
+        if (operation == null || operation.activeTravel().isEmpty() || operation.activeTravel().orElseThrow().arrived()) return Optional.empty();
+        return Optional.of(OperationFront.logistics(operation).directive(operation, lease.id(), actorId));
     }
 
     private static long confirmedStrikeCount(FrontierWorldState state, SubjectId sceneCause) {

@@ -15,13 +15,18 @@ import java.util.Objects;
  * anchor survive a HOT/COLD hand-off as one immutable fact.  It deliberately contains no
  * Minecraft identity or physics policy.</p>
  */
-public record OperationTravel(TraversalTopology topology, int cursor, Map<SubjectId, BodyPosition> formation,
+public record OperationTravel(SubjectId frontId, TraversalTopology topology, int cursor, Map<SubjectId, BodyPosition> formation,
                               TransportAnchor cargoAnchor) {
     public static final int MAX_CELLS = 4_096;
     public static final int MAX_COLD_ADVANCE = 32;
 
+    public OperationTravel(TraversalTopology topology, int cursor, Map<SubjectId, BodyPosition> formation, TransportAnchor cargoAnchor) {
+        this(frontIdFor(topology), topology, cursor, formation, cargoAnchor);
+    }
+
     public OperationTravel {
-        topology = Objects.requireNonNull(topology, "operation travel topology");
+        frontId = Objects.requireNonNull(frontId, "operation front id"); topology = Objects.requireNonNull(topology, "operation travel topology");
+        if (!frontId.equals(frontIdFor(topology))) throw new IllegalArgumentException("operation travel must retain its deterministic front identity");
         List<BlockPosition> corridor = corridor(topology);
         if (topology.edges().stream().anyMatch(edge -> edge.kind() != TraversalKind.PEDESTRIAN
                 || !edge.capabilities().contains(TraversalCapability.PEDESTRIAN))) {
@@ -77,7 +82,7 @@ public record OperationTravel(TraversalTopology topology, int cursor, Map<Subjec
 
     /** Physical evidence may change retained edge availability, never geometry or the cursor. */
     public OperationTravel withAvailability(java.util.Set<TraversalEdgeId> affected, TraversalAvailability availability) {
-        return new OperationTravel(topology.withAvailability(affected, availability), cursor, formation, cargoAnchor);
+        return new OperationTravel(frontId, topology.withAvailability(affected, availability), cursor, formation, cargoAnchor);
     }
 
     /** A loaded physical caravan may certify only its immediately adjacent cell. */
@@ -95,11 +100,16 @@ public record OperationTravel(TraversalTopology topology, int cursor, Map<Subjec
         if (nextCursor <= cursor || nextCursor > nextColdCursor()) {
             throw new IllegalArgumentException("operation travel cursor must advance by one bounded COLD step");
         }
-        return new OperationTravel(topology, nextCursor, nextFormation, nextCargoAnchor);
+        return new OperationTravel(frontId, topology, nextCursor, nextFormation, nextCargoAnchor);
     }
 
     private static List<BlockPosition> corridor(TraversalTopology topology) {
         return topology.linearCorridorSurfaces().stream().map(SurfaceAnchor::support).toList();
+    }
+
+    public static SubjectId frontIdFor(TraversalTopology topology) {
+        Objects.requireNonNull(topology, "front topology");
+        return new SubjectId("front:" + topology.id().value().substring(topology.id().value().indexOf(':') + 1).replace(':', '-'));
     }
 
 }
