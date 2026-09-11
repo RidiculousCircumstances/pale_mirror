@@ -13,6 +13,8 @@ public final class OperationFrontEffectCoordinator {
         if (this.applied.size() > MAX_EFFECTS) throw new IllegalArgumentException("front effect retention exceeded");
     }
     public static OperationFrontEffectCoordinator empty() { return new OperationFrontEffectCoordinator(Set.of()); }
+    /** Snapshot-visible receipts ordered by their exact cause and front identities. */
+    public Set<OperationFrontEffectKey> applied() { return applied; }
     public boolean accepts(OperationFrontEffectKey key) { return !applied.contains(Objects.requireNonNull(key, "front effect key")); }
     public OperationFrontEffectCoordinator record(OperationFrontEffectKey key) {
         if (!accepts(key)) throw new IllegalArgumentException("cross-front effect is already applied");
@@ -20,4 +22,8 @@ public final class OperationFrontEffectCoordinator {
         if (next.size() > MAX_EFFECTS) throw new IllegalStateException("active front effect retention exhausted");
         return new OperationFrontEffectCoordinator(next);
     }
+    @Override public boolean equals(Object other) {
+        return other instanceof OperationFrontEffectCoordinator value && applied.equals(value.applied);
+    }
+    @Override public int hashCode() { return applied.hashCode(); }
 }

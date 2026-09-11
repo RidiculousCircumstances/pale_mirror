@@ -75,6 +75,15 @@ public final class StrategicPlanStateCodec {
             FrontierWorldStateCodec.writeString(output, authority.policy().id()); output.writeInt(authority.policy().version());
             output.writeLong(authority.reconsiderationEpoch()); writeSubjects(output, authority.commitmentIds()); writeSubjects(output, authority.provenanceIds());
         }
+        writeCount(output, plans.frontEffects().applied().size());
+        for (OperationFrontEffectKey effect : plans.frontEffects().applied().stream()
+                .sorted(Comparator.comparing(OperationFrontEffectKey::causeId)
+                        .thenComparing(OperationFrontEffectKey::sourceFrontId)
+                        .thenComparing(OperationFrontEffectKey::targetFrontId)
+                        .thenComparingLong(OperationFrontEffectKey::authorityEpoch)).toList()) {
+            writeSubject(output, effect.causeId()); writeSubject(output, effect.sourceFrontId());
+            writeSubject(output, effect.targetFrontId()); output.writeLong(effect.authorityEpoch());
+        }
         writeCount(output, plans.infectionKnowledge().entries().size());
         for (Map.Entry<SubjectId, Map<InfectionCell, SettlementInfectionKnowledge.KnownInfection>> settlement : plans.infectionKnowledge().entries().entrySet().stream()
                 .sorted(Map.Entry.comparingByKey()).toList()) {
@@ -233,6 +242,11 @@ public final class StrategicPlanStateCodec {
             DecisionAuthority authority = new DecisionAuthority(owner, authorityKind, policy, input.readLong(), readSubjects(input), readSubjects(input));
             if (authorities.put(owner, authority) != null) throw new IllegalArgumentException("duplicate decision authority");
         }
+        java.util.Set<OperationFrontEffectKey> frontEffects = new java.util.LinkedHashSet<>();
+        for (int index = 0, count = readCount(input); index < count; index++) {
+            OperationFrontEffectKey effect = new OperationFrontEffectKey(readSubject(input), readSubject(input), readSubject(input), input.readLong());
+            if (!frontEffects.add(effect)) throw new IllegalArgumentException("duplicate cross-front effect receipt");
+        }
         Map<SubjectId, Map<InfectionCell, SettlementInfectionKnowledge.KnownInfection>> knowledge = new LinkedHashMap<>();
         if (hasInfectionKnowledge) for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId settlement = readSubject(input); Map<InfectionCell, SettlementInfectionKnowledge.KnownInfection> cells = new LinkedHashMap<>();
@@ -266,7 +280,8 @@ public final class StrategicPlanStateCodec {
         if (hasHiveDoctrine) { int kind = input.readUnsignedByte(); if (kind >= HiveDoctrine.values().length) throw new IllegalArgumentException("unknown hive doctrine");
             doctrine = new HiveDoctrineState(FrontierWireTags.require(HiveDoctrine.class, kind), input.readLong()); }
         return new StrategicPlanState(objectives, tasks, patrols, engagements, new SettlementInfectionKnowledge(knowledge), new HiveOperationKnowledge(hiveKnowledge),
-                new HiveTerritoryKnowledge(territory), new HiveSettlementKnowledge(settlementSightings), doctrine, assaults, new DecisionAuthorityState(authorities));
+                new HiveTerritoryKnowledge(territory), new HiveSettlementKnowledge(settlementSightings), doctrine, assaults,
+                new DecisionAuthorityState(authorities), new OperationFrontEffectCoordinator(frontEffects));
     }
 
     /**
