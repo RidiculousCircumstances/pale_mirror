@@ -1,8 +1,9 @@
 # PM-F02C-COLD-ADMISSION-OBSERVATION-25: prove the real COLD admission bound
 
-Specification revision: 1. Status: `CHECKPOINTED_METHOD_BUILD`.
+Specification revision: 1. Status: `EXECUTING_METHOD_BUILD`.
 Parent slice: F0.2C. Risk: critical-code. Engineer: supervising root.
-Executor: one fresh `gpt-5.6-terra`, reasoning `high`.
+Executor: `/root/f02c_shared_assault_challenge24/terra_cold_admission_observation25`,
+one fresh `gpt-5.6-terra`, reasoning `high`.
 
 ## Bounded context packet
 
@@ -81,6 +82,7 @@ successor and forces seam simplification before further code.
 Use branch `terra/f02c-cold-admission-observation-25`, worktree
 `/home/rd/proj/pm-f02c-cold-admission-observation-25` and task root
 `/home/rd/proj/pm-f02c-cold-admission-observation-25-tmp`. Preserve all prior
-worktrees/evidence and unrelated services. The liveness epoch begins at direct
-assignment; check after each ten complete minutes of silence, never sooner. The
-first economy audit is due one hour later if execution remains active.
+worktrees/evidence and unrelated services. Assignment/liveness epoch:
+`2026-09-11T00:02:57Z`; check after each ten complete minutes of silence, never
+sooner. The first economy audit is due at `2026-09-11T01:02:57Z` if execution
+remains active.
