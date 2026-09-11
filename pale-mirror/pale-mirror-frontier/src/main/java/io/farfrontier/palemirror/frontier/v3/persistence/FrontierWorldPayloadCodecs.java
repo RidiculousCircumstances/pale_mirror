@@ -239,14 +239,14 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             CargoLoaded loaded = (CargoLoaded) payload;
             return encodeProduction(output -> {
                 writeSubject(output, loaded.contractId()); writeSubject(output, loaded.cargo().id()); writeSubject(output, loaded.cargo().ownerId());
-                output.writeByte(loaded.cargo().itemIds().size());
+                output.writeBoolean(loaded.cargo().fungibleContents()); output.writeByte(loaded.cargo().itemIds().size());
                 for (var item : loaded.cargo().itemIds()) writeSubject(output, item);
             });
         }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
-            SubjectIdHolder contract = readSubject(input); SubjectIdHolder cargo = readSubject(input); SubjectIdHolder owner = readSubject(input); int count = input.readUnsignedByte();
+            SubjectIdHolder contract = readSubject(input); SubjectIdHolder cargo = readSubject(input); SubjectIdHolder owner = readSubject(input); boolean fungible = input.readBoolean(); int count = input.readUnsignedByte();
             java.util.ArrayList<io.farfrontier.palemirror.frontier.v3.api.SubjectId> items = new java.util.ArrayList<>(); for (int index = 0; index < count; index++) items.add(readSubject(input).value());
-            return new CargoLoaded(contract.value(), new CargoBatch(cargo.value(), owner.value(), items));
+            return new CargoLoaded(contract.value(), new CargoBatch(cargo.value(), owner.value(), items, fungible));
         }); }
     }
     private static final class CargoDeliveredCodec implements PayloadCodec {
@@ -254,20 +254,20 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         @Override public byte[] encode(FrontierPayload payload) {
             CargoDelivered delivered = (CargoDelivered) payload;
             return encodeProduction(output -> {
-                writeSubject(output, delivered.operationId()); writeSubject(output, delivered.cargoId()); output.writeByte(delivered.placements().size());
+                writeSubject(output, delivered.operationId()); writeSubject(output, delivered.cargoId()); output.writeBoolean(delivered.fungibleContents()); output.writeByte(delivered.placements().size());
                 for (CargoHandoffPlacement placement : delivered.placements()) {
                     writeSubject(output, placement.itemId()); writeSubject(output, placement.receiverSlot().containerId()); output.writeByte(placement.receiverSlot().slot());
                 }
             });
         }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
-            SubjectIdHolder operation = readSubject(input); SubjectIdHolder cargo = readSubject(input); int count = input.readUnsignedByte();
+            SubjectIdHolder operation = readSubject(input); SubjectIdHolder cargo = readSubject(input); boolean fungible = input.readBoolean(); int count = input.readUnsignedByte();
             java.util.ArrayList<CargoHandoffPlacement> placements = new java.util.ArrayList<>();
             for (int index = 0; index < count; index++) {
                 SubjectIdHolder item = readSubject(input); SubjectIdHolder receiver = readSubject(input);
                 placements.add(new CargoHandoffPlacement(item.value(), new InventoryCustody.ContainerSlot(receiver.value(), input.readUnsignedByte())));
             }
-            return new CargoDelivered(operation.value(), cargo.value(), placements);
+            return new CargoDelivered(operation.value(), cargo.value(), placements, fungible);
         }); }
     }
     private static final class OperationCreatedCodec implements PayloadCodec {

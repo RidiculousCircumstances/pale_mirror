@@ -303,6 +303,21 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         return new ExactInventory(containers, items, nextCargo, playerItems, worldCarrierItems, conflicts, surfaces, economics, resources);
     }
 
+    /** Atomically retains a contract claim while moving its COLD lot portion into identified cargo. */
+    public ExactInventory reserveAndLoadFungibleCargo(CargoBatch batch, SubjectId sourceAccountId, ResourceLot lot, ClaimAllocation claim) {
+        Objects.requireNonNull(lot, "cargo lot"); Objects.requireNonNull(claim, "cargo claim");
+        if (!batch.fungibleContents() || cargo.containsKey(batch.id()) || !lot.itemKind().equals(claim.itemKind())
+                || lot.quantity() < claim.quantity()) {
+            throw new IllegalArgumentException("fungible cargo reservation is invalid");
+        }
+        Map<SubjectId, Integer> quantities = Map.of(lot.id(), claim.quantity());
+        CustodyAccount destination = new CustodyAccount(new SubjectId("custody:" + batch.id().value().replace(':', '-')),
+                new ResourceCustody.Cargo(batch.id()), quantities, Map.of(claim.id(), claim.quantity()));
+        FungibleResourceLedger resources = fungibleResources.reserveThenTransferToNewAccount(claim, sourceAccountId, destination);
+        Map<SubjectId, CargoBatch> nextCargo = new HashMap<>(cargo); nextCargo.put(batch.id(), batch);
+        return new ExactInventory(containers, items, nextCargo, playerItems, worldCarrierItems, conflicts, surfaces, economics, resources);
+    }
+
     /** Moves every exact cargo item into observed receiver slots and removes the completed batch. */
     public ExactInventory completeCargoHandoff(SubjectId cargoId, List<CargoHandoffPlacement> placements) {
         CargoBatch batch = cargo.get(Objects.requireNonNull(cargoId, "cargo id"));
@@ -340,6 +355,9 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
                 ? fungibleResources.transferToNewAccount(source.id(), new CustodyAccount(new SubjectId("custody:" + targetContainerId.value().replace(':', '-')),
                         new ResourceCustody.Container(targetContainerId), source.lotQuantities(), source.claimQuantities()))
                 : fungibleResources.transfer(source.id(), targetAccount.id(), source.lotQuantities(), source.claimQuantities());
+        SubjectId receivingAccount = targetAccount == null
+                ? new SubjectId("custody:" + targetContainerId.value().replace(':', '-')) : targetAccount.id();
+        for (SubjectId claimId : source.claimQuantities().keySet()) resources = resources.releaseClaim(receivingAccount, claimId);
         Map<SubjectId, CargoBatch> nextCargo = new HashMap<>(cargo); nextCargo.remove(cargoId);
         return new ExactInventory(containers, items, nextCargo, playerItems, worldCarrierItems, conflicts, surfaces, economics, resources);
     }
@@ -502,6 +520,11 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
                 case ResourceCustody.Player ignored -> { }
                 case ResourceCustody.WorldCarrier ignored -> { }
             }
+        }
+        for (CargoBatch batch : cargo.values()) if (batch.fungibleContents()) {
+            long matching = fungibleResources.accounts().values().stream().filter(account -> account.custody() instanceof ResourceCustody.Cargo custody
+                    && custody.cargoId().equals(batch.id())).count();
+            if (matching != 1) throw new IllegalArgumentException("fungible cargo must retain one exact custody account");
         }
         for (PhysicalStackBinding binding : fungibleResources.bindings().values()) {
             CustodyAccount account = fungibleResources.accounts().get(binding.accountId());

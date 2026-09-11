@@ -57,12 +57,18 @@ public final class SupplyOperationProcess {
         ExactItemStack item = state.inventory().items().values().stream().sorted(Comparator.comparing(ExactItemStack::id)).filter(value -> value.itemKind().equals(contract.itemKind())
                 && value.count() == contract.itemCount() && value.custody() instanceof InventoryCustody.ContainerSlot slot
                 && slot.containerId().equals(FrontierWorldState.depotId(settlement.id()))).findFirst().orElse(null);
-        if (item == null || !participantsAvailable(state, settlement)) return abandonPreparation(state, preparation, contract);
+        FungibleResourceCustodySupport.LotAtContainer resource = item == null
+                ? FungibleResourceCustodySupport.firstAtContainer(state, FrontierWorldState.depotId(settlement.id()), contract.itemKind(), contract.itemCount())
+                    .filter(value -> state.inventory().fungibleResources().bindings().values().stream().noneMatch(binding -> binding.accountId().equals(value.accountId())))
+                    .orElse(null) : null;
+        if ((item == null && resource == null) || !participantsAvailable(state, settlement)) return abandonPreparation(state, preparation, contract);
         ContainerSurface surface = state.inventory().surfaces().get(FrontierWorldState.depotId(settlement.id()));
         if (surface != null && surface.status() == ContainerSurfaceStatus.ACTIVE) {
+            if (item == null) return List.of(schedule(cargoLoad(contract, Math.addExact(action.dueAt().ticks(), 100L))));
             return List.of(new ProposedEvent(contract.settlementId(), new PhysicalIntentPrepared(cargoLoadingIntent(contract, item, surface))));
         }
-        return cargoLoadedEvents(state, contract, item, action.dueAt().ticks(), autonomousInterception);
+        return cargoLoadedEvents(state, contract, item == null ? CargoBatch.fungible(contract.cargoId(), contract.settlementId())
+                : new CargoBatch(contract.cargoId(), contract.settlementId(), List.of(item.id())), action.dueAt().ticks(), autonomousInterception);
     }
 
     /** Continues a physical active-depot cargo loading only after its exact removal receipt. */
@@ -81,15 +87,15 @@ public final class SupplyOperationProcess {
             throw new IllegalArgumentException("cargo loading confirmation requires its exact removal receipt");
         }
         CargoLoadingStateSupport.validateReceipt(intent, receipt);
-        return cargoLoadedEvents(state, contract, item, now, true, transition);
+        return cargoLoadedEvents(state, contract, new CargoBatch(contract.cargoId(), contract.settlementId(), List.of(item.id())), now, true, transition);
     }
 
-    private static List<ProposedEvent> cargoLoadedEvents(FrontierWorldState state, SupplyContract contract, ExactItemStack item,
+    private static List<ProposedEvent> cargoLoadedEvents(FrontierWorldState state, SupplyContract contract, CargoBatch cargo,
                                                           long now, boolean autonomousInterception) {
-        return cargoLoadedEvents(state, contract, item, now, autonomousInterception, null);
+        return cargoLoadedEvents(state, contract, cargo, now, autonomousInterception, null);
     }
 
-    private static List<ProposedEvent> cargoLoadedEvents(FrontierWorldState state, SupplyContract contract, ExactItemStack item,
+    private static List<ProposedEvent> cargoLoadedEvents(FrontierWorldState state, SupplyContract contract, CargoBatch cargo,
                                                           long now, boolean autonomousInterception, PhysicalIntentTransition physicalTransition) {
         StrategicTask preparation = preparationTaskForContract(state, contract, StrategicTaskStatus.ACTIVE);
         StrategicTask delivery = deliveryTask(state, preparation, StrategicTaskStatus.PENDING);
@@ -97,7 +103,7 @@ public final class SupplyOperationProcess {
         RouteOperation operation = routeOperation(state, contract, settlement);
         List<ProposedEvent> events = new ArrayList<>();
         if (physicalTransition != null) events.add(new ProposedEvent(contract.settlementId(), physicalTransition));
-        events.addAll(List.of(new ProposedEvent(contract.settlementId(), new CargoLoaded(contract.id(), new CargoBatch(contract.cargoId(), contract.settlementId(), List.of(item.id())))),
+        events.addAll(List.of(new ProposedEvent(contract.settlementId(), new CargoLoaded(contract.id(), cargo)),
                 transition(preparation, StrategicTaskStatus.COMPLETED), transition(delivery, StrategicTaskStatus.ACTIVE),
                 new ProposedEvent(contract.settlementId(), new OperationCreated(operation))));
         // Cargo loading is a settlement fact. It is not an observation by the hive; an
@@ -214,7 +220,9 @@ public final class SupplyOperationProcess {
         if (operation == null || !subject.equals(operation.settlementId()) || !operation.cargoId().equals(delivered.cargoId())) {
             throw new IllegalArgumentException("cold cargo delivery has a foreign operation owner");
         }
-        return state.completeColdCargoHandoff(delivered.operationId(), delivered.cargoId(), delivered.placements());
+        return delivered.fungibleContents()
+                ? state.completeColdFungibleCargoHandoff(delivered.operationId(), delivered.cargoId())
+                : state.completeColdCargoHandoff(delivered.operationId(), delivered.cargoId(), delivered.placements());
     }
 
     public static List<ProposedEvent> failed(FrontierWorldState state, RouteOperation operation, String reason) {
@@ -309,7 +317,10 @@ public final class SupplyOperationProcess {
     }
     private static List<ProposedEvent> arrivalEvents(FrontierWorldState state, RouteOperation operation, long now) {
         SubjectId receiver = FrontierCargoValidation.receiverStore(state.bootstrap(), operation);
+        CargoBatch cargo = state.inventory().cargo().get(operation.cargoId());
+        if (cargo == null) throw new IllegalStateException("arrived operation has no cargo");
         if (state.inventory().surfaces().get(receiver).status() == ContainerSurfaceStatus.ACTIVE) {
+            if (cargo.fungibleContents()) return List.of(schedule(operationProgress(operation, Math.addExact(now, 100L))));
             PhysicalIntentId intentId = cargoHandoffIntent(operation).id();
             return state.physicalIntents().containsKey(intentId) ? List.of() : List.of(new ProposedEvent(operation.settlementId(), new PhysicalIntentPrepared(cargoHandoffIntent(operation))));
         }
@@ -321,7 +332,8 @@ public final class SupplyOperationProcess {
 
     private static CargoDelivered coldDelivery(FrontierWorldState state, RouteOperation operation, SubjectId receiver) {
         CargoBatch cargo = state.inventory().cargo().get(operation.cargoId());
-        if (cargo == null) throw new IllegalStateException("arrived operation has no exact cargo");
+        if (cargo == null) throw new IllegalStateException("arrived operation has no cargo");
+        if (cargo.fungibleContents()) return CargoDelivered.fungible(operation.id(), cargo.id());
         java.util.ArrayList<CargoHandoffPlacement> placements = new java.util.ArrayList<>(); int nextSlot = 0;
         for (SubjectId itemId : cargo.itemIds().stream().sorted().toList()) {
             while (nextSlot < state.inventory().containers().get(receiver).slotCount()
@@ -375,8 +387,10 @@ public final class SupplyOperationProcess {
                 .reduce((left, right) -> { throw new IllegalArgumentException("supply delivery task binding is ambiguous"); })
                 .orElseThrow(() -> new IllegalArgumentException("supply preparation has no matching delivery task"));
     }
-    private static Optional<ExactItemStack> bread(FrontierWorldState state, Settlement settlement) {
-        return SettlementProvisionProcess.exportableBread(state, settlement.id());
+    private static Optional<BreadSource> bread(FrontierWorldState state, Settlement settlement) {
+        Optional<ExactItemStack> exact = SettlementProvisionProcess.exportableBread(state, settlement.id());
+        if (exact.isPresent()) return exact.map(BreadSource::exact);
+        return SettlementProvisionProcess.exportableFungibleBread(state, settlement.id()).map(BreadSource::fungible);
     }
     private static boolean participantsAvailable(FrontierWorldState state, Settlement settlement) {
         return FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), ResidentProfession.LOGISTICIAN).isPresent()
@@ -408,9 +422,13 @@ public final class SupplyOperationProcess {
         return new RouteOperation(operationId, settlement.id(), contract.cargoId(), contract.recipientId(), unit,
                 state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id()), 0, OperationStage.ASSEMBLING, java.util.Optional.of(assembly), java.util.Optional.empty());
     }
-    private static SupplyContract contract(FrontierWorldState state, StrategicTask task, Settlement settlement, ExactItemStack bread) {
+    private static SupplyContract contract(FrontierWorldState state, StrategicTask task, Settlement settlement, BreadSource bread) {
         SupplyContract contract = contract(state, task);
         return new SupplyContract(contract.id(), settlement.id(), state.bootstrap().hive().id(), contract.cargoId(), bread.itemKind(), bread.count(), ContractStatus.ORDERED);
+    }
+    private record BreadSource(String itemKind, int count) {
+        static BreadSource exact(ExactItemStack value) { return new BreadSource(value.itemKind(), value.count()); }
+        static BreadSource fungible(FungibleResourceCustodySupport.LotAtContainer value) { return new BreadSource(value.lot().itemKind(), 64); }
     }
     private static SupplyContract contract(FrontierWorldState state, StrategicTask task) {
         StrategicObjective objective = state.strategicPlans().objectives().get(task.objectiveId());

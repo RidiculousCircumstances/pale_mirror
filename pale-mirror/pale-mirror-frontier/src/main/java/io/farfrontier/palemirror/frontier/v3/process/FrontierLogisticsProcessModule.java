@@ -171,7 +171,8 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
         SubjectId depot = FrontierWorldState.depotId(contract.settlementId());
         boolean backed = state.inventory().items().values().stream().anyMatch(item -> item.itemKind().equals(contract.itemKind())
                 && item.count() == contract.itemCount() && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot));
-        if (!backed) throw new IllegalArgumentException("supply contract has no exact depot-backed item");
+        if (!backed) backed = FungibleResourceCustodySupport.firstAtContainer(state, depot, contract.itemKind(), contract.itemCount()).isPresent();
+        if (!backed) throw new IllegalArgumentException("supply contract has no depot-backed resource");
         return state.createSupplyContract(contract);
     }
 
@@ -183,9 +184,16 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
 
     private static FrontierWorldState reduceCargoLoaded(FrontierWorldState state, SubjectId subject, CargoLoaded loaded) {
         SupplyContract contract = state.contracts().get(loaded.contractId());
-        if (contract == null || !subject.equals(contract.settlementId()) || !loaded.cargo().id().equals(contract.cargoId()) || loaded.cargo().itemIds().size() != 1) {
+        if (contract == null || !subject.equals(contract.settlementId()) || !loaded.cargo().id().equals(contract.cargoId())) {
             throw new IllegalArgumentException("cargo load does not match its contract");
         }
+        if (loaded.cargo().fungibleContents()) {
+            FungibleResourceCustodySupport.LotAtContainer lot = FungibleResourceCustodySupport.firstAtContainer(state,
+                    FrontierWorldState.depotId(contract.settlementId()), contract.itemKind(), contract.itemCount())
+                    .orElseThrow(() -> new IllegalArgumentException("fungible cargo has no contract-backed lot"));
+            return state.loadContractFungibleCargo(loaded.contractId(), loaded.cargo(), lot.accountId(), lot.lot().id());
+        }
+        if (loaded.cargo().itemIds().size() != 1) throw new IllegalArgumentException("exact cargo must name one contract item");
         ExactItemStack item = state.inventory().items().get(loaded.cargo().itemIds().getFirst());
         if (item == null || !item.itemKind().equals(contract.itemKind()) || item.count() != contract.itemCount()) throw new IllegalArgumentException("cargo item does not match contract demand");
         return state.loadContractCargo(loaded.contractId(), loaded.cargo());

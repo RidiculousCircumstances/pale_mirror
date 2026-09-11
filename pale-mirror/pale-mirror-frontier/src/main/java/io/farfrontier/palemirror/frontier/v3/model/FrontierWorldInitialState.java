@@ -32,7 +32,9 @@ final class FrontierWorldInitialState {
         bootstrap.hive().organs().forEach(organ -> organ.containerId().ifPresent(container -> containers.put(container, new ContainerRecord(container, bootstrap.hive().id(), 27))));
         containers.put(FrontierRouteNetwork.MAINTENANCE_CONTAINER, new ContainerRecord(FrontierRouteNetwork.MAINTENANCE_CONTAINER, FrontierRouteNetwork.OWNER, 27));
         SubjectId firstDepot = FrontierWorldState.depotId(bootstrap.settlements().getFirst().id()); Map<SubjectId, ExactItemStack> items = new LinkedHashMap<>();
-        SubjectId wheat = new SubjectId("item:bootstrap-1-wheat"); items.put(wheat, new ExactItemStack(wheat, bootstrap.settlements().getFirst().id(), "minecraft:wheat", 64, new InventoryCustody.ContainerSlot(firstDepot, 0)));
+        SubjectId wheat = new SubjectId("lot:bootstrap-1-wheat");
+        FungibleResourceLedger resources = FungibleResourceLedger.empty().issue(new ResourceLot(wheat, bootstrap.settlements().getFirst().id(), "minecraft:wheat", 64,
+                "bootstrap", List.of()), new CustodyAccount(new SubjectId("custody:container-1-depot"), new ResourceCustody.Container(firstDepot), Map.of(wheat, 64), Map.of()));
         bootstrap.settlements().forEach(settlement -> {
             SubjectId depot = FrontierWorldState.depotId(settlement.id());
             for (int index = 0; index < EngineeringRecoveryTeam.MAX_MEMBERS; index++) {
@@ -41,13 +43,13 @@ final class FrontierWorldInitialState {
                         new InventoryCustody.ContainerSlot(depot, 20 + index)));
             }
         });
-        SubjectId biomass = new SubjectId("item:bootstrap-hive-biomass");
-        items.put(biomass, new ExactItemStack(biomass, bootstrap.hive().id(), "minecraft:rotten_flesh", 64,
-                new InventoryCustody.ContainerSlot(new SubjectId("container:hive-east-store"), 0)));
+        SubjectId biomass = new SubjectId("lot:bootstrap-hive-biomass"); SubjectId eastStore = new SubjectId("container:hive-east-store");
+        resources = resources.issue(new ResourceLot(biomass, bootstrap.hive().id(), "minecraft:rotten_flesh", 64, "bootstrap", List.of()),
+                new CustodyAccount(new SubjectId("custody:container-hive-east-store"), new ResourceCustody.Container(eastStore), Map.of(biomass, 64), Map.of()));
         Map<InfectionCell, FixedRatio> infection = new LinkedHashMap<>();
         bootstrap.hive().seedNests().forEach(nest -> seedInfection(infection, InfectionCell.at(nest.anchor())));
         return new FrontierWorldState(bootstrap, actors, structures, infection, new ExactInventory(containers, items, Map.of(), Map.of(), Map.of(), Map.of(),
-                ContainerSurfaceManifest.initial(bootstrap), EconomicLedger.bootstrap(bootstrap)),
+                ContainerSurfaceManifest.initial(bootstrap), EconomicLedger.bootstrap(bootstrap), resources),
                 Map.of(), Map.of(), Map.of(), Map.of(), LogisticsHistory.empty(), Map.of(), Map.of(), Map.of(), colony,
                 Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), RouteTopology.initial(), StrategicPlanState.empty(), population, CompanyRegistry.empty(),
                 ResourceSiteState.initial(bootstrap), PhysicalReplicaCustodyState.empty());

@@ -284,7 +284,8 @@ public final class StrategicObjectiveProcess {
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
         boolean reserveShort = SettlementProvisionProcess.availableFood(state, settlement.id()) < SettlementProvisionProcess.reserveRequirement(state, settlement.id());
         boolean wheat = state.inventory().items().values().stream().anyMatch(item -> item.itemKind().equals("minecraft:wheat")
-                && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot));
+                && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot))
+                || FungibleResourceCustodySupport.firstAtContainer(state, depot, "minecraft:wheat", 64).isPresent();
         boolean constructionActive = state.routeConstructions().values().stream().anyMatch(project -> project.settlementId().equals(settlement.id()));
         boolean alreadyConfirmed = state.strategicPlans().routePatrols().values().stream().anyMatch(patrol -> patrol.settlementId().equals(settlement.id())
                 && patrol.status() == RoutePatrolStatus.OBSTRUCTION_CONFIRMED && patrol.obstruction().stream().anyMatch(state.physicalDeltas()::containsKey));
@@ -328,7 +329,8 @@ public final class StrategicObjectiveProcess {
         }
         if (workshop && wheat) return Optional.of(new Candidate(StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, Optional.empty(),
                 reserveShort ? Long.MAX_VALUE - 1L : FixedScalar.SCALE));
-        return SettlementProvisionProcess.exportableBread(state, settlement.id()).isPresent() && !state.humanPopulation().quarantined(settlement.id())
+        return (SettlementProvisionProcess.exportableBread(state, settlement.id()).isPresent()
+                || SettlementProvisionProcess.exportableFungibleBread(state, settlement.id()).isPresent()) && !state.humanPopulation().quarantined(settlement.id())
                 ? Optional.of(new Candidate(StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE, Optional.empty(), FixedScalar.SCALE)) : Optional.empty();
     }
     private static Optional<Candidate> hiveCandidate(FrontierWorldState state, boolean allowInterception, long now,
@@ -351,7 +353,10 @@ public final class StrategicObjectiveProcess {
         boolean capacity = state.hiveColony().growthJobs().isEmpty() && state.hiveColony().addedOrgans().size() < HiveColony.MAX_ADDED_ORGANS
                 && state.hiveColony().spawnedBioforms().size() < HiveColony.MAX_SPAWNED_BIOFORMS;
         boolean biomass = state.inventory().items().values().stream().anyMatch(item -> item.itemKind().equals("minecraft:rotten_flesh")
-                && item.custody() instanceof InventoryCustody.ContainerSlot slot && state.isHiveStore(slot.containerId()));
+                && item.custody() instanceof InventoryCustody.ContainerSlot slot && state.isHiveStore(slot.containerId()))
+                || state.inventory().fungibleResources().accounts().values().stream().anyMatch(account -> account.custody() instanceof ResourceCustody.Container container
+                && state.isHiveStore(container.containerId()) && account.lotQuantities().entrySet().stream().anyMatch(entry ->
+                state.inventory().fungibleResources().lots().get(entry.getKey()).itemKind().equals("minecraft:rotten_flesh") && entry.getValue() >= 64));
         return capacity && biomass ? Optional.of(new Candidate(StrategicObjectiveKind.HIVE_GROW_ORGANISM, Optional.empty(), FixedScalar.SCALE)) : Optional.empty();
     }
     private static StrategicObjective objective(SubjectId owner, Candidate candidate, int ordinal) {

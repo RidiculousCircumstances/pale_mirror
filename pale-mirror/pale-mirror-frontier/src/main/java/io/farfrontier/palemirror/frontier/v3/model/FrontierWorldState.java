@@ -714,6 +714,24 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         return next(actorLocations, structureConditions, infection, inventory.loadCargo(cargo), productionJobs,
                 next, operations, physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
     }
+    public FrontierWorldState loadContractFungibleCargo(SubjectId contractId, CargoBatch cargo, SubjectId sourceAccountId, SubjectId lotId) {
+        SupplyContract contract = contracts.get(contractId);
+        if (contract == null || contract.status() != ContractStatus.ORDERED || !contract.cargoId().equals(cargo.id()) || !cargo.fungibleContents()) {
+            throw new IllegalArgumentException("fungible cargo load does not match an ordered contract");
+        }
+        ResourceLot lot = inventory.fungibleResources().lots().get(lotId);
+        if (lot == null || !lot.economicOwnerId().equals(contract.settlementId()) || !lot.itemKind().equals(contract.itemKind())) {
+            throw new IllegalArgumentException("fungible cargo lot does not match the contract");
+        }
+        ClaimAllocation claim = new ClaimAllocation(supplyClaimId(contract), contract.id(), contract.settlementId(), contract.itemKind(), contract.itemCount());
+        Map<SubjectId, SupplyContract> next = new LinkedHashMap<>(contracts); next.put(contractId, contract.withStatus(ContractStatus.LOADED));
+        return next(actorLocations, structureConditions, infection,
+                inventory.reserveAndLoadFungibleCargo(cargo, sourceAccountId, lot, claim), productionJobs, next, operations,
+                physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+    }
+    private static SubjectId supplyClaimId(SupplyContract contract) {
+        return new SubjectId("claim:supply-" + contract.id().value().replace(':', '-'));
+    }
     public FrontierWorldState completeColdCargoHandoff(SubjectId operationId, SubjectId cargoId, List<CargoHandoffPlacement> placements) {
         RouteOperation operation = operations.get(Objects.requireNonNull(operationId, "cold cargo operation id"));
         if (operation == null || operation.stage() != OperationStage.ARRIVED || !operation.cargoId().equals(cargoId)) {
@@ -727,7 +745,22 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 .orElseThrow(() -> new IllegalArgumentException("cold cargo handoff has no supply contract"));
         if (contract.status() != ContractStatus.LOADED) throw new IllegalArgumentException("only loaded cold cargo can arrive");
         Map<SubjectId, SupplyContract> nextContracts = new LinkedHashMap<>(contracts); nextContracts.put(contract.id(), contract.withStatus(ContractStatus.DELIVERED));
+        CargoBatch cargo = inventory.cargo().get(cargoId);
+        if (cargo == null || cargo.fungibleContents()) throw new IllegalArgumentException("exact cold cargo delivery requires exact cargo");
         return next(actorLocations, structureConditions, infection, inventory.completeCargoHandoff(cargoId, placements), productionJobs, nextContracts, operations,
+                physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+    }
+    public FrontierWorldState completeColdFungibleCargoHandoff(SubjectId operationId, SubjectId cargoId) {
+        RouteOperation operation = operations.get(Objects.requireNonNull(operationId, "cold fungible cargo operation id"));
+        if (operation == null || operation.stage() != OperationStage.ARRIVED || !operation.cargoId().equals(cargoId)) {
+            throw new IllegalArgumentException("cold fungible cargo handoff does not match an arrived operation");
+        }
+        SubjectId receiver = FrontierCargoValidation.receiverStore(bootstrap, operation);
+        SupplyContract contract = contracts.values().stream().filter(value -> value.cargoId().equals(cargoId)).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("cold fungible cargo handoff has no supply contract"));
+        if (contract.status() != ContractStatus.LOADED) throw new IllegalArgumentException("only loaded fungible cargo can arrive");
+        Map<SubjectId, SupplyContract> nextContracts = new LinkedHashMap<>(contracts); nextContracts.put(contract.id(), contract.withStatus(ContractStatus.DELIVERED));
+        return next(actorLocations, structureConditions, infection, inventory.completeFungibleCargoHandoff(cargoId, receiver), productionJobs, nextContracts, operations,
                 physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
     }
     public FrontierWorldState createOperation(RouteOperation operation) {

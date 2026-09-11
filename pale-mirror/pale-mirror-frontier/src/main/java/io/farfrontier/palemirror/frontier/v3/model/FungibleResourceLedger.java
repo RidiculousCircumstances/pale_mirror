@@ -123,6 +123,12 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         return new FungibleResourceLedger(lots, claims, next, withoutBindingsFor(from.id()));
     }
 
+    /** Reserves one COLD contract portion and immediately gives that same portion to a new owner. */
+    public FungibleResourceLedger reserveThenTransferToNewAccount(ClaimAllocation claim, SubjectId fromId, CustodyAccount destination) {
+        Objects.requireNonNull(claim, "cargo claim");
+        return reserve(claim, fromId).transferToNewAccount(fromId, destination);
+    }
+
     /**
      * Commits one observed partial physical handoff as one canonical transaction. The source
      * fence and both replacement layouts are checked together, so releasing a visible stack

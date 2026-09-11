@@ -63,9 +63,16 @@ public final class SettlementProvisionProcess {
     public static int availableFood(FrontierWorldState state, SubjectId settlementId) {
         SubjectId depot = FrontierWorldState.depotId(settlementId);
         if (ReferenceContainerCustody.blocksCanonicalUse(state, depot)) return 0;
-        return state.inventory().items().values().stream().filter(item -> BREAD.equals(item.itemKind()))
+        int exact = state.inventory().items().values().stream().filter(item -> BREAD.equals(item.itemKind()))
                 .filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot))
                 .mapToInt(ExactItemStack::count).reduce(0, Math::addExact);
+        int fungible = state.inventory().fungibleResources().accounts().values().stream()
+                .filter(account -> account.custody() instanceof ResourceCustody.Container container && container.containerId().equals(depot))
+                .filter(account -> state.inventory().fungibleResources().bindings().values().stream().noneMatch(binding -> binding.accountId().equals(account.id())))
+                .flatMap(account -> account.lotQuantities().entrySet().stream())
+                .filter(entry -> BREAD.equals(state.inventory().fungibleResources().lots().get(entry.getKey()).itemKind()))
+                .mapToInt(java.util.Map.Entry::getValue).sum();
+        return Math.addExact(exact, fungible);
     }
 
     public static java.util.Optional<ExactItemStack> exportableBread(FrontierWorldState state, SubjectId settlementId) {
@@ -73,6 +80,22 @@ public final class SettlementProvisionProcess {
         return state.inventory().items().values().stream().sorted(Comparator.comparing(ExactItemStack::id)).filter(item -> BREAD.equals(item.itemKind()))
                 .filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot))
                 .filter(item -> item.count() == 64 && available - item.count() >= reserve).findFirst();
+    }
+
+    /** COLD reserve query for ordinary food lots; physical bindings remain unavailable to planning. */
+    public static java.util.Optional<FungibleResourceCustodySupport.LotAtContainer> exportableFungibleBread(FrontierWorldState state, SubjectId settlementId) {
+        SubjectId depot = FrontierWorldState.depotId(settlementId);
+        if (ReferenceContainerCustody.blocksCanonicalUse(state, depot)) return java.util.Optional.empty();
+        int reserve = reserveRequirement(state, settlementId);
+        int available = state.inventory().fungibleResources().accounts().values().stream()
+                .filter(account -> account.custody() instanceof ResourceCustody.Container container && container.containerId().equals(depot))
+                .filter(account -> state.inventory().fungibleResources().bindings().values().stream().noneMatch(binding -> binding.accountId().equals(account.id())))
+                .flatMap(account -> account.lotQuantities().entrySet().stream())
+                .filter(entry -> BREAD.equals(state.inventory().fungibleResources().lots().get(entry.getKey()).itemKind()))
+                .mapToInt(java.util.Map.Entry::getValue).sum();
+        if (availableFood(state, settlementId) - 64 < reserve) return java.util.Optional.empty();
+        return FungibleResourceCustodySupport.firstAtContainer(state, depot, BREAD, 64).filter(lot ->
+                state.inventory().fungibleResources().bindings().values().stream().noneMatch(binding -> binding.accountId().equals(lot.accountId())));
     }
 
     public static List<ProposedEvent> planProgress(FrontierWorldState state, ScheduledAction action) {
