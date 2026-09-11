@@ -15,6 +15,7 @@ import io.farfrontier.palemirror.frontier.v3.persistence.RecoveryImage;
 import io.farfrontier.palemirror.frontier.v3.persistence.SnapshotReceipt;
 import io.farfrontier.palemirror.frontier.v3.persistence.SnapshotRecord;
 import io.farfrontier.palemirror.frontier.v3.process.HiveNutrientTransferProcess;
+import io.farfrontier.palemirror.frontier.v3.process.HiveGrowthProcess;
 import io.farfrontier.palemirror.frontier.v3.process.PopulationBirthProcess;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import net.minecraft.core.BlockPos;
@@ -266,6 +267,63 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
         helper.assertValueEqual(confirmed, recovered.decodedState().orElseThrow(),
                 "the confirmed fungible source departure survives immediate replay without duplicate cargo");
         recovered.shutdown(); runtime.shutdown(); helper.succeed();
+    }
+
+    /** A player taking part of a reserved HOT hive input retires only that claimed growth work. */
+    @GameTest(batch = "pm-frontier-v3-reference-conflict-restart", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void reservedFungibleHiveWithdrawalForfeitsItsOneOwningGrowthJob(GameTestHelper helper) {
+        WorldId world = new WorldId("frontier:reference-fungible-claim-withdrawal");
+        SubjectId east = new SubjectId("container:hive-west-store"), hive;
+        FrontierWorldState state = activated(FrontierWorldState.initial(FrontierBootstrapper.create(world, 91L)), east);
+        hive = state.bootstrap().hive().id(); SubjectId lotId = new SubjectId("lot:reference-hive-claim");
+        SubjectId accountId = new SubjectId("custody:reference-hive-claim");
+        ResourceLot biomass = new ResourceLot(lotId, hive, "minecraft:rotten_flesh", 64, "reference", List.of());
+        CustodyAccount account = new CustodyAccount(accountId, new ResourceCustody.Container(east), Map.of(lotId, 64), Map.of());
+        FungibleResourceLedger cold = FungibleResourceLedger.empty().issue(biomass, account);
+        FungiblePhysicalObservation.Stack stack = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                new InventoryCustody.ContainerSlot(east, 0)), biomass.itemKind(), 64);
+        FungibleResourceLedger hot = cold.rebind(accountId, 1L, FungiblePhysicalObservation.bind(cold, accountId, 1L, List.of(stack)));
+        StrategicObjective objective = new StrategicObjective(new SubjectId("objective:reference-fungible-claim"), hive,
+                StrategicObjectiveKind.HIVE_GROW_ORGANISM, Optional.empty(), 2, StrategicObjectiveStatus.ACTIVE);
+        StrategicTask task = new StrategicTask(new SubjectId("task:reference-fungible-claim"), objective.id(), hive,
+                StrategicTaskKind.GROW_HIVE_ORGANISM, Optional.empty(), List.of(StrategicTaskRequirement.EXACT_HIVE_BIOMASS),
+                List.of(), StrategicTaskStatus.PENDING);
+        state = held(state.withInventory(state.inventory().withFungibleResources(hot))
+                .withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task)), east);
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> start = HiveGrowthProcess.planStart(state, HiveGrowthProcess.start(task, 100L));
+        HiveGrowthStarted started = start.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                .filter(HiveGrowthStarted.class::isInstance).map(HiveGrowthStarted.class::cast).findFirst().orElseThrow();
+        PhysicalIntentPrepared prepared = start.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                .filter(PhysicalIntentPrepared.class::isInstance).map(PhysicalIntentPrepared.class::cast).findFirst().orElseThrow();
+        state = state.withStrategicPlans(state.strategicPlans().transitionTask(task.id(), StrategicTaskStatus.ACTIVE));
+        state = HiveGrowthProcess.reduceStarted(state, hive, started).preparePhysicalIntent(prepared.intent());
+
+        ChestBlockEntity chest = chest(helper, position(state, east), east);
+        chest.setItem(0, new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.ROTTEN_FLESH, 32)); chest.setChanged();
+        var player = helper.makeMockServerPlayerInLevel();
+        player.getInventory().setItem(0, new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.ROTTEN_FLESH, 32));
+        helper.assertTrue(helper.getLevel().players().stream().flatMap(value -> java.util.stream.IntStream.range(0,
+                        value.getInventory().getContainerSize()).mapToObj(value.getInventory()::getItem))
+                        .filter(value -> !value.isEmpty() && value.getItem() == net.minecraft.world.item.Items.ROTTEN_FLESH
+                        && value.getCount() == 32).count() == 1,
+                "the observed departure must have exactly one unambiguous matching player stack");
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(world, state);
+        helper.assertTrue(!FrontierV3FungibleResourceObservationExecutor.observe(helper.getLevel(), runtime,
+                        runtime.decodedState().orElseThrow(), account, chest, 1L),
+                "a committed handoff consumes this adapter turn rather than treating the old layout as current");
+        FrontierWorldState forfeited = runtime.decodedState().orElseThrow();
+        SubjectId claimId = ((HiveGrowthInputHold.FungibleCold) started.job().inputHold()).claimId();
+        helper.assertTrue(!forfeited.hiveColony().growthJobs().containsKey(started.job().id())
+                        && forfeited.strategicPlans().tasks().get(task.id()).status() == StrategicTaskStatus.BLOCKED
+                        && !forfeited.physicalIntents().containsKey(prepared.intent().id())
+                        && !forfeited.inventory().fungibleResources().claims().containsKey(claimId),
+                "the exact owning growth job is retired atomically and no reserved allocation survives the physical loss");
+        helper.assertTrue(forfeited.inventory().fungibleResources().accounts().values().stream().anyMatch(value -> value.custody()
+                        .equals(new ResourceCustody.Player(player.getUUID())) && value.lotQuantities().equals(Map.of(lotId, 32))
+                        && value.claimQuantities().isEmpty())
+                        && forfeited.inventory().fungibleResources().totalQuantity(hive, "minecraft:rotten_flesh") == 64,
+                "the observed player portion remains one unclaimed HOT custody account with the conserved total");
+        runtime.shutdown(); helper.succeed();
     }
 
     private static FrontierWorldState activated(FrontierWorldState state, SubjectId containerId) {

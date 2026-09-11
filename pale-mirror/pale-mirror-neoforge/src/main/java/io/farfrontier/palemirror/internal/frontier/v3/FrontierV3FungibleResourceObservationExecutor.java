@@ -8,6 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.CustodyAccount;
 import io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalObservation;
 import io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalHandoff;
+import io.farfrontier.palemirror.frontier.v3.model.FungibleClaimForfeitureStateSupport;
 import io.farfrontier.palemirror.frontier.v3.model.FungibleResourceHandoffObserved;
 import io.farfrontier.palemirror.frontier.v3.model.FungibleResourceLedger;
 import io.farfrontier.palemirror.frontier.v3.model.FungibleStackBindingsReleased;
@@ -116,9 +117,10 @@ final class FrontierV3FungibleResourceObservationExecutor {
         if (state.inventory().fungibleResources().accounts().values().stream().anyMatch(value -> value.custody().equals(new ResourceCustody.Player(playerId)))) return false;
         SubjectId destinationId = new SubjectId("custody:player-" + playerId);
         try {
-            FungibleResourceHandoffObserved observed = FungiblePhysicalHandoff.departToNew(state.inventory().fungibleResources(), account.id(), epoch,
+            FungibleResourceHandoffObserved observed = committedDeparture(state, FungiblePhysicalHandoff.departToNew(state.inventory().fungibleResources(), account.id(), epoch,
                     source.binding(), source.remainingQuantity(), destinationId, new ResourceCustody.Player(playerId), 1L,
-                    new PhysicalStackAddress.PlayerSlot(playerId, target.slot()));
+                    new PhysicalStackAddress.PlayerSlot(playerId, target.slot())));
+            if (observed == null) return false;
             CommandResult result = FrontierV3CommandSubmission.submit(runtime, "fungible-player-withdrawal", account.id().value(), observed);
             return result instanceof CommandResult.Accepted;
         } catch (IllegalArgumentException invalid) {
@@ -138,8 +140,9 @@ final class FrontierV3FungibleResourceObservationExecutor {
         if (targets.size() != 1) return false;
         ExternalTarget target = targets.getFirst();
         try {
-            FungibleResourceHandoffObserved observed = FungiblePhysicalHandoff.departToNew(state.inventory().fungibleResources(), account.id(), epoch,
-                    source.binding(), source.remainingQuantity(), target.accountId(), target.custody(), 1L, target.address());
+            FungibleResourceHandoffObserved observed = committedDeparture(state, FungiblePhysicalHandoff.departToNew(state.inventory().fungibleResources(), account.id(), epoch,
+                    source.binding(), source.remainingQuantity(), target.accountId(), target.custody(), 1L, target.address()));
+            if (observed == null) return false;
             CommandResult result = FrontierV3CommandSubmission.submit(runtime, "fungible-external-departure", account.id().value(), observed);
             return result instanceof CommandResult.Accepted;
         } catch (IllegalArgumentException invalid) {
@@ -162,9 +165,10 @@ final class FrontierV3FungibleResourceObservationExecutor {
             PlayerStack target = targets.getFirst(); UUID playerId = target.player().getUUID();
             if (state.inventory().fungibleResources().accounts().values().stream().anyMatch(account -> account.custody().equals(new ResourceCustody.Player(playerId)))) continue;
             try {
-                FungibleResourceHandoffObserved observed = FungiblePhysicalHandoff.departToNew(state.inventory().fungibleResources(), source.id(),
+                FungibleResourceHandoffObserved observed = committedDeparture(state, FungiblePhysicalHandoff.departToNew(state.inventory().fungibleResources(), source.id(),
                         current.getFirst().authorityEpoch(), current.getFirst(), 0, new SubjectId("custody:player-" + playerId),
-                        new ResourceCustody.Player(playerId), 1L, new PhysicalStackAddress.PlayerSlot(playerId, target.slot()));
+                        new ResourceCustody.Player(playerId), 1L, new PhysicalStackAddress.PlayerSlot(playerId, target.slot())));
+                if (observed == null) continue;
                 CommandResult result = FrontierV3CommandSubmission.submit(runtime, "fungible-world-pickup", source.id().value(), observed);
                 if (result instanceof CommandResult.Accepted) return true;
             } catch (IllegalArgumentException ignored) {
@@ -219,6 +223,12 @@ final class FrontierV3FungibleResourceObservationExecutor {
     private static List<PhysicalStackBinding> current(FungibleResourceLedger resources, SubjectId accountId) {
         return resources.bindings().values().stream().filter(binding -> binding.accountId().equals(accountId))
                 .sorted(Comparator.comparing(PhysicalStackBinding::id)).toList();
+    }
+
+    /** A physical departure may take live input only through its owner's atomic forfeiture path. */
+    private static FungibleResourceHandoffObserved committedDeparture(FrontierWorldState state, FungibleResourceHandoffObserved observed) {
+        FungibleResourceHandoffObserved committed = observed.forfeitMovedClaims();
+        return committed.forfeitedClaimIds().isEmpty() || FungibleClaimForfeitureStateSupport.supports(state, committed) ? committed : null;
     }
 
     private static List<ExternalTarget> externalTargets(ServerLevel level, BlockPos source, SourceDeparture departure) {

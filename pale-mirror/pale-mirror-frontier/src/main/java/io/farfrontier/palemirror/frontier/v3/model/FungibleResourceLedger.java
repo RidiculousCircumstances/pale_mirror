@@ -90,6 +90,27 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         return withAccount(new CustodyAccount(account.id(), account.custody(), account.lotQuantities(), nextQuantities), nextClaims, bindings);
     }
 
+    /** Releases named allocations across their current HOT layout after an observed physical loss. */
+    public FungibleResourceLedger releaseClaims(java.util.Set<SubjectId> claimIds) {
+        Objects.requireNonNull(claimIds, "released claim ids");
+        if (claimIds.isEmpty() || claimIds.stream().anyMatch(id -> !claims.containsKey(id))) {
+            throw new IllegalArgumentException("claim forfeiture must name current allocations");
+        }
+        Map<SubjectId, ClaimAllocation> nextClaims = new HashMap<>(claims); claimIds.forEach(nextClaims::remove);
+        Map<SubjectId, CustodyAccount> nextAccounts = new HashMap<>();
+        accounts.forEach((id, account) -> {
+            Map<SubjectId, Integer> accountClaims = new HashMap<>(account.claimQuantities()); claimIds.forEach(accountClaims::remove);
+            nextAccounts.put(id, new CustodyAccount(account.id(), account.custody(), account.lotQuantities(), accountClaims));
+        });
+        Map<SubjectId, PhysicalStackBinding> nextBindings = new HashMap<>();
+        bindings.forEach((id, binding) -> {
+            Map<SubjectId, Integer> bindingClaims = new HashMap<>(binding.claimQuantities()); claimIds.forEach(bindingClaims::remove);
+            nextBindings.put(id, new PhysicalStackBinding(binding.id(), binding.accountId(), binding.address(), binding.authorityEpoch(),
+                    binding.itemKind(), binding.lotQuantities(), bindingClaims));
+        });
+        return new FungibleResourceLedger(lots, nextClaims, nextAccounts, nextBindings);
+    }
+
     /** Exact zero-sum custody transfer; the caller names both lot and claim portions. */
     public FungibleResourceLedger transfer(SubjectId fromId, SubjectId toId, Map<SubjectId, Integer> lotQuantities,
                                             Map<SubjectId, Integer> claimQuantities) {

@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.process;
 import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
 import io.farfrontier.palemirror.frontier.v3.api.CommandId;
 import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
+import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
@@ -12,16 +13,31 @@ import io.farfrontier.palemirror.frontier.v3.model.CustodyAccount;
 import io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalObservation;
 import io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalHandoff;
 import io.farfrontier.palemirror.frontier.v3.model.FungibleResourceLedger;
+import io.farfrontier.palemirror.frontier.v3.model.FungibleResourceHandoffObserved;
 import io.farfrontier.palemirror.frontier.v3.model.FungibleStackLayoutObserved;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackBinding;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceCustody;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceLot;
-import io.farfrontier.palemirror.frontier.v3.model.FungibleResourceHandoffObserved;
 import io.farfrontier.palemirror.frontier.v3.model.FungibleStackBindingsReleased;
+import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus;
+import io.farfrontier.palemirror.frontier.v3.model.HiveGrowthStarted;
+import io.farfrontier.palemirror.frontier.v3.model.HiveGrowthInputHold;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentPrepared;
+import io.farfrontier.palemirror.frontier.v3.model.ReferenceContainerCustodyFixtures;
+import io.farfrontier.palemirror.frontier.v3.model.StrategicObjective;
+import io.farfrontier.palemirror.frontier.v3.model.StrategicObjectiveKind;
+import io.farfrontier.palemirror.frontier.v3.model.StrategicObjectiveStatus;
+import io.farfrontier.palemirror.frontier.v3.model.StrategicPlanState;
+import io.farfrontier.palemirror.frontier.v3.model.StrategicTask;
+import io.farfrontier.palemirror.frontier.v3.model.StrategicTaskKind;
+import io.farfrontier.palemirror.frontier.v3.model.StrategicTaskRequirement;
+import io.farfrontier.palemirror.frontier.v3.model.StrategicTaskStatus;
+import io.farfrontier.palemirror.frontier.v3.model.StrategicTaskTransition;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import org.junit.jupiter.api.Test;
 
@@ -30,6 +46,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -115,6 +132,64 @@ class FungiblePhysicalObservationProcessTest {
         assertThrows(IllegalArgumentException.class, () -> transferred.transferObservedToNewAccount(observed.sourceAccountId(), observed.destinationAccount(),
                 observed.sourceEpoch(), observed.destinationEpoch(), observed.lotQuantities(), observed.claimQuantities(),
                 observed.remainingSource(), observed.destinationBindings()));
+    }
+
+    @Test
+    void hotReservedDepartureReleasesOnlyItsOwningHiveWorkAndNeverLeavesTheClaimSpendable() {
+        FrontierWorldState baseline = hiveGrowthTaskState();
+        SubjectId hive = baseline.bootstrap().hive().id(), east = new SubjectId("container:hive-west-store");
+        SubjectId accountId = new SubjectId("custody:hive-west-biomass"), lotId = new SubjectId("lot:hive-west-biomass");
+        FungibleResourceLedger resources = FungibleResourceLedger.empty().issue(new ResourceLot(lotId, hive, "minecraft:rotten_flesh", 64,
+                "test", List.of()), new CustodyAccount(accountId, new ResourceCustody.Container(east), Map.of(lotId, 64), Map.of()));
+        List<FungiblePhysicalObservation.Stack> layout = List.of(new FungiblePhysicalObservation.Stack(
+                new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(east, 0)), "minecraft:rotten_flesh", 64));
+        resources = resources.rebind(accountId, 7L, FungiblePhysicalObservation.bind(resources, accountId, 7L, layout));
+        FrontierWorldState held = ReferenceContainerCustodyFixtures.observedAndHeld(baseline.withInventory(baseline.inventory()
+                .withSurfaceStatus(east, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(east, ContainerSurfaceStatus.ACTIVE)
+                .withFungibleResources(resources)), east);
+        StrategicTask task = held.strategicPlans().tasks().get(new SubjectId("task:hive-nutrient"));
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> start = HiveGrowthProcess.planStart(held, HiveGrowthProcess.start(task, 100L));
+        HiveGrowthStarted started = start.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                .filter(HiveGrowthStarted.class::isInstance).map(HiveGrowthStarted.class::cast).findFirst().orElseThrow();
+        PhysicalIntentPrepared prepared = start.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                .filter(PhysicalIntentPrepared.class::isInstance).map(PhysicalIntentPrepared.class::cast).findFirst().orElseThrow();
+        FrontierWorldState active = held.withStrategicPlans(held.strategicPlans().transitionTask(task.id(), StrategicTaskStatus.ACTIVE));
+        active = HiveGrowthProcess.reduceStarted(active, hive, started).preparePhysicalIntent(prepared.intent());
+        PhysicalStackBinding source = active.inventory().fungibleResources().bindings().values().iterator().next();
+        SubjectId claimId = ((HiveGrowthInputHold.FungibleCold) started.job().inputHold()).claimId();
+        UUID player = UUID.fromString("00000000-0000-0000-0000-000000000144");
+        FungibleResourceHandoffObserved theft = FungiblePhysicalHandoff.departToNew(active.inventory().fungibleResources(), accountId, 7L,
+                source, 32, new SubjectId("custody:player-claim-theft"), new ResourceCustody.Player(player), 1L,
+                new PhysicalStackAddress.PlayerSlot(player, 0)).forfeitMovedClaims();
+
+        assertEquals(theft, FrontierWorldRuntimeDefinition.payloadCodecs().decode(theft.type(),
+                FrontierWorldRuntimeDefinition.payloadCodecs().encode(theft)));
+        assertInstanceOf(CommandPlan.Accepted.class, FrontierWorldPhysicalObservationProcess.planFungibleHandoff(active, theft));
+        FrontierWorldState afterTheft = FrontierWorldPhysicalObservationProcess.reduceFungibleHandoff(active, hive, theft);
+
+        assertFalse(afterTheft.hiveColony().growthJobs().containsKey(started.job().id()));
+        assertEquals(StrategicTaskStatus.BLOCKED, afterTheft.strategicPlans().tasks().get(task.id()).status());
+        assertFalse(afterTheft.physicalIntents().containsKey(prepared.intent().id()));
+        assertFalse(afterTheft.inventory().fungibleResources().claims().containsKey(claimId));
+        assertEquals(Map.of(), afterTheft.inventory().fungibleResources().accounts().get(accountId).claimQuantities());
+        assertEquals(Map.of(), afterTheft.inventory().fungibleResources().accounts().get(theft.destinationAccount().id()).claimQuantities());
+        assertEquals(64, afterTheft.inventory().fungibleResources().totalQuantity(hive, "minecraft:rotten_flesh"));
+        assertEquals(afterTheft, new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().decode(
+                new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().encode(afterTheft)));
+        FungibleResourceHandoffObserved bypass = new FungibleResourceHandoffObserved(theft.sourceAccountId(), theft.destinationAccount(),
+                theft.sourceEpoch(), theft.destinationEpoch(), theft.lotQuantities(), theft.claimQuantities(), theft.remainingSource(), theft.destinationBindings());
+        assertInstanceOf(CommandPlan.Rejected.class, FrontierWorldPhysicalObservationProcess.planFungibleHandoff(active, bypass));
+        assertEquals(Map.of(lotId, 32), afterTheft.inventory().fungibleResources().accounts().get(theft.destinationAccount().id()).lotQuantities());
+    }
+
+    private static FrontierWorldState hiveGrowthTaskState() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:fungible-claim-theft"), 93L));
+        SubjectId hive = state.bootstrap().hive().id();
+        StrategicObjective objective = new StrategicObjective(new SubjectId("objective:hive-nutrient"), hive,
+                StrategicObjectiveKind.HIVE_GROW_ORGANISM, java.util.Optional.empty(), 2, StrategicObjectiveStatus.ACTIVE);
+        StrategicTask task = new StrategicTask(new SubjectId("task:hive-nutrient"), objective.id(), hive, StrategicTaskKind.GROW_HIVE_ORGANISM,
+                java.util.Optional.empty(), List.of(StrategicTaskRequirement.EXACT_HIVE_BIOMASS), List.of(), StrategicTaskStatus.PENDING);
+        return state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task));
     }
 
     private static FungibleStackLayoutObserved observation(SubjectId account, long epoch, String kind, int first, int second) {

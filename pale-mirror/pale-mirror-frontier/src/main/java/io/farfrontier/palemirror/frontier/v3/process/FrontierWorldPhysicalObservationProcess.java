@@ -161,6 +161,10 @@ public final class FrontierWorldPhysicalObservationProcess {
     static FrontierWorldState reduceFungibleHandoff(FrontierWorldState state, SubjectId subject, FungibleResourceHandoffObserved observed) {
         FungibleResourceLedger ledger = state.inventory().fungibleResources(); CustodyAccount source = ledger.accounts().get(observed.sourceAccountId());
         if (source == null || !subject.equals(owner(state, source))) throw new IllegalArgumentException("fungible handoff has no owning subject");
+        if (!observed.claimQuantities().isEmpty() && observed.forfeitedClaimIds().isEmpty()) {
+            throw new IllegalArgumentException("physical handoff cannot move a live claimed allocation without retiring its owner");
+        }
+        if (!observed.forfeitedClaimIds().isEmpty()) return FungibleClaimForfeitureStateSupport.apply(state, observed);
         CustodyAccount existing = ledger.accounts().get(observed.destinationAccount().id());
         FungibleResourceLedger transferred;
         if (existing == null) {

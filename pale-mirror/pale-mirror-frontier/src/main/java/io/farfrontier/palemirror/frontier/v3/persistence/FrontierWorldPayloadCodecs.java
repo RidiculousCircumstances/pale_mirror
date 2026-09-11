@@ -211,10 +211,11 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             writeSubject(output, observed.sourceAccountId()); writeFungibleAccount(output, observed.destinationAccount());
             output.writeLong(observed.sourceEpoch()); output.writeLong(observed.destinationEpoch()); writeFungibleQuantities(output, observed.lotQuantities());
             writeFungibleQuantities(output, observed.claimQuantities()); writeFungibleBindings(output, observed.remainingSource()); writeFungibleBindings(output, observed.destinationBindings());
+            writeSubjects(output, observed.forfeitedClaimIds());
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new FungibleResourceHandoffObserved(readSubject(input).value(),
                 readFungibleAccount(input), input.readLong(), input.readLong(), readFungibleQuantities(input), readFungibleQuantities(input),
-                readFungibleBindings(input), readFungibleBindings(input))); }
+                readFungibleBindings(input), readFungibleBindings(input), readSubjects(input))); }
     }
     private static final class FungibleStackBindingsReleasedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.fungible_stack_bindings_released"; }
@@ -942,6 +943,14 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         for (int index = 0, count = input.readUnsignedShort(); index < count; index++) bindings.add(new PhysicalStackBinding(readSubject(input).value(),
                 readSubject(input).value(), readPhysicalStackAddress(input), input.readLong(), readString(input), readFungibleQuantities(input), readFungibleQuantities(input)));
         return bindings;
+    } private static void writeSubjects(DataOutputStream output, java.util.Set<SubjectId> values) throws IOException {
+        output.writeShort(values.size()); for (SubjectId value : values.stream().sorted().toList()) writeSubject(output, value);
+    } private static java.util.Set<SubjectId> readSubjects(DataInputStream input) throws IOException {
+        java.util.Set<SubjectId> values = new java.util.LinkedHashSet<>();
+        for (int index = 0, count = input.readUnsignedShort(); index < count; index++) {
+            if (!values.add(readSubject(input).value())) throw new IllegalArgumentException("duplicate forfeited claim identity");
+        }
+        return values;
     } public static void writeSubject(DataOutputStream output, io.farfrontier.palemirror.frontier.v3.api.SubjectId value) throws IOException { writeString(output, value.value()); }
     static SubjectIdHolder readSubject(DataInputStream input) throws IOException { return new SubjectIdHolder(new io.farfrontier.palemirror.frontier.v3.api.SubjectId(readString(input))); }
     public static void writeString(DataOutputStream output, String value) throws IOException {
