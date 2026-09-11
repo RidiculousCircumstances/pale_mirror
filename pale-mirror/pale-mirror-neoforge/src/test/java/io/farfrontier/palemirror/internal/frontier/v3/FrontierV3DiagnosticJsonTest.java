@@ -64,7 +64,7 @@ class FrontierV3DiagnosticJsonTest {
                 configuration.initialInstant(), new byte[] {1}, List.of(), List.of());
 
         String json = FrontierV3HiveMobilizationDiagnostic.returningJson(checkpoint, state, mobilization, returning, next, member,
-                0L, 0L, new FrontierV3PhysicalDemand.Readiness(false, false, false, 0, 0), false);
+                0L, 0L, new FrontierV3PhysicalDemand.Readiness(false, false, false, 0, 0), false, "[]");
 
         var parsed = JsonParser.parseString(json.substring(FrontierV3DiagnosticJson.PREFIX.length())).getAsJsonObject();
         assertEquals("RETURNING", parsed.get("mobilizationStatus").getAsString());

@@ -10,7 +10,8 @@ const positions = Object.freeze(ids.map((id, index) => ({ id, x: -360 + index, y
 
 function snapshot(returnedMembers, survivorPositions = positions) {
   return { kind: 'hive_mobilization', id: 'mobilization:development-hive-mobilization', status: 'ok', mobilizationStatus: 'RETURNING',
-    survivors: 4, returnedMembers, returnComplete: false, survivorPositions };
+    survivors: 4, returnedMembers, returnComplete: false, survivorPositions,
+    physicalSurvivors: survivorPositions.map(value => ({ id: value.id, observed: { x: value.x, y: value.y, z: value.z } })) };
 }
 
 const declarationSource = await readFile(new URL('../scenarios/disposable-hive-return-restart.json', import.meta.url));
@@ -32,7 +33,7 @@ function persistentManifest(before = snapshot(0), after = snapshot(0)) {
 }
 
 test('F0.4 declaration binds the return endpoint rather than a synthetic scene', () => {
-  assert.deepEqual(assertF04HiveReturnDeclaration(declaration).handoff, { x: -360, y: 65, z: -340 });
+  assert.deepEqual(assertF04HiveReturnDeclaration(declaration).returnFrontier, { x: 417, y: 64, z: 420 });
   const wrong = structuredClone(declaration); wrong.actions[0].position.z = -352;
   assert.throws(() => assertF04HiveReturnDeclaration(wrong), /exact retained-return lifecycle/);
 });

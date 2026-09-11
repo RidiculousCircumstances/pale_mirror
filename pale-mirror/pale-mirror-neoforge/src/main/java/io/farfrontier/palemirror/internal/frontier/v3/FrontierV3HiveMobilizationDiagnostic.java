@@ -152,7 +152,13 @@ final class FrontierV3HiveMobilizationDiagnostic {
         BlockPos targetBlock = new BlockPos(target.support().x(), target.support().y(), target.support().z());
         FrontierV3PhysicalDemand.Readiness demand = FrontierV3PhysicalDemand.readiness(level, targetBlock);
         boolean standingColumn = demand.chunkLoaded() && FrontierV3StandingPosition.hasExactStandingColumn(level, target.support());
-        return returningJson(checkpoint, state, mobilization, returning, nextActor, member, completed, hot, demand, standingColumn);
+        String physicalSurvivors = returning.members().keySet().stream().sorted().map(actor -> {
+            var body = level.getEntity(FrontierV3AmbientActorExecutor.entityId(state, actor));
+            return body == null ? "{\"id\":\"" + quote(actor.value()) + "\",\"observed\":null}"
+                    : "{\"id\":\"" + quote(actor.value()) + "\",\"observed\":{\"x\":" + body.getBlockX()
+                    + ",\"y\":" + body.getBlockY() + ",\"z\":" + body.getBlockZ() + "}}";
+        }).collect(Collectors.joining(",", "[", "]"));
+        return returningJson(checkpoint, state, mobilization, returning, nextActor, member, completed, hot, demand, standingColumn, physicalSurvivors);
     }
 
     /**
@@ -161,7 +167,8 @@ final class FrontierV3HiveMobilizationDiagnostic {
      */
     static String returningJson(CheckpointImage checkpoint, FrontierWorldState state, HiveMobilization mobilization,
                                 HiveReturnAssembly returning, SubjectId nextActor, HiveTaskAssembly.Member member,
-                                long completed, long hot, FrontierV3PhysicalDemand.Readiness demand, boolean standingColumn) {
+                                long completed, long hot, FrontierV3PhysicalDemand.Readiness demand, boolean standingColumn,
+                                String physicalSurvivors) {
         SurfaceAnchor current = member.currentSurface();
         SurfaceAnchor target = member.nextSurface();
         String survivorPositions = returning.members().keySet().stream().sorted().map(actor -> {
@@ -174,6 +181,7 @@ final class FrontierV3HiveMobilizationDiagnostic {
                         + ",\"survivors\":" + returning.members().size() + ",\"returnedMembers\":" + completed
                         + ",\"hotMembers\":" + hot + ",\"returnComplete\":false,\"nextMember\":\"" + quote(nextActor.value())
                         + "\",\"survivorPositions\":" + survivorPositions
+                        + ",\"physicalSurvivors\":" + physicalSurvivors
                         + ",\"cursor\":" + member.cursor() + ",\"current\":{\"x\":" + current.support().x()
                         + ",\"y\":" + current.support().y() + ",\"z\":" + current.support().z() + "},\"target\":{\"x\":"
                         + target.support().x() + ",\"y\":" + target.support().y() + ",\"z\":" + target.support().z()

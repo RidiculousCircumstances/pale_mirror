@@ -2,7 +2,7 @@ import { isDeepStrictEqual } from 'node:util';
 
 const SCENARIO = 'disposable_hive_return_restart';
 const MOBILIZATION = 'mobilization:development-hive-mobilization';
-const RETURN_HANDOFF = Object.freeze({ x: -360, y: 65, z: -340 });
+const RETURN_FRONTIER = Object.freeze({ x: 417, y: 64, z: 420 });
 
 /** Validates the retained native manifest, never a fixture copy or a derived summary. */
 export function assertF04HiveReturnCarrier(manifest) {
@@ -13,7 +13,7 @@ export function assertF04HiveReturnCarrier(manifest) {
   const before = exactSnapshot(manifest, 3);
   const after = exactSnapshot(manifest, 5);
   if (!before || !after || before.survivors !== 4 || after.survivors !== 4 || before.returnComplete || after.returnComplete
-      || !retainedSurvivorProgress(before, after)) {
+      || !retainedSurvivorProgress(before, after) || !observedBodies(before) || !observedBodies(after)) {
     throw new Error('F0.4 return carrier observed reset, replacement, loss, or unbound survivor positions');
   }
   return Object.freeze({ mobilization: MOBILIZATION, survivors: Object.freeze(before.survivorPositions), recovered: Object.freeze(after.survivorPositions) });
@@ -25,12 +25,12 @@ export function assertF04HiveReturnDeclaration(declaration) {
   const visit = actions?.[0];
   if (declaration?.id !== SCENARIO || declaration?.isolation?.mode !== 'disposable_lite' || declaration.server?.profile !== 'hive-return'
       || declaration.restart?.mode !== 'graceful' || declaration.restart?.afterAction !== 3 || !Array.isArray(actions) || actions.length !== 5
-      || visit?.type !== 'visit' || visit.dimension !== 'pale_mirror:frontier_graybox' || !isDeepStrictEqual(visit.position, RETURN_HANDOFF)
+      || visit?.type !== 'visit' || visit.dimension !== 'pale_mirror:frontier_graybox' || !isDeepStrictEqual(visit.position, RETURN_FRONTIER)
       || actions[2]?.type !== 'inspect' || actions[2].view !== 'hive_mobilization' || actions[2].id !== MOBILIZATION
       || actions[4]?.type !== 'inspect' || actions[4].view !== 'hive_mobilization' || actions[4].id !== MOBILIZATION) {
     throw new Error('F0.4 return carrier declaration lacks its exact retained-return lifecycle');
   }
-  return Object.freeze({ scenario: SCENARIO, mobilization: MOBILIZATION, handoff: RETURN_HANDOFF });
+  return Object.freeze({ scenario: SCENARIO, mobilization: MOBILIZATION, returnFrontier: RETURN_FRONTIER });
 }
 
 /** Binds the final manifest to the one declaration and persistent client attempt. */
@@ -69,6 +69,10 @@ function retainedSurvivorProgress(before, after) {
 function normalizeSurvivors(values) {
   return Array.isArray(values) ? values.map(value => ({ id: value?.id, x: value?.x, y: value?.y, z: value?.z }))
     .sort((a, b) => String(a.id).localeCompare(String(b.id))) : [];
+}
+function observedBodies(snapshot) {
+  const bodies = normalizeSurvivors(snapshot?.physicalSurvivors?.map(value => ({ id: value?.id, ...value?.observed })));
+  return bodies.length === 4 && bodies.every(validSurvivor) && sameIds(normalizeSurvivors(snapshot.survivorPositions), bodies);
 }
 
 function validSurvivor(value) { return typeof value.id === 'string' && Number.isInteger(value.x) && Number.isInteger(value.y) && Number.isInteger(value.z); }
