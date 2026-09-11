@@ -19,7 +19,7 @@ from typing import Any
 from PIL import Image
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[3]
 BAKEOFF_PATH = ROOT / "pale-mirror-visuals/src/main/blender/harvester/bakeoff/collector_volume_bakeoff_v02.json"
 TRACE_PATH = ROOT / "pale-mirror-visuals/src/main/blender/harvester/traces/biomass_collector_primary_v03.json"
 

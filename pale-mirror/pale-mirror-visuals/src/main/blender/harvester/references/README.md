@@ -13,7 +13,7 @@ the two remaining panels are Blender-only diagnostic evidence. Build the
 normalized human-review contact sheet with:
 
 ```bash
-python tools/harvester_turntable_contact_sheet.py \
+python tools/visuals/harvester/harvester_turntable_contact_sheet.py \
   --manifest pale-mirror-visuals/src/main/blender/harvester/references/biomass_collector_turntable_v02.provenance.json \
   --references-root /home/rd/harvester_references \
   --output build/harvester-turntables/biomass_collector_turntable_v02.png

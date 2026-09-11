@@ -133,11 +133,11 @@ uv run --project tools/blender -- python tools/blender/collect_windows_blender_o
   --reference-root /path/to/harvester_references
 uv run --project tools/blender -- python tools/blender/pm_blender_cli.py render_audit --label collector_primary_trace_v02
 uv run --project tools/blender -- python tools/blender/collect_windows_blender_outputs.py --label collector_primary_trace_v02
-python tools/harvester_primary_trace_overlay.py \
+python tools/visuals/harvester/harvester_primary_trace_overlay.py \
   --reference /path/to/harvester_references/01_harvester_biomass_collector.jpg \
   --trace-render build/blender-audits/collector_primary_trace_v02-biomass_collector/primary_trace.png \
   --output build/blender-audits/collector_primary_trace_v02-biomass_collector/primary_trace_overlay.png
-python tools/harvester_primary_model_overlay.py \
+python tools/visuals/harvester/harvester_primary_model_overlay.py \
   --reference /path/to/harvester_references/01_harvester_biomass_collector.jpg \
   --trace-render build/blender-audits/primary_composition_v01-biomass_collector-collector_v05_direct_mesh_v01/primary_trace.png \
   --silhouette build/blender-audits/primary_composition_v01-biomass_collector-collector_v05_direct_mesh_v01/silhouette_primary.png \

@@ -7,7 +7,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 
 
-SCRIPT = Path(__file__).parents[1] / "harvester_contour_overlay.py"
+SCRIPT = Path(__file__).parents[1] / "visuals/harvester/harvester_contour_overlay.py"
 SPEC = importlib.util.spec_from_file_location("harvester_contour_overlay", SCRIPT)
 MODULE = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None

@@ -13,7 +13,7 @@ from PIL import Image
 
 
 ROOT = Path(__file__).resolve().parents[2]
-TOOL = ROOT / "tools/harvester_blind_pairwise.py"
+TOOL = ROOT / "tools/visuals/harvester/harvester_blind_pairwise.py"
 PROTOCOL = ROOT / "pale-mirror-visuals/src/main/blender/harvester/blind_review_protocol_v01.json"
 spec = importlib.util.spec_from_file_location("harvester_blind_pairwise", TOOL)
 if spec is None or spec.loader is None:

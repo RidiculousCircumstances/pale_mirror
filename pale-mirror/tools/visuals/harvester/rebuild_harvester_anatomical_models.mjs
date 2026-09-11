@@ -7,7 +7,7 @@ import path from 'node:path';
 // readable secondary plane. The editor skeleton and GeckoLib animation IDs
 // are retained verbatim so this remains a resource-only art change.
 
-const root = path.resolve(import.meta.dirname, '..');
+const root = path.resolve(import.meta.dirname, '..', '..', '..');
 const sourceRoot = path.join(root, 'pale-mirror-visuals', 'src', 'main');
 const projectRoot = path.join(sourceRoot, 'blockbench', 'harvester');
 const geoRoot = path.join(sourceRoot, 'resources', 'assets', 'pale_mirror_visuals', 'geo', 'harvester');
@@ -817,7 +817,7 @@ function rebuild(name, cubes) {
         const next = `${JSON.stringify(value, null, 2)}\n`;
         if (checkOnly) {
             if (fs.readFileSync(file, 'utf8') !== next) {
-                throw new Error(`${name}: generated source is stale: ${path.relative(root, file)}; run node tools/rebuild_harvester_anatomical_models.mjs`);
+                throw new Error(`${name}: generated source is stale: ${path.relative(root, file)}; run node tools/visuals/harvester/rebuild_harvester_anatomical_models.mjs`);
             }
         } else {
             writeJson(file, value);

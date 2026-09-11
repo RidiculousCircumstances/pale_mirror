@@ -7,3 +7,4 @@ build/
 hosted/
 *.zip
 neoforge-*-installer.jar.log
+__pycache__/

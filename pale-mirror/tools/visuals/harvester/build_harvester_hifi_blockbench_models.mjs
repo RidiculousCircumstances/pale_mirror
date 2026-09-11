@@ -1,14 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const root = path.resolve(import.meta.dirname, '..');
+const root = path.resolve(import.meta.dirname, '..', '..', '..');
 const projects = path.join(root, 'pale-mirror-visuals', 'src', 'main', 'blockbench', 'harvester');
 const creatureNames = ['biomass_collector', 'crusher_stalker', 'scythe_stalker'];
 const sourceResolution = 1254;
 const check = process.argv.slice(2).includes('--check');
 
 if (process.argv.slice(2).some(argument => argument !== '--check')) {
-    throw new Error('Usage: node tools/build_harvester_hifi_blockbench_models.mjs [--check]');
+    throw new Error('Usage: node tools/visuals/harvester/build_harvester_hifi_blockbench_models.mjs [--check]');
 }
 
 const writeJson = (file, data) => fs.writeFileSync(file, `${JSON.stringify(data, null, 2)}\n`);
@@ -665,7 +665,7 @@ for (const name of creatureNames) {
     const rendered = `${JSON.stringify(project, null, 2)}\n`;
     if (check) {
         if (!fs.existsSync(output) || fs.readFileSync(output, 'utf8') !== rendered) {
-            throw new Error(`${name}: committed image-faithful mesh is stale; run node tools/build_harvester_hifi_blockbench_models.mjs`);
+            throw new Error(`${name}: committed image-faithful mesh is stale; run node tools/visuals/harvester/build_harvester_hifi_blockbench_models.mjs`);
         }
     } else {
         writeJson(output, project);

@@ -52,7 +52,10 @@ class PackPayloadIndexTest(unittest.TestCase):
         for bad_path, expected in [
             ('./.github/workflows/build.yml', 'non-canonical'),
             ('pale-mirror/../pale-mirror/build.gradle', 'non-canonical'),
+            ('.git', 'repository-only'),
             ('.github/workflows/build.yml', 'repository-only'),
+            ('REPOSITORY_LAYOUT.md', 'repository-only'),
+            ('docs/README.md', 'repository-only'),
             ('nested/forbidden.jar', 'repository-only'),
         ]:
             with self.subTest(bad_path=bad_path), fixture() as root:

@@ -18,7 +18,7 @@ and contain `primary.png`, `front.png`, `side.png`, `opposite.png` and
 `elevated_rear.png`.
 
 ```bash
-python3 tools/harvester_blind_pairwise.py \
+python3 tools/visuals/harvester/harvester_blind_pairwise.py \
   --protocol pale-mirror-visuals/src/main/blender/harvester/blind_review_protocol_v01.json \
   --review-id collector-example-v01 \
   --reference /home/rd/harvester_references/01_harvester_biomass_collector.jpg \

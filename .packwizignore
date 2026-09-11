@@ -4,6 +4,8 @@ neoforge-*-installer.jar.log
 AGENTS.md
 perf.data
 pale-mirror/
+REPOSITORY_LAYOUT.md
+docs/README.md
 
 # Repository-only monorepo inputs must never become distributable pack payload.
 .assembly-*

@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-TOOL = ROOT / "tools/harvester_volume_bakeoff.py"
+TOOL = ROOT / "tools/visuals/harvester/harvester_volume_bakeoff.py"
 spec = importlib.util.spec_from_file_location("harvester_volume_bakeoff", TOOL)
 if spec is None or spec.loader is None:
     raise SystemExit("could not load harvester_volume_bakeoff")

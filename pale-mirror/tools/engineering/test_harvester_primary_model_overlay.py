@@ -12,7 +12,7 @@ from PIL import Image
 
 
 ROOT = Path(__file__).resolve().parents[2]
-TOOL = ROOT / "tools/harvester_primary_model_overlay.py"
+TOOL = ROOT / "tools/visuals/harvester/harvester_primary_model_overlay.py"
 spec = importlib.util.spec_from_file_location("harvester_primary_model_overlay", TOOL)
 if spec is None or spec.loader is None:
     raise SystemExit("could not load harvester_primary_model_overlay")

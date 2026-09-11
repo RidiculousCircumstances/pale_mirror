@@ -11,7 +11,7 @@ import tomllib
 
 
 EXCLUDED_PREFIXES = ('.assembly-', '.git/', '.github/', '.work/', 'build/', 'crash-reports/', 'hosted/', 'logs/', 'pale-mirror/', 'run/')
-EXCLUDED_PATHS = ('AGENTS.md', 'perf.data')
+EXCLUDED_PATHS = ('.git', 'AGENTS.md', 'perf.data', 'REPOSITORY_LAYOUT.md', 'docs/README.md')
 PACK_METADATA = ('pack.toml', 'index.toml', '.packwizignore', '.gitignore', '.gitattributes')
 REQUIRED_PAYLOADS = (
     'config/structurify.json',

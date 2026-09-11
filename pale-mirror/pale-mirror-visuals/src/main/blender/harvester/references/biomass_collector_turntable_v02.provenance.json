@@ -72,7 +72,7 @@
   "derived_contact_sheet": {
     "file": "biomass_collector_turntable_v02_canonical_contact_sheet.png",
     "sha256": "80492b05984d710cf833ffdd527a60076bb034f4f4e07733a07183b46a21e54f",
-    "generator": "tools/harvester_turntable_contact_sheet.py",
+    "generator": "tools/visuals/harvester/harvester_turntable_contact_sheet.py",
     "purpose": "normalized six-panel human-review evidence; never a Hunyuan crop source"
   },
   "review": {

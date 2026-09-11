@@ -61,7 +61,7 @@ CPU-heavy mesh analysis, but host RAM is not treated as substitute VRAM.
 
 ### A. Controlled input
 
-`tools/harvester_volume_bakeoff.py prepare` verifies the pinned reference and
+`tools/visuals/harvester/harvester_volume_bakeoff.py prepare` verifies the pinned reference and
 trace, compiles the literal trace mask and writes a transparent RGBA image plus
 a manifest.  A changed source image, trace or camera mapping fails closed.
 
@@ -100,7 +100,7 @@ topology/skeletons but never replace the required visual and motion review.
 
 ### E. Visual acceptance
 
-Run `tools/harvester_visual_audit.mjs --capture`, collect the Blender frames,
+Run `tools/visuals/harvester/harvester_visual_audit.mjs --capture`, collect the Blender frames,
 inspect the real primary overlay plus every mandated diagnostic/action frame,
 and obtain an independent review.  The 85/100 hard gate in the Harvester brief
 still applies.  Only after this evidence is accepted may the canonical `.blend`

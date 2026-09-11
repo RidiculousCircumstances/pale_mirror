@@ -32,19 +32,19 @@ each `.bbmodel` so Blockbench opens it without a missing-texture prompt.
 
 `material_studies/` retains the project-bound 1254×1254 organic-material
 sources used by the hi-fi Blockbench projects. The reproducible 256×256
-Minecraft sheets are made from them by `tools/build_harvester_texture_sheets.py`.
+Minecraft sheets are made from them by `tools/visuals/harvester/build_harvester_texture_sheets.py`.
 
 ## Legacy compatibility export
 
-`tools/rebuild_harvester_anatomical_models.mjs` is the reproducible source for
+`tools/visuals/harvester/rebuild_harvester_anatomical_models.mjs` is the reproducible source for
 the committed legacy cube compatibility export. It preserves the named bones,
 hierarchy, texture and GeckoLib animation IDs for the future mesh renderer's
 animation bridge. It is not a likeness generator. Do not hand-patch only one
 of its outputs or re-run the rejected surface-sampling experiments.
 
 ```bash
-node tools/rebuild_harvester_anatomical_models.mjs
-node tools/rebuild_harvester_anatomical_models.mjs --check
+node tools/visuals/harvester/rebuild_harvester_anatomical_models.mjs
+node tools/visuals/harvester/rebuild_harvester_anatomical_models.mjs --check
 ```
 
 The second command is non-mutating and verifies only compatibility output.
@@ -52,8 +52,8 @@ The second command is non-mutating and verifies only compatibility output.
 The image-faithful source itself is reproducible separately:
 
 ```bash
-node tools/build_harvester_hifi_blockbench_models.mjs
-node tools/build_harvester_hifi_blockbench_models.mjs --check
+node tools/visuals/harvester/build_harvester_hifi_blockbench_models.mjs
+node tools/visuals/harvester/build_harvester_hifi_blockbench_models.mjs --check
 ```
 
 ## Image-faithful construction contract
@@ -93,9 +93,9 @@ mesh never changes the trace, score or acceptance authority.
 
 Each creature's `reference_subject_bounds_normalized`, alignment anchor and
 `contour_landmarks` are pinned in `review_briefs.json`. After every capture,
-`tools/harvester_contour_overlay.py` extracts the solid Blockbench projection,
+`tools/visuals/harvester/harvester_contour_overlay.py` extracts the solid Blockbench projection,
 fits it uniformly into those reference bounds and creates a three-panel
-reference / model mask / overlay image. `tools/harvester_visual_audit.mjs` runs
+reference / model mask / overlay image. `tools/visuals/harvester/harvester_visual_audit.mjs` runs
 that step automatically. The overlay is mandatory evidence and a material
 primary-contour mismatch is a hard rejection gate, but the tool deliberately
 does not award a similarity score: a vision-capable reviewer decides whether
@@ -190,7 +190,7 @@ separate steps:
 Create an audit package with real screenshots after every modelling change:
 
 ```bash
-node tools/harvester_visual_audit.mjs \
+node tools/visuals/harvester/harvester_visual_audit.mjs \
   --creature scythe_stalker \
   --iteration anatomical-masses-v01 \
   --references-root /home/rd/harvester_references \
@@ -208,7 +208,7 @@ After the independent visual subagent has looked at the images, the primary
 agent fills its findings into `review.json` and finalises it:
 
 ```bash
-node tools/harvester_visual_audit.mjs \
+node tools/visuals/harvester/harvester_visual_audit.mjs \
   --finalize build/harvester-visual-audits/<audit-directory>
 ```
 

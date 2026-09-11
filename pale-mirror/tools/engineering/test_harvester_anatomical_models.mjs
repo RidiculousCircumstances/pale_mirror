@@ -22,7 +22,8 @@ const creatures = {
 };
 
 const readJson = file => JSON.parse(fs.readFileSync(file, 'utf8'));
-const run = (script, argument) => spawnSync('node', [path.join(root, 'tools', script), argument], { encoding: 'utf8' });
+const harvesterTools = path.join(root, 'tools', 'visuals', 'harvester');
+const run = (script, argument) => spawnSync('node', [path.join(harvesterTools, script), argument], { encoding: 'utf8' });
 
 for (const [creature, contract] of Object.entries(creatures)) {
     const project = readJson(path.join(harvesterRoot, `${creature}_reference_hifi.bbmodel`));

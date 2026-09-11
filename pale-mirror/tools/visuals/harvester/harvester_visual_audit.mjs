@@ -12,7 +12,7 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 
-const root = path.resolve(import.meta.dirname, '..');
+const root = path.resolve(import.meta.dirname, '..', '..', '..');
 const sourceRoot = path.join(root, 'pale-mirror-visuals', 'src', 'main');
 const harvesterRoot = path.join(sourceRoot, 'blockbench', 'harvester');
 const assetRoot = path.join(sourceRoot, 'resources', 'assets', 'pale_mirror_visuals');
@@ -68,8 +68,8 @@ function parseArgs(argv) {
 
 function usage() {
     return `Usage:
-  node tools/harvester_visual_audit.mjs --creature <${supportedCreatures.join('|')}> --iteration <label> --references-root <directory> [--model-file <candidate.bbmodel>] [--capture] [--display <X11-display>] [--previous <audit-dir>]
-  node tools/harvester_visual_audit.mjs --finalize <audit-dir>
+  node tools/visuals/harvester/harvester_visual_audit.mjs --creature <${supportedCreatures.join('|')}> --iteration <label> --references-root <directory> [--model-file <candidate.bbmodel>] [--capture] [--display <X11-display>] [--previous <audit-dir>]
+  node tools/visuals/harvester/harvester_visual_audit.mjs --finalize <audit-dir>
 
 The first command creates a human-review package. --capture opens the canonical
 image-faithful .bbmodel from the review brief, or an explicitly supplied
@@ -219,7 +219,7 @@ function scorecardMarkdown(review) {
         `1. Largest mismatch: \n2. Second mismatch: \n3. Third mismatch: \n\n` +
         `One next modelling change (not a broad rewrite): \n\n` +
         `## 8. Versioned hand-off\n\n` +
-        `The independent visual reviewer fills \`review.json\`; the primary agent then runs \`node tools/harvester_visual_audit.mjs --finalize <this-audit-directory>\`. Retain this directory beside the next audit for before/after comparison.\n`;
+        `The independent visual reviewer fills \`review.json\`; the primary agent then runs \`node tools/visuals/harvester/harvester_visual_audit.mjs --finalize <this-audit-directory>\`. Retain this directory beside the next audit for before/after comparison.\n`;
 }
 
 function discoverXauthority() {
@@ -370,7 +370,7 @@ function removeAuditProfile(auditProfile) {
 
 function normaliseX11Window(display, modelFile) {
     const resize = spawnSync('python3', [
-        path.join(root, 'tools', 'resize_x11_window.py'),
+        path.join(root, 'tools', 'blender', 'resize_x11_window.py'),
         '--display', display,
         '--title', path.basename(modelFile, path.extname(modelFile)),
         '--width', '1920',

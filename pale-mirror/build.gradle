@@ -107,16 +107,16 @@ def architectureContractTests = layout.projectDirectory.file('tools/engineering/
 def frontierV3ArchitectureDebtPolicy = layout.projectDirectory.file('tools/engineering/frontier_v3_architecture_debt.yml').asFile
 def frontierV3ArchitectureDebtValidator = layout.projectDirectory.file('tools/engineering/frontier_v3_architecture_debt.py').asFile
 def frontierV3ArchitectureDebtTests = layout.projectDirectory.file('tools/engineering/test_frontier_v3_architecture_debt.py').asFile
-def harvesterContourTool = layout.projectDirectory.file('tools/harvester_contour_overlay.py').asFile
+def harvesterContourTool = layout.projectDirectory.file('tools/visuals/harvester/harvester_contour_overlay.py').asFile
 def harvesterContourTests = layout.projectDirectory.file('tools/engineering/test_harvester_contour_overlay.py').asFile
-def harvesterAnatomicalModelTool = layout.projectDirectory.file('tools/rebuild_harvester_anatomical_models.mjs').asFile
+def harvesterAnatomicalModelTool = layout.projectDirectory.file('tools/visuals/harvester/rebuild_harvester_anatomical_models.mjs').asFile
 def harvesterAnatomicalModelTests = layout.projectDirectory.file('tools/engineering/test_harvester_anatomical_models.mjs').asFile
-def harvesterVolumeBakeoffTool = layout.projectDirectory.file('tools/harvester_volume_bakeoff.py').asFile
+def harvesterVolumeBakeoffTool = layout.projectDirectory.file('tools/visuals/harvester/harvester_volume_bakeoff.py').asFile
 def harvesterVolumeBakeoffTests = layout.projectDirectory.file('tools/engineering/test_harvester_volume_bakeoff.py').asFile
-def harvesterPrimaryModelOverlayTool = layout.projectDirectory.file('tools/harvester_primary_model_overlay.py').asFile
+def harvesterPrimaryModelOverlayTool = layout.projectDirectory.file('tools/visuals/harvester/harvester_primary_model_overlay.py').asFile
 def harvesterPrimaryModelOverlayTests = layout.projectDirectory.file('tools/engineering/test_harvester_primary_model_overlay.py').asFile
 def collectorDirectMeshProtocolTests = layout.projectDirectory.file('tools/engineering/test_collector_direct_mesh_protocol.py').asFile
-def harvesterBlindPairwiseTool = layout.projectDirectory.file('tools/harvester_blind_pairwise.py').asFile
+def harvesterBlindPairwiseTool = layout.projectDirectory.file('tools/visuals/harvester/harvester_blind_pairwise.py').asFile
 def harvesterBlindPairwiseTests = layout.projectDirectory.file('tools/engineering/test_harvester_blind_pairwise.py').asFile
 def harvesterBlindPairwiseProtocol = layout.projectDirectory.file('pale-mirror-visuals/src/main/blender/harvester/blind_review_protocol_v01.json').asFile
 def hunyuan2mvPreparationTool = layout.projectDirectory.file('tools/hunyuan3d_2mv/prepare_collector_multiview.py').asFile
@@ -345,6 +345,12 @@ tasks.register('verifyWorkspaceHygiene') {
         }
         if (!forbidden.isEmpty()) {
             throw new GradleException("Generated/local workspace state must not be tracked: ${forbidden.join(', ')}")
+        }
+        def looseToolSources = tracked.findAll { path ->
+            path.startsWith('tools/') && !path.substring('tools/'.length()).contains('/') && path != 'tools/README.md'
+        }
+        if (!looseToolSources.isEmpty()) {
+            throw new GradleException("Tool sources must be owned by a scoped tools directory: ${looseToolSources.join(', ')}")
         }
     }
 }
