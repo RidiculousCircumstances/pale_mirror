@@ -15,7 +15,7 @@ final class FrontierV3PilotDemandHandshake {
     }
 
     static boolean admitted(JsonObject value, String request, String assault, String dimension, BlockPos expectedHandoff, String expectedPlayerId,
-                            FrontierV3PilotVisitIngress.Correlation correlation) {
+                            FrontierV3PilotDemandReceiptTransition.Correlation correlation) {
         if (!"demand_handshake".equals(string(value, "kind")) || !request.equals(string(value, "id")) || !assault.equals(string(value, "assault"))
                 || !dimension.equals(string(value, "destinationDimension")) || !"ADMITTED".equals(string(value, "reason"))
                 || !value.has("candidateHandoff") || !value.get("candidateHandoff").isJsonObject()) return false;

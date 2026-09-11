@@ -104,6 +104,7 @@ test('HOT consumer rejects observed receipt mutation, replay, old record, lifecy
     value => { value.manifest.diagnostics[0].observed.value.sceneDemandObserverIds = []; },
     value => { value.manifest.diagnostics[0].observed.value.serverPlayerPosition = null; },
     value => { value.manifest.diagnostics[0].observed.value.pilotRunId = '00000000-0000-0000-0000-000000000037'; },
+    value => { value.manifest.diagnostics[0].observed.value.pilotRunId = '00000000-0000-0000-0000-000000000037'; value.manifest.diagnostics[4].observed.value.pilotRunId = '00000000-0000-0000-0000-000000000037'; },
     value => { value.manifest.diagnostics[4].observed.value.targetChunkSeen = false; },
     value => { value.manifest.diagnostics[4].observed.value.finalClientDimension = 'minecraft:overworld'; },
     value => { value.manifest.diagnostics[4].observed.value.pilotActionAttempt = '00000000-0000-0000-0000-000000000037'; },

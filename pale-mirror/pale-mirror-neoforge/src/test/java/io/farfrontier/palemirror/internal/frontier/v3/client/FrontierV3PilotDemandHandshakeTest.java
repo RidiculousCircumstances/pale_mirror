@@ -13,7 +13,7 @@ class FrontierV3PilotDemandHandshakeTest {
     private static final String ASSAULT = "assault:development-settlement-assault";
     private static final String DIMENSION = "pale_mirror:frontier_graybox";
     private static final String PLAYER = "00000000-0000-0000-0000-000000000035";
-    private static final FrontierV3PilotVisitIngress.Correlation CORRELATION = new FrontierV3PilotVisitIngress.Correlation(
+    private static final FrontierV3PilotDemandReceiptTransition.Correlation CORRELATION = new FrontierV3PilotDemandReceiptTransition.Correlation(
             "00000000-0000-0000-0000-000000000031", 1, "00000000-0000-0000-0000-000000000032");
     /** Candidate handoff is Northwatch's anchor, not the nearby travel coordinate. */
     private static final BlockPos HANDOFF = new BlockPos(-360, 64, -340);

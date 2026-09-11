@@ -8,6 +8,7 @@ import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3PilotChunkMapAccessor;
 import io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3PilotDistanceManagerAccessor;
+import io.farfrontier.palemirror.internal.frontier.v3.client.FrontierV3PilotDemandReceiptTransition;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -33,14 +34,10 @@ import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.UUID;
-import java.util.function.Function;
 
 /**
  * Pilot-only acknowledgement armed before ordinary travel, retained through transfer, then read
@@ -50,7 +47,7 @@ import java.util.function.Function;
 @EventBusSubscriber(modid = PaleMirrorMod.MOD_ID)
 public final class FrontierV3PilotDemandHandshakeCommand {
     static final String COMMAND = "pale_mirror_pilot_demand_handshake";
-    private static final ArmedReceipts ARMED = new ArmedReceipts();
+    private static final TransitionAdapters TRANSITIONS = new TransitionAdapters();
 
     private FrontierV3PilotDemandHandshakeCommand() { }
 
@@ -73,8 +70,8 @@ public final class FrontierV3PilotDemandHandshakeCommand {
         String request = StringArgumentType.getString(context, "request");
         String assault = StringArgumentType.getString(context, "assault");
         String dimension = StringArgumentType.getString(context, "dimension");
-        Correlation correlation;
-        try { correlation = new Correlation(StringArgumentType.getString(context, "run"), IntegerArgumentType.getInteger(context, "step"), StringArgumentType.getString(context, "attempt")); }
+        FrontierV3PilotDemandReceiptTransition.Correlation correlation;
+        try { correlation = new FrontierV3PilotDemandReceiptTransition.Correlation(StringArgumentType.getString(context, "run"), IntegerArgumentType.getInteger(context, "step"), StringArgumentType.getString(context, "attempt")); }
         catch (IllegalArgumentException invalid) { return 0; }
         BlockPos travelAnchor = new BlockPos(IntegerArgumentType.getInteger(context, "x"), IntegerArgumentType.getInteger(context, "y"),
                 IntegerArgumentType.getInteger(context, "z"));
@@ -86,100 +83,88 @@ public final class FrontierV3PilotDemandHandshakeCommand {
         ServerLevel destinationLevel = context.getSource().getServer().getLevel(destination);
         if (destinationLevel == null || player.serverLevel().dimension().equals(destination)) return 0;
         ArmedReceipt armed = new ArmedReceipt(correlation, request, assault, dimension, destination, travelAnchor);
-        if (!ARMED.arm(player.getUUID(), armed)) return 0;
         try {
-            // This is the same ordinary ServerPlayer teleport API used by TeleportCommand; no ticket or PM state is manufactured here.
-            player.teleportTo(destinationLevel, travelAnchor.getX(), travelAnchor.getY(), travelAnchor.getZ(), player.getYRot(), player.getXRot());
-            player.setDeltaMovement(player.getDeltaMovement().multiply(1.0D, 0.0D, 1.0D)); player.setOnGround(true);
-            return 1;
-        } catch (RuntimeException failure) { ARMED.forget(player.getUUID()); throw failure; }
+            return TRANSITIONS.armAndDispatch(player.getUUID(), player.getGameProfile().getName(), armed.transitionArm(), command ->
+                    context.getSource().getServer().getCommands().performPrefixedCommand(context.getSource(), command)) ? 1 : 0;
+        } catch (RuntimeException failure) { TRANSITIONS.forget(player.getUUID()); throw failure; }
     }
 
     /** The matching PlayerChangedDimensionEvent is the post-transfer observation boundary. */
     @SubscribeEvent
     public static void onPlayerChangedDimension(PlayerEvent.PlayerChangedDimensionEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
-        ARMED.observeTransfer(player.getUUID(), event.getTo());
+        TRANSITIONS.observeTransfer(player.getUUID(), event.getTo().location().toString());
     }
 
     /** Runs after vanilla level/distance-manager work and before the default-priority PM scene Post listener. */
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     public static void onServerTick(ServerTickEvent.Post event) {
-        for (Pending pending : ARMED.transferred()) {
+        for (FrontierV3PilotDemandReceiptTransition.Pending pending : TRANSITIONS.transferred()) {
             ServerPlayer player = event.getServer().getPlayerList().getPlayer(pending.player());
-            if (player == null) { ARMED.forget(pending.player()); continue; }
+            if (player == null) { TRANSITIONS.forget(pending.player()); continue; }
             ServerLevel destination = player.serverLevel();
-            ARMED.observeAfterDistance(pending.player(), state -> postDistanceObservation(player, destination, state)).ifPresent(receipt ->
+            if (!TRANSITIONS.observeCurrentDestination(pending.player(), destination.dimension().location().toString())) continue;
+            TRANSITIONS.observeAfterDistance(pending.player(), state -> postDistanceObservation(player, destination, state)).ifPresent(receipt ->
                     player.sendSystemMessage(Component.literal("PMV3_DIAG " + receipt.json())));
         }
     }
 
     @SubscribeEvent
     public static void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
-        if (event.getEntity() instanceof ServerPlayer player) ARMED.forget(player.getUUID());
+        if (event.getEntity() instanceof ServerPlayer player) TRANSITIONS.forget(player.getUUID());
     }
 
     @SubscribeEvent
     public static void onServerStopped(ServerStoppedEvent event) {
-        ARMED.clear();
+        TRANSITIONS.clear();
     }
 
-    private static Optional<PostDistanceObservation> postDistanceObservation(ServerPlayer player, ServerLevel destination, Pending pending) {
-        ArmedReceipt armed = pending.armed();
+    private static Optional<FrontierV3PilotDemandReceiptTransition.Observation<Receipt>> postDistanceObservation(ServerPlayer player, ServerLevel destination,
+                                                                                                                   FrontierV3PilotDemandReceiptTransition.Pending pending) {
+        ArmedReceipt armed = ArmedReceipt.from(pending.arm(), ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(pending.arm().destination())));
         if (!destination.dimension().equals(armed.destination())) return Optional.empty();
-        Candidate candidate = pending.candidate().orElseGet(() -> Candidate.from(
+        FrontierV3PilotDemandReceiptTransition.Candidate candidate = pending.candidate().orElseGet(() -> Candidate.from(
                 FrontierV3ServerLifecycle.pilotSceneDemandSnapshot(destination, new SubjectId(armed.assault()))).orElse(null));
         if (candidate == null) return Optional.empty();
-        FrontierV3SceneDemand.Snapshot demand = FrontierV3SceneDemand.observe(destination, candidate.handoff());
+        io.farfrontier.palemirror.frontier.v3.model.BlockPosition handoff = new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(
+                candidate.handoff().getX(), candidate.handoff().getY(), candidate.handoff().getZ());
+        FrontierV3SceneDemand.Snapshot demand = FrontierV3SceneDemand.observe(destination, handoff);
         FrontierV3PilotSceneDemandSnapshot snapshot = new FrontierV3PilotSceneDemandSnapshot(Optional.of(candidate.providerIdentity()), OptionalInt.of(1),
-                Optional.of(candidate.handoff()), demand.chunkLoaded(), demand.observerIds());
-        TicketState ticket = ticketState(destination, new BlockPos(candidate.handoff().x(), candidate.handoff().y(), candidate.handoff().z()));
+                Optional.of(handoff), demand.chunkLoaded(), demand.observerIds());
+        TicketState ticket = ticketState(destination, candidate.handoff());
         Receipt receipt = Receipt.from(armed, Optional.of(player.getUUID()), Optional.of(player.blockPosition()), player.serverLevel() == destination, ticket, snapshot);
-        return Optional.of(new PostDistanceObservation(receipt, Optional.of(candidate)));
+        return Optional.of(new FrontierV3PilotDemandReceiptTransition.Observation<>(receipt, receipt.reason() == Reason.ADMITTED, Optional.of(candidate)));
     }
 
-    record Correlation(String runId, int actionStep, String actionAttempt) {
-        Correlation {
-            UUID.fromString(runId); if (actionStep < 1) throw new IllegalArgumentException("action step"); UUID.fromString(actionAttempt);
+    record ArmedReceipt(FrontierV3PilotDemandReceiptTransition.Correlation correlation, String request, String assault, String dimension, ResourceKey<Level> destination, BlockPos travelAnchor) {
+        FrontierV3PilotDemandReceiptTransition.Arm transitionArm() { return new FrontierV3PilotDemandReceiptTransition.Arm(correlation, request, assault, dimension, travelAnchor); }
+        static ArmedReceipt from(FrontierV3PilotDemandReceiptTransition.Arm arm, ResourceKey<Level> destination) {
+            return new ArmedReceipt(arm.correlation(), arm.request(), arm.assault(), arm.destination(), destination, arm.travelAnchor());
         }
     }
-    record ArmedReceipt(Correlation correlation, String request, String assault, String dimension, ResourceKey<Level> destination, BlockPos travelAnchor) { }
     record Candidate(String providerIdentity, io.farfrontier.palemirror.frontier.v3.model.BlockPosition handoff) {
-        static Optional<Candidate> from(FrontierV3PilotSceneDemandSnapshot snapshot) {
+        static Optional<FrontierV3PilotDemandReceiptTransition.Candidate> from(FrontierV3PilotSceneDemandSnapshot snapshot) {
             if (snapshot.providerIdentity().isEmpty() || snapshot.exactCandidateCount().orElse(0) != 1 || snapshot.handoffPosition().isEmpty()) return Optional.empty();
-            return Optional.of(new Candidate(snapshot.providerIdentity().orElseThrow(), snapshot.handoffPosition().orElseThrow()));
+            io.farfrontier.palemirror.frontier.v3.model.BlockPosition handoff = snapshot.handoffPosition().orElseThrow();
+            return Optional.of(new FrontierV3PilotDemandReceiptTransition.Candidate(snapshot.providerIdentity().orElseThrow(), new BlockPos(handoff.x(), handoff.y(), handoff.z())));
         }
     }
-    record Pending(UUID player, ArmedReceipt armed, boolean transferObserved, Optional<Candidate> candidate) {
-        Pending { candidate = candidate == null ? Optional.empty() : candidate; }
-        Pending transferred() { return new Pending(player, armed, true, candidate); }
-        Pending retain(Optional<Candidate> observed) { return new Pending(player, armed, transferObserved, candidate.isPresent() ? candidate : observed); }
-    }
-    record PostDistanceObservation(Receipt receipt, Optional<Candidate> candidate) { }
 
-    /** One pending receipt per player; a different transfer cannot consume it and logout/server stop clears it. */
-    static final class ArmedReceipts {
-        private final Map<UUID, Pending> receipts = new HashMap<>();
-        boolean arm(UUID player, ArmedReceipt receipt) {
-            if (receipts.containsKey(player)) return false;
-            receipts.put(player, new Pending(player, receipt, false, Optional.empty())); return true;
+    /** Adapter-facing composition shared by command, transfer, HIGHEST observation, and cleanup. */
+    static final class TransitionAdapters {
+        private final FrontierV3PilotDemandReceiptTransition.Custody custody = new FrontierV3PilotDemandReceiptTransition.Custody();
+        boolean armAndDispatch(UUID player, String playerName, FrontierV3PilotDemandReceiptTransition.Arm arm,
+                               FrontierV3PilotDemandReceiptTransition.Dispatcher dispatcher) {
+            return custody.armAndDispatch(player, playerName, arm, dispatcher);
         }
-        boolean observeTransfer(UUID player, ResourceKey<Level> destination) {
-            Pending receipt = receipts.get(player);
-            if (receipt == null || receipt.transferObserved() || !receipt.armed().destination().equals(destination)) return false;
-            receipts.put(player, receipt.transferred()); return true;
-        }
-        List<Pending> transferred() { return new ArrayList<>(receipts.values()).stream().filter(Pending::transferObserved).toList(); }
-        Optional<Receipt> observeAfterDistance(UUID player, Function<Pending, Optional<PostDistanceObservation>> observe) {
-            Pending pending = receipts.get(player); if (pending == null || !pending.transferObserved()) return Optional.empty();
-            Optional<PostDistanceObservation> observed = observe.apply(pending); if (observed.isEmpty()) return Optional.empty();
-            Pending retained = pending.retain(observed.orElseThrow().candidate());
-            if (observed.orElseThrow().receipt().reason() == Reason.ADMITTED) { receipts.remove(player); return Optional.of(observed.orElseThrow().receipt()); }
-            receipts.put(player, retained); return Optional.empty();
-        }
-        void forget(UUID player) { receipts.remove(player); }
-        void clear() { receipts.clear(); }
-        boolean pending(UUID player) { return receipts.containsKey(player); }
+        boolean observeTransfer(UUID player, String destination) { return custody.observeTransfer(player, destination); }
+        boolean observeCurrentDestination(UUID player, String destination) { return custody.observeCurrentDestination(player, destination); }
+        List<FrontierV3PilotDemandReceiptTransition.Pending> transferred() { return custody.transferred(); }
+        <T> Optional<T> observeAfterDistance(UUID player, java.util.function.Function<FrontierV3PilotDemandReceiptTransition.Pending,
+                Optional<FrontierV3PilotDemandReceiptTransition.Observation<T>>> observer) { return custody.observeAfterDistance(player, observer); }
+        void forget(UUID player) { custody.forget(player); }
+        void clear() { custody.clear(); }
+        boolean pending(UUID player) { return custody.pending(player); }
     }
 
     private static TicketState ticketState(ServerLevel level, BlockPos anchor) {
@@ -200,7 +185,7 @@ public final class FrontierV3PilotDemandHandshakeCommand {
         static TicketState absent() { return new TicketState(false, false, -1, false); }
     }
 
-    record Receipt(Correlation correlation, String request, String assault, String destinationDimension, BlockPos travelAnchor, String playerId,
+    record Receipt(FrontierV3PilotDemandReceiptTransition.Correlation correlation, String request, String assault, String destinationDimension, BlockPos travelAnchor, String playerId,
                    Optional<BlockPos> serverPlayerPosition, boolean destinationObserved, TicketState ticket, Optional<String> providerIdentity,
                    Optional<Integer> exactCandidateCount, Optional<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> candidateHandoff,
                    boolean demandChunkLoaded, java.util.Set<UUID> demandObserverIds, boolean requestedObserverPresent, Reason reason) {

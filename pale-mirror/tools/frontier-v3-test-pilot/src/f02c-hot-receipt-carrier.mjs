@@ -120,6 +120,7 @@ function assertPersistentTopology(manifest, declaration) {
 
 /** The visit cannot become a completed action from client chunk visibility or elapsed settling alone. */
 function assertDemandHandshake(manifest, ingress) {
+  const outerLifecycleRun = manifest.lifecycle?.[0]?.identity?.runId;
   const records = manifest.diagnostics.filter(entry => entry?.observed?.actionStep === 1 && entry.observed?.value?.kind === 'demand_handshake'
     && entry.observed?.value?.id === ingress.demandHandshake.request);
   if (records.length !== 1) throw new Error('F0.2C HOT carrier lacks one server-thread demand handshake receipt');
@@ -127,7 +128,7 @@ function assertDemandHandshake(manifest, ingress) {
   if (value.assault !== ingress.demandHandshake.assault || value.destinationDimension !== ingress.dimension
       || !isDeepStrictEqual(value.travelAnchor, ingress.position) || !isDeepStrictEqual(value.candidateHandoff, ingress.demandHandshake.handoff)
       || !value.serverPlayerPosition || value.reason !== 'ADMITTED' || typeof value.playerId !== 'string' || value.playerId.length === 0
-      || !uuid(value.pilotRunId) || value.pilotActionStep !== 1 || !uuid(value.pilotActionAttempt)
+      || !uuid(value.pilotRunId) || value.pilotRunId !== outerLifecycleRun || value.pilotActionStep !== 1 || !uuid(value.pilotActionAttempt)
       || value.destinationObserved !== true || value.destinationPlayerTicket !== true || value.destinationHolder !== true
       || typeof value.providerIdentity !== 'string' || value.providerIdentity.length === 0 || value.exactCandidateCount !== 1
       || value.sceneDemandChunkLoaded !== true || value.requestedObserverPresent !== true
@@ -138,6 +139,7 @@ function assertDemandHandshake(manifest, ingress) {
 
 /** Client-visible ingress is a separate receipt: server admission never substitutes for it. */
 function assertClientIngress(manifest, ingress) {
+  const outerLifecycleRun = manifest.lifecycle?.[0]?.identity?.runId;
   const records = manifest.diagnostics.filter(entry => entry?.observed?.actionStep === 1 && entry.observed?.value?.kind === 'visit_ingress'
     && entry.observed?.value?.id === ingress.demandHandshake.request);
   if (records.length !== 1) throw new Error('F0.2C HOT carrier lacks one client ingress receipt');
@@ -145,7 +147,7 @@ function assertClientIngress(manifest, ingress) {
   const server = manifest.diagnostics.find(entry => entry?.observed?.actionStep === 1 && entry.observed?.value?.kind === 'demand_handshake'
     && entry.observed?.value?.id === ingress.demandHandshake.request)?.observed.value;
   if (value.targetDimensionSeen !== true || value.targetChunkSeen !== true || value.finalClientDimension !== ingress.dimension
-      || !point(value.finalClientPosition) || !server || value.pilotRunId !== server.pilotRunId
+      || !point(value.finalClientPosition) || !server || value.pilotRunId !== outerLifecycleRun || value.pilotRunId !== server.pilotRunId
       || value.pilotActionStep !== server.pilotActionStep || value.pilotActionAttempt !== server.pilotActionAttempt) {
     throw new Error('F0.2C HOT carrier has incomplete client destination/chunk ingress evidence');
   }

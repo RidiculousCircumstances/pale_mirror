@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCandidate;
+import io.farfrontier.palemirror.internal.frontier.v3.client.FrontierV3PilotDemandReceiptTransition;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
@@ -30,7 +31,7 @@ class FrontierV3PilotDemandHandshakeCommandTest {
     /** Northwatch settlement anchor; it is deliberately not the player travel coordinate. */
     private static final BlockPosition HANDOFF = new BlockPosition(-360, 64, -340);
     private static final UUID PLAYER = UUID.fromString("00000000-0000-0000-0000-000000000035");
-    private static final FrontierV3PilotDemandHandshakeCommand.Correlation CORRELATION = new FrontierV3PilotDemandHandshakeCommand.Correlation(
+    private static final FrontierV3PilotDemandReceiptTransition.Correlation CORRELATION = new FrontierV3PilotDemandReceiptTransition.Correlation(
             "00000000-0000-0000-0000-000000000031", 1, "00000000-0000-0000-0000-000000000032");
 
     @Test
@@ -92,39 +93,46 @@ class FrontierV3PilotDemandHandshakeCommandTest {
     }
 
     @Test
-    void armTransferPostDistanceAndCleanupUseOneReceiptCustodyComposition() {
-        FrontierV3PilotDemandHandshakeCommand.ArmedReceipts receipts = new FrontierV3PilotDemandHandshakeCommand.ArmedReceipts();
-        ResourceKey<Level> destination = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse("pale_mirror:frontier_graybox"));
-        ResourceKey<Level> wrongDestination = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse("minecraft:overworld"));
+    void commandTransferPostDistanceAndClientFacingDispatchUseOneReceiptCustodyComposition() {
+        FrontierV3PilotDemandHandshakeCommand.TransitionAdapters receipts = new FrontierV3PilotDemandHandshakeCommand.TransitionAdapters();
+        String destination = "pale_mirror:frontier_graybox";
         FrontierV3PilotDemandHandshakeCommand.ArmedReceipt armed = armed();
-        FrontierV3PilotDemandHandshakeCommand.Candidate candidate = new FrontierV3PilotDemandHandshakeCommand.Candidate("projection-snapshot", HANDOFF);
-        assertTrue(receipts.arm(PLAYER, armed));
-        assertFalse(receipts.arm(PLAYER, armed));
-        assertFalse(receipts.observeTransfer(PLAYER, wrongDestination));
+        FrontierV3PilotDemandReceiptTransition.Candidate candidate = new FrontierV3PilotDemandReceiptTransition.Candidate("projection-snapshot", new BlockPos(-360, 64, -340));
+        assertTrue(receipts.armAndDispatch(PLAYER, "pilot", armed.transitionArm(), command -> {
+            assertEquals("execute in pale_mirror:frontier_graybox run tp pilot -360 65 -352", command);
+            assertTrue(receipts.observeTransfer(PLAYER, destination));
+        }));
+        assertFalse(receipts.armAndDispatch(PLAYER, "pilot", armed.transitionArm(), ignored -> { }));
+        assertFalse(receipts.observeTransfer(PLAYER, "minecraft:overworld"));
         assertTrue(receipts.observeAfterDistance(PLAYER, ignored -> Optional.empty()).isEmpty());
-        assertTrue(receipts.observeTransfer(PLAYER, destination));
         assertFalse(receipts.observeTransfer(PLAYER, destination));
         assertTrue(receipts.pending(PLAYER));
         FrontierV3PilotDemandHandshakeCommand.Receipt notReady = receipt(armed, FrontierV3PilotDemandHandshakeCommand.TicketState.absent());
-        assertTrue(receipts.observeAfterDistance(PLAYER, pending -> Optional.of(new FrontierV3PilotDemandHandshakeCommand.PostDistanceObservation(notReady, Optional.of(candidate)))).isEmpty());
+        assertTrue(receipts.observeAfterDistance(PLAYER, pending -> Optional.of(new FrontierV3PilotDemandReceiptTransition.Observation<>(notReady, false, Optional.of(candidate)))).isEmpty());
         assertTrue(receipts.pending(PLAYER));
         FrontierV3PilotDemandHandshakeCommand.Receipt admitted = receipt(armed, READY_TICKET);
         assertEquals(Optional.of(admitted), receipts.observeAfterDistance(PLAYER, pending -> {
             assertEquals(Optional.of(candidate), pending.candidate());
-            return Optional.of(new FrontierV3PilotDemandHandshakeCommand.PostDistanceObservation(admitted, Optional.of(candidate)));
+            return Optional.of(new FrontierV3PilotDemandReceiptTransition.Observation<>(admitted, true, Optional.of(candidate)));
         }));
         assertFalse(receipts.pending(PLAYER));
     }
 
     @Test
-    void armedReceiptIsRemovedOnTheSamePilotCleanupBoundariesAsTheTransferOwner() {
-        FrontierV3PilotDemandHandshakeCommand.ArmedReceipts receipts = new FrontierV3PilotDemandHandshakeCommand.ArmedReceipts();
-        ResourceKey<Level> destination = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse("pale_mirror:frontier_graybox"));
+    void cancellationDepartureAndPilotCleanupInvalidateTheSameAdapterCustody() {
+        FrontierV3PilotDemandHandshakeCommand.TransitionAdapters receipts = new FrontierV3PilotDemandHandshakeCommand.TransitionAdapters();
         FrontierV3PilotDemandHandshakeCommand.ArmedReceipt armed = armed();
-        assertTrue(receipts.arm(PLAYER, armed)); assertTrue(receipts.observeTransfer(PLAYER, destination)); receipts.forget(PLAYER);
+        // A transfer observed before the client/server arm is stale and cannot later supply a receipt.
+        assertFalse(receipts.observeTransfer(PLAYER, "pale_mirror:frontier_graybox"));
+        assertFalse(receipts.armAndDispatch(PLAYER, "pilot", armed.transitionArm(), ignored -> { }));
+        assertFalse(receipts.pending(PLAYER));
+        assertTrue(receipts.armAndDispatch(PLAYER, "pilot", armed.transitionArm(), command -> { receipts.observeTransfer(PLAYER, "pale_mirror:frontier_graybox"); }));
+        assertFalse(receipts.observeCurrentDestination(PLAYER, "minecraft:overworld"));
+        assertFalse(receipts.pending(PLAYER));
+        assertTrue(receipts.armAndDispatch(PLAYER, "pilot", armed.transitionArm(), command -> { receipts.observeTransfer(PLAYER, "pale_mirror:frontier_graybox"); })); receipts.forget(PLAYER);
         assertFalse(receipts.pending(PLAYER));
         assertTrue(receipts.observeAfterDistance(PLAYER, ignored -> Optional.empty()).isEmpty());
-        assertTrue(receipts.arm(PLAYER, armed)); receipts.clear();
+        assertTrue(receipts.armAndDispatch(PLAYER, "pilot", armed.transitionArm(), command -> { receipts.observeTransfer(PLAYER, "pale_mirror:frontier_graybox"); })); receipts.clear();
         assertFalse(receipts.pending(PLAYER));
     }
 
