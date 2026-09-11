@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { assertF04HiveReturnCarrier, assertF04HiveReturnDeclaration, assertF04HiveReturnIdentity } from '../src/f04-hive-return-carrier.mjs';
-import { buildF04HiveReturnReceipt, preflightF04HiveReturnCarrier } from '../src/run-f04-hive-return-carrier.mjs';
+import { buildF04HiveReturnReceipt, isolatedScenarioSupervisorInvocation, preflightF04HiveReturnCarrier } from '../src/run-f04-hive-return-carrier.mjs';
 
 const ids = ['actor:hive-return-a', 'actor:hive-return-b', 'actor:hive-return-c', 'actor:hive-return-d'];
 const positions = Object.freeze(ids.map((id, index) => ({ id, x: -360 + index, y: 64, z: -340 })));
@@ -58,6 +58,12 @@ test('F0.4 native preflight binds exact declaration, persistent manifest, and no
   value.scenarioDeclarationSha256 = 'b'.repeat(64);
   assert.throws(() => preflightF04HiveReturnCarrier({ declarationSource, declarationSha256,
     manifestSource: Buffer.from(JSON.stringify(value)), outerAttempt }), /foreign persistent manifest/);
+});
+
+test('F0.4 native invocation gives the scenario one dedicated evidence process directory', () => {
+  const invocation = isolatedScenarioSupervisorInvocation({ scenarioPath: '/checkout/scenario.json', manifestPath: '/checkout/manifest.json',
+    root: '/checkout/evidence', outerAttempt });
+  assert.equal(invocation.options.env.FRONTIER_V3_NATIVE_PROCESS_ROOT, '/checkout/evidence/process');
 });
 
 test('F0.4 return carrier permits only recorded physical return progress and rejects an unstamped reset', () => {

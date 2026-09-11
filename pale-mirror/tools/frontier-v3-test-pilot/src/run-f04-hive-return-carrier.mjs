@@ -58,7 +58,7 @@ async function main() {
   if (!process.env.FRONTIER_V3_JFR_OUTPUT || !jfrPath.startsWith(`${resolve(project, 'build/profiles')}/`)) {
     throw new Error('F0.4 return carrier requires a build/profiles JFR output');
   }
-  const root = dirname(output); await mkdir(root, { recursive: true });
+  const root = dirname(output); await mkdir(resolve(root, 'process'), { recursive: true });
   const declarationPath = resolve(project, 'tools/frontier-v3-test-pilot/scenarios', scenario);
   const declarationSource = await readFile(declarationPath); const declarationSha256 = digest(declarationSource);
   assertF04HiveReturnDeclaration(parse(declarationSource, 'declaration'));
