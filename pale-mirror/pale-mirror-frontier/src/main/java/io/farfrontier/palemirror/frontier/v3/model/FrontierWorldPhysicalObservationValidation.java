@@ -45,6 +45,10 @@ final class FrontierWorldPhysicalObservationValidation {
                         instanceof ResourceCustody.Container container && container.containerId().equals(receiver)).findFirst()
                         .orElseThrow(() -> new IllegalArgumentException("fungible cargo receipt has no receiver account"));
                 FungiblePhysicalObservation.bind(inventory.fungibleResources(), account.id(), cargo.authorityEpoch(), cargo.stacks());
+            } else if (observation instanceof FungibleResourceConsumedObservation consumed) {
+                if (intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXACT_ITEM_CONSUMPTION
+                        || !intent.subjectIds().contains(consumed.lotId())) throw new IllegalArgumentException("fungible consumption receipt has foreign intent subjects");
+                if (!consumed.remainingStacks().isEmpty()) throw new IllegalArgumentException("completed hive biomass receipt must consume its whole claimed layout");
             } else if (observation instanceof ExplosionObservation explosion) {
                 ExplosionStateSupport.validateReceipt(intent, explosion);
             } else if (observation instanceof SceneStrikeObservation strike) {

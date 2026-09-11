@@ -927,6 +927,17 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             return ExplosionStateSupport.complete(this, current, explosion, next);
         }
         if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXACT_ITEM_CONSUMPTION) {
+            if (evidence instanceof FungibleResourceConsumedObservation consumed) {
+                if (!hiveColony.growthJobs().containsKey(current.causeSubjectId())) {
+                    throw new IllegalArgumentException("fungible consumption has no supported owning process");
+                }
+                next.put(intentId, current.withStatus(nextStatus, java.util.Optional.of(consumed.id())));
+                Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(physicalObservations); observations.put(consumed.id(), consumed);
+                FrontierWorldState consumedState = HiveGrowthStateSupport.consumeObservedFungible(this, current.causeSubjectId(), consumed);
+                return consumedState.next(consumedState.actorLocations, consumedState.structureConditions, consumedState.infection, consumedState.inventory,
+                        consumedState.productionJobs, consumedState.contracts, consumedState.operations, next, observations, consumedState.sceneLeases,
+                        consumedState.hiveColony, consumedState.structureDamage, consumedState.physicalDeltas, consumedState.ambientLeases);
+            }
             if (!(evidence instanceof ExactItemConsumedObservation consumed)) throw new IllegalArgumentException("exact consumption requires item observation evidence");
             SubjectId itemId = current.subjectIds().stream().filter(id -> !id.equals(current.causeSubjectId())).findFirst().orElseThrow();
             ExactItemStack item = inventory.items().get(itemId);

@@ -97,6 +97,14 @@ final class PhysicalEffectObservationStateCodec {
                     if (!(stack.address() instanceof PhysicalStackAddress.ContainerSlot slot)) throw new IllegalArgumentException("fungible cargo receipt has no container slot");
                     FrontierWorldStateCodec.writeCustody(output, slot.slot()); string(output, stack.itemKind()); output.writeByte(stack.quantity());
                 }
+            } else if (observation instanceof FungibleResourceConsumedObservation consumed) {
+                output.writeByte(21); string(output, consumed.id().value()); string(output, consumed.intentId().value()); string(output, consumed.accountId().value());
+                string(output, consumed.lotId().value()); string(output, consumed.claimId().value()); output.writeShort(consumed.consumedCount()); output.writeLong(consumed.authorityEpoch());
+                FrontierWorldStateCodec.writeCount(output, consumed.remainingStacks().size());
+                for (FungiblePhysicalObservation.Stack stack : consumed.remainingStacks()) {
+                    if (!(stack.address() instanceof PhysicalStackAddress.ContainerSlot slot)) throw new IllegalArgumentException("fungible consumption receipt has no container slot");
+                    FrontierWorldStateCodec.writeCustody(output, slot.slot()); string(output, stack.itemKind()); output.writeByte(stack.quantity());
+                }
             } else throw new IllegalArgumentException("unknown physical effect observation");
         }
     }
@@ -129,6 +137,7 @@ final class PhysicalEffectObservationStateCodec {
                         new SubjectId(text(input)), new SubjectId(text(input)), input.readUnsignedByte());
                 case 19 -> serviceInputIssue(input, id, intentId);
                 case 20 -> fungibleCargo(input, id, intentId);
+                case 21 -> fungibleConsumed(input, id, intentId);
                 default -> throw new IllegalArgumentException("unknown physical observation kind");
             };
             if (observations.put(id, observation) != null) throw new IllegalArgumentException("duplicate physical observation id");
@@ -153,6 +162,16 @@ final class PhysicalEffectObservationStateCodec {
             stacks.add(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(slot), text(input), input.readUnsignedByte()));
         }
         return new FungibleCargoHandoffObservation(id, intentId, cargoId, epoch, stacks);
+    }
+    private static FungibleResourceConsumedObservation fungibleConsumed(DataInputStream input, PhysicalObservationId id, PhysicalIntentId intentId) throws IOException {
+        SubjectId account = new SubjectId(text(input)); SubjectId lot = new SubjectId(text(input)); SubjectId claim = new SubjectId(text(input));
+        int count = input.readUnsignedShort(); long epoch = input.readLong(); java.util.ArrayList<FungiblePhysicalObservation.Stack> remaining = new java.util.ArrayList<>();
+        for (int index = 0, size = FrontierWorldStateCodec.readCount(input); index < size; index++) {
+            InventoryCustody custody = FrontierWorldStateCodec.readCustody(input);
+            if (!(custody instanceof InventoryCustody.ContainerSlot slot)) throw new IllegalArgumentException("fungible consumption stack must target a container slot");
+            remaining.add(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(slot), text(input), input.readUnsignedByte()));
+        }
+        return new FungibleResourceConsumedObservation(id, intentId, account, lot, claim, count, epoch, remaining);
     }
     private static ExplosionObservation explosion(DataInputStream input, PhysicalObservationId id, PhysicalIntentId intentId) throws IOException {
         FixedPosition origin = new FixedPosition(new FixedScalar(input.readLong()), new FixedScalar(input.readLong()), new FixedScalar(input.readLong()));

@@ -71,7 +71,6 @@ public final class HiveGrowthProcess {
         }
         SubjectId sourceStore = fungibleBiomass.map(ignored -> targetStore).orElseGet(() -> ((InventoryCustody.ContainerSlot) biomass.orElseThrow().custody()).containerId());
         if (ReferenceContainerCustody.blocksCanonicalUse(state, sourceStore)) return List.of(transition(task, StrategicTaskStatus.BLOCKED));
-        if (fungibleBiomass.isPresent() && ReferenceContainerCustody.hasLiveCustody(state, sourceStore)) return List.of(transition(task, StrategicTaskStatus.BLOCKED));
         HiveGrowthJob job = fungibleBiomass.map(value -> growthJob(hive, nest, value, ordinal)).orElseGet(() -> growthJob(hive, nest, biomass.orElseThrow(), ordinal));
         // A serialized surface is only prior projection evidence.  COLD remains eligible until
         // the exact currently observed store has a live custody epoch.
@@ -145,7 +144,7 @@ public final class HiveGrowthProcess {
                 || !BIOMASS.equals(lot.itemKind()) || lot.quantity() < 64 || !lot.economicOwnerId().equals(job.hiveId())
                 || account.lotQuantities().getOrDefault(lot.id(), 0) < 64 || !state.isHiveStore(store.containerId())
                 || !HiveStorageSupport.operationalNestForStore(state, store.containerId()).id().equals(job.nestId())
-                || ReferenceContainerCustody.hasLiveCustody(state, store.containerId()) || state.inventory().fungibleResources().claims().containsKey(held.claimId())) {
+                || state.inventory().fungibleResources().claims().containsKey(held.claimId())) {
             throw new IllegalArgumentException("fungible hive growth start lacks inactive nest-local biomass custody");
         }
         activeTask(state, job.hiveId()); return state.startFungibleHiveGrowth(job);
@@ -187,6 +186,14 @@ public final class HiveGrowthProcess {
         HiveGrowthJob job = state.hiveColony().growthJobs().get(intent.causeSubjectId());
         if (job == null || !subject.equals(job.hiveId()) || !intent.id().equals(job.consumptionIntentId())
                 || !intent.subjectIds().equals(List.of(job.id(), job.consumedItemId()))) throw new IllegalArgumentException("hive growth consumption intent does not bind its active job");
+        if (job.inputHold() instanceof HiveGrowthInputHold.FungibleCold held) {
+            CustodyAccount account = state.inventory().fungibleResources().accounts().get(held.accountId());
+            boolean bound = account != null && state.inventory().fungibleResources().bindings().values().stream().anyMatch(binding -> binding.accountId().equals(account.id()));
+            if (!bound || !ReferenceContainerCustody.hasLiveCustody(state, ((ResourceCustody.Container) account.custody()).containerId())) {
+                throw new IllegalArgumentException("fungible hive growth physical consumption requires current local store custody");
+            }
+            return state.preparePhysicalIntent(intent);
+        }
         ExactItemStack input = state.inventory().items().get(job.consumedItemId());
         if (input == null || !BIOMASS.equals(input.itemKind()) || input.count() != 64 || !(input.custody() instanceof InventoryCustody.ContainerSlot slot)
                 || !state.isHiveStore(slot.containerId())) throw new IllegalArgumentException("hive growth consumption requires an exact biomass stack");

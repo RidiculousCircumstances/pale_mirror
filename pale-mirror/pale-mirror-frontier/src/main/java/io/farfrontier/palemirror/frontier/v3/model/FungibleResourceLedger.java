@@ -358,6 +358,37 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         return new FungibleResourceLedger(nextLots, nextClaims, nextAccounts, nextBindings);
     }
 
+    /** Consumes a claimed HOT portion and atomically replaces its observed remaining layout. */
+    public FungibleResourceLedger destroyObserved(SubjectId accountId, long authorityEpoch, Map<SubjectId, Integer> lotQuantities,
+                                                  Map<SubjectId, Integer> claimQuantities, List<FungiblePhysicalObservation.Stack> remaining) {
+        CustodyAccount account = requireAccount(accountId); requireSubset(account.lotQuantities(), lotQuantities, "observed destruction lots");
+        requireOptionalSubset(account.claimQuantities(), claimQuantities, "observed destruction claims");
+        if (authorityEpoch < 1 || sum(lotQuantities) != sum(claimQuantities)) throw new IllegalArgumentException("observed destruction must consume one claimed exact portion");
+        List<PhysicalStackBinding> current = bindings.values().stream().filter(binding -> binding.accountId().equals(account.id())).toList();
+        if (current.isEmpty() || current.stream().anyMatch(binding -> binding.authorityEpoch() != authorityEpoch)) {
+            throw new IllegalArgumentException("observed destruction has no current physical authority");
+        }
+        Map<SubjectId, ResourceLot> nextLots = new HashMap<>(lots); lotQuantities.forEach((id, quantity) -> {
+            ResourceLot lot = requireLot(id); int remainingQuantity = lot.quantity() - quantity;
+            if (remainingQuantity == 0) nextLots.remove(id); else nextLots.put(id, lot.withQuantity(remainingQuantity));
+        });
+        Map<SubjectId, ClaimAllocation> nextClaims = new HashMap<>(claims); claimQuantities.forEach((id, quantity) -> {
+            ClaimAllocation claim = claims.get(id); int remainingQuantity = claim.quantity() - quantity;
+            if (remainingQuantity == 0) nextClaims.remove(id); else nextClaims.put(id, new ClaimAllocation(claim.id(), claim.claimantId(), claim.economicOwnerId(), claim.itemKind(), remainingQuantity));
+        });
+        Map<SubjectId, Integer> remainingLots = subtract(account.lotQuantities(), lotQuantities);
+        Map<SubjectId, Integer> remainingClaims = subtract(account.claimQuantities(), claimQuantities);
+        Map<SubjectId, CustodyAccount> nextAccounts = new HashMap<>(accounts);
+        if (remainingLots.isEmpty()) {
+            if (!remaining.isEmpty()) throw new IllegalArgumentException("empty observed destruction account retains physical stacks");
+            nextAccounts.remove(account.id());
+            return new FungibleResourceLedger(nextLots, nextClaims, nextAccounts, withoutBindingsFor(account.id()));
+        }
+        nextAccounts.put(account.id(), new CustodyAccount(account.id(), account.custody(), remainingLots, remainingClaims));
+        FungibleResourceLedger reduced = new FungibleResourceLedger(nextLots, nextClaims, nextAccounts, withoutBindingsFor(account.id()));
+        return reduced.rebind(account.id(), authorityEpoch, FungiblePhysicalObservation.bind(reduced, account.id(), authorityEpoch, remaining));
+    }
+
     /**
      * Applies one declared COLD recipe inside its sole account.  The caller owns recipe
      * eligibility; this ledger only proves that the named input custody and allocations are

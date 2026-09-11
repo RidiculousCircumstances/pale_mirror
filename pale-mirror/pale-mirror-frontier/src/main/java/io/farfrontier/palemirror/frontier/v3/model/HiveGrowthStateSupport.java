@@ -55,6 +55,17 @@ final class HiveGrowthStateSupport {
                 state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony().consumeTransferredNutrient(jobId, held.itemId()), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
     }
 
+    static FrontierWorldState consumeObservedFungible(FrontierWorldState state, SubjectId jobId, FungibleResourceConsumedObservation observed) {
+        HiveGrowthJob job = state.hiveColony().growthJobs().get(Objects.requireNonNull(jobId, "fungible observed growth job id"));
+        if (job == null || !(job.inputHold() instanceof HiveGrowthInputHold.FungibleCold held)
+                || !held.accountId().equals(observed.accountId()) || !held.itemId().equals(observed.lotId()) || !held.claimId().equals(observed.claimId())
+                || observed.consumedCount() != 64) throw new IllegalArgumentException("fungible observed biomass does not match its active job");
+        FungibleResourceLedger resources = state.inventory().fungibleResources().destroyObserved(held.accountId(), observed.authorityEpoch(),
+                Map.of(held.itemId(), observed.consumedCount()), Map.of(held.claimId(), observed.consumedCount()), observed.remainingStacks());
+        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory().withFungibleResources(resources), state.productionJobs(), state.contracts(), state.operations(),
+                state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony().consumeTransferredNutrient(jobId, held.itemId()), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
+    }
+
     static FrontierWorldState cancel(FrontierWorldState state, SubjectId jobId) {
         return state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(), state.contracts(), state.operations(),
                 state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony().cancelGrowth(jobId), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
