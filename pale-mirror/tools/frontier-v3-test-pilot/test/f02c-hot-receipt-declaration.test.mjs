@@ -9,6 +9,8 @@ const outerAttempt = '00000000-0000-0000-0000-000000000031';
 const clientRunId = '00000000-0000-0000-0000-000000000032';
 const nonce = '00000000-0000-0000-0000-000000000033';
 const sessionId = '00000000-0000-0000-0000-000000000034';
+// The seeded assault lease is lease:assault-development-settlement-assault-r14.
+const fixtureStrikeIntent = 'intent:scene-strike-assault-9cb1e908be6e0c35354f9b92fb020f744407022a00be79b8ecb239254bd862c3';
 const declarationSource = await readFile(new URL('../scenarios/disposable-settlement-assault-restart.json', import.meta.url));
 const declarationSha256 = hash(declarationSource); const declaration = JSON.parse(declarationSource); const build = { sourceCommit: '2139f55c4c009cc30d6e569ca5d1ac72a62b4847', sourceDirty: false, profile: 'settlement-assault' };
 
@@ -51,6 +53,14 @@ test('HOT declaration begins before manufacture and names three exact persistent
   assert.deepEqual([slots.preRestart.after, slots.recovered.after, slots.released.after], [2, 3, 5]);
   assert.deepEqual(declaration.actions[0].demandHandshake, { request: 'settlement-assault-visit', assault: 'assault:development-settlement-assault', handoff: { x: -360, y: 64, z: -340 } });
   assert.equal(declaration.actions[0].settleMs, 0);
+});
+
+test('HOT declaration binds the seeded lease receipt rather than a stale foreign strike identity', () => {
+  const slots = assertF02cHotReceiptDeclaration(declaration);
+  for (const slot of Object.values(slots)) {
+    assert.equal(slot.expect.strikeIntent, fixtureStrikeIntent);
+    assert.equal(slot.expect.strikeReceipt, `observation:${fixtureStrikeIntent.replace(':', '-')}`);
+  }
 });
 
 test('HOT declaration rejects the former client-local settle ingress before a carrier can run it', () => {
