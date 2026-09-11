@@ -29,8 +29,20 @@ public final class SourceGrayboxEntityAdmission {
     /** The exact lifecycle/firewall composition used by the ordinary EntityJoinLevelEvent. */
     public static boolean rejects(ServerLevel level, Entity entity, FrontierV3ServerLifecycle.JoinFirewallProof proof) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity"); Objects.requireNonNull(proof, "join proof");
-        return rejectsSourceMob(proof, level.dimension().equals(SourceGrayboxWorldBoundary.DIMENSION),
-                SourceGrayboxMaterializer.recognizesManagedEntity(entity));
+        return rejects(level.dimension().equals(SourceGrayboxWorldBoundary.DIMENSION), entity, proof);
+    }
+
+    /** Shared proof-aware custody decision consumed by the ordinary EntityJoinLevelEvent. */
+    static boolean rejects(boolean sourceDimension, Entity entity, FrontierV3ServerLifecycle.JoinFirewallProof proof) {
+        Objects.requireNonNull(entity, "entity"); Objects.requireNonNull(proof, "join proof");
+        return rejects(sourceDimension, entity instanceof Mob, SourceGrayboxMaterializer.recognizesManagedEntity(entity), proof);
+    }
+
+    /** Exact proof-aware custody predicate below the ordinary EntityJoinLevelEvent boundary. */
+    static boolean rejects(boolean sourceDimension, boolean mob, boolean sourceManaged,
+                           FrontierV3ServerLifecycle.JoinFirewallProof proof) {
+        Objects.requireNonNull(proof, "join proof");
+        return mob && rejectsSourceMob(proof, sourceDimension, sourceManaged);
     }
 
     static boolean rejects(ResourceKey<Level> dimension, Entity entity) {
