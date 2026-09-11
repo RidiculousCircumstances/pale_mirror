@@ -240,6 +240,48 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         return new FungibleResourceLedger(nextLots, nextClaims, nextAccounts, nextBindings);
     }
 
+    /**
+     * Applies one declared COLD recipe inside its sole account.  The caller owns recipe
+     * eligibility; this ledger only proves that the named input custody and allocations are
+     * consumed exactly before the one new output lot exists.
+     */
+    public FungibleResourceLedger transformCold(SubjectId accountId, Map<SubjectId, Integer> inputLots,
+                                                Map<SubjectId, Integer> inputClaims, ResourceLot output) {
+        CustodyAccount account = requireAccount(accountId); Objects.requireNonNull(output, "recipe output lot");
+        requireNoPhysicalBinding(account.id(), "recipe transformation");
+        requireSubset(account.lotQuantities(), inputLots, "recipe input lots");
+        requireOptionalSubset(account.claimQuantities(), inputClaims, "recipe input claims");
+        requireClaimsCoveredByLots(inputLots, inputClaims, "recipe transformation");
+        if (lots.containsKey(output.id()) || sum(inputLots) != output.quantity()) {
+            throw new IllegalArgumentException("recipe transformation does not preserve its exact quantity");
+        }
+        if (inputLots.entrySet().stream().map(entry -> requireLot(entry.getKey()).economicOwnerId()).distinct().count() != 1
+                || !requireLot(inputLots.keySet().iterator().next()).economicOwnerId().equals(output.economicOwnerId())) {
+            throw new IllegalArgumentException("recipe transformation crosses economic ownership");
+        }
+        if (!inputClaims.isEmpty() && sum(inputClaims) != sum(inputLots)) {
+            throw new IllegalArgumentException("recipe transformation leaves a claimed input portion behind");
+        }
+        Map<SubjectId, ResourceLot> nextLots = new HashMap<>(lots);
+        inputLots.forEach((id, quantity) -> {
+            ResourceLot lot = requireLot(id); int remaining = lot.quantity() - quantity;
+            if (remaining == 0) nextLots.remove(id); else nextLots.put(id, lot.withQuantity(remaining));
+        });
+        nextLots.put(output.id(), output);
+        Map<SubjectId, ClaimAllocation> nextClaims = new HashMap<>(claims);
+        inputClaims.forEach((id, quantity) -> {
+            ClaimAllocation claim = claims.get(id); int remaining = claim.quantity() - quantity;
+            if (remaining == 0) nextClaims.remove(id);
+            else nextClaims.put(id, new ClaimAllocation(claim.id(), claim.claimantId(), claim.economicOwnerId(), claim.itemKind(), remaining));
+        });
+        Map<SubjectId, Integer> nextAccountLots = subtract(account.lotQuantities(), inputLots);
+        nextAccountLots.put(output.id(), output.quantity());
+        Map<SubjectId, Integer> nextAccountClaims = subtract(account.claimQuantities(), inputClaims);
+        Map<SubjectId, CustodyAccount> nextAccounts = new HashMap<>(accounts);
+        nextAccounts.put(account.id(), new CustodyAccount(account.id(), account.custody(), nextAccountLots, nextAccountClaims));
+        return new FungibleResourceLedger(nextLots, nextClaims, nextAccounts, bindings);
+    }
+
     public int totalQuantity(SubjectId owner, String kind) {
         return lots.values().stream().filter(lot -> lot.economicOwnerId().equals(owner) && lot.itemKind().equals(kind)).mapToInt(ResourceLot::quantity).sum();
     }
@@ -324,6 +366,17 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         Map<SubjectId, Integer> nextLots = new HashMap<>(account.lotQuantities()); lots.forEach((id, quantity) -> nextLots.merge(id, quantity, Integer::sum));
         Map<SubjectId, Integer> nextClaims = new HashMap<>(account.claimQuantities()); claims.forEach((id, quantity) -> nextClaims.merge(id, quantity, Integer::sum));
         return new CustodyAccount(account.id(), account.custody(), nextLots, nextClaims);
+    }
+    private void requireClaimsCoveredByLots(Map<SubjectId, Integer> lotQuantities, Map<SubjectId, Integer> claimQuantities,
+                                            String operation) {
+        claimQuantities.forEach((claimId, claimQuantity) -> {
+            ClaimAllocation claim = claims.get(claimId);
+            int compatible = lotQuantities.entrySet().stream().filter(entry -> {
+                ResourceLot lot = requireLot(entry.getKey());
+                return lot.economicOwnerId().equals(claim.economicOwnerId()) && lot.itemKind().equals(claim.itemKind());
+            }).mapToInt(Map.Entry::getValue).sum();
+            if (compatible < claimQuantity) throw new IllegalArgumentException(operation + " has a claim without matching resource lots");
+        });
     }
     private static Map<SubjectId, Integer> subtract(Map<SubjectId, Integer> source, Map<SubjectId, Integer> removed) {
         Map<SubjectId, Integer> next = new HashMap<>(source); removed.forEach((id, quantity) -> { int remaining = next.get(id) - quantity; if (remaining == 0) next.remove(id); else next.put(id, remaining); }); return next;

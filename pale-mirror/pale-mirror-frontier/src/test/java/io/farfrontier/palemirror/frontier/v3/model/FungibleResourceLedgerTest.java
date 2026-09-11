@@ -55,6 +55,23 @@ class FungibleResourceLedgerTest {
     }
 
     @Test
+    void coldRecipeConsumesTheReservedInputLotBeforeItCreatesItsOutputLot() {
+        SubjectId claimId = new SubjectId("claim:bakery");
+        FungibleResourceLedger reserved = issue(10).reserve(new ClaimAllocation(claimId, new SubjectId("process:bakery"), OWNER,
+                "minecraft:bread", 10), DEPOT_ACCOUNT);
+        ResourceLot output = new ResourceLot(new SubjectId("lot:toast"), OWNER, "minecraft:toast", 10, "recipe:toast", List.of(LOT));
+
+        FungibleResourceLedger transformed = reserved.transformCold(DEPOT_ACCOUNT, Map.of(LOT, 10), Map.of(claimId, 10), output);
+
+        assertEquals(Map.of(output.id(), 10), transformed.accounts().get(DEPOT_ACCOUNT).lotQuantities());
+        assertEquals(10, transformed.totalQuantity(OWNER, "minecraft:toast"));
+        assertThrows(IllegalArgumentException.class, () -> reserved.transformCold(DEPOT_ACCOUNT, Map.of(LOT, 9), Map.of(claimId, 10), output));
+        assertThrows(IllegalStateException.class, () -> issue(10).rebind(DEPOT_ACCOUNT, 3L, List.of(binding("binding:recipe", 3L, 10,
+                new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(DEPOT, 0))))).transformCold(DEPOT_ACCOUNT,
+                Map.of(LOT, 10), Map.of(), output));
+    }
+
+    @Test
     void transientPhysicalBindingsAcceptARealSplitButFenceStaleOrDuplicateStackEvidence() {
         FungibleResourceLedger issued = issue(10);
         PhysicalStackBinding first = binding("binding:one", 7L, 6, new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(DEPOT, 0)));
