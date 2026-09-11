@@ -1,9 +1,9 @@
 # PM-F02C-PROJECTION-PROVIDER-SNAPSHOT-30: reuse projection-owned provider truth
 
-Specification revision: 1. Status: `AUTHORIZED`.
+Specification revision: 2. Status: `EXECUTING_METHOD_BUILD`.
 Parent slice: F0.2C. Risk: critical-code. Engineer: supervising root.
-Executor: one fresh `gpt-5.6-terra`, reasoning `high`; active identity is
-recorded on dispatch.
+Executor: one fresh `gpt-5.6-terra`, reasoning `high`, routed as
+`/root/f02c_shared_assault_challenge24/terra_projection_provider_snapshot30`.
 
 ## Baseline and context packet
 
@@ -102,4 +102,6 @@ Run only the smallest focused pure/ordinary-JVM tests and stop at
 `METHOD_ADMISSION` for one fresh read-only challenger. No aggregate gate,
 GameTest, Minecraft, R14, JFR, CI, push or publication. One consolidated
 semantic return is the maximum; a second closes the context. Assignment and
-ten-minute liveness/economy epochs are recorded on dispatch.
+ten-minute liveness/economy epochs are recorded on dispatch. Assignment epoch:
+`2026-09-11T02:35:00Z`; first economy audit is due after
+`2026-09-11T03:35:00Z` if still active.
