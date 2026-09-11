@@ -199,7 +199,7 @@ public final class HiveMobilizationProcess {
                 })) {
             throw new IllegalArgumentException("only the exact complete staged group may depart");
         }
-        if (!departed.assault().taskId().equals(mobilization.taskId()) || !departed.assault().hiveId().equals(mobilization.hiveId())
+        if (!departed.assault().expeditionId().equals(mobilization.expeditionId()) || !departed.assault().taskId().equals(mobilization.taskId()) || !departed.assault().hiveId().equals(mobilization.hiveId())
                 || !departed.assault().sighting().equals(mobilization.sighting()) || !departed.assault().overseerId().equals(mobilization.overseerId())
                 || !departed.assault().attackerIds().equals(mobilization.memberIds())
                 || state.strategicPlans().settlementAssaults().containsKey(departed.assault().id())) {

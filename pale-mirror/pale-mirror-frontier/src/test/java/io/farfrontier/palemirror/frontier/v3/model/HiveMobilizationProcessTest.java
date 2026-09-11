@@ -253,6 +253,8 @@ class HiveMobilizationProcessTest {
                     .filter(HiveMobilizationDeparted.class::isInstance).map(HiveMobilizationDeparted.class::cast).findFirst().orElseThrow();
             started = departed.assault();
             departedEvent = departed;
+            assertEquals(initial.expeditionId(), started.expeditionId(),
+                    "cocoon assembly and the admitted assault retain one expedition parent identity");
             assertEquals(initial.memberIds(), started.attackerIds(), "departure must not reselect nearby forms");
             assertEquals(initial.overseerId(), started.overseerId(), "the retained controller must cross the operation boundary");
             assertEquals(finalAssembly.members().entrySet().stream().collect(java.util.stream.Collectors.toMap(

@@ -21,6 +21,9 @@ public record HiveMobilization(SubjectId id, SubjectId hiveId, SubjectId nestId,
                                Optional<HiveAssemblyBlockage> assemblyBlockage, long startedAt) {
     public static final int MAX_MEMBERS = 12;
 
+    /** The task-derived parent survives the lifecycle handoff without a second roster record. */
+    public SubjectId expeditionId() { return HiveExpeditionIdentity.forTask(taskId); }
+
     public HiveMobilization {
         Objects.requireNonNull(id, "hive mobilization id");
         Objects.requireNonNull(hiveId, "hive mobilization hive");

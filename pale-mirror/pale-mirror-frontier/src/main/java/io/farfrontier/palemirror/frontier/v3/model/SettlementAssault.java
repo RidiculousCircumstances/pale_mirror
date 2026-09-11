@@ -76,6 +76,8 @@ public record SettlementAssault(SubjectId id, SubjectId taskId, SubjectId hiveId
     }
 
     public SubjectId settlementId() { return sighting.settlementId(); }
+    /** Same exact parent as the preceding cocoon mobilisation. */
+    public SubjectId expeditionId() { return HiveExpeditionIdentity.forTask(taskId); }
     public BlockPosition settlementAnchor() { return sighting.settlementAnchor(); }
     public List<SubjectId> attackerIds() { return attackers.stream().map(SettlementAssaultAttacker::actorId).toList(); }
     /** The Overseer is physically present but does not become an interchangeable attack source. */
