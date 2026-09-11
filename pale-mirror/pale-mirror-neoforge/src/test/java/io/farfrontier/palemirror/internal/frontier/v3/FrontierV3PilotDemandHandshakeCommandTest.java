@@ -1,5 +1,10 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.mojang.brigadier.builder.RequiredArgumentBuilder;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import org.junit.jupiter.api.Test;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
@@ -22,6 +27,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrontierV3PilotDemandHandshakeCommandTest {
@@ -58,6 +64,38 @@ class FrontierV3PilotDemandHandshakeCommandTest {
         assertEquals(FrontierV3PilotDemandHandshakeCommand.Reason.NO_DEMAND,
                 FrontierV3PilotDemandHandshakeCommand.reason(false, READY_TICKET, Optional.of("projection-snapshot"),
                         Optional.of(1), Optional.of(HANDOFF), true, true));
+    }
+
+    @Test
+    void registeredGrammarRoundTripsTheExactColonBearingArmCommandToItsQueuedDispatchAdapter() throws CommandSyntaxException {
+        FrontierV3PilotDemandHandshakeCommand.TransitionAdapters receipts = new FrontierV3PilotDemandHandshakeCommand.TransitionAdapters();
+        AtomicReference<FrontierV3PilotDemandHandshakeCommand.ArmInput> handlerInput = new AtomicReference<>();
+        AtomicReference<String> queuedCommand = new AtomicReference<>();
+        CommandDispatcher<Boolean> dispatcher = new CommandDispatcher<>();
+        dispatcher.register(FrontierV3PilotDemandHandshakeCommand.commandTree(Boolean::booleanValue, (context, input) -> {
+            handlerInput.set(input);
+            return receipts.armAndDispatch(PLAYER, "PMTestPilot", input.transitionArm(), queuedCommand::set) ? 1 : 0;
+        }));
+
+        FrontierV3PilotDemandReceiptTransition.Arm arm = armed().transitionArm();
+        String command = FrontierV3PilotDemandReceiptTransition.armCommand(arm);
+        assertEquals(1, dispatcher.execute(command, true));
+        assertEquals(arm, handlerInput.get().transitionArm());
+        assertEquals(ASSAULT.value(), handlerInput.get().assault());
+        assertEquals("pale_mirror:frontier_graybox", handlerInput.get().dimension());
+        assertEquals("execute in pale_mirror:frontier_graybox run tp PMTestPilot -360 65 -352", queuedCommand.get());
+
+        CommandDispatcher<Boolean> order34WordGrammar = new CommandDispatcher<>();
+        var oldAssault = RequiredArgumentBuilder.<Boolean, String>argument("assault", StringArgumentType.word()).executes(context -> 1);
+        var oldRequest = RequiredArgumentBuilder.<Boolean, String>argument("request", StringArgumentType.word()).then(oldAssault);
+        var oldArm = LiteralArgumentBuilder.<Boolean>literal("arm").then(oldRequest);
+        order34WordGrammar.register(LiteralArgumentBuilder.<Boolean>literal(FrontierV3PilotDemandHandshakeCommand.COMMAND).then(oldArm));
+        assertThrows(CommandSyntaxException.class, () -> order34WordGrammar.execute(command, true));
+
+        handlerInput.set(null);
+        assertEquals(0, dispatcher.execute(command.replace(ASSAULT.value(), "foreign:development-settlement-assault"), true));
+        assertNull(handlerInput.get());
+        assertThrows(CommandSyntaxException.class, () -> dispatcher.execute(command + " extra", true));
     }
 
     @Test

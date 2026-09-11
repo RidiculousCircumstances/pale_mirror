@@ -2,6 +2,9 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.mojang.brigadier.builder.RequiredArgumentBuilder;
+import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import io.farfrontier.palemirror.PaleMirrorMod;
@@ -11,7 +14,7 @@ import io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3PilotDista
 import io.farfrontier.palemirror.internal.frontier.v3.client.FrontierV3PilotDemandReceiptTransition;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import net.minecraft.commands.CommandSourceStack;
-import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.ResourceLocationArgument;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
@@ -38,6 +41,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.UUID;
+import java.util.function.Predicate;
 
 /**
  * Pilot-only acknowledgement armed before ordinary travel, retained through transfer, then read
@@ -53,40 +57,61 @@ public final class FrontierV3PilotDemandHandshakeCommand {
 
     @SubscribeEvent
     public static void register(RegisterCommandsEvent event) {
-        event.getDispatcher().register(Commands.literal(COMMAND).requires(source -> source.hasPermission(4))
-                .then(Commands.literal("arm").then(Commands.argument("request", StringArgumentType.word())
-                        .then(Commands.argument("assault", StringArgumentType.word())
-                                .then(Commands.argument("dimension", StringArgumentType.word())
-                                        .then(Commands.argument("run", StringArgumentType.word())
-                                                .then(Commands.argument("step", IntegerArgumentType.integer(1))
-                                                        .then(Commands.argument("attempt", StringArgumentType.word())
-                                                                .then(Commands.argument("x", IntegerArgumentType.integer())
-                                                                        .then(Commands.argument("y", IntegerArgumentType.integer())
-                                                                                .then(Commands.argument("z", IntegerArgumentType.integer()).executes(
-                                                                                        FrontierV3PilotDemandHandshakeCommand::arm))))))))))));
+        event.getDispatcher().register(commandTree(source -> source.hasPermission(4), FrontierV3PilotDemandHandshakeCommand::arm));
     }
 
-    private static int arm(com.mojang.brigadier.context.CommandContext<CommandSourceStack> context) {
-        String request = StringArgumentType.getString(context, "request");
-        String assault = StringArgumentType.getString(context, "assault");
-        String dimension = StringArgumentType.getString(context, "dimension");
+    /** The registered pilot grammar accepts resource identifiers without changing their wire form. */
+    static <S> LiteralArgumentBuilder<S> commandTree(Predicate<S> authorized, ArmHandler<S> handler) {
+        var z = RequiredArgumentBuilder.<S, Integer>argument("z", IntegerArgumentType.integer()).executes(context -> dispatchArm(context, handler));
+        var y = RequiredArgumentBuilder.<S, Integer>argument("y", IntegerArgumentType.integer()).then(z);
+        var x = RequiredArgumentBuilder.<S, Integer>argument("x", IntegerArgumentType.integer()).then(y);
+        var attempt = RequiredArgumentBuilder.<S, String>argument("attempt", StringArgumentType.word()).then(x);
+        var step = RequiredArgumentBuilder.<S, Integer>argument("step", IntegerArgumentType.integer(1)).then(attempt);
+        var run = RequiredArgumentBuilder.<S, String>argument("run", StringArgumentType.word()).then(step);
+        var dimension = RequiredArgumentBuilder.<S, ResourceLocation>argument("dimension", ResourceLocationArgument.id()).then(run);
+        var assault = RequiredArgumentBuilder.<S, ResourceLocation>argument("assault", ResourceLocationArgument.id()).then(dimension);
+        var request = RequiredArgumentBuilder.<S, String>argument("request", StringArgumentType.word()).then(assault);
+        return LiteralArgumentBuilder.<S>literal(COMMAND).requires(authorized::test)
+                .then(LiteralArgumentBuilder.<S>literal("arm").then(request));
+    }
+
+    private static <S> int dispatchArm(CommandContext<S> context, ArmHandler<S> handler) {
         FrontierV3PilotDemandReceiptTransition.Correlation correlation;
-        try { correlation = new FrontierV3PilotDemandReceiptTransition.Correlation(StringArgumentType.getString(context, "run"), IntegerArgumentType.getInteger(context, "step"), StringArgumentType.getString(context, "attempt")); }
+        try {
+            correlation = new FrontierV3PilotDemandReceiptTransition.Correlation(StringArgumentType.getString(context, "run"),
+                    IntegerArgumentType.getInteger(context, "step"), StringArgumentType.getString(context, "attempt"));
+        }
         catch (IllegalArgumentException invalid) { return 0; }
+        String request = StringArgumentType.getString(context, "request");
+        String assault = context.getArgument("assault", ResourceLocation.class).toString();
+        String dimension = context.getArgument("dimension", ResourceLocation.class).toString();
         BlockPos travelAnchor = new BlockPos(IntegerArgumentType.getInteger(context, "x"), IntegerArgumentType.getInteger(context, "y"),
                 IntegerArgumentType.getInteger(context, "z"));
         if (!request.matches("[a-z][a-z0-9_-]{0,63}") || !assault.matches("assault:[a-z0-9][a-z0-9_-]{0,95}")) return 0;
-        ResourceLocation dimensionId = ResourceLocation.tryParse(dimension);
+        return handler.arm(context, new ArmInput(correlation, request, assault, dimension, travelAnchor));
+    }
+
+    private static int arm(CommandContext<CommandSourceStack> context, ArmInput input) {
+        ResourceLocation dimensionId = ResourceLocation.tryParse(input.dimension());
         ServerPlayer player = context.getSource().getEntity() instanceof ServerPlayer value ? value : null;
         if (player == null || dimensionId == null) return 0;
         ResourceKey<Level> destination = ResourceKey.create(Registries.DIMENSION, dimensionId);
         ServerLevel destinationLevel = context.getSource().getServer().getLevel(destination);
         if (destinationLevel == null || player.serverLevel().dimension().equals(destination)) return 0;
-        ArmedReceipt armed = new ArmedReceipt(correlation, request, assault, dimension, destination, travelAnchor);
+        ArmedReceipt armed = new ArmedReceipt(input.correlation(), input.request(), input.assault(), input.dimension(), destination, input.travelAnchor());
         try {
             return TRANSITIONS.armAndDispatch(player.getUUID(), player.getGameProfile().getName(), armed.transitionArm(), command ->
                     context.getSource().getServer().getCommands().performPrefixedCommand(context.getSource(), command)) ? 1 : 0;
         } catch (RuntimeException failure) { TRANSITIONS.forget(player.getUUID()); throw failure; }
+    }
+
+    @FunctionalInterface
+    interface ArmHandler<S> { int arm(CommandContext<S> context, ArmInput input); }
+
+    record ArmInput(FrontierV3PilotDemandReceiptTransition.Correlation correlation, String request, String assault, String dimension, BlockPos travelAnchor) {
+        FrontierV3PilotDemandReceiptTransition.Arm transitionArm() {
+            return new FrontierV3PilotDemandReceiptTransition.Arm(correlation, request, assault, dimension, travelAnchor);
+        }
     }
 
     /** The matching PlayerChangedDimensionEvent is the post-transfer observation boundary. */
