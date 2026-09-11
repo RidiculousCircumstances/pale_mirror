@@ -16,11 +16,13 @@ public enum HiveMobilizationStatus {
     ASSEMBLING,
     /** The retained complete group has atomically transferred to its named operation. */
     DEPARTED,
+    /** The same parent has received its exact child operation's terminal outcome. */
+    COMPLETED,
     /** A loaded-world pre/postcondition disagreed; no body is invented or moved. */
     CONFLICT;
 
     public int wireTag() { return FrontierWireTags.tag(this); }
 
-    /** A departed group is no longer owned by cocoon mobilisation; its operation owns it. */
-    public boolean terminal() { return this == DEPARTED || this == CONFLICT; }
+    /** Departure is a child hand-off, not parent completion. */
+    public boolean terminal() { return this == COMPLETED || this == CONFLICT; }
 }

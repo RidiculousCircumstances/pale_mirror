@@ -231,6 +231,15 @@ public record HiveColony(Map<SubjectId, HiveOrgan> addedOrgans, Map<SubjectId, B
         return new HiveColony(addedOrgans, spawnedBioforms, growthJobs, nutrientTransfers, nutrientReceipts, nextLifecycles, nextMobilizations);
     }
 
+    /** Retains the parent result after its exact departed assault reaches a terminal outcome. */
+    public HiveColony completeMobilization(SubjectId mobilizationId) {
+        HiveMobilization current = mobilizations.get(Objects.requireNonNull(mobilizationId, "hive mobilization id"));
+        if (current == null) throw new IllegalArgumentException("unknown hive mobilization: " + mobilizationId.value());
+        Map<SubjectId, HiveMobilization> next = new LinkedHashMap<>(mobilizations);
+        next.put(mobilizationId, current.complete());
+        return new HiveColony(addedOrgans, spawnedBioforms, growthJobs, nutrientTransfers, nutrientReceipts, bioformLifecycles, next);
+    }
+
     void validateAgainst(FrontierBootstrap bootstrap) {
         var hive = bootstrap.hive();
         var organIds = hive.organs().stream().map(HiveOrgan::id).collect(java.util.stream.Collectors.toSet());
@@ -270,9 +279,9 @@ public record HiveColony(Map<SubjectId, HiveOrgan> addedOrgans, Map<SubjectId, B
                 }
                 BioformLifecyclePhase expected = mobilization.status() == HiveMobilizationStatus.DEPARTED
                         ? BioformLifecyclePhase.ACTIVE
+                        : mobilization.status().terminal() ? null
                         : mobilization.releasedMemberIds().contains(member)
-                        ? BioformLifecyclePhase.ASSEMBLING
-                        : (mobilization.status().terminal() ? null : BioformLifecyclePhase.WAKING);
+                        ? BioformLifecyclePhase.ASSEMBLING : BioformLifecyclePhase.WAKING;
                 if (expected != null && lifecycle.phase() != expected) {
                     throw new IllegalArgumentException("hive mobilization lifecycle does not match its physical release phase");
                 }

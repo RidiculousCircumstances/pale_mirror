@@ -69,7 +69,7 @@ public final class FrontierWireTags {
             entry(HiveMobilizationStatus.class,
                     tag(0, HiveMobilizationStatus.WAKING), tag(1, HiveMobilizationStatus.RELEASING),
                     tag(2, HiveMobilizationStatus.ASSEMBLING), tag(3, HiveMobilizationStatus.CONFLICT),
-                    tag(4, HiveMobilizationStatus.DEPARTED)),
+                    tag(4, HiveMobilizationStatus.DEPARTED), tag(5, HiveMobilizationStatus.COMPLETED)),
             entry(HiveMobilizationConflictReason.class,
                     tag(0, HiveMobilizationConflictReason.COCOON_CHANGED), tag(1, HiveMobilizationConflictReason.UNKNOWN_AFTER_RESTART),
                     tag(2, HiveMobilizationConflictReason.ASSEMBLY_PATH_BLOCKED), tag(3, HiveMobilizationConflictReason.DEPARTURE_UNAVAILABLE)),

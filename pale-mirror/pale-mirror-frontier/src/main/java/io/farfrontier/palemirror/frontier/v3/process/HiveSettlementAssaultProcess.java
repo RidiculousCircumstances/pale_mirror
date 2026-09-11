@@ -221,7 +221,12 @@ public final class HiveSettlementAssaultProcess {
         StrategicTask task = plans.tasks().get(assault.taskId());
         plans = plans.transitionTask(task.id(), resolved.outcome() == SettlementAssaultOutcome.HIVE_VICTORY
                 ? StrategicTaskStatus.COMPLETED : StrategicTaskStatus.BLOCKED);
-        return state.withStrategicPlans(plans);
+        HiveMobilization parent = state.hiveColony().mobilizations().values().stream()
+                .filter(value -> value.taskId().equals(assault.taskId()) && value.status() == HiveMobilizationStatus.DEPARTED)
+                .findFirst().orElse(null);
+        return parent == null ? state.withStrategicPlans(plans)
+                : state.withChanges(FrontierWorldStateUpdate.begin().strategicPlans(plans)
+                        .hiveColony(state.hiveColony().completeMobilization(parent.id())));
     }
 
     private static SettlementAssault assault(FrontierWorldState state, SubjectId id) {

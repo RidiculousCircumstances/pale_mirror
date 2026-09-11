@@ -22,7 +22,7 @@ final class HiveMobilizationStateSupport {
                     || !task.ownerId().equals(bootstrap.hive().id()) || !knownSettlement) {
                 throw new IllegalArgumentException("hive mobilization must retain one exact assault task and settlement target");
             }
-            if (mobilization.status() != HiveMobilizationStatus.DEPARTED) {
+            if (mobilization.status() != HiveMobilizationStatus.DEPARTED && mobilization.status() != HiveMobilizationStatus.COMPLETED) {
                 if (task.status() != StrategicTaskStatus.ACTIVE) {
                     throw new IllegalArgumentException("an un-departed hive mobilization must retain one active exact assault task");
                 }
@@ -36,10 +36,16 @@ final class HiveMobilizationStateSupport {
                 throw new IllegalArgumentException("a departed hive mobilization must retain exactly one same-sighting settlement assault");
             }
             SettlementAssault departure = departures.getFirst();
+            if (mobilization.status() == HiveMobilizationStatus.DEPARTED && departure.status() == SettlementAssaultStatus.RESOLVED) {
+                throw new IllegalArgumentException("a resolved expedition child must close its departed parent atomically");
+            }
             if (departure.status() != SettlementAssaultStatus.RESOLVED && task.status() != StrategicTaskStatus.ACTIVE) {
                 throw new IllegalArgumentException("an unresolved departed assault must retain its active exact task");
             }
             if (departure.status() == SettlementAssaultStatus.RESOLVED) {
+                if (mobilization.status() != HiveMobilizationStatus.COMPLETED) {
+                    throw new IllegalArgumentException("a terminal expedition child requires its completed parent receipt");
+                }
                 StrategicTaskStatus expected = departure.outcome().orElseThrow() == SettlementAssaultOutcome.HIVE_VICTORY
                         ? StrategicTaskStatus.COMPLETED : StrategicTaskStatus.BLOCKED;
                 if (task.status() != expected) {

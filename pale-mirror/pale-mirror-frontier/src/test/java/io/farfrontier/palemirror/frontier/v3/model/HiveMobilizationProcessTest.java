@@ -279,11 +279,14 @@ class HiveMobilizationProcessTest {
                 "a durable departure payload may not alter its deterministic initial assault state");
         HiveMobilization departed = state.hiveColony().mobilizations().get(initial.id());
         assertEquals(HiveMobilizationStatus.DEPARTED, departed.status());
+        assertFalse(departed.status().terminal(), "child hand-off is not parent completion");
+        assertEquals(HiveMobilizationStatus.COMPLETED, departed.complete().status());
+        assertTrue(departed.complete().status().terminal());
         assertEquals(started, state.strategicPlans().settlementAssaults().get(started.id()));
         FrontierWorldState departedState = state;
         assertTrue(initial.memberIds().stream().allMatch(member -> departedState.hiveColony().bioformLifecycles().get(member).phase()
-                == BioformLifecyclePhase.ACTIVE && HivePhysiologySupport.availableForIndependentOperation(departedState, member)),
-                "the same materialized organisms become active only after their completed exact transfer");
+                == BioformLifecyclePhase.ACTIVE && !HivePhysiologySupport.availableForIndependentOperation(departedState, member)),
+                "the same materialized organisms become active only after their completed exact transfer, while the live parent retains their operation custody");
         assertTrue(initial.memberIds().stream().allMatch(member -> departedState.ambientLeases().get(member) == null
                 || departedState.ambientLeases().get(member).status() == AmbientLeaseStatus.CLOSED),
                 "the operation hand-off must close only its obsolete assembly HOT authority");

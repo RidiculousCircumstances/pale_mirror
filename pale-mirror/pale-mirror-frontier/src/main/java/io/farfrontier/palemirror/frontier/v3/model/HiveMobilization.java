@@ -68,8 +68,8 @@ public record HiveMobilization(SubjectId id, SubjectId hiveId, SubjectId nestId,
         if (releasingMemberId.isPresent() && !expectedReleasingMember.equals(releasingMemberId)) {
             throw new IllegalArgumentException("releasing hive mobilization member is not the exact next cocoon occupant");
         }
-        if ((status == HiveMobilizationStatus.ASSEMBLING || status == HiveMobilizationStatus.DEPARTED) && assembly.isEmpty()
-                || status != HiveMobilizationStatus.ASSEMBLING && status != HiveMobilizationStatus.DEPARTED
+        if ((status == HiveMobilizationStatus.ASSEMBLING || status == HiveMobilizationStatus.DEPARTED || status == HiveMobilizationStatus.COMPLETED) && assembly.isEmpty()
+                || status != HiveMobilizationStatus.ASSEMBLING && status != HiveMobilizationStatus.DEPARTED && status != HiveMobilizationStatus.COMPLETED
                 && status != HiveMobilizationStatus.CONFLICT && assembly.isPresent()) {
             throw new IllegalArgumentException("only an assembling, departed or conflicted complete mobilization retains one exact assembly plan");
         }
@@ -138,6 +138,15 @@ public record HiveMobilization(SubjectId id, SubjectId hiveId, SubjectId nestId,
         }
         return new HiveMobilization(id, hiveId, nestId, taskId, settlementId, sighting, overseerId, memberIds, releasedMemberIds,
                 Optional.empty(), assembly, HiveMobilizationStatus.DEPARTED, Optional.empty(), Optional.empty(), startedAt);
+    }
+
+    /** The parent closes only after its retained child reports one terminal result. */
+    public HiveMobilization complete() {
+        if (status != HiveMobilizationStatus.DEPARTED) {
+            throw new IllegalArgumentException("only a departed expedition parent may complete");
+        }
+        return new HiveMobilization(id, hiveId, nestId, taskId, settlementId, sighting, overseerId, memberIds, releasedMemberIds,
+                Optional.empty(), assembly, HiveMobilizationStatus.COMPLETED, Optional.empty(), Optional.empty(), startedAt);
     }
 
     public HiveMobilization conflict(HiveMobilizationConflictReason reason) {
