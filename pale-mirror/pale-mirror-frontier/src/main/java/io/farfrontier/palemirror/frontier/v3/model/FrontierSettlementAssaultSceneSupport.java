@@ -34,7 +34,8 @@ public final class FrontierSettlementAssaultSceneSupport {
     static java.util.List<SettlementAssaultSceneCandidate> candidates(FrontierWorldState state,
                                                                        FrontierSettlementAssaultBattlefield.Provider provider) {
         return state.strategicPlans().settlementAssaults().values().stream()
-                .filter(assault -> assault.status() == SettlementAssaultStatus.COLD_COMBAT)
+                .filter(assault -> assault.status() == SettlementAssaultStatus.COLD_COMBAT
+                        && assault.tacticalPlan().currentFor(state.strategicPlans()))
                 .sorted(java.util.Comparator.comparing(SettlementAssault::id))
                 .map(assault -> FrontierSettlementAssaultBattlefield.candidate(state, assault, provider)).flatMap(java.util.Optional::stream).toList();
     }
@@ -43,6 +44,7 @@ public final class FrontierSettlementAssaultSceneSupport {
         SettlementAssaultSceneCause cause = FrontierSceneBehaviors.settlementAssault(lease);
         SettlementAssault assault = require(state, cause);
         if (lease.status() != SceneLeaseStatus.PREPARED || assault.status() != SettlementAssaultStatus.COLD_COMBAT
+                || !assault.tacticalPlan().currentFor(state.strategicPlans())
                 || !lease.handoffPosition().equals(assault.settlementAnchor()) || !targetIntact(state, assault)) {
             throw new IllegalArgumentException("assault scene must prepare one intact COLD battle at its retained anchor");
         }

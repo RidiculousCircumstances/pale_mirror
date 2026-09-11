@@ -107,6 +107,8 @@ class SettlementAssaultTest {
                 .filter(objective -> objective.ownerId().equals(hive) && objective.status() == StrategicObjectiveStatus.ACTIVE)
                 .map(StrategicObjective::id).toList();
         FrontierWorldState reconsidered = state.withStrategicPlans(state.strategicPlans().reconsider(hive, currentCommitments, List.of()));
+        assertTrue(reconsidered.coldSettlementAssaultSceneCandidates().isEmpty(),
+                "a superseded expedition tactical plan must not admit a second HOT scene");
         assertThrows(IllegalArgumentException.class,
                 () -> reconsidered.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation)),
                 "a superseded expedition authority must not commit its stale child-front receipt");
