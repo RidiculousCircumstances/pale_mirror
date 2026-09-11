@@ -53,6 +53,37 @@ class HiveNutrientTransferProcessTest {
     }
 
     @Test
+    void hotFungibleTargetAcceptsOnlyTheObservedCompleteCargoLayout() {
+        FrontierWorldState baseline = growthTaskState();
+        SubjectId hive = baseline.bootstrap().hive().id(), east = new SubjectId("container:hive-east-store"), west = new SubjectId("container:hive-west-store");
+        SubjectId lotId = new SubjectId("lot:hive-east-biomass"), accountId = new SubjectId("custody:hive-east-biomass");
+        ResourceLot biomass = new ResourceLot(lotId, hive, "minecraft:rotten_flesh", 64, "bootstrap", List.of());
+        CustodyAccount account = new CustodyAccount(accountId, new ResourceCustody.Container(east), Map.of(lotId, 64), Map.of());
+        FrontierWorldState source = baseline.withInventory(baseline.inventory().withFungibleResources(FungibleResourceLedger.empty().issue(biomass, account)));
+        StrategicTask task = source.strategicPlans().tasks().get(new SubjectId("task:hive-nutrient"));
+        HiveNutrientTransfer transfer = HiveNutrientTransferProcess.create(source, task,
+                new FungibleResourceCustodySupport.LotAtContainer(accountId, biomass, 64), west, 0);
+        FrontierWorldState inTransit = HiveNutrientTransferProcess.reduceStarted(source, hive, transfer);
+        for (int cursor = 1; cursor < transfer.corridor().size(); cursor++) {
+            inTransit = HiveNutrientTransferProcess.reduceAdvanced(inTransit, hive, new HiveNutrientTransferAdvanced(transfer.id(), cursor));
+        }
+        FrontierWorldState targetHeld = ReferenceContainerCustodyFixtures.observedAndHeld(inTransit.withInventory(inTransit.inventory()
+                .withSurfaceStatus(west, ContainerSurfaceStatus.PREPARED)), west);
+        HiveNutrientTransfer waiting = targetHeld.hiveColony().nutrientTransfers().get(transfer.id()).awaitArrival(new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:hive-nutrient-arrival-task-hive-nutrient"));
+        FrontierWorldState pending = HiveNutrientTransferProcess.reduceEndpointPrepared(targetHeld, hive, new HiveNutrientTransferEndpointPrepared(waiting));
+        var arrival = HiveNutrientTransferStateSupport.arrivalIntent(pending, waiting);
+        FrontierWorldState running = pending.preparePhysicalIntent(arrival).transitionPhysicalIntent(arrival.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
+        FungibleCargoHandoffObservation observed = new FungibleCargoHandoffObservation(new PhysicalObservationId("observation:fungible-hive-nutrient-arrival"), arrival.id(),
+                transfer.cargoId(), 1L, List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(west, 0)), biomass.itemKind(), 64)));
+        FrontierWorldState arrived = running.transitionPhysicalIntent(arrival.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observed));
+
+        assertTrue(arrived.inventory().cargo().isEmpty());
+        assertEquals(HiveNutrientReceiptStatus.STORED, arrived.hiveColony().nutrientReceipts().get(transfer.id()).status());
+        assertEquals(64, arrived.inventory().fungibleResources().accounts().values().stream().filter(value -> value.custody()
+                instanceof ResourceCustody.Container container && container.containerId().equals(west)).findFirst().orElseThrow().lotQuantities().get(lotId));
+    }
+
+    @Test
     void hotFungibleSourceRemainsBoundUntilObservedRemovalCreatesOneColdCargoPortion() {
         FrontierWorldState baseline = growthTaskState();
         SubjectId hive = baseline.bootstrap().hive().id(), east = new SubjectId("container:hive-east-store");

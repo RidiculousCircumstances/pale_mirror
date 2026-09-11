@@ -29,6 +29,12 @@ final class FrontierWorldPhysicalObservationValidation {
             if (observation instanceof CargoHandoffObservation cargo) {
                 FrontierCargoValidation.validateObservation(bootstrap, operations, contracts, inventory, intent, cargo);
             } else if (observation instanceof FungibleCargoHandoffObservation cargo) {
+                if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.HIVE_NUTRIENT_ARRIVAL) {
+                    if (intent.subjectIds().size() != 3 || !intent.subjectIds().get(1).equals(cargo.cargoId())) {
+                        throw new IllegalArgumentException("fungible nutrient arrival receipt has foreign cargo");
+                    }
+                    continue;
+                }
                 RouteOperation operation = operations.get(intent.causeSubjectId());
                 if (intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_HANDOFF || operation == null
                         || !operation.cargoId().equals(cargo.cargoId()) || inventory.cargo().containsKey(cargo.cargoId())) {

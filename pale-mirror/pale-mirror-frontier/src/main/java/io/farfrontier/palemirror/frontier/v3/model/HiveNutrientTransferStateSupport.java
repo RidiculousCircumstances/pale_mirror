@@ -207,6 +207,22 @@ public final class HiveNutrientTransferStateSupport {
                 observations, state.sceneLeases(), state.hiveColony().completeNutrientTransfer(receipt), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
     }
 
+    static FrontierWorldState completeFungiblePhysicalArrival(FrontierWorldState state, PhysicalIntent intent, FungibleCargoHandoffObservation observed,
+                                                               Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, PhysicalIntent> intents) {
+        HiveNutrientTransfer transfer = requireUnblocked(state, intent.subjectIds().getFirst());
+        if (!transfer.fungibleContents() || transfer.phase() != HiveNutrientTransferPhase.ARRIVAL_PENDING
+                || !transfer.endpointIntentId().equals(java.util.Optional.of(intent.id())) || !observed.intentId().equals(intent.id())
+                || !transfer.cargoId().equals(observed.cargoId())) {
+            throw new IllegalArgumentException("fungible nutrient arrival observation does not match its retained cargo");
+        }
+        HiveNutrientReceipt receipt = new HiveNutrientReceipt(transfer.id(), transfer.hiveId(), transfer.cargoId(), transfer.itemId(), transfer.sourceSlot(), transfer.targetSlot());
+        intents.put(intent.id(), intent.withStatus(PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(observed.id())));
+        Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId, PhysicalEffectObservation> observations = new java.util.LinkedHashMap<>(state.physicalObservations()); observations.put(observed.id(), observed);
+        ExactInventory inventory = state.inventory().completeObservedFungibleCargoHandoff(transfer.cargoId(), transfer.targetStoreId(), observed.authorityEpoch(), observed.stacks());
+        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), inventory, state.productionJobs(), state.contracts(), state.operations(), intents,
+                observations, state.sceneLeases(), state.hiveColony().completeNutrientTransfer(receipt), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
+    }
+
     static FrontierWorldState completeEndpoint(FrontierWorldState state, PhysicalIntent intent, PhysicalEffectObservation evidence,
                                                Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, PhysicalIntent> intents) {
         if (intent.kind() == PhysicalIntentKind.HIVE_NUTRIENT_DEPARTURE) {
@@ -215,6 +231,7 @@ public final class HiveNutrientTransferStateSupport {
             return completePhysicalDeparture(state, intent, departure, intents);
         }
         if (intent.kind() == PhysicalIntentKind.HIVE_NUTRIENT_ARRIVAL) {
+            if (evidence instanceof FungibleCargoHandoffObservation arrival) return completeFungiblePhysicalArrival(state, intent, arrival, intents);
             if (!(evidence instanceof HiveNutrientArrivalObservation arrival)) throw new IllegalArgumentException("hive nutrient arrival requires exact target insertion evidence");
             return completePhysicalArrival(state, intent, arrival, intents);
         }
