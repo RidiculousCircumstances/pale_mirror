@@ -501,13 +501,9 @@ public final class StrategicPlanState {
         if (task == null || !currentDecisionAuthority(task.authorityId(), task.authorityEpoch())) {
             throw new IllegalArgumentException("HOT assault strike has no current decision authority");
         }
-        OperationFrontEffectKey effect = new OperationFrontEffectKey(intent.causeSubjectId(), assaultFront(assault, "attack"),
-                assaultFront(assault, "defence"), task.authorityEpoch());
+        OperationFrontEffectKey effect = new OperationFrontEffectKey(intent.causeSubjectId(), assault.attackFront().id(),
+                assault.defenceFront().id(), task.authorityEpoch());
         return recordFrontEffect(effect).replaceSettlementAssault(assault.afterHotStrike(Math.toIntExact(epoch)));
-    }
-
-    private static SubjectId assaultFront(SettlementAssault assault, String lane) {
-        return new SubjectId("front:" + assault.id().value().substring("assault:".length()).replace(':', '-') + "-" + lane);
     }
 
     public StrategicPlanState transitionSettlementAssault(SubjectId assaultId, SettlementAssaultStatus nextStatus) {

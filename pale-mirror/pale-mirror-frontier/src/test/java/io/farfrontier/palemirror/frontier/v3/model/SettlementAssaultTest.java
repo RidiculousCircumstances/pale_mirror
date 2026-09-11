@@ -28,6 +28,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class SettlementAssaultTest {
@@ -106,6 +107,10 @@ class SettlementAssaultTest {
         String frontPrefix = "front:" + assault.id().value().substring("assault:".length()).replace(':', '-');
         OperationFrontEffectKey effect = new OperationFrontEffectKey(cause, new SubjectId(frontPrefix + "-attack"),
                 new SubjectId(frontPrefix + "-defence"), 0L);
+        assertEquals(assault.expeditionId(), assault.attackFront().expeditionId());
+        assertEquals(assault.expeditionId(), assault.defenceFront().expeditionId());
+        assertTrue(java.util.Collections.disjoint(assault.attackFront().actorIds(), assault.defenceFront().actorIds()),
+                "the two child fronts must retain disjoint canonical actor allocations");
         assertFalse(state.strategicPlans().frontEffects().accepts(effect),
                 "the attack and defence allocations share one durable cross-front receipt");
         FrontierWorldState confirmed = state;

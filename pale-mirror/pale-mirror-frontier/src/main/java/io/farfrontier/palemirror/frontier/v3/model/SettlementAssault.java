@@ -83,7 +83,14 @@ public record SettlementAssault(SubjectId id, SubjectId taskId, SubjectId hiveId
     /** The Overseer is physically present but does not become an interchangeable attack source. */
     public List<SubjectId> combatantAttackerIds() { return attackers.stream().map(SettlementAssaultAttacker::actorId).filter(id -> !id.equals(overseerId)).toList(); }
     public List<SubjectId> defenderIds() { return defenderUnit.memberIds(); }
+    public SettlementAssaultFront attackFront() { return front("attack", attackerIds()); }
+    public SettlementAssaultFront defenceFront() { return front("defence", defenderIds()); }
     public boolean allAttackersAtBattlefield() { return attackers.stream().allMatch(SettlementAssaultAttacker::atDestination); }
+
+    private SettlementAssaultFront front(String lane, List<SubjectId> members) {
+        return new SettlementAssaultFront(new SubjectId("front:" + id.value().substring("assault:".length()).replace(':', '-') + "-" + lane),
+                expeditionId(), tacticalPlan.id(), tacticalPlan.planEpoch(), members);
+    }
 
     public SettlementAssault advanceAttacker(SubjectId actorId, int nextRouteIndex) {
         if (status != SettlementAssaultStatus.APPROACHING) {
