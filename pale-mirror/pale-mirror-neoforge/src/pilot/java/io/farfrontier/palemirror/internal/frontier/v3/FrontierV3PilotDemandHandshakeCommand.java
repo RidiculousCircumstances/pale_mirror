@@ -23,38 +23,45 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.level.Ticket;
 import net.minecraft.util.SortedArraySet;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.ChunkPos;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Pilot-only acknowledgement for a completed ordinary visit.  It only reads the server thread's
- * current player/ticket/holder/runtime state; in particular it never queues scene admission or
- * changes ticket, chunk, canonical, cache, or lifecycle ownership.
+ * Pilot-only acknowledgement armed before ordinary travel and fulfilled immediately after the
+ * ordinary destination transfer. It only reads current player/ticket/holder/runtime state; in
+ * particular it never queues scene admission or changes ticket, chunk, canonical, cache, or
+ * lifecycle ownership.
  */
 @EventBusSubscriber(modid = PaleMirrorMod.MOD_ID)
 public final class FrontierV3PilotDemandHandshakeCommand {
     static final String COMMAND = "pale_mirror_pilot_demand_handshake";
+    private static final ArmedReceipts ARMED = new ArmedReceipts();
 
     private FrontierV3PilotDemandHandshakeCommand() { }
 
     @SubscribeEvent
     public static void register(RegisterCommandsEvent event) {
         event.getDispatcher().register(Commands.literal(COMMAND).requires(source -> source.hasPermission(4))
-                .then(Commands.argument("request", StringArgumentType.word())
+                .then(Commands.literal("arm").then(Commands.argument("request", StringArgumentType.word())
                         .then(Commands.argument("assault", StringArgumentType.word())
                                 .then(Commands.argument("dimension", StringArgumentType.word())
                                         .then(Commands.argument("x", IntegerArgumentType.integer())
                                                 .then(Commands.argument("y", IntegerArgumentType.integer())
                                                         .then(Commands.argument("z", IntegerArgumentType.integer()).executes(
-                                                                FrontierV3PilotDemandHandshakeCommand::acknowledge))))))));
+                                                                FrontierV3PilotDemandHandshakeCommand::arm)))))))));
     }
 
-    private static int acknowledge(com.mojang.brigadier.context.CommandContext<CommandSourceStack> context) {
+    private static int arm(com.mojang.brigadier.context.CommandContext<CommandSourceStack> context) {
         String request = StringArgumentType.getString(context, "request");
         String assault = StringArgumentType.getString(context, "assault");
         String dimension = StringArgumentType.getString(context, "dimension");
@@ -63,16 +70,59 @@ public final class FrontierV3PilotDemandHandshakeCommand {
         if (!request.matches("[a-z][a-z0-9_-]{0,63}") || !assault.matches("assault:[a-z0-9][a-z0-9_-]{0,95}")) return 0;
         ResourceLocation dimensionId = ResourceLocation.tryParse(dimension);
         ServerPlayer player = context.getSource().getEntity() instanceof ServerPlayer value ? value : null;
-        ServerLevel destination = dimensionId == null ? null : context.getSource().getServer().getLevel(ResourceKey.create(Registries.DIMENSION, dimensionId));
-        FrontierV3PilotSceneDemandSnapshot snapshot = destination == null ? null
-                : FrontierV3ServerLifecycle.pilotSceneDemandSnapshot(destination, new SubjectId(assault));
+        if (player == null || dimensionId == null) return 0;
+        ResourceKey<Level> destination = ResourceKey.create(Registries.DIMENSION, dimensionId);
+        if (context.getSource().getServer().getLevel(destination) == null) return 0;
+        ARMED.arm(player.getUUID(), new ArmedReceipt(request, assault, dimension, destination, travelAnchor));
+        return 1;
+    }
+
+    /** The matching PlayerChangedDimensionEvent is the post-transfer observation boundary. */
+    @SubscribeEvent
+    public static void onPlayerChangedDimension(PlayerEvent.PlayerChangedDimensionEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        ARMED.fulfillAfterOrdinaryTransfer(player.getUUID(), event.getTo()).ifPresent(armed -> {
+            ServerLevel destination = player.serverLevel();
+            FrontierV3PilotDemandHandshakeCommand.receipt(player, destination, armed).ifPresent(value ->
+                    player.sendSystemMessage(Component.literal("PMV3_DIAG " + value.json())));
+        });
+    }
+
+    @SubscribeEvent
+    public static void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player) ARMED.forget(player.getUUID());
+    }
+
+    @SubscribeEvent
+    public static void onServerStopped(ServerStoppedEvent event) {
+        ARMED.clear();
+    }
+
+    private static Optional<Receipt> receipt(ServerPlayer player, ServerLevel destination, ArmedReceipt armed) {
+        if (!destination.dimension().equals(armed.destination())) return Optional.empty();
+        FrontierV3PilotSceneDemandSnapshot snapshot = FrontierV3ServerLifecycle.pilotSceneDemandSnapshot(destination, new SubjectId(armed.assault()));
         BlockPos handoff = snapshot == null ? null : snapshot.handoffPosition().map(position -> new BlockPos(position.x(), position.y(), position.z())).orElse(null);
-        TicketState ticket = destination == null || handoff == null ? TicketState.absent() : ticketState(destination, handoff);
-        boolean destinationObserved = player != null && destination != null && player.serverLevel() == destination;
-        Receipt receipt = Receipt.from(request, assault, dimension, travelAnchor, player == null ? Optional.empty() : Optional.of(player.getUUID()),
-                player == null ? Optional.empty() : Optional.of(player.blockPosition()), destinationObserved, ticket, snapshot);
-        context.getSource().sendSuccess(() -> Component.literal("PMV3_DIAG " + receipt.json()), false);
-        return receipt.reason() == Reason.ADMITTED ? 1 : 0;
+        TicketState ticket = handoff == null ? TicketState.absent() : ticketState(destination, handoff);
+        boolean destinationObserved = player.serverLevel() == destination;
+        return Optional.of(Receipt.from(armed.request(), armed.assault(), armed.dimension(), armed.travelAnchor(), Optional.of(player.getUUID()),
+                Optional.of(player.blockPosition()), destinationObserved, ticket, snapshot));
+    }
+
+    record ArmedReceipt(String request, String assault, String dimension, ResourceKey<Level> destination, BlockPos travelAnchor) { }
+
+    /** One pending receipt per player; a different transfer cannot consume it and logout/server stop clears it. */
+    static final class ArmedReceipts {
+        private final Map<UUID, ArmedReceipt> receipts = new HashMap<>();
+        void arm(UUID player, ArmedReceipt receipt) { receipts.put(player, receipt); }
+        Optional<ArmedReceipt> fulfillAfterOrdinaryTransfer(UUID player, ResourceKey<Level> destination) {
+            ArmedReceipt receipt = receipts.get(player);
+            if (receipt == null || !receipt.destination().equals(destination)) return Optional.empty();
+            receipts.remove(player);
+            return Optional.of(receipt);
+        }
+        void forget(UUID player) { receipts.remove(player); }
+        void clear() { receipts.clear(); }
+        boolean pending(UUID player) { return receipts.containsKey(player); }
     }
 
     private static TicketState ticketState(ServerLevel level, BlockPos anchor) {

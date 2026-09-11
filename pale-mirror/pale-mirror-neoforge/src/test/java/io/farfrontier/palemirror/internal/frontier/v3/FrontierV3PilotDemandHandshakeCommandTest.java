@@ -6,6 +6,10 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCandidate;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.level.Level;
 
 import java.util.List;
 import java.util.Map;
@@ -84,6 +88,46 @@ class FrontierV3PilotDemandHandshakeCommandTest {
         assertEquals(FrontierV3PilotDemandHandshakeCommand.Reason.NO_CANDIDATE,
                 FrontierV3PilotDemandHandshakeCommand.reason(true, READY_TICKET, zero.providerIdentity(), Optional.of(0), zero.handoffPosition(), false, false));
         assertFalse(zero.demandChunkLoaded());
+    }
+
+    @Test
+    void prearmedReceiptIsFulfilledOnceAtTheMatchingPostTransferBoundaryBeforeALateConsumerCanEraseItsCandidate() {
+        FrontierV3PilotDemandHandshakeCommand.ArmedReceipts receipts = new FrontierV3PilotDemandHandshakeCommand.ArmedReceipts();
+        ResourceKey<Level> destination = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse("pale_mirror:frontier_graybox"));
+        ResourceKey<Level> wrongDestination = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse("minecraft:overworld"));
+        FrontierV3PilotDemandHandshakeCommand.ArmedReceipt armed = new FrontierV3PilotDemandHandshakeCommand.ArmedReceipt(
+                "settlement-assault-visit", ASSAULT.value(), destination.location().toString(), destination, new BlockPos(-360, 65, -352));
+
+        receipts.arm(PLAYER, armed);
+        assertTrue(receipts.fulfillAfterOrdinaryTransfer(PLAYER, wrongDestination).isEmpty());
+        assertTrue(receipts.pending(PLAYER));
+        assertEquals(Optional.of(armed), receipts.fulfillAfterOrdinaryTransfer(PLAYER, destination));
+        assertFalse(receipts.pending(PLAYER));
+        // A later scene turn may consume the cold candidate, but cannot replace this exact receipt.
+        assertTrue(receipts.fulfillAfterOrdinaryTransfer(PLAYER, destination).isEmpty());
+
+        FrontierV3PilotSceneDemandSnapshot early = FrontierV3PilotSceneDemandSnapshot.fromProviderCandidates(Optional.of("projection-snapshot"),
+                List.of(candidate(ASSAULT, HANDOFF)), ASSAULT, handoff -> new FrontierV3SceneDemand.Snapshot(true, Set.of(PLAYER)));
+        FrontierV3PilotDemandHandshakeCommand.Receipt earlyReceipt = FrontierV3PilotDemandHandshakeCommand.Receipt.from(armed.request(), armed.assault(), armed.dimension(),
+                armed.travelAnchor(), Optional.of(PLAYER), Optional.of(armed.travelAnchor()), true, READY_TICKET, early);
+        assertEquals(FrontierV3PilotDemandHandshakeCommand.Reason.ADMITTED, earlyReceipt.reason());
+
+        FrontierV3PilotSceneDemandSnapshot late = FrontierV3PilotSceneDemandSnapshot.fromProviderCandidates(Optional.of("projection-snapshot"), List.of(), ASSAULT,
+                handoff -> new FrontierV3SceneDemand.Snapshot(false, Set.of()));
+        assertEquals(FrontierV3PilotDemandHandshakeCommand.Reason.NO_CANDIDATE,
+                FrontierV3PilotDemandHandshakeCommand.reason(true, READY_TICKET, late.providerIdentity(), Optional.of(late.exactCandidateCount().orElse(0)), late.handoffPosition(), false, false));
+    }
+
+    @Test
+    void armedReceiptIsRemovedOnTheSamePilotCleanupBoundariesAsTheTransferOwner() {
+        FrontierV3PilotDemandHandshakeCommand.ArmedReceipts receipts = new FrontierV3PilotDemandHandshakeCommand.ArmedReceipts();
+        ResourceKey<Level> destination = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse("pale_mirror:frontier_graybox"));
+        FrontierV3PilotDemandHandshakeCommand.ArmedReceipt armed = new FrontierV3PilotDemandHandshakeCommand.ArmedReceipt(
+                "settlement-assault-visit", ASSAULT.value(), destination.location().toString(), destination, BlockPos.ZERO);
+        receipts.arm(PLAYER, armed); receipts.forget(PLAYER);
+        assertFalse(receipts.pending(PLAYER));
+        receipts.arm(PLAYER, armed); receipts.clear();
+        assertFalse(receipts.pending(PLAYER));
     }
 
     private static SettlementAssaultSceneCandidate candidate(SubjectId assault, BlockPosition handoff) {

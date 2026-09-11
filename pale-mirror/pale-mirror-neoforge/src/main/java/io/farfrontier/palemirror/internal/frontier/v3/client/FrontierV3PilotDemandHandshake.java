@@ -7,10 +7,11 @@ import net.minecraft.core.BlockPos;
 final class FrontierV3PilotDemandHandshake {
     private FrontierV3PilotDemandHandshake() { }
 
-    /** The actual visit transition: local readiness alone is insufficient without a fresh exact server receipt. */
-    static boolean mayAdvance(boolean localVisitReady, boolean freshReceipt, JsonObject value, String request, String assault,
+    /** The actual visit transition: both independently retained client facts need a fresh exact server receipt. */
+    static boolean mayAdvance(FrontierV3PilotVisitIngress ingress, boolean freshReceipt, JsonObject value, String request, String assault,
                               String dimension, BlockPos expectedHandoff, String expectedPlayerId) {
-        return localVisitReady && freshReceipt && admitted(value, request, assault, dimension, expectedHandoff, expectedPlayerId);
+        return ingress.serverReceiptRequested() && ingress.targetDimensionSeen() && ingress.targetChunkSeen() && freshReceipt
+                && admitted(value, request, assault, dimension, expectedHandoff, expectedPlayerId);
     }
 
     static boolean admitted(JsonObject value, String request, String assault, String dimension, BlockPos expectedHandoff, String expectedPlayerId) {

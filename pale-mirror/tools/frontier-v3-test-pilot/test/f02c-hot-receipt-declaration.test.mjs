@@ -37,7 +37,9 @@ function envelope() {
       playerId: '00000000-0000-0000-0000-000000000035', serverPlayerPosition: { x: -360, y: 65, z: -352 }, destinationObserved: true,
       destinationPlayerTicket: true, destinationHolder: true, providerIdentity: 'projection-snapshot', exactCandidateCount: 1,
       sceneDemandChunkLoaded: true, sceneDemandObserverIds: ['00000000-0000-0000-0000-000000000035'], requestedObserverPresent: true, reason: 'ADMITTED' } } }]
-      .concat(semantic.map(record), [{ actionStep: 2, value: structuredClone(semantic[0].expect) }]) };
+      .concat(semantic.map(record), [{ observed: { actionStep: 1, value: { kind: 'visit_ingress', id: current.actions[0].demandHandshake.request,
+        targetDimensionSeen: true, targetChunkSeen: true, finalClientDimension: current.actions[0].dimension,
+        finalClientPosition: structuredClone(current.actions[0].position) } } }, { actionStep: 2, value: structuredClone(semantic[0].expect) }]) };
   return { scenario: 'disposable-settlement-assault-restart.json', declarationSource, declarationSha256, outerAttempt, declaration: current, manifest,
     manifestSource: Buffer.from(`${JSON.stringify(manifest)}\n`) };
 }
@@ -95,6 +97,8 @@ test('HOT consumer rejects observed receipt mutation, replay, old record, lifecy
     value => { value.manifest.diagnostics[0].observed.value.playerId = '00000000-0000-0000-0000-000000000036'; },
     value => { value.manifest.diagnostics[0].observed.value.sceneDemandObserverIds = []; },
     value => { value.manifest.diagnostics[0].observed.value.serverPlayerPosition = null; },
+    value => { value.manifest.diagnostics[4].observed.value.targetChunkSeen = false; },
+    value => { value.manifest.diagnostics[4].observed.value.finalClientDimension = 'minecraft:overworld'; },
     value => { value.manifest.diagnostics.splice(1, 0, structuredClone(value.manifest.diagnostics[0])); }
   ]) {
     const value = envelope(); mutate(value); value.manifestSource = Buffer.from(`${JSON.stringify(value.manifest)}\n`);

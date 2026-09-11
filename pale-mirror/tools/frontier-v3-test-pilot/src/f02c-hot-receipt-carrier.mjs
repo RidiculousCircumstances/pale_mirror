@@ -115,6 +115,7 @@ function assertPersistentTopology(manifest, declaration) {
   }
   assertHotRestartPhaseTrace(records);
   assertDemandHandshake(manifest, declaration.actions[0]);
+  assertClientIngress(manifest, declaration.actions[0]);
 }
 
 /** The visit cannot become a completed action from client chunk visibility or elapsed settling alone. */
@@ -131,6 +132,18 @@ function assertDemandHandshake(manifest, ingress) {
       || value.sceneDemandChunkLoaded !== true || value.requestedObserverPresent !== true
       || !Array.isArray(value.sceneDemandObserverIds) || !value.sceneDemandObserverIds.includes(value.playerId)) {
     throw new Error('F0.2C HOT carrier has an incomplete or non-admitted demand handshake receipt');
+  }
+}
+
+/** Client-visible ingress is a separate receipt: server admission never substitutes for it. */
+function assertClientIngress(manifest, ingress) {
+  const records = manifest.diagnostics.filter(entry => entry?.observed?.actionStep === 1 && entry.observed?.value?.kind === 'visit_ingress'
+    && entry.observed?.value?.id === ingress.demandHandshake.request);
+  if (records.length !== 1) throw new Error('F0.2C HOT carrier lacks one client ingress receipt');
+  const value = records[0].observed.value;
+  if (value.targetDimensionSeen !== true || value.targetChunkSeen !== true || value.finalClientDimension !== ingress.dimension
+      || !isDeepStrictEqual(value.finalClientPosition, ingress.position)) {
+    throw new Error('F0.2C HOT carrier has incomplete client destination/chunk ingress evidence');
   }
 }
 

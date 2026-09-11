@@ -18,20 +18,32 @@ class FrontierV3PilotDemandHandshakeTest {
 
     @Test
     void localDimensionAndChunkReadinessCannotAdvanceBeforeAFreshServerReceipt() {
-        assertFalse(FrontierV3PilotDemandHandshake.mayAdvance(true, false, admitted(), REQUEST, ASSAULT, DIMENSION, HANDOFF, PLAYER));
-        assertFalse(FrontierV3PilotDemandHandshake.mayAdvance(false, true, admitted(), REQUEST, ASSAULT, DIMENSION, HANDOFF, PLAYER));
-        assertTrue(FrontierV3PilotDemandHandshake.mayAdvance(true, true, admitted(), REQUEST, ASSAULT, DIMENSION, HANDOFF, PLAYER));
+        FrontierV3PilotVisitIngress dimensionOnly = ingress(DIMENSION, false);
+        FrontierV3PilotVisitIngress allGreen = ingress(DIMENSION, true);
+        assertFalse(FrontierV3PilotDemandHandshake.mayAdvance(allGreen, true, admitted(), REQUEST, ASSAULT, DIMENSION, HANDOFF, PLAYER));
+        assertTrue(allGreen.requestServerReceipt());
+        assertFalse(FrontierV3PilotDemandHandshake.mayAdvance(allGreen, false, admitted(), REQUEST, ASSAULT, DIMENSION, HANDOFF, PLAYER));
+        assertTrue(dimensionOnly.requestServerReceipt());
+        assertFalse(FrontierV3PilotDemandHandshake.mayAdvance(dimensionOnly, true, admitted(), REQUEST, ASSAULT, DIMENSION, HANDOFF, PLAYER));
+        assertTrue(FrontierV3PilotDemandHandshake.mayAdvance(allGreen, true, admitted(), REQUEST, ASSAULT, DIMENSION, HANDOFF, PLAYER));
     }
 
     @Test
     void freshReceiptMustBindTheExactRequestDimensionCandidatePlayerAndObserver() {
-        assertFalse(FrontierV3PilotDemandHandshake.mayAdvance(true, true, with("id", "other"), REQUEST, ASSAULT, DIMENSION, HANDOFF, PLAYER));
-        assertFalse(FrontierV3PilotDemandHandshake.mayAdvance(true, true, with("destinationDimension", "minecraft:overworld"), REQUEST, ASSAULT, DIMENSION, HANDOFF, PLAYER));
+        FrontierV3PilotVisitIngress ingress = ingress(DIMENSION, true); ingress.requestServerReceipt();
+        assertFalse(FrontierV3PilotDemandHandshake.mayAdvance(ingress, true, with("id", "other"), REQUEST, ASSAULT, DIMENSION, HANDOFF, PLAYER));
+        assertFalse(FrontierV3PilotDemandHandshake.mayAdvance(ingress, true, with("destinationDimension", "minecraft:overworld"), REQUEST, ASSAULT, DIMENSION, HANDOFF, PLAYER));
         JsonObject wrongHandoff = admitted(); wrongHandoff.getAsJsonObject("candidateHandoff").addProperty("y", 65);
-        assertFalse(FrontierV3PilotDemandHandshake.mayAdvance(true, true, wrongHandoff, REQUEST, ASSAULT, DIMENSION, HANDOFF, PLAYER));
-        assertFalse(FrontierV3PilotDemandHandshake.mayAdvance(true, true, with("playerId", "00000000-0000-0000-0000-000000000036"), REQUEST, ASSAULT, DIMENSION, HANDOFF, PLAYER));
+        assertFalse(FrontierV3PilotDemandHandshake.mayAdvance(ingress, true, wrongHandoff, REQUEST, ASSAULT, DIMENSION, HANDOFF, PLAYER));
+        assertFalse(FrontierV3PilotDemandHandshake.mayAdvance(ingress, true, with("playerId", "00000000-0000-0000-0000-000000000036"), REQUEST, ASSAULT, DIMENSION, HANDOFF, PLAYER));
         JsonObject noObserver = admitted(); noObserver.getAsJsonArray("sceneDemandObserverIds").remove(0); noObserver.addProperty("requestedObserverPresent", false);
-        assertFalse(FrontierV3PilotDemandHandshake.mayAdvance(true, true, noObserver, REQUEST, ASSAULT, DIMENSION, HANDOFF, PLAYER));
+        assertFalse(FrontierV3PilotDemandHandshake.mayAdvance(ingress, true, noObserver, REQUEST, ASSAULT, DIMENSION, HANDOFF, PLAYER));
+    }
+
+    private static FrontierV3PilotVisitIngress ingress(String dimension, boolean chunk) {
+        FrontierV3PilotVisitIngress value = new FrontierV3PilotVisitIngress(DIMENSION);
+        value.observe(dimension, chunk, new BlockPos(-360, 65, -352));
+        return value;
     }
 
     private static JsonObject with(String field, String value) { JsonObject receipt = admitted(); receipt.addProperty(field, value); return receipt; }
