@@ -7,6 +7,7 @@ import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilization;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationStatus;
+import io.farfrontier.palemirror.frontier.v3.model.HiveReturnAssembly;
 import io.farfrontier.palemirror.frontier.v3.model.HiveTaskAssembly;
 import io.farfrontier.palemirror.frontier.v3.model.HiveAssemblyBlockage;
 import io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor;
@@ -28,6 +29,9 @@ final class FrontierV3HiveMobilizationDiagnostic {
             }
             if (mobilization != null && mobilization.status() == HiveMobilizationStatus.DEPARTED) {
                 return departed(checkpoint, state, mobilization);
+            }
+            if (mobilization != null && mobilization.status() == HiveMobilizationStatus.RETURNING) {
+                return returning(checkpoint, state, level, mobilization);
             }
         } catch (IllegalArgumentException invalid) {
             return FrontierV3DiagnosticJson.bounded("hive_mobilization", id, checkpoint,
@@ -114,6 +118,44 @@ final class FrontierV3HiveMobilizationDiagnostic {
                         + ",\"assemblyComplete\":true,\"overseer\":\"" + quote(mobilization.overseerId().value())
                         + "\",\"members\":" + mobilization.memberIds().size() + ",\"closedAssemblyLeases\":" + closed
                         + ",\"assault\":\"" + quote(assaultId) + "\",\"detail\":\"exact_roster_transferred\"}");
+    }
+
+    /**
+     * Reports the one retained survivor cursor that can make physical progress next.  The
+     * formatter observes canonical positions and loaded-world readiness only; it cannot revive
+     * a casualty, advance a return edge, or create a replacement body.
+     */
+    private static String returning(CheckpointImage checkpoint, FrontierWorldState state, ServerLevel level,
+                                    HiveMobilization mobilization) {
+        HiveReturnAssembly returning = mobilization.returnAssembly().orElseThrow();
+        SubjectId nextActor = returning.safeAdvances().stream().min(Comparator.naturalOrder()).orElse(null);
+        HiveTaskAssembly.Member member = nextActor == null ? null : returning.members().get(nextActor);
+        long completed = returning.members().values().stream().filter(HiveTaskAssembly.Member::arrived).count();
+        long hot = returning.members().keySet().stream().map(state.ambientLeases()::get)
+                .filter(lease -> lease != null && lease.status() == AmbientLeaseStatus.HOT
+                        && lease.goal() == AmbientGoalKind.HIVE_TASK_RETURN).count();
+        if (member == null) {
+            return FrontierV3DiagnosticJson.bounded("hive_mobilization", mobilization.id().value(), checkpoint,
+                    base(mobilization.id().value(), checkpoint) + ",\"status\":\"ok\",\"mobilizationStatus\":\"RETURNING\""
+                            + ",\"survivors\":" + returning.members().size() + ",\"returnedMembers\":" + completed
+                            + ",\"hotMembers\":" + hot + ",\"returnComplete\":" + returning.complete()
+                            + ",\"nextMember\":\"\",\"detail\":\"return_complete\"}");
+        }
+        SurfaceAnchor current = member.currentSurface();
+        SurfaceAnchor target = member.nextSurface();
+        BlockPos targetBlock = new BlockPos(target.support().x(), target.support().y(), target.support().z());
+        FrontierV3PhysicalDemand.Readiness demand = FrontierV3PhysicalDemand.readiness(level, targetBlock);
+        boolean standingColumn = demand.chunkLoaded() && FrontierV3StandingPosition.hasExactStandingColumn(level, target.support());
+        return FrontierV3DiagnosticJson.bounded("hive_mobilization", mobilization.id().value(), checkpoint,
+                base(mobilization.id().value(), checkpoint) + ",\"status\":\"ok\",\"mobilizationStatus\":\"RETURNING\""
+                        + ",\"survivors\":" + returning.members().size() + ",\"returnedMembers\":" + completed
+                        + ",\"hotMembers\":" + hot + ",\"returnComplete\":false,\"nextMember\":\"" + quote(nextActor.value())
+                        + "\",\"cursor\":" + member.cursor() + ",\"current\":{\"x\":" + current.support().x()
+                        + ",\"y\":" + current.support().y() + ",\"z\":" + current.support().z() + "},\"target\":{\"x\":"
+                        + target.support().x() + ",\"y\":" + target.support().y() + ",\"z\":" + target.support().z()
+                        + "},\"physicalReadiness\":{\"chunkLoaded\":" + demand.chunkLoaded() + ",\"ordinaryPlayerNearby\":"
+                        + demand.ordinaryPlayerNearby() + ",\"standingColumn\":" + standingColumn + ",\"runnable\":"
+                        + (demand.runnable() && standingColumn) + "},\"detail\":\"awaiting_return_arrival\"}");
     }
 
     private static String quote(String value) { return value.replace("\\", "\\\\").replace("\"", "\\\""); }

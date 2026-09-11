@@ -610,6 +610,9 @@ final class FrontierV3AmbientActorExecutor {
                     physicalTarget.getY(), physicalTarget.getZ() + 0.5D));
             return false;
         }
+        if (lease.goal() == AmbientGoalKind.HIVE_TASK_RETURN) {
+            return FrontierV3HiveReturnMotion.pursue(level, runtime, state, actorId, body, lease);
+        }
         if (lease.goal() == AmbientGoalKind.OPERATION_ASSEMBLY) {
             OperationAssembly.Member member = assemblyMember(state, actorId, lease);
             if (member == null) {
@@ -725,6 +728,11 @@ final class FrontierV3AmbientActorExecutor {
             if (cursor == null || !position.equals(cursor)) return Optional.empty();
             position = cursor;
         }
+        if (state.ambientLeases().get(actorId).goal() == AmbientGoalKind.HIVE_TASK_RETURN) {
+            BodyPosition cursor = FrontierV3HiveReturnMotion.currentCursor(state, actorId, state.ambientLeases().get(actorId));
+            if (cursor == null || !position.equals(cursor)) return Optional.empty();
+            position = cursor;
+        }
         if (state.ambientLeases().get(actorId).goal() == AmbientGoalKind.SCOUT_PATROL) {
             if (!position.equals(current.body())) return Optional.empty();
             position = current.body();
@@ -834,6 +842,7 @@ final class FrontierV3AmbientActorExecutor {
         if (lease.goal() == AmbientGoalKind.OPERATION_ASSEMBLY) return observeAssemblyArrival(level, runtime, state, actorId, body, lease);
         if (lease.goal() == AmbientGoalKind.ENGINEERING_ASSEMBLY) return observeEngineeringAssemblyArrival(level, runtime, state, actorId, body, lease);
         if (lease.goal() == AmbientGoalKind.HIVE_TASK_ASSEMBLY) return observeHiveAssemblyArrival(level, runtime, state, actorId, body, lease);
+        if (lease.goal() == AmbientGoalKind.HIVE_TASK_RETURN) return FrontierV3HiveReturnMotion.observeArrival(level, runtime, state, actorId, body, lease);
         if (lease.goal() == AmbientGoalKind.SCOUT_PATROL) return observeScoutPatrolArrival(level, runtime, state, actorId, body, lease);
         if (lease.goal() != AmbientGoalKind.TRANSIT) return false;
         ResidentMigrationJourney journey = state.humanPopulation().migration(actorId);
@@ -963,7 +972,7 @@ final class FrontierV3AmbientActorExecutor {
     }
     private static BlockPos minecraftFloor(BlockPosition floor) { return new BlockPos(floor.x(), floor.y(), floor.z()); }
     private static BlockPos minecraftBody(BodyPosition body) { return new BlockPos(body.x(), body.y(), body.z()); }
-    private static BodyPosition observedBody(Entity entity) { return new BodyPosition(entity.getBlockX(), entity.getBlockY(), entity.getBlockZ()); }
+    static BodyPosition observedBody(Entity entity) { return new BodyPosition(entity.getBlockX(), entity.getBlockY(), entity.getBlockZ()); }
     private static void forgetColdDemand(FrontierV3ServerRuntime<?, ?> runtime, SubjectId actorId) {
         Map<SubjectId, Long> absentSince = COLD_DEMAND_SINCE.get(runtime); if (absentSince == null) return;
         absentSince.remove(actorId); if (absentSince.isEmpty()) COLD_DEMAND_SINCE.remove(runtime);
