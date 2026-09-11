@@ -259,6 +259,7 @@ public final class HiveSettlementAssaultProcess {
 
     private static SettlementAssault assault(FrontierWorldState state, StrategicTask task, HiveSettlementKnowledge.Sighting sighting,
                                              SubjectId overseerId, List<SubjectId> attackers, Map<SubjectId, SurfaceAnchor> starts) {
+        if (!state.strategicPlans().currentDecisionAuthority(task.authorityId(), task.authorityEpoch())) return null;
         HumanAssignmentProjection assignments = HumanAssignmentProjection.compile(state);
         List<SubjectId> defenders = state.humanPopulation().residents().values().stream().filter(value -> value.settlementId().equals(sighting.settlementId()))
                 .filter(value -> assignments.idle(value.id()) || ProductionProcess.interruptibleForSettlementDefence(state, value.id()).isPresent())

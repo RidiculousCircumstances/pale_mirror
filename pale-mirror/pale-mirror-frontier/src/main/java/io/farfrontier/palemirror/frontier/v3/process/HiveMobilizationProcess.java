@@ -282,6 +282,9 @@ public final class HiveMobilizationProcess {
                 || !task.ownerId().equals(subject) || state.hiveColony().mobilizations().containsKey(mobilization.id())) {
             throw new IllegalArgumentException("hive mobilization must retain one active exact hive assault task");
         }
+        if (!state.strategicPlans().currentDecisionAuthority(task.authorityId(), task.authorityEpoch())) {
+            throw new IllegalArgumentException("hive mobilization task has stale decision authority");
+        }
     }
 
     private static HiveMobilization requireMobilization(FrontierWorldState state, SubjectId subject, SubjectId id) {
