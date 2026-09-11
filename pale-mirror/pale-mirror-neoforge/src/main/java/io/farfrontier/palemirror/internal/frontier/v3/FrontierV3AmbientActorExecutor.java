@@ -20,6 +20,7 @@ import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierSettlementAssaultBattlefield;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
@@ -79,6 +80,7 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Objects;
 import java.util.UUID;
 /**
  * Materializes exact ordinary residents and hive bioforms through persisted per-actor HOT leases.
@@ -452,19 +454,58 @@ final class FrontierV3AmbientActorExecutor {
      * actor kind and an extant ambient lease before a V3 body may enter the physical world.
      */
     static boolean recognizes(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity) {
+        return recognizes(runtime, ManagedCarrier.from(entity), current -> FrontierV3GrayboxExecutor.admissionProvider(runtime, current));
+    }
+
+    /**
+     * The non-Minecraft half of the actual entity-join recognition boundary.  Keeping this
+     * narrow carrier adapter lets the connected regression exercise the callback decision
+     * without inventing a fake Entity, while production still adapts the real entity above.
+     */
+    static boolean recognizes(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, ManagedCarrier carrier,
+                              FrontierSceneAdmission.ProviderSource providerSource) {
+        Objects.requireNonNull(runtime, "runtime"); Objects.requireNonNull(carrier, "carrier"); Objects.requireNonNull(providerSource, "provider source");
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return false;
-        String rawActorId = entity.getPersistentData().getString(ACTOR_KEY);
+        return recognizes(state, carrier, providerSource);
+    }
+
+    /** Shared read-only recognition decision after the runtime has selected its exact state. */
+    static boolean recognizes(FrontierWorldState state, ManagedCarrier carrier,
+                              FrontierSceneAdmission.ProviderSource providerSource) {
+        Objects.requireNonNull(state, "state"); Objects.requireNonNull(carrier, "carrier"); Objects.requireNonNull(providerSource, "provider source");
+        String rawActorId = carrier.actorId();
         if (rawActorId.isBlank()) return false;
         SubjectId actorId;
         try { actorId = new SubjectId(rawActorId); } catch (IllegalArgumentException invalid) { return false; }
+        // A join must never replace projection truth with the default pure-model compiler. If
+        // the registered snapshot is absent or structurally fenced, retain no ambient ownership
+        // claim until the projection stage publishes a compatible immutable view.
+        java.util.Optional<FrontierSettlementAssaultBattlefield.Provider> provider = providerSource.provider(state);
+        if (provider.isEmpty()) return false;
         var location = state.actorLocations().get(actorId);
         var lease = state.ambientLeases().get(actorId);
         return location != null && location.condition().status() == ActorLifeStatus.ALIVE
                 && lease != null && lease.status() != AmbientLeaseStatus.CLOSED
-                && !FrontierSceneAdmission.reserved(state, actorId)
-                && entityId(state, actorId).equals(entity.getUUID())
-                && owned(entity, actorId, bioform(state, actorId));
+                && !FrontierSceneAdmission.reserved(state, actorId, ignored -> provider)
+                && entityId(state, actorId).equals(carrier.entityId())
+                && carrier.ownedBy(actorId, bioform(state, actorId));
+    }
+
+    /** Exact read-only facts taken from a joining Minecraft entity. */
+    record ManagedCarrier(UUID entityId, String actorId, boolean removed, boolean bioform, String kind) {
+        ManagedCarrier {
+            Objects.requireNonNull(entityId, "entity id"); Objects.requireNonNull(actorId, "actor id"); Objects.requireNonNull(kind, "kind");
+        }
+        static ManagedCarrier from(Entity entity) {
+            Objects.requireNonNull(entity, "entity");
+            return new ManagedCarrier(entity.getUUID(), entity.getPersistentData().getString(ACTOR_KEY), entity.isRemoved(),
+                    entity instanceof Zombie, entity.getPersistentData().getString(KIND_KEY));
+        }
+        boolean ownedBy(SubjectId expectedActor, boolean expectedBioform) {
+            return !removed && expectedActor.value().equals(actorId) && bioform == expectedBioform
+                    && (expectedBioform ? "BIOFORM" : "RESIDENT").equals(kind);
+        }
     }
     /** Accepts only a real loaded-world death for the exact HOT ambient body. */
     static boolean observeDeath(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity, Entity source) {

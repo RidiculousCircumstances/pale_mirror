@@ -80,6 +80,16 @@ public final class FrontierSceneAdmission {
     }
 
     /**
+     * Reservation at a physical callback boundary.  The caller supplies its registered
+     * projection-owned provider rather than allowing this convenience overload to compile the
+     * full pure-model geometry before the first point query.
+     */
+    public static boolean reserved(FrontierWorldState state, SubjectId actorId, ProviderSource providerSource) {
+        Objects.requireNonNull(state, "state"); Objects.requireNonNull(actorId, "actor id");
+        return reservationAdmission(state, providerSource).reserves(actorId);
+    }
+
+    /**
      * A generic ambient goal may not take an actor that a strategic engagement, assault or
      * already-prepared scene owns. An ordinary en-route logistics operation is intentionally
      * excluded: its own ambient body is the legal precursor to its later scene hand-off.

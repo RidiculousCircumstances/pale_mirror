@@ -31,6 +31,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Objects;
 import java.util.function.Predicate;
 
 /**
@@ -67,13 +68,23 @@ final class FrontierV3GrayboxExecutor {
         tick(world, runtime, state, cursor(runtime, state));
     }
 
+    /** Same projection-owner refresh used by the state-replacement seam test. */
+    static void refresh(FrontierV3AftermathPhysicalWorld world, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                        FrontierWorldState state) {
+        tick(world, runtime, state, cursor(runtime, Objects.requireNonNull(state, "state")));
+    }
+
     private static Cursor cursor(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state) {
-        FrontierGrayboxPlan.StructuralInput input = FrontierGrayboxPlan.structuralInput(state);
         Cursor cursor = CURSORS.get(runtime);
-        if (cursor == null || !input.equals(cursor.input())) {
-            FrontierGrayboxPlan plan = FrontierGrayboxPlan.compileStructuralBaseline(state);
-            cursor = Cursor.from(input, plan, cursor);
-            CURSORS.put(runtime, cursor);
+        if (cursor == null || !cursor.input().matches(state)) {
+            FrontierGrayboxPlan.StructuralInput input = FrontierGrayboxPlan.structuralInput(state);
+            if (cursor == null || !input.equals(cursor.input())) {
+                FrontierGrayboxPlan plan = FrontierGrayboxPlan.compileStructuralBaseline(state);
+                cursor = Cursor.from(input, plan, cursor);
+                CURSORS.put(runtime, cursor);
+            } else {
+                cursor.replaceInput(input);
+            }
         }
         return cursor;
     }
@@ -110,7 +121,7 @@ final class FrontierV3GrayboxExecutor {
     static Optional<FrontierSettlementAssaultBattlefield.Provider> admissionProvider(
             FrontierV3ServerRuntime<?, ?> runtime, FrontierWorldState state) {
         Cursor cursor = CURSORS.get(runtime);
-        if (cursor == null || !FrontierGrayboxPlan.structuralInput(state).equals(cursor.input())) return Optional.empty();
+        if (cursor == null || !cursor.input().matches(state)) return Optional.empty();
         return Optional.of(cursor.providerSnapshot(state));
     }
 
@@ -342,7 +353,7 @@ final class FrontierV3GrayboxExecutor {
      * available promptly even if lexicographically earlier settlements remain unloaded.
      */
     static final class Cursor {
-        private final FrontierGrayboxPlan.StructuralInput input;
+        private FrontierGrayboxPlan.StructuralInput input;
         private final FrontierGrayboxPlan structuralBaseline;
         private final List<ChunkCells> chunks;
         private int nextChunkIndex;
@@ -384,6 +395,7 @@ final class FrontierV3GrayboxExecutor {
             return fromCells(null, cells, prior);
         }
         FrontierGrayboxPlan.StructuralInput input() { return input; }
+        void replaceInput(FrontierGrayboxPlan.StructuralInput replacement) { input = Objects.requireNonNull(replacement, "structural input"); }
         FrontierSettlementAssaultBattlefield.Provider providerSnapshot(FrontierWorldState state) {
             if (structuralBaseline == null) throw new IllegalStateException("test-only cursor has no structural provider baseline");
             return new ProjectionProviderSnapshot(structuralBaseline, state.physicalDeltas());

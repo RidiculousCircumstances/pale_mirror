@@ -142,13 +142,69 @@ class FrontierV3AmbientAdmissionPolicyTest {
                             .settlementAssaultCandidates().isEmpty(),
                     "a structural-input replacement must fail closed until a projection refreshes its snapshot");
 
-            FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> refreshed = runtime(structurallyChanged);
-            try {
-                FrontierV3GrayboxExecutor.tick(new FullyLoadedPhysicalWorld(), refreshed);
-                assertFalse(FrontierV3AmbientActorExecutor.admissionPolicy(refreshed, structurallyChanged).admissionFor(structurallyChanged)
-                                .settlementAssaultCandidates().isEmpty(),
-                        "only a new projection turn may refresh structural admission authority");
-            } finally { FrontierV3GrayboxExecutor.forget(refreshed); refreshed.shutdown(); }
+            FrontierV3GrayboxExecutor.refresh(new FullyLoadedPhysicalWorld(), runtime, structurallyChanged);
+            assertFalse(FrontierV3AmbientActorExecutor.admissionPolicy(runtime, structurallyChanged).admissionFor(structurallyChanged)
+                            .settlementAssaultCandidates().isEmpty(),
+                    "the registered projection owner alone refreshes the same runtime's structural admission authority");
+        } finally { FrontierV3GrayboxExecutor.forget(runtime); runtime.shutdown(); }
+    }
+
+    @Test
+    void productionSnapshotBoundsAdmissionAndJoinRecognitionBeforePointQueries() {
+        FrontierWorldState base = twoEligibleAssaults();
+        SubjectId ambientResident = base.actorLocations().keySet().stream()
+                .filter(actor -> !base.hiveColony().bioformLifecycles().containsKey(actor))
+                .filter(actor -> base.strategicPlans().settlementAssaults().values().stream()
+                        .noneMatch(assault -> assault.attackerIds().contains(actor) || assault.defenderIds().contains(actor)))
+                .findFirst().orElseThrow();
+        FrontierWorldState state = withPreparedLease(base, ambientResident);
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(state);
+        try {
+            FrontierV3GrayboxExecutor.tick(new FullyLoadedPhysicalWorld(), runtime);
+            FrontierSettlementAssaultBattlefield.Provider snapshot = FrontierV3GrayboxExecutor.admissionProvider(runtime, state).orElseThrow();
+            AtomicInteger queries = new AtomicInteger();
+            AtomicInteger snapshotRequests = new AtomicInteger();
+            FrontierSceneAdmission.ProviderSource countedSnapshot = ignored -> {
+                snapshotRequests.incrementAndGet();
+                return Optional.of(position -> {
+                queries.incrementAndGet();
+                return snapshot.cellAt(position);
+                });
+            };
+            FrontierV3AmbientActorExecutor.ManagedCarrier carrier = new FrontierV3AmbientActorExecutor.ManagedCarrier(
+                    FrontierV3AmbientActorExecutor.entityId(state, ambientResident), ambientResident.value(), false, false, "RESIDENT");
+
+            assertTrue(FrontierV3AmbientActorExecutor.recognizes(runtime, carrier, countedSnapshot),
+                    "the actual join-recognition decision must retain an exact ambient resident through the projection registry");
+            int members = state.strategicPlans().settlementAssaults().values().stream()
+                    .filter(assault -> assault.status() == SettlementAssaultStatus.COLD_COMBAT)
+                    .mapToInt(assault -> assault.attackerIds().size() + assault.defenderIds().size()).sum();
+            assertEquals(members * 3, queries.get(),
+                    "the complete recognition callback may perform only named support/headroom point queries after its fixed snapshot check");
+            assertEquals(1, snapshotRequests.get(),
+                    "the complete callback obtains one registered immutable view; compatibility is checked by the cursor's fixed identity fields");
+
+            assertFalse(FrontierV3AmbientActorExecutor.recognizes(runtime, carrier, ignored -> Optional.empty()),
+                    "a missing or stale derived provider must fail closed instead of reaching the default full compiler");
+
+            FrontierWorldState unrelated = withPreparedLease(state, ambientResident);
+            assertTrue(FrontierV3GrayboxExecutor.admissionProvider(runtime, unrelated).isPresent(),
+                    "an unrelated canonical replacement preserves the projection-owned structural snapshot by identity");
+            assertTrue(FrontierV3AmbientActorExecutor.recognizes(unrelated, carrier,
+                    current -> FrontierV3GrayboxExecutor.admissionProvider(runtime, current)),
+                    "the unchanged structural contributors retain ordinary ambient identity and recognition");
+
+            Settlement settlement = state.bootstrap().settlements().getFirst();
+            Map<SubjectId, StructureCondition> changed = new LinkedHashMap<>(state.structureConditions());
+            changed.put(settlement.structures().getFirst().id(), StructureCondition.DESTROYED);
+            FrontierWorldState structuralReplacement = state.withChanges(FrontierWorldStateUpdate.begin().structureConditions(changed));
+            assertFalse(FrontierV3AmbientActorExecutor.recognizes(structuralReplacement, carrier,
+                    current -> FrontierV3GrayboxExecutor.admissionProvider(runtime, current)),
+                    "a relevant structural replacement fences join recognition until the same projection owner refreshes");
+            FrontierV3GrayboxExecutor.refresh(new FullyLoadedPhysicalWorld(), runtime, structuralReplacement);
+            assertTrue(FrontierV3AmbientActorExecutor.recognizes(structuralReplacement, carrier,
+                    current -> FrontierV3GrayboxExecutor.admissionProvider(runtime, current)),
+                    "the refreshed same-runtime snapshot restores the unchanged ambient identity without any join-path compiler");
         } finally { FrontierV3GrayboxExecutor.forget(runtime); runtime.shutdown(); }
     }
 

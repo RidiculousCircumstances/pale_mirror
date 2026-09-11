@@ -78,7 +78,8 @@ public final class FrontierGrayboxPlan {
     public static StructuralInput structuralInput(FrontierWorldState state) {
         Objects.requireNonNull(state, "structural projection state");
         return new StructuralInput(state.bootstrap(), state.structureConditions(), state.hiveColony().addedOrgans(),
-                retainedCocoonLifecycles(state.hiveColony()), state.routeTopology(), activeWorksiteStaging(state));
+                state.hiveColony().bioformLifecycles(), retainedCocoonLifecycles(state.hiveColony()), state.routeTopology(),
+                state.routeConstructions(), activeWorksiteStaging(state));
     }
 
     private static Map<SubjectId, BioformLifecycle> retainedCocoonLifecycles(HiveColony colony) {
@@ -91,20 +92,45 @@ public final class FrontierGrayboxPlan {
         private final FrontierBootstrap bootstrap;
         private final Map<SubjectId, StructureCondition> structureConditions;
         private final Map<SubjectId, HiveOrgan> addedOrgans;
+        private final Map<SubjectId, BioformLifecycle> bioformLifecycles;
         private final Map<SubjectId, BioformLifecycle> retainedCocoonLifecycles;
         private final RouteTopology routeTopology;
+        private final Map<SubjectId, RouteConstruction> routeConstructions;
         private final Map<SubjectId, java.util.List<BlockPosition>> activeWorksiteStaging;
 
         private StructuralInput(FrontierBootstrap bootstrap, Map<SubjectId, StructureCondition> structureConditions,
-                                Map<SubjectId, HiveOrgan> addedOrgans, Map<SubjectId, BioformLifecycle> retainedCocoonLifecycles,
-                                RouteTopology routeTopology,
+                                Map<SubjectId, HiveOrgan> addedOrgans, Map<SubjectId, BioformLifecycle> bioformLifecycles,
+                                Map<SubjectId, BioformLifecycle> retainedCocoonLifecycles, RouteTopology routeTopology,
+                                Map<SubjectId, RouteConstruction> routeConstructions,
                                 Map<SubjectId, java.util.List<BlockPosition>> activeWorksiteStaging) {
             this.bootstrap = bootstrap;
             this.structureConditions = structureConditions;
             this.addedOrgans = addedOrgans;
+            this.bioformLifecycles = bioformLifecycles;
             this.retainedCocoonLifecycles = retainedCocoonLifecycles;
             this.routeTopology = routeTopology;
+            this.routeConstructions = routeConstructions;
             this.activeWorksiteStaging = activeWorksiteStaging;
+        }
+
+        /**
+         * Projection admission may ask only whether the immutable contributors retained by this
+         * cursor are still the current ones.  This is deliberately reference identity, not
+         * value equality: equality of a lifecycle or route map would enumerate the whole
+         * contributor before a single point query.  Canonical transitions retain untouched
+         * immutable indexes, so an unrelated replacement stays compatible in a fixed number of
+         * checks while any replaced contributor is fenced until the projector refreshes. The
+         * projector may then perform the one detailed structural comparison below and retain its
+         * plan when the changed contributor has no structural effect.
+         */
+        public boolean matches(FrontierWorldState state) {
+            Objects.requireNonNull(state, "structural projection state");
+            return bootstrap == state.bootstrap()
+                    && structureConditions == state.structureConditions()
+                    && addedOrgans == state.hiveColony().addedOrgans()
+                    && bioformLifecycles == state.hiveColony().bioformLifecycles()
+                    && routeTopology == state.routeTopology()
+                    && routeConstructions == state.routeConstructions();
         }
 
         @Override public boolean equals(Object other) {
