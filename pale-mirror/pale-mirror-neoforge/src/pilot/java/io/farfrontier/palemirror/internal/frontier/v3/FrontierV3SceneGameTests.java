@@ -34,6 +34,8 @@ import io.farfrontier.palemirror.frontier.v3.model.ResidentRole;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.CustodyAccount;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceCustody;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssault;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultCauseIdentity;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCandidate;
@@ -54,6 +56,8 @@ import io.farfrontier.palemirror.frontier.v3.persistence.RecoveryImage;
 import io.farfrontier.palemirror.frontier.v3.persistence.SnapshotReceipt;
 import io.farfrontier.palemirror.frontier.v3.persistence.SnapshotRecord;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
@@ -65,6 +69,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.entity.vehicle.MinecartChest;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.AABB;
@@ -896,19 +901,24 @@ public final class FrontierV3SceneGameTests {
         helper.assertTrue(level.addFreshEntity(body), "the exact HOT body fixture must enter the loaded world");
         return body;
     }
-    /** Local GameTest representation of one already-canonical exact cargo batch. */
+    /** Local GameTest representation of the one already-canonical bounded cargo stack. */
     private static MinecartChest addOwnedCarrier(GameTestHelper helper, ServerLevel level, FrontierWorldState state,
                                                  SceneLease lease, BlockPos position) {
         MinecartChest cart = EntityType.CHEST_MINECART.create(level);
-        helper.assertTrue(cart != null, "the exact HOT cargo carrier fixture must be constructible");
+        helper.assertTrue(cart != null, "the HOT cargo carrier fixture must be constructible");
         cart.setUUID(FrontierV3CargoCarrierExecutor.id(lease)); cart.setPos(position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D);
         cart.getPersistentData().putString(FrontierV3CargoCarrierExecutor.LEASE_KEY, lease.id().value());
         cart.getPersistentData().putString(FrontierV3CargoCarrierExecutor.CARGO_KEY, FrontierSceneBehaviors.logistics(lease).cargoId().value());
-        var cargo = state.inventory().cargo().get(FrontierSceneBehaviors.logistics(lease).cargoId());
-        for (int slot = 0; slot < cargo.itemIds().size(); slot++) {
-            cart.setItem(slot, FrontierV3CargoHandoffExecutor.materializedStack(state.inventory().items().get(cargo.itemIds().get(slot))));
-        }
-        helper.assertTrue(level.addFreshEntity(cart), "the exact HOT cargo carrier fixture must enter the loaded world");
+        CustodyAccount account = state.inventory().fungibleResources().accounts().values().stream()
+                .filter(value -> value.custody() instanceof ResourceCustody.Cargo cargo
+                        && cargo.cargoId().equals(FrontierSceneBehaviors.logistics(lease).cargoId())).findFirst().orElseThrow();
+        String kind = account.lotQuantities().keySet().stream().map(state.inventory().fungibleResources().lots()::get)
+                .map(lot -> lot.itemKind()).distinct().reduce((left, right) -> "").orElse("");
+        int quantity = account.lotQuantities().values().stream().mapToInt(Integer::intValue).sum();
+        var item = BuiltInRegistries.ITEM.getOptional(ResourceLocation.parse(kind)).orElse(null);
+        helper.assertTrue(item != null && quantity > 0 && quantity <= 64, "the cargo fixture requires one bounded canonical fungible stack");
+        cart.setItem(0, new ItemStack(item, quantity));
+        helper.assertTrue(level.addFreshEntity(cart), "the canonical HOT cargo carrier fixture must enter the loaded world");
         return cart;
     }
     private static PhysicalIntent onlyStrike(FrontierWorldState state) {

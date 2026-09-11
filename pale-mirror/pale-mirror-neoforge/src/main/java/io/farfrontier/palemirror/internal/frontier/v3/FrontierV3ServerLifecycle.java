@@ -945,7 +945,6 @@ public final class FrontierV3ServerLifecycle {
             runtime.quarantine(new IllegalStateException(cause + " has no canonical state"));
             return;
         }
-        if (!state.inventory().worldCarrierItems().containsKey(entity.getUUID())) return;
         try {
             FrontierV3CargoCarrierImpactLedger.get(level).capture(level.getGameTime(), entity, state);
         } catch (RuntimeException error) {

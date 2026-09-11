@@ -214,7 +214,10 @@ final class FrontierV3CargoCarrierExecutor {
 
     /** A fungible route batch has one bounded physical carrier stack, never a permanent stack ID. */
     private static ItemStack fungibleStack(FrontierWorldState state, CargoBatch cargo) {
-        var account = state.inventory().fungibleResources().accounts().get(cargo.id());
+        var account = state.inventory().fungibleResources().accounts().values().stream()
+                .filter(value -> value.custody() instanceof io.farfrontier.palemirror.frontier.v3.model.ResourceCustody.Cargo carried
+                        && carried.cargoId().equals(cargo.id()))
+                .findFirst().orElse(null);
         if (account == null || account.lotQuantities().isEmpty() || account.lotQuantities().values().stream().mapToInt(Integer::intValue).sum() > 64) {
             return ItemStack.EMPTY;
         }

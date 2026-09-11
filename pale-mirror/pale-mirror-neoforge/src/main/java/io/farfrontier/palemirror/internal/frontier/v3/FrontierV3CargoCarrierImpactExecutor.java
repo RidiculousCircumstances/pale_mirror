@@ -1,10 +1,17 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemCustodyChanged;
+import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemDestroyed;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
+import io.farfrontier.palemirror.frontier.v3.model.CustodyAccount;
+import io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalHandoff;
+import io.farfrontier.palemirror.frontier.v3.model.FungibleResourceHandoffObserved;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackBinding;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceCustody;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -37,17 +44,18 @@ final class FrontierV3CargoCarrierImpactExecutor {
         for (int count = 0; count < MAX_RECONCILIATIONS_PER_TICK; count++) {
             var ready = ledger.nextReady(inspectionGameTime);
             if (ready.isEmpty()) return;
-            reconcile(level, runtime, ledger, ready.orElseThrow());
+            if (ready.orElseThrow().fungible().isPresent()) reconcileFungible(level, runtime, ledger, ready.orElseThrow());
+            else reconcileExact(level, runtime, ledger, ready.orElseThrow());
         }
     }
 
-    private static void reconcile(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                  FrontierV3CargoCarrierImpactLedger ledger, FrontierV3CargoCarrierImpactLedger.Ready ready) {
+    private static void reconcileExact(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                       FrontierV3CargoCarrierImpactLedger ledger, FrontierV3CargoCarrierImpactLedger.Ready ready) {
         BlockPos position = BlockPos.of(ready.position());
         if (!level.hasChunkAt(position)) return; // wait for ordinary loaded-world evidence; never ticket.
         FrontierWorldState state = runtime.decodedState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         InventoryCustody.WorldCarrier source = new InventoryCustody.WorldCarrier(ready.carrierId());
-        ExactItemStack item = state.inventory().items().get(ready.itemId());
+        ExactItemStack item = state.inventory().items().get(ready.itemId().orElseThrow());
         if (item == null || !item.custody().equals(source)) { ledger.resolve(ready); return; }
 
         Entity carrier = level.getEntity(ready.carrierId());
@@ -83,12 +91,62 @@ final class FrontierV3CargoCarrierImpactExecutor {
         ledger.resolve(ready);
     }
 
+    /** Replays a retained HOT fungible cart aftermath only from the one captured account/binding fence. */
+    private static void reconcileFungible(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                          FrontierV3CargoCarrierImpactLedger ledger, FrontierV3CargoCarrierImpactLedger.Ready ready) {
+        BlockPos position = BlockPos.of(ready.position());
+        if (!level.hasChunkAt(position)) return;
+        FrontierV3CargoCarrierImpactLedger.Fungible retained = ready.fungible().orElseThrow();
+        FrontierWorldState state = runtime.decodedState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
+        CustodyAccount source = state.inventory().fungibleResources().accounts().get(retained.accountId());
+        PhysicalStackBinding binding = state.inventory().fungibleResources().bindings().get(retained.bindingId());
+        if (source == null || binding == null || !source.custody().equals(new ResourceCustody.WorldCarrier(ready.carrierId()))
+                || !binding.accountId().equals(source.id()) || binding.authorityEpoch() != retained.authorityEpoch()
+                || !binding.itemKind().equals(retained.itemKind()) || binding.quantity() != retained.quantity()) {
+            ledger.resolve(ready); return;
+        }
+        Entity carrier = level.getEntity(ready.carrierId());
+        if (carrier instanceof MinecartChest cart && !cart.isRemoved()) {
+            if (!contains(cart, binding)) throw new IllegalStateException("live cargo carrier lost a fungible stack without a physical transfer receipt");
+            ledger.resolve(ready); return;
+        }
+        if (carrier != null && !carrier.isRemoved()) throw new IllegalStateException("cargo carrier UUID was rebound to a foreign entity");
+        List<ItemEntity> drops = level.getEntitiesOfClass(ItemEntity.class, new AABB(position).inflate(16.0D),
+                drop -> matches(drop.getItem(), binding)).stream().sorted(Comparator.comparing(ItemEntity::getUUID)).toList();
+        if (drops.size() != 1) return; // no unambiguous physical destination: keep restart-safe evidence fenced
+        ItemEntity drop = drops.getFirst();
+        try {
+            FungibleResourceHandoffObserved observed = FungiblePhysicalHandoff.departToNew(state.inventory().fungibleResources(), source.id(),
+                    binding.authorityEpoch(), binding, 0, new io.farfrontier.palemirror.frontier.v3.api.SubjectId("custody:world-" + drop.getUUID()),
+                    new ResourceCustody.WorldCarrier(drop.getUUID()), 1L, new PhysicalStackAddress.WorldEntity(drop.getUUID()));
+            CommandResult result = FrontierV3CommandSubmission.submit(runtime, "fungible-cargo-impact-drop", source.id().value(), observed);
+            if (result instanceof CommandResult.Accepted) ledger.resolve(ready);
+        } catch (IllegalArgumentException ignored) {
+            // A changed account, claims, or physical shape never authorizes an inferred loss.
+        }
+    }
+
     private static boolean contains(MinecartChest cart, ExactItemStack item, java.util.UUID carrierId) {
         for (int slot = 0; slot < cart.getContainerSize(); slot++) {
             if (FrontierV3CargoHandoffExecutor.exactMatch(cart.getItem(slot), item)
                     && FrontierV3CargoHandoffExecutor.worldCarrierId(cart.getItem(slot)).filter(carrierId::equals).isPresent()) return true;
         }
         return false;
+    }
+
+    private static boolean contains(MinecartChest cart, PhysicalStackBinding binding) {
+        int found = 0;
+        for (int slot = 0; slot < cart.getContainerSize(); slot++) {
+            ItemStack stack = cart.getItem(slot);
+            if (stack.isEmpty()) continue;
+            if (!matches(stack, binding) || ++found > 1) return false;
+        }
+        return found == 1;
+    }
+
+    private static boolean matches(ItemStack stack, PhysicalStackBinding binding) {
+        return !stack.isEmpty() && net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem()).toString().equals(binding.itemKind())
+                && stack.getCount() == binding.quantity();
     }
 
     /** A hopper may pull an exact drop before this server-thread observer runs; its old carrier ID remains valid provenance. */

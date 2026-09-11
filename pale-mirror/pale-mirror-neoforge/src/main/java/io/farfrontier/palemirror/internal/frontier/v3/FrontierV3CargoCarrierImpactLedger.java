@@ -3,6 +3,10 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
+import io.farfrontier.palemirror.frontier.v3.model.CustodyAccount;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackBinding;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceCustody;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
@@ -30,7 +34,7 @@ import java.util.UUID;
  */
 final class FrontierV3CargoCarrierImpactLedger extends SavedData {
     private static final String NAME = "pale_mirror_frontier_v3_cargo_carrier_impacts";
-    private static final int FORMAT = 1, MAX_PENDING_CARRIERS = 4_096, MAX_ITEMS_PER_CARRIER = 54;
+    private static final int FORMAT = 2, MAX_PENDING_CARRIERS = 4_096, MAX_ITEMS_PER_CARRIER = 54;
     private final LinkedHashMap<UUID, Pending> pending;
 
     private FrontierV3CargoCarrierImpactLedger() { this(new LinkedHashMap<>()); }
@@ -48,8 +52,10 @@ final class FrontierV3CargoCarrierImpactLedger extends SavedData {
     void capture(long gameTime, Entity entity, FrontierWorldState state) {
         Objects.requireNonNull(entity, "carrier entity"); Objects.requireNonNull(state, "world state");
         UUID carrierId = entity.getUUID(); List<SubjectId> items = state.inventory().worldCarrierItems().get(carrierId);
-        if (items == null || items.isEmpty()) throw new IllegalStateException("cargo impact has no exact released carrier custody");
-        Pending observed = new Pending(carrierId, entity.blockPosition().asLong(), gameTime, items);
+        Fungible fungible = fungible(state, carrierId);
+        if ((items == null || items.isEmpty()) && fungible == null) throw new IllegalStateException("cargo impact has no released carrier custody");
+        if (items != null && !items.isEmpty() && fungible != null) throw new IllegalStateException("cargo impact mixes exact and fungible carrier custody");
+        Pending observed = new Pending(carrierId, entity.blockPosition().asLong(), gameTime, items == null ? List.of() : items, Optional.ofNullable(fungible));
         Pending existing = pending.get(carrierId);
         if (existing != null) {
             if (!existing.equals(observed)) throw new IllegalStateException("cargo carrier impact identity changed before reconciliation");
@@ -61,18 +67,22 @@ final class FrontierV3CargoCarrierImpactLedger extends SavedData {
 
     Optional<Ready> nextReady(long gameTime) {
         return pending.values().stream().sorted(Comparator.comparing(Pending::carrierId))
-                .filter(value -> value.capturedAtGameTime() < gameTime).filter(value -> !value.itemIds().isEmpty())
-                .findFirst().map(value -> new Ready(value.carrierId(), value.position(), value.itemIds().getFirst()));
+                .filter(value -> value.capturedAtGameTime() < gameTime)
+                .findFirst().map(value -> new Ready(value.carrierId(), value.position(),
+                        value.itemIds().isEmpty() ? Optional.empty() : Optional.of(value.itemIds().getFirst()), value.fungible()));
     }
 
     void resolve(Ready ready) {
         Pending value = pending.get(ready.carrierId());
-        if (value == null || value.position() != ready.position() || value.itemIds().isEmpty() || !value.itemIds().getFirst().equals(ready.itemId())) {
+        if (value == null || value.position() != ready.position() || !value.fungible().equals(ready.fungible())
+                || value.itemIds().isEmpty() != ready.itemId().isEmpty()
+                || ready.itemId().isPresent() && !value.itemIds().getFirst().equals(ready.itemId().orElseThrow())) {
             throw new IllegalStateException("cargo carrier impact resolution is not the retained queue head");
         }
+        if (ready.fungible().isPresent()) { pending.remove(value.carrierId()); setDirty(); return; }
         List<SubjectId> remaining = value.itemIds().subList(1, value.itemIds().size());
         if (remaining.isEmpty()) pending.remove(value.carrierId());
-        else pending.put(value.carrierId(), new Pending(value.carrierId(), value.position(), value.capturedAtGameTime(), remaining));
+        else pending.put(value.carrierId(), new Pending(value.carrierId(), value.position(), value.capturedAtGameTime(), remaining, Optional.empty()));
         setDirty();
     }
 
@@ -94,12 +104,12 @@ final class FrontierV3CargoCarrierImpactLedger extends SavedData {
         tag.put("pending", values); return tag;
     }
 
-    record Ready(UUID carrierId, long position, SubjectId itemId) { }
+    record Ready(UUID carrierId, long position, Optional<SubjectId> itemId, Optional<Fungible> fungible) { }
 
-    record Pending(UUID carrierId, long position, long capturedAtGameTime, List<SubjectId> itemIds) {
+    record Pending(UUID carrierId, long position, long capturedAtGameTime, List<SubjectId> itemIds, Optional<Fungible> fungible) {
         Pending {
-            Objects.requireNonNull(carrierId, "carrier id"); Objects.requireNonNull(itemIds, "item ids");
-            if (capturedAtGameTime < 0L || itemIds.isEmpty() || itemIds.size() > MAX_ITEMS_PER_CARRIER) {
+            Objects.requireNonNull(carrierId, "carrier id"); Objects.requireNonNull(itemIds, "item ids"); Objects.requireNonNull(fungible, "fungible impact");
+            if (capturedAtGameTime < 0L || itemIds.size() > MAX_ITEMS_PER_CARRIER || itemIds.isEmpty() == fungible.isEmpty()) {
                 throw new IllegalArgumentException("invalid v3 cargo carrier impact");
             }
             itemIds = List.copyOf(itemIds);
@@ -108,7 +118,7 @@ final class FrontierV3CargoCarrierImpactLedger extends SavedData {
         CompoundTag save() {
             CompoundTag tag = new CompoundTag(); tag.putUUID("carrier", carrierId); tag.putLong("pos", position); tag.putLong("capturedAt", capturedAtGameTime);
             ListTag values = new ListTag(); itemIds.forEach(id -> { CompoundTag item = new CompoundTag(); item.putString("item", id.value()); values.add(item); });
-            tag.put("items", values); return tag;
+            tag.put("items", values); fungible.ifPresent(value -> value.save(tag)); return tag;
         }
         static Pending load(CompoundTag tag) {
             if (!tag.hasUUID("carrier") || !tag.contains("pos", Tag.TAG_LONG) || !tag.contains("capturedAt", Tag.TAG_LONG) || !tag.contains("items", Tag.TAG_LIST)) {
@@ -120,8 +130,36 @@ final class FrontierV3CargoCarrierImpactLedger extends SavedData {
                 if (!item.contains("item", Tag.TAG_STRING)) throw new IllegalStateException("incomplete cargo carrier impact item");
                 items.add(new SubjectId(item.getString("item")));
             }
-            try { return new Pending(tag.getUUID("carrier"), tag.getLong("pos"), tag.getLong("capturedAt"), items); }
+            Optional<Fungible> fungible = tag.contains("fungibleAccount", Tag.TAG_STRING) ? Optional.of(Fungible.load(tag)) : Optional.empty();
+            try { return new Pending(tag.getUUID("carrier"), tag.getLong("pos"), tag.getLong("capturedAt"), items, fungible); }
             catch (IllegalArgumentException invalid) { throw new IllegalStateException("invalid cargo carrier impact", invalid); }
         }
+    }
+
+    record Fungible(SubjectId accountId, SubjectId bindingId, long authorityEpoch, String itemKind, int quantity) {
+        Fungible {
+            Objects.requireNonNull(accountId, "fungible account"); Objects.requireNonNull(bindingId, "fungible binding"); Objects.requireNonNull(itemKind, "fungible kind");
+            if (authorityEpoch < 1L || quantity < 1 || quantity > 64) throw new IllegalArgumentException("invalid fungible cargo impact");
+        }
+        void save(CompoundTag tag) { tag.putString("fungibleAccount", accountId.value()); tag.putString("fungibleBinding", bindingId.value());
+            tag.putLong("fungibleEpoch", authorityEpoch); tag.putString("fungibleKind", itemKind); tag.putInt("fungibleQuantity", quantity); }
+        static Fungible load(CompoundTag tag) {
+            if (!tag.contains("fungibleBinding", Tag.TAG_STRING) || !tag.contains("fungibleEpoch", Tag.TAG_LONG)
+                    || !tag.contains("fungibleKind", Tag.TAG_STRING) || !tag.contains("fungibleQuantity", Tag.TAG_INT)) throw new IllegalStateException("incomplete fungible cargo impact");
+            return new Fungible(new SubjectId(tag.getString("fungibleAccount")), new SubjectId(tag.getString("fungibleBinding")),
+                    tag.getLong("fungibleEpoch"), tag.getString("fungibleKind"), tag.getInt("fungibleQuantity"));
+        }
+    }
+
+    private static Fungible fungible(FrontierWorldState state, UUID carrierId) {
+        List<CustodyAccount> accounts = state.inventory().fungibleResources().accounts().values().stream()
+                .filter(account -> account.custody().equals(new ResourceCustody.WorldCarrier(carrierId))).toList();
+        if (accounts.size() != 1) return null;
+        List<PhysicalStackBinding> bindings = state.inventory().fungibleResources().bindings().values().stream()
+                .filter(binding -> binding.accountId().equals(accounts.getFirst().id())).toList();
+        if (bindings.size() != 1 || !(bindings.getFirst().address() instanceof PhysicalStackAddress.WorldEntity address)
+                || !address.entityId().equals(carrierId)) return null;
+        PhysicalStackBinding binding = bindings.getFirst();
+        return new Fungible(accounts.getFirst().id(), binding.id(), binding.authorityEpoch(), binding.itemKind(), binding.quantity());
     }
 }

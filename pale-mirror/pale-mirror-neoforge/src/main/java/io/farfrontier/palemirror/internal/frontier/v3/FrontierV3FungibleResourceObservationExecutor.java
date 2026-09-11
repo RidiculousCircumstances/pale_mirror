@@ -28,6 +28,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.block.entity.HopperBlockEntity;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.vehicle.MinecartChest;
 import net.minecraft.world.phys.AABB;
 
 import java.util.Comparator;
@@ -44,6 +45,7 @@ final class FrontierV3FungibleResourceObservationExecutor {
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return;
+        if (observeOneCargoCarrierDeparture(level, runtime, state)) return;
         if (observeOneWorldPickup(level, runtime, state)) return;
         for (CustodyAccount account : state.inventory().fungibleResources().accounts().values().stream()
                 .filter(value -> value.custody() instanceof ResourceCustody.Container)
@@ -176,6 +178,56 @@ final class FrontierV3FungibleResourceObservationExecutor {
             }
         }
         return false;
+    }
+
+    /**
+     * A released logistics cart is the physical carrier for the same account, not a second
+     * inventory.  Its only admitted ordinary departure is one unambiguous player stack whose
+     * quantity exactly explains the cart slot's observed reduction.
+     */
+    private static boolean observeOneCargoCarrierDeparture(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                                           FrontierWorldState state) {
+        for (CustodyAccount source : state.inventory().fungibleResources().accounts().values().stream()
+                .filter(account -> account.custody() instanceof ResourceCustody.WorldCarrier)
+                .sorted(Comparator.comparing(CustodyAccount::id)).toList()) {
+            List<PhysicalStackBinding> current = current(state.inventory().fungibleResources(), source.id());
+            if (current.size() != 1 || !(current.getFirst().address() instanceof PhysicalStackAddress.WorldEntity address)) continue;
+            if (!(level.getEntity(address.entityId()) instanceof MinecartChest cart) || cart.isRemoved()) continue;
+            PhysicalStackBinding binding = current.getFirst(); ItemStack remaining = cargoStack(cart, binding);
+            if (remaining == null || remaining.getCount() == binding.quantity()) continue;
+            int moved = binding.quantity() - remaining.getCount();
+            List<PlayerStack> targets = level.players().stream().flatMap(player -> java.util.stream.IntStream.range(0, player.getInventory().getContainerSize())
+                    .mapToObj(slot -> new PlayerStack(player, slot, player.getInventory().getItem(slot))))
+                    .filter(target -> sameKindAndQuantity(target.stack(), binding, moved)).sorted(Comparator.comparing((PlayerStack value) -> value.player().getUUID())
+                            .thenComparingInt(PlayerStack::slot)).toList();
+            if (targets.size() != 1) continue;
+            PlayerStack target = targets.getFirst(); UUID playerId = target.player().getUUID();
+            if (state.inventory().fungibleResources().accounts().values().stream()
+                    .anyMatch(account -> account.custody().equals(new ResourceCustody.Player(playerId)))) continue;
+            try {
+                FungibleResourceHandoffObserved observed = committedDeparture(state, FungiblePhysicalHandoff.departToNew(
+                        state.inventory().fungibleResources(), source.id(), binding.authorityEpoch(), binding, remaining.getCount(),
+                        new SubjectId("custody:player-" + playerId), new ResourceCustody.Player(playerId), 1L,
+                        new PhysicalStackAddress.PlayerSlot(playerId, target.slot())));
+                if (observed == null) continue;
+                CommandResult result = FrontierV3CommandSubmission.submit(runtime, "fungible-cargo-carrier-withdrawal", source.id().value(), observed);
+                if (result instanceof CommandResult.Accepted) return true;
+            } catch (IllegalArgumentException ignored) {
+                // Physical stacks that cannot prove one complete custody transaction remain fenced.
+            }
+        }
+        return false;
+    }
+
+    private static ItemStack cargoStack(MinecartChest cart, PhysicalStackBinding binding) {
+        ItemStack observed = ItemStack.EMPTY;
+        for (int slot = 0; slot < cart.getContainerSize(); slot++) {
+            ItemStack stack = cart.getItem(slot);
+            if (stack.isEmpty()) continue;
+            if (!observed.isEmpty() || !kind(stack).equals(binding.itemKind()) || stack.getCount() > binding.quantity()) return null;
+            observed = stack;
+        }
+        return observed;
     }
 
     /** The reverse merge uses the same one transaction; the player portion never becomes COLD. */

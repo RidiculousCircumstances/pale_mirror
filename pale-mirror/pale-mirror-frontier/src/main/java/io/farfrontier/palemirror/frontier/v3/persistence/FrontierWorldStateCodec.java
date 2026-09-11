@@ -37,7 +37,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 writeInventory(output, state.inventory());
                 writeReplicaCustody(output, state.replicaCustody());
                 DeferredAftermathStateCodec.write(output, state.deferredAftermath());
-                writeProductionJobs(output, state.productionJobs());
+                ProductionJobStateCodec.write(output, state.productionJobs());
                 SettlementServiceWorkStateCodec.write(output, state.serviceWorks());
                 writeContracts(output, state.contracts());
                 writeOperations(output, state.operations());
@@ -75,7 +75,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             CompanyRegistry companies = readCompanyRegistry(input, true, true, true);
             ExactInventory inventory = readInventory(input, economics); PhysicalReplicaCustodyState replicaCustody = readReplicaCustody(input);
             DeferredAftermathState deferredAftermath = DeferredAftermathStateCodec.read(input);
-            Map<SubjectId, ProductionJob> jobs = readProductionJobs(input, true);
+            Map<SubjectId, ProductionJob> jobs = ProductionJobStateCodec.read(input, true);
             Map<SubjectId, SettlementServiceWork> serviceWorks = SettlementServiceWorkStateCodec.read(input);
             Map<SubjectId, SupplyContract> contracts = readContracts(input); Map<SubjectId, RouteOperation> operations = readOperations(input, true, true, true, true, true, true, true);
             LogisticsHistory history = readLogisticsHistory(input);
@@ -535,7 +535,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             writeString(output, conflict.id().value()); writeString(output, conflict.subjectId().value()); writeString(output, conflict.containerId().value());
             output.writeByte(conflict.slot()); output.writeByte(conflict.kind().wireTag());
         }
-        writeFungibleResources(output, inventory.fungibleResources());
+        FungibleResourceStateCodec.write(output, inventory.fungibleResources());
     }
     private static ExactInventory readInventory(DataInputStream input, EconomicLedger economics) throws IOException {
         Map<SubjectId, ContainerRecord> containers = new LinkedHashMap<>();
@@ -584,161 +584,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 throw new IllegalArgumentException("invalid or duplicate inventory conflict");
             }
         }
-        return new ExactInventory(containers, items, cargo, players, carriers, conflicts, surfaces, economics, readFungibleResources(input));
-    }
-
-    private static void writeFungibleResources(DataOutputStream output, FungibleResourceLedger ledger) throws IOException {
-        writeCount(output, ledger.lots().size());
-        for (ResourceLot lot : ledger.lots().values().stream().sorted(Comparator.comparing(ResourceLot::id)).toList()) {
-            writeString(output, lot.id().value()); writeString(output, lot.economicOwnerId().value()); writeString(output, lot.itemKind());
-            writeCount(output, lot.quantity()); writeString(output, lot.provenance()); writeCount(output, lot.lineage().size());
-            for (SubjectId parent : lot.lineage()) writeString(output, parent.value());
-        }
-        writeCount(output, ledger.claims().size());
-        for (ClaimAllocation claim : ledger.claims().values().stream().sorted(Comparator.comparing(ClaimAllocation::id)).toList()) {
-            writeString(output, claim.id().value()); writeString(output, claim.claimantId().value()); writeString(output, claim.economicOwnerId().value());
-            writeString(output, claim.itemKind()); writeCount(output, claim.quantity());
-        }
-        writeCount(output, ledger.accounts().size());
-        for (CustodyAccount account : ledger.accounts().values().stream().sorted(Comparator.comparing(CustodyAccount::id)).toList()) {
-            writeString(output, account.id().value()); writeResourceCustody(output, account.custody()); writeQuantities(output, account.lotQuantities());
-            writeQuantities(output, account.claimQuantities());
-        }
-        writeCount(output, ledger.bindings().size());
-        for (PhysicalStackBinding binding : ledger.bindings().values().stream().sorted(Comparator.comparing(PhysicalStackBinding::id)).toList()) {
-            writeString(output, binding.id().value()); writeString(output, binding.accountId().value()); writePhysicalAddress(output, binding.address());
-            output.writeLong(binding.authorityEpoch()); writeString(output, binding.itemKind()); writeQuantities(output, binding.lotQuantities());
-            writeQuantities(output, binding.claimQuantities());
-        }
-    }
-
-    private static FungibleResourceLedger readFungibleResources(DataInputStream input) throws IOException {
-        Map<SubjectId, ResourceLot> lots = new LinkedHashMap<>();
-        for (int index = 0, count = readCount(input); index < count; index++) {
-            SubjectId id = new SubjectId(readString(input)); SubjectId owner = new SubjectId(readString(input)); String kind = readString(input);
-            int quantity = readCount(input); String provenance = readString(input); List<SubjectId> lineage = new ArrayList<>();
-            for (int parent = 0, parents = readCount(input); parent < parents; parent++) lineage.add(new SubjectId(readString(input)));
-            if (lots.put(id, new ResourceLot(id, owner, kind, quantity, provenance, lineage)) != null) throw new IllegalArgumentException("duplicate resource lot id");
-        }
-        Map<SubjectId, ClaimAllocation> claims = new LinkedHashMap<>();
-        for (int index = 0, count = readCount(input); index < count; index++) {
-            SubjectId id = new SubjectId(readString(input)); ClaimAllocation claim = new ClaimAllocation(id, new SubjectId(readString(input)),
-                    new SubjectId(readString(input)), readString(input), readCount(input));
-            if (claims.put(id, claim) != null) throw new IllegalArgumentException("duplicate claim allocation id");
-        }
-        Map<SubjectId, CustodyAccount> accounts = new LinkedHashMap<>();
-        for (int index = 0, count = readCount(input); index < count; index++) {
-            SubjectId id = new SubjectId(readString(input)); CustodyAccount account = new CustodyAccount(id, readResourceCustody(input), readQuantities(input), readQuantities(input));
-            if (accounts.put(id, account) != null) throw new IllegalArgumentException("duplicate custody account id");
-        }
-        Map<SubjectId, PhysicalStackBinding> bindings = new LinkedHashMap<>();
-        for (int index = 0, count = readCount(input); index < count; index++) {
-            SubjectId id = new SubjectId(readString(input)); PhysicalStackBinding binding = new PhysicalStackBinding(id, new SubjectId(readString(input)),
-                    readPhysicalAddress(input), input.readLong(), readString(input), readQuantities(input), readQuantities(input));
-            if (bindings.put(id, binding) != null) throw new IllegalArgumentException("duplicate physical stack binding id");
-        }
-        return new FungibleResourceLedger(lots, claims, accounts, bindings);
-    }
-
-    private static void writeQuantities(DataOutputStream output, Map<SubjectId, Integer> quantities) throws IOException {
-        writeCount(output, quantities.size());
-        for (Map.Entry<SubjectId, Integer> entry : quantities.entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
-            writeString(output, entry.getKey().value()); writeCount(output, entry.getValue());
-        }
-    }
-
-    private static Map<SubjectId, Integer> readQuantities(DataInputStream input) throws IOException {
-        Map<SubjectId, Integer> quantities = new LinkedHashMap<>();
-        for (int index = 0, count = readCount(input); index < count; index++) {
-            SubjectId id = new SubjectId(readString(input)); if (quantities.put(id, readCount(input)) != null) throw new IllegalArgumentException("duplicate custody quantity");
-        }
-        return quantities;
-    }
-
-    private static void writePhysicalAddress(DataOutputStream output, PhysicalStackAddress address) throws IOException {
-        switch (address) {
-            case PhysicalStackAddress.ContainerSlot slot -> { output.writeByte(0); writeCustody(output, slot.slot()); }
-            case PhysicalStackAddress.PlayerSlot slot -> { output.writeByte(1); writeString(output, slot.playerId().toString()); output.writeByte(slot.slot()); }
-            case PhysicalStackAddress.HopperSlot slot -> { output.writeByte(2); writePosition(output, slot.position()); output.writeByte(slot.slot()); }
-            case PhysicalStackAddress.WorldEntity entity -> { output.writeByte(3); writeString(output, entity.entityId().toString()); }
-        }
-    }
-
-    private static PhysicalStackAddress readPhysicalAddress(DataInputStream input) throws IOException {
-        return switch (input.readUnsignedByte()) {
-            case 0 -> {
-                InventoryCustody custody = readCustody(input);
-                if (!(custody instanceof InventoryCustody.ContainerSlot slot)) {
-                    throw new IllegalArgumentException("physical container address requires a container slot");
-                }
-                yield new PhysicalStackAddress.ContainerSlot(slot);
-            }
-            case 1 -> new PhysicalStackAddress.PlayerSlot(UUID.fromString(readString(input)), input.readUnsignedByte());
-            case 2 -> new PhysicalStackAddress.HopperSlot(readPosition(input), input.readUnsignedByte());
-            case 3 -> new PhysicalStackAddress.WorldEntity(UUID.fromString(readString(input)));
-            default -> throw new IllegalArgumentException("unknown physical stack address");
-        };
-    }
-
-    private static void writeResourceCustody(DataOutputStream output, ResourceCustody custody) throws IOException {
-        switch (custody) {
-            case ResourceCustody.Container container -> { output.writeByte(0); writeString(output, container.containerId().value()); }
-            case ResourceCustody.Player player -> { output.writeByte(1); writeString(output, player.playerId().toString()); }
-            case ResourceCustody.Cargo cargo -> { output.writeByte(2); writeString(output, cargo.cargoId().value()); }
-            case ResourceCustody.WorldCarrier carrier -> { output.writeByte(3); writeString(output, carrier.carrierId().toString()); }
-            case ResourceCustody.Actor actor -> { output.writeByte(4); writeString(output, actor.actorId().value()); }
-        }
-    }
-
-    private static ResourceCustody readResourceCustody(DataInputStream input) throws IOException {
-        return switch (input.readUnsignedByte()) {
-            case 0 -> new ResourceCustody.Container(new SubjectId(readString(input)));
-            case 1 -> new ResourceCustody.Player(UUID.fromString(readString(input)));
-            case 2 -> new ResourceCustody.Cargo(new SubjectId(readString(input)));
-            case 3 -> new ResourceCustody.WorldCarrier(UUID.fromString(readString(input)));
-            case 4 -> new ResourceCustody.Actor(new SubjectId(readString(input)));
-            default -> throw new IllegalArgumentException("unknown resource custody");
-        };
-    }
-    private static void writeProductionJobs(DataOutputStream output, Map<SubjectId, ProductionJob> jobs) throws IOException {
-        writeCount(output, jobs.size());
-        for (ProductionJob job : jobs.values().stream().sorted(java.util.Comparator.comparing(ProductionJob::id)).toList()) {
-            writeString(output, job.id().value()); writeString(output, job.settlementId().value()); writeString(output, job.facilityId().value());
-            writeString(output, job.workerId().value()); writeString(output, job.consumedItemId().value()); writeProductionInputHold(output, job.inputHold()); writeString(output, job.outputItemId().value());
-            writeString(output, job.outputItemKind()); output.writeByte(job.outputCount()); ProductionWorkProgressStateCodec.write(output, job.workProgress());
-            TraversalTopologyStateCodec.write(output, job.workTraversal()); output.writeShort(job.traversalCursor());
-        } }
-    private static Map<SubjectId, ProductionJob> readProductionJobs(DataInputStream input, boolean hasInputHold) throws IOException { Map<SubjectId, ProductionJob> jobs = new LinkedHashMap<>();
-        for (int index = 0, count = readCount(input); index < count; index++) {
-            SubjectId id = new SubjectId(readString(input));
-            SubjectId settlement = new SubjectId(readString(input)), facility = new SubjectId(readString(input)), worker = new SubjectId(readString(input));
-            SubjectId consumed = new SubjectId(readString(input)); ProductionInputHold hold = hasInputHold ? readProductionInputHold(input, consumed) : new ProductionInputHold.Materialized(consumed);
-            SubjectId output = new SubjectId(readString(input)); String outputKind = readString(input); int outputCount = input.readUnsignedByte();
-            ProductionWorkProgress progress = ProductionWorkProgressStateCodec.read(input); TraversalTopology traversal = TraversalTopologyStateCodec.read(input);
-            ProductionJob job = new ProductionJob(id, settlement, facility, worker, consumed, hold, output, outputKind, outputCount, progress, traversal, input.readUnsignedShort());
-            if (jobs.put(id, job) != null) throw new IllegalArgumentException("duplicate production job id");
-        }
-        return jobs;
-    }
-    private static void writeProductionInputHold(DataOutputStream output, ProductionInputHold hold) throws IOException {
-        if (hold instanceof ProductionInputHold.Materialized) { output.writeByte(0); return; }
-        if (hold instanceof ProductionInputHold.Cold cold) {
-            ExactItemStack item = cold.item();
-            output.writeByte(1); writeString(output, item.economicOwnerId().value()); writeString(output, item.itemKind()); output.writeByte(item.count()); writeCustody(output, item.custody());
-        } else if (hold instanceof ProductionInputHold.FungibleCold cold) {
-            output.writeByte(2); writeString(output, cold.accountId().value()); writeString(output, cold.claimId().value());
-        } else if (hold instanceof ProductionInputHold.FungibleBound bound) {
-            output.writeByte(3); writeString(output, bound.accountId().value()); writeString(output, bound.claimId().value()); output.writeLong(bound.authorityEpoch());
-        } else throw new IllegalArgumentException("unknown production input hold");
-    }
-    private static ProductionInputHold readProductionInputHold(DataInputStream input, SubjectId itemId) throws IOException {
-        return switch (input.readUnsignedByte()) {
-            case 0 -> new ProductionInputHold.Materialized(itemId);
-            case 1 -> new ProductionInputHold.Cold(new ExactItemStack(itemId, new SubjectId(readString(input)), readString(input), input.readUnsignedByte(), readCustody(input)));
-            case 2 -> new ProductionInputHold.FungibleCold(itemId, new SubjectId(readString(input)), new SubjectId(readString(input)));
-            case 3 -> new ProductionInputHold.FungibleBound(itemId, new SubjectId(readString(input)), new SubjectId(readString(input)), input.readLong());
-            default -> throw new IllegalArgumentException("unknown production input hold");
-        };
+        return new ExactInventory(containers, items, cargo, players, carriers, conflicts, surfaces, economics, FungibleResourceStateCodec.read(input));
     }
     private static void writeContracts(DataOutputStream output, Map<SubjectId, SupplyContract> contracts) throws IOException {
         writeCount(output, contracts.size()); for (SupplyContract contract : contracts.values().stream().sorted(java.util.Comparator.comparing(SupplyContract::id)).toList()) {

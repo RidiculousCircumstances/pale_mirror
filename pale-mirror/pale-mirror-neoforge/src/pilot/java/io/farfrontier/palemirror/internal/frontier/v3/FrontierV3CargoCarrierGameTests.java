@@ -4,18 +4,21 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierV3FixtureCatalog;
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
 import io.farfrontier.palemirror.frontier.v3.model.CargoCarrierReleased;
 import io.farfrontier.palemirror.frontier.v3.model.ContractStatus;
+import io.farfrontier.palemirror.frontier.v3.model.CustodyAccount;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import io.farfrontier.palemirror.frontier.v3.model.OperationStage;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceCustody;
 import io.farfrontier.palemirror.frontier.v3.model.SceneEngagementCandidate;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeasePrepared;
@@ -30,6 +33,8 @@ import io.farfrontier.palemirror.frontier.v3.persistence.RecoveryImage;
 import io.farfrontier.palemirror.frontier.v3.persistence.SnapshotReceipt;
 import io.farfrontier.palemirror.frontier.v3.persistence.SnapshotRecord;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
@@ -38,6 +43,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.vehicle.MinecartChest;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Blocks;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
@@ -186,7 +192,7 @@ public final class FrontierV3CargoCarrierGameTests {
     }
 
     @GameTest(batch = "pm-frontier-v3-scene-cargo", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
-    public static void playerOpeningCargoReleasesItsRouteThenObservesExactWithdrawal(GameTestHelper helper) {
+    public static void playerOpeningCargoReleasesItsRouteThenObservesPartialFungibleWithdrawal(GameTestHelper helper) {
         // This test proves player custody/release, while preparedSceneMaterializes... proves
         // cargo creation. Keep the observed cart in this template instead of force-loading the
         // canonical hand-off chunk shared by parallel GameTests.
@@ -205,15 +211,15 @@ public final class FrontierV3CargoCarrierGameTests {
                 helper.assertTrue(cart == carrier, "the exact cargo cart must be UUID-indexed before interaction");
                 FrontierWorldState hot = state(runtime);
                 helper.assertTrue(FrontierV3CargoCarrierExecutor.markReleasedCarrier(hot, lease, cart),
-                        "release marks every exact stack with its live cart carrier before the durable fact");
+                        "release verifies the one live cargo carrier before the durable fact");
                 helper.assertTrue(!FrontierV3CargoCarrierPresentation.attached(cart, lease),
                         "a released player-opened cart must lose its caravan caption before it can become ordinary world custody");
                 FrontierV3CommandSubmission.submit(runtime, "scene-cargo-player-release", lease.id().value(),
                         new CargoCarrierReleased(lease.id(), FrontierSceneBehaviors.logistics(lease).cargoId(), cart.getUUID(), java.util.Optional.of(java.util.UUID.fromString("00000000-0000-0000-0000-000000000061"))));
                 FrontierWorldState released = state(runtime);
-                var itemId = initial.inventory().cargo().get(FrontierSceneBehaviors.logistics(lease).cargoId()).itemIds().getFirst();
-                helper.assertValueEqual(released.inventory().items().get(itemId).custody(), new InventoryCustody.WorldCarrier(cart.getUUID()),
-                        "a released shipment becomes the exact cart's physical custody, never an untracked aggregate");
+                var source = fungibleWorldCarrierAccount(released, cart.getUUID());
+                helper.assertValueEqual(source.custody(), new ResourceCustody.WorldCarrier(cart.getUUID()),
+                        "a released shipment becomes the cart's one HOT fungible custody account");
                 helper.assertValueEqual(released.contracts().values().stream().filter(contract -> contract.cargoId().equals(FrontierSceneBehaviors.logistics(lease).cargoId())).findFirst().orElseThrow().status(), ContractStatus.INTERRUPTED,
                         "opening the cart interrupts the canonical supply contract");
                 helper.assertValueEqual(released.operations().get(FrontierSceneBehaviors.logistics(lease).operationId()).stage(), OperationStage.INTERRUPTED,
@@ -221,17 +227,24 @@ public final class FrontierV3CargoCarrierGameTests {
                 helper.assertValueEqual(released.sceneLeases().get(lease.id()).status(), SceneLeaseStatus.DRAINING,
                         "the HOT bodies must drain rather than keep escorting a released cart");
                 var player = helper.makeMockServerPlayerInLevel();
-                player.getInventory().setItem(0, cart.removeItemNoUpdate(0)); cart.setChanged();
-                FrontierV3CargoCarrierObservationExecutor.tick(level, runtime);
-                helper.assertValueEqual(state(runtime).inventory().items().get(itemId).custody(), new InventoryCustody.Player(player.getUUID()),
-                        "the first real cart withdrawal must retain its exact stack ID and player UUID");
+                var withdrawn = cart.getItem(0).split(cart.getItem(0).getCount() / 2);
+                player.getInventory().setItem(0, withdrawn); cart.setChanged();
+                FrontierV3FungibleResourceObservationExecutor.tick(level, runtime);
+                FrontierWorldState observed = state(runtime);
+                var retained = observed.inventory().fungibleResources().accounts().get(source.id());
+                var playerAccount = observed.inventory().fungibleResources().accounts().values().stream()
+                        .filter(account -> account.custody().equals(new ResourceCustody.Player(player.getUUID()))).findFirst().orElseThrow();
+                helper.assertValueEqual(retained.lotQuantities().values().stream().mapToInt(Integer::intValue).sum(), cart.getItem(0).getCount(),
+                        "the cart retains exactly its physically remaining partial fungible portion");
+                helper.assertValueEqual(playerAccount.lotQuantities().values().stream().mapToInt(Integer::intValue).sum(), withdrawn.getCount(),
+                        "the observed player stack owns exactly the withdrawn partial fungible portion");
                 cart.discard(); runtime.shutdown(); helper.succeed();
             } catch (RuntimeException failure) { discard(level, lease); runtime.shutdown(); throw failure; }
         });
     }
 
     @GameTest(batch = "pm-frontier-v3-scene-cargo", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 30)
-    public static void externalImpactReloadTransfersDestroyedCargoCartToExactDrops(GameTestHelper helper) {
+    public static void externalImpactReloadTransfersDestroyedCargoCartToFungibleDrop(GameTestHelper helper) {
         // Stay inside this test's template footprint. A relative x=64 overlaps a concurrently
         // running fixture, which can legitimately remove its own nearby item entities.
         ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(4, 8, 4));
@@ -244,26 +257,21 @@ public final class FrontierV3CargoCarrierGameTests {
         FrontierV3CommandSubmission.submit(runtime, "scene-cargo-impact-hot", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
         helper.runAfterDelay(1L, () -> {
             try {
-                MinecartChest cart = EntityType.CHEST_MINECART.create(level);
-                helper.assertTrue(cart != null, "the exact cargo cart fixture must be constructible");
-                cart.setUUID(FrontierV3CargoCarrierExecutor.id(lease)); BlockPos cartPosition = cargoPosition(origin, lease);
-                cart.setPos(cartPosition.getX() + 0.5D, cartPosition.getY(), cartPosition.getZ() + 0.5D);
-                cart.getPersistentData().putString(FrontierV3CargoCarrierExecutor.LEASE_KEY, lease.id().value());
-                cart.getPersistentData().putString(FrontierV3CargoCarrierExecutor.CARGO_KEY, FrontierSceneBehaviors.logistics(lease).cargoId().value());
-                var cargo = state(runtime).inventory().cargo().get(FrontierSceneBehaviors.logistics(lease).cargoId());
-                for (int slot = 0; slot < cargo.itemIds().size(); slot++) cart.setItem(slot, FrontierV3CargoHandoffExecutor.materializedStack(state(runtime).inventory().items().get(cargo.itemIds().get(slot))));
-                helper.assertTrue(level.addFreshEntity(cart), "the exact cargo cart fixture must enter the loaded world");
+                MinecartChest cart = addOwnedCarrier(helper, level, state(runtime), lease, cargoPosition(origin, lease));
                 FrontierV3CargoCarrierImpactLedger ledger = FrontierV3CargoCarrierImpactLedger.get(level);
                 boolean rejected = false;
                 try { ledger.capture(level.getGameTime(), cart, state(runtime)); }
                 catch (IllegalStateException expected) { rejected = true; }
                 helper.assertTrue(rejected, "an unreleased HOT cargo batch may never be treated as a physical carrier");
                 helper.assertTrue(FrontierV3CargoCarrierExecutor.markReleasedCarrier(state(runtime), lease, cart),
-                        "every exact cart stack must retain its old carrier identity before impact");
+                        "the live fungible cart must pass its canonical carrier ownership check before impact");
                 FrontierV3CommandSubmission.submit(runtime, "scene-cargo-impact-release", lease.id().value(),
                         new CargoCarrierReleased(lease.id(), FrontierSceneBehaviors.logistics(lease).cargoId(), cart.getUUID(), Optional.empty()));
                 FrontierWorldState released = state(runtime); ledger.capture(level.getGameTime(), cart, released);
                 FrontierV3CargoCarrierImpactLedger restored = FrontierV3CargoCarrierImpactLedger.load(ledger.save(new net.minecraft.nbt.CompoundTag(), level.registryAccess()), level.registryAccess());
+                var originalReady = ledger.nextReady(Long.MAX_VALUE);
+                helper.assertTrue(originalReady.isPresent(), "the live saved-data ledger must retain the released fungible carrier before simulated restart");
+                ledger.resolve(originalReady.orElseThrow());
                 BlockPos impactPosition = cart.blockPosition(); java.util.List<net.minecraft.world.item.ItemStack> releasedStacks = new java.util.ArrayList<>();
                 for (int slot = 0; slot < cart.getContainerSize(); slot++) {
                     var stack = cart.removeItemNoUpdate(slot); if (stack.isEmpty()) continue;
@@ -272,25 +280,29 @@ public final class FrontierV3CargoCarrierGameTests {
                 cart.setChanged(); cart.discard();
                 helper.runAfterDelay(2L, () -> {
                     try {
-                        helper.assertTrue(restored.nextReady(Long.MAX_VALUE).isPresent(), "reloaded impact evidence must retain one queued exact stack");
+                        helper.assertTrue(restored.nextReady(Long.MAX_VALUE).isPresent(), "reloaded impact evidence must retain one queued fungible carrier");
                         // The fixture lives in its own already-loaded template chunk. The production executor
                         // may inspect that chunk but must never make it load.
                         helper.assertTrue(level.hasChunkAt(cargoPosition(origin, lease)), "the impact anchor must remain naturally loaded for inspection");
-                        java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, java.util.UUID> drops = new java.util.HashMap<>();
-                        for (var stack : releasedStacks) {
-                            ItemEntity drop = new ItemEntity(level, impactPosition.getX() + 0.5D, impactPosition.getY(), impactPosition.getZ() + 0.5D, stack);
-                            helper.assertTrue(level.addFreshEntity(drop), "a real exact cart stack must become one physical drop");
-                            drops.put(FrontierV3CargoHandoffExecutor.itemId(stack).orElseThrow(), drop.getUUID());
-                        }
+                        helper.assertValueEqual(releasedStacks.size(), 1, "one fungible cargo account must have one physical cart stack");
+                        ItemEntity drop = new ItemEntity(level, impactPosition.getX() + 0.5D, impactPosition.getY(), impactPosition.getZ() + 0.5D, releasedStacks.getFirst());
+                        helper.assertTrue(level.addFreshEntity(drop), "the real fungible cart stack must become one physical drop");
                         helper.runAfterDelay(1L, () -> {
                             try {
-                                helper.assertTrue(drops.values().stream().allMatch(dropId -> level.getEntity(dropId) instanceof ItemEntity),
-                                        "each released cart stack must remain one nearby physical drop before reconciliation");
+                                helper.assertTrue(level.getEntity(drop.getUUID()) instanceof ItemEntity,
+                                        "the released fungible cart stack must remain one nearby physical drop before reconciliation");
+                                helper.assertTrue(level.hasChunkAt(impactPosition), "the retained carrier impact position must remain ordinarily loaded");
+                                helper.assertValueEqual(level.getEntitiesOfClass(ItemEntity.class, new net.minecraft.world.phys.AABB(impactPosition).inflate(16.0D),
+                                                candidateDrop -> ItemStack.isSameItemSameComponents(candidateDrop.getItem(), drop.getItem())
+                                                        && candidateDrop.getItem().getCount() == drop.getItem().getCount()).size(), 1,
+                                        "the restart fixture must expose exactly one physical successor drop");
                                 FrontierV3CargoCarrierImpactExecutor.tick(level, runtime, restored, level.getGameTime() + 1L);
-                                for (var entry : drops.entrySet()) {
-                                    helper.assertValueEqual(state(runtime).inventory().items().get(entry.getKey()).custody(), new InventoryCustody.WorldCarrier(entry.getValue()),
-                                            "reloaded impact evidence must transfer each exact stack to its one real surviving drop");
-                                }
+                                var successor = state(runtime).inventory().fungibleResources().accounts().values().stream()
+                                        .filter(account -> account.custody().equals(new ResourceCustody.WorldCarrier(drop.getUUID()))).findFirst();
+                                helper.assertTrue(successor.isPresent(), "reloaded impact evidence must retain a successor account at the observed drop; accounts="
+                                        + state(runtime).inventory().fungibleResources().accounts().values().stream().map(account -> account.custody().toString()).toList());
+                                helper.assertValueEqual(successor.orElseThrow().custody(), new ResourceCustody.WorldCarrier(drop.getUUID()),
+                                        "reloaded impact evidence must transfer the one fungible account to its real surviving drop");
                                 runtime.shutdown(); helper.succeed();
                             } catch (RuntimeException failure) { discard(level, lease); runtime.shutdown(); throw failure; }
                         });
@@ -312,30 +324,24 @@ public final class FrontierV3CargoCarrierGameTests {
         FrontierV3CommandSubmission.submit(runtime, "scene-cargo-terminal-hot", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
         helper.runAfterDelay(1L, () -> {
             try {
-                MinecartChest cart = EntityType.CHEST_MINECART.create(level);
-                helper.assertTrue(cart != null, "the terminal-damage cargo cart fixture must be constructible");
-                cart.setUUID(FrontierV3CargoCarrierExecutor.id(lease)); BlockPos cartPosition = cargoPosition(origin, lease);
-                cart.setPos(cartPosition.getX() + 0.5D, cartPosition.getY(), cartPosition.getZ() + 0.5D);
-                cart.getPersistentData().putString(FrontierV3CargoCarrierExecutor.LEASE_KEY, lease.id().value());
-                cart.getPersistentData().putString(FrontierV3CargoCarrierExecutor.CARGO_KEY, FrontierSceneBehaviors.logistics(lease).cargoId().value());
-                var cargo = state(runtime).inventory().cargo().get(FrontierSceneBehaviors.logistics(lease).cargoId());
-                for (int slot = 0; slot < cargo.itemIds().size(); slot++) cart.setItem(slot, FrontierV3CargoHandoffExecutor.materializedStack(state(runtime).inventory().items().get(cargo.itemIds().get(slot))));
-                helper.assertTrue(level.addFreshEntity(cart), "the terminal-damage cargo cart fixture must enter the loaded world");
+                MinecartChest cart = addOwnedCarrier(helper, level, state(runtime), lease, cargoPosition(origin, lease));
                 FrontierV3CargoCarrierImpactLedger ledger = FrontierV3CargoCarrierImpactLedger.get(level);
                 FrontierV3ServerLifecycle.observeTerminalVehicleDamage(level, runtime, cart, level.damageSources().generic());
-                var itemId = cargo.itemIds().getFirst();
-                helper.assertValueEqual(state(runtime).inventory().items().get(itemId).custody(), new InventoryCustody.WorldCarrier(cart.getUUID()),
-                        "a terminal hit must durably release exact cargo before vanilla destroys the cart");
+                var carrierAccount = fungibleWorldCarrierAccount(state(runtime), cart.getUUID());
+                helper.assertValueEqual(carrierAccount.custody(), new ResourceCustody.WorldCarrier(cart.getUUID()),
+                        "a terminal hit must durably release fungible cargo before vanilla destroys the cart");
                 helper.assertTrue(ledger.nextReady(Long.MAX_VALUE).isPresent(), "terminal damage must retain restart-safe pre-destruction evidence");
                 helper.assertTrue(cart.hurt(level.damageSources().generic(), 5.0F), "vanilla must still apply the unrestricted terminal minecart hit");
                 helper.runAfterDelay(2L, () -> {
                     try {
                         helper.assertTrue(cart.isRemoved(), "the test must observe real vanilla cart destruction rather than a protected vehicle");
                         FrontierV3CargoCarrierImpactExecutor.tick(level, runtime, ledger, level.getGameTime() + 1L);
-                        var surviving = state(runtime).inventory().items().get(itemId);
-                        helper.assertTrue(surviving == null || (surviving.custody() instanceof InventoryCustody.WorldCarrier carrier
-                                        && !carrier.carrierId().equals(cart.getUUID())),
-                                "the exact cargo must either follow one real vanilla drop or be recorded destroyed, never retain the destroyed cart identity");
+                        boolean retained = state(runtime).inventory().fungibleResources().accounts().values().stream()
+                                .anyMatch(account -> account.custody().equals(new ResourceCustody.WorldCarrier(cart.getUUID())));
+                        boolean successor = state(runtime).inventory().fungibleResources().accounts().values().stream()
+                                .anyMatch(account -> account.custody() instanceof ResourceCustody.WorldCarrier carrier && !carrier.carrierId().equals(cart.getUUID()));
+                        helper.assertTrue(successor || retained && ledger.nextReady(Long.MAX_VALUE).isPresent(),
+                                "a missing fungible drop must either retain one successor carrier or stay fenced by restart-safe impact evidence");
                         runtime.shutdown(); helper.succeed();
                     } catch (RuntimeException failure) { discard(level, lease); runtime.shutdown(); throw failure; }
                 });
@@ -382,16 +388,29 @@ public final class FrontierV3CargoCarrierGameTests {
     }
     private static MinecartChest addOwnedCarrier(GameTestHelper helper, ServerLevel level, FrontierWorldState state, SceneLease lease, BlockPos position) {
         MinecartChest cart = EntityType.CHEST_MINECART.create(level);
-        helper.assertTrue(cart != null, "the exact recovery cargo carrier must be constructible");
+        helper.assertTrue(cart != null, "the cargo carrier fixture must be constructible");
         cart.setUUID(FrontierV3CargoCarrierExecutor.id(lease)); cart.setPos(position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D);
         cart.getPersistentData().putString(FrontierV3CargoCarrierExecutor.LEASE_KEY, lease.id().value());
         cart.getPersistentData().putString(FrontierV3CargoCarrierExecutor.CARGO_KEY, FrontierSceneBehaviors.logistics(lease).cargoId().value());
-        var cargo = state.inventory().cargo().get(FrontierSceneBehaviors.logistics(lease).cargoId());
-        for (int slot = 0; slot < cargo.itemIds().size(); slot++) {
-            cart.setItem(slot, FrontierV3CargoHandoffExecutor.materializedStack(state.inventory().items().get(cargo.itemIds().get(slot))));
-        }
-        helper.assertTrue(level.addFreshEntity(cart), "the exact recovery cargo carrier must enter the loaded world");
+        CustodyAccount account = fungibleCargoAccount(state, FrontierSceneBehaviors.logistics(lease).cargoId());
+        String kind = account.lotQuantities().keySet().stream().map(state.inventory().fungibleResources().lots()::get)
+                .map(lot -> lot.itemKind()).distinct().reduce((left, right) -> "").orElse("");
+        int quantity = account.lotQuantities().values().stream().mapToInt(Integer::intValue).sum();
+        var item = BuiltInRegistries.ITEM.getOptional(ResourceLocation.parse(kind)).orElse(null);
+        helper.assertTrue(item != null && quantity > 0 && quantity <= 64, "the cargo fixture requires one bounded canonical fungible stack");
+        cart.setItem(0, new ItemStack(item, quantity));
+        helper.assertTrue(level.addFreshEntity(cart), "the canonical cargo carrier fixture must enter the loaded world");
         return cart;
+    }
+
+    private static CustodyAccount fungibleCargoAccount(FrontierWorldState state, SubjectId cargoId) {
+        return state.inventory().fungibleResources().accounts().values().stream()
+                .filter(account -> account.custody() instanceof ResourceCustody.Cargo custody && custody.cargoId().equals(cargoId))
+                .findFirst().orElseThrow();
+    }
+    private static CustodyAccount fungibleWorldCarrierAccount(FrontierWorldState state, java.util.UUID carrierId) {
+        return state.inventory().fungibleResources().accounts().values().stream()
+                .filter(account -> account.custody().equals(new ResourceCustody.WorldCarrier(carrierId))).findFirst().orElseThrow();
     }
     private static FrontierWorldState state(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         return new FrontierWorldStateCodec().decode(runtime.checkpointImage().orElseThrow().canonicalState());

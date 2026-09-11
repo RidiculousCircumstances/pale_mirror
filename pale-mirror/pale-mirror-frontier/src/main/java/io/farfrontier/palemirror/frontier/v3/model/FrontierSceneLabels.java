@@ -39,17 +39,41 @@ public final class FrontierSceneLabels {
     }
 
     public static String cargo(FrontierWorldState state, CargoBatch cargo) {
-        ExactItemStack stack = cargo.itemIds().stream().map(state.inventory().items()::get).filter(java.util.Objects::nonNull)
-                .min(Comparator.comparing(ExactItemStack::id))
-                .orElseThrow(() -> new IllegalStateException("cargo has no exact presentable stack: " + cargo.id().value()));
-        String material = stack.itemKind().substring(stack.itemKind().indexOf(':') + 1).replace('_', ' ').toUpperCase(Locale.ROOT);
+        CargoPresentation cargoPresentation = cargo.fungibleContents() ? fungibleCargo(state, cargo) : exactCargo(state, cargo);
         String owner = state.bootstrap().settlements().stream().filter(settlement -> settlement.id().equals(cargo.ownerId()))
                 .map(Settlement::displayName).findFirst().orElse(cargo.ownerId().value().startsWith("hive:") ? "HIVE" : "FRONTIER");
         // A physical carrier is often seen from the side at a distance.  Two short semantic
         // lines make its affiliation and exact visible load legible without creating a HUD,
         // exposing an internal ID, or introducing a second operation object.
-        return owner.toUpperCase(Locale.ROOT) + " CARAVAN\n" + material + " ×" + stack.count();
+        return owner.toUpperCase(Locale.ROOT) + " CARAVAN\n" + cargoPresentation.material() + " ×" + cargoPresentation.quantity();
     }
+
+    private static CargoPresentation exactCargo(FrontierWorldState state, CargoBatch cargo) {
+        ExactItemStack stack = cargo.itemIds().stream().map(state.inventory().items()::get).filter(java.util.Objects::nonNull)
+                .min(Comparator.comparing(ExactItemStack::id))
+                .orElseThrow(() -> new IllegalStateException("cargo has no exact presentable stack: " + cargo.id().value()));
+        return new CargoPresentation(material(stack.itemKind()), stack.count());
+    }
+
+    private static CargoPresentation fungibleCargo(FrontierWorldState state, CargoBatch cargo) {
+        CustodyAccount account = state.inventory().fungibleResources().accounts().values().stream()
+                .filter(value -> value.custody() instanceof ResourceCustody.Cargo carried && carried.cargoId().equals(cargo.id()))
+                .findFirst().orElse(null);
+        if (account == null || account.lotQuantities().isEmpty()) {
+            throw new IllegalStateException("cargo has no presentable fungible account: " + cargo.id().value());
+        }
+        var lots = account.lotQuantities().keySet().stream().map(state.inventory().fungibleResources().lots()::get)
+                .filter(java.util.Objects::nonNull).toList();
+        String itemKind = lots.stream().map(ResourceLot::itemKind).distinct().reduce((left, right) -> "").orElse("");
+        if (itemKind.isEmpty()) throw new IllegalStateException("cargo has mixed or missing fungible presentation lots: " + cargo.id().value());
+        return new CargoPresentation(material(itemKind), account.lotQuantities().values().stream().mapToInt(Integer::intValue).sum());
+    }
+
+    private static String material(String itemKind) {
+        return itemKind.substring(itemKind.indexOf(':') + 1).replace('_', ' ').toUpperCase(Locale.ROOT);
+    }
+
+    private record CargoPresentation(String material, int quantity) { }
 
     private static String words(String enumName) { return enumName.replace('_', ' ').toUpperCase(Locale.ROOT); }
 }

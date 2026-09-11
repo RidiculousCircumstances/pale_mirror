@@ -1,21 +1,16 @@
 package io.farfrontier.palemirror.frontier.v3.persistence;
-import io.farfrontier.palemirror.frontier.v3.model.*; import io.farfrontier.palemirror.frontier.v3.api.FixedRatio; import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
-import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
+import io.farfrontier.palemirror.frontier.v3.model.*; import io.farfrontier.palemirror.frontier.v3.api.FixedRatio; import io.farfrontier.palemirror.frontier.v3.api.FixedScalar; import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.kernel.PayloadCodec; import io.farfrontier.palemirror.frontier.v3.kernel.PayloadCodecs;
-import java.nio.ByteBuffer; import java.io.ByteArrayInputStream; import java.io.ByteArrayOutputStream; import java.io.DataInputStream;
-import java.io.DataOutputStream; import java.io.IOException; import java.util.List;
+import java.nio.ByteBuffer; import java.io.ByteArrayInputStream; import java.io.ByteArrayOutputStream; import java.io.DataInputStream; import java.io.DataOutputStream; import java.io.IOException; import java.util.List;
 /** Complete payload registry for the currently installed v3 world processes. */
 public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCodecs() { }
-    public static PayloadCodecs create() {
-        return FrontierWorldProcessCodecs.create();
-    }
-
-    static PayloadCodecs physicalCodecs() { return new PayloadCodecs(List.of(
+    public static PayloadCodecs create() { return FrontierWorldProcessCodecs.create(); }
+    static PayloadCodecs physicalCodecs() { return PayloadCodecs.merge(new PayloadCodecs(List.of(
             new PhysicalIntentPreparedCodec(), new PhysicalIntentTransitionCodec(), new StructureDamagedCodec(),
             PhysicalDeltaPayloadCodecs.single(), PhysicalDeltaPayloadCodecs.batch(), new ExactItemCustodyChangedCodec(), new ExactItemDestroyedCodec(),
-            new InventoryConflictObservedCodec(), new ContainerSurfaceTransitionCodec(), new ResourceDepositedCodec(), new FungibleStackLayoutObservedCodec(),
-            new FungibleResourceHandoffObservedCodec(), new FungibleStackBindingsReleasedCodec(), new CargoCarrierReleasedPayloadCodec())); }
+            new InventoryConflictObservedCodec(), new ContainerSurfaceTransitionCodec(), new ResourceDepositedCodec(),
+            new CargoCarrierReleasedPayloadCodec())), FungibleResourcePayloadCodecs.observationCodecs()); }
     static PayloadCodecs replicaCustodyCodecs() { return new PayloadCodecs(PhysicalReplicaCustodyPayloadCodecs.codecs()); }
     static PayloadCodecs ambientCodecs() { return new PayloadCodecs(List.of(new AmbientActorDiedCodec(),
             new AmbientActorObservedCodec(), AmbientLeasePayloadCodecs.prepared(), AmbientLeasePayloadCodecs.transition(), AmbientLeasePayloadCodecs.released(),
@@ -36,7 +31,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             MedicalTreatmentPayloadCodecs.started(), MedicalTreatmentPayloadCodecs.transition())),
             MedicalTreatmentScenePayloadCodecs.codecs()); }
     static PayloadCodecs economyCodecs() { return PayloadCodecs.merge(new PayloadCodecs(List.of(
-            new ProductionStartedCodec(), new ProductionCompletedCodec(), new FungibleProductionCompletedCodec(), new ProductionBlockedCodec(), ProductionInterruptionPayloadCodec.interrupted(),
+            new ProductionStartedCodec(), new ProductionCompletedCodec(), FungibleResourcePayloadCodecs.productionCompleted(), new ProductionBlockedCodec(), ProductionInterruptionPayloadCodec.interrupted(),
             new CompanyRegisteredCodec(), new EmploymentContractOpenedCodec(), new EmploymentContractTerminatedCodec(), MarketPayloadCodecs.opened(),
             MarketPayloadCodecs.quote(), MarketPayloadCodecs.accepted(), MarketPayloadCodecs.workOrderCancelled(), MarketPayloadCodecs.expired(),
             MarketPayloadCodecs.cancelled())), ProductionWorkScenePayloadCodecs.codecs(), ProductionWorkScenePayloadCodecs.productionEvents()); }
@@ -159,20 +154,6 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
                 return new ProductionCompleted(job.value(), new ExactItemStack(output.value(), owner.value(), kind, count, new InventoryCustody.ContainerSlot(container.value(), slot)));
             });
         }
-    } private static final class FungibleProductionCompletedCodec implements PayloadCodec {
-        @Override public String type() { return "frontier.fungible_production_completed"; }
-        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
-            FungibleProductionCompleted completed = (FungibleProductionCompleted) payload; ResourceLot lot = completed.output();
-            writeSubject(output, completed.jobId()); writeSubject(output, lot.id()); writeSubject(output, lot.economicOwnerId()); writeString(output, lot.itemKind());
-            output.writeShort(lot.quantity()); writeString(output, lot.provenance()); output.writeByte(lot.lineage().size());
-            for (SubjectId lineage : lot.lineage()) writeSubject(output, lineage);
-        }); }
-        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
-            SubjectId jobId = readSubject(input).value(); SubjectId id = readSubject(input).value(); SubjectId owner = readSubject(input).value();
-            String kind = readString(input); int quantity = input.readUnsignedShort(); String provenance = readString(input); int count = input.readUnsignedByte();
-            java.util.ArrayList<SubjectId> lineage = new java.util.ArrayList<>(); for (int index = 0; index < count; index++) lineage.add(readSubject(input).value());
-            return new FungibleProductionCompleted(jobId, new ResourceLot(id, owner, kind, quantity, provenance, lineage));
-        }); }
     } private static final class ProductionBlockedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.production_blocked"; } @Override public byte[] encode(FrontierPayload payload) {
             ProductionBlocked blocked = (ProductionBlocked) payload;
@@ -186,45 +167,6 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
                 return new ProductionBlocked(settlement.value(), facility.value(), work.value(), FrontierWireTags.require(ProductionBlockReason.class, ordinal));
             });
         }
-    }
-    private static final class FungibleStackLayoutObservedCodec implements PayloadCodec {
-        @Override public String type() { return "frontier.fungible_stack_layout_observed"; }
-        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
-            FungibleStackLayoutObserved observed = (FungibleStackLayoutObserved) payload;
-            writeSubject(output, observed.accountId()); output.writeLong(observed.authorityEpoch()); output.writeShort(observed.stacks().size());
-            for (FungiblePhysicalObservation.Stack stack : observed.stacks()) {
-                writePhysicalStackAddress(output, stack.address()); writeString(output, stack.itemKind()); output.writeByte(stack.quantity());
-            }
-        }); }
-        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
-            SubjectId account = readSubject(input).value(); long epoch = input.readLong(); int count = input.readUnsignedShort();
-            if (count == 0 || count > 16_384) throw new IllegalArgumentException("invalid fungible stack observation count");
-            java.util.ArrayList<FungiblePhysicalObservation.Stack> stacks = new java.util.ArrayList<>();
-            for (int index = 0; index < count; index++) stacks.add(new FungiblePhysicalObservation.Stack(readPhysicalStackAddress(input), readString(input), input.readUnsignedByte()));
-            return new FungibleStackLayoutObserved(account, epoch, stacks);
-        }); }
-    }
-    private static final class FungibleResourceHandoffObservedCodec implements PayloadCodec {
-        @Override public String type() { return "frontier.fungible_resource_handoff_observed"; }
-        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
-            FungibleResourceHandoffObserved observed = (FungibleResourceHandoffObserved) payload;
-            writeSubject(output, observed.sourceAccountId()); writeFungibleAccount(output, observed.destinationAccount());
-            output.writeLong(observed.sourceEpoch()); output.writeLong(observed.destinationEpoch()); writeFungibleQuantities(output, observed.lotQuantities());
-            writeFungibleQuantities(output, observed.claimQuantities()); writeFungibleBindings(output, observed.remainingSource()); writeFungibleBindings(output, observed.destinationBindings());
-            writeSubjects(output, observed.forfeitedClaimIds());
-        }); }
-        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new FungibleResourceHandoffObserved(readSubject(input).value(),
-                readFungibleAccount(input), input.readLong(), input.readLong(), readFungibleQuantities(input), readFungibleQuantities(input),
-                readFungibleBindings(input), readFungibleBindings(input), readSubjects(input))); }
-    }
-    private static final class FungibleStackBindingsReleasedCodec implements PayloadCodec {
-        @Override public String type() { return "frontier.fungible_stack_bindings_released"; }
-        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
-            FungibleStackBindingsReleased released = (FungibleStackBindingsReleased) payload;
-            writeSubject(output, released.accountId()); output.writeLong(released.authorityEpoch());
-        }); }
-        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new FungibleStackBindingsReleased(
-                readSubject(input).value(), input.readLong())); }
     }
     private static final class ContractCreatedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.supply_contract_created"; } @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> writeContract(output, ((SupplyContractCreated) payload).contract())); }
@@ -742,7 +684,6 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         if (envelope != 0xfffe) throw new IllegalArgumentException("operation travel payload requires the current typed-anchor envelope");
         return readOperationTravelWithTopology(input, TraversalTopologyStateCodec.read(input));
     }
-
     private static OperationTravel readOperationTravelWithTopology(DataInputStream input, TraversalTopology topology) throws IOException {
         int cursor = input.readUnsignedShort(); java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, BodyPosition> formation = new java.util.LinkedHashMap<>();
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) {
@@ -786,7 +727,6 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         return new CargoHandoffObservation(id, intentId, cargoId.value(), placements);
     }
     private static final int TYPED_BODY_LEASE_MARKER = 0xfffe;
-
     private static void writeSceneLease(DataOutputStream output, SceneLease lease) throws IOException {
         if (!FrontierSceneBehaviors.isLogistics(lease)) {
             throw new IllegalArgumentException("logistics scene WAL payload requires its typed cause");
@@ -861,103 +801,33 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         return SceneLease.forCause(id, world, cause, handoff, new io.farfrontier.palemirror.frontier.v3.api.SimInstant(instant), revision,
                 FrontierWireTags.require(SceneLeaseStatus.class, status), members, positions, ambient, java.util.Optional.empty());
     }
-    private static void writeMemberPositions(DataOutputStream output, java.util.List<SceneMemberPosition> values) throws IOException {
-        output.writeByte(values.size()); for (SceneMemberPosition member : values) {
-            writeSubject(output, member.actorId()); output.writeInt(member.body().x()); output.writeInt(member.body().y()); output.writeInt(member.body().z()); output.writeLong(member.health().raw());
-        }
-    }
+    private static void writeMemberPositions(DataOutputStream output, java.util.List<SceneMemberPosition> values) throws IOException { output.writeByte(values.size()); for (SceneMemberPosition member : values) writeMemberPosition(output, member); }
+    private static void writeMemberPosition(DataOutputStream output, SceneMemberPosition member) throws IOException { writeSubject(output, member.actorId()); output.writeInt(member.body().x());
+        output.writeInt(member.body().y());
+        output.writeInt(member.body().z()); output.writeLong(member.health().raw()); }
     private static java.util.List<SceneMemberPosition> readMemberPositions(DataInputStream input) throws IOException {
         java.util.ArrayList<SceneMemberPosition> values = new java.util.ArrayList<>();
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) values.add(new SceneMemberPosition(readSubject(input).value(),
                 new BodyPosition(input.readInt(), input.readInt(), input.readInt()), new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(input.readLong())));
-        return values;
-    } static void writeCustody(DataOutputStream output, InventoryCustody custody) throws IOException {
+        return values; } static void writeCustody(DataOutputStream output, InventoryCustody custody) throws IOException {
         if (custody instanceof InventoryCustody.ContainerSlot slot) { output.writeByte(0); writeSubject(output, slot.containerId()); output.writeByte(slot.slot()); }
         else if (custody instanceof InventoryCustody.Player player) { output.writeByte(1); writeString(output, player.playerId().toString()); }
         else if (custody instanceof InventoryCustody.WorldCarrier carrier) { output.writeByte(2); writeString(output, carrier.carrierId().toString()); }
         else if (custody instanceof InventoryCustody.Actor actor) { output.writeByte(3); writeSubject(output, actor.actorId()); }
-        else throw new IllegalArgumentException("observed item custody payload cannot encode cargo custody");
-    } static InventoryCustody readCustody(DataInputStream input) throws IOException {
-        return switch (input.readUnsignedByte()) {
-            case 0 -> new InventoryCustody.ContainerSlot(readSubject(input).value(), input.readUnsignedByte());
+        else throw new IllegalArgumentException("observed item custody payload cannot encode cargo custody"); } static InventoryCustody readCustody(DataInputStream input) throws IOException {
+        return switch (input.readUnsignedByte()) { case 0 -> new InventoryCustody.ContainerSlot(readSubject(input).value(), input.readUnsignedByte());
             case 1 -> new InventoryCustody.Player(java.util.UUID.fromString(readString(input)));
             case 2 -> new InventoryCustody.WorldCarrier(java.util.UUID.fromString(readString(input))); case 3 -> new InventoryCustody.Actor(readSubject(input).value());
-            default -> throw new IllegalArgumentException("unknown observed item custody kind");
-        };
-    } private static void writePhysicalStackAddress(DataOutputStream output, PhysicalStackAddress address) throws IOException {
-        switch (address) {
-            case PhysicalStackAddress.ContainerSlot slot -> { output.writeByte(0); writeSubject(output, slot.slot().containerId()); output.writeByte(slot.slot().slot()); }
-            case PhysicalStackAddress.PlayerSlot slot -> { output.writeByte(1); writeString(output, slot.playerId().toString()); output.writeByte(slot.slot()); }
-            case PhysicalStackAddress.HopperSlot slot -> { output.writeByte(2); output.writeInt(slot.position().x()); output.writeInt(slot.position().y()); output.writeInt(slot.position().z()); output.writeByte(slot.slot()); }
-            case PhysicalStackAddress.WorldEntity entity -> { output.writeByte(3); writeString(output, entity.entityId().toString()); }
-        }
-    } private static PhysicalStackAddress readPhysicalStackAddress(DataInputStream input) throws IOException {
-        return switch (input.readUnsignedByte()) {
-            case 0 -> new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(readSubject(input).value(), input.readUnsignedByte()));
-            case 1 -> new PhysicalStackAddress.PlayerSlot(java.util.UUID.fromString(readString(input)), input.readUnsignedByte());
-            case 2 -> new PhysicalStackAddress.HopperSlot(new BlockPosition(input.readInt(), input.readInt(), input.readInt()), input.readUnsignedByte());
-            case 3 -> new PhysicalStackAddress.WorldEntity(java.util.UUID.fromString(readString(input)));
-            default -> throw new IllegalArgumentException("unknown physical stack address");
-        };
-    } private static void writeFungibleAccount(DataOutputStream output, CustodyAccount account) throws IOException {
-        writeSubject(output, account.id()); writeResourceCustody(output, account.custody()); writeFungibleQuantities(output, account.lotQuantities());
-        writeFungibleQuantities(output, account.claimQuantities());
-    } private static CustodyAccount readFungibleAccount(DataInputStream input) throws IOException {
-        return new CustodyAccount(readSubject(input).value(), readResourceCustody(input), readFungibleQuantities(input), readFungibleQuantities(input));
-    } private static void writeResourceCustody(DataOutputStream output, ResourceCustody custody) throws IOException {
-        switch (custody) {
-            case ResourceCustody.Container container -> { output.writeByte(0); writeSubject(output, container.containerId()); }
-            case ResourceCustody.Player player -> { output.writeByte(1); writeString(output, player.playerId().toString()); }
-            case ResourceCustody.Cargo cargo -> { output.writeByte(2); writeSubject(output, cargo.cargoId()); }
-            case ResourceCustody.WorldCarrier carrier -> { output.writeByte(3); writeString(output, carrier.carrierId().toString()); }
-            case ResourceCustody.Actor actor -> { output.writeByte(4); writeSubject(output, actor.actorId()); }
-        }
-    } private static ResourceCustody readResourceCustody(DataInputStream input) throws IOException {
-        return switch (input.readUnsignedByte()) {
-            case 0 -> new ResourceCustody.Container(readSubject(input).value());
-            case 1 -> new ResourceCustody.Player(java.util.UUID.fromString(readString(input)));
-            case 2 -> new ResourceCustody.Cargo(readSubject(input).value());
-            case 3 -> new ResourceCustody.WorldCarrier(java.util.UUID.fromString(readString(input)));
-            case 4 -> new ResourceCustody.Actor(readSubject(input).value());
-            default -> throw new IllegalArgumentException("unknown resource custody");
-        };
-    } private static void writeFungibleQuantities(DataOutputStream output, java.util.Map<SubjectId, Integer> quantities) throws IOException {
-        output.writeShort(quantities.size());
-        for (java.util.Map.Entry<SubjectId, Integer> entry : quantities.entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).toList()) {
-            writeSubject(output, entry.getKey()); output.writeShort(entry.getValue());
-        }
-    } private static java.util.Map<SubjectId, Integer> readFungibleQuantities(DataInputStream input) throws IOException {
-        java.util.Map<SubjectId, Integer> quantities = new java.util.LinkedHashMap<>();
-        for (int index = 0, count = input.readUnsignedShort(); index < count; index++) {
-            SubjectId id = readSubject(input).value(); if (quantities.put(id, input.readUnsignedShort()) != null) throw new IllegalArgumentException("duplicate fungible quantity identity");
-        }
-        return quantities;
-    } private static void writeFungibleBindings(DataOutputStream output, java.util.List<PhysicalStackBinding> bindings) throws IOException {
-        output.writeShort(bindings.size());
-        for (PhysicalStackBinding binding : bindings) {
-            writeSubject(output, binding.id()); writeSubject(output, binding.accountId()); writePhysicalStackAddress(output, binding.address()); output.writeLong(binding.authorityEpoch());
-            writeString(output, binding.itemKind()); writeFungibleQuantities(output, binding.lotQuantities()); writeFungibleQuantities(output, binding.claimQuantities());
-        }
-    } private static java.util.List<PhysicalStackBinding> readFungibleBindings(DataInputStream input) throws IOException {
-        java.util.ArrayList<PhysicalStackBinding> bindings = new java.util.ArrayList<>();
-        for (int index = 0, count = input.readUnsignedShort(); index < count; index++) bindings.add(new PhysicalStackBinding(readSubject(input).value(),
-                readSubject(input).value(), readPhysicalStackAddress(input), input.readLong(), readString(input), readFungibleQuantities(input), readFungibleQuantities(input)));
-        return bindings;
-    } private static void writeSubjects(DataOutputStream output, java.util.Set<SubjectId> values) throws IOException {
-        output.writeShort(values.size()); for (SubjectId value : values.stream().sorted().toList()) writeSubject(output, value);
-    } private static java.util.Set<SubjectId> readSubjects(DataInputStream input) throws IOException {
-        java.util.Set<SubjectId> values = new java.util.LinkedHashSet<>();
-        for (int index = 0, count = input.readUnsignedShort(); index < count; index++) {
-            if (!values.add(readSubject(input).value())) throw new IllegalArgumentException("duplicate forfeited claim identity");
-        }
-        return values;
+            default -> throw new IllegalArgumentException("unknown observed item custody kind"); };
     } public static void writeSubject(DataOutputStream output, io.farfrontier.palemirror.frontier.v3.api.SubjectId value) throws IOException { writeString(output, value.value()); }
     static SubjectIdHolder readSubject(DataInputStream input) throws IOException { return new SubjectIdHolder(new io.farfrontier.palemirror.frontier.v3.api.SubjectId(readString(input))); }
     public static void writeString(DataOutputStream output, String value) throws IOException {
-        byte[] encoded = value.getBytes(java.nio.charset.StandardCharsets.UTF_8); if (encoded.length > 256) throw new IllegalArgumentException("production payload field is too long"); output.writeShort(encoded.length); output.write(encoded);
-    } static String readString(DataInputStream input) throws IOException {
-        return readString(input, input.readUnsignedShort());
-    } static String readString(DataInputStream input, int length) throws IOException {
+        byte[] encoded = value.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        if (encoded.length > 256) throw new IllegalArgumentException("production payload field is too long");
+        output.writeShort(encoded.length); output.write(encoded); }
+    static String readString(DataInputStream input) throws IOException { return readString(input, input.readUnsignedShort()); }
+    static String readString(DataInputStream input, int length) throws IOException {
         if (length > 256) throw new IllegalArgumentException("production payload field is too long");
-        byte[] encoded = input.readNBytes(length); if (encoded.length != length) throw new IOException("truncated production payload field"); return new String(encoded, java.nio.charset.StandardCharsets.UTF_8); }
+        byte[] encoded = input.readNBytes(length); if (encoded.length != length) throw new IOException("truncated production payload field");
+        return new String(encoded, java.nio.charset.StandardCharsets.UTF_8); }
 }

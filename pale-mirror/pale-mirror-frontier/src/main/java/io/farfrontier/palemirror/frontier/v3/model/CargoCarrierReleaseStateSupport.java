@@ -27,6 +27,13 @@ final class CargoCarrierReleaseStateSupport {
         }).orElseThrow(() -> new IllegalArgumentException("cargo carrier release has no supply contract"));
         if (contract.status() != ContractStatus.LOADED) throw new IllegalArgumentException("only loaded cargo may leave its route carrier");
         ExactInventory inventory = state.inventory().releaseCargoToWorldCarrier(released.cargoId(), released.carrierId());
+        // A player/external release interrupts this route before its physical stack can leave
+        // the cart. Its former shipment claim cannot remain spendable or fence the ordinary
+        // subsequent player/drop handoff, so retire it atomically with that interruption.
+        java.util.Set<SubjectId> releasedClaims = inventory.fungibleResources().accounts().values().stream()
+                .filter(account -> account.custody().equals(new ResourceCustody.WorldCarrier(released.carrierId())))
+                .flatMap(account -> account.claimQuantities().keySet().stream()).collect(java.util.stream.Collectors.toSet());
+        if (!releasedClaims.isEmpty()) inventory = inventory.withFungibleResources(inventory.fungibleResources().releaseClaims(releasedClaims));
         Map<SubjectId, SupplyContract> contracts = new LinkedHashMap<>(state.contracts()); contracts.put(contract.id(), contract.withStatus(ContractStatus.INTERRUPTED));
         Map<SubjectId, RouteOperation> operations = new LinkedHashMap<>(state.operations());
         operations.put(operation.id(), new RouteOperation(operation.id(), operation.settlementId(), operation.cargoId(), operation.destinationId(),
