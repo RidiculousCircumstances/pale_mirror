@@ -189,12 +189,19 @@ class FrontierV3AmbientAdmissionPolicyTest {
                     "the actual lifecycle recognition delegate and production firewall must retain the exact ambient resident");
             assertProjectionReadWork(runtime, members, "initial lifecycle recognition");
 
-            assertThrows(IllegalStateException.class, () -> FrontierGrayboxPlan.withoutStructuralDerivation(
-                    () -> FrontierGrayboxPlan.structuralInput(state)),
-                    "fault control: the former pre-query structural-input fallback is forbidden inside provider acquisition");
-            assertThrows(IllegalStateException.class, () -> FrontierGrayboxPlan.withoutStructuralDerivation(
-                    () -> FrontierGrayboxPlan.compileStructuralBaseline(state)),
-                    "fault control: a global baseline compiler is equally forbidden inside provider acquisition");
+            FrontierV3ServerLifecycle.JoinFirewallProof inputFault = FrontierV3ServerLifecycle.composeSourceJoin(
+                    () -> { FrontierGrayboxPlan.structuralInput(state); return FrontierV3ServerLifecycle.EntityJoinAdmission.RETAINED; }, () -> true);
+            assertEquals(FrontierV3ServerLifecycle.EntityJoinAdmission.NOT_MANAGED, inputFault.lifecycleAdmission(),
+                    "fault control: the outer production join boundary catches the former pre-query structural-input fallback");
+            assertTrue(SourceGrayboxEntityAdmission.rejectsSourceMob(inputFault, true, false),
+                    "a structural-input fault must become the ordinary source-firewall cancellation, not an event exception");
+            FrontierV3ServerLifecycle.JoinFirewallProof compileFault = FrontierV3ServerLifecycle.composeSourceJoin(
+                    () -> FrontierV3ServerLifecycle.EntityJoinAdmission.RETAINED,
+                    () -> { FrontierGrayboxPlan.compileStructuralBaseline(state); return true; });
+            assertEquals(FrontierV3ServerLifecycle.EntityJoinAdmission.NOT_MANAGED, compileFault.lifecycleAdmission(),
+                    "fault control: the outer production join boundary catches a global compile from recognition");
+            assertTrue(SourceGrayboxEntityAdmission.rejectsSourceMob(compileFault, true, false),
+                    "a global compile fault must take the same fail-closed firewall result");
 
             GrayboxCell damaged = FrontierGrayboxPlan.compile(state).cells().values().stream()
                     .filter(cell -> cell.ownerId().equals(state.bootstrap().settlements().getFirst().structures().getFirst().id()))

@@ -106,7 +106,14 @@ public final class FrontierGrayboxPlan {
 
     private static void requireStructuralDerivationAllowed() {
         if (STRUCTURAL_DERIVATION_FORBIDDEN.get() != 0) {
-            throw new IllegalStateException("projection admission may not derive structural geometry");
+            throw new StructuralDerivationForbiddenException();
+        }
+    }
+
+    /** Controlled fail-closed signal for a projection admission read boundary. */
+    public static final class StructuralDerivationForbiddenException extends IllegalStateException {
+        private StructuralDerivationForbiddenException() {
+            super("projection admission may not derive structural geometry");
         }
     }
 

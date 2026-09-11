@@ -13,6 +13,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRecoveryConfiguration;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierGrayboxPlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierReadabilityPlan;
 import io.farfrontier.palemirror.frontier.v3.persistence.RecoveryImage;
 import io.farfrontier.palemirror.internal.presentation.PaleMirrorPlayerPresentation;
@@ -31,6 +32,8 @@ import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.OptionalInt;
+import java.util.function.BooleanSupplier;
+import java.util.function.Supplier;
 
 /** Explicit development bridge; V3 has no production activation before the cutover gate. */
 public final class FrontierV3ServerLifecycle {
@@ -544,7 +547,7 @@ public final class FrontierV3ServerLifecycle {
      */
     public static JoinFirewallProof observeSourceJoin(ServerLevel level, Entity entity) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity");
-        return new JoinFirewallProof(observeEntityJoin(level, entity), recognizesManagedCarrier(level, entity));
+        return composeSourceJoin(() -> observeEntityJoin(level, entity), () -> recognizesManagedCarrier(level, entity));
     }
 
     /** Exact carrier delegate of {@link #observeSourceJoin(ServerLevel, Entity)} for focused runtime tests. */
@@ -553,7 +556,23 @@ public final class FrontierV3ServerLifecycle {
                                                EntityJoinAdmission lifecycleAdmission) {
         Objects.requireNonNull(runtime, "runtime"); Objects.requireNonNull(carrier, "carrier");
         Objects.requireNonNull(lifecycleAdmission, "lifecycle admission");
-        return new JoinFirewallProof(lifecycleAdmission, recognizesManagedAmbientCarrier(runtime, carrier));
+        return composeSourceJoin(() -> lifecycleAdmission, () -> recognizesManagedAmbientCarrier(runtime, carrier));
+    }
+
+    /**
+     * Outer join boundary shared by the real Entity callback and focused fault controls. Any
+     * attempted global structural derivation is converted to the same fail-closed proof that
+     * the source firewall cancels; it never escapes as an event-callback exception.
+     */
+    static JoinFirewallProof composeSourceJoin(Supplier<EntityJoinAdmission> lifecycle,
+                                               BooleanSupplier recognition) {
+        Objects.requireNonNull(lifecycle, "lifecycle action"); Objects.requireNonNull(recognition, "recognition action");
+        try {
+            return FrontierGrayboxPlan.withoutStructuralDerivation(
+                    () -> new JoinFirewallProof(lifecycle.get(), recognition.getAsBoolean()));
+        } catch (FrontierGrayboxPlan.StructuralDerivationForbiddenException forbidden) {
+            return new JoinFirewallProof(EntityJoinAdmission.NOT_MANAGED, false);
+        }
     }
 
     /**
