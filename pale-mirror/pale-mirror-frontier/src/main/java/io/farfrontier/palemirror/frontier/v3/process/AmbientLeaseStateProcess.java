@@ -19,6 +19,18 @@ public final class AmbientLeaseStateProcess {
         if (!HivePhysiologySupport.permitsAmbientLease(state, lease.actorId())) {
             throw new IllegalArgumentException("cocoon-retained bioform may not prepare an ambient lease");
         }
+        HiveMobilization returning = state.hiveColony().mobilizations().values().stream()
+                .filter(value -> value.status() == HiveMobilizationStatus.RETURNING)
+                .filter(value -> value.returnAssembly().map(assembly -> assembly.members().containsKey(lease.actorId())).orElse(false))
+                .reduce((left, right) -> { throw new IllegalArgumentException("ambient bioform belongs to more than one hive return"); })
+                .orElse(null);
+        if (returning != null) {
+            HiveTaskAssembly.Member member = returning.returnAssembly().orElseThrow().members().get(lease.actorId());
+            SurfaceAnchor expected = member.arrived() ? member.currentSurface() : member.nextSurface();
+            if (lease.goal() != AmbientGoalKind.HIVE_TASK_RETURN || !lease.goalBody().equals(expected.standingBody())) {
+                throw new IllegalArgumentException("a returning expedition member may prepare only its exact parent-owned return lease");
+            }
+        }
         FrontierSceneAdmission.GenericAmbientAdmission genericAdmission = FrontierSceneAdmission.genericAmbientAdmission(state);
         if (genericAdmission.reserves(lease.actorId()) && genericAdmission.preLeaseSceneCause(lease.actorId()).isEmpty()) {
             throw new IllegalArgumentException("a strategic scene or engagement exclusively owns the ambient actor");
@@ -86,6 +98,18 @@ public final class AmbientLeaseStateProcess {
             if (current.goal() != AmbientGoalKind.HIVE_TASK_ASSEMBLY
                     || !release.body().supportingSurface().equals(member.currentSurface())) {
                 throw new IllegalArgumentException("HOT hive task assembly may return to COLD only at its exact retained cursor");
+            }
+        }
+        HiveMobilization returning = state.hiveColony().mobilizations().values().stream()
+                .filter(value -> value.status() == HiveMobilizationStatus.RETURNING)
+                .filter(value -> value.returnAssembly().map(assembly -> assembly.members().containsKey(release.actorId())).orElse(false))
+                .reduce((left, right) -> { throw new IllegalArgumentException("ambient bioform belongs to more than one hive return"); })
+                .orElse(null);
+        if (returning != null) {
+            HiveTaskAssembly.Member member = returning.returnAssembly().orElseThrow().members().get(release.actorId());
+            if (current.goal() != AmbientGoalKind.HIVE_TASK_RETURN
+                    || !release.body().supportingSurface().equals(member.currentSurface())) {
+                throw new IllegalArgumentException("HOT hive return may return to COLD only at its exact retained cursor");
             }
         }
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());

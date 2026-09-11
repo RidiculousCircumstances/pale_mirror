@@ -112,7 +112,9 @@ public record RouteOperation(SubjectId id, SubjectId settlementId, SubjectId car
             throw new IllegalArgumentException("next operation travel must retain the arrived formation and cargo anchor");
         }
         OperationStage nextStage = stage == OperationStage.ARRIVED || stage == OperationStage.RETURNING ? OperationStage.RETURNING : OperationStage.EN_ROUTE;
-        return new RouteOperation(id, settlementId, cargoId, destinationId, unit, route, routeIndex, nextStage, Optional.empty(), Optional.of(travel), tacticalPlan.withPhase(nextStage == OperationStage.RETURNING ? TacticalPlanPhase.RETURN : TacticalPlanPhase.TRAVEL));
+        TacticalPlanPhase phase = nextStage == OperationStage.RETURNING ? TacticalPlanPhase.RETURN : TacticalPlanPhase.TRAVEL;
+        return new RouteOperation(id, settlementId, cargoId, destinationId, unit, route, routeIndex, nextStage,
+                Optional.empty(), Optional.of(travel), tacticalPlan.withPhase(phase));
     }
 
     public RouteOperation withTravel(OperationTravel travel) {

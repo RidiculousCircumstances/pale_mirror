@@ -240,6 +240,42 @@ public record HiveColony(Map<SubjectId, HiveOrgan> addedOrgans, Map<SubjectId, B
         return new HiveColony(addedOrgans, spawnedBioforms, growthJobs, nutrientTransfers, nutrientReceipts, bioformLifecycles, next);
     }
 
+    /** Atomically gives each living departed member to its parent-owned exact homeward cursor. */
+    public HiveColony beginMobilizationReturn(SubjectId mobilizationId, HiveReturnAssembly retainedReturn) {
+        HiveMobilization current = mobilizations.get(Objects.requireNonNull(mobilizationId, "hive mobilization id"));
+        if (current == null) throw new IllegalArgumentException("unknown hive mobilization: " + mobilizationId.value());
+        HiveMobilization nextMobilization = current.beginReturn(retainedReturn);
+        Map<SubjectId, BioformLifecycle> lifecycles = new LinkedHashMap<>(bioformLifecycles);
+        for (SubjectId survivor : retainedReturn.members().keySet()) {
+            BioformLifecycle lifecycle = lifecycles.get(survivor);
+            if (lifecycle == null) throw new IllegalArgumentException("returning survivor has no lifecycle");
+            lifecycles.put(survivor, lifecycle.returning());
+        }
+        Map<SubjectId, HiveMobilization> next = new LinkedHashMap<>(mobilizations);
+        next.put(mobilizationId, nextMobilization);
+        return new HiveColony(addedOrgans, spawnedBioforms, growthJobs, nutrientTransfers, nutrientReceipts, lifecycles, next);
+    }
+
+    /** Moves only one return cursor and restores ordinary active custody when the parent closes. */
+    public HiveColony advanceMobilizationReturn(SubjectId mobilizationId, SubjectId memberId) {
+        HiveMobilization current = mobilizations.get(Objects.requireNonNull(mobilizationId, "hive mobilization id"));
+        if (current == null) throw new IllegalArgumentException("unknown hive mobilization: " + mobilizationId.value());
+        HiveMobilization nextMobilization = current.advanceReturn(memberId);
+        Map<SubjectId, BioformLifecycle> lifecycles = new LinkedHashMap<>(bioformLifecycles);
+        if (nextMobilization.status() == HiveMobilizationStatus.COMPLETED) {
+            for (SubjectId survivor : nextMobilization.returnAssembly().orElseThrow().members().keySet()) {
+                BioformLifecycle lifecycle = lifecycles.get(survivor);
+                if (lifecycle == null || lifecycle.phase() != BioformLifecyclePhase.RETURNING) {
+                    throw new IllegalArgumentException("completed return survivor lacks returning custody");
+                }
+                lifecycles.put(survivor, lifecycle.active());
+            }
+        }
+        Map<SubjectId, HiveMobilization> next = new LinkedHashMap<>(mobilizations);
+        next.put(mobilizationId, nextMobilization);
+        return new HiveColony(addedOrgans, spawnedBioforms, growthJobs, nutrientTransfers, nutrientReceipts, lifecycles, next);
+    }
+
     void validateAgainst(FrontierBootstrap bootstrap) {
         var hive = bootstrap.hive();
         var organIds = hive.organs().stream().map(HiveOrgan::id).collect(java.util.stream.Collectors.toSet());
@@ -279,6 +315,9 @@ public record HiveColony(Map<SubjectId, HiveOrgan> addedOrgans, Map<SubjectId, B
                 }
                 BioformLifecyclePhase expected = mobilization.status() == HiveMobilizationStatus.DEPARTED
                         ? BioformLifecyclePhase.ACTIVE
+                        : mobilization.status() == HiveMobilizationStatus.RETURNING
+                        ? (mobilization.returnAssembly().orElseThrow().members().containsKey(member)
+                                ? BioformLifecyclePhase.RETURNING : BioformLifecyclePhase.ACTIVE)
                         : mobilization.status().terminal() ? null
                         : mobilization.releasedMemberIds().contains(member)
                         ? BioformLifecyclePhase.ASSEMBLING : BioformLifecyclePhase.WAKING;

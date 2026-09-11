@@ -154,6 +154,16 @@ public final class AmbientActorProcess {
             SurfaceAnchor target = member.arrived() ? member.currentSurface() : member.nextSurface();
             return new AmbientGoal(AmbientGoalKind.HIVE_TASK_ASSEMBLY, target.support());
         }
+        HiveMobilization returningMobilization = state.hiveColony().mobilizations().values().stream()
+                .filter(mobilization -> mobilization.status() == HiveMobilizationStatus.RETURNING)
+                .filter(mobilization -> mobilization.returnAssembly().map(assembly -> assembly.members().containsKey(actorId)).orElse(false))
+                .reduce((left, right) -> { throw new IllegalStateException("ambient bioform belongs to more than one hive return"); })
+                .orElse(null);
+        if (returningMobilization != null) {
+            HiveTaskAssembly.Member member = returningMobilization.returnAssembly().orElseThrow().members().get(actorId);
+            SurfaceAnchor target = member.arrived() ? member.currentSurface() : member.nextSurface();
+            return new AmbientGoal(AmbientGoalKind.HIVE_TASK_RETURN, target.support());
+        }
         EngineeringWorkOrder engineering = java.util.stream.Stream.concat(state.routeConstructions().values().stream(), state.routeMaintenances().values().stream())
                 .filter(project -> project.building() || project.readyForToolReturn())
                 .filter(project -> project.assembly().map(assembly -> assembly.members().containsKey(actorId)).orElse(false))

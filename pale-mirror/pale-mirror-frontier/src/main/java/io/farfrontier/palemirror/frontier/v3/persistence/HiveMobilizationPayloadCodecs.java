@@ -8,6 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWireTags;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilization;
 import io.farfrontier.palemirror.frontier.v3.model.HiveAssemblyBlockage;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationAssemblyAdvanced;
+import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationReturnAdvanced;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationCocoonReleased;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationConflictReason;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationDeparted;
@@ -31,7 +32,7 @@ final class HiveMobilizationPayloadCodecs {
     private HiveMobilizationPayloadCodecs() { }
 
     static PayloadCodecs codecs() {
-        return new PayloadCodecs(List.of(new StartedCodec(), new ReleaseStartedCodec(), new CocoonReleasedCodec(), new AssemblyAdvancedCodec(), new DepartedCodec(), new ConflictedCodec()));
+        return new PayloadCodecs(List.of(new StartedCodec(), new ReleaseStartedCodec(), new CocoonReleasedCodec(), new AssemblyAdvancedCodec(), new ReturnAdvancedCodec(), new DepartedCodec(), new ConflictedCodec()));
     }
 
     private static final class StartedCodec implements PayloadCodec {
@@ -63,6 +64,12 @@ final class HiveMobilizationPayloadCodecs {
         @Override public FrontierPayload decode(byte[] bytes) { return decodeValue(bytes,
                 input -> new HiveMobilizationDeparted(readSubject(input), SettlementAssaultPayloadCodecs.read(input))); }
     }
+    private static final class ReturnAdvancedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.hive_mobilization_return_advanced"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeValue(output -> { HiveMobilizationReturnAdvanced advanced = (HiveMobilizationReturnAdvanced) payload;
+            writeSubject(output, advanced.mobilizationId()); writeSubject(output, advanced.bioformId()); output.writeShort(advanced.expectedCursor()); }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeValue(bytes, input -> new HiveMobilizationReturnAdvanced(readSubject(input), readSubject(input), input.readUnsignedShort())); }
+    }
     private static final class ConflictedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.hive_mobilization_conflicted"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeValue(output -> { HiveMobilizationConflicted conflicted = (HiveMobilizationConflicted) payload;
@@ -93,7 +100,7 @@ final class HiveMobilizationPayloadCodecs {
         HiveMobilizationStatus status = FrontierWireTags.require(HiveMobilizationStatus.class, input.readUnsignedByte());
         Optional<HiveMobilizationConflictReason> conflict = input.readBoolean()
                 ? Optional.of(FrontierWireTags.require(HiveMobilizationConflictReason.class, input.readUnsignedByte())) : Optional.empty();
-        return new HiveMobilization(id, hive, nest, task, settlement, sighting, overseer, members, released, releasing, assembly, status, conflict,
+        return new HiveMobilization(id, hive, nest, task, settlement, sighting, overseer, members, released, releasing, assembly, Optional.empty(), status, conflict,
                 readBlockage(input), input.readLong());
     }
 

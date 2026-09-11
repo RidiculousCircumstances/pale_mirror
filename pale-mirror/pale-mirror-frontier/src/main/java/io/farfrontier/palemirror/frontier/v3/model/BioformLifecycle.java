@@ -48,4 +48,12 @@ public record BioformLifecycle(BioformLifecyclePhase phase, Optional<HiveCocoonS
         }
         return new BioformLifecycle(BioformLifecyclePhase.ASSEMBLING, homeSlot);
     }
+
+    /** The exact active body remains materializable, but is still owned by a homeward parent. */
+    public BioformLifecycle returning() {
+        if (phase != BioformLifecyclePhase.ACTIVE || homeSlot.isEmpty()) {
+            throw new IllegalStateException("only an active cocoon-origin bioform may return home");
+        }
+        return new BioformLifecycle(BioformLifecyclePhase.RETURNING, homeSlot);
+    }
 }

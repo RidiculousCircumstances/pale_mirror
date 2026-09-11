@@ -134,6 +134,9 @@ public final class FrontierReadabilityPlan {
                     "ASSEMBLY · " + mobilization.memberIds().size() + " FORMED");
             case DEPARTED -> new MobilizationReadout(FrontierObjectBoard.Tone.HIVE,
                     "EXPEDITION DEPARTED · " + mobilization.memberIds().size());
+            case RETURNING -> new MobilizationReadout(FrontierObjectBoard.Tone.HIVE,
+                    "EXPEDITION RETURNING · " + mobilization.returnAssembly().orElseThrow().members().size()
+                            + "/" + mobilization.memberIds().size());
             case COMPLETED -> new MobilizationReadout(FrontierObjectBoard.Tone.HIVE,
                     "EXPEDITION RESULT RETAINED · " + mobilization.memberIds().size());
             case CONFLICT -> new MobilizationReadout(FrontierObjectBoard.Tone.WARNING, "WAKE INTERRUPTED · INSPECT COCOONS");

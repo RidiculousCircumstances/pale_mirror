@@ -89,7 +89,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.settlement_assault_started", "frontier.settlement_assault_attacker_advanced",
             "frontier.settlement_assault_transition", "frontier.settlement_assault_strike", "frontier.settlement_assault_resolved", "frontier.deferred_aftermath_prepared", "frontier.deferred_aftermath_resolved",
             "frontier.hive_mobilization_started", "frontier.hive_mobilization_release_started",
-            "frontier.hive_mobilization_cocoon_released", "frontier.hive_mobilization_assembly_advanced", "frontier.hive_mobilization_departed", "frontier.hive_mobilization_conflicted");
+            "frontier.hive_mobilization_cocoon_released", "frontier.hive_mobilization_assembly_advanced", "frontier.hive_mobilization_return_advanced", "frontier.hive_mobilization_departed", "frontier.hive_mobilization_conflicted");
     private static final Set<String> INFRASTRUCTURE = types(
             "frontier.route_construction_started", "frontier.route_construction_material_loaded",
             "frontier.route_construction_assembly_started", "frontier.route_construction_assembly_advanced",
@@ -133,6 +133,7 @@ public final class FrontierWorldProcessCatalog {
             Map.entry("frontier.hive.growth.task.complete", (state, action, autonomous) -> HiveGrowthProcess.planCompletion(state, action)),
             Map.entry("frontier.hive.nutrient.transfer.progress", (state, action, autonomous) -> HiveNutrientTransferProcess.plan(state, action)),
             Map.entry("frontier.hive.mobilization.assembly_progress", (state, action, autonomous) -> HiveMobilizationProcess.planAssemblyProgress(state, action)),
+            Map.entry("frontier.hive.mobilization.return_progress", (state, action, autonomous) -> HiveMobilizationProcess.planReturnProgress(state, action)),
             Map.entry("frontier.population.birth.review", (state, action, autonomous) -> PopulationBirthProcess.planReview(state, action)),
             Map.entry("frontier.population.birth.complete", (state, action, autonomous) -> PopulationBirthProcess.planCompletion(state, action)),
             Map.entry("frontier.population.migration.review", (state, action, autonomous) -> PopulationMigrationProcess.planReview(state, action)),
@@ -298,7 +299,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.resource_site_harvest_scene_lease_prepared",
             "frontier.resource_site_harvest_scene_lease_handoff"); }
     private static Set<String> hiveCommands() { return types("frontier.hot_scout_operation_observed", "frontier.scout_patrol_advanced", "frontier.scout_patrol_lease_recovered",
-            "frontier.hive_mobilization_release_started", "frontier.hive_mobilization_cocoon_released", "frontier.hive_mobilization_assembly_advanced",
+            "frontier.hive_mobilization_release_started", "frontier.hive_mobilization_cocoon_released", "frontier.hive_mobilization_assembly_advanced", "frontier.hive_mobilization_return_advanced",
             "frontier.hive_mobilization_conflicted", "frontier.deferred_aftermath_resolved"); }
     /**
      * These are the two physical-observation payloads that advance an already declared
@@ -332,7 +333,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.resource_site.harvest.cold_progress", "frontier.objective.resource_harvest"); }
     private static Set<String> hiveSchedules() { return types(
             "frontier.hive.infection.task", "frontier.hive.growth.task.start", "frontier.hive.growth.task.complete",
-            "frontier.hive.nutrient.transfer.progress", "frontier.hive.mobilization.assembly_progress", "frontier.hive.scout.patrol",
+            "frontier.hive.nutrient.transfer.progress", "frontier.hive.mobilization.assembly_progress", "frontier.hive.mobilization.return_progress", "frontier.hive.scout.patrol",
             "frontier.settlement_assault.start", "frontier.settlement_assault.progress", "frontier.settlement_assault.combat"); }
     private static Set<String> infrastructureSchedules() { return types(
             "frontier.structural_repair.scan", "frontier.route_construction.scan", "frontier.route_construction.start",
@@ -454,7 +455,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.settlement_assault_attacker_advanced", "frontier.settlement_assault_transition", "frontier.settlement_assault_strike",
                     "frontier.settlement_assault_resolved", "frontier.deferred_aftermath_prepared", "frontier.deferred_aftermath_resolved",
                     "frontier.hive_mobilization_started", "frontier.hive_mobilization_release_started",
-                    "frontier.hive_mobilization_cocoon_released", "frontier.hive_mobilization_assembly_advanced", "frontier.hive_mobilization_departed", "frontier.hive_mobilization_conflicted",
+                    "frontier.hive_mobilization_cocoon_released", "frontier.hive_mobilization_assembly_advanced", "frontier.hive_mobilization_return_advanced", "frontier.hive_mobilization_departed", "frontier.hive_mobilization_conflicted",
                     "frontier.production_interrupted",
                     "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
                     "frontier.resource_deposited", "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed",

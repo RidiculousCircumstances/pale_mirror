@@ -16,6 +16,8 @@ public enum HiveMobilizationStatus {
     ASSEMBLING,
     /** The retained complete group has atomically transferred to its named operation. */
     DEPARTED,
+    /** A resolved child retains each living member's bounded homeward cursor. */
+    RETURNING,
     /** The same parent has received its exact child operation's terminal outcome. */
     COMPLETED,
     /** A loaded-world pre/postcondition disagreed; no body is invented or moved. */

@@ -260,10 +260,14 @@ public final class StrategicPlanState {
     }
 
     public StrategicPlanState withInfectionKnowledge(SettlementInfectionKnowledge next) {
-        return infectionKnowledge.equals(next) ? this : new StrategicPlanState(objectives, tasks, routePatrols, routeEngagements, next, hiveOperationKnowledge, hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine, settlementAssaults, decisionAuthorities, frontEffects);
+        return infectionKnowledge.equals(next) ? this : new StrategicPlanState(objectives, tasks, routePatrols,
+                routeEngagements, next, hiveOperationKnowledge, hiveTerritoryKnowledge, hiveSettlementKnowledge,
+                hiveDoctrine, settlementAssaults, decisionAuthorities, frontEffects);
     }
     public StrategicPlanState withHiveOperationKnowledge(HiveOperationKnowledge next) {
-        return hiveOperationKnowledge.equals(next) ? this : new StrategicPlanState(objectives, tasks, routePatrols, routeEngagements, infectionKnowledge, next, hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine, settlementAssaults, decisionAuthorities, frontEffects);
+        return hiveOperationKnowledge.equals(next) ? this : new StrategicPlanState(objectives, tasks, routePatrols,
+                routeEngagements, infectionKnowledge, next, hiveTerritoryKnowledge, hiveSettlementKnowledge,
+                hiveDoctrine, settlementAssaults, decisionAuthorities, frontEffects);
     }
     public StrategicPlanState withHiveTerritoryKnowledge(HiveTerritoryKnowledge next) {
         return hiveTerritoryKnowledge.equals(next) ? this : new StrategicPlanState(objectives, tasks, routePatrols, routeEngagements,

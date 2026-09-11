@@ -22,7 +22,8 @@ final class HiveMobilizationStateSupport {
                     || !task.ownerId().equals(bootstrap.hive().id()) || !knownSettlement) {
                 throw new IllegalArgumentException("hive mobilization must retain one exact assault task and settlement target");
             }
-            if (mobilization.status() != HiveMobilizationStatus.DEPARTED && mobilization.status() != HiveMobilizationStatus.COMPLETED) {
+            if (mobilization.status() != HiveMobilizationStatus.DEPARTED && mobilization.status() != HiveMobilizationStatus.RETURNING
+                    && mobilization.status() != HiveMobilizationStatus.COMPLETED) {
                 if (task.status() != StrategicTaskStatus.ACTIVE) {
                     throw new IllegalArgumentException("an un-departed hive mobilization must retain one active exact assault task");
                 }
@@ -37,19 +38,28 @@ final class HiveMobilizationStateSupport {
             }
             SettlementAssault departure = departures.getFirst();
             if (mobilization.status() == HiveMobilizationStatus.DEPARTED && departure.status() == SettlementAssaultStatus.RESOLVED) {
-                throw new IllegalArgumentException("a resolved expedition child must close its departed parent atomically");
+                throw new IllegalArgumentException("a resolved expedition child must atomically retain a return or casualty-only completion");
             }
             if (departure.status() != SettlementAssaultStatus.RESOLVED && task.status() != StrategicTaskStatus.ACTIVE) {
                 throw new IllegalArgumentException("an unresolved departed assault must retain its active exact task");
             }
             if (departure.status() == SettlementAssaultStatus.RESOLVED) {
-                if (mobilization.status() != HiveMobilizationStatus.COMPLETED) {
-                    throw new IllegalArgumentException("a terminal expedition child requires its completed parent receipt");
+                if (mobilization.status() != HiveMobilizationStatus.RETURNING && mobilization.status() != HiveMobilizationStatus.COMPLETED) {
+                    throw new IllegalArgumentException("a terminal expedition child requires its retained return or completed parent receipt");
                 }
                 StrategicTaskStatus expected = departure.outcome().orElseThrow() == SettlementAssaultOutcome.HIVE_VICTORY
                         ? StrategicTaskStatus.COMPLETED : StrategicTaskStatus.BLOCKED;
                 if (task.status() != expected) {
                     throw new IllegalArgumentException("a resolved departed assault task must retain its matching terminal outcome");
+                }
+            }
+            if (mobilization.status() == HiveMobilizationStatus.RETURNING || mobilization.returnAssembly().isPresent()) {
+                HiveReturnAssembly returning = mobilization.returnAssembly().orElseThrow();
+                if (!returning.members().keySet().stream().allMatch(mobilization.memberIds()::contains)) {
+                    throw new IllegalArgumentException("a return cursor may name only the original expedition roster");
+                }
+                if (mobilization.status() == HiveMobilizationStatus.COMPLETED && !returning.complete()) {
+                    throw new IllegalArgumentException("a completed expedition retains unfinished survivor return cursors");
                 }
             }
         }

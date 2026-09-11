@@ -27,6 +27,8 @@ import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationReleaseStarte
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationStarted;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationStatus;
 import io.farfrontier.palemirror.frontier.v3.model.HiveTaskAssembly;
+import io.farfrontier.palemirror.frontier.v3.model.HiveReturnAssembly;
+import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationReturnAdvanced;
 import io.farfrontier.palemirror.frontier.v3.model.HiveNest;
 import io.farfrontier.palemirror.frontier.v3.model.HiveOrgan;
 import io.farfrontier.palemirror.frontier.v3.model.HiveSettlementKnowledge;
@@ -130,6 +132,27 @@ public final class HiveMobilizationProcess {
                 new SimInstant(dueAt), 0, mobilizationId, "frontier.hive.mobilization.assembly_progress", 1);
     }
 
+    /** One durable COLD clock for the parent-owned return; it never recomputes a route. */
+    public static ScheduledAction returnProgress(SubjectId mobilizationId, long dueAt) {
+        return new ScheduledAction(new ScheduleId("schedule:hive-mobilization-return-" + mobilizationId.value().replace(':', '-')),
+                new SimInstant(dueAt), 0, mobilizationId, "frontier.hive.mobilization.return_progress", 1);
+    }
+
+    public static List<ProposedEvent> planReturnProgress(FrontierWorldState state, ScheduledAction action) {
+        HiveMobilization mobilization = state.hiveColony().mobilizations().get(action.subject());
+        if (mobilization == null || mobilization.status() != HiveMobilizationStatus.RETURNING
+                || !returnProgress(mobilization.id(), action.dueAt().ticks()).id().equals(action.id())) return List.of();
+        HiveReturnAssembly returning = mobilization.returnAssembly().orElseThrow();
+        if (returning.complete()) return List.of();
+        long nextDue = Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().migrationStepInterval());
+        ProposedEvent retry = new ProposedEvent(SYSTEM, new ScheduleEffect.Created(returnProgress(mobilization.id(), nextDue)));
+        if (returning.members().keySet().stream().map(state.ambientLeases()::get)
+                .anyMatch(lease -> lease != null && lease.status() != AmbientLeaseStatus.CLOSED)) return List.of(retry);
+        SubjectId advancing = returning.safeAdvances().stream().findFirst().orElse(null);
+        return advancing == null ? List.of(retry) : List.of(new ProposedEvent(mobilization.hiveId(),
+                new HiveMobilizationReturnAdvanced(mobilization.id(), advancing, returning.members().get(advancing).cursor())), retry);
+    }
+
     /** Advances only one stored edge after every exact member has returned from HOT custody. */
     public static List<ProposedEvent> planAssemblyProgress(FrontierWorldState state, ScheduledAction action) {
         HiveMobilization mobilization = state.hiveColony().mobilizations().get(action.subject());
@@ -185,6 +208,37 @@ public final class HiveMobilizationProcess {
         }
         return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).ambientLeases(ambient).hiveColony(
                 state.hiveColony().advanceMobilizationAssembly(mobilization.id(), advanced.bioformId())));
+    }
+
+    /** Reducer counterpart of one retained survivor return edge. */
+    public static FrontierWorldState reduceReturnAdvanced(FrontierWorldState state, SubjectId subject, HiveMobilizationReturnAdvanced advanced) {
+        HiveMobilization mobilization = requireMobilization(state, subject, advanced.mobilizationId());
+        if (mobilization.status() != HiveMobilizationStatus.RETURNING) {
+            throw new IllegalArgumentException("only a returning hive parent may advance homeward");
+        }
+        HiveReturnAssembly returning = mobilization.returnAssembly().orElseThrow();
+        HiveTaskAssembly.Member member = returning.members().get(advanced.bioformId());
+        ActorLocation actor = state.actorLocations().get(advanced.bioformId());
+        if (member == null || member.cursor() != advanced.expectedCursor() || actor == null
+                || !actor.supportingSurface().equals(member.currentSurface())) {
+            throw new IllegalArgumentException("hive return body no longer matches its retained cursor");
+        }
+        AmbientActorLease lease = state.ambientLeases().get(advanced.bioformId());
+        if (lease != null && lease.status() != AmbientLeaseStatus.CLOSED
+                && (lease.status() != AmbientLeaseStatus.HOT || lease.goal() != AmbientGoalKind.HIVE_TASK_RETURN)) {
+            throw new IllegalArgumentException("hive return cursor may advance only from COLD or its exact HOT return lease");
+        }
+        HiveReturnAssembly next = returning.advance(advanced.bioformId());
+        Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
+        actors.put(advanced.bioformId(), actor.withBody(BodyPosition.above(next.members().get(advanced.bioformId()).currentSurface())));
+        Map<SubjectId, AmbientActorLease> ambient = new LinkedHashMap<>(state.ambientLeases());
+        if (lease != null && lease.status() == AmbientLeaseStatus.HOT) {
+            HiveTaskAssembly.Member advancedMember = next.members().get(advanced.bioformId());
+            SurfaceAnchor target = advancedMember.arrived() ? advancedMember.currentSurface() : advancedMember.nextSurface();
+            ambient.put(advanced.bioformId(), lease.withGoal(AmbientGoalKind.HIVE_TASK_RETURN, target.standingBody()));
+        }
+        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).ambientLeases(ambient).hiveColony(
+                state.hiveColony().advanceMobilizationReturn(mobilization.id(), advanced.bioformId())));
     }
 
     /** Reducer for the exact completed-assembly custody hand-off; never an external command. */

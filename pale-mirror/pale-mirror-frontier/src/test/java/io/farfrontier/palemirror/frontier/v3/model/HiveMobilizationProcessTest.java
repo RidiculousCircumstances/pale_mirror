@@ -304,7 +304,40 @@ class HiveMobilizationProcessTest {
                 "a terminal task may not detach itself from its still-unresolved exact assault");
         FrontierWorldState released = HiveSettlementAssaultProcess.reduceResolved(departedState, hive,
                 new SettlementAssaultResolved(exactAssault.id(), SettlementAssaultOutcome.ABORTED));
+        HiveMobilization returning = released.hiveColony().mobilizations().get(initial.id());
+        assertEquals(HiveMobilizationStatus.RETURNING, returning.status(),
+                "a surviving expedition cannot complete merely because its child resolved");
+        FrontierWorldState returnStarted = released;
+        assertTrue(initial.memberIds().stream().allMatch(member -> returnStarted.hiveColony().bioformLifecycles().get(member).phase()
+                        == BioformLifecyclePhase.RETURNING && !HivePhysiologySupport.availableForIndependentOperation(returnStarted, member)),
+                "the parent retains every surviving physical identity until its exact return cursor reaches home");
+        assertEquals(released, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(released)),
+                "the unfinished exact return remains snapshot-recoverable");
         assertFalse(FrontierSceneAdmission.reserved(released, initial.memberIds().getFirst()));
+        AmbientActorLease returnLease = AmbientActorProcess.nextLease(returnStarted, initial.memberIds().getFirst(), new SimInstant(10_000L));
+        assertEquals(AmbientGoalKind.HIVE_TASK_RETURN, returnLease.goal(),
+                "the ordinary provider receives the parent-owned return goal, not a generic replacement purpose");
+        assertThrows(IllegalArgumentException.class, () -> AmbientLeaseStateProcess.prepare(returnStarted,
+                new AmbientActorLease(returnLease.actorId(), returnLease.handoffBody(), returnLease.handoffInstant(), returnLease.revision(),
+                        AmbientLeaseStatus.PREPARED, AmbientGoalKind.WORK, returnLease.goalBody())),
+                "a generic ambient purpose may not bypass retained homeward custody");
+        ScheduledAction returnTick = HiveMobilizationProcess.returnProgress(returning.id(), 10_000L);
+        List<ProposedEvent> returnEvents = HiveMobilizationProcess.planReturnProgress(returnStarted, returnTick);
+        assertInstanceOf(HiveMobilizationReturnAdvanced.class, returnEvents.getFirst().payload(),
+                "the ordinary durable scheduler advances one stored homeward edge rather than releasing the roster");
+        assertTrue(returnEvents.stream().map(ProposedEvent::payload).anyMatch(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created.class::isInstance),
+                "an unfinished parent schedules the next bounded return edge");
+        while (released.hiveColony().mobilizations().get(initial.id()).status() == HiveMobilizationStatus.RETURNING) {
+            HiveMobilization current = released.hiveColony().mobilizations().get(initial.id());
+            SubjectId advancing = current.returnAssembly().orElseThrow().safeAdvances().getFirst();
+            int cursor = current.returnAssembly().orElseThrow().members().get(advancing).cursor();
+            released = HiveMobilizationProcess.reduceReturnAdvanced(released, hive,
+                    new HiveMobilizationReturnAdvanced(current.id(), advancing, cursor));
+        }
+        assertEquals(HiveMobilizationStatus.COMPLETED, released.hiveColony().mobilizations().get(initial.id()).status());
+        FrontierWorldState returned = released;
+        assertTrue(initial.memberIds().stream().allMatch(member -> returned.hiveColony().bioformLifecycles().get(member).phase()
+                        == BioformLifecyclePhase.ACTIVE), "only the completed retained cursor restores independent custody");
         assertEquals(initial.memberIds().getFirst(), AmbientActorProcess.nextLease(released, initial.memberIds().getFirst(),
                 new SimInstant(10_000L)).actorId(), "resolved COLD custody returns the same active identity to ordinary ambient admission");
     }

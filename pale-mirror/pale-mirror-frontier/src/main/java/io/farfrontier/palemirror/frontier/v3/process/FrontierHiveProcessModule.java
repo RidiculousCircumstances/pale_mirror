@@ -58,6 +58,11 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
             if (next.complete()) events.addAll(HiveSettlementAssaultProcess.planAssemblyDeparture(state, mobilization, next, command.submittedAt().ticks()));
             return new CommandPlan.Accepted(List.copyOf(events));
         }
+        if (command.payload() instanceof HiveMobilizationReturnAdvanced advanced) {
+            try { HiveMobilizationProcess.reduceReturnAdvanced(state, state.bootstrap().hive().id(), advanced); }
+            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(state.bootstrap().hive().id(), advanced)));
+        }
         if (command.payload() instanceof HiveMobilizationConflicted conflicted) {
             try { HiveMobilizationProcess.reduceConflicted(state, state.bootstrap().hive().id(), conflicted); }
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
@@ -91,6 +96,7 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
             case HiveMobilizationReleaseStarted started -> HiveMobilizationProcess.reduceReleaseStarted(state, event.subject(), started);
             case HiveMobilizationCocoonReleased released -> HiveMobilizationProcess.reduceCocoonReleased(state, event.subject(), released);
             case HiveMobilizationAssemblyAdvanced advanced -> HiveMobilizationProcess.reduceAssemblyAdvanced(state, event.subject(), advanced);
+            case HiveMobilizationReturnAdvanced advanced -> HiveMobilizationProcess.reduceReturnAdvanced(state, event.subject(), advanced);
             case HiveMobilizationDeparted departed -> HiveMobilizationProcess.reduceDeparted(state, event.subject(), departed);
             case HiveMobilizationConflicted conflicted -> HiveMobilizationProcess.reduceConflicted(state, event.subject(), conflicted);
             case HiveOperationObserved observed -> HivePerceptionProcess.reduce(state, event.subject(), observed);

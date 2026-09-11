@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.model.HiveMobilization;
 import io.farfrontier.palemirror.frontier.v3.model.HiveAssemblyBlockage;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationStatus;
 import io.farfrontier.palemirror.frontier.v3.model.HiveTaskAssembly;
+import io.farfrontier.palemirror.frontier.v3.model.HiveReturnAssembly;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -40,6 +41,8 @@ final class HiveMobilizationStateCodec {
             if (mobilization.releasingMemberId().isPresent()) FrontierWorldStateCodec.writeString(output, mobilization.releasingMemberId().orElseThrow().value());
             output.writeBoolean(mobilization.assembly().isPresent());
             if (mobilization.assembly().isPresent()) writeAssembly(output, mobilization.assembly().orElseThrow());
+            output.writeBoolean(mobilization.returnAssembly().isPresent());
+            if (mobilization.returnAssembly().isPresent()) writeReturnAssembly(output, mobilization.returnAssembly().orElseThrow());
             output.writeByte(mobilization.status().wireTag());
             output.writeBoolean(mobilization.conflictReason().isPresent());
             if (mobilization.conflictReason().isPresent()) output.writeByte(mobilization.conflictReason().orElseThrow().wireTag());
@@ -70,11 +73,12 @@ final class HiveMobilizationStateCodec {
             Optional<SubjectId> releasing = input.readBoolean()
                     ? Optional.of(new SubjectId(FrontierWorldStateCodec.readString(input))) : Optional.empty();
             Optional<HiveTaskAssembly> assembly = input.readBoolean() ? Optional.of(readAssembly(input)) : Optional.empty();
+            Optional<HiveReturnAssembly> returnAssembly = input.readBoolean() ? Optional.of(readReturnAssembly(input)) : Optional.empty();
             HiveMobilizationStatus status = FrontierWireTags.require(HiveMobilizationStatus.class, input.readUnsignedByte());
             Optional<io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationConflictReason> reason = input.readBoolean()
                     ? Optional.of(FrontierWireTags.require(io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationConflictReason.class, input.readUnsignedByte()))
                     : Optional.empty();
-            HiveMobilization mobilization = new HiveMobilization(id, hive, nest, task, settlement, sighting, overseer, members, released, releasing, assembly, status, reason,
+            HiveMobilization mobilization = new HiveMobilization(id, hive, nest, task, settlement, sighting, overseer, members, released, releasing, assembly, returnAssembly, status, reason,
                     readBlockage(input), input.readLong());
             if (mobilizations.put(id, mobilization) != null) throw new IllegalArgumentException("duplicate hive mobilization");
         }
@@ -116,5 +120,27 @@ final class HiveMobilizationStateCodec {
             }
         }
         return new HiveTaskAssembly(ganglion, members);
+    }
+
+    private static void writeReturnAssembly(DataOutputStream output, HiveReturnAssembly assembly) throws IOException {
+        FrontierWorldStateCodec.writeString(output, assembly.nestId().value());
+        FrontierWorldStateCodec.writeCount(output, assembly.members().size());
+        for (var entry : assembly.members().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
+            FrontierWorldStateCodec.writeString(output, entry.getKey().value());
+            TraversalTopologyStateCodec.write(output, entry.getValue().topology());
+            output.writeShort(entry.getValue().cursor());
+        }
+    }
+
+    private static HiveReturnAssembly readReturnAssembly(DataInputStream input) throws IOException {
+        SubjectId nest = new SubjectId(FrontierWorldStateCodec.readString(input));
+        Map<SubjectId, HiveTaskAssembly.Member> members = new LinkedHashMap<>();
+        for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) {
+            SubjectId actor = new SubjectId(FrontierWorldStateCodec.readString(input));
+            if (members.put(actor, new HiveTaskAssembly.Member(TraversalTopologyStateCodec.read(input), input.readUnsignedShort())) != null) {
+                throw new IllegalArgumentException("duplicate hive return member");
+            }
+        }
+        return new HiveReturnAssembly(nest, members);
     }
 }

@@ -61,6 +61,56 @@ public final class HiveAssemblyCorridor {
         return assembly;
     }
 
+    /**
+     * Compiles the return from the canonical current survivor bodies to their own retained
+     * hibernaculum trays. It deliberately uses the same immutable terrain/organ geometry and
+     * collision schedule as departure; no loaded-world route or synthetic relocation is used.
+     */
+    public static HiveReturnAssembly compileReturn(FrontierWorldState state, HiveMobilization mobilization) {
+        Objects.requireNonNull(state, "hive return state");
+        Objects.requireNonNull(mobilization, "hive return mobilization");
+        if (mobilization.status() != HiveMobilizationStatus.DEPARTED) {
+            throw new IllegalArgumentException("only a departed expedition may compile its return");
+        }
+        Map<SubjectId, HiveTaskAssembly.Member> members = new LinkedHashMap<>();
+        List<HiveOrgan> hiveOrgans = java.util.stream.Stream.concat(state.bootstrap().hive().organs().stream(),
+                state.hiveColony().addedOrgans().values().stream()).toList();
+        Set<BlockPosition> intactOrgans = FrontierGrayboxPlan.intactOrganOccupancy(hiveOrgans);
+        Set<BlockPosition> physicalHiveCells = new LinkedHashSet<>(intactOrgans);
+        hiveOrgans.forEach(organ -> physicalHiveCells.addAll(HiveOrganSupportPlan.foundationCells(state.bootstrap().terrain(), organ)));
+        Set<SurfaceAnchor> blockedBodySurfaces = blockedBodySurfaces(state, physicalHiveCells);
+        Map<SubjectId, HiveOrgan> homes = new LinkedHashMap<>();
+        Map<SubjectId, SurfaceAnchor> destinations = new LinkedHashMap<>();
+        for (SubjectId member : mobilization.memberIds()) {
+            ActorLocation actor = state.actorLocations().get(member);
+            if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE) continue;
+            BioformLifecycle lifecycle = state.hiveColony().bioformLifecycles().get(member);
+            if (lifecycle == null || lifecycle.phase() != BioformLifecyclePhase.ACTIVE || lifecycle.homeSlot().isEmpty()) {
+                throw new IllegalArgumentException("returning survivor has no active retained cocoon home");
+            }
+            HiveOrgan home = homeHibernaculum(state, member);
+            homes.put(member, home);
+            destinations.put(member, HiveCocoonPlan.wakingSurface(home, lifecycle.homeSlot().orElseThrow()));
+        }
+        if (destinations.isEmpty()) throw new IllegalArgumentException("a casualty-only expedition completes without a return cursor");
+        Set<SurfaceAnchor> allHomeSurfaces = Set.copyOf(destinations.values());
+        for (SubjectId member : destinations.keySet()) {
+            SurfaceAnchor start = state.actorLocations().get(member).supportingSurface();
+            SurfaceAnchor destination = destinations.get(member);
+            HiveOrgan home = homes.get(member);
+            List<SurfaceAnchor> surfaces = route(state, home, start, destination, allHomeSurfaces, intactOrgans, blockedBodySurfaces);
+            TraversalTopology topology = TraversalTopology.corridor(new TraversalTopologyId("topology:hive-return:"
+                    + mobilization.id().value() + ":" + member.value()), 0L, mobilization.id(), TraversalKind.GROUND_BIOFORM,
+                    Set.of(TraversalCapability.GROUND_BIOFORM), surfaces);
+            members.put(member, new HiveTaskAssembly.Member(topology, 0));
+        }
+        HiveReturnAssembly result = new HiveReturnAssembly(mobilization.nestId(), members);
+        if (!completesUnderRetainedSchedule(result)) {
+            throw new IllegalArgumentException("hive return has no jointly completable retained approaches");
+        }
+        return result;
+    }
+
     private static List<SurfaceAnchor> route(FrontierWorldState state, HiveOrgan home, SurfaceAnchor start,
                                              SurfaceAnchor destination, Set<SurfaceAnchor> allStagingSurfaces,
                                              Set<BlockPosition> intactOrgans, Set<SurfaceAnchor> blockedBodySurfaces) {
@@ -141,9 +191,10 @@ public final class HiveAssemblyCorridor {
 
     private static HiveOrgan homeHibernaculum(FrontierWorldState state, SubjectId member) {
         BioformLifecycle lifecycle = state.hiveColony().bioformLifecycles().get(member);
-        if (lifecycle == null || (lifecycle.phase() != BioformLifecyclePhase.ASSEMBLING && lifecycle.phase() != BioformLifecyclePhase.WAKING)
+        if (lifecycle == null || (lifecycle.phase() != BioformLifecyclePhase.ASSEMBLING
+                && lifecycle.phase() != BioformLifecyclePhase.WAKING && lifecycle.phase() != BioformLifecyclePhase.ACTIVE)
                 || lifecycle.homeSlot().isEmpty()) {
-            throw new IllegalArgumentException("hive assembly member is not an exact releasing cocoon occupant");
+            throw new IllegalArgumentException("hive assembly/return member has no exact retained cocoon home");
         }
         SubjectId id = lifecycle.homeSlot().orElseThrow().hibernaculumId();
         return java.util.stream.Stream.concat(state.bootstrap().hive().organs().stream(), state.hiveColony().addedOrgans().values().stream())
@@ -182,6 +233,18 @@ public final class HiveAssemblyCorridor {
 
     private static boolean completesUnderRetainedSchedule(HiveTaskAssembly initial) {
         HiveTaskAssembly current = initial;
+        int maximumMoves = current.members().values().stream().mapToInt(member -> member.corridor().size() - 1).sum();
+        for (int move = 0; move < maximumMoves; move++) {
+            if (current.complete()) return true;
+            List<SubjectId> safe = current.safeAdvances();
+            if (safe.isEmpty()) return false;
+            current = current.advance(safe.getFirst());
+        }
+        return current.complete();
+    }
+
+    private static boolean completesUnderRetainedSchedule(HiveReturnAssembly initial) {
+        HiveReturnAssembly current = initial;
         int maximumMoves = current.members().values().stream().mapToInt(member -> member.corridor().size() - 1).sum();
         for (int move = 0; move < maximumMoves; move++) {
             if (current.complete()) return true;
