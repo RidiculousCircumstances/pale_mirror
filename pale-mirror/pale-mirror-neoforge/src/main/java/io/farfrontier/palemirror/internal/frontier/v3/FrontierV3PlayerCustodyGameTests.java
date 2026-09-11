@@ -11,6 +11,7 @@ import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinit
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceCustody;
 import io.farfrontier.palemirror.frontier.v3.persistence.AppendReceipt;
 import io.farfrontier.palemirror.frontier.v3.persistence.CompactionReceipt;
 import io.farfrontier.palemirror.frontier.v3.persistence.Durability;
@@ -24,6 +25,8 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
@@ -68,6 +71,37 @@ public final class FrontierV3PlayerCustodyGameTests {
                 "return must restore the original exact slot without creating or aggregating a resource");
         helper.assertTrue(FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(0), exact),
                 "the physical return must retain the exact durable tag and count");
+        runtime.shutdown(); helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-player-withdrawal", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void activeChestTransfersOneFungiblePortionToItsRealPlayer(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); WorldId world = new WorldId("frontier:fungible-player-withdrawal-game-test");
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
+                FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.configuration(world, 91L), new EphemeralStore(), 10_000);
+        SubjectId container = new SubjectId("container:1-depot"); BlockPos chestPosition = helper.absolutePos(new BlockPos(60, 8, 0));
+        level.setBlock(chestPosition.below(), Blocks.STONE.defaultBlockState(), 3);
+        ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.claimFreshChest(level, chestPosition, container);
+        helper.assertTrue(chest != null, "the fungible fixture needs an owned chest");
+        FrontierV3CommandSubmission.submit(runtime, "fungible-player-withdrawal-prepare", container.value(), new ContainerSurfaceTransition(container, ContainerSurfaceStatus.PREPARED));
+        FrontierV3CommandSubmission.submit(runtime, "fungible-player-withdrawal-active", container.value(), new ContainerSurfaceTransition(container, ContainerSurfaceStatus.ACTIVE));
+        chest.setItem(0, new ItemStack(Items.WHEAT, 64)); chest.setChanged();
+        FrontierV3FungibleResourceObservationExecutor.tick(level, runtime);
+        FrontierWorldState bound = state(runtime);
+        helper.assertTrue(!bound.inventory().fungibleResources().bindings().isEmpty(), "the full observed stack must become HOT before a player may split it");
+
+        var player = helper.makeMockServerPlayerInLevel();
+        chest.setItem(0, new ItemStack(Items.WHEAT, 32)); player.getInventory().setItem(0, new ItemStack(Items.WHEAT, 32)); chest.setChanged();
+        FrontierV3FungibleResourceObservationExecutor.tick(level, runtime);
+        FrontierWorldState moved = state(runtime);
+        var playerAccount = moved.inventory().fungibleResources().accounts().values().stream()
+                .filter(account -> account.custody().equals(new ResourceCustody.Player(player.getUUID()))).findFirst().orElse(null);
+        helper.assertTrue(playerAccount != null && playerAccount.lotQuantities().values().stream().mapToInt(Integer::intValue).sum() == 32,
+                "one physical partial withdrawal must create one exact player portion");
+        helper.assertTrue(moved.inventory().fungibleResources().bindings().values().stream().anyMatch(binding -> binding.accountId().equals(playerAccount.id())),
+                "the player portion remains HOT and therefore cannot become concurrent COLD stock");
+        helper.assertTrue(moved.inventory().fungibleResources().totalQuantity(new SubjectId("settlement:1"), "minecraft:wheat") == 64,
+                "the split must conserve every ordinary item unit");
         runtime.shutdown(); helper.succeed();
     }
 

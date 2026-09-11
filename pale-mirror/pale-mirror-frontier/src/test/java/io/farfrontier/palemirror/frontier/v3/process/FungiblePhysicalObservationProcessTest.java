@@ -10,6 +10,7 @@ import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
 import io.farfrontier.palemirror.frontier.v3.model.CustodyAccount;
 import io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalObservation;
+import io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalHandoff;
 import io.farfrontier.palemirror.frontier.v3.model.FungibleResourceLedger;
 import io.farfrontier.palemirror.frontier.v3.model.FungibleStackLayoutObserved;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection;
@@ -30,6 +31,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FungiblePhysicalObservationProcessTest {
     @Test
@@ -87,6 +89,32 @@ class FungiblePhysicalObservationProcessTest {
         assertInstanceOf(CommandResult.Accepted.class, engine.submit(command(engine, world, "released", released)));
         FrontierWorldState releasedState = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         assertEquals(Map.of(), releasedState.inventory().fungibleResources().bindings());
+    }
+
+    @Test
+    void observedPartialDepartureUsesTheCurrentBindingAndCannotReopenColdCustody() {
+        SubjectId owner = new SubjectId("settlement:1"), container = new SubjectId("container:1-depot");
+        SubjectId lot = new SubjectId("lot:partial-departure"), account = new SubjectId("custody:partial-departure");
+        FungibleResourceLedger ledger = FungibleResourceLedger.empty().issue(new ResourceLot(lot, owner, "minecraft:wheat", 10, "test", List.of()),
+                new CustodyAccount(account, new ResourceCustody.Container(container), Map.of(lot, 10), Map.of()));
+        ledger = ledger.rebind(account, 7L, FungiblePhysicalObservation.bind(ledger, account, 7L, List.of(
+                new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(container, 3)), "minecraft:wheat", 10))));
+        PhysicalStackBinding source = ledger.bindings().values().iterator().next(); UUID player = UUID.fromString("00000000-0000-0000-0000-000000000101");
+        CustodyAccount destination = new CustodyAccount(new SubjectId("custody:player-partial"), new ResourceCustody.Player(player), Map.of(lot, 4), Map.of());
+
+        FungibleResourceHandoffObserved observed = FungiblePhysicalHandoff.depart(ledger, account, 7L, source, 6, destination, 1L,
+                new PhysicalStackAddress.PlayerSlot(player, 2));
+        FungibleResourceLedger transferred = ledger.transferObservedToNewAccount(observed.sourceAccountId(), observed.destinationAccount(),
+                observed.sourceEpoch(), observed.destinationEpoch(), observed.lotQuantities(), observed.claimQuantities(),
+                observed.remainingSource(), observed.destinationBindings());
+
+        assertEquals(10, transferred.totalQuantity(owner, "minecraft:wheat"));
+        assertEquals(Map.of(lot, 6), transferred.accounts().get(account).lotQuantities());
+        assertEquals(Map.of(lot, 4), transferred.accounts().get(destination.id()).lotQuantities());
+        assertEquals(2, transferred.bindings().size(), "both visible portions remain HOT; neither may be spent as COLD");
+        assertThrows(IllegalArgumentException.class, () -> transferred.transferObservedToNewAccount(observed.sourceAccountId(), observed.destinationAccount(),
+                observed.sourceEpoch(), observed.destinationEpoch(), observed.lotQuantities(), observed.claimQuantities(),
+                observed.remainingSource(), observed.destinationBindings()));
     }
 
     private static FungibleStackLayoutObserved observation(SubjectId account, long epoch, String kind, int first, int second) {
