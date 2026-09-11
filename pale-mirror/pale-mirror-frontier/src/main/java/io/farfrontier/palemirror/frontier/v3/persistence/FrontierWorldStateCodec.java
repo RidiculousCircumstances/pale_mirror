@@ -289,7 +289,9 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         }
         writeCount(output, colony.growthJobs().size());
         for (HiveGrowthJob job : colony.growthJobs().values().stream().sorted(Comparator.comparing(HiveGrowthJob::id)).toList()) {
-            writeString(output, job.id().value()); writeString(output, job.hiveId().value()); writeString(output, job.nestId().value()); writeString(output, job.consumedItemId().value()); writeHiveGrowthInputHold(output, job.inputHold()); writeString(output, job.consumptionIntentId().value());
+            writeString(output, job.id().value()); writeString(output, job.hiveId().value()); writeString(output, job.nestId().value());
+            writeString(output, job.consumedItemId().value()); writeHiveGrowthInputHold(output, job.inputHold());
+            writeString(output, job.consumptionIntentId().value());
             HiveOrgan organ = job.organ(); writeString(output, organ.id().value()); output.writeByte(organ.kind().wireTag()); writePosition(output, organ.anchor());
             Bioform bioform = job.bioform(); writeString(output, bioform.id().value()); BioformProfileStateCodec.write(output, bioform);
         }
@@ -331,7 +333,9 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         }
         Map<SubjectId, HiveGrowthJob> jobs = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
-            SubjectId id = new SubjectId(readString(input)); SubjectId hive = new SubjectId(readString(input)); SubjectId nest = new SubjectId(readString(input)); SubjectId item = new SubjectId(readString(input)); HiveGrowthInputHold hold = readHiveGrowthInputHold(input, item);
+            SubjectId id = new SubjectId(readString(input)); SubjectId hive = new SubjectId(readString(input));
+            SubjectId nest = new SubjectId(readString(input)); SubjectId item = new SubjectId(readString(input));
+            HiveGrowthInputHold hold = readHiveGrowthInputHold(input, item);
             io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId consumption = new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(readString(input));
             SubjectId organId = new SubjectId(readString(input)); int kind = input.readUnsignedByte(); BlockPosition anchor = readPosition(input);
             SubjectId bioformId = new SubjectId(readString(input)); Bioform bioform = BioformProfileStateCodec.read(input, bioformId, hive, nest);
@@ -662,7 +666,13 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
 
     private static PhysicalStackAddress readPhysicalAddress(DataInputStream input) throws IOException {
         return switch (input.readUnsignedByte()) {
-            case 0 -> { InventoryCustody custody = readCustody(input); if (!(custody instanceof InventoryCustody.ContainerSlot slot)) throw new IllegalArgumentException("physical container address requires a container slot"); yield new PhysicalStackAddress.ContainerSlot(slot); }
+            case 0 -> {
+                InventoryCustody custody = readCustody(input);
+                if (!(custody instanceof InventoryCustody.ContainerSlot slot)) {
+                    throw new IllegalArgumentException("physical container address requires a container slot");
+                }
+                yield new PhysicalStackAddress.ContainerSlot(slot);
+            }
             case 1 -> new PhysicalStackAddress.PlayerSlot(UUID.fromString(readString(input)), input.readUnsignedByte());
             case 2 -> new PhysicalStackAddress.HopperSlot(readPosition(input), input.readUnsignedByte());
             case 3 -> new PhysicalStackAddress.WorldEntity(UUID.fromString(readString(input)));

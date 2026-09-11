@@ -77,6 +77,38 @@ public final class FungiblePhysicalHandoff {
                 remaining, List.of(arrived));
     }
 
+    /** Folds one vanished player/world binding back into a currently bound destination stack. */
+    public static FungibleResourceHandoffObserved returnToExisting(FungibleResourceLedger ledger, SubjectId sourceAccountId,
+                                                                   long sourceEpoch, PhysicalStackBinding sourceBinding,
+                                                                   SubjectId destinationAccountId, long destinationEpoch,
+                                                                   PhysicalStackBinding destinationBinding) {
+        Objects.requireNonNull(ledger, "fungible ledger"); Objects.requireNonNull(sourceBinding, "source binding");
+        Objects.requireNonNull(destinationBinding, "destination binding");
+        CustodyAccount source = ledger.accounts().get(sourceAccountId); CustodyAccount destination = ledger.accounts().get(destinationAccountId);
+        if (source == null || destination == null || source.id().equals(destination.id()) || sourceEpoch < 1 || destinationEpoch < 1
+                || !sourceBinding.accountId().equals(source.id()) || !destinationBinding.accountId().equals(destination.id())
+                || sourceBinding.authorityEpoch() != sourceEpoch || destinationBinding.authorityEpoch() != destinationEpoch
+                || !sourceBinding.itemKind().equals(destinationBinding.itemKind())) {
+            throw new IllegalArgumentException("fungible return has no compatible current custody boundary");
+        }
+        List<PhysicalStackBinding> sourceCurrent = current(ledger, source.id(), sourceEpoch);
+        List<PhysicalStackBinding> destinationCurrent = current(ledger, destination.id(), destinationEpoch);
+        if (!sourceCurrent.contains(sourceBinding) || !destinationCurrent.contains(destinationBinding)) {
+            throw new IllegalArgumentException("fungible return has no current source or destination binding");
+        }
+        Map<SubjectId, Integer> finalLots = add(destinationBinding.lotQuantities(), sourceBinding.lotQuantities());
+        Map<SubjectId, Integer> finalClaims = add(destinationBinding.claimQuantities(), sourceBinding.claimQuantities());
+        List<PhysicalStackBinding> remainingSource = sourceCurrent.stream().filter(binding -> !binding.id().equals(sourceBinding.id())).toList();
+        List<PhysicalStackBinding> destinationBindings = new ArrayList<>();
+        for (PhysicalStackBinding binding : destinationCurrent) {
+            destinationBindings.add(binding.id().equals(destinationBinding.id()) ? new PhysicalStackBinding(binding.id(), binding.accountId(),
+                    binding.address(), binding.authorityEpoch(), binding.itemKind(), finalLots, finalClaims) : binding);
+        }
+        return new FungibleResourceHandoffObserved(source.id(), new CustodyAccount(destination.id(), destination.custody(),
+                add(destination.lotQuantities(), sourceBinding.lotQuantities()), add(destination.claimQuantities(), sourceBinding.claimQuantities())),
+                sourceEpoch, destinationEpoch, sourceBinding.lotQuantities(), sourceBinding.claimQuantities(), remainingSource, destinationBindings);
+    }
+
     private static Map<SubjectId, Integer> first(Map<SubjectId, Integer> source, int quantity) {
         if (quantity == 0) return Map.of();
         int remaining = quantity; Map<SubjectId, Integer> result = new LinkedHashMap<>();
@@ -93,6 +125,20 @@ public final class FungiblePhysicalHandoff {
         Map<SubjectId, Integer> result = new LinkedHashMap<>();
         source.forEach((id, quantity) -> { int moved = quantity - retained.getOrDefault(id, 0); if (moved > 0) result.put(id, moved); });
         return Map.copyOf(result);
+    }
+
+    private static Map<SubjectId, Integer> add(Map<SubjectId, Integer> left, Map<SubjectId, Integer> right) {
+        Map<SubjectId, Integer> result = new LinkedHashMap<>(left); right.forEach((id, quantity) -> result.merge(id, quantity, Integer::sum));
+        return Map.copyOf(result);
+    }
+
+    private static List<PhysicalStackBinding> current(FungibleResourceLedger ledger, SubjectId account, long epoch) {
+        List<PhysicalStackBinding> result = ledger.bindings().values().stream().filter(binding -> binding.accountId().equals(account))
+                .sorted(Comparator.comparing(PhysicalStackBinding::id)).toList();
+        if (result.isEmpty() || result.stream().anyMatch(binding -> binding.authorityEpoch() != epoch)) {
+            throw new IllegalArgumentException("fungible return has stale physical authority");
+        }
+        return result;
     }
 
     private static String singleKind(FungibleResourceLedger ledger, Map<SubjectId, Integer> quantities) {

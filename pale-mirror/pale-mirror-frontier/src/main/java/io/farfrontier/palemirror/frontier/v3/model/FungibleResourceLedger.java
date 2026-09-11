@@ -396,7 +396,11 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         if (!claimQuantities.isEmpty() && sum(lotQuantities) != sum(claimQuantities)) throw new IllegalArgumentException("claimed destruction must consume the same exact quantity");
         Map<SubjectId, ResourceLot> nextLots = new HashMap<>(lots); Map<SubjectId, ClaimAllocation> nextClaims = new HashMap<>(claims);
         lotQuantities.forEach((id, quantity) -> { ResourceLot lot = requireLot(id); int remaining = lot.quantity() - quantity; if (remaining == 0) nextLots.remove(id); else nextLots.put(id, lot.withQuantity(remaining)); });
-        claimQuantities.forEach((id, quantity) -> { ClaimAllocation claim = claims.get(id); int remaining = claim.quantity() - quantity; if (remaining == 0) nextClaims.remove(id); else nextClaims.put(id, new ClaimAllocation(claim.id(), claim.claimantId(), claim.economicOwnerId(), claim.itemKind(), remaining)); });
+        claimQuantities.forEach((id, quantity) -> {
+            ClaimAllocation claim = claims.get(id); int remaining = claim.quantity() - quantity;
+            if (remaining == 0) nextClaims.remove(id);
+            else nextClaims.put(id, new ClaimAllocation(claim.id(), claim.claimantId(), claim.economicOwnerId(), claim.itemKind(), remaining));
+        });
         Map<SubjectId, Integer> nextLotsAtAccount = subtract(account.lotQuantities(), lotQuantities); Map<SubjectId, Integer> nextClaimsAtAccount = subtract(account.claimQuantities(), claimQuantities);
         Map<SubjectId, CustodyAccount> nextAccounts = new HashMap<>(accounts);
         if (nextLotsAtAccount.isEmpty()) nextAccounts.remove(account.id());
@@ -488,9 +492,16 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         Map<SubjectId, Integer> lotTotals = new HashMap<>(); Map<SubjectId, Integer> claimTotals = new HashMap<>();
         for (CustodyAccount account : accounts.values()) {
             account.lotQuantities().forEach((id, quantity) -> { if (!lots.containsKey(id)) throw new IllegalArgumentException("custody account references an unknown lot"); lotTotals.merge(id, quantity, Integer::sum); });
-            account.claimQuantities().forEach((id, quantity) -> { ClaimAllocation claim = claims.get(id); if (claim == null) throw new IllegalArgumentException("custody account references an unknown claim"); claimTotals.merge(id, quantity, Integer::sum);
-                int compatible = account.lotQuantities().entrySet().stream().filter(entry -> { ResourceLot lot = lots.get(entry.getKey()); return lot.economicOwnerId().equals(claim.economicOwnerId()) && lot.itemKind().equals(claim.itemKind()); }).mapToInt(Map.Entry::getValue).sum();
-                if (quantity > compatible) throw new IllegalArgumentException("claim allocation exceeds compatible account stock"); });
+            account.claimQuantities().forEach((id, quantity) -> {
+                ClaimAllocation claim = claims.get(id);
+                if (claim == null) throw new IllegalArgumentException("custody account references an unknown claim");
+                claimTotals.merge(id, quantity, Integer::sum);
+                int compatible = account.lotQuantities().entrySet().filter(entry -> {
+                    ResourceLot lot = lots.get(entry.getKey());
+                    return lot.economicOwnerId().equals(claim.economicOwnerId()) && lot.itemKind().equals(claim.itemKind());
+                }).mapToInt(Map.Entry::getValue).sum();
+                if (quantity > compatible) throw new IllegalArgumentException("claim allocation exceeds compatible account stock");
+            });
         }
         lots.forEach((id, lot) -> { if (lotTotals.getOrDefault(id, 0) != lot.quantity()) throw new IllegalArgumentException("resource lot must have exact canonical custody"); });
         claims.forEach((id, claim) -> { if (claimTotals.getOrDefault(id, 0) != claim.quantity()) throw new IllegalArgumentException("claim allocation must have exact canonical custody"); });
@@ -512,8 +523,13 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
             if (account == null || addresses.put(binding.address(), binding.id()) != null || binding.quantity() > 64) throw new IllegalArgumentException("physical stack binding is not one unique current stack");
             binding.lotQuantities().forEach((id, quantity) -> { ResourceLot lot = lots.get(id); if (lot == null || !lot.itemKind().equals(binding.itemKind())) throw new IllegalArgumentException("physical stack binding has incompatible lot evidence");
                 boundLots.computeIfAbsent(account.id(), ignored -> new HashMap<>()).merge(id, quantity, Integer::sum); });
-            binding.claimQuantities().forEach((id, quantity) -> { ClaimAllocation claim = claims.get(id); if (claim == null || !claim.itemKind().equals(binding.itemKind())) throw new IllegalArgumentException("physical stack binding has incompatible claim evidence");
-                boundClaims.computeIfAbsent(account.id(), ignored -> new HashMap<>()).merge(id, quantity, Integer::sum); });
+            binding.claimQuantities().forEach((id, quantity) -> {
+                ClaimAllocation claim = claims.get(id);
+                if (claim == null || !claim.itemKind().equals(binding.itemKind())) {
+                    throw new IllegalArgumentException("physical stack binding has incompatible claim evidence");
+                }
+                boundClaims.computeIfAbsent(account.id(), ignored -> new HashMap<>()).merge(id, quantity, Integer::sum);
+            });
             int boundClaimsAtStack = binding.claimQuantities().values().stream().mapToInt(Integer::intValue).sum();
             if (boundClaimsAtStack > binding.quantity()) {
                 throw new IllegalArgumentException("physical stack binding claims exceed its exact stack quantity");
@@ -541,7 +557,10 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         return new Reservation(new CustodyAccount(account.id(), account.custody(), account.lotQuantities(), quantities), nextClaims);
     }
     private Integer availableFor(CustodyAccount account, ClaimAllocation claim) {
-        return account.lotQuantities().entrySet().stream().filter(entry -> { ResourceLot lot = lots.get(entry.getKey()); return lot.economicOwnerId().equals(claim.economicOwnerId()) && lot.itemKind().equals(claim.itemKind()); }).mapToInt(Map.Entry::getValue).sum();
+        return account.lotQuantities().entrySet().stream().filter(entry -> {
+            ResourceLot lot = lots.get(entry.getKey());
+            return lot.economicOwnerId().equals(claim.economicOwnerId()) && lot.itemKind().equals(claim.itemKind());
+        }).mapToInt(Map.Entry::getValue).sum();
     }
     private int claimedFor(CustodyAccount account, ClaimAllocation claim) {
         return account.claimQuantities().entrySet().stream().filter(entry -> {

@@ -91,9 +91,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         for (Company company : companies.companies().values()) {
             FrontierWorldStateSupport.settlement(bootstrap, company.settlementId());
             ResidentProfile founder = humanPopulation.resident(company.founderId());
-            if (founder == null) {
-                throw new IllegalArgumentException("company founder must remain a canonical resident");
-            }
+            if (founder == null) throw new IllegalArgumentException("company founder must remain a canonical resident");
             EconomicAccount account = inventory.economics().require(company.id());
             if (account.ownerKind() != EconomicOwnerKind.COMPANY || account.status() != EconomicAccountStatus.ACTIVE && company.status() == CompanyStatus.ACTIVE) {
                 throw new IllegalArgumentException("company legal state and account must agree");
@@ -102,9 +100,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         for (EmploymentContract contract : companies.employmentContracts().values()) {
             Company company = companies.companies().get(contract.companyId());
             ResidentProfile resident = humanPopulation.resident(contract.residentId());
-            if (company == null || resident == null) {
-                throw new IllegalArgumentException("employment must bind known legal identities");
-            }
+            if (company == null || resident == null) throw new IllegalArgumentException("employment must bind known legal identities");
             EconomicAccount account = inventory.economics().require(contract.residentId());
             if (account.ownerKind() != EconomicOwnerKind.RESIDENT) {
                 throw new IllegalArgumentException("employment resident must retain a resident account");
@@ -592,102 +588,13 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         return next(actorLocations, structureConditions, infection, inventory, next, contracts, operations,
                 physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
     }
-    public FrontierWorldState startProductionJob(ProductionJob job, SubjectId inputItemId) {
-        Objects.requireNonNull(job, "production job");
-        Objects.requireNonNull(inputItemId, "production input item id");
-        if (!job.consumedItemId().equals(inputItemId)) throw new IllegalArgumentException("production job input identity differs");
-        ExactItemStack input = inventory.items().get(inputItemId);
-        if (input == null || !(input.custody() instanceof InventoryCustody.ContainerSlot)) throw new IllegalArgumentException("production input is unavailable");
-        if (!(job.inputHold() instanceof ProductionInputHold.Cold held) || !held.item().equals(input)) {
-            throw new IllegalArgumentException("cold production job must retain its exact removed input");
-        }
-        if (productionJobs.containsKey(job.id())) throw new IllegalArgumentException("production job identity already exists: " + job.id().value());
-        if (productionJobs.values().stream().anyMatch(existing -> existing.facilityId().equals(job.facilityId()))) {
-            throw new IllegalArgumentException("facility already has an active production job: " + job.facilityId().value());
-        }
-        Map<SubjectId, ProductionJob> next = new LinkedHashMap<>(productionJobs); next.put(job.id(), job);
-        return next(actorLocations, structureConditions, infection, inventory.withoutItem(inputItemId), next,
-                contracts, operations, physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
-    }
-    public FrontierWorldState completeProductionJob(SubjectId jobId, ExactItemStack output) {
-        ProductionJob job = productionJobs.get(Objects.requireNonNull(jobId, "production job id"));
-        if (job == null) throw new IllegalArgumentException("unknown production job: " + jobId.value());
-        if (!job.outputItemId().equals(output.id()) || !job.outputItemKind().equals(output.itemKind()) || job.outputCount() != output.count()) {
-            throw new IllegalArgumentException("production output does not match durable job result");
-        }
-        if (!(job.inputHold() instanceof ProductionInputHold.Cold) || inventory.items().containsKey(job.consumedItemId())) {
-            throw new IllegalArgumentException("materialized production must confirm its physical transformation rather than emit a direct completion");
-        }
-        Map<SubjectId, ProductionJob> next = new LinkedHashMap<>(productionJobs); next.remove(jobId);
-        return next(actorLocations, structureConditions, infection, inventory.store(output), next, contracts, operations,
-                physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
-    }
+    public FrontierWorldState startProductionJob(ProductionJob job, SubjectId inputItemId) { return ProductionJobStateSupport.start(this, job, inputItemId); }
+    public FrontierWorldState completeProductionJob(SubjectId jobId, ExactItemStack output) { return ProductionJobStateSupport.complete(this, jobId, output); }
     /** Commits a COLD recipe by replacing its reserved fungible lot inside the same account. */
-    public FrontierWorldState completeFungibleProductionJob(SubjectId jobId, ResourceLot output) {
-        ProductionJob job = productionJobs.get(Objects.requireNonNull(jobId, "fungible production job id"));
-        if (job == null || !(job.inputHold() instanceof ProductionInputHold.FungibleCold cold)
-                || !job.outputItemId().equals(output.id()) || !job.outputItemKind().equals(output.itemKind())
-                || job.outputCount() != output.quantity() || !job.settlementId().equals(output.economicOwnerId())) {
-            throw new IllegalArgumentException("fungible production output does not match durable job result");
-        }
-        FungibleResourceLedger resources = inventory.fungibleResources().transformCold(cold.accountId(),
-                Map.of(cold.itemId(), job.outputCount()), Map.of(cold.claimId(), job.outputCount()), output);
-        Map<SubjectId, ProductionJob> next = new LinkedHashMap<>(productionJobs); next.remove(jobId);
-        return next(actorLocations, structureConditions, infection, inventory.withFungibleResources(resources), next, contracts, operations,
-                physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
-    }
+    public FrontierWorldState completeFungibleProductionJob(SubjectId jobId, ResourceLot output) { return ProductionJobStateSupport.completeFungible(this, jobId, output); }
     /** Starts a fungible COLD/HOT job by recording only its allocation, never removing a stack identity. */
-    public FrontierWorldState startFungibleProductionJob(ProductionJob job) {
-        Objects.requireNonNull(job, "fungible production job");
-        ProductionInputHold hold = job.inputHold();
-        FungibleResourceLedger resources = inventory.fungibleResources();
-        ClaimAllocation claim;
-        FungibleResourceLedger reserved;
-        if (hold instanceof ProductionInputHold.FungibleCold cold) {
-            claim = new ClaimAllocation(cold.claimId(), job.id(), job.settlementId(), "minecraft:wheat", job.outputCount());
-            reserved = resources.reserve(claim, cold.accountId());
-        } else if (hold instanceof ProductionInputHold.FungibleBound bound) {
-            claim = new ClaimAllocation(bound.claimId(), job.id(), job.settlementId(), "minecraft:wheat", job.outputCount());
-            reserved = resources.reserveBound(claim, bound.accountId(), bound.authorityEpoch());
-        } else {
-            throw new IllegalArgumentException("fungible production job has no fungible input hold");
-        }
-        if (!resources.lots().containsKey(job.consumedItemId()) || productionJobs.containsKey(job.id())
-                || productionJobs.values().stream().anyMatch(existing -> existing.facilityId().equals(job.facilityId()))) {
-            throw new IllegalArgumentException("fungible production job is unavailable or duplicates its facility");
-        }
-        Map<SubjectId, ProductionJob> next = new LinkedHashMap<>(productionJobs); next.put(job.id(), job);
-        return next(actorLocations, structureConditions(), infection, inventory.withFungibleResources(reserved), next, contracts, operations,
-                physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
-    }
-    public FrontierWorldState cancelProductionJob(SubjectId jobId) {
-        ProductionJob job = productionJobs.get(Objects.requireNonNull(jobId, "production job id"));
-        if (job == null) throw new IllegalArgumentException("unknown production job: " + jobId.value());
-        ExactInventory nextInventory = switch (job.inputHold()) {
-            case ProductionInputHold.Cold cold -> {
-                ExactItemStack held = cold.item();
-                if (inventory.items().containsKey(held.id()) || !(held.custody() instanceof InventoryCustody.ContainerSlot source)
-                        || inventory.itemAt(source.containerId(), source.slot()).isPresent()) {
-                    throw new IllegalArgumentException("cold production hold cannot return to its original exact slot");
-                }
-                yield inventory.store(held);
-            }
-            // The real stack remains under observed custody; cancellation neither restores nor deletes it.
-            case ProductionInputHold.Materialized ignored -> inventory;
-            case ProductionInputHold.FungibleCold cold -> inventory.withFungibleResources(inventory.fungibleResources()
-                    .releaseClaim(cold.accountId(), cold.claimId()));
-            case ProductionInputHold.FungibleBound ignored -> throw new IllegalArgumentException("bound fungible production must await physical recovery");
-        };
-        Map<PhysicalIntentId, PhysicalIntent> nextIntents = new LinkedHashMap<>(physicalIntents);
-        for (PhysicalIntent intent : physicalIntents.values()) if (intent.causeSubjectId().equals(job.id())) {
-            if (intent.kind() != PhysicalIntentKind.PRODUCTION_TRANSFORMATION || intent.status() != PhysicalIntentStatus.PREPARED)
-                throw new IllegalArgumentException("production job with a running or terminal physical transformation cannot be cancelled");
-            nextIntents.remove(intent.id());
-        }
-        Map<SubjectId, ProductionJob> next = new LinkedHashMap<>(productionJobs); next.remove(job.id());
-        return next(actorLocations, structureConditions, infection, nextInventory, next, contracts, operations,
-                nextIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
-    }
+    public FrontierWorldState startFungibleProductionJob(ProductionJob job) { return ProductionJobStateSupport.startFungible(this, job); }
+    public FrontierWorldState cancelProductionJob(SubjectId jobId) { return ProductionJobStateSupport.cancel(this, jobId); }
     public FrontierWorldState createSupplyContract(SupplyContract contract) {
         if (contracts.containsKey(contract.id())) throw new IllegalArgumentException("supply contract identity already exists");
         Map<SubjectId, SupplyContract> next = new LinkedHashMap<>(contracts); next.put(contract.id(), contract);

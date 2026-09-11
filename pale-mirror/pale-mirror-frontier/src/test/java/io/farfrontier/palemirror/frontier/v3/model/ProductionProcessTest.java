@@ -2,7 +2,6 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.process.*;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
-
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.api.ScheduleId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
@@ -26,19 +25,16 @@ import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 import org.junit.jupiter.api.Test;
-
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-
 class ProductionProcessTest {
     @Test
     void coldFungibleProductionKeepsOneReservedLotUntilItTransformsIntoOneOutputLot() {
@@ -48,7 +44,6 @@ class ProductionProcessTest {
         ExactInventory inventory = initial.inventory();
         FrontierWorldState pending = productionTask(initial.withInventory(inventory), StrategicTaskStatus.PENDING);
         StrategicTask task = pending.strategicPlans().tasks().values().iterator().next();
-
         List<ProposedEvent> planned = ProductionProcess.planStart(pending, ProductionProcess.start(task, 100L));
         ProductionStarted started = planned.stream().map(ProposedEvent::payload).filter(ProductionStarted.class::isInstance)
                 .map(ProductionStarted.class::cast).findFirst().orElseThrow();
@@ -56,12 +51,10 @@ class ProductionProcessTest {
         FrontierWorldState active = StrategicObjectiveProcess.reduceTaskTransition(pending, settlement,
                 assertInstanceOf(StrategicTaskTransition.class, planned.getFirst().payload()));
         FrontierWorldState reserved = ProductionProcess.reduceStarted(active, settlement, started);
-
         assertEquals(64, reserved.inventory().fungibleResources().accounts().get(accountId).claimQuantities().get(hold.claimId()));
         List<ProposedEvent> completion = ProductionProcess.planCompletion(reserved, ProductionProcess.complete(started.job(), 200L));
         FungibleProductionCompleted completed = assertInstanceOf(FungibleProductionCompleted.class, completion.getFirst().payload());
         FrontierWorldState transformed = ProductionProcess.reduceFungibleCompleted(reserved, settlement, completed);
-
         assertTrue(transformed.productionJobs().isEmpty());
         assertFalse(transformed.inventory().items().containsKey(completed.output().id()));
         assertEquals(64, transformed.inventory().fungibleResources().totalQuantity(settlement, "minecraft:bread"));

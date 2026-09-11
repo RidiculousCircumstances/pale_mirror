@@ -102,6 +102,14 @@ public final class FrontierV3PlayerCustodyGameTests {
                 "the player portion remains HOT and therefore cannot become concurrent COLD stock");
         helper.assertTrue(moved.inventory().fungibleResources().totalQuantity(new SubjectId("settlement:1"), "minecraft:wheat") == 64,
                 "the split must conserve every ordinary item unit");
+        chest.setItem(0, new ItemStack(Items.WHEAT, 64)); player.getInventory().setItem(0, ItemStack.EMPTY); chest.setChanged();
+        FrontierV3FungibleResourceObservationExecutor.tick(level, runtime);
+        FrontierWorldState returned = state(runtime);
+        helper.assertTrue(returned.inventory().fungibleResources().accounts().values().stream()
+                        .noneMatch(account -> account.custody().equals(new ResourceCustody.Player(player.getUUID()))),
+                "the same player portion must merge back into its retained depot account exactly once");
+        helper.assertTrue(returned.inventory().fungibleResources().totalQuantity(new SubjectId("settlement:1"), "minecraft:wheat") == 64,
+                "the physical merge must retain the original conserved total");
         runtime.shutdown(); helper.succeed();
     }
 
