@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.persistence.StrategicPlanStateCodec;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
+import io.farfrontier.palemirror.frontier.v3.process.HiveSettlementAssaultProcess;
 
 import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
@@ -169,6 +170,50 @@ class SettlementAssaultTest {
         PhysicalIntent nextIntent = strike(nextHot, nextLease, nextCause, nextAttacker, nextTarget);
         assertEquals(PhysicalIntentStatus.PREPARED, nextHot.preparePhysicalIntent(nextIntent).physicalIntents().get(nextIntent.id()).status(),
                 "the released COLD assault admits only its next exact epoch");
+    }
+
+    @Test void hotOverseerLossRetreatsTheSameExpeditionBeforeItsColdTerminalDecision() {
+        FrontierDevelopmentScenarios.SettlementAssaultFixture fixture = FrontierDevelopmentScenarios.settlementAssaultFixture(
+                new WorldId("frontier:overseer-retreat"), 92L);
+        FrontierWorldState state = fixture.state();
+        SettlementAssault assault = state.strategicPlans().settlementAssaults().get(fixture.assaultId());
+        SettlementAssaultSceneCandidate candidate = state.coldSettlementAssaultSceneCandidates().stream()
+                .filter(value -> value.assaultId().equals(assault.id())).findFirst().orElseThrow();
+        SceneLeaseId leaseId = new SceneLeaseId("lease:overseer-retreat");
+        WorldId worldId = state.bootstrap().worldId();
+        List<SceneMember> members = candidate.memberPositions().keySet().stream().sorted()
+                .map(id -> new SceneMember(id, SceneLease.deterministicEntityId(worldId, id))).toList();
+        SceneLease lease = SceneLease.forCause(leaseId, worldId,
+                new SettlementAssaultSceneCause(assault.id(), assault.settlementId()), candidate.handoffPosition(), fixture.instant(), 4L,
+                SceneLeaseStatus.PREPARED, members, SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), Set.of(), Optional.empty());
+        state = state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+        long contactPlanEpoch = state.strategicPlans().settlementAssaults().get(assault.id()).tacticalPlan().planEpoch();
+
+        state = state.recordActorDeath(new ActorDied(leaseId, assault.overseerId(), lease.memberPosition(assault.overseerId()), "test-overseer-loss"), 11L);
+
+        SettlementAssault retreating = state.strategicPlans().settlementAssaults().get(assault.id());
+        assertEquals(assault.expeditionId(), retreating.expeditionId());
+        assertEquals(TacticalPlanPhase.RETREAT, retreating.tacticalPlan().phase());
+        assertEquals(contactPlanEpoch + 1L, retreating.tacticalPlan().planEpoch());
+        assertEquals(SceneLeaseStatus.HOT, state.sceneLeases().get(leaseId).status(), "the same physical lease drains naturally after the canonical retreat order");
+        PhysicalIntent staleContact = new PhysicalIntent(new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:overseer-retreat"),
+                PhysicalIntentKind.SCENE_STRIKE, PhysicalIntentStatus.RUNNING,
+                SettlementAssaultCauseIdentity.strike(assault.id(), assault.combatantAttackerIds().getFirst(), 0),
+                List.of(assault.combatantAttackerIds().getFirst(), assault.defenderIds().getFirst()),
+                new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED);
+        FrontierWorldState afterLoss = state;
+        assertThrows(IllegalArgumentException.class, () -> afterLoss.strategicPlans().afterConfirmedHotStrike(staleContact),
+                "the old contact directive cannot commit after the same expedition orders retreat");
+
+        state = state.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING);
+        state = state.releaseSceneLease(leaseId, members.stream().filter(member -> !member.actorId().equals(assault.overseerId()))
+                .map(member -> new SceneMemberPosition(member.actorId(), lease.memberPosition(member.actorId()), FixedScalar.whole(20))).toList());
+        SettlementAssault coldRetreat = state.strategicPlans().settlementAssaults().get(assault.id());
+        assertEquals(SettlementAssaultStatus.COLD_COMBAT, coldRetreat.status());
+        assertEquals(TacticalPlanPhase.RETREAT, coldRetreat.tacticalPlan().phase());
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> terminal = HiveSettlementAssaultProcess.planCombat(state,
+                HiveSettlementAssaultProcess.combat(coldRetreat, 20L));
+        assertEquals(new SettlementAssaultResolved(assault.id(), SettlementAssaultOutcome.ABORTED), terminal.getFirst().payload());
     }
 
     private static PhysicalIntent strike(FrontierWorldState state, SceneLease lease, SubjectId cause, SubjectId attacker, SubjectId target) {

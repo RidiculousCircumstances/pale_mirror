@@ -126,6 +126,9 @@ public final class HiveSettlementAssaultProcess {
         SettlementAssault assault = state.strategicPlans().settlementAssaults().get(action.subject());
         if (assault == null || assault.status() != SettlementAssaultStatus.COLD_COMBAT
                 || !action.id().equals(combat(assault, action.dueAt().ticks()).id())) return List.of();
+        if (assault.tacticalPlan().phase() == TacticalPlanPhase.RETREAT) {
+            return List.of(new ProposedEvent(assault.hiveId(), new SettlementAssaultResolved(assault.id(), SettlementAssaultOutcome.ABORTED)));
+        }
         List<SubjectId> attackers = livingCombatantAttackers(state, assault), defenders = livingDefenders(state, assault);
         if (attackers.isEmpty() || defenders.isEmpty()) return terminal(assault, attackers, defenders);
         if (FrontierSettlementAssaultBattlefield.candidate(state, assault).isEmpty()) {

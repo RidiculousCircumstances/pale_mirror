@@ -378,6 +378,18 @@ public final class FrontierSceneBehaviors {
         @Override public SceneRecoveryPlan recoveryUnresolvedPlan(FrontierWorldState state, SceneLease lease, SceneLeaseRecoveryUnresolved unresolved) {
             return new SceneRecoveryPlan(owner(state, lease), unresolved, new SceneContinuation.None());
         }
+        @Override public SceneDeathOutcome afterActorDeath(FrontierWorldState state, SceneLease lease, SubjectId actorId, long atTick) {
+            SettlementAssault assault = FrontierSettlementAssaultSceneSupport.require(state, cause(lease));
+            if (assault.status() != SettlementAssaultStatus.HOT || !assault.overseerId().equals(actorId)) {
+                return SceneDeathOutcome.unchanged(state);
+            }
+            // Keep the same durable assault, roster and authority.  The physical scene may
+            // drain naturally, but it can no longer commit a contact receipt or regain a
+            // replacement controller from ambient Minecraft state.
+            StrategicPlanState plans = state.strategicPlans().replaceSettlementAssault(assault.retreatAfterOverseerLoss(actorId));
+            return new SceneDeathOutcome(state.humanPopulation(), state.resourceSites(), plans,
+                    state.physicalIntents(), state.serviceWorks());
+        }
     }
 
     private static final class EngineeringWorksiteBehavior implements SceneBehavior<EngineeringWorkSceneCause> {

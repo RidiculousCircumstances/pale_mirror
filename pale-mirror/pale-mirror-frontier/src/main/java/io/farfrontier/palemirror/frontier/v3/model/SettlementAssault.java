@@ -114,8 +114,18 @@ public record SettlementAssault(SubjectId id, SubjectId taskId, SubjectId hiveId
         }
         TacticalPlan nextPlan = next == SettlementAssaultStatus.RESOLVED ? tacticalPlan.withPhase(TacticalPlanPhase.COMPLETE)
                 : next == SettlementAssaultStatus.APPROACHING ? tacticalPlan.withPhase(TacticalPlanPhase.TRAVEL)
+                : next == SettlementAssaultStatus.COLD_COMBAT && tacticalPlan.phase() == TacticalPlanPhase.RETREAT ? tacticalPlan
                 : tacticalPlan.withPhase(TacticalPlanPhase.CONTACT);
         return new SettlementAssault(id, taskId, hiveId, sighting, overseerId, attackers, defenderUnit, nextPlan, next, nextStrikeEpoch, Optional.empty());
+    }
+
+    /** The same expedition retreats after its irreplaceable command owner is physically lost. */
+    public SettlementAssault retreatAfterOverseerLoss(SubjectId lostActorId) {
+        if (status != SettlementAssaultStatus.HOT || !overseerId.equals(Objects.requireNonNull(lostActorId, "lost Overseer"))) {
+            throw new IllegalArgumentException("only the HOT expedition's exact Overseer loss may order retreat");
+        }
+        return new SettlementAssault(id, taskId, hiveId, sighting, overseerId, attackers, defenderUnit,
+                tacticalPlan.withPhase(TacticalPlanPhase.RETREAT), status, nextStrikeEpoch, outcome);
     }
 
     public SettlementAssault afterStrike(int expectedEpoch) {

@@ -501,6 +501,9 @@ public final class StrategicPlanState {
         if (task == null || !currentDecisionAuthority(task.authorityId(), task.authorityEpoch())) {
             throw new IllegalArgumentException("HOT assault strike has no current decision authority");
         }
+        if (assault.tacticalPlan().phase() != TacticalPlanPhase.CONTACT) {
+            throw new IllegalArgumentException("HOT assault strike has no current contact directive");
+        }
         OperationFrontEffectKey effect = new OperationFrontEffectKey(intent.causeSubjectId(), assault.attackFront().id(),
                 assault.defenceFront().id(), task.authorityEpoch());
         return recordFrontEffect(effect).replaceSettlementAssault(assault.afterHotStrike(Math.toIntExact(epoch)));
