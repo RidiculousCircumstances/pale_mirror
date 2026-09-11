@@ -6,7 +6,7 @@ import java.util.Map;
 import java.util.Objects;
 
 /** One canonical resource location; slots are transient physical bindings rather than stock owners. */
-public record CustodyAccount(SubjectId id, InventoryCustody custody, Map<SubjectId, Integer> lotQuantities,
+public record CustodyAccount(SubjectId id, ResourceCustody custody, Map<SubjectId, Integer> lotQuantities,
                              Map<SubjectId, Integer> claimQuantities) {
     public CustodyAccount {
         Objects.requireNonNull(id, "custody account id"); Objects.requireNonNull(custody, "custody account location");

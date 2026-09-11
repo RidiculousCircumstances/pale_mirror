@@ -25,7 +25,7 @@ class FungibleResourceLedgerTest {
         FungibleResourceLedger issued = issue(10);
         ResourceLot child = new ResourceLot(new SubjectId("lot:bread-child"), OWNER, "minecraft:bread", 4, "bootstrap", List.of(LOT));
         FungibleResourceLedger split = issued.split(DEPOT_ACCOUNT, LOT, child, 4);
-        CustodyAccount player = new CustodyAccount(new SubjectId("custody:player"), new InventoryCustody.Player(uuid(2)),
+        CustodyAccount player = new CustodyAccount(new SubjectId("custody:player"), new ResourceCustody.Player(uuid(2)),
                 Map.of(child.id(), 4), Map.of());
         FungibleResourceLedger moved = split.transferToNewAccount(DEPOT_ACCOUNT, player);
 
@@ -43,7 +43,7 @@ class FungibleResourceLedgerTest {
     void reservedPortionMovesExactlyAndCannotBeDoubleAllocatedOrOverConsumed() {
         FungibleResourceLedger reserved = issue(10).reserve(new ClaimAllocation(new SubjectId("claim:provision"), new SubjectId("process:provision"), OWNER,
                 "minecraft:bread", 4), DEPOT_ACCOUNT);
-        CustodyAccount player = new CustodyAccount(new SubjectId("custody:player"), new InventoryCustody.Player(uuid(3)), Map.of(LOT, 4),
+        CustodyAccount player = new CustodyAccount(new SubjectId("custody:player"), new ResourceCustody.Player(uuid(3)), Map.of(LOT, 4),
                 Map.of(new SubjectId("claim:provision"), 4));
         FungibleResourceLedger stolen = reserved.transferToNewAccount(DEPOT_ACCOUNT, player);
 
@@ -62,6 +62,11 @@ class FungibleResourceLedgerTest {
         FungibleResourceLedger split = issued.rebind(DEPOT_ACCOUNT, 7L, List.of(first, second));
 
         assertEquals(10, split.bindings().values().stream().mapToInt(PhysicalStackBinding::quantity).sum());
+        assertThrows(IllegalStateException.class, () -> split.destroy(DEPOT_ACCOUNT, Map.of(LOT, 1), Map.of()),
+                "an observer-free HOT hopper/container binding must fence concurrent COLD spending");
+        assertThrows(IllegalArgumentException.class, () -> split.releaseBindings(DEPOT_ACCOUNT, 6L));
+        FungibleResourceLedger released = split.releaseBindings(DEPOT_ACCOUNT, 7L);
+        assertEquals(9, released.destroy(DEPOT_ACCOUNT, Map.of(LOT, 1), Map.of()).totalQuantity(OWNER, "minecraft:bread"));
         assertThrows(IllegalArgumentException.class, () -> split.rebind(DEPOT_ACCOUNT, 8L, List.of(first)));
         assertThrows(IllegalArgumentException.class, () -> issued.rebind(DEPOT_ACCOUNT, 7L, List.of(first,
                 binding("binding:duplicate-address", 7L, 4, new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(DEPOT, 0))))));
@@ -86,7 +91,7 @@ class FungibleResourceLedgerTest {
 
     private static FungibleResourceLedger issue(int quantity) {
         ResourceLot lot = new ResourceLot(LOT, OWNER, "minecraft:bread", quantity, "bootstrap", List.of());
-        CustodyAccount account = new CustodyAccount(DEPOT_ACCOUNT, new InventoryCustody.ContainerSlot(DEPOT, 0), Map.of(LOT, quantity), Map.of());
+        CustodyAccount account = new CustodyAccount(DEPOT_ACCOUNT, new ResourceCustody.Container(DEPOT), Map.of(LOT, quantity), Map.of());
         return FungibleResourceLedger.empty().issue(lot, account);
     }
 

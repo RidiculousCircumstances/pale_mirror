@@ -584,7 +584,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         }
         writeCount(output, ledger.accounts().size());
         for (CustodyAccount account : ledger.accounts().values().stream().sorted(Comparator.comparing(CustodyAccount::id)).toList()) {
-            writeString(output, account.id().value()); writeCustody(output, account.custody()); writeQuantities(output, account.lotQuantities());
+            writeString(output, account.id().value()); writeResourceCustody(output, account.custody()); writeQuantities(output, account.lotQuantities());
             writeQuantities(output, account.claimQuantities());
         }
         writeCount(output, ledger.bindings().size());
@@ -611,7 +611,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         }
         Map<SubjectId, CustodyAccount> accounts = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
-            SubjectId id = new SubjectId(readString(input)); CustodyAccount account = new CustodyAccount(id, readCustody(input), readQuantities(input), readQuantities(input));
+            SubjectId id = new SubjectId(readString(input)); CustodyAccount account = new CustodyAccount(id, readResourceCustody(input), readQuantities(input), readQuantities(input));
             if (accounts.put(id, account) != null) throw new IllegalArgumentException("duplicate custody account id");
         }
         Map<SubjectId, PhysicalStackBinding> bindings = new LinkedHashMap<>();
@@ -654,6 +654,27 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             case 2 -> new PhysicalStackAddress.HopperSlot(readPosition(input), input.readUnsignedByte());
             case 3 -> new PhysicalStackAddress.WorldEntity(UUID.fromString(readString(input)));
             default -> throw new IllegalArgumentException("unknown physical stack address");
+        };
+    }
+
+    private static void writeResourceCustody(DataOutputStream output, ResourceCustody custody) throws IOException {
+        switch (custody) {
+            case ResourceCustody.Container container -> { output.writeByte(0); writeString(output, container.containerId().value()); }
+            case ResourceCustody.Player player -> { output.writeByte(1); writeString(output, player.playerId().toString()); }
+            case ResourceCustody.Cargo cargo -> { output.writeByte(2); writeString(output, cargo.cargoId().value()); }
+            case ResourceCustody.WorldCarrier carrier -> { output.writeByte(3); writeString(output, carrier.carrierId().toString()); }
+            case ResourceCustody.Actor actor -> { output.writeByte(4); writeString(output, actor.actorId().value()); }
+        }
+    }
+
+    private static ResourceCustody readResourceCustody(DataInputStream input) throws IOException {
+        return switch (input.readUnsignedByte()) {
+            case 0 -> new ResourceCustody.Container(new SubjectId(readString(input)));
+            case 1 -> new ResourceCustody.Player(UUID.fromString(readString(input)));
+            case 2 -> new ResourceCustody.Cargo(new SubjectId(readString(input)));
+            case 3 -> new ResourceCustody.WorldCarrier(UUID.fromString(readString(input)));
+            case 4 -> new ResourceCustody.Actor(new SubjectId(readString(input)));
+            default -> throw new IllegalArgumentException("unknown resource custody");
         };
     }
     private static void writeProductionJobs(DataOutputStream output, Map<SubjectId, ProductionJob> jobs) throws IOException {

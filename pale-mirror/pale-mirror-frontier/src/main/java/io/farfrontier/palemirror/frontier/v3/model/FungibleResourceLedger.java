@@ -44,6 +44,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
     /** Reserves part of the already-accounted stock without creating a second resource balance. */
     public FungibleResourceLedger reserve(ClaimAllocation claim, SubjectId accountId) {
         Objects.requireNonNull(claim, "claim allocation"); CustodyAccount account = requireAccount(accountId);
+        requireNoPhysicalBinding(account.id(), "reserve");
         if (claims.containsKey(claim.id()) || account.claimQuantities().containsKey(claim.id()) || availableFor(account, claim) < claim.quantity()) {
             throw new IllegalArgumentException("claim allocation is not backed by one exact account balance");
         }
@@ -56,6 +57,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
     public FungibleResourceLedger transfer(SubjectId fromId, SubjectId toId, Map<SubjectId, Integer> lotQuantities,
                                             Map<SubjectId, Integer> claimQuantities) {
         CustodyAccount from = requireAccount(fromId); CustodyAccount to = requireAccount(toId);
+        requireNoPhysicalBinding(from.id(), "transfer"); requireNoPhysicalBinding(to.id(), "transfer");
         if (from.id().equals(to.id())) throw new IllegalArgumentException("fungible transfer requires distinct custody accounts");
         requireSubset(from.lotQuantities(), lotQuantities, "lot transfer"); requireOptionalSubset(from.claimQuantities(), claimQuantities, "claim transfer");
         if (sum(lotQuantities) != sum(claimQuantities) && !claimQuantities.isEmpty()) throw new IllegalArgumentException("claimed transfer must preserve exact resource quantity");
@@ -71,6 +73,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
     /** Opens a newly observed player/container/carrier account by moving exact extant quantities into it. */
     public FungibleResourceLedger transferToNewAccount(SubjectId fromId, CustodyAccount destination) {
         CustodyAccount from = requireAccount(fromId); Objects.requireNonNull(destination, "new custody account");
+        requireNoPhysicalBinding(from.id(), "transfer");
         if (accounts.containsKey(destination.id()) || from.id().equals(destination.id())) throw new IllegalArgumentException("new custody account identity is already live");
         requireSubset(from.lotQuantities(), destination.lotQuantities(), "new custody account lots");
         requireOptionalSubset(from.claimQuantities(), destination.claimQuantities(), "new custody account claims");
@@ -86,6 +89,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
     /** Changes canonical lot lineage while retaining total resource quantity and all reservations. */
     public FungibleResourceLedger split(SubjectId accountId, SubjectId sourceLotId, ResourceLot child, int quantity) {
         CustodyAccount account = requireAccount(accountId); ResourceLot source = requireLot(sourceLotId);
+        requireNoPhysicalBinding(account.id(), "split");
         if (lots.containsKey(child.id()) || !source.economicOwnerId().equals(child.economicOwnerId()) || !source.itemKind().equals(child.itemKind())
                 || !source.provenance().equals(child.provenance()) || child.quantity() != quantity || quantity < 1 || quantity >= source.quantity()
                 || !source.splitChild(child.id(), quantity).equals(child) || account.lotQuantities().getOrDefault(sourceLotId, 0) < quantity) {
@@ -99,6 +103,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
     /** Merges two co-located interchangeable lots into fresh bounded lineage without changing any allocation. */
     public FungibleResourceLedger merge(SubjectId accountId, SubjectId leftId, SubjectId rightId, ResourceLot merged) {
         CustodyAccount account = requireAccount(accountId); ResourceLot left = requireLot(leftId); ResourceLot right = requireLot(rightId);
+        requireNoPhysicalBinding(account.id(), "merge");
         if (leftId.equals(rightId) || lots.containsKey(merged.id()) || !left.economicOwnerId().equals(right.economicOwnerId())
                 || !left.itemKind().equals(right.itemKind()) || !left.provenance().equals(right.provenance())
                 || !merged.economicOwnerId().equals(left.economicOwnerId()) || !merged.itemKind().equals(left.itemKind())
@@ -125,9 +130,21 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         return new FungibleResourceLedger(lots, claims, accounts, next);
     }
 
+    /** Releases only the current epoch after its durable physical checkpoint; a stale lease cannot reopen COLD spending. */
+    public FungibleResourceLedger releaseBindings(SubjectId accountId, long authorityEpoch) {
+        requireAccount(accountId);
+        List<PhysicalStackBinding> current = bindings.values().stream().filter(binding -> binding.accountId().equals(accountId)).toList();
+        if (current.isEmpty() || current.stream().anyMatch(binding -> binding.authorityEpoch() != authorityEpoch)) {
+            throw new IllegalArgumentException("physical custody release does not match the current authority epoch");
+        }
+        Map<SubjectId, PhysicalStackBinding> next = withoutBindingsFor(accountId);
+        return new FungibleResourceLedger(lots, claims, accounts, next);
+    }
+
     /** A typed destruction sink removes only the named custody portions; nothing is rolled back or minted. */
     public FungibleResourceLedger destroy(SubjectId accountId, Map<SubjectId, Integer> lotQuantities, Map<SubjectId, Integer> claimQuantities) {
         CustodyAccount account = requireAccount(accountId); requireSubset(account.lotQuantities(), lotQuantities, "destruction lots");
+        requireNoPhysicalBinding(account.id(), "destroy");
         requireOptionalSubset(account.claimQuantities(), claimQuantities, "destruction claims");
         if (!claimQuantities.isEmpty() && sum(lotQuantities) != sum(claimQuantities)) throw new IllegalArgumentException("claimed destruction must consume the same exact quantity");
         Map<SubjectId, ResourceLot> nextLots = new HashMap<>(lots); Map<SubjectId, ClaimAllocation> nextClaims = new HashMap<>(claims);
@@ -195,6 +212,11 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         Map<SubjectId, PhysicalStackBinding> next = new HashMap<>(bindings);
         bindings.values().stream().filter(binding -> binding.accountId().equals(accountId)).map(PhysicalStackBinding::id).forEach(next::remove);
         return next;
+    }
+    private void requireNoPhysicalBinding(SubjectId accountId, String operation) {
+        if (bindings.values().stream().anyMatch(binding -> binding.accountId().equals(accountId))) {
+            throw new IllegalStateException("fungible " + operation + " is fenced by active physical custody");
+        }
     }
     private static CustodyAccount accountWithAdded(CustodyAccount account, Map<SubjectId, Integer> lots, Map<SubjectId, Integer> claims) {
         Map<SubjectId, Integer> nextLots = new HashMap<>(account.lotQuantities()); lots.forEach((id, quantity) -> nextLots.merge(id, quantity, Integer::sum));
