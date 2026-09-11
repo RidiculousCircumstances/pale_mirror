@@ -15,6 +15,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 
 import java.util.Comparator;
+import java.util.stream.Collectors;
 
 /** Read-only operator view of one exact cocoon-release gate. */
 final class FrontierV3HiveMobilizationDiagnostic {
@@ -134,12 +135,17 @@ final class FrontierV3HiveMobilizationDiagnostic {
         long hot = returning.members().keySet().stream().map(state.ambientLeases()::get)
                 .filter(lease -> lease != null && lease.status() == AmbientLeaseStatus.HOT
                         && lease.goal() == AmbientGoalKind.HIVE_TASK_RETURN).count();
+        String survivorPositions = returning.members().keySet().stream().sorted().map(actor -> {
+            SurfaceAnchor surface = state.actorLocations().get(actor).supportingSurface();
+            return "{\"id\":\"" + quote(actor.value()) + "\",\"x\":" + surface.support().x()
+                    + ",\"y\":" + surface.support().y() + ",\"z\":" + surface.support().z() + "}";
+        }).collect(Collectors.joining(",", "[", "]"));
         if (member == null) {
             return FrontierV3DiagnosticJson.bounded("hive_mobilization", mobilization.id().value(), checkpoint,
                     base(mobilization.id().value(), checkpoint) + ",\"status\":\"ok\",\"mobilizationStatus\":\"RETURNING\""
                             + ",\"survivors\":" + returning.members().size() + ",\"returnedMembers\":" + completed
                             + ",\"hotMembers\":" + hot + ",\"returnComplete\":" + returning.complete()
-                            + ",\"nextMember\":\"\",\"detail\":\"return_complete\"}");
+                            + ",\"survivorPositions\":" + survivorPositions + ",\"nextMember\":\"\",\"detail\":\"return_complete\"}");
         }
         SurfaceAnchor current = member.currentSurface();
         SurfaceAnchor target = member.nextSurface();
@@ -150,6 +156,7 @@ final class FrontierV3HiveMobilizationDiagnostic {
                 base(mobilization.id().value(), checkpoint) + ",\"status\":\"ok\",\"mobilizationStatus\":\"RETURNING\""
                         + ",\"survivors\":" + returning.members().size() + ",\"returnedMembers\":" + completed
                         + ",\"hotMembers\":" + hot + ",\"returnComplete\":false,\"nextMember\":\"" + quote(nextActor.value())
+                        + "\",\"survivorPositions\":" + survivorPositions
                         + "\",\"cursor\":" + member.cursor() + ",\"current\":{\"x\":" + current.support().x()
                         + ",\"y\":" + current.support().y() + ",\"z\":" + current.support().z() + "},\"target\":{\"x\":"
                         + target.support().x() + ",\"y\":" + target.support().y() + ",\"z\":" + target.support().z()
