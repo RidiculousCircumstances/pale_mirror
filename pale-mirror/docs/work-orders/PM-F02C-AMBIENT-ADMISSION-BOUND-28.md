@@ -1,6 +1,6 @@
 # PM-F02C-AMBIENT-ADMISSION-BOUND-28: bound physical-provider admission work
 
-Specification revision: 1. Status: `AUTHORIZED_AWAITING_EXECUTOR`.
+Specification revision: 2. Status: `EXECUTING_METHOD_BUILD`.
 Parent slice: F0.2C. Risk: critical-code. Engineer: supervising root.
 Executor: one fresh `gpt-5.6-terra`, reasoning `high`, routed as
 `/root/f02c_shared_assault_challenge24/terra_ambient_admission_bound28`.
@@ -106,6 +106,6 @@ navigation/tactics, F0.3, publication, deployment or confidence rerun. If the
 claim cannot be proved faithfully at the cheap tier, return `ARCHITECTURE` or
 `METHOD_RISK`; do not manufacture another proof-only production seam.
 
-Assignment epoch is set when the fresh executor starts. The supervisor performs
-one bounded liveness check after each complete ten-minute silence interval and
-one economy audit after one hour if still active.
+Assignment epoch: `2026-09-11T01:29:37Z`. The supervisor performs one bounded
+liveness check after each complete ten-minute silence interval and one economy
+audit after one hour if still active.
