@@ -5,7 +5,11 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Pure contract shared by the first depot and hive-store consumers of the replica kernel.
@@ -78,15 +82,9 @@ public final class ReferenceContainerCustody {
             ExactItemStack item = state.inventory().itemAt(containerId, slot).orElse(null);
             value.append(slot).append(':');
             if (item != null) value.append("exact:").append(item.id().value()).append(':').append(item.itemKind()).append(':').append(item.count());
-            else {
-                int currentSlot = slot;
-                PhysicalStackBinding binding = state.inventory().fungibleResources().bindings().values().stream()
-                        .filter(candidate -> candidate.address() instanceof PhysicalStackAddress.ContainerSlot address
-                                && address.slot().containerId().equals(containerId) && address.slot().slot() == currentSlot)
-                        .findFirst().orElse(null);
-                if (binding == null) value.append("empty");
-                else value.append("fungible:").append(binding.itemKind()).append(':').append(binding.quantity());
-            }
+            else expectedFungibleSlot(state, containerId, slot).ifPresentOrElse(
+                    fungible -> value.append("fungible:").append(fungible.itemKind()).append(':').append(fungible.quantity()),
+                    () -> value.append("empty"));
             value.append('|');
         }
         return sha256(value.toString());
@@ -107,6 +105,57 @@ public final class ReferenceContainerCustody {
             value.append('|');
         }
         return sha256(value.toString());
+    }
+
+    /**
+     * The one fungible-slot grammar shared by initial COLD materialization and the reference
+     * firewall.  Before a HOT observation binds a physical stack, the deterministic projected
+     * slot is already canonical; once binding exists, only that exact transient address counts.
+     */
+    public static Optional<ProjectedFungibleSlot> expectedFungibleSlot(FrontierWorldState state, SubjectId containerId, int slot) {
+        ContainerRecord container = state.inventory().containers().get(Objects.requireNonNull(containerId, "container id"));
+        if (container == null || slot < 0 || slot >= container.slotCount()) throw new IllegalArgumentException("fungible reference slot is invalid");
+        return Optional.ofNullable(expectedFungibleSlots(state, containerId).get(slot));
+    }
+
+    private static Map<Integer, ProjectedFungibleSlot> expectedFungibleSlots(FrontierWorldState state, SubjectId containerId) {
+        Map<Integer, ProjectedFungibleSlot> slots = new LinkedHashMap<>();
+        List<PhysicalStackBinding> bindings = state.inventory().fungibleResources().bindings().values().stream()
+                .filter(candidate -> candidate.address() instanceof PhysicalStackAddress.ContainerSlot address
+                        && address.slot().containerId().equals(containerId)).toList();
+        if (!bindings.isEmpty()) {
+            for (PhysicalStackBinding binding : bindings) {
+                PhysicalStackAddress.ContainerSlot address = (PhysicalStackAddress.ContainerSlot) binding.address();
+                slots.put(address.slot().slot(), new ProjectedFungibleSlot(binding.itemKind(), binding.quantity()));
+            }
+            return Map.copyOf(slots);
+        }
+        List<CustodyAccount> accounts = state.inventory().fungibleResources().accounts().values().stream()
+                .filter(account -> account.custody() instanceof ResourceCustody.Container custody && custody.containerId().equals(containerId)).toList();
+        if (accounts.size() != 1) return Map.of();
+        Map<String, Integer> quantities = new LinkedHashMap<>();
+        accounts.getFirst().lotQuantities().entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
+            ResourceLot lot = state.inventory().fungibleResources().lots().get(entry.getKey());
+            if (lot == null) throw new IllegalStateException("reference custody account has unknown lot");
+            quantities.merge(lot.itemKind(), entry.getValue(), Integer::sum);
+        });
+        int next = 0;
+        for (Map.Entry<String, Integer> entry : quantities.entrySet()) {
+            int remaining = entry.getValue();
+            while (remaining > 0) {
+                while (state.inventory().itemAt(containerId, next).isPresent()) next++;
+                int quantity = Math.min(64, remaining);
+                slots.put(next++, new ProjectedFungibleSlot(entry.getKey(), quantity));
+                remaining -= quantity;
+            }
+        }
+        return Map.copyOf(slots);
+    }
+
+    public record ProjectedFungibleSlot(String itemKind, int quantity) {
+        public ProjectedFungibleSlot {
+            if (itemKind == null || itemKind.isBlank() || quantity < 1 || quantity > 64) throw new IllegalArgumentException("projected fungible slot is invalid");
+        }
     }
 
     public record ObservedSlot(int slot, String itemId, String itemKind, int count, boolean fungible) {

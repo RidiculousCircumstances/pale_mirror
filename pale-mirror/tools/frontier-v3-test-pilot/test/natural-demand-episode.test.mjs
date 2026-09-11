@@ -143,11 +143,28 @@ test('malformed arm cannot reach authenticated command transport', async () => {
   } finally { await rcon.close(); }
 });
 
-test('the natural-demand transport remains diagnostic-only and cannot become the RC-6 recovery stop fence', async () => {
+test('the natural-demand transport remains excluded from RC-6 but is available only to declared F0.3 recovery', async () => {
   const source = await readFile(new URL('../src/run-isolated-scenario.mjs', import.meta.url), 'utf8');
-  assert.doesNotMatch(source, /runPilotWithNaturalDemandArm\(/);
-  assert.doesNotMatch(source, /stopPilotNaturalDemandCarrier\(/);
-  assert.doesNotMatch(source, /requestRconStopWithNaturalDemandFence/);
+  assert.match(source, /const naturalDemandStop = scenario\.recoveryStop === 'natural_demand';/);
+  assert.match(source, /naturalDemandStop && !scenario\.id\.startsWith\('disposable_f03_fungible_'/);
+  assert.match(source, /recoveryCarrier = scenario\.id === 'disposable_f02b_normal_product_recovery'/);
+  assert.match(source, /if \(naturalDemandStop\) \{[\s\S]*?stopPilotNaturalDemandCarrier/);
+});
+
+test('F0.3 terminal pilot dispatch retains the demand-loss function instead of shadowing it with its policy flag', async () => {
+  const source = await readFile(new URL('../src/run-isolated-scenario.mjs', import.meta.url), 'utf8');
+  assert.match(source, /async function runPilot\([\s\S]*?\{ awaitNormalDemandLoss: waitForNormalDemandLoss = true \} = \{\}\)/);
+  assert.match(source, /if \(!waitForNormalDemandLoss\) return;\s*await awaitNormalDemandLoss\(server, segment\);/);
+  assert.doesNotMatch(source, /\{ awaitNormalDemandLoss = true \} = \{\}/);
+});
+
+test('only declared F0.3 recovery can retain a post-release vanilla holder', async () => {
+  const f03 = await fresh('f03-retained-holder', 'disposable_f03_fungible_player_graceful');
+  const arm = await armNaturalDemandEpisode(f03, SERVER, { lateMembershipPolicy: 'retain_until_ready' });
+  assert.equal(arm.lateMembershipPolicy, 'retain_until_ready');
+  await assert.rejects(armNaturalDemandEpisode(await fresh('f02b-retained-holder'), SERVER,
+    { lateMembershipPolicy: 'retain_until_ready' }), /reserved for declared F0.3 recovery/);
+  await assert.rejects(armNaturalDemandEpisode(f03, SERVER, { lateMembershipPolicy: 'unknown' }), /policy is malformed/);
 });
 
 function awaitArmWritten(lifecycle) {
@@ -221,10 +238,10 @@ async function outcomeRcon(lifecycle, arm, outcomes) {
     close: () => new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve())) };
 }
 
-async function fresh(segmentId) {
+async function fresh(segmentId, scenarioId = 'f02b-natural-demand') {
   const parent = await mkdtemp(process.env.PALE_MIRROR_TEST_TMP_PREFIX ?? '/home/rd/proj/pm-f02b-r31-node-');
   roots.push(parent);
   return createLifecycleBarrierSession(join(parent, 'lifecycle'), newLifecycleIdentity({ buildIdentitySha256: BUILD, workerId: 'worker-2',
-    runId: '00000000-0000-0000-0000-000000000011', scenarioId: 'f02b-natural-demand', segmentId,
+    runId: '00000000-0000-0000-0000-000000000011', scenarioId, segmentId,
     nonce: '00000000-0000-0000-0000-000000000013', sessionId: '00000000-0000-0000-0000-000000000014' }));
 }

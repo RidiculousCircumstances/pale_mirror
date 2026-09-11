@@ -48,6 +48,26 @@ class FrontierV3PilotNaturalDemandStopAdmissionTest {
     }
 
     @Test
+    void retainedF03DependencyStillBlocksHaltUntilTheFreshCommandReadIsZeroReady() {
+        FrontierV3PilotNaturalDemandEpisode episode = new FrontierV3PilotNaturalDemandEpisode(true);
+        assertEquals(FrontierV3PilotNaturalDemandEpisode.Status.ARMED,
+                observe(episode, Set.of(CENTER), Map.of(CENTER, holder(46, 0, true)), false));
+        assertEquals(FrontierV3PilotNaturalDemandEpisode.Status.WAITING_FOR_READINESS,
+                observe(episode, Set.of(), Map.of(CENTER, holder(46, 0, true), DEPENDENCY, holder(47, 1, false)), true));
+        AtomicInteger halts = new AtomicInteger();
+        FrontierV3PilotNaturalDemandStopAdmission admission = admission();
+
+        assertThrows(IllegalStateException.class, () -> admission.admit(server, RUN_ID, 12345L, NONCE,
+                () -> observe(episode, Set.of(), Map.of(CENTER, holder(46, 0, true), DEPENDENCY, holder(47, 1, false)), true),
+                halts::incrementAndGet));
+        assertEquals(0, halts.get());
+        admission.admit(server, RUN_ID, 12345L, NONCE,
+                () -> observe(episode, Set.of(), Map.of(CENTER, holder(46, 0, true), DEPENDENCY, holder(47, 0, true)), true),
+                halts::incrementAndGet);
+        assertEquals(1, halts.get());
+    }
+
+    @Test
     void latePlayerDemandAtTheFormerCheckUseSeamAdmitsNoHalt() {
         FrontierV3PilotNaturalDemandEpisode episode = eligible(44);
         AtomicInteger halts = new AtomicInteger();

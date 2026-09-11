@@ -52,6 +52,35 @@ class FrontierV3PilotNaturalDemandEpisodeTest {
     }
 
     @Test
+    void declaredF03PolicyRetainsLateVanillaWorkUntilItsExactHolderIsReady() {
+        FrontierV3PilotNaturalDemandEpisode episode = new FrontierV3PilotNaturalDemandEpisode(true);
+        assertEquals(FrontierV3PilotNaturalDemandEpisode.Status.ARMED,
+                observe(episode, Set.of(CENTER), Map.of(CENTER, holder(52, 0, true)), false));
+        // This dependency appeared after the product release signal, but was already
+        // live in ChunkMap. It is retained rather than silently excluded from halt.
+        assertEquals(FrontierV3PilotNaturalDemandEpisode.Status.WAITING_FOR_READINESS,
+                observe(episode, Set.of(), Map.of(CENTER, holder(52, 0, true), DEPENDENCY, holder(53, 1, false)), true));
+        assertEquals(FrontierV3PilotNaturalDemandEpisode.Status.ELIGIBLE,
+                observe(episode, Set.of(), Map.of(CENTER, holder(52, 0, true), DEPENDENCY, holder(53, 0, true)), true));
+        assertEquals(2, episode.terminalMembers(Map.of(CENTER, holder(52, 0, true), DEPENDENCY, holder(53, 0, true))).size());
+    }
+
+    @Test
+    void ordinaryLiveHolderReplacementRefreshesThePreReleaseSnapshotButNotTheReleasedClosure() {
+        FrontierV3PilotNaturalDemandEpisode episode = new FrontierV3PilotNaturalDemandEpisode(true);
+        assertEquals(FrontierV3PilotNaturalDemandEpisode.Status.ARMED,
+                observe(episode, Set.of(CENTER), Map.of(CENTER, holder(54, 1, false)), false));
+        // Normal player movement may make vanilla replace its in-flight holder before demand
+        // withdrawal. The upcoming closure must bind the current object, not stale arm-time work.
+        assertEquals(FrontierV3PilotNaturalDemandEpisode.Status.ARMED,
+                observe(episode, Set.of(CENTER), Map.of(CENTER, holder(55, 0, true)), false));
+        assertEquals(FrontierV3PilotNaturalDemandEpisode.Status.ELIGIBLE,
+                observe(episode, Set.of(), Map.of(CENTER, holder(55, 0, true)), true));
+        assertEquals(FrontierV3PilotNaturalDemandEpisode.Status.INVALID,
+                observe(episode, Set.of(), Map.of(CENTER, holder(56, 0, true)), true));
+    }
+
+    @Test
     void currentMapAbsenceUsesRetainedObjectButNeverAbsenceOfEvidence() {
         FrontierV3PilotNaturalDemandEpisode episode = new FrontierV3PilotNaturalDemandEpisode();
         assertEquals(FrontierV3PilotNaturalDemandEpisode.Status.ARMED,

@@ -123,6 +123,7 @@ class FrontierV3DiagnosticJsonTest {
         SubjectId settlement = state.bootstrap().settlements().getFirst().id();
         SubjectId hive = state.bootstrap().hive().id();
         SubjectId container = state.inventory().containers().keySet().stream().sorted().findFirst().orElseThrow();
+        SubjectId resource = state.inventory().fungibleResources().accounts().keySet().stream().sorted().findFirst().orElseThrow();
 
         String summary = FrontierV3DiagnosticJson.render("summary", "", checkpoint, state, Optional.empty());
         String siteJson = FrontierV3DiagnosticJson.render("site", site.value(), checkpoint, state, Optional.empty());
@@ -132,6 +133,7 @@ class FrontierV3DiagnosticJsonTest {
         String settlementJson = FrontierV3DiagnosticJson.render("settlement", settlement.value(), checkpoint, state, Optional.empty());
         String hiveJson = FrontierV3DiagnosticJson.render("hive", hive.value(), checkpoint, state, Optional.empty());
         String containerJson = FrontierV3DiagnosticJson.render("container", container.value(), checkpoint, state, Optional.empty());
+        String resourceJson = FrontierV3DiagnosticJson.render("resource", resource.value(), checkpoint, state, Optional.empty());
         String missing = FrontierV3DiagnosticJson.render("site", "site:missing", checkpoint, state, Optional.empty());
 
         assertTrue(summary.startsWith(FrontierV3DiagnosticJson.PREFIX + "{\"schema\":1,\"kind\":\"summary\""));
@@ -158,8 +160,13 @@ class FrontierV3DiagnosticJsonTest {
                 "one named hive diagnostic exposes bounded canonical expansion state without materializing it");
         assertTrue(containerJson.contains("\"surface\":") && containerJson.contains("\"position\":{") && containerJson.contains("\"occupiedCount\":") && containerJson.contains("\"occupied\":["),
                 "one diagnostic must expose only the exact occupied slot projection of one named container");
+        assertTrue(resourceJson.contains("\"account\":\"" + resource.value() + "\"") && resourceJson.contains("\"custody\":{\"kind\":\"CONTAINER\"")
+                        && resourceJson.contains("\"lots\":[{\"id\":\"lot:bootstrap-") && resourceJson.contains("\"bindingCount\":0")
+                        && resourceJson.contains("\"bindings\":[]"),
+                "one exact resource account exposes its canonical quantity and no invented physical binding");
         assertTrue(missing.contains("\"status\":\"not_found\""));
-        assertTrue(summary.length() < 8_192 && siteJson.length() < 8_192 && actorJson.length() < 8_192 && itemJson.length() < 8_192 && settlementJson.length() < 8_192 && hiveJson.length() < 8_192 && containerJson.length() < 8_192);
+        assertTrue(summary.length() < 8_192 && siteJson.length() < 8_192 && actorJson.length() < 8_192 && itemJson.length() < 8_192
+                && settlementJson.length() < 8_192 && hiveJson.length() < 8_192 && containerJson.length() < 8_192 && resourceJson.length() < 8_192);
     }
 
     @Test

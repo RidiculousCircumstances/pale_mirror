@@ -56,7 +56,7 @@ class FrontierV3CrashBoundaryProbeTest {
             List<String> mixins = new ArrayList<>();
             resource.getAsJsonArray("mixins").forEach(mixin -> mixins.add(mixin.getAsString()));
             assertEquals(List.of("FrontierV3DurableServerSaveMixin", "FrontierV3DurableCrashWindowMixin",
-                    "FrontierV3HarvestCrashWindowMixin", "FrontierV3PilotChunkMapAccessor",
+                    "FrontierV3HarvestCrashWindowMixin", "FrontierV3FungiblePlayerCrashWindowMixin", "FrontierV3PilotChunkMapAccessor",
                     "FrontierV3PilotDistanceManagerAccessor"), mixins,
                     "the pilot crash resource owns exactly its durable-window mixins and mapped pilot accessors");
         }
@@ -316,6 +316,10 @@ class FrontierV3CrashBoundaryProbeTest {
         assertDoesNotThrow(() -> FrontierV3CrashBoundaryProbe.requireAppliedMixin(
                 FrontierV3CrashBoundaryProbe.PHYSICAL_EFFECT_VISIBLE_BEFORE_TYPED_OBSERVATION,
                 java.util.Set.of("io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3HarvestCrashWindowMixin")));
+        assertDoesNotThrow(() -> FrontierV3CrashBoundaryProbe.requireAppliedMixin(
+                FrontierV3CrashBoundaryProbe.PHYSICAL_EFFECT_VISIBLE_BEFORE_TYPED_OBSERVATION,
+                "frontier.fungible_resource_handoff_observed",
+                java.util.Set.of("io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3FungiblePlayerCrashWindowMixin")));
         assertThrows(IllegalStateException.class, () -> FrontierV3CrashBoundaryProbe.requireAppliedMixin(
                 FrontierV3CrashBoundaryProbe.RELEASE_DURABLE_BEFORE_COLD_RESUMPTION, java.util.Set.of()));
         assertThrows(IllegalArgumentException.class, () -> FrontierV3CrashBoundaryProbe.requireAppliedMixin("not_a_boundary", java.util.Set.of()));
@@ -340,6 +344,15 @@ class FrontierV3CrashBoundaryProbeTest {
                     return Set.of(mixinClass);
                 })));
 
+        Map<String, String> fungible = properties(0L, "custody:container-1-depot",
+                FrontierV3CrashBoundaryProbe.PHYSICAL_EFFECT_VISIBLE_BEFORE_TYPED_OBSERVATION,
+                "frontier.fungible_resource_handoff_observed");
+        assertDoesNotThrow(() -> FrontierV3CrashBoundaryProbe.requireConfiguredMixinApplication(fungible::get, cacheKey -> {
+            assertEquals("io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3FungiblePlayerCrashWindowMixin", cacheKey,
+                    "the armed fungible payload must not fall back to the harvest mixin target");
+            return Set.of(cacheKey);
+        }));
+
         String release = FrontierV3CrashBoundaryProbe.RELEASE_DURABLE_BEFORE_COLD_RESUMPTION;
         assertThrows(IllegalStateException.class, () -> FrontierV3CrashBoundaryProbe
                 .requireConfiguredMixinApplication(property(release), ignored -> Set.of()));
@@ -362,6 +375,15 @@ class FrontierV3CrashBoundaryProbeTest {
                 mixinTargets("io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3DurableCrashWindowMixin"));
         assertEquals(List.of("io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ResourceSiteHarvestSceneExecutor"),
                 mixinTargets("io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3HarvestCrashWindowMixin"));
+        assertEquals(List.of("io.farfrontier.palemirror.internal.frontier.v3.FrontierV3FungibleResourceObservationExecutor"),
+                mixinTargets("io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3FungiblePlayerCrashWindowMixin"));
+    }
+
+    @Test
+    void fungibleCrashWindowNamesTheExactProductionSubmissionPayloadDescriptor() throws IOException {
+        List<String> constants = mixinUtf8("io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3FungiblePlayerCrashWindowMixin");
+        assertTrue(constants.stream().anyMatch(value -> value.contains("FrontierV3CommandSubmission;submit") && value.contains("FrontierPayload")));
+        assertFalse(constants.stream().anyMatch(value -> value.contains("FrontierV3CommandSubmission;submit") && value.contains("FrontierEvent")));
     }
 
     private static Map<String, String> properties(long revision, String owner, String boundary, String payload) {
@@ -382,6 +404,14 @@ class FrontierV3CrashBoundaryProbeTest {
         try (InputStream stream = FrontierV3CrashBoundaryProbeTest.class.getClassLoader().getResourceAsStream(path)) {
             assertNotNull(stream, path);
             return mixinTargets(stream.readAllBytes(), mixinClass);
+        }
+    }
+
+    private static List<String> mixinUtf8(String mixinClass) throws IOException {
+        String path = mixinClass.replace('.', '/') + ".class";
+        try (DataInputStream input = new DataInputStream(FrontierV3CrashBoundaryProbeTest.class.getClassLoader().getResourceAsStream(path))) {
+            assertNotNull(input, path); input.readInt(); input.readUnsignedShort(); input.readUnsignedShort();
+            return java.util.Arrays.stream(constantPool(input)).filter(String.class::isInstance).map(String.class::cast).toList();
         }
     }
 

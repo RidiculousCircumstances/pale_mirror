@@ -29,6 +29,12 @@ import io.farfrontier.palemirror.frontier.v3.model.ProductionJob;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentProfile;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentBirthJob;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentNutritionStatus;
+import io.farfrontier.palemirror.frontier.v3.model.CustodyAccount;
+import io.farfrontier.palemirror.frontier.v3.model.ClaimAllocation;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackBinding;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceCustody;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceLot;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSite;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestProgress;
@@ -128,6 +134,7 @@ final class FrontierV3DiagnosticJson {
             case "hive_transfer" -> hiveTransfer(id, checkpoint, state);
             case "actor" -> actor(id, checkpoint, state, admission);
             case "item" -> item(id, checkpoint, state);
+            case "resource" -> resource(id, checkpoint, state);
             case "container" -> container(id, checkpoint, state, containerReadiness);
             case "reference_container" -> referenceContainer(id, checkpoint, state);
             case "market_order" -> marketOrder(id, checkpoint, state);
@@ -383,6 +390,61 @@ final class FrontierV3DiagnosticJson {
         if (item == null) return unavailable("item", id, checkpoint, "not_found");
         return base("item", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(item.economicOwnerId().value())
                 + "\",\"itemKind\":\"" + quote(item.itemKind()) + "\",\"count\":" + item.count() + ",\"custody\":" + custody(item.custody()) + "}";
+    }
+
+    /**
+     * One account's exact fungible custody projection.  Physical addresses are retained
+     * evidence only: lots and claims remain the canonical quantity and reservation owners.
+     */
+    private static String resource(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+        SubjectId accountId = subject(id).orElse(null);
+        if (accountId == null) return unavailable("resource", id, checkpoint, "not_found");
+        var resources = state.inventory().fungibleResources();
+        CustodyAccount account = resources.accounts().get(accountId);
+        if (account == null) return unavailable("resource", id, checkpoint, "not_found");
+        String lots = account.lotQuantities().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).map(entry -> {
+            ResourceLot lot = resources.lots().get(entry.getKey());
+            return lot == null ? "" : "{\"id\":\"" + quote(lot.id().value()) + "\",\"owner\":\""
+                    + quote(lot.economicOwnerId().value()) + "\",\"itemKind\":\"" + quote(lot.itemKind())
+                    + "\",\"quantity\":" + entry.getValue() + "}";
+        }).filter(value -> !value.isEmpty()).collect(java.util.stream.Collectors.joining(",", "[", "]"));
+        String claims = account.claimQuantities().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).map(entry -> {
+            ClaimAllocation claim = resources.claims().get(entry.getKey());
+            return claim == null ? "" : "{\"id\":\"" + quote(claim.id().value()) + "\",\"claimant\":\""
+                    + quote(claim.claimantId().value()) + "\",\"owner\":\"" + quote(claim.economicOwnerId().value())
+                    + "\",\"itemKind\":\"" + quote(claim.itemKind()) + "\",\"quantity\":" + entry.getValue() + "}";
+        }).filter(value -> !value.isEmpty()).collect(java.util.stream.Collectors.joining(",", "[", "]"));
+        java.util.List<PhysicalStackBinding> accountBindings = resources.bindings().values().stream().filter(binding -> binding.accountId().equals(account.id()))
+                .sorted(java.util.Comparator.comparing(PhysicalStackBinding::id)).toList();
+        String bindings = accountBindings.stream().map(binding -> "{\"id\":\""
+                        + quote(binding.id().value()) + "\",\"epoch\":" + binding.authorityEpoch() + ",\"itemKind\":\""
+                        + quote(binding.itemKind()) + "\",\"quantity\":" + binding.quantity() + ",\"address\":"
+                        + resourceAddress(binding.address()) + "}").collect(java.util.stream.Collectors.joining(",", "[", "]"));
+        int quantity = account.lotQuantities().values().stream().mapToInt(Integer::intValue).sum();
+        return base("resource", id, checkpoint) + ",\"status\":\"ok\",\"account\":\"" + quote(account.id().value())
+                + "\",\"custody\":" + resourceCustody(account.custody()) + ",\"quantity\":" + quantity
+                + ",\"lots\":" + lots + ",\"claims\":" + claims + ",\"bindingCount\":" + accountBindings.size()
+                + ",\"bindings\":" + bindings + "}";
+    }
+
+    private static String resourceCustody(ResourceCustody custody) {
+        if (custody instanceof ResourceCustody.Container value) return "{\"kind\":\"CONTAINER\",\"container\":\"" + quote(value.containerId().value()) + "\"}";
+        if (custody instanceof ResourceCustody.Player value) return "{\"kind\":\"PLAYER\",\"player\":\"" + value.playerId() + "\"}";
+        if (custody instanceof ResourceCustody.Cargo value) return "{\"kind\":\"CARGO\",\"cargo\":\"" + quote(value.cargoId().value()) + "\"}";
+        if (custody instanceof ResourceCustody.WorldCarrier value) return "{\"kind\":\"WORLD_CARRIER\",\"carrier\":\"" + value.carrierId() + "\"}";
+        ResourceCustody.Actor value = (ResourceCustody.Actor) custody;
+        return "{\"kind\":\"ACTOR\",\"actor\":\"" + quote(value.actorId().value()) + "\"}";
+    }
+
+    private static String resourceAddress(PhysicalStackAddress address) {
+        if (address instanceof PhysicalStackAddress.ContainerSlot value) return "{\"kind\":\"CONTAINER_SLOT\",\"container\":\""
+                + quote(value.slot().containerId().value()) + "\",\"slot\":" + value.slot().slot() + "}";
+        if (address instanceof PhysicalStackAddress.PlayerSlot value) return "{\"kind\":\"PLAYER_SLOT\",\"player\":\""
+                + value.playerId() + "\",\"slot\":" + value.slot() + "}";
+        if (address instanceof PhysicalStackAddress.HopperSlot value) return "{\"kind\":\"HOPPER_SLOT\",\"position\":"
+                + position(value.position()) + ",\"slot\":" + value.slot() + "}";
+        PhysicalStackAddress.WorldEntity value = (PhysicalStackAddress.WorldEntity) address;
+        return "{\"kind\":\"WORLD_ENTITY\",\"entity\":\"" + value.entityId() + "\"}";
     }
 
     /** One bounded exact-container projection for test-pilot and operator inspection. */

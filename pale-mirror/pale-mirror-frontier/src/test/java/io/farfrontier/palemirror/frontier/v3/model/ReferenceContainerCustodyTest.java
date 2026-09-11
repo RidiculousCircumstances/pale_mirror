@@ -61,6 +61,25 @@ class ReferenceContainerCustodyTest {
     }
 
     @Test
+    void coldFungibleLotUsesTheSameProjectedSlotsForFirstPhysicalWriteAndReferenceObservation() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:reference-cold-fungible"), 91L));
+        SubjectId depot = FrontierWorldState.depotId(new SubjectId("settlement:1"));
+        assertEquals(new ReferenceContainerCustody.ProjectedFungibleSlot("minecraft:wheat", 64),
+                ReferenceContainerCustody.expectedFungibleSlot(state, depot, 0).orElseThrow());
+        ArrayList<ReferenceContainerCustody.ObservedSlot> matching = new ArrayList<>();
+        for (int slot = 0; slot < state.inventory().containers().get(depot).slotCount(); slot++) {
+            ExactItemStack item = state.inventory().itemAt(depot, slot).orElse(null);
+            ReferenceContainerCustody.ProjectedFungibleSlot fungible = ReferenceContainerCustody.expectedFungibleSlot(state, depot, slot).orElse(null);
+            matching.add(item != null ? new ReferenceContainerCustody.ObservedSlot(slot, item.id().value(), item.itemKind(), item.count())
+                    : fungible == null ? ReferenceContainerCustody.ObservedSlot.empty(slot)
+                    : ReferenceContainerCustody.ObservedSlot.fungible(slot, fungible.itemKind(), fungible.quantity()));
+        }
+        assertEquals(ReferenceContainerCustody.canonicalFingerprint(state, depot), ReferenceContainerCustody.observedFingerprint(state, depot, matching));
+        matching.set(0, ReferenceContainerCustody.ObservedSlot.fungible(0, "minecraft:wheat", 63));
+        assertNotEquals(ReferenceContainerCustody.canonicalFingerprint(state, depot), ReferenceContainerCustody.observedFingerprint(state, depot, matching));
+    }
+
+    @Test
     void temporaryFungibleSlotBindingContributesKindAndCountButNeverAStackIdentity() {
         FrontierWorldState baseline = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:reference-fungible"), 91L));
         SubjectId depot = FrontierWorldState.depotId(new SubjectId("settlement:1"));

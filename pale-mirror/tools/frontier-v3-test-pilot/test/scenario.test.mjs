@@ -41,6 +41,7 @@ test('summary diagnostics need no object identity while object diagnostics do', 
   assert.doesNotThrow(() => validateScenario(inspection));
   assert.throws(() => validateScenario({ ...inspection, actions: [{ type: 'inspect', view: 'site', id: '' }] }), /inspect needs a read-only v3 view and id/);
   assert.doesNotThrow(() => validateScenario({ ...inspection, actions: [{ type: 'inspect', view: 'performance', id: '' }] }));
+  assert.doesNotThrow(() => validateScenario({ ...inspection, actions: [{ type: 'inspect', view: 'resource', id: 'custody:container-1-depot' }] }));
   assert.doesNotThrow(() => validateScenario({ ...scenario, assertions: [{ after: 0, view: 'summary', id: '', expect: { status: 'ok' } }] }));
   assert.throws(() => validateScenario({ ...scenario, assertions: [{ after: 0, view: 'site', id: '', expect: { status: 'ok' } }] }), /invalid diagnostic assertion/);
 });
@@ -91,10 +92,23 @@ test('native pilot moves an exact real player stack into a container before acce
   assert.throws(() => validateScenario({ ...ingress, actions: [{ ...ingress.actions[2], count: 0 }] }), /quick_move_from_container/);
 });
 
+test('native pilot permits only a bounded ordinary proper container-stack split', () => {
+  const split = { ...scenario, actions: [{ type: 'split_move_from_container', item: 'minecraft:wheat', sourceCount: 64, movedCount: 32,
+    timeoutMs: 10_000 }], assertions: [], frames: [] };
+  assert.doesNotThrow(() => validateScenario(split));
+  assert.throws(() => validateScenario({ ...split, actions: [{ ...split.actions[0], movedCount: 64 }] }), /split_move_from_container/);
+  assert.throws(() => validateScenario({ ...split, actions: [{ ...split.actions[0], movedCount: 0 }] }), /split_move_from_container/);
+});
+
 test('an isolated scenario has an explicit deterministic disposable-world seed', () => {
   const isolated = { ...scenario, isolation: { mode: 'disposable_lite', seed: 41 } };
   assert.doesNotThrow(() => validateScenario(isolated));
   assert.throws(() => validateScenario({ ...isolated, isolation: { mode: 'shared', seed: 41 } }), /isolation/);
+});
+
+test('fungible native recovery declares the all-holder graceful-stop boundary', () => {
+  assert.doesNotThrow(() => validateScenario({ ...scenario, recoveryStop: 'natural_demand' }));
+  assert.throws(() => validateScenario({ ...scenario, recoveryStop: 'direct_rcon' }), /recoveryStop/);
 });
 
 test('a canonical startup quarantine fails a nonce-owned disposable server immediately', () => {
@@ -391,4 +405,14 @@ test('checked-in scenarios parse through the declared runner boundary', async ()
     const source = await readFile(new URL(`../scenarios/${name}`, import.meta.url), 'utf8');
     assert.doesNotThrow(() => validateScenario(JSON.parse(source)), name);
   }
+});
+
+test('F0.3 abrupt player recovery re-enters ordinary source demand before custody inspection', async () => {
+  const source = await readFile(new URL('../scenarios/disposable-f03-fungible-player-abrupt.json', import.meta.url), 'utf8');
+  const abrupt = JSON.parse(source);
+  assert.doesNotThrow(() => validateScenario(abrupt));
+  const segments = restartSegments(abrupt);
+  assert.deepEqual(segments.after.setup, [{ type: 'visit', dimension: 'pale_mirror:frontier_graybox',
+    position: { x: -340, y: 65, z: -329 }, settleMs: 1000 }]);
+  assert.equal(segments.after.actions[0].type, 'wait_until_diagnostic');
 });

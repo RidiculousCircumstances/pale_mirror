@@ -90,9 +90,11 @@ test('isolated graceful recovery pre-arms the observer before RCON and retains i
   const source = await readFile(new URL('../src/run-isolated-scenario.mjs', import.meta.url), 'utf8');
   const prearm = source.indexOf('server.ownerObserverArm = await prearmSaveOwnerObserver');
   const stop = source.indexOf('await requestRconStop');
+  const naturalStop = source.indexOf('await stopPilotNaturalDemandCarrier');
   const capture = source.indexOf('const ownerObserver =');
   const durable = source.indexOf('await awaitLifecycleSignal(lifecycle, LifecycleSignal.DURABLE_SERVER_SAVE');
-  assert.ok(prearm >= 0 && prearm < stop && stop < capture && capture < durable);
+  assert.ok(prearm >= 0 && capture > prearm && naturalStop > capture && stop > capture && durable > naturalStop,
+    'both the legacy and declared F0.3 stop paths begin ownership capture before they can ask the server to halt');
   assert.match(source, /ownerObservation: ownerObservationFact/);
   assert.match(source, /manifest\.ownerObservation = ownerObservationFact/);
 });

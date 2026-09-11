@@ -22,6 +22,7 @@ public enum FrontierV3DiagnosticView {
     HIVE_MOBILIZATION("hive_mobilization", true),
     ACTOR("actor", true),
     ITEM("item", true),
+    RESOURCE("resource", true),
     CONTAINER("container", true),
     REFERENCE_CONTAINER("reference_container", true),
     MARKET_ORDER("market_order", true),

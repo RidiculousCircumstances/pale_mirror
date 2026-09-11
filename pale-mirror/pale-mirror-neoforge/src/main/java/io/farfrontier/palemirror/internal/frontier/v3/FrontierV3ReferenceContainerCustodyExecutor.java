@@ -40,6 +40,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.WeakHashMap;
 
 /**
@@ -55,6 +56,13 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
     private static final long ABSENT_CONFIRMATION_TICKS = 2L;
     /** Transient sampling debounce only; all admitted replica evidence remains durable. */
     private static final Map<ServerLevel, Map<SubjectId, Long>> ABSENT_SINCE_TICK = new WeakHashMap<>();
+    /**
+     * JVM-local observation only.  A reboot starts with no physical witness, so its persisted
+     * HOT layout must survive until a naturally ticking source can reconcile it.  Once that
+     * exact epoch has been witnessed in this server process, a later ordinary unload must take
+     * the normal checkpoint/release path rather than retaining HOT custody indefinitely.
+     */
+    private static final Map<ServerLevel, Map<SubjectId, Long>> OBSERVED_CUSTODY_EPOCHS = new WeakHashMap<>();
 
     private FrontierV3ReferenceContainerCustodyExecutor() { }
 
@@ -68,9 +76,18 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
                 .sorted(Comparator.comparing(PhysicalCustodyLease::scopeId)).toList()) {
             ContainerSurface surface = state.inventory().surfaces().get(lease.objectId());
             if (surface == null || !naturallyTicking(level, position(surface))) {
+                // A persisted HOT fungible layout is still the only authority for a possible
+                // player/container handoff.  On restart the player is normally not connected
+                // when this first loop runs, so checkpointing an unobserved source would turn
+                // its saved physical split into an unexplainable COLD mismatch before its
+                // naturally loaded recovery visit.  Retain only a current, same-epoch binding;
+                // stale or unbound scopes keep the ordinary bounded drain path.
+                if (retainsUnobservedRestartFungibleHot(observedCustodyEpochs(level),
+                        state.inventory().fungibleResources(), lease)) continue;
                 drain(runtime, lease, "unloaded");
                 return;
             }
+            rememberCurrentProcessObservation(level, lease);
         }
         List<ContainerSurface> loaded = state.inventory().surfaces().values().stream().filter(surface -> naturallyTicking(level, position(surface))).toList();
         List<ContainerSurface> eligible = eligibleReferenceSurfaces(state, loaded);
@@ -249,6 +266,28 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
     }
 
     /**
+     * An unloaded reference scope may release only after its fungible layout is no longer the
+     * current HOT evidence.  This is intentionally narrower than a generic live-lease check:
+     * an epoch mismatch remains fenced and follows the normal release/conflict route.
+     */
+    static boolean retainsUnobservedRestartFungibleHot(Map<SubjectId, Long> observedEpochs,
+                                                       io.farfrontier.palemirror.frontier.v3.model.FungibleResourceLedger resources,
+                                                       PhysicalCustodyLease lease) {
+        return !Objects.equals(observedEpochs.get(lease.scopeId()), lease.authorityEpoch())
+                && resources.bindings().values().stream().anyMatch(binding -> binding.authorityEpoch() == lease.authorityEpoch()
+                && resources.accounts().get(binding.accountId()).custody() instanceof ResourceCustody.Container container
+                && container.containerId().equals(lease.objectId()));
+    }
+
+    private static Map<SubjectId, Long> observedCustodyEpochs(ServerLevel level) {
+        return OBSERVED_CUSTODY_EPOCHS.computeIfAbsent(level, ignored -> new HashMap<>());
+    }
+
+    private static void rememberCurrentProcessObservation(ServerLevel level, PhysicalCustodyLease lease) {
+        observedCustodyEpochs(level).put(lease.scopeId(), lease.authorityEpoch());
+    }
+
+    /**
      * Closes the exact replica boundary immediately after a reference-owned physical effect has
      * been durably confirmed.  A player may leave on the next normal tick, so waiting for the
      * periodic sampler would leave an owned output behind an old released observation and make
@@ -333,12 +372,8 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
             if (stack.isEmpty()) slots.add(ReferenceContainerCustody.ObservedSlot.empty(slot));
             else {
                 CustomData custom = stack.get(DataComponents.CUSTOM_DATA);
-                int currentSlot = slot;
-                PhysicalStackBinding fungible = state.inventory().fungibleResources().bindings().values().stream()
-                        .filter(binding -> binding.address() instanceof PhysicalStackAddress.ContainerSlot address
-                                && address.slot().containerId().equals(containerId) && address.slot().slot() == currentSlot)
-                        .findFirst().orElse(null);
                 String kind = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+                ReferenceContainerCustody.ProjectedFungibleSlot fungible = ReferenceContainerCustody.expectedFungibleSlot(state, containerId, slot).orElse(null);
                 if (custom == null && fungible != null && fungible.itemKind().equals(kind) && fungible.quantity() == stack.getCount()) {
                     slots.add(ReferenceContainerCustody.ObservedSlot.fungible(slot, kind, stack.getCount()));
                     continue;

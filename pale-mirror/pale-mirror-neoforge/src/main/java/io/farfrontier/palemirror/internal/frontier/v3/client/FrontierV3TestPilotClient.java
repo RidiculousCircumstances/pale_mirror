@@ -62,14 +62,11 @@ public final class FrontierV3TestPilotClient {
     private static boolean containerOpenAttempted;
     private static boolean quickMoveAttempted;
     private static boolean inspectSent;
-    // Action-local response identity prevents a terminal inspection reusing a preceding wait's cached diagnostic.
     private static ObservedDiagnostic inspectBaseline;
     private static boolean fastForwardSent;
-    // A follow-up advance may complete between polls, so only this action's response can complete it.
     private static ObservedDiagnostic fastForwardBaseline;
     private static ObservedDiagnostic diagnosticWaitBaseline;
     private static boolean boardInteractionAttempted;
-    /** Optional local correlation label from the immutable scenario declaration. */
     private static String currentCausalMilestone;
     private static boolean entityInteractionAttempted;
     private static int attackedEntityRuntimeId = -1;
@@ -281,6 +278,7 @@ public final class FrontierV3TestPilotClient {
                 }
                 case "quick_move_from_inventory" -> quickMoveFromInventory(minecraft, action);
                 case "quick_move_from_container" -> quickMoveFromContainer(minecraft, action);
+                case "split_move_from_container" -> splitMoveFromContainer(minecraft, action);
                 default -> throw new IllegalArgumentException("unsupported visible pilot action: " + type);
             }
         } catch (RuntimeException failure) {
@@ -325,7 +323,6 @@ public final class FrontierV3TestPilotClient {
         }
         timeout(minecraft, action, "ordinary placement did not produce " + itemId + " at " + target);
     }
-    /** Opens the real block menu through Minecraft's normal client interaction packet. */
     private static void openContainer(Minecraft minecraft, BlockPos target, long timeoutMs) {
         if (minecraft.player.containerMenu != minecraft.player.inventoryMenu) { advance("open_container"); return; }
         if (!containerOpenAttempted) {
@@ -345,12 +342,12 @@ public final class FrontierV3TestPilotClient {
         ResourceLocation item = ResourceLocation.parse(action.get("item").getAsString()); int count = action.get("count").getAsInt();
         if (quickMoveAttempted) {
             boolean moved = minecraft.player.containerMenu.slots.stream().filter(slot -> slot.container != minecraft.player.getInventory())
-                    .anyMatch(slot -> sameStack(slot, item, count));
+                    .anyMatch(slot -> FrontierV3PilotInventoryActions.sameStack(slot, item, count));
             if (moved) { advance("quick_move_from_inventory"); return; }
             timeout(minecraft, action, "quick move did not reach the container"); return;
         }
         Slot source = minecraft.player.containerMenu.slots.stream().filter(slot -> slot.container == minecraft.player.getInventory())
-                .filter(slot -> sameStack(slot, item, count)).findFirst().orElse(null);
+                .filter(slot -> FrontierV3PilotInventoryActions.sameStack(slot, item, count)).findFirst().orElse(null);
         if (source == null) { timeout(minecraft, action, "player lacks exact stack " + item + " x" + count); return; }
         int menuSlot = minecraft.player.containerMenu.slots.indexOf(source);
         if (menuSlot < 0) throw new IllegalStateException("player inventory slot is absent from the open container menu");
@@ -365,21 +362,27 @@ public final class FrontierV3TestPilotClient {
         ResourceLocation item = ResourceLocation.parse(action.get("item").getAsString()); int count = action.get("count").getAsInt();
         if (quickMoveAttempted) {
             boolean moved = minecraft.player.containerMenu.slots.stream().filter(slot -> slot.container == minecraft.player.getInventory())
-                    .anyMatch(slot -> sameStack(slot, item, count));
+                    .anyMatch(slot -> FrontierV3PilotInventoryActions.sameStack(slot, item, count));
             if (moved) { advance("quick_move_from_container"); return; }
             timeout(minecraft, action, "quick move did not reach the player inventory"); return;
         }
         Slot source = minecraft.player.containerMenu.slots.stream().filter(slot -> slot.container != minecraft.player.getInventory())
-                .filter(slot -> sameStack(slot, item, count)).findFirst().orElse(null);
+                .filter(slot -> FrontierV3PilotInventoryActions.sameStack(slot, item, count)).findFirst().orElse(null);
         if (source == null) { timeout(minecraft, action, "container lacks exact stack " + item + " x" + count); return; }
         int menuSlot = minecraft.player.containerMenu.slots.indexOf(source);
         if (menuSlot < 0) throw new IllegalStateException("container slot is absent from the open container menu");
         minecraft.gameMode.handleInventoryMouseClick(minecraft.player.containerMenu.containerId, menuSlot, 0, ClickType.QUICK_MOVE, minecraft.player);
         quickMoveAttempted = true;
     }
-    private static boolean sameStack(Slot slot, ResourceLocation item, int count) {
-        return !slot.getItem().isEmpty() && slot.getItem().getCount() == count
-                && BuiltInRegistries.ITEM.getKey(slot.getItem().getItem()).equals(item);
+    /**
+     * Uses the same two ordinary menu clicks as a player splitting a chest stack: right-click
+     * half into the carried slot, then left-click that exact portion into an empty inventory slot.
+     */
+    private static void splitMoveFromContainer(Minecraft minecraft, JsonObject action) {
+        var result = FrontierV3PilotInventoryActions.splitMoveFromContainer(minecraft, action, quickMoveAttempted);
+        quickMoveAttempted = result.attempted();
+        if (result.complete()) { advance("split_move_from_container"); return; }
+        timeout(minecraft, action, "ordinary split move did not retain exact source and player portions");
     }
     private static void waitUntilBlock(Minecraft minecraft, JsonObject action) {
         BlockPos target = resolvedPosition(minecraft, action, "position");
@@ -397,7 +400,6 @@ public final class FrontierV3TestPilotClient {
         if (target == null) return;
         visit(minecraft, target, action.get("dimension").getAsString(), action.get("settleMs").getAsLong(), 120_000L, "visit", action);
     }
-    /** Uses only a fresh read-only operation snapshot to choose a player-side observation point. */
     private static void visitOperation(Minecraft minecraft, JsonObject action) {
         BlockPos anchor = operationAnchor(minecraft, action, "travelCurrent"); if (anchor == null) return;
         JsonObject offset = action.getAsJsonObject("offset");
@@ -438,7 +440,6 @@ public final class FrontierV3TestPilotClient {
         if (anchor == null) return;
         look(minecraft, anchor); advance("look_operation");
     }
-    /** Returns one current diagnostic coordinate, requesting it at the same bounded cadence as other waits. */
     private static BlockPos operationAnchor(Minecraft minecraft, JsonObject action, String anchor) {
         String operation = action.get("operationId").getAsString(); long tick = minecraft.level.getGameTime();
         ObservedDiagnostic diagnostic = diagnostics.get(new DiagnosticIdentity("operation", operation));
@@ -453,7 +454,6 @@ public final class FrontierV3TestPilotClient {
         timeout(minecraft, action, "timed out reading current operation anchor " + operation);
         return null;
     }
-    /** Proves the player camera itself is aimed at one loaded, non-air exact block. */
     private static void assertVisibleBlock(Minecraft minecraft, JsonObject action) {
         BlockPos expected = resolvedPosition(minecraft, action, "position");
         if (expected == null) return;

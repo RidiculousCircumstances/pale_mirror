@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
+import io.farfrontier.palemirror.frontier.v3.model.CustodyAccount;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob;
@@ -13,6 +14,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestSceneLease
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestSceneLeasePrepared;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseReleased;
 import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess;
+import net.minecraft.server.level.ServerLevel;
 import org.spongepowered.asm.mixin.Mixins;
 
 import java.util.Objects;
@@ -39,6 +41,8 @@ final class FrontierV3CrashBoundaryProbe {
             TYPED_OBSERVATION_DURABLE_BEFORE_NEXT_PROCESS_CHECKPOINT, "frontier.resource_site_harvest_progressed",
             HOT_CHECKPOINT_DURABLE_BEFORE_DRAIN_RELEASE, "frontier.resource_site_harvest_hot_traversal_advanced",
             RELEASE_DURABLE_BEFORE_COLD_RESUMPTION, "frontier.scene_lease_released_v2");
+    private static final String HARVEST_PHYSICAL_PAYLOAD = "frontier.resource_site_harvest_progressed";
+    private static final String FUNGIBLE_PLAYER_PHYSICAL_PAYLOAD = "frontier.fungible_resource_handoff_observed";
     private static final String PILOT_RUN_ID = "pale_mirror.frontier_v3.pilot.run_id";
     private static final String BOUNDARY = "pale_mirror.frontier_v3.pilot.crash.boundary";
     private static final String OWNER = "pale_mirror.frontier_v3.pilot.crash.owner";
@@ -51,7 +55,7 @@ final class FrontierV3CrashBoundaryProbe {
     private final Arm arm;
     private final Consumer<String> marker;
     /** Captured only by the pilot mixin after Minecraft has actually accepted the block write. */
-    private final ThreadLocal<PhysicalCropEffect> visibleCropEffect = new ThreadLocal<>();
+    private final ThreadLocal<PhysicalEffect> visibleEffect = new ThreadLocal<>();
     /** One fresh-run prepare witness for the only job a release arm may name. */
     private LeaseWitness releaseWitness;
     /** Once two prepares name the armed job, further prepares cannot make that evidence unambiguous. */
@@ -94,8 +98,14 @@ final class FrontierV3CrashBoundaryProbe {
 
     /** Records one actual crop write; it never changes the Minecraft or canonical state. */
     void cropEffectBecameVisible(ResourceSiteHarvestJob job, BlockPosition cropSlot) {
-        visibleCropEffect.set(new PhysicalCropEffect(Objects.requireNonNull(job, "harvest job").siteId().value(),
-                Objects.requireNonNull(cropSlot, "crop slot")));
+        Objects.requireNonNull(cropSlot, "crop slot");
+        visibleEffect.set(new PhysicalEffect(Objects.requireNonNull(job, "harvest job").siteId().value(), HARVEST_PHYSICAL_PAYLOAD));
+    }
+
+    /** Records an already-observed ordinary player split after Minecraft accepted the menu clicks. */
+    void fungiblePlayerDepartureBecameVisible(CustodyAccount account) {
+        visibleEffect.set(new PhysicalEffect(Objects.requireNonNull(account, "fungible source account").id().value(),
+                FUNGIBLE_PLAYER_PHYSICAL_PAYLOAD));
     }
 
     /**
@@ -107,12 +117,28 @@ final class FrontierV3CrashBoundaryProbe {
                                                  ResourceSiteHarvestJob job) {
         Objects.requireNonNull(runtime, "runtime");
         Objects.requireNonNull(job, "harvest job");
-        PhysicalCropEffect effect = visibleCropEffect.get();
-        visibleCropEffect.remove();
-        if (effect == null || !effect.owner().equals(job.siteId().value()) || arm == null || fired) return;
+        afterVisiblePhysicalEffect(runtime);
+    }
+
+    /** Parks only after the production adapter has observed one exact physical player departure. */
+    void afterVisibleFungiblePlayerDeparture(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, CustodyAccount account) {
+        Objects.requireNonNull(level, "level");
+        fungiblePlayerDepartureBecameVisible(account);
+        afterVisiblePhysicalEffect(runtime, () -> level.getServer().saveEverything(true, true, true));
+    }
+
+    private void afterVisiblePhysicalEffect(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
+        afterVisiblePhysicalEffect(runtime, () -> { });
+    }
+
+    private void afterVisiblePhysicalEffect(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Runnable durablePhysicalSave) {
+        PhysicalEffect effect = visibleEffect.get();
+        visibleEffect.remove();
+        if (effect == null || arm == null || fired) return;
         long revision = runtime.canonicalState().orElseThrow(() -> new IllegalStateException("pilot v3 runtime is inactive"))
                 .revision().value();
         if (!arm.matchesPhysical(effect, revision)) return;
+        durablePhysicalSave.run();
         announceAndPark(arm, revision);
     }
 
@@ -145,12 +171,18 @@ final class FrontierV3CrashBoundaryProbe {
         Objects.requireNonNull(appliedMixins, "applied mixins");
         String boundary = properties.apply(BOUNDARY);
         if (blank(boundary)) return;
-        MixinTarget target = mixinTarget(boundary);
-        requireAppliedMixin(boundary, appliedMixins.apply(target.mixinClass()));
+        String payload = properties.apply(PAYLOAD);
+        MixinTarget target = mixinTarget(boundary, blank(payload) ? HARVEST_PHYSICAL_PAYLOAD : payload);
+        requireAppliedMixin(boundary, blank(payload) ? HARVEST_PHYSICAL_PAYLOAD : payload,
+                appliedMixins.apply(target.mixinClass()));
     }
 
     static void requireAppliedMixin(String boundary, Set<String> appliedMixinClasses) {
-        MixinTarget target = mixinTarget(boundary);
+        requireAppliedMixin(boundary, HARVEST_PHYSICAL_PAYLOAD, appliedMixinClasses);
+    }
+
+    static void requireAppliedMixin(String boundary, String payload, Set<String> appliedMixinClasses) {
+        MixinTarget target = mixinTarget(boundary, payload);
         if (!Objects.requireNonNull(appliedMixinClasses, "applied mixin classes").contains(target.mixinClass())) {
             throw new IllegalStateException("pilot crash mixin was not applied to " + target.targetClass().getName());
         }
@@ -202,14 +234,17 @@ final class FrontierV3CrashBoundaryProbe {
         releaseWitnessAmbiguous = false;
     }
 
-    private static MixinTarget mixinTarget(String boundary) {
+    private static MixinTarget mixinTarget(String boundary, String payload) {
         return switch (boundary) {
             case LEASE_RECORDED_BEFORE_PHYSICAL_MATERIALIZATION,
                     TYPED_OBSERVATION_DURABLE_BEFORE_NEXT_PROCESS_CHECKPOINT,
                     HOT_CHECKPOINT_DURABLE_BEFORE_DRAIN_RELEASE,
                     RELEASE_DURABLE_BEFORE_COLD_RESUMPTION -> new MixinTarget(FrontierStoreTransactionCommitter.class,
                     "io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3DurableCrashWindowMixin");
-            case PHYSICAL_EFFECT_VISIBLE_BEFORE_TYPED_OBSERVATION -> new MixinTarget(FrontierV3ResourceSiteHarvestSceneExecutor.class,
+            case PHYSICAL_EFFECT_VISIBLE_BEFORE_TYPED_OBSERVATION -> FUNGIBLE_PLAYER_PHYSICAL_PAYLOAD.equals(payload)
+                    ? new MixinTarget(FrontierV3FungibleResourceObservationExecutor.class,
+                    "io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3FungiblePlayerCrashWindowMixin")
+                    : new MixinTarget(FrontierV3ResourceSiteHarvestSceneExecutor.class,
                     "io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3HarvestCrashWindowMixin");
             default -> throw new IllegalArgumentException("test-only crash arm names a boundary without an installed pilot hook");
         };
@@ -224,8 +259,8 @@ final class FrontierV3CrashBoundaryProbe {
             if (durablePayload == null && !PHYSICAL_EFFECT_VISIBLE_BEFORE_TYPED_OBSERVATION.equals(boundary)) {
                 throw new IllegalArgumentException("test-only crash arm names a boundary without an installed pilot hook");
             }
-            String expectedPayload = durablePayload == null ? "frontier.resource_site_harvest_progressed" : durablePayload;
-            if (!expectedPayload.equals(payload)) {
+            if ((durablePayload == null && !java.util.Set.of(HARVEST_PHYSICAL_PAYLOAD, FUNGIBLE_PLAYER_PHYSICAL_PAYLOAD).contains(payload))
+                    || (durablePayload != null && !durablePayload.equals(payload))) {
                 throw new IllegalArgumentException("test-only crash arm payload does not match semantic boundary");
             }
         }
@@ -261,16 +296,16 @@ final class FrontierV3CrashBoundaryProbe {
             return transaction.events().size() == 1 && transaction.events().getFirst() == release
                     ? ReleaseAssessment.MATCH : ReleaseAssessment.CONTRADICTORY;
         }
-        private boolean matchesPhysical(PhysicalCropEffect effect, long currentRevision) {
+        private boolean matchesPhysical(PhysicalEffect effect, long currentRevision) {
             return PHYSICAL_EFFECT_VISIBLE_BEFORE_TYPED_OBSERVATION.equals(boundary) && (revision == -1L || revision == currentRevision)
-                    && owner.equals(effect.owner()) && payload.equals("frontier.resource_site_harvest_progressed");
+                    && owner.equals(effect.owner()) && payload.equals(effect.payload());
         }
         private boolean matches(FrontierEvent event) {
             return event.subject().value().equals(owner) && event.payload().type().equals(payload);
         }
     }
 
-    private record PhysicalCropEffect(String owner, BlockPosition cropSlot) { }
+    private record PhysicalEffect(String owner, String payload) { }
     private record LeaseWitness(io.farfrontier.palemirror.frontier.v3.api.WorldId worldId, SceneLeaseId leaseId, SubjectId job, SubjectId owner) { }
     private record MixinTarget(Class<?> targetClass, String mixinClass) { }
     private enum ReleaseAssessment { NONE, CONTRADICTORY, MATCH }

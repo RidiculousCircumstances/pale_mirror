@@ -134,15 +134,20 @@ public final class FrontierV3PilotNaturalDemandObserver {
         if (!Files.isRegularFile(token)) return null;
         JsonObject identity = JsonParser.parseString(Files.readString(directory.resolve("identity.json"), StandardCharsets.UTF_8)).getAsJsonObject();
         JsonObject arm = JsonParser.parseString(Files.readString(token, StandardCharsets.UTF_8)).getAsJsonObject();
+        String lateMembershipPolicy = arm.has("lateMembershipPolicy") ? arm.get("lateMembershipPolicy").getAsString() : "strict";
+        boolean retainPostReleaseMembers = "retain_until_ready".equals(lateMembershipPolicy);
         if (arm.get("schema") == null || arm.get("schema").getAsInt() != 1 || arm.get("kind") == null
                 || !ARM_KIND.equals(arm.get("kind").getAsString()) || arm.get("identity") == null
                 || !identity.equals(arm.getAsJsonObject("identity")) || arm.get("serverRunId") == null
                 || !serverRunId.equals(arm.get("serverRunId").getAsString()) || arm.get("serverPid") == null
                 || arm.get("serverPid").getAsLong() != ProcessHandle.current().pid() || arm.get("stopAdmissionNonce") == null
-                || !arm.get("stopAdmissionNonce").getAsString().matches("[0-9a-f-]{36}")) {
+                || !arm.get("stopAdmissionNonce").getAsString().matches("[0-9a-f-]{36}")
+                || !("strict".equals(lateMembershipPolicy) || (retainPostReleaseMembers && identity.has("scenarioId")
+                    && identity.get("scenarioId").getAsString().startsWith("disposable_f03_fungible_")))) {
             throw new IllegalArgumentException("natural-demand arm is stale, foreign or malformed");
         }
-        return new Episode(directory, identity, server, serverRunId, ProcessHandle.current().pid(), arm.get("stopAdmissionNonce").getAsString());
+        return new Episode(directory, identity, server, serverRunId, ProcessHandle.current().pid(), arm.get("stopAdmissionNonce").getAsString(),
+                retainPostReleaseMembers);
     }
 
     private static boolean normalDemandLossReleased(Episode episode) throws IOException {
@@ -189,7 +194,7 @@ public final class FrontierV3PilotNaturalDemandObserver {
             // Once admitted, preserve the exact object even after it has left the current
             // updating map.  This is only a reference for a server-thread readiness read;
             // it neither creates demand nor retains a chunk in vanilla's lifecycle.
-            if (current != null && retained == null && !released) {
+            if (current != null && current != retained && (!released || episode.state.retainsPostReleaseMembers())) {
                 episode.holders.put(position, current);
                 retained = current;
             }
@@ -253,13 +258,15 @@ public final class FrontierV3PilotNaturalDemandObserver {
             Map<FrontierV3PilotNaturalDemandEpisode.ChunkKey, FrontierV3PilotNaturalDemandEpisode.Holder> holders) { }
     private static final class Episode {
         private final Path directory; private final JsonObject identity; private final String serverRunId; private final long serverPid; private final String stopAdmissionNonce;
-        private final FrontierV3PilotNaturalDemandEpisode state = new FrontierV3PilotNaturalDemandEpisode();
+        private final FrontierV3PilotNaturalDemandEpisode state;
         private final Map<FrontierV3PilotNaturalDemandEpisode.ChunkKey, ChunkHolder> holders = new LinkedHashMap<>();
         private final FrontierV3PilotNaturalDemandStopAdmission stopAdmission;
         private boolean releaseObserved;
         private boolean eligiblePublished; private boolean invalidPublished;
-        private Episode(Path directory, JsonObject identity, MinecraftServer server, String serverRunId, long serverPid, String stopAdmissionNonce) {
+        private Episode(Path directory, JsonObject identity, MinecraftServer server, String serverRunId, long serverPid, String stopAdmissionNonce,
+                boolean retainPostReleaseMembers) {
             this.directory = directory; this.identity = identity; this.serverRunId = serverRunId; this.serverPid = serverPid; this.stopAdmissionNonce = stopAdmissionNonce;
+            this.state = new FrontierV3PilotNaturalDemandEpisode(retainPostReleaseMembers);
             this.stopAdmission = new FrontierV3PilotNaturalDemandStopAdmission(server, serverRunId, serverPid, stopAdmissionNonce);
         }
     }

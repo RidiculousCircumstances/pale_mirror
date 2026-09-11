@@ -33,8 +33,20 @@ final class FrontierV3PhysicalExecutors {
             // physical effect before the generic surface drift audit: otherwise the audit
             // mistakes its own known recovery window for player/world tampering.
             executor("production-transformation", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("cargo-loading"), "production-transformation-effect", FrontierV3ProductionTransformationExecutor::tick),
-            executor("container-surfaces", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("production-transformation"), "container-surface-effect", FrontierV3ContainerSurfaceExecutor::tick),
-            executor("fungible-resource-observation", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("container-surfaces"), "fungible-resource-custody-observation", FrontierV3FungibleResourceObservationExecutor::tick),
+            // A restart can retain an ordinary player/container split in vanilla storage before
+            // its typed handoff reaches the canonical WAL.  Read that fenced HOT evidence
+            // before the generic surface audit: the latter only knows the older canonical
+            // layout and would otherwise mark the source CONFLICT, permanently hiding the
+            // one recoverable player departure.
+            executor("fungible-resource-observation", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("production-transformation"), "fungible-resource-custody-observation", FrontierV3FungibleResourceObservationExecutor::tick),
+            // The generic audit has two independently durable predecessors: a
+            // RUNNING production receipt and a fungible HOT handoff recovered
+            // from physical storage.  Keep both graph edges explicit so a
+            // later executor insertion cannot turn either recovery order into
+            // incidental declaration order.
+            executor("container-surfaces", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT,
+                    Set.of("production-transformation", "fungible-resource-observation"),
+                    "container-surface-effect", FrontierV3ContainerSurfaceExecutor::tick),
             executor("reference-container-custody", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("fungible-resource-observation"), "reference-container-custody", FrontierV3ReferenceContainerCustodyExecutor::tick),
             // Harvest changes both one PM-owned field and its exact chest slot, so it is an
             // effect after the container owner has established ACTIVE provenance, not projection.

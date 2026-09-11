@@ -32,9 +32,27 @@ final class FrontierV3PilotNaturalDemandEpisode {
     record Member(String dimension, int x, int z, int diagnosticIdentity, int generationRefCount, boolean readyForSaving, String terminal) { }
 
     private final Map<ChunkKey, Object> members = new LinkedHashMap<>();
+    private final boolean retainPostReleaseMembers;
     private Status status = Status.ARMED;
     private boolean sawPlayerDemand;
     private String failure;
+
+    FrontierV3PilotNaturalDemandEpisode() {
+        this(false);
+    }
+
+    /**
+     * The historic F0.2B carrier invalidates an incomplete snapshot. The
+     * declared F0.3 custody carrier retains late already-live vanilla work and
+     * requires every retained holder to become zero-ready before halt.
+     */
+    FrontierV3PilotNaturalDemandEpisode(boolean retainPostReleaseMembers) {
+        this.retainPostReleaseMembers = retainPostReleaseMembers;
+    }
+
+    boolean retainsPostReleaseMembers() {
+        return retainPostReleaseMembers;
+    }
 
     Status observe(Set<ChunkKey> playerTickets, Map<ChunkKey, Holder> completeHolders, boolean demandLossReleased) {
         Objects.requireNonNull(playerTickets, "playerTickets");
@@ -48,9 +66,20 @@ final class FrontierV3PilotNaturalDemandEpisode {
         // Before release, retaining all live ChunkMap holders is a conservative, behavior-neutral
         // superset. After release, a previously unseen holder proves the snapshot was incomplete.
         for (Map.Entry<ChunkKey, Holder> entry : completeHolders.entrySet()) {
-            Object previous = members.putIfAbsent(entry.getKey(), entry.getValue().identity());
-            if (previous != null && previous != entry.getValue().identity()) return invalidate("natural holder was replaced or revived");
-            if (demandLossReleased && previous == null) return invalidate("late natural holder membership after demand withdrawal");
+            Object previous = members.get(entry.getKey());
+            // Vanilla may replace a live holder while the ordinary player ticket is still
+            // expanding or moving.  That is not the completion snapshot: retain the latest
+            // actual holder until demand loss.  Once demand has released, replacement remains
+            // fail-closed because it could hide fresh post-release work from a stop receipt.
+            if (previous != null && previous != entry.getValue().identity()) {
+                if (demandLossReleased) return invalidate("natural holder was replaced or revived");
+                members.put(entry.getKey(), entry.getValue().identity());
+            } else if (previous == null) {
+                members.put(entry.getKey(), entry.getValue().identity());
+            }
+            if (demandLossReleased && previous == null && !retainPostReleaseMembers) {
+                return invalidate("late natural holder membership after demand withdrawal");
+            }
         }
         sawPlayerDemand |= !playerTickets.isEmpty();
         for (ChunkKey playerTicket : playerTickets) {

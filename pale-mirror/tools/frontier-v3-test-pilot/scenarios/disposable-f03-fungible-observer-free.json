@@ -1,0 +1,34 @@
+{
+  "schema": 1,
+  "id": "disposable_f03_fungible_observer_free",
+  "recoveryStop": "natural_demand",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "world", "viewDistance": 8 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/time set day" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -340, "y": 65, "z": -329 }, "settleMs": 1000 },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "resource", "id": "custody:container-1-depot", "expect": { "status": "ok", "quantity": 64, "custody": { "kind": "CONTAINER", "container": "container:1-depot" } } }
+    ] }
+  ],
+  "actions": [
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "surface": "ACTIVE", "custody": { "status": "ACQUIRED" }, "physicalSocket": { "chunk": "LOADED" } }, "timeoutMs": 30000 },
+    { "type": "inspect", "view": "resource", "id": "custody:container-1-depot", "causalMilestone": "observer_free_hot_binding" },
+    { "type": "visit", "dimension": "minecraft:overworld", "position": { "x": 0, "y": 80, "z": 0 }, "settleMs": 1000 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "custody": { "status": "RELEASED" }, "physicalSocket": { "chunk": "UNLOADED" } }, "timeoutMs": 30000 },
+    { "type": "inspect", "view": "container", "id": "container:1-depot", "causalMilestone": "observer_free_released" },
+    { "type": "inspect", "view": "resource", "id": "custody:container-1-depot", "causalMilestone": "observer_free_no_cold_spend_before_restart" },
+    { "type": "inspect", "view": "container", "id": "container:1-depot", "causalMilestone": "observer_free_recovered_release" },
+    { "type": "inspect", "view": "resource", "id": "custody:container-1-depot", "causalMilestone": "observer_free_no_cold_spend_after_restart" }
+  ],
+  "restart": { "mode": "graceful", "afterAction": 6, "resumeSetup": [] },
+  "assertions": [
+    { "after": 2, "view": "resource", "id": "custody:container-1-depot", "expect": { "status": "ok", "quantity": 64, "custody": { "kind": "CONTAINER", "container": "container:1-depot" } } },
+    { "after": 5, "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "custody": { "status": "RELEASED" }, "physicalSocket": { "chunk": "UNLOADED" } } },
+    { "after": 6, "view": "resource", "id": "custody:container-1-depot", "expect": { "status": "ok", "quantity": 64, "custody": { "kind": "CONTAINER", "container": "container:1-depot" } } },
+    { "after": 7, "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "custody": { "status": "RELEASED" }, "physicalSocket": { "chunk": "UNLOADED" } } },
+    { "after": 8, "view": "resource", "id": "custody:container-1-depot", "expect": { "status": "ok", "quantity": 64, "custody": { "kind": "CONTAINER", "container": "container:1-depot" } } }
+  ],
+  "frames": []
+}

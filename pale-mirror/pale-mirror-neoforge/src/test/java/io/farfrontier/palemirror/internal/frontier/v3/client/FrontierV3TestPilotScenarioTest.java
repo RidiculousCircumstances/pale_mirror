@@ -325,12 +325,15 @@ class FrontierV3TestPilotScenarioTest {
                 {"type":"open_container","position":{"x":1,"y":64,"z":2},"timeoutMs":10000},
                 {"type":"quick_move_from_inventory","item":"minecraft:glowstone_dust","count":1,"timeoutMs":10000},
                 {"type":"quick_move_from_container","item":"minecraft:wheat","count":64,"timeoutMs":10000},
+                {"type":"split_move_from_container","item":"minecraft:wheat","sourceCount":64,"movedCount":32,"timeoutMs":10000},
                 {"type":"wait_until_container_item","containerId":"container:4-depot","item":"minecraft:glowstone_dust","count":1,"slot":0,"timeoutMs":30000}]}""");
-        assertEquals(4, parsed.actionCount());
+        assertEquals(5, parsed.actionCount());
         assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"quick_move_from_inventory","item":"minecraft:glowstone_dust","count":65,"timeoutMs":10000}]}"""));
         assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"quick_move_from_container","item":"minecraft:wheat","count":0,"timeoutMs":10000}]}"""));
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"split_move_from_container","item":"minecraft:wheat","sourceCount":64,"movedCount":64,"timeoutMs":10000}]}"""));
         assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"open_container","position":{"diagnostic":{"view":"container","id":"container:1-depot","field":"slots"}},"timeoutMs":10000}]}"""));
         assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""

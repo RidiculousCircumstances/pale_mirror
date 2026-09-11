@@ -19,7 +19,7 @@ const VISIT_TIMEOUT_MS = 120_000;
 const INSPECT_TIMEOUT_MS = 30_000;
 const PILOT_CATALOG = resolve(dirname(new URL(import.meta.url).pathname), '../../../pale-mirror-frontier/src/testFixtures/resources/io/farfrontier/palemirror/frontier/v3/model/frontier-v3-pilot-profiles.properties');
 const { profiles: PILOT_PROFILES, defaultProfile: PILOT_DEFAULT_PROFILE } = loadPilotProfiles(PILOT_CATALOG);
-const EVIDENCE_ACTIONS = new Set(['walk', 'look', 'look_nearest_entity', 'break', 'place', 'open_container', 'quick_move_from_inventory', 'quick_move_from_container', 'wait_until_container_item', 'wait', 'wait_until_block', 'wait_until_diagnostic', 'wait_until_harvest_result', 'fast_forward', 'fast_forward_to_instant', 'release_fast_forward_hold', 'inspect', 'assert_visible_block', 'assert_visible_board', 'assert_visible_entity', 'interact_board', 'interact_nearest_entity', 'attack_nearest_entity', 'visit', 'visit_operation', 'look_operation']);
+const EVIDENCE_ACTIONS = new Set(['walk', 'look', 'look_nearest_entity', 'break', 'place', 'open_container', 'quick_move_from_inventory', 'quick_move_from_container', 'split_move_from_container', 'wait_until_container_item', 'wait', 'wait_until_block', 'wait_until_diagnostic', 'wait_until_harvest_result', 'fast_forward', 'fast_forward_to_instant', 'release_fast_forward_hold', 'inspect', 'assert_visible_block', 'assert_visible_board', 'assert_visible_entity', 'interact_board', 'interact_nearest_entity', 'attack_nearest_entity', 'visit', 'visit_operation', 'look_operation']);
 const SETUP_ACTIONS = new Set(['command', 'observe', 'assert_fixture', 'visit']);
 
 /** Resolves only the unambiguous Xwayland session cookie name; it never reads the secret. */
@@ -114,6 +114,9 @@ export function validateScenario(scenario) {
       || (scenario.restart.resumeSetup !== undefined && !Array.isArray(scenario.restart.resumeSetup)))) {
     throw new Error('restart needs mode graceful|abrupt and afterAction strictly inside the evidence action range');
   }
+  if (scenario.recoveryStop !== undefined && scenario.recoveryStop !== 'natural_demand') {
+    throw new Error('recoveryStop must be the declared natural_demand pilot boundary');
+  }
   if (scenario.crash !== undefined && (!scenario.crash || scenario.restart?.mode !== 'abrupt'
       || !['before_restart', 'after_restart'].includes(scenario.crash.phase)
       || !CRASH_BOUNDARIES.has(scenario.crash.boundary) || !stableToken(scenario.crash.owner)
@@ -170,6 +173,11 @@ export function validateScenario(scenario) {
       if (['quick_move_from_inventory', 'quick_move_from_container'].includes(action.type) && (!validItemKind(action.item) || !validStackCount(action.count)
           || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 120_000)) {
         throw new Error(`${action.type} needs exact item/count and timeoutMs 0..120000`);
+      }
+      if (action.type === 'split_move_from_container' && (!validItemKind(action.item) || !validStackCount(action.sourceCount)
+          || !validStackCount(action.movedCount) || action.movedCount >= action.sourceCount
+          || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 120_000)) {
+        throw new Error('split_move_from_container needs an exact source, a positive proper moved portion and timeoutMs 0..120000');
       }
       if (action.type === 'wait_until_container_item' && (!requiredId(action.containerId, 'container:') || !validItemKind(action.item)
           || !validStackCount(action.count) || (action.slot !== undefined && (!Number.isInteger(action.slot) || action.slot < 0 || action.slot > 26))
@@ -254,7 +262,7 @@ export function validateScenario(scenario) {
   if (!Array.isArray(assertions)) throw new Error('scenario assertions must be an array');
   for (const assertion of assertions) {
     if (!assertion || !Number.isInteger(assertion.after) || assertion.after < 0 || assertion.after > (scenario.actions ?? []).length
-        || !['summary', 'performance', 'aftermath', 'process', 'site', 'settlement', 'hive', 'hive_transfer', 'hive_mobilization', 'actor', 'item', 'container', 'reference_container', 'market_order', 'operation', 'route_construction', 'route_maintenance', 'route_topology', 'physical_delta', 'medical', 'scene', 'intent', 'trace', 'transit', 'traversal_foundry', 'hive_foundry'].includes(assertion.view)
+        || !['summary', 'performance', 'aftermath', 'process', 'site', 'settlement', 'hive', 'hive_transfer', 'hive_mobilization', 'actor', 'item', 'resource', 'container', 'reference_container', 'market_order', 'operation', 'route_construction', 'route_maintenance', 'route_topology', 'physical_delta', 'medical', 'scene', 'intent', 'trace', 'transit', 'traversal_foundry', 'hive_foundry'].includes(assertion.view)
         || typeof assertion.id !== 'string' || (!['summary', 'performance', 'aftermath'].includes(assertion.view) && !assertion.id)
         || !assertion.expect || typeof assertion.expect !== 'object') {
       throw new Error('invalid diagnostic assertion');
@@ -276,7 +284,7 @@ export function validateScenario(scenario) {
     for (const action of scenario.restart.resumeSetup) {
       // Reuse the public setup boundary rather than creating a second, less
       // strict restart-only action language.
-      validateScenario({ ...scenario, restart: undefined, setup: [action] });
+      validateScenario({ ...scenario, restart: undefined, crash: undefined, setup: [action] });
     }
   }
   scenarioDeadlineMs(scenario);
@@ -362,7 +370,7 @@ function segment(scenario, first, end, setup, includeFirstBoundary) {
 }
 
 function validDiagnosticIdentity(value) {
-  return ['summary', 'performance', 'aftermath', 'process', 'site', 'settlement', 'hive', 'hive_transfer', 'hive_mobilization', 'actor', 'item', 'container', 'reference_container', 'market_order', 'operation', 'route_construction', 'route_maintenance', 'route_topology', 'physical_delta', 'medical', 'scene', 'intent', 'trace', 'transit', 'traversal_foundry', 'hive_foundry'].includes(value.view)
+  return ['summary', 'performance', 'aftermath', 'process', 'site', 'settlement', 'hive', 'hive_transfer', 'hive_mobilization', 'actor', 'item', 'resource', 'container', 'reference_container', 'market_order', 'operation', 'route_construction', 'route_maintenance', 'route_topology', 'physical_delta', 'medical', 'scene', 'intent', 'trace', 'transit', 'traversal_foundry', 'hive_foundry'].includes(value.view)
     && typeof value.id === 'string' && (['summary', 'performance', 'aftermath'].includes(value.view) || Boolean(value.id));
 }
 

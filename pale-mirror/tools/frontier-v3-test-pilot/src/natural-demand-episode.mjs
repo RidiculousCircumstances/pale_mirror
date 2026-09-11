@@ -12,10 +12,14 @@ const UUID = /^[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12}$/i;
 export const NATURAL_DEMAND_STOP_COMMAND = 'pale_mirror_pilot_graceful_stop';
 
 /** Arms one exact server before its ordinary pilot segment begins. */
-export async function armNaturalDemandEpisode(lifecycle, server) {
+export async function armNaturalDemandEpisode(lifecycle, server, { lateMembershipPolicy = 'strict' } = {}) {
   requireLifecycle(lifecycle); requireServer(server);
+  if (!['strict', 'retain_until_ready'].includes(lateMembershipPolicy)) throw new Error('natural-demand late membership policy is malformed');
+  if (lateMembershipPolicy === 'retain_until_ready' && !lifecycle.identity.scenarioId.startsWith('disposable_f03_fungible_')) {
+    throw new Error('retained natural-demand membership is reserved for declared F0.3 recovery');
+  }
   const fact = { schema: 1, kind: ARM_KIND, identity: lifecycle.identity,
-    serverRunId: server.serverRunId, serverPid: server.serverPid, stopAdmissionNonce: randomUUID() };
+    serverRunId: server.serverRunId, serverPid: server.serverPid, lateMembershipPolicy, stopAdmissionNonce: randomUUID() };
   const path = join(lifecycle.directory, `natural-demand-episode-arm-${server.serverRunId}.json`);
   await writeImmutable(lifecycle.directory, path, `${JSON.stringify(fact)}\n`);
   return Object.freeze({ ...fact, receipt: { path, sha256: sha256(JSON.stringify(fact)) } });
@@ -53,8 +57,9 @@ export async function awaitNaturalDemandEpisodeReady(lifecycle, server, timeoutM
   return awaitCondition(signals, timeoutMs, async () => {
     if (await exists(invalid)) throw new Error('natural-demand episode was invalidated before pilot stop admission');
     try {
-      validateNaturalDemandEpisode(JSON.parse(await readFile(eligible, 'utf8')), lifecycle.identity, server);
-      return true;
+      const value = JSON.parse(await readFile(eligible, 'utf8'));
+      validateNaturalDemandEpisode(value, lifecycle.identity, server);
+      return Object.freeze(value);
     } catch (error) {
       if (error?.code !== 'ENOENT') throw error;
     }
@@ -91,9 +96,10 @@ export async function requestPilotNaturalDemandStop(lifecycle, server, arm, time
  */
 export async function stopPilotNaturalDemandCarrier({ lifecycle, server, arm, timeoutMs, awaitDurable }) {
   if (typeof awaitDurable !== 'function') throw new Error('natural-demand durable callback is malformed');
-  await awaitNaturalDemandEpisodeReady(lifecycle, server, timeoutMs);
+  const eligible = await awaitNaturalDemandEpisodeReady(lifecycle, server, timeoutMs);
   const admitted = await requestPilotNaturalDemandStop(lifecycle, server, arm, timeoutMs);
-  return await awaitDurable(admitted);
+  const durable = await awaitDurable(admitted);
+  return Object.freeze({ eligible, admitted, durable });
 }
 
 function validateNaturalDemandEpisode(value, identity, server) {
