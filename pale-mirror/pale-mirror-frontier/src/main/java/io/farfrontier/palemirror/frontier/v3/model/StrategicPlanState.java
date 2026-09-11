@@ -267,6 +267,11 @@ public final class StrategicPlanState {
                 if (authority.kind() != expectedAuthority.kind() || !authority.policy().equals(expectedAuthority.policy())) {
                     throw new IllegalArgumentException("decision authority policy is not registered for its owner");
                 }
+                java.util.Set<SubjectId> active = objectives.values().stream().filter(objective -> objective.ownerId().equals(owner))
+                        .filter(objective -> objective.status() == StrategicObjectiveStatus.ACTIVE).map(StrategicObjective::id).collect(java.util.stream.Collectors.toSet());
+                if (!active.equals(java.util.Set.copyOf(authority.commitmentIds()))) {
+                    throw new IllegalArgumentException("decision authority commitments must exactly reference active objectives");
+                }
             });
         }
         infectionKnowledge.validate(bootstrap);
@@ -325,8 +330,10 @@ public final class StrategicPlanState {
             throw new IllegalArgumentException("strategic objective is duplicate or owner work lane is already active");
         }
         Map<SubjectId, StrategicObjective> next = new LinkedHashMap<>(retained.objectives); next.put(objective.id(), objective);
+        DecisionAuthorityState nextAuthorities = retained.decisionAuthorities.authorities().isEmpty() ? retained.decisionAuthorities
+                : retained.decisionAuthorities.replace(retained.decisionAuthorities.require(objective.authorityId()).committed(objective.id()));
         return new StrategicPlanState(next, retained.tasks, retained.routePatrols, retained.routeEngagements, retained.infectionKnowledge, retained.hiveOperationKnowledge,
-                retained.hiveTerritoryKnowledge, retained.hiveSettlementKnowledge, retained.hiveDoctrine, retained.settlementAssaults, retained.decisionAuthorities);
+                retained.hiveTerritoryKnowledge, retained.hiveSettlementKnowledge, retained.hiveDoctrine, retained.settlementAssaults, nextAuthorities);
     }
 
     public StrategicPlanState addTask(StrategicTask task) {
@@ -357,8 +364,13 @@ public final class StrategicPlanState {
                 nextObjectives.put(objective.id(), objective.withStatus(blocked ? StrategicObjectiveStatus.BLOCKED : StrategicObjectiveStatus.COMPLETED));
             }
         }
+        DecisionAuthorityState nextAuthorities = decisionAuthorities;
+        StrategicObjective changed = nextObjectives.get(current.objectiveId());
+        if (!decisionAuthorities.authorities().isEmpty() && changed.status() != StrategicObjectiveStatus.ACTIVE) {
+            nextAuthorities = decisionAuthorities.replace(decisionAuthorities.require(changed.authorityId()).released(changed.id()));
+        }
         return new StrategicPlanState(nextObjectives, nextTasks, routePatrols, routeEngagements, infectionKnowledge, hiveOperationKnowledge,
-                hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine, settlementAssaults, decisionAuthorities);
+                hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine, settlementAssaults, nextAuthorities);
     }
 
     public StrategicPlanState startPatrol(RoutePatrol patrol) {

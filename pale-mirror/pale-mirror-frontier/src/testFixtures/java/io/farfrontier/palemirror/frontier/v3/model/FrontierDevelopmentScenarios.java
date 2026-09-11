@@ -57,7 +57,7 @@ final class FrontierDevelopmentScenarios {
         StrategicTask task = new StrategicTask(new SubjectId("task:development-hot-strike"), objective.id(), hive,
                 StrategicTaskKind.INTERCEPT_ROUTE_OPERATION, Optional.empty(), Optional.of(operation.id()),
                 Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD), List.of(), StrategicTaskStatus.PENDING, Optional.of(intercept));
-        state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task));
+        state = state.withStrategicPlans(state.strategicPlans().addObjective(objective).addTask(task));
         Bioform scout = state.bootstrap().hive().bioforms().stream().filter(Bioform::isScout).findFirst().orElseThrow();
         HiveOperationKnowledge.Sighting sighting = new HiveOperationKnowledge.Sighting(operation.id(), scout.id(), intercept, 2_600L);
         state = state.withStrategicPlans(state.strategicPlans().withHiveOperationKnowledge(state.strategicPlans().hiveOperationKnowledge().observe(sighting)));
@@ -90,7 +90,7 @@ final class FrontierDevelopmentScenarios {
                 Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_GUARD), List.of(), StrategicTaskStatus.ACTIVE);
         RoutePatrol patrol = RoutePatrol.planned(state, task, settlement,
                 RouteUnitManifest.patrol(taskId, guards.getFirst().id(), List.of(guards.get(1).id())));
-        state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task).startPatrol(patrol));
+        state = state.withStrategicPlans(state.strategicPlans().addObjective(objective).addTask(task).startPatrol(patrol));
         int maximumTransitions = patrol.assembly().members().values().stream()
                 .mapToInt(member -> member.corridor().size() - 1).sum();
         for (int transition = 0; transition <= maximumTransitions; transition++) {
@@ -300,7 +300,7 @@ final class FrontierDevelopmentScenarios {
         HiveSettlementKnowledge.Sighting sighting = new HiveSettlementKnowledge.Sighting(settlement.id(), scout.id(), settlement.anchor(), 100L);
         InfectionCell cell = InfectionCell.at(settlement.anchor());
         FixedRatio intensity = new FixedRatio(FixedScalar.ONE);
-        StrategicPlanState plans = StrategicPlanState.empty()
+        StrategicPlanState plans = state.strategicPlans()
                 .withHiveSettlementKnowledge(new HiveSettlementKnowledge(java.util.Map.of(settlement.id(), sighting)))
                 .withHiveDoctrine(new HiveDoctrineState(HiveDoctrine.INTERDICT, 100L))
                 .withHiveTerritoryKnowledge(new HiveTerritoryKnowledge(java.util.Map.of(cell,
@@ -575,7 +575,7 @@ final class FrontierDevelopmentScenarios {
                 StrategicObjectiveKind.HIVE_GROW_ORGANISM, Optional.empty(), 2, StrategicObjectiveStatus.ACTIVE);
         StrategicTask task = new StrategicTask(new SubjectId("task:development-hive-nutrient-transfer"), objective.id(), hive,
                 StrategicTaskKind.GROW_HIVE_ORGANISM, Optional.empty(), List.of(StrategicTaskRequirement.EXACT_HIVE_BIOMASS), List.of(), StrategicTaskStatus.PENDING);
-        state = ReferenceContainerCustodyFixtures.observedAndHeld(state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task)).withInventory(state.inventory()
+        state = ReferenceContainerCustodyFixtures.observedAndHeld(state.withStrategicPlans(state.strategicPlans().addObjective(objective).addTask(task)).withInventory(state.inventory()
                 .withSurfaceStatus(eastStore, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(westStore, ContainerSurfaceStatus.PREPARED)), eastStore);
         state = withHeldFungibleBiomass(state, eastStore);
         return new HiveNutrientTransferFixture(state, SimInstant.ZERO, List.of(HiveGrowthProcess.start(task, 1L)),
@@ -662,7 +662,7 @@ final class FrontierDevelopmentScenarios {
         StrategicTask task = new StrategicTask(new SubjectId("task:development-" + suffix + "-decontamination"), objective.id(), settlement.id(),
                 StrategicTaskKind.DECONTAMINATE_INFECTION_CELL, Optional.of(cell), List.of(StrategicTaskRequirement.ACTIVE_INFIRMARY,
                 StrategicTaskRequirement.EXACT_DECONTAMINATION_REAGENT), List.of(), StrategicTaskStatus.PENDING);
-        state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task));
+        state = state.withStrategicPlans(state.strategicPlans().addObjective(objective).addTask(task));
         // The player has ample time to enter the ordinary settlement before the first scan. A
         // failed early scan would correctly block this exact task, which is not the condition
         // this fixture is intended to exercise.
@@ -724,7 +724,7 @@ final class FrontierDevelopmentScenarios {
         StrategicTask task = new StrategicTask(new SubjectId("task:development-production-input-theft"), objective.id(), settlementId,
                 StrategicTaskKind.PRODUCE_BREAD, Optional.empty(), List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT),
                 List.of(), StrategicTaskStatus.ACTIVE);
-        state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task));
+        state = state.withStrategicPlans(state.strategicPlans().addObjective(objective).addTask(task));
         SubjectId company = CompanyFoundationProcess.companyId(settlementId);
         SubjectId worker = state.companies().companies().get(company).founderId();
         ExactItemStack input = state.inventory().items().get(new SubjectId("item:bootstrap-1-wheat"));
@@ -835,7 +835,7 @@ final class FrontierDevelopmentScenarios {
         StrategicTask task = new StrategicTask(new SubjectId("task:development-hive-mobilization"), objective.id(), hive,
                 StrategicTaskKind.ASSAULT_SETTLEMENT, Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD,
                 StrategicTaskRequirement.AVAILABLE_HIVE_BOMBER), List.of(), StrategicTaskStatus.PENDING);
-        StrategicPlanState plans = StrategicPlanState.empty()
+        StrategicPlanState plans = state.strategicPlans()
                 .withHiveSettlementKnowledge(new HiveSettlementKnowledge(Map.of(settlement.id(), sighting)))
                 .withHiveTerritoryKnowledge(new HiveTerritoryKnowledge(Map.of(cell,
                         new HiveTerritoryKnowledge.Belief(cell, new FixedRatio(FixedScalar.ONE), scout.id(), settlement.anchor(), 100L))))

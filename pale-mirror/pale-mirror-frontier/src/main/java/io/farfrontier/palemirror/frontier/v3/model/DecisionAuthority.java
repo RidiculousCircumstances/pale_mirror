@@ -30,4 +30,18 @@ public record DecisionAuthority(SubjectId ownerId, DecisionAuthorityKind kind, D
     public DecisionAuthority reconsidered(List<SubjectId> commitments, List<SubjectId> provenance) {
         return new DecisionAuthority(ownerId, kind, policy, Math.addExact(reconsiderationEpoch, 1L), commitments, provenance);
     }
+
+    public DecisionAuthority committed(SubjectId objectiveId) {
+        Objects.requireNonNull(objectiveId, "objective commitment");
+        if (commitmentIds.contains(objectiveId)) throw new IllegalArgumentException("duplicate decision commitment");
+        java.util.ArrayList<SubjectId> next = new java.util.ArrayList<>(commitmentIds); next.add(objectiveId);
+        return new DecisionAuthority(ownerId, kind, policy, reconsiderationEpoch, next, provenanceIds);
+    }
+
+    public DecisionAuthority released(SubjectId objectiveId) {
+        Objects.requireNonNull(objectiveId, "objective commitment");
+        if (!commitmentIds.contains(objectiveId)) return this;
+        return new DecisionAuthority(ownerId, kind, policy, reconsiderationEpoch,
+                commitmentIds.stream().filter(id -> !id.equals(objectiveId)).toList(), provenanceIds);
+    }
 }

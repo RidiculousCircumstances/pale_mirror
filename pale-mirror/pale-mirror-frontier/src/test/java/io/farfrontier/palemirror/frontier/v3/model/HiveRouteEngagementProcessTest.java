@@ -32,7 +32,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HiveRouteEngagementProcessTest {
     @Test void hotOrRecoveryLeaseDefersTheSameColdInterceptionWithoutClaimingItsOperation() {
-        FrontierWorldState state = enRouteState().withStrategicPlans(StrategicPlanState.empty());
+        FrontierWorldState state = enRouteState();
+        state = state.withStrategicPlans(StrategicPlanState.initial(state.bootstrap()));
         RouteOperation operation = state.operations().values().stream().filter(value -> value.stage() == OperationStage.EN_ROUTE).findFirst().orElseThrow();
         SceneLease lease = routeLease(state, operation, "lease:intercept-exclusive", SceneLeaseStatus.PREPARED);
         state = state.prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART);
@@ -55,7 +56,8 @@ class HiveRouteEngagementProcessTest {
     }
 
     @Test void hiveReviewDoesNotInspectAnUnobservedHumanOperation() {
-        FrontierWorldState state = enRouteState().withStrategicPlans(StrategicPlanState.empty());
+        FrontierWorldState state = enRouteState();
+        state = state.withStrategicPlans(StrategicPlanState.initial(state.bootstrap()));
         SubjectId hive = state.bootstrap().hive().id();
 
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> events = StrategicObjectiveProcess.plan(state,

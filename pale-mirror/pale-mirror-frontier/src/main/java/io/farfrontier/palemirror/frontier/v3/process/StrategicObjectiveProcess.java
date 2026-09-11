@@ -100,7 +100,7 @@ public final class StrategicObjectiveProcess {
                 .filter(task -> task.status() == StrategicTaskStatus.PENDING || task.status() == StrategicTaskStatus.ACTIVE)
                 .sorted(Comparator.comparing(StrategicTask::id)).map(task -> new ProposedEvent(hive, new StrategicTaskTransition(task.id(), StrategicTaskStatus.BLOCKED))).toList();
         int ordinal = FrontierWorldScheduleSupport.ordinal(action.id().value());
-        DecisionAuthority authority = state.strategicPlans().requireDecisionAuthority(hive);
+        DecisionAuthority authority = state.strategicPlans().requireDecisionAuthority(hive); DecisionPolicyRegistry.require(authority);
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:" + action.id().value().substring("schedule:".length())), hive,
                 StrategicObjectiveKind.HIVE_ASSAULT_SETTLEMENT, Optional.empty(), Optional.empty(), ordinal, StrategicObjectiveStatus.ACTIVE,
                 authority.ownerId(), authority.reconsiderationEpoch());
@@ -139,6 +139,7 @@ public final class StrategicObjectiveProcess {
         }
         int ordinal = FrontierWorldScheduleSupport.ordinal(action.id().value());
         Candidate candidate = new Candidate(StrategicObjectiveKind.SETTLEMENT_HARVEST_RESOURCE_SITE, Optional.empty(), Optional.of(lifecycle.siteId()), FixedScalar.SCALE);
+        DecisionPolicyRegistry.require(state.strategicPlans().requireDecisionAuthority(owner));
         StrategicObjective objective = objective(state, owner, candidate, ordinal); StrategicTask task = task(state, objective);
         return List.of(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
                 new ProposedEvent(task.id(), new ScheduleEffect.Created(ResourceSiteHarvestProcess.start(task, Math.addExact(action.dueAt().ticks(), 100L)))));
@@ -158,6 +159,7 @@ public final class StrategicObjectiveProcess {
                                             boolean allowHiveInterception, String eventIdentity, Optional<HiveOperationKnowledge.Sighting> interceptSighting) {
         SubjectId owner = action.subject(); int ordinal = FrontierWorldScheduleSupport.ordinal(action.id().value());
         requireKnownOwner(state.bootstrap(), owner);
+        DecisionPolicyRegistry.require(state.strategicPlans().requireDecisionAuthority(owner));
         List<ProposedEvent> next = recurring ? List.of(new ProposedEvent(owner,
                 new ScheduleEffect.Created(review(owner, ordinal + 1, action.dueAt().ticks()
                         + state.bootstrap().ruleset().cadence().strategicReviewInterval())))) : List.of();
