@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { validateLifecycleBarrierRecords } from './lifecycle-barrier.mjs';
 
 const SCENE = 'assault:development-settlement-assault';
+const HANDSHAKE = 'settlement-assault-visit';
 const SLOTS = Object.freeze([[2, 'preRestart', 'HOT'], [3, 'recovered', 'HOT'], [5, 'released', 'CLOSED']]);
 
 /** The completed persistent-run manifest, rather than declaration literals, is the HOT receipt authority. */
@@ -33,6 +34,12 @@ export function assertF02cHotReceiptDeclaration(value) {
   }
   const initial = value.setup?.find(entry => entry.type === 'assert_fixture')?.checks?.find(entry => entry.view === 'scene' && entry.id === SCENE);
   if (initial?.expect?.status !== 'not_found') throw new Error('F0.2C HOT carrier must begin before lease or strike manufacture');
+  const ingress = value.actions[0];
+  if (ingress?.type !== 'visit' || ingress.dimension !== 'pale_mirror:frontier_graybox' || ingress.settleMs !== 0
+      || !isDeepStrictEqual(ingress.position, { x: -360, y: 65, z: -352 })
+      || !isDeepStrictEqual(ingress.demandHandshake, { request: HANDSHAKE, assault: SCENE })) {
+    throw new Error('F0.2C HOT carrier lacks its server-thread demand handshake ingress');
+  }
   const selected = {};
   for (const [after, name, leaseStatus] of SLOTS) {
     const matches = value.assertions.filter(entry => entry?.after === after && entry.view === 'scene' && entry.id === SCENE);
@@ -105,6 +112,23 @@ function assertPersistentTopology(manifest, declaration) {
     previous = current;
   }
   assertHotRestartPhaseTrace(records);
+  assertDemandHandshake(manifest, declaration.actions[0]);
+}
+
+/** The visit cannot become a completed action from client chunk visibility or elapsed settling alone. */
+function assertDemandHandshake(manifest, ingress) {
+  const records = manifest.diagnostics.filter(entry => entry?.observed?.actionStep === 1 && entry.observed?.value?.kind === 'demand_handshake'
+    && entry.observed?.value?.id === ingress.demandHandshake.request);
+  if (records.length !== 1) throw new Error('F0.2C HOT carrier lacks one server-thread demand handshake receipt');
+  const value = records[0].observed.value; const anchor = value.anchor;
+  if (value.assault !== ingress.demandHandshake.assault || value.destinationDimension !== ingress.dimension
+      || !isDeepStrictEqual(anchor, ingress.position) || value.reason !== 'ADMITTED' || typeof value.playerId !== 'string' || value.playerId.length === 0
+      || value.destinationObserved !== true || value.destinationPlayerTicket !== true || value.destinationHolder !== true
+      || typeof value.providerIdentity !== 'string' || value.providerIdentity.length === 0 || !Number.isInteger(value.exactCandidateCount) || value.exactCandidateCount < 1
+      || value.sceneDemandChunkLoaded !== true || value.requestedObserverPresent !== true
+      || !Array.isArray(value.sceneDemandObserverIds) || !value.sceneDemandObserverIds.includes(value.playerId)) {
+    throw new Error('F0.2C HOT carrier has an incomplete or non-admitted demand handshake receipt');
+  }
 }
 
 // The shared journal validator deliberately owns generic identity, sequence and transition

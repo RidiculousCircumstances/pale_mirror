@@ -135,7 +135,8 @@ export function validateScenario(scenario) {
       if (action.causalMilestone !== undefined) causalMilestones.add(action.causalMilestone);
       if (action.type === 'command' && !String(action.command).startsWith('/')) throw new Error('setup command must start with /');
       if (action.type === 'visit' && (!validDimension(action.dimension) || !validResolvablePosition(action.position)
-          || !Number.isInteger(action.settleMs) || action.settleMs < 0 || action.settleMs > 120_000)) {
+          || !Number.isInteger(action.settleMs) || action.settleMs < 0 || action.settleMs > 120_000
+          || !validDemandHandshake(action.demandHandshake) || (action.demandHandshake !== undefined && action.settleMs !== 0))) {
         throw new Error('visit needs a namespaced dimension, block position and settleMs 0..120000');
       }
       if (action.type === 'visit_operation' && (!requiredId(action.operationId, 'operation:') || !validDimension(action.dimension)
@@ -279,6 +280,12 @@ export function validateScenario(scenario) {
     }
   }
   scenarioDeadlineMs(scenario);
+}
+
+function validDemandHandshake(value) {
+  return value === undefined || value !== null && typeof value === 'object' && !Array.isArray(value)
+    && Object.keys(value).length === 2 && typeof value.request === 'string' && /^[a-z][a-z0-9_-]{0,63}$/.test(value.request)
+    && typeof value.assault === 'string' && /^assault:[a-z0-9][a-z0-9_-]{0,95}$/.test(value.assault);
 }
 
 /**

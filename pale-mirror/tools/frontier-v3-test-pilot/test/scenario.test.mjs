@@ -113,6 +113,15 @@ test('chunk visits are ordinary-player travel and may be causal evidence actions
   assert.throws(() => validateScenario({ ...visit, setup: [{ ...visit.setup[0], position: { diagnostic: { ...retainedProcessCursor.diagnostic, field: 'cursor.actorBody' } } }] }), /visit needs/);
 });
 
+test('a demand-bound visit has no client-local settle completion and names its exact scene', () => {
+  const visit = { ...scenario, actions: [{ type: 'visit', dimension: 'pale_mirror:frontier_graybox',
+    position: { x: -360, y: 65, z: -352 }, settleMs: 0,
+    demandHandshake: { request: 'settlement-assault-visit', assault: 'assault:development-settlement-assault' } }], assertions: [], frames: [] };
+  assert.doesNotThrow(() => validateScenario(visit));
+  assert.throws(() => validateScenario({ ...visit, actions: [{ ...visit.actions[0], settleMs: 1_000 }] }), /visit needs/);
+  assert.throws(() => validateScenario({ ...visit, actions: [{ ...visit.actions[0], demandHandshake: { request: 'Foreign', assault: 'assault:foreign' } }] }), /visit needs/);
+});
+
 test('native pilot permits only named isolated development profiles', () => {
   assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'scene-return' } }));
   assert.doesNotThrow(() => validateScenario({ ...scenario, server: { ...scenario.server, profile: 'settlement-assault' } }));

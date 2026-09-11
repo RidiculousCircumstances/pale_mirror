@@ -31,7 +31,12 @@ function envelope() {
     runId: clientRunId, build: structuredClone(build), recovery: { mode: 'graceful', splitAfterAction: 2, clientSession: { runId: outerAttempt, reusedJvm: true } },
     actions: current.actions.map((action, index) => ({ correlation: `scenario:${clientRunId}:${index + 1}`, action: structuredClone(action) })), lifecycle,
     clientSegments: [{ segment: 'persistent_restart', manifest: 'settlement-assault.manifest.json', runId: clientRunId, timing: {}, reusedJvm: true }],
-    diagnostics: semantic.map(record).concat([{ actionStep: 2, value: structuredClone(semantic[0].expect) }]) };
+    diagnostics: [{ observed: { actionStep: 1, value: { kind: 'demand_handshake', id: current.actions[0].demandHandshake.request,
+      assault: current.actions[0].demandHandshake.assault, destinationDimension: current.actions[0].dimension,
+      anchor: structuredClone(current.actions[0].position), playerId: '00000000-0000-0000-0000-000000000035', destinationObserved: true,
+      destinationPlayerTicket: true, destinationHolder: true, providerIdentity: 'projection-snapshot', exactCandidateCount: 1,
+      sceneDemandChunkLoaded: true, sceneDemandObserverIds: ['00000000-0000-0000-0000-000000000035'], requestedObserverPresent: true, reason: 'ADMITTED' } } }]
+      .concat(semantic.map(record), [{ actionStep: 2, value: structuredClone(semantic[0].expect) }]) };
   return { scenario: 'disposable-settlement-assault-restart.json', declarationSource, declarationSha256, outerAttempt, declaration: current, manifest,
     manifestSource: Buffer.from(`${JSON.stringify(manifest)}\n`) };
 }
@@ -40,6 +45,15 @@ test('HOT declaration begins before manufacture and names three exact persistent
   const slots = assertF02cHotReceiptDeclaration(declaration);
   assert.deepEqual(Object.keys(slots), ['preRestart', 'recovered', 'released']);
   assert.deepEqual([slots.preRestart.after, slots.recovered.after, slots.released.after], [2, 3, 5]);
+  assert.deepEqual(declaration.actions[0].demandHandshake, { request: 'settlement-assault-visit', assault: 'assault:development-settlement-assault' });
+  assert.equal(declaration.actions[0].settleMs, 0);
+});
+
+test('HOT declaration rejects the former client-local settle ingress before a carrier can run it', () => {
+  const oldOrder = structuredClone(declaration);
+  delete oldOrder.actions[0].demandHandshake;
+  oldOrder.actions[0].settleMs = 1_000;
+  assert.throws(() => assertF02cHotReceiptDeclaration(oldOrder), /server-thread demand handshake ingress/);
 });
 
 test('HOT consumer reads exactly one declaration-bound pre-restart, recovery, and release record from the final manifest', () => {
@@ -56,13 +70,13 @@ test('HOT production-shaped preflight binds declaration bytes, persistent runner
 
 test('HOT consumer rejects observed receipt mutation, replay, old record, lifecycle misassociation, and duplicate declaration-bound slots', () => {
   for (const mutate of [
-    value => { value.manifest.diagnostics[0].observed.value.strikeReceipt = 'observation:intent:foreign'; },
-    value => { value.manifest.diagnostics[0].observed.value.kind = 'trace'; },
-    value => { value.manifest.diagnostics[0].observed.value.id = 'assault:foreign'; },
-    value => { value.manifest.diagnostics[1].observed.actionStep = 2; },
-    value => { value.manifest.diagnostics[2].observed.value.strikeIntent = value.manifest.diagnostics[0].observed.value.strikeIntent.replace(/.$/, 'f'); },
+    value => { value.manifest.diagnostics[1].observed.value.strikeReceipt = 'observation:intent:foreign'; },
+    value => { value.manifest.diagnostics[1].observed.value.kind = 'trace'; },
+    value => { value.manifest.diagnostics[1].observed.value.id = 'assault:foreign'; },
+    value => { value.manifest.diagnostics[2].observed.actionStep = 2; },
+    value => { value.manifest.diagnostics[3].observed.value.strikeIntent = value.manifest.diagnostics[1].observed.value.strikeIntent.replace(/.$/, 'f'); },
     value => { value.manifest.lifecycle[5].identity.runId = clientRunId; },
-    value => { value.manifest.diagnostics.splice(1, 0, structuredClone(value.manifest.diagnostics[1])); },
+    value => { value.manifest.diagnostics.splice(2, 0, structuredClone(value.manifest.diagnostics[2])); },
     value => { value.manifest.actions[3].correlation = `scenario:${clientRunId}:3`; },
     value => { value.manifest.recovery.clientSession.runId = clientRunId; },
     value => { value.manifest.lifecycle[3].detail.actionStep = 3; },
@@ -70,7 +84,10 @@ test('HOT consumer rejects observed receipt mutation, replay, old record, lifecy
     value => { [value.manifest.lifecycle[3].detail, value.manifest.lifecycle[10].detail] = [value.manifest.lifecycle[10].detail, value.manifest.lifecycle[3].detail]; },
     value => { value.manifest.lifecycle[4].detail.segment = 'after_restart'; },
     value => { value.manifest.lifecycle[11].detail.segment = 'before_restart'; },
-    value => { value.manifest.lifecycle.splice(12, 0, structuredClone(value.manifest.lifecycle[11])); value.manifest.lifecycle.forEach((entry, index) => { entry.sequence = index + 1; }); }
+    value => { value.manifest.lifecycle.splice(12, 0, structuredClone(value.manifest.lifecycle[11])); value.manifest.lifecycle.forEach((entry, index) => { entry.sequence = index + 1; }); },
+    value => { value.manifest.diagnostics[0].observed.value.reason = 'NO_DEMAND'; },
+    value => { value.manifest.diagnostics[0].observed.value.destinationPlayerTicket = false; },
+    value => { value.manifest.diagnostics.splice(1, 0, structuredClone(value.manifest.diagnostics[0])); }
   ]) {
     const value = envelope(); mutate(value); value.manifestSource = Buffer.from(`${JSON.stringify(value.manifest)}\n`);
     assert.throws(() => preflightF02cHotReceiptCarrier(value), /F0\.2C HOT carrier|lifecycle barrier/);

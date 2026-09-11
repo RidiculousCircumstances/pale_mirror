@@ -201,6 +201,22 @@ class FrontierV3TestPilotScenarioTest {
     }
 
     @Test
+    void demandHandshakeVisitsRequireAZeroSettleAndExactImmutableIds() {
+        assertEquals(1, FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"visit","dimension":"pale_mirror:frontier_graybox",
+                "position":{"x":-360,"y":65,"z":-352},"settleMs":0,
+                "demandHandshake":{"request":"settlement-assault-visit","assault":"assault:development-settlement-assault"}}]}""").actionCount());
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"visit","dimension":"pale_mirror:frontier_graybox",
+                "position":{"x":-360,"y":65,"z":-352},"settleMs":1,
+                "demandHandshake":{"request":"settlement-assault-visit","assault":"assault:development-settlement-assault"}}]}"""));
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"visit","dimension":"pale_mirror:frontier_graybox",
+                "position":{"x":-360,"y":65,"z":-352},"settleMs":0,
+                "demandHandshake":{"request":"settlement-assault-visit","assault":"assault:foreign","extra":true}}]}"""));
+    }
+
+    @Test
     void acceptsOnlyThePublishedProcessCursorAsAnOrdinaryVisitAnchor() {
         FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"visit","dimension":"pale_mirror:frontier_graybox",
