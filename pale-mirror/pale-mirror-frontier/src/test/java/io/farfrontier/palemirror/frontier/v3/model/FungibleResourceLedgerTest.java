@@ -75,6 +75,23 @@ class FungibleResourceLedgerTest {
     }
 
     @Test
+    void hotVanillaSplitAndMergeRebindOneLotWithoutStackIdentityOrQuantityDrift() {
+        FungibleResourceLedger issued = issue(10);
+        List<FungiblePhysicalObservation.Stack> splitStacks = List.of(
+                new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(DEPOT, 0)), "minecraft:bread", 6),
+                new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(DEPOT, 1)), "minecraft:bread", 4));
+        FungibleResourceLedger split = issued.rebind(DEPOT_ACCOUNT, 9L,
+                FungiblePhysicalObservation.bind(issued, DEPOT_ACCOUNT, 9L, splitStacks));
+        FungibleResourceLedger merged = split.rebind(DEPOT_ACCOUNT, 9L, FungiblePhysicalObservation.bind(split, DEPOT_ACCOUNT, 9L, List.of(
+                new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(DEPOT, 3)), "minecraft:bread", 10))));
+
+        assertEquals(10, merged.totalQuantity(OWNER, "minecraft:bread"));
+        assertEquals(1, merged.bindings().size());
+        assertThrows(IllegalArgumentException.class, () -> FungiblePhysicalObservation.bind(issued, DEPOT_ACCOUNT, 9L, List.of(
+                new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(DEPOT, 0)), "minecraft:carrot", 10))));
+    }
+
+    @Test
     void snapshotRoundTripPreservesLotsClaimsAccountsAndTransientBindingsExactly() {
         WorldId world = new WorldId("frontier:fungible-ledger-round-trip");
         FrontierWorldState baseline = new FrontierWorldStateCodec().decode(FrontierEngines
