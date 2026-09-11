@@ -57,6 +57,16 @@ import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseTransition;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseRecoveryUnresolved;
 import io.farfrontier.palemirror.frontier.v3.model.OperationStage;
 import io.farfrontier.palemirror.frontier.v3.model.SceneEngagementCandidate;
+import io.farfrontier.palemirror.frontier.v3.model.CustodyAccount;
+import io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalHandoff;
+import io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalObservation;
+import io.farfrontier.palemirror.frontier.v3.model.FungibleResourceHandoffObserved;
+import io.farfrontier.palemirror.frontier.v3.model.FungibleResourceLedger;
+import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackBinding;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceCustody;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceLot;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -64,6 +74,7 @@ import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -237,6 +248,52 @@ class FrontierV3ServerRuntimeTest {
         FrontierV3ServerRuntime<Counter, CounterProjection> recovered = FrontierV3ServerRuntime.start(configuration(), store, 2);
         assertEquals(new SimInstant(3L), recovered.checkpointImage().orElseThrow().instant());
         assertEquals(7, recovered.projection(ProjectionQuery.summary()).orElseThrow().value());
+    }
+
+    @Test
+    void partialFungibleHandoffRetainsItsOldHotSourceBeforeCommitAndExactlyReplaysAfterCommit(@TempDir Path directory) {
+        WorldId world = new WorldId("frontier:fungible-partial-recovery");
+        FrontierEngineConfiguration<FrontierWorldState, ?> base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
+        SubjectId settlement = new SubjectId("settlement:1"), depot = FrontierWorldState.depotId(settlement);
+        SubjectId sourceId = new SubjectId("custody:partial-recovery"), lotId = new SubjectId("lot:partial-recovery");
+        FungibleResourceLedger cold = FungibleResourceLedger.empty().issue(new ResourceLot(lotId, settlement, "minecraft:wheat", 64,
+                "test", List.of()), new CustodyAccount(sourceId, new ResourceCustody.Container(depot), Map.of(lotId, 64), Map.of()));
+        List<FungiblePhysicalObservation.Stack> layout = List.of(new FungiblePhysicalObservation.Stack(
+                new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, 0)), "minecraft:wheat", 64));
+        FungibleResourceLedger hot = cold.rebind(sourceId, 3L, FungiblePhysicalObservation.bind(cold, sourceId, 3L, layout));
+        FrontierWorldState initial = base.initialState().withInventory(base.initialState().inventory().withFungibleResources(hot));
+        FrontierEngineConfiguration<FrontierWorldState, ?> configuration = new FrontierEngineConfiguration<>(base.worldId(), initial,
+                base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(),
+                base.limits(), base.initialSchedules(), base.transactionCommitter(), base.stateValidator(), base.executionMetrics());
+        FrontierFileStore store = new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs());
+
+        FrontierV3ServerRuntime<FrontierWorldState, ?> beforeCommit = FrontierV3ServerRuntime.start(configuration, store, 10_000);
+        beforeCommit.shutdown();
+        FrontierV3ServerRuntime<FrontierWorldState, ?> preserved = FrontierV3ServerRuntime.start(configuration, store, 10_000);
+        assertEquals(Map.of(lotId, 64), worldState(preserved).inventory().fungibleResources().accounts().get(sourceId).lotQuantities(),
+                "a physical save before canonical confirmation keeps the old fenced source; it does not invent a player balance");
+        preserved.shutdown();
+
+        FrontierV3ServerRuntime<FrontierWorldState, ?> committed = FrontierV3ServerRuntime.start(configuration, store, 10_000);
+        PhysicalStackBinding source = committed.decodedState().orElseThrow().inventory().fungibleResources().bindings().values().iterator().next();
+        java.util.UUID player = java.util.UUID.fromString("00000000-0000-0000-0000-000000000155");
+        FungibleResourceHandoffObserved handoff = FungiblePhysicalHandoff.departToNew(committed.decodedState().orElseThrow().inventory()
+                        .fungibleResources(), sourceId, 3L, source, 32, new SubjectId("custody:player-partial-recovery"),
+                new ResourceCustody.Player(player), 1L, new PhysicalStackAddress.PlayerSlot(player, 0));
+        submitWorld(committed, "fungible-partial-recovery", handoff);
+        FrontierWorldState afterCommit = worldState(committed);
+        committed.shutdown();
+
+        FrontierV3ServerRuntime<FrontierWorldState, ?> recovered = FrontierV3ServerRuntime.start(
+                FrontierWorldRuntimeDefinition.configuration(world, 91L), store, 10_000);
+        assertEquals(afterCommit, worldState(recovered));
+        assertEquals(64, worldState(recovered).inventory().fungibleResources().totalQuantity(settlement, "minecraft:wheat"));
+        CheckpointImage checkpoint = recovered.checkpointImage().orElseThrow(); CommandId commandId = new CommandId("test:fungible-partial-recovery");
+        FrontierCommand duplicate = new FrontierCommand(1, commandId, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), handoff);
+        assertEquals(RejectionCode.DUPLICATE_COMMAND, assertInstanceOf(CommandResult.Rejected.class,
+                recovered.submit(duplicate).orElseThrow()).rejection().code());
+        recovered.shutdown();
     }
 
     @Test
