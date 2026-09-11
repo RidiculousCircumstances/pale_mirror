@@ -1,6 +1,6 @@
 # PM-F02C-CANONICAL-LOCAL-PROVIDER-29: one bounded canonical provider query
 
-Specification revision: 2. Status: `EXECUTING_METHOD_BUILD`.
+Specification revision: 3. Status: `METHOD_ADMISSION_REVIEW`.
 Parent slice: F0.2C. Risk: critical-code. Engineer: supervising root.
 Executor: one fresh `gpt-5.6-terra`, reasoning `high`, routed as
 `/root/f02c_shared_assault_challenge24/terra_canonical_local_provider29`.
@@ -116,3 +116,25 @@ One consolidated semantic return is the maximum for this fresh context. A
 second rejection closes it. Assignment epoch: `2026-09-11T01:57:44Z`; the first
 bounded liveness check is due only after a complete ten-minute silence interval,
 and the first economy audit is due after `2026-09-11T02:57:44Z` if still active.
+
+## Method-admission packet
+
+Terra returned clean candidate
+`d76e878807161f0938b488a4aad0a6e3bb10e928`, parent `e5284b78`, tree
+`dbfc1e2bfe2eb12b8f672a32aef1e91e05c4fb02`, with exactly three production
+model paths and two focused test paths changed. Its sole focused command reports
+32/32 in 14 seconds. Main independently recovered complete XML identities:
+
+- `FrontierGrayboxPlanTest`, 18/18,
+  `f1e75a1b0825dca1fafaed3ac8e06fa253a4afaf39123fa840da22ed402fec15`;
+- `HiveSettlementAssaultProcessTest`, 14/14,
+  `aa2ce7aad7fee1fb02ae1e03f7805602d2940bb1941d800a82fa283bcc6f83d9`.
+
+The candidate and receipts are stable for read-only challenge. No aggregate,
+GameTest, Minecraft, native or CI work ran. The declared task root is absent,
+so its probe, complete command receipt and negative provenance are not retained;
+this remains a delivery limitation regardless of the semantic review result.
+Fresh independent challenger
+`/root/f02c_shared_assault_challenge24/canonical_local_provider29_challenger`
+started read-only at `2026-09-11T02:19:27Z`. It may inspect only stable source
+and existing receipts and returns before any expensive work.
