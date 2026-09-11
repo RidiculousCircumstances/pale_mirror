@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
 import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
@@ -22,6 +23,7 @@ import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseTransition;
 import io.farfrontier.palemirror.frontier.v3.model.SceneMember;
 import io.farfrontier.palemirror.frontier.v3.model.SceneMemberPosition;
+import io.farfrontier.palemirror.frontier.v3.model.SceneStrikeObservation;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssault;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCandidate;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultCauseIdentity;
@@ -301,19 +303,28 @@ final class FrontierV3SettlementAssaultSceneExecutor {
 
     private static void release(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                 FrontierWorldState state, SceneLease lease) {
-        if (!level.hasChunkAt(new BlockPos(lease.handoffPosition().x(), lease.handoffPosition().y(), lease.handoffPosition().z()))) {
-            releaseWhenUnloaded(level, runtime, lease);
-            return;
-        }
         List<SceneMemberPosition> captured = new ArrayList<>();
+        boolean unavailable = false;
         for (SceneMember member : lease.members()) {
             if (state.actorLocations().get(member.actorId()).condition().status() == ActorLifeStatus.DEAD) continue;
             Entity entity = level.getEntity(member.entityId());
+            if (entity == null) {
+                unavailable = true;
+                continue;
+            }
             if (!(entity instanceof Mob mob) || !mob.isAlive() || !owns(runtime, entity, member)) {
                 conflict(level, runtime, lease, "release-body-unavailable");
                 return;
             }
             captured.add(new SceneMemberPosition(member.actorId(), at(mob), fixed(mob.getHealth())));
+        }
+        if (unavailable) {
+            // A restart or ordinary demand loss can unload a remote member while the hand-off
+            // chunk remains loaded.  That is not contradictory body evidence: use the durable
+            // scene checkpoint (plus the already-confirmed exact strike health) rather than
+            // force-loading, replaying, or treating absence as a foreign actor.
+            captured = lastObserved(runtime, lease.id());
+            if (captured == null) captured = durableReleaseCheckpoint(state, lease);
         }
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "settlement_assault_released", lease,
                 submit(runtime, "settlement-assault-release", new SceneLeaseReleased(lease.id(), captured)));
@@ -415,6 +426,23 @@ final class FrontierV3SettlementAssaultSceneExecutor {
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "settlement_assault_released_unloaded", lease,
                 submit(runtime, "settlement-assault-release-unloaded", new SceneLeaseReleased(lease.id(), captured)));
         forgetObserved(runtime, lease.id());
+    }
+
+    /**
+     * Retains only durable COLD positions. HOT local motion is presentation state, while one
+     * confirmed strike is an exact canonical health effect and must survive this fallback.
+     */
+    static List<SceneMemberPosition> durableReleaseCheckpoint(FrontierWorldState state, SceneLease lease) {
+        Map<SubjectId, FixedScalar> health = new LinkedHashMap<>();
+        for (SceneMember member : lease.members()) health.put(member.actorId(), state.actorLocations().get(member.actorId()).condition().health());
+        state.physicalIntents().values().stream().filter(intent -> intent.kind() == PhysicalIntentKind.SCENE_STRIKE
+                        && intent.status() == PhysicalIntentStatus.CONFIRMED
+                        && FrontierV3SettlementAssaultReceiptBinding.belongsToLease(state, lease, intent))
+                .map(PhysicalIntent::postconditionObservationId).flatMap(Optional::stream)
+                .map(state.physicalObservations()::get).filter(SceneStrikeObservation.class::isInstance).map(SceneStrikeObservation.class::cast)
+                .forEach(receipt -> health.put(receipt.targetId(), receipt.targetHealthAfter()));
+        return lease.members().stream().filter(member -> state.actorLocations().get(member.actorId()).condition().status() == ActorLifeStatus.ALIVE)
+                .map(member -> new SceneMemberPosition(member.actorId(), lease.memberPosition(member.actorId()), health.get(member.actorId()))).toList();
     }
 
     private static List<SceneMemberPosition> lastObserved(FrontierV3ServerRuntime<?, ?> runtime, SceneLeaseId leaseId) {
