@@ -14,7 +14,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     static PayloadCodecs physicalCodecs() { return new PayloadCodecs(List.of(
             new PhysicalIntentPreparedCodec(), new PhysicalIntentTransitionCodec(), new StructureDamagedCodec(),
             PhysicalDeltaPayloadCodecs.single(), PhysicalDeltaPayloadCodecs.batch(), new ExactItemCustodyChangedCodec(), new ExactItemDestroyedCodec(),
-            new InventoryConflictObservedCodec(), new ContainerSurfaceTransitionCodec(), new ResourceDepositedCodec(), new CargoCarrierReleasedPayloadCodec())); }
+            new InventoryConflictObservedCodec(), new ContainerSurfaceTransitionCodec(), new ResourceDepositedCodec(), new FungibleStackLayoutObservedCodec(), new CargoCarrierReleasedPayloadCodec())); }
     static PayloadCodecs replicaCustodyCodecs() { return new PayloadCodecs(PhysicalReplicaCustodyPayloadCodecs.codecs()); }
     static PayloadCodecs ambientCodecs() { return new PayloadCodecs(List.of(new AmbientActorDiedCodec(),
             new AmbientActorObservedCodec(), AmbientLeasePayloadCodecs.prepared(), AmbientLeasePayloadCodecs.transition(), AmbientLeasePayloadCodecs.released(),
@@ -171,6 +171,23 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
                 return new ProductionBlocked(settlement.value(), facility.value(), work.value(), FrontierWireTags.require(ProductionBlockReason.class, ordinal));
             });
         }
+    }
+    private static final class FungibleStackLayoutObservedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.fungible_stack_layout_observed"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
+            FungibleStackLayoutObserved observed = (FungibleStackLayoutObserved) payload;
+            writeSubject(output, observed.accountId()); output.writeLong(observed.authorityEpoch()); output.writeShort(observed.stacks().size());
+            for (FungiblePhysicalObservation.Stack stack : observed.stacks()) {
+                writePhysicalStackAddress(output, stack.address()); writeString(output, stack.itemKind()); output.writeByte(stack.quantity());
+            }
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
+            SubjectId account = readSubject(input).value(); long epoch = input.readLong(); int count = input.readUnsignedShort();
+            if (count == 0 || count > 16_384) throw new IllegalArgumentException("invalid fungible stack observation count");
+            java.util.ArrayList<FungiblePhysicalObservation.Stack> stacks = new java.util.ArrayList<>();
+            for (int index = 0; index < count; index++) stacks.add(new FungiblePhysicalObservation.Stack(readPhysicalStackAddress(input), readString(input), input.readUnsignedByte()));
+            return new FungibleStackLayoutObserved(account, epoch, stacks);
+        }); }
     }
     private static final class ContractCreatedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.supply_contract_created"; } @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> writeContract(output, ((SupplyContractCreated) payload).contract())); }
@@ -804,6 +821,21 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             case 1 -> new InventoryCustody.Player(java.util.UUID.fromString(readString(input)));
             case 2 -> new InventoryCustody.WorldCarrier(java.util.UUID.fromString(readString(input))); case 3 -> new InventoryCustody.Actor(readSubject(input).value());
             default -> throw new IllegalArgumentException("unknown observed item custody kind");
+        };
+    } private static void writePhysicalStackAddress(DataOutputStream output, PhysicalStackAddress address) throws IOException {
+        switch (address) {
+            case PhysicalStackAddress.ContainerSlot slot -> { output.writeByte(0); writeSubject(output, slot.slot().containerId()); output.writeByte(slot.slot().slot()); }
+            case PhysicalStackAddress.PlayerSlot slot -> { output.writeByte(1); writeString(output, slot.playerId().toString()); output.writeByte(slot.slot()); }
+            case PhysicalStackAddress.HopperSlot slot -> { output.writeByte(2); output.writeInt(slot.position().x()); output.writeInt(slot.position().y()); output.writeInt(slot.position().z()); output.writeByte(slot.slot()); }
+            case PhysicalStackAddress.WorldEntity entity -> { output.writeByte(3); writeString(output, entity.entityId().toString()); }
+        }
+    } private static PhysicalStackAddress readPhysicalStackAddress(DataInputStream input) throws IOException {
+        return switch (input.readUnsignedByte()) {
+            case 0 -> new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(readSubject(input).value(), input.readUnsignedByte()));
+            case 1 -> new PhysicalStackAddress.PlayerSlot(java.util.UUID.fromString(readString(input)), input.readUnsignedByte());
+            case 2 -> new PhysicalStackAddress.HopperSlot(new BlockPosition(input.readInt(), input.readInt(), input.readInt()), input.readUnsignedByte());
+            case 3 -> new PhysicalStackAddress.WorldEntity(java.util.UUID.fromString(readString(input)));
+            default -> throw new IllegalArgumentException("unknown physical stack address");
         };
     } public static void writeSubject(DataOutputStream output, io.farfrontier.palemirror.frontier.v3.api.SubjectId value) throws IOException { writeString(output, value.value()); }
     static SubjectIdHolder readSubject(DataInputStream input) throws IOException { return new SubjectIdHolder(new io.farfrontier.palemirror.frontier.v3.api.SubjectId(readString(input))); }

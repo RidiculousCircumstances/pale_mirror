@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.api.CommandRejection;
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.api.RejectionCode;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 
 import java.util.ArrayList;
@@ -128,5 +129,34 @@ public final class FrontierWorldPhysicalObservationProcess {
             throw new IllegalArgumentException("resource deposit targets an occupied canonical slot");
         }
         return state.withInventory(state.inventory().store(deposited.item()));
+    }
+
+    static CommandPlan planFungibleLayout(FrontierWorldState state, FungibleStackLayoutObserved observed) {
+        CustodyAccount account = state.inventory().fungibleResources().accounts().get(observed.accountId());
+        if (account == null) return new CommandPlan.Rejected(new CommandRejection(RejectionCode.REJECTED_BY_POLICY,
+                "fungible layout observation has an unknown custody account"));
+        SubjectId owner = owner(state, account);
+        try { reduceFungibleLayout(state, owner, observed); }
+        catch (IllegalArgumentException invalid) { return new CommandPlan.Rejected(new CommandRejection(RejectionCode.REJECTED_BY_POLICY, invalid.getMessage())); }
+        return new CommandPlan.Accepted(List.of(new ProposedEvent(owner, observed)));
+    }
+
+    static FrontierWorldState reduceFungibleLayout(FrontierWorldState state, SubjectId subject, FungibleStackLayoutObserved observed) {
+        FungibleResourceLedger ledger = state.inventory().fungibleResources(); CustodyAccount account = ledger.accounts().get(observed.accountId());
+        if (account == null || !subject.equals(owner(state, account))) throw new IllegalArgumentException("fungible layout observation has no owning subject");
+        List<PhysicalStackBinding> bindings = FungiblePhysicalObservation.bind(ledger, account.id(), observed.authorityEpoch(), observed.stacks());
+        return state.withInventory(state.inventory().withFungibleResources(ledger.rebind(account.id(), observed.authorityEpoch(), bindings)));
+    }
+
+    private static SubjectId owner(FrontierWorldState state, CustodyAccount account) {
+        if (account.custody() instanceof ResourceCustody.Container container) {
+            ContainerRecord record = state.inventory().containers().get(container.containerId());
+            if (record == null) throw new IllegalArgumentException("fungible custody account has no known container owner");
+            return record.ownerId();
+        }
+        return account.lotQuantities().keySet().stream().map(id -> state.inventory().fungibleResources().lots().get(id))
+                .map(ResourceLot::economicOwnerId).distinct().reduce((left, right) -> {
+                    throw new IllegalArgumentException("fungible physical account has mixed economic owners");
+                }).orElseThrow(() -> new IllegalArgumentException("fungible custody account has no resource owner"));
     }
 }

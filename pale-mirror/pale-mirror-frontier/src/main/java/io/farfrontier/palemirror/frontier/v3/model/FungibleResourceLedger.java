@@ -122,6 +122,9 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         if (replacements.isEmpty() || replacements.stream().anyMatch(binding -> !binding.accountId().equals(accountId) || binding.authorityEpoch() != authorityEpoch)) {
             throw new IllegalArgumentException("physical bindings do not match their current custody authority");
         }
+        if (bindings.values().stream().anyMatch(binding -> binding.accountId().equals(accountId) && binding.authorityEpoch() != authorityEpoch)) {
+            throw new IllegalArgumentException("physical bindings are stale for the current custody authority");
+        }
         Map<SubjectId, PhysicalStackBinding> next = new HashMap<>(bindings);
         bindings.values().stream().filter(binding -> binding.accountId().equals(account.id())).map(PhysicalStackBinding::id).forEach(next::remove);
         for (PhysicalStackBinding binding : replacements) {
