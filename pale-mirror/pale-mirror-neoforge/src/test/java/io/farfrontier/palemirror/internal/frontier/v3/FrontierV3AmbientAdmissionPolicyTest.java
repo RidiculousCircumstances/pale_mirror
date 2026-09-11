@@ -16,6 +16,7 @@ import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
 import io.farfrontier.palemirror.frontier.v3.model.BioformLifecycle;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierGrayboxPlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSettlementAssaultBattlefield;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
@@ -34,6 +35,7 @@ import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneLeasePr
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultAttacker;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultStatus;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
+import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseHandoff;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementResidentIngressPlan;
 import io.farfrontier.palemirror.frontier.v3.model.StrategicObjective;
@@ -81,8 +83,8 @@ class FrontierV3AmbientAdmissionPolicyTest {
         FrontierWorldState state = twoEligibleAssaults();
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(state);
         try {
-            assertFalse(FrontierV3SettlementAssaultSceneExecutor.admit(runtime, state, ignored -> true,
-                    (candidate, lease) -> { throw new AssertionError("an absent projection must not construct a lease"); }),
+            assertFalse(FrontierV3SettlementAssaultSceneExecutor.tick(runtime, assaultTurn(
+                    (candidate, provider, lease) -> { throw new AssertionError("an absent projection must not construct a lease"); })),
                     "the registered scene transaction must defer without a preceding projection");
             FrontierV3GrayboxExecutor.ProjectionWorkSnapshot absent = FrontierV3GrayboxExecutor.projectionWork(runtime);
             assertEquals(1, absent.compatibilityChecks());
@@ -94,24 +96,55 @@ class FrontierV3AmbientAdmissionPolicyTest {
             FrontierV3GrayboxExecutor.tick(new FullyLoadedPhysicalWorld(), runtime);
             FrontierV3GrayboxExecutor.resetProjectionWork(runtime);
             AtomicReference<SceneLease> prepared = new AtomicReference<>();
-            assertTrue(FrontierV3SettlementAssaultSceneExecutor.admit(runtime, state, ignored -> true, (candidate, lease) -> {
+            AtomicReference<io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCandidate> selected = new AtomicReference<>();
+            AtomicInteger rejectedSubmits = new AtomicInteger();
+            assertTrue(FrontierV3SettlementAssaultSceneExecutor.tick(runtime, assaultTurn((candidate, provider, lease) -> {
+                selected.set(candidate);
                 prepared.set(lease);
-                submit(runtime, state.bootstrap().worldId(), new SettlementAssaultSceneLeasePrepared(lease), "command:projection-owned-scene-prepare");
-            }), "the compatible projection must admit one exact assault through its actual reducer command");
+                assertTrue(FrontierV3SettlementAssaultSceneExecutor.submitPrepared(candidate, provider, lease,
+                        () -> submit(runtime, state.bootstrap().worldId(), new SettlementAssaultSceneLeasePrepared(lease),
+                                "command:projection-owned-scene-prepare")));
+            })), "the compatible projection must admit one exact assault through its actual reducer command");
             assertEquals(SceneLeaseStatus.PREPARED, runtime.decodedState().orElseThrow().sceneLeases().get(prepared.get().id()).status());
             int members = state.strategicPlans().settlementAssaults().values().stream()
                     .filter(assault -> assault.status() == SettlementAssaultStatus.COLD_COMBAT)
                     .mapToInt(assault -> assault.attackerIds().size() + assault.defenderIds().size()).sum();
-            assertProjectionReadWork(runtime, members, "candidate selection plus prepared reducer");
+            FrontierV3GrayboxExecutor.ProjectionWorkSnapshot preparedWork = FrontierV3GrayboxExecutor.projectionWork(runtime);
+            assertEquals(1, preparedWork.compatibilityChecks());
+            assertEquals(0, preparedWork.freshnessConstructions());
+            assertEquals(0, preparedWork.planCompilations());
+            assertEquals(1, preparedWork.providerAcquisitions());
+            assertEquals((members + prepared.get().members().size()) * 3, preparedWork.pointQueries(),
+                    "candidate selection and final trusted-command binding must use only named provider cells");
+            io.farfrontier.palemirror.frontier.v3.model.BlockPosition lostFloor = prepared.get().memberPosition(prepared.get().members().getFirst().actorId())
+                    .supportingSurface().support();
+            GrayboxCell lostProviderFloor = FrontierGrayboxPlan.compile(state).cells().get(lostFloor);
+            assertNotNull(lostProviderFloor, "the captured member starts on one retained provider floor");
+            FrontierWorldState lossState = withExactSupportLoss(state, lostProviderFloor.position(), lostProviderFloor);
+            FrontierSettlementAssaultBattlefield.Provider retainedProvider = FrontierV3GrayboxExecutor.admissionProvider(runtime, lossState).orElseThrow();
+            FrontierSceneBehaviors.validatePrepared(lossState, prepared.get());
+            assertFalse(FrontierV3SettlementAssaultSceneExecutor.submitPrepared(selected.get(), retainedProvider, prepared.get(),
+                    rejectedSubmits::incrementAndGet),
+                    "the trusted physical-executor prepared reducer may retain a locally clear exact roster, but final submission must reject its non-provider floor");
+            assertEquals(0, rejectedSubmits.get(), "a rejected prepared command must never enter the physical-executor submit path");
+            SceneLease forged = reducerAcceptedLostProviderHandoff(lossState, prepared.get(), prepared.get().members().getFirst().actorId(),
+                    lostFloor);
+            assertFalse(FrontierV3SettlementAssaultSceneExecutor.submitHandoff(retainedProvider, forged,
+                    rejectedSubmits::incrementAndGet),
+                    "the physical-executor handoff reducer may retain its exact moving body, but the final production boundary must reject a non-provider floor");
+            assertEquals(0, rejectedSubmits.get(), "a rejected floor must never submit its trusted physical-executor handoff command");
 
-            FrontierWorldState nonStructural = withPreparedLease(state, prepared.get().members().getFirst().actorId());
-            assertTrue(FrontierV3SettlementAssaultSceneExecutor.admit(runtime, nonStructural, ignored -> true,
-                    (candidate, lease) -> { }), "an unrelated canonical replacement must retain compatible provider authority");
+            FrontierWorldState nonStructural = runtime.decodedState().orElseThrow();
+            FrontierV3GrayboxExecutor.resetProjectionWork(runtime);
+            assertTrue(FrontierV3SettlementAssaultSceneExecutor.tick(runtime, assaultTurn(
+                    (candidate, provider, lease) -> { throw new AssertionError("an installed prepared scene owns its next registered turn"); })),
+                    "the registered scene turn must consume the runtime-installed nonstructural prepared state");
+            FrontierV3GrayboxExecutor.admissionProvider(runtime, nonStructural).orElseThrow();
             FrontierV3GrayboxExecutor.ProjectionWorkSnapshot retained = FrontierV3GrayboxExecutor.projectionWork(runtime);
             assertEquals(0, retained.freshnessConstructions());
             assertEquals(0, retained.planCompilations());
-            assertEquals(2, retained.providerAcquisitions());
-            assertEquals(members * 6, retained.pointQueries(), "the second compatible state may repeat only bounded point queries");
+            assertEquals(1, retained.providerAcquisitions());
+            assertEquals(0, retained.pointQueries(), "an active runtime-installed scene does not re-enumerate provider geometry");
 
             FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> structuralRuntime = runtime(state);
             try {
@@ -124,8 +157,8 @@ class FrontierV3AmbientAdmissionPolicyTest {
                         "command:projection-owned-scene-structural-change");
                 FrontierWorldState stale = structuralRuntime.decodedState().orElseThrow();
                 FrontierV3GrayboxExecutor.resetProjectionWork(structuralRuntime);
-                assertFalse(FrontierV3SettlementAssaultSceneExecutor.admit(structuralRuntime, stale, ignored -> true,
-                        (candidate, lease) -> { throw new AssertionError("a stale projection must not construct a lease"); }),
+                assertFalse(FrontierV3SettlementAssaultSceneExecutor.tick(structuralRuntime, assaultTurn(
+                        (candidate, provider, lease) -> { throw new AssertionError("a stale projection must not construct a lease"); })),
                         "an installed relevant structural replacement must fence scene admission until projection refresh");
                 FrontierV3GrayboxExecutor.ProjectionWorkSnapshot fenced = FrontierV3GrayboxExecutor.projectionWork(structuralRuntime);
                 assertEquals(1, fenced.compatibilityChecks());
@@ -136,17 +169,19 @@ class FrontierV3AmbientAdmissionPolicyTest {
 
                 FrontierV3GrayboxExecutor.refresh(new FullyLoadedPhysicalWorld(), structuralRuntime, stale);
                 AtomicReference<SceneLease> refreshed = new AtomicReference<>();
-                assertTrue(FrontierV3SettlementAssaultSceneExecutor.admit(structuralRuntime, stale, ignored -> true, (candidate, lease) -> {
+                assertTrue(FrontierV3SettlementAssaultSceneExecutor.tick(structuralRuntime, assaultTurn((candidate, provider, lease) -> {
                     refreshed.set(lease);
-                    submit(structuralRuntime, stale.bootstrap().worldId(), new SettlementAssaultSceneLeasePrepared(lease),
-                            "command:projection-owned-scene-refresh-prepare");
-                }), "only the refreshed projection may restore exact scene admission");
+                    assertTrue(FrontierV3SettlementAssaultSceneExecutor.submitPrepared(candidate, provider, lease,
+                            () -> submit(structuralRuntime, stale.bootstrap().worldId(), new SettlementAssaultSceneLeasePrepared(lease),
+                                    "command:projection-owned-scene-refresh-prepare")));
+                })), "only the refreshed projection may restore exact scene admission");
                 assertEquals(SceneLeaseStatus.PREPARED, structuralRuntime.decodedState().orElseThrow().sceneLeases().get(refreshed.get().id()).status());
                 FrontierV3GrayboxExecutor.ProjectionWorkSnapshot refreshedWork = FrontierV3GrayboxExecutor.projectionWork(structuralRuntime);
                 assertEquals(1, refreshedWork.freshnessConstructions());
                 assertEquals(1, refreshedWork.planCompilations(), "one relevant structural replacement compiles only in the projection owner");
                 assertEquals(1, refreshedWork.providerAcquisitions());
-                assertEquals(members * 3, refreshedWork.pointQueries(), "post-refresh admission still consumes only named provider cells");
+                assertEquals((members + refreshed.get().members().size()) * 3, refreshedWork.pointQueries(),
+                        "post-refresh candidate and final binding still consume only named provider cells");
             } finally { FrontierV3GrayboxExecutor.forget(structuralRuntime); structuralRuntime.shutdown(); }
         } finally { FrontierV3GrayboxExecutor.forget(runtime); runtime.shutdown(); }
     }
@@ -527,6 +562,43 @@ class FrontierV3AmbientAdmissionPolicyTest {
 
     private static SubjectId firstCandidateActor(FrontierSceneAdmission.ReservationAdmission admission) {
         return admission.settlementAssaultCandidates().getFirst().memberPositions().keySet().stream().sorted().findFirst().orElseThrow();
+    }
+
+    private static SceneLease reducerAcceptedLostProviderHandoff(FrontierWorldState state, SceneLease lease, SubjectId actor,
+                                                                   io.farfrontier.palemirror.frontier.v3.model.BlockPosition lostFloor) {
+        Map<SubjectId, AmbientActorLease> hot = new LinkedHashMap<>(state.ambientLeases());
+        BodyPosition original = state.actorLocations().get(actor).body();
+        hot.put(actor, new AmbientActorLease(actor, original, io.farfrontier.palemirror.frontier.v3.api.SimInstant.ZERO, 1L,
+                AmbientLeaseStatus.HOT, AmbientGoalKind.GUARD, original));
+        FrontierWorldState captureState = state.withChanges(FrontierWorldStateUpdate.begin().ambientLeases(hot));
+        Map<SubjectId, BodyPosition> positions = new LinkedHashMap<>(lease.memberPositions());
+        positions.put(actor, BodyPosition.aboveSupportCell(lostFloor));
+        SceneLease forged = lease.withMemberPositions(positions).withAmbientHandoff(Set.of(actor));
+        captureState.handoffAmbientScene(new SceneLeaseHandoff(forged, List.of(
+                new io.farfrontier.palemirror.frontier.v3.model.SceneMemberPosition(actor,
+                        forged.memberPosition(actor), state.actorLocations().get(actor).condition().health()))));
+        return forged;
+    }
+
+    /** Exact delegate of the registered assault turn, without a fake {@code ServerLevel}. */
+    private static FrontierV3SettlementAssaultSceneExecutor.Turn assaultTurn(PreparedAdmission prepared) {
+        return new FrontierV3SettlementAssaultSceneExecutor.Turn() {
+            @Override public boolean demanded(io.farfrontier.palemirror.frontier.v3.model.BlockPosition position) { return true; }
+            @Override public void execute(FrontierWorldState state, SceneLease lease) { }
+            @Override public void prepare(io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCandidate candidate,
+                                          FrontierSettlementAssaultBattlefield.Provider provider, SceneLease lease) {
+                prepared.prepare(candidate, provider, lease);
+            }
+            @Override public void handoff(FrontierWorldState state, FrontierSettlementAssaultBattlefield.Provider provider, SceneLease lease) {
+                throw new AssertionError("the prepared fixture must not select an ambient handoff");
+            }
+        };
+    }
+
+    @FunctionalInterface
+    private interface PreparedAdmission {
+        void prepare(io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCandidate candidate,
+                     FrontierSettlementAssaultBattlefield.Provider provider, SceneLease lease);
     }
 
     private static FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime(FrontierWorldState state) {

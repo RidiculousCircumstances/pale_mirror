@@ -13,6 +13,7 @@ import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierGrayboxPlan;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierSettlementAssaultBattlefield;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseRecoveryUnresolved;
@@ -63,6 +64,33 @@ final class FrontierV3SettlementAssaultSceneExecutor {
 
     /** @return true when a typed assault scene owns this materialization turn. */
     static boolean tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
+        return tick(runtime, new Turn() {
+            @Override public boolean demanded(io.farfrontier.palemirror.frontier.v3.model.BlockPosition position) {
+                return FrontierV3SceneExecutor.demandExists(level, position);
+            }
+
+            @Override public void execute(FrontierWorldState state, SceneLease lease) {
+                FrontierV3SettlementAssaultSceneExecutor.execute(level, runtime, state, lease);
+            }
+
+            @Override public void prepare(SettlementAssaultSceneCandidate candidate,
+                                          FrontierSettlementAssaultBattlefield.Provider provider, SceneLease lease) {
+                FrontierV3SettlementAssaultSceneExecutor.prepare(level, runtime, candidate, provider, lease);
+            }
+
+            @Override public void handoff(FrontierWorldState state, FrontierSettlementAssaultBattlefield.Provider provider,
+                                          SceneLease lease) {
+                FrontierV3SettlementAssaultSceneExecutor.handoff(level, runtime, state, provider, lease);
+            }
+        });
+    }
+
+    /**
+     * The executable composition shared by the registered {@link #tick(ServerLevel, FrontierV3ServerRuntime)}
+     * turn. Package scope permits a faithful no-Minecraft-body regression without an alternate
+     * candidate/provider path.
+     */
+    static boolean tick(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Turn turn) {
         FrontierWorldState state = state(runtime);
         if (state == null) return false;
         forgetInactive(runtime, state);
@@ -70,13 +98,20 @@ final class FrontierV3SettlementAssaultSceneExecutor {
                 .filter(lease -> lease.status() != SceneLeaseStatus.CLOSED && lease.status() != SceneLeaseStatus.CONFLICT)
                 .sorted(Comparator.comparing(SceneLease::id)).findFirst();
         if (active.isPresent()) {
-            execute(level, runtime, state, active.orElseThrow());
+            turn.execute(state, active.orElseThrow());
             return true;
         }
-        return admit(runtime, state, position -> FrontierV3SceneExecutor.demandExists(level, position), (battle, lease) -> {
-            if (FrontierSceneAdmission.available(state, battle.memberPositions().keySet())) prepare(level, runtime, lease);
-            else handoff(level, runtime, state, lease);
+        return admit(runtime, state, turn::demanded, (battle, lease, provider) -> {
+            if (FrontierSceneAdmission.available(state, battle.memberPositions().keySet())) turn.prepare(battle, provider, lease);
+            else turn.handoff(state, provider, lease);
         });
+    }
+
+    interface Turn {
+        boolean demanded(io.farfrontier.palemirror.frontier.v3.model.BlockPosition position);
+        void execute(FrontierWorldState state, SceneLease lease);
+        void prepare(SettlementAssaultSceneCandidate candidate, FrontierSettlementAssaultBattlefield.Provider provider, SceneLease lease);
+        void handoff(FrontierWorldState state, FrontierSettlementAssaultBattlefield.Provider provider, SceneLease lease);
     }
 
     /**
@@ -89,19 +124,21 @@ final class FrontierV3SettlementAssaultSceneExecutor {
                          Predicate<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> demanded,
                          CandidateAdmission admission) {
         return FrontierGrayboxPlan.withoutStructuralDerivation(() -> {
+            FrontierSettlementAssaultBattlefield.Provider provider = FrontierV3GrayboxExecutor.admissionProvider(runtime, state).orElse(null);
+            if (provider == null) return false;
             Optional<SettlementAssaultSceneCandidate> candidate = FrontierSceneAdmission.settlementAssaultCandidates(state,
-                            ignored -> FrontierV3GrayboxExecutor.admissionProvider(runtime, state)).stream()
+                            ignored -> Optional.of(provider)).stream()
                     .filter(value -> demanded.test(value.handoffPosition())).findFirst();
             if (candidate.isEmpty()) return false;
             SettlementAssaultSceneCandidate battle = candidate.orElseThrow();
-            admission.admit(battle, lease(runtime, battle));
+            admission.admit(battle, lease(runtime, battle), provider);
             return true;
         });
     }
 
     @FunctionalInterface
     interface CandidateAdmission {
-        void admit(SettlementAssaultSceneCandidate candidate, SceneLease lease);
+        void admit(SettlementAssaultSceneCandidate candidate, SceneLease lease, FrontierSettlementAssaultBattlefield.Provider provider);
     }
 
     private static SceneLease lease(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SettlementAssaultSceneCandidate candidate) {
@@ -115,14 +152,15 @@ final class FrontierV3SettlementAssaultSceneExecutor {
                 SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), Set.of(), Optional.empty());
     }
 
-    private static void prepare(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease) {
-        FrontierV3DiagnosticTrace.recordScene(level.getServer(), "settlement_assault_prepared", lease,
-                submit(runtime, "settlement-assault-prepare", new SettlementAssaultSceneLeasePrepared(lease)));
+    private static void prepare(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                SettlementAssaultSceneCandidate candidate, FrontierSettlementAssaultBattlefield.Provider provider, SceneLease lease) {
+        submitPrepared(candidate, provider, lease, () -> FrontierV3DiagnosticTrace.recordScene(level.getServer(), "settlement_assault_prepared", lease,
+                submit(runtime, "settlement-assault-prepare", new SettlementAssaultSceneLeasePrepared(lease))));
     }
 
     /** Claims only an existing exact ambient body; a partial hand-off waits rather than cloning it. */
     private static void handoff(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                FrontierWorldState state, SceneLease lease) {
+                                FrontierWorldState state, FrontierSettlementAssaultBattlefield.Provider provider, SceneLease lease) {
         List<SceneMemberPosition> captures = new ArrayList<>();
         for (SceneMember member : lease.members()) {
             var ambient = state.ambientLeases().get(member.actorId());
@@ -139,8 +177,39 @@ final class FrontierV3SettlementAssaultSceneExecutor {
                 capture.body()));
         SceneLease handed = lease.withMemberPositions(positions).withAmbientHandoff(captures.stream()
                 .map(SceneMemberPosition::actorId).collect(java.util.stream.Collectors.toSet()));
-        FrontierV3DiagnosticTrace.recordScene(level.getServer(), "settlement_assault_handoff", handed,
-                submit(runtime, "settlement-assault-handoff", new SettlementAssaultSceneLeaseHandoff(handed, captures)));
+        submitHandoff(provider, handed, () -> FrontierV3DiagnosticTrace.recordScene(level.getServer(), "settlement_assault_handoff", handed,
+                submit(runtime, "settlement-assault-handoff", new SettlementAssaultSceneLeaseHandoff(handed, captures))));
+    }
+
+    /**
+     * A PREPARED command has not observed movement yet: it must be byte-for-byte the selected
+     * provider-approved candidate, not merely a locally clear collection of canonical bodies.
+     */
+    static boolean providerAuthorizesPreparedLease(SettlementAssaultSceneCandidate candidate,
+                                                   FrontierSettlementAssaultBattlefield.Provider provider, SceneLease lease) {
+        if (!lease.memberPositions().equals(SceneLease.bodiesAboveSupportCells(candidate.memberPositions()))) return false;
+        return providerAuthorizesHandoffLease(provider, lease);
+    }
+
+    /** A captured HOT body may move, but its final submitted support still needs this provider. */
+    static boolean providerAuthorizesHandoffLease(FrontierSettlementAssaultBattlefield.Provider provider, SceneLease lease) {
+        return lease.members().stream().allMatch(member -> FrontierSettlementAssaultBattlefield.providerAuthorizesFloor(provider,
+                lease.memberPosition(member.actorId()).supportingSurface().support()));
+    }
+
+    /** Final production authority boundary for a newly selected scene lease. */
+    static boolean submitPrepared(SettlementAssaultSceneCandidate candidate, FrontierSettlementAssaultBattlefield.Provider provider,
+                                  SceneLease lease, Runnable acceptedSubmit) {
+        if (!providerAuthorizesPreparedLease(candidate, provider, lease)) return false;
+        acceptedSubmit.run();
+        return true;
+    }
+
+    /** Final production authority boundary after the moving ambient bodies are captured. */
+    static boolean submitHandoff(FrontierSettlementAssaultBattlefield.Provider provider, SceneLease lease, Runnable acceptedSubmit) {
+        if (!providerAuthorizesHandoffLease(provider, lease)) return false;
+        acceptedSubmit.run();
+        return true;
     }
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,

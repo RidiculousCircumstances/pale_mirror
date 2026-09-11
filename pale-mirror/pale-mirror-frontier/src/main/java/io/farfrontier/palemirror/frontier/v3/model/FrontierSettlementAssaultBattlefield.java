@@ -9,6 +9,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Objects;
 import java.util.Set;
 
 /** Pure compiler for the exact, local floor columns of a settlement assault. */
@@ -85,6 +86,11 @@ public final class FrontierSettlementAssaultBattlefield {
      */
     static boolean serviceableFloor(FrontierWorldState state, BlockPosition position) {
         return serviceableFloor(providerView(state), position);
+    }
+
+    /** The existing provider grammar exposed only for the physical admission boundary. */
+    public static boolean providerAuthorizesFloor(Provider provider, BlockPosition position) {
+        return serviceableFloor(Objects.requireNonNull(provider, "provider"), Objects.requireNonNull(position, "position"));
     }
 
     /**
