@@ -48,7 +48,7 @@ public final class FrontierV3PlayerCustodyGameTests {
     public static void activeChestTransfersOneExactStackToAndFromItsRealPlayer(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); WorldId world = new WorldId("frontier:player-withdrawal-game-test");
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime = exactWheatRuntime(world);
-        SubjectId container = new SubjectId("container:1-depot"); BlockPos chestPosition = helper.absolutePos(new BlockPos(58, 8, 0));
+        SubjectId container = new SubjectId("container:1-depot"); BlockPos chestPosition = interior(helper);
         level.setBlock(chestPosition.below(), Blocks.STONE.defaultBlockState(), 3);
         ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.claimFreshChest(level, chestPosition, container);
         helper.assertTrue(chest != null, "the player custody fixture needs an owned chest");
@@ -83,7 +83,7 @@ public final class FrontierV3PlayerCustodyGameTests {
         ServerLevel level = helper.getLevel(); WorldId world = new WorldId("frontier:fungible-player-withdrawal-game-test");
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
                 FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.configuration(world, 91L), new EphemeralStore(), 10_000);
-        SubjectId container = new SubjectId("container:1-depot"); BlockPos chestPosition = helper.absolutePos(new BlockPos(60, 8, 0));
+        SubjectId container = new SubjectId("container:1-depot"); BlockPos chestPosition = interior(helper);
         level.setBlock(chestPosition.below(), Blocks.STONE.defaultBlockState(), 3);
         ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.claimFreshChest(level, chestPosition, container);
         helper.assertTrue(chest != null, "the fungible fixture needs an owned chest");
@@ -122,7 +122,7 @@ public final class FrontierV3PlayerCustodyGameTests {
         ServerLevel level = helper.getLevel(); WorldId world = new WorldId("frontier:fungible-hopper-game-test");
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
                 FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.configuration(world, 91L), new EphemeralStore(), 10_000);
-        SubjectId container = new SubjectId("container:1-depot"); BlockPos chestPosition = helper.absolutePos(new BlockPos(62, 8, 0));
+        SubjectId container = new SubjectId("container:1-depot"); BlockPos chestPosition = interior(helper);
         level.setBlock(chestPosition.below(), Blocks.STONE.defaultBlockState(), 3);
         ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.claimFreshChest(level, chestPosition, container);
         helper.assertTrue(chest != null, "the hopper fixture needs an owned chest");
@@ -149,7 +149,7 @@ public final class FrontierV3PlayerCustodyGameTests {
         ServerLevel level = helper.getLevel(); WorldId world = new WorldId("frontier:fungible-drop-pickup-game-test");
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
                 FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.configuration(world, 91L), new EphemeralStore(), 10_000);
-        SubjectId container = new SubjectId("container:1-depot"); BlockPos chestPosition = helper.absolutePos(new BlockPos(64, 8, 0));
+        SubjectId container = new SubjectId("container:1-depot"); BlockPos chestPosition = interior(helper);
         level.setBlock(chestPosition.below(), Blocks.STONE.defaultBlockState(), 3);
         ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.claimFreshChest(level, chestPosition, container);
         helper.assertTrue(chest != null, "the drop fixture needs an owned chest");
@@ -190,6 +190,9 @@ public final class FrontierV3PlayerCustodyGameTests {
                 .mapToLong(io.farfrontier.palemirror.frontier.v3.model.PhysicalStackBinding::authorityEpoch).findFirst().orElse(1L);
         FrontierV3FungibleResourceObservationExecutor.observe(level, runtime, state, account, chest, epoch);
     }
+
+    /** The tiny bastion template owns this interior cell; distant offsets can leave a neighbour undiscoverable. */
+    private static BlockPos interior(GameTestHelper helper) { return helper.absolutePos(new BlockPos(1, 8, 0)); }
 
     /** Retains the independent exact-item observer fixture after the fresh fungible bootstrap cut. */
     private static FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> exactWheatRuntime(WorldId world) {

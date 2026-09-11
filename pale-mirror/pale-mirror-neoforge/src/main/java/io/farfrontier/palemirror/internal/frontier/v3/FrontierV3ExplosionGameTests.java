@@ -45,7 +45,7 @@ public final class FrontierV3ExplosionGameTests {
     @GameTest(batch = "pm-frontier-v3-explosion", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void managedBlastRetainsExactWorldDropEvidenceAcrossSavedDataReload(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); BlockPos position = helper.absolutePos(new BlockPos(46, 8, 0));
-        SubjectId itemId = new SubjectId("item:bootstrap-1-wheat");
+        SubjectId itemId = new SubjectId("item:bootstrap-1-engineering-tool-1");
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:explosion-world-drop"), 91L));
         var expected = initial.inventory().items().get(itemId); InventoryCustody.ContainerSlot source = (InventoryCustody.ContainerSlot) expected.custody();
         java.util.UUID carrierId = java.util.UUID.fromString("00000000-0000-0000-0000-000000000079");

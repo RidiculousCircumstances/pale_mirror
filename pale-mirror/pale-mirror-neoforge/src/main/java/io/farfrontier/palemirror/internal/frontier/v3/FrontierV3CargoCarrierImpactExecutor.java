@@ -111,7 +111,10 @@ final class FrontierV3CargoCarrierImpactExecutor {
             ledger.resolve(ready); return;
         }
         if (carrier != null && !carrier.isRemoved()) throw new IllegalStateException("cargo carrier UUID was rebound to a foreign entity");
-        List<ItemEntity> drops = level.getEntitiesOfClass(ItemEntity.class, new AABB(position).inflate(16.0D),
+        // Fungible stacks deliberately have no durable per-stack tag.  The successor must
+        // therefore remain in the immediate cart-impact footprint; accepting an equal stack
+        // from the wider scene would invent a custody handoff.
+        List<ItemEntity> drops = level.getEntitiesOfClass(ItemEntity.class, new AABB(position).inflate(4.0D),
                 drop -> matches(drop.getItem(), binding)).stream().sorted(Comparator.comparing(ItemEntity::getUUID)).toList();
         if (drops.size() != 1) return; // no unambiguous physical destination: keep restart-safe evidence fenced
         ItemEntity drop = drops.getFirst();

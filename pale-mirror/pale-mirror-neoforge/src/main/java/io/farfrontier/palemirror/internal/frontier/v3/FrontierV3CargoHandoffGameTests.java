@@ -7,6 +7,8 @@ import io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceTransition;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
+import io.farfrontier.palemirror.frontier.v3.model.CustodyAccount;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceCustody;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
@@ -147,9 +149,11 @@ public final class FrontierV3CargoHandoffGameTests {
         helper.assertTrue(chest != null, "a prepared exact depot may claim one fresh supported chest");
         helper.assertTrue(FrontierV3ContainerSurfaceExecutor.writeCanonicalSlots(chest, state, container),
                 "initial materialization must write every canonical slot with its exact item identity");
-        ExactItemStack wheat = state.inventory().itemAt(container, 0).orElseThrow();
-        helper.assertTrue(FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(0), wheat),
-                "the initial depot stack must retain its canonical item tag");
+        CustodyAccount wheat = fungibleContainerAccount(state, container);
+        helper.assertValueEqual(chest.getItem(0).getCount(), wheat.lotQuantities().values().stream().mapToInt(Integer::intValue).sum(),
+                "the initial depot stack must retain its canonical fungible quantity");
+        helper.assertValueEqual(net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(chest.getItem(0).getItem()).toString(), "minecraft:wheat",
+                "the initial depot stack must retain its canonical fungible kind");
         helper.assertTrue(chest.getItem(1).isEmpty(), "unowned canonical slots stay physically empty");
         helper.succeed();
     }
@@ -502,7 +506,7 @@ public final class FrontierV3CargoHandoffGameTests {
         helper.assertTrue(chest != null, "the active owned chest fixture must be constructible");
         FrontierV3CommandSubmission.submit(runtime, "hopper-return-prepare", container.value(), new ContainerSurfaceTransition(container, ContainerSurfaceStatus.PREPARED));
         FrontierV3CommandSubmission.submit(runtime, "hopper-return-active", container.value(), new ContainerSurfaceTransition(container, ContainerSurfaceStatus.ACTIVE));
-        ExactItemStack expected = state(runtime).inventory().itemAt(container, 0).orElseThrow();
+        ExactItemStack expected = state(runtime).inventory().itemAt(container, 20).orElseThrow();
         BlockPos hopperPosition = chestPosition.east(); level.setBlock(hopperPosition, Blocks.HOPPER.defaultBlockState(), 3);
         net.minecraft.world.level.block.entity.HopperBlockEntity hopper = (net.minecraft.world.level.block.entity.HopperBlockEntity) level.getBlockEntity(hopperPosition);
         hopper.setItem(0, FrontierV3CargoHandoffExecutor.materializedStack(expected));
@@ -510,14 +514,14 @@ public final class FrontierV3CargoHandoffGameTests {
         java.util.UUID carrierId = FrontierV3InventoryObservationExecutor.bindHopperCarrier(ledger, hopper, 0).carrierId();
         FrontierV3CommandSubmission.submit(runtime, "hopper-return-outbound", expected.id().value(),
                 new io.farfrontier.palemirror.frontier.v3.model.ExactItemCustodyChanged(expected.id(), expected.custody(), new InventoryCustody.WorldCarrier(carrierId)));
-        chest.setItem(0, hopper.getItem(0)); hopper.setItem(0, net.minecraft.world.item.ItemStack.EMPTY);
+        chest.setItem(20, hopper.getItem(0)); hopper.setItem(0, net.minecraft.world.item.ItemStack.EMPTY);
 
         helper.assertTrue(FrontierV3InventoryObservationExecutor.observeOne(level, runtime, state(runtime), ledger,
                         new FrontierV3InventoryObservationExecutor.StoreChest(chestPosition, container), chest),
                 "the active chest must observe the exact tagged hopper stack rather than recreate or approximate it");
-        helper.assertValueEqual(state(runtime).inventory().items().get(expected.id()).custody(), new InventoryCustody.ContainerSlot(container, 0),
+        helper.assertValueEqual(state(runtime).inventory().items().get(expected.id()).custody(), new InventoryCustody.ContainerSlot(container, 20),
                 "hopper return must durably restore the same canonical exact item to its owned slot");
-        helper.assertTrue(FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(0), expected),
+        helper.assertTrue(FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(20), expected),
                 "custody reconciliation must leave the physical returned stack untouched");
         helper.succeed();
     }
@@ -533,8 +537,6 @@ public final class FrontierV3CargoHandoffGameTests {
         helper.assertTrue(chest != null, "the ingress fixture needs an owned chest");
         FrontierV3CommandSubmission.submit(runtime, "ingress-prepare", container.value(), new ContainerSurfaceTransition(container, ContainerSurfaceStatus.PREPARED));
         FrontierV3CommandSubmission.submit(runtime, "ingress-active", container.value(), new ContainerSurfaceTransition(container, ContainerSurfaceStatus.ACTIVE));
-        ExactItemStack wheat = state(runtime).inventory().itemAt(container, 0).orElseThrow();
-        chest.setItem(0, FrontierV3CargoHandoffExecutor.materializedStack(wheat));
         SubjectId pendingId = new SubjectId("item:ingress-game-test-iron");
         net.minecraft.world.item.ItemStack supplied = new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_INGOT, 64);
         FrontierV3CargoHandoffExecutor.bindExactItemId(supplied, pendingId);
@@ -557,6 +559,10 @@ public final class FrontierV3CargoHandoffGameTests {
 
     private static FrontierWorldState state(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         return new FrontierWorldStateCodec().decode(runtime.checkpointImage().orElseThrow().canonicalState());
+    }
+    private static CustodyAccount fungibleContainerAccount(FrontierWorldState state, SubjectId container) {
+        return state.inventory().fungibleResources().accounts().values().stream()
+                .filter(account -> account.custody().equals(new ResourceCustody.Container(container))).findFirst().orElseThrow();
     }
     /** The bastion test template is deliberately tiny: projection fixtures stay in their own cell. */
     private static BlockPos interior(GameTestHelper helper) { return helper.absolutePos(new BlockPos(1, 8, 0)); }

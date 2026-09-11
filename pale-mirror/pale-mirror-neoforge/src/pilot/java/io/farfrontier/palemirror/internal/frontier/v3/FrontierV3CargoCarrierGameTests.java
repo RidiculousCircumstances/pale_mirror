@@ -292,10 +292,10 @@ public final class FrontierV3CargoCarrierGameTests {
                                 helper.assertTrue(level.getEntity(drop.getUUID()) instanceof ItemEntity,
                                         "the released fungible cart stack must remain one nearby physical drop before reconciliation");
                                 helper.assertTrue(level.hasChunkAt(impactPosition), "the retained carrier impact position must remain ordinarily loaded");
-                                helper.assertValueEqual(level.getEntitiesOfClass(ItemEntity.class, new net.minecraft.world.phys.AABB(impactPosition).inflate(16.0D),
+                                helper.assertValueEqual(level.getEntitiesOfClass(ItemEntity.class, new net.minecraft.world.phys.AABB(impactPosition).inflate(4.0D),
                                                 candidateDrop -> ItemStack.isSameItemSameComponents(candidateDrop.getItem(), drop.getItem())
                                                         && candidateDrop.getItem().getCount() == drop.getItem().getCount()).size(), 1,
-                                        "the restart fixture must expose exactly one physical successor drop");
+                                        "the restart fixture must expose exactly one physical successor drop in the immediate cart-impact footprint");
                                 FrontierV3CargoCarrierImpactExecutor.tick(level, runtime, restored, level.getGameTime() + 1L);
                                 var successor = state(runtime).inventory().fungibleResources().accounts().values().stream()
                                         .filter(account -> account.custody().equals(new ResourceCustody.WorldCarrier(drop.getUUID()))).findFirst();
