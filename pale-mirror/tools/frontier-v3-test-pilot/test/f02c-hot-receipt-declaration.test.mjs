@@ -46,7 +46,7 @@ test('HOT declaration begins before manufacture and names three exact persistent
   const slots = assertF02cHotReceiptDeclaration(declaration);
   assert.deepEqual(Object.keys(slots), ['preRestart', 'recovered', 'released']);
   assert.deepEqual([slots.preRestart.after, slots.recovered.after, slots.released.after], [2, 3, 5]);
-  assert.deepEqual(declaration.actions[0].demandHandshake, { request: 'settlement-assault-visit', assault: 'assault:development-settlement-assault', handoff: { x: -360, y: 64, z: -352 } });
+  assert.deepEqual(declaration.actions[0].demandHandshake, { request: 'settlement-assault-visit', assault: 'assault:development-settlement-assault', handoff: { x: -360, y: 64, z: -340 } });
   assert.equal(declaration.actions[0].settleMs, 0);
 });
 

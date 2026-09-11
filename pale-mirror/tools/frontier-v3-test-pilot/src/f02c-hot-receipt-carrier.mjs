@@ -4,7 +4,8 @@ import { validateLifecycleBarrierRecords } from './lifecycle-barrier.mjs';
 
 const SCENE = 'assault:development-settlement-assault';
 const HANDSHAKE = 'settlement-assault-visit';
-const HANDOFF = Object.freeze({ x: -360, y: 64, z: -352 });
+// Northwatch's canonical settlement anchor, distinct from the player travel coordinate below.
+const HANDOFF = Object.freeze({ x: -360, y: 64, z: -340 });
 const SLOTS = Object.freeze([[2, 'preRestart', 'HOT'], [3, 'recovered', 'HOT'], [5, 'released', 'CLOSED']]);
 
 /** The completed persistent-run manifest, rather than declaration literals, is the HOT receipt authority. */

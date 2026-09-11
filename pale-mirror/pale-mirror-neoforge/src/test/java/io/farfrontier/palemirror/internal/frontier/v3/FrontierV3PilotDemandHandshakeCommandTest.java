@@ -23,7 +23,8 @@ class FrontierV3PilotDemandHandshakeCommandTest {
     private static final FrontierV3PilotDemandHandshakeCommand.TicketState READY_TICKET =
             new FrontierV3PilotDemandHandshakeCommand.TicketState(true, true, 1, true);
     private static final SubjectId ASSAULT = new SubjectId("assault:requested");
-    private static final BlockPosition HANDOFF = new BlockPosition(-360, 64, -352);
+    /** Northwatch settlement anchor; it is deliberately not the player travel coordinate. */
+    private static final BlockPosition HANDOFF = new BlockPosition(-360, 64, -340);
     private static final UUID PLAYER = UUID.fromString("00000000-0000-0000-0000-000000000035");
 
     @Test
@@ -65,7 +66,7 @@ class FrontierV3PilotDemandHandshakeCommandTest {
                 "pale_mirror:frontier_graybox", new BlockPos(-360, 65, -352), Optional.of(PLAYER), Optional.of(new BlockPos(-360, 65, -352)),
                 true, READY_TICKET, snapshot);
         assertEquals(FrontierV3PilotDemandHandshakeCommand.Reason.ADMITTED, receipt.reason());
-        assertTrue(receipt.json().contains("\"candidateHandoff\":{\"x\":-360,\"y\":64,\"z\":-352}"));
+        assertTrue(receipt.json().contains("\"candidateHandoff\":{\"x\":-360,\"y\":64,\"z\":-340}"));
         assertTrue(receipt.json().contains("\"serverPlayerPosition\":{\"x\":-360,\"y\":65,\"z\":-352}"));
     }
 
