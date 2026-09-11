@@ -1,6 +1,6 @@
 # PM-F02C-COLD-ADMISSION-FINAL-27: verify the bounded COLD admission correction
 
-Specification revision: 1. Status: `AUTHORIZED_AWAITING_EXECUTOR`.
+Specification revision: 2. Status: `EXECUTING_FINAL_VERIFICATION`.
 Parent slice: F0.2C. Risk: critical-code. Engineer: supervising root.
 Executor: one fresh `gpt-5.6-terra`, reasoning `high`, routed as
 `/root/f02c_shared_assault_challenge24/terra_cold_admission_final27`.
@@ -92,6 +92,6 @@ evidence and remove only exact task-owned disposable runtime bytes after their
 receipt is secured. Do not contact predecessor builders or request an
 intermediate design decision.
 
-Assignment epoch is set when the fresh executor starts. The supervisor performs
-one bounded liveness check after each complete ten-minute silence interval and
-one economy audit after one hour if still active.
+Assignment epoch: `2026-09-11T00:53:20Z`. The supervisor performs one bounded
+liveness check after each complete ten-minute silence interval and one economy
+audit after one hour if still active.
