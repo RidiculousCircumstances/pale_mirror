@@ -30,7 +30,6 @@ final class FrontierDevelopmentScenarios {
         FrontierWorldState state = null; RouteOperation operation = null;
         for (long tick = 1L; tick <= 12_000L; tick++) {
             engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
-            if (tick % 20L != 0L) continue;
             state = codec.decode(engine.checkpoint().canonicalState());
             RouteOperation candidate = state.operations().get(new SubjectId("operation:supply-1-2"));
             if (candidate != null && candidate.stage() == OperationStage.EN_ROUTE && candidate.activeTravel().isPresent()
@@ -41,6 +40,7 @@ final class FrontierDevelopmentScenarios {
         }
         if (state == null || operation == null) throw new IllegalStateException("development scene needs one en-route operation");
         BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor().surface().support();
+        SubjectId operationId = operation.id();
         List<Bioform> bioforms = state.bootstrap().hive().bioforms();
         List<Bioform> exactRoster = java.util.stream.Stream.of(
                 bioforms.stream().filter(Bioform::isOverseer).sorted(Comparator.comparing(Bioform::id)).limit(1),
@@ -52,12 +52,18 @@ final class FrontierDevelopmentScenarios {
             state = deployFixtureBioform(state, bioform.id(), intercept);
         }
         SubjectId hive = state.bootstrap().hive().id();
+        StrategicPlanState plans = state.strategicPlans();
+        for (StrategicTask existing : plans.tasks().values()) {
+            if (existing.ownerId().equals(hive) && plans.objectives().get(existing.objectiveId()).status() == StrategicObjectiveStatus.ACTIVE) {
+                plans = plans.transitionTask(existing.id(), StrategicTaskStatus.BLOCKED);
+            }
+        }
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:development-hot-strike"), hive,
                 StrategicObjectiveKind.HIVE_INTERCEPT_ROUTE_OPERATION, Optional.empty(), 99, StrategicObjectiveStatus.ACTIVE);
         StrategicTask task = new StrategicTask(new SubjectId("task:development-hot-strike"), objective.id(), hive,
-                StrategicTaskKind.INTERCEPT_ROUTE_OPERATION, Optional.empty(), Optional.of(operation.id()),
-                Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD), List.of(), StrategicTaskStatus.PENDING, Optional.of(intercept));
-        state = state.withStrategicPlans(state.strategicPlans().addObjective(objective).addTask(task));
+                StrategicTaskKind.INTERCEPT_ROUTE_OPERATION, Optional.empty(), Optional.of(operationId), Optional.empty(),
+                List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD), List.of(), StrategicTaskStatus.PENDING, Optional.of(intercept));
+        state = state.withStrategicPlans(plans.addObjective(objective).addTask(task));
         Bioform scout = state.bootstrap().hive().bioforms().stream().filter(Bioform::isScout).findFirst().orElseThrow();
         HiveOperationKnowledge.Sighting sighting = new HiveOperationKnowledge.Sighting(operation.id(), scout.id(), intercept, 2_600L);
         state = state.withStrategicPlans(state.strategicPlans().withHiveOperationKnowledge(state.strategicPlans().hiveOperationKnowledge().observe(sighting)));
@@ -846,6 +852,38 @@ final class FrontierDevelopmentScenarios {
         state = StrategicObjectiveProcess.reduceTaskTransition(state, hive, new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE));
         state = HiveMobilizationProcess.reduceStarted(state, hive, new HiveMobilizationStarted(mobilization));
         return new HiveMobilizationFixture(state, new SimInstant(200L), List.of(), mobilization.id(), mobilization.memberIds());
+    }
+
+    /**
+     * Exact post-contact precondition for the native survivor-return carrier.  It uses the same
+     * reducers as a completed expedition: no fixture body, lease, movement, or return cursor is
+     * fabricated.  The ordinary player must still load and observe the retained next edge.
+     */
+    static HiveMobilizationFixture hiveReturnFixture(WorldId worldId, long seed) {
+        HiveMobilizationFixture base = hiveMobilizationFixture(worldId, seed);
+        FrontierWorldState state = base.state(); SubjectId hive = state.bootstrap().hive().id();
+        for (SubjectId member : base.memberIds()) {
+            HiveMobilization current = state.hiveColony().mobilizations().get(base.mobilizationId());
+            state = HiveMobilizationProcess.reduceReleaseStarted(state, hive, new HiveMobilizationReleaseStarted(current.id()));
+            state = HiveMobilizationProcess.reduceCocoonReleased(state, hive, new HiveMobilizationCocoonReleased(current.id(), member));
+        }
+        SettlementAssault assault = null;
+        for (int step = 0; step < 256; step++) {
+            HiveMobilization current = state.hiveColony().mobilizations().get(base.mobilizationId());
+            List<ProposedEvent> planned = HiveMobilizationProcess.planAssemblyProgress(state,
+                    HiveMobilizationProcess.assemblyProgress(current.id(), 300L + step * 20L));
+            HiveMobilizationAssemblyAdvanced advanced = (HiveMobilizationAssemblyAdvanced) planned.getFirst().payload();
+            state = HiveMobilizationProcess.reduceAssemblyAdvanced(state, hive, advanced);
+            for (ProposedEvent event : planned) if (event.payload() instanceof HiveMobilizationDeparted departed) {
+                assault = departed.assault(); state = HiveMobilizationProcess.reduceDeparted(state, hive, departed); break;
+            }
+            if (assault != null) break;
+        }
+        if (assault == null) throw new IllegalStateException("development return fixture did not reach exact departure");
+        state = HiveSettlementAssaultProcess.reduceResolved(state, hive, new SettlementAssaultResolved(assault.id(), SettlementAssaultOutcome.ABORTED));
+        HiveMobilization returning = state.hiveColony().mobilizations().get(base.mobilizationId());
+        if (returning.status() != HiveMobilizationStatus.RETURNING) throw new IllegalStateException("development return fixture lacks retained survivors");
+        return new HiveMobilizationFixture(state, new SimInstant(900L), List.of(), base.mobilizationId(), base.memberIds());
     }
 
     /**

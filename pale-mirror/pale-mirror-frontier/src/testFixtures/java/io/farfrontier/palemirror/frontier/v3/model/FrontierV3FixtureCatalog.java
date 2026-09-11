@@ -53,6 +53,7 @@ public final class FrontierV3FixtureCatalog {
             Map.entry("engineeringWorksite", FrontierV3FixtureCatalog::engineeringWorksiteConfiguration),
             Map.entry("hiveGrowth", FrontierV3FixtureCatalog::hiveGrowthConfiguration),
             Map.entry("hiveMobilization", FrontierV3FixtureCatalog::hiveMobilizationConfiguration),
+            Map.entry("hiveReturn", FrontierV3FixtureCatalog::hiveReturnConfiguration),
             Map.entry("hiveNutrientTransfer", FrontierV3FixtureCatalog::hiveNutrientTransferConfiguration),
             Map.entry("settlementProvision", FrontierV3FixtureCatalog::settlementProvisionConfiguration),
             Map.entry("routeSceneReturn", FrontierV3FixtureCatalog::routeSceneReturnConfiguration),
@@ -148,6 +149,10 @@ public final class FrontierV3FixtureCatalog {
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> hiveMobilizationConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.HiveMobilizationFixture fixture = FrontierDevelopmentScenarios.hiveMobilizationFixture(worldId, seed);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
+    }
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> hiveReturnConfiguration(WorldId worldId, long seed) {
+        FrontierDevelopmentScenarios.HiveMobilizationFixture fixture = FrontierDevelopmentScenarios.hiveReturnFixture(worldId, seed);
         return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
     }
 

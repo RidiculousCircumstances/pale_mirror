@@ -72,7 +72,7 @@ class FrontierV3FixtureCatalogTest {
     @Test
     void everyDeclaredFixtureProfileHasExactlyOneLoadedProviderAndRequiredEvidenceContract() {
         List<FrontierV3FixtureCatalog.Profile> profiles = FrontierV3FixtureCatalog.profiles();
-        assertEquals(30, profiles.size());
+        assertEquals(31, profiles.size());
         assertEquals(profiles.size(), profiles.stream().map(FrontierV3FixtureCatalog.Profile::id).distinct().count());
         for (int index = 0; index < profiles.size(); index++) {
             FrontierV3FixtureCatalog.Profile profile = profiles.get(index);
@@ -80,8 +80,9 @@ class FrontierV3FixtureCatalogTest {
             assertEquals("production", profile.rulesetId());
             assertTrue(profile.sourceProfile().length() > 0);
             assertTrue(profile.requiredAssertion().length() > 0);
-            var configuration = FrontierV3FixtureCatalog.configuration(profile.id(), new WorldId("frontier:catalog-" + index), 41L);
-            assertEquals("frontier:catalog-" + index, configuration.worldId().value());
+            String world = "frontier:catalog-" + profile.id();
+            var configuration = FrontierV3FixtureCatalog.configuration(profile.id(), new WorldId(world), 41L);
+            assertEquals(world, configuration.worldId().value());
             assertEquals(FrontierRulesets.production(), configuration.initialState().bootstrap().ruleset(),
                     "a fixture may vary canonical state, but it must not silently vary production balance rules");
         }
@@ -226,6 +227,17 @@ class FrontierV3FixtureCatalogTest {
         FrontierObjectBoard board = FrontierReadabilityPlan.compile(state).boards().get(hibernaculum);
         assertEquals(FrontierObjectBoard.Tone.WARNING, board.tone());
         assertTrue(board.text().endsWith("WAKE SEQUENCE · 0/4"), "the physical tray must explain its own waking state without a HUD");
+    }
+    @Test
+    void hiveReturnFixtureRetainsTheSameSurvivingExpeditionBeforeAnyPhysicalVisit() {
+        FrontierWorldState state = FrontierV3FixtureCatalog.hiveReturnConfiguration(
+                new WorldId("frontier:hive-return-fixture"), 41L).initialState();
+        HiveMobilization returnParent = state.hiveColony().mobilizations().values().stream().findFirst().orElseThrow();
+        assertEquals(HiveMobilizationStatus.RETURNING, returnParent.status());
+        assertEquals(returnParent.memberIds(), returnParent.returnAssembly().orElseThrow().members().keySet().stream().sorted().toList());
+        assertTrue(returnParent.memberIds().stream().allMatch(member -> state.hiveColony().bioformLifecycles().get(member).phase()
+                == BioformLifecyclePhase.RETURNING));
+        assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
     }
 
     @Test
