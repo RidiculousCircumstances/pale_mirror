@@ -86,6 +86,48 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         return new FungibleResourceLedger(lots, claims, next, withoutBindingsFor(from.id()));
     }
 
+    /**
+     * Commits one observed partial physical handoff as one canonical transaction. The source
+     * fence and both replacement layouts are checked together, so releasing a visible stack
+     * cannot open an interim COLD-spending window before its player/hopper/drop custody exists.
+     */
+    public FungibleResourceLedger transferObservedToNewAccount(SubjectId fromId, CustodyAccount destination, long sourceEpoch,
+                                                               long destinationEpoch, Map<SubjectId, Integer> lotQuantities,
+                                                               Map<SubjectId, Integer> claimQuantities,
+                                                               List<PhysicalStackBinding> remainingSource,
+                                                               List<PhysicalStackBinding> destinationBindings) {
+        CustodyAccount from = requireAccount(fromId); Objects.requireNonNull(destination, "observed destination account");
+        Objects.requireNonNull(remainingSource, "observed remaining source layout"); Objects.requireNonNull(destinationBindings, "observed destination layout");
+        if (accounts.containsKey(destination.id()) || sourceEpoch < 1 || destinationEpoch < 1) throw new IllegalArgumentException("observed handoff has an invalid new custody account or epoch");
+        List<PhysicalStackBinding> current = bindings.values().stream().filter(binding -> binding.accountId().equals(from.id())).toList();
+        if (current.isEmpty() || current.stream().anyMatch(binding -> binding.authorityEpoch() != sourceEpoch)) {
+            throw new IllegalArgumentException("observed handoff does not own the current source binding");
+        }
+        requireSubset(from.lotQuantities(), lotQuantities, "observed transfer lots"); requireOptionalSubset(from.claimQuantities(), claimQuantities, "observed transfer claims");
+        if (!claimQuantities.isEmpty() && sum(lotQuantities) != sum(claimQuantities)) throw new IllegalArgumentException("observed claimed transfer must preserve exact quantity");
+        if (!destination.lotQuantities().equals(lotQuantities) || !destination.claimQuantities().equals(claimQuantities)) {
+            throw new IllegalArgumentException("observed destination must retain exactly the transferred quantities");
+        }
+        Map<SubjectId, Integer> remainingLots = subtract(from.lotQuantities(), lotQuantities);
+        Map<SubjectId, Integer> remainingClaims = subtract(from.claimQuantities(), claimQuantities);
+        if (remainingLots.isEmpty() != remainingSource.isEmpty()) throw new IllegalArgumentException("observed source layout does not match its remaining custody");
+        requireBindings(remainingSource, from.id(), sourceEpoch, "observed source layout");
+        requireBindings(destinationBindings, destination.id(), destinationEpoch, "observed destination layout");
+        if (!boundQuantities(remainingSource, true).equals(remainingLots) || !boundQuantities(remainingSource, false).equals(remainingClaims)
+                || !boundQuantities(destinationBindings, true).equals(destination.lotQuantities())
+                || !boundQuantities(destinationBindings, false).equals(destination.claimQuantities())) {
+            throw new IllegalArgumentException("observed handoff layout does not exactly account for its custody");
+        }
+        Map<SubjectId, CustodyAccount> nextAccounts = new HashMap<>(accounts);
+        if (remainingLots.isEmpty()) nextAccounts.remove(from.id());
+        else nextAccounts.put(from.id(), new CustodyAccount(from.id(), from.custody(), remainingLots, remainingClaims));
+        nextAccounts.put(destination.id(), destination);
+        Map<SubjectId, PhysicalStackBinding> nextBindings = withoutBindingsFor(from.id());
+        for (PhysicalStackBinding binding : remainingSource) if (nextBindings.put(binding.id(), binding) != null) throw new IllegalArgumentException("observed source binding identity is already live");
+        for (PhysicalStackBinding binding : destinationBindings) if (nextBindings.put(binding.id(), binding) != null) throw new IllegalArgumentException("observed destination binding identity is already live");
+        return new FungibleResourceLedger(lots, claims, nextAccounts, nextBindings);
+    }
+
     /** Changes canonical lot lineage while retaining total resource quantity and all reservations. */
     public FungibleResourceLedger split(SubjectId accountId, SubjectId sourceLotId, ResourceLot child, int quantity) {
         CustodyAccount account = requireAccount(accountId); ResourceLot source = requireLot(sourceLotId);
@@ -220,6 +262,17 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         if (bindings.values().stream().anyMatch(binding -> binding.accountId().equals(accountId))) {
             throw new IllegalStateException("fungible " + operation + " is fenced by active physical custody");
         }
+    }
+    private static void requireBindings(List<PhysicalStackBinding> bindings, SubjectId accountId, long epoch, String label) {
+        if (bindings == null || bindings.stream().anyMatch(binding -> !binding.accountId().equals(accountId) || binding.authorityEpoch() != epoch)) {
+            throw new IllegalArgumentException(label + " does not match its custody authority");
+        }
+    }
+    private static Map<SubjectId, Integer> boundQuantities(List<PhysicalStackBinding> bindings, boolean lots) {
+        Map<SubjectId, Integer> result = new HashMap<>();
+        bindings.forEach(binding -> (lots ? binding.lotQuantities() : binding.claimQuantities())
+                .forEach((id, quantity) -> result.merge(id, quantity, Integer::sum)));
+        return Map.copyOf(result);
     }
     private static CustodyAccount accountWithAdded(CustodyAccount account, Map<SubjectId, Integer> lots, Map<SubjectId, Integer> claims) {
         Map<SubjectId, Integer> nextLots = new HashMap<>(account.lotQuantities()); lots.forEach((id, quantity) -> nextLots.merge(id, quantity, Integer::sum));

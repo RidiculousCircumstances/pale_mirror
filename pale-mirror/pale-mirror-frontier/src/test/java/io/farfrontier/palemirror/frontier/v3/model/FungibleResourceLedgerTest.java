@@ -92,6 +92,25 @@ class FungibleResourceLedgerTest {
     }
 
     @Test
+    void observedPartialHandoffMovesOneBoundedPortionWithoutAnInterimColdSpendingWindow() {
+        FungibleResourceLedger hot = issue(10).rebind(DEPOT_ACCOUNT, 4L, List.of(binding("binding:source", 4L, 10,
+                new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(DEPOT, 0)))));
+        SubjectId playerAccountId = new SubjectId("custody:player-handoff");
+        CustodyAccount player = new CustodyAccount(playerAccountId, new ResourceCustody.Player(uuid(4)), Map.of(LOT, 4), Map.of());
+        PhysicalStackBinding remaining = binding("binding:source-remainder", 4L, 6,
+                new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(DEPOT, 0)));
+        PhysicalStackBinding held = new PhysicalStackBinding(new SubjectId("binding:player-handoff"), playerAccountId,
+                new PhysicalStackAddress.PlayerSlot(uuid(4), 0), 5L, "minecraft:bread", Map.of(LOT, 4), Map.of());
+
+        FungibleResourceLedger moved = hot.transferObservedToNewAccount(DEPOT_ACCOUNT, player, 4L, 5L, Map.of(LOT, 4), Map.of(), List.of(remaining), List.of(held));
+        assertEquals(Map.of(LOT, 6), moved.accounts().get(DEPOT_ACCOUNT).lotQuantities());
+        assertEquals(Map.of(LOT, 4), moved.accounts().get(playerAccountId).lotQuantities());
+        assertEquals(10, moved.totalQuantity(OWNER, "minecraft:bread"));
+        assertThrows(IllegalArgumentException.class, () -> hot.transferObservedToNewAccount(DEPOT_ACCOUNT, player, 3L, 5L,
+                Map.of(LOT, 4), Map.of(), List.of(remaining), List.of(held)));
+    }
+
+    @Test
     void snapshotRoundTripPreservesLotsClaimsAccountsAndTransientBindingsExactly() {
         WorldId world = new WorldId("frontier:fungible-ledger-round-trip");
         FrontierWorldState baseline = new FrontierWorldStateCodec().decode(FrontierEngines
