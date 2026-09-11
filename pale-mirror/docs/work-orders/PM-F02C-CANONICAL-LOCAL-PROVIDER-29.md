@@ -1,9 +1,9 @@
 # PM-F02C-CANONICAL-LOCAL-PROVIDER-29: one bounded canonical provider query
 
-Specification revision: 1. Status: `AUTHORIZED`.
+Specification revision: 2. Status: `EXECUTING_METHOD_BUILD`.
 Parent slice: F0.2C. Risk: critical-code. Engineer: supervising root.
-Executor: one fresh `gpt-5.6-terra`, reasoning `high`; active identity is
-recorded in `CONTINUITY.md` after dispatch.
+Executor: one fresh `gpt-5.6-terra`, reasoning `high`, routed as
+`/root/f02c_shared_assault_challenge24/terra_canonical_local_provider29`.
 
 ## Baseline and bounded context
 
@@ -113,5 +113,6 @@ proof-category failure. No aggregate gate, GameTest, Minecraft, R14, JFR, CI,
 push or publication.
 
 One consolidated semantic return is the maximum for this fresh context. A
-second rejection closes it. Assignment and ten-minute liveness epochs are added
-to the ledger on dispatch; one-hour economy auditing remains binding.
+second rejection closes it. Assignment epoch: `2026-09-11T01:57:44Z`; the first
+bounded liveness check is due only after a complete ten-minute silence interval,
+and the first economy audit is due after `2026-09-11T02:57:44Z` if still active.
