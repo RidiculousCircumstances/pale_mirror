@@ -22,6 +22,7 @@ import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseTransition;
 import io.farfrontier.palemirror.frontier.v3.model.SceneMember;
 import io.farfrontier.palemirror.frontier.v3.model.SceneMemberPosition;
+import io.farfrontier.palemirror.frontier.v3.model.SettlementAssault;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCandidate;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultCauseIdentity;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCause;
@@ -247,7 +248,7 @@ final class FrontierV3SettlementAssaultSceneExecutor {
             conflict(level, runtime, lease, "hot-body-unavailable");
             return;
         }
-        for (Body actor : bodies) FrontierV3ControlledMobMotion.moveToward(level, actor.mob(), target(state, actor, bodies));
+        for (Body actor : bodies) FrontierV3ControlledMobMotion.moveToward(level, actor.mob(), target(state, lease, actor, bodies));
         if (confirmedStrikeForThisLease(state, lease)) {
             // One HOT lease owns one exact COLD epoch.  Its durable receipt remains visible
             // across restart while ordinary demand loss decides when the completed lease drains;
@@ -328,7 +329,20 @@ final class FrontierV3SettlementAssaultSceneExecutor {
         }).filter(java.util.Objects::nonNull).sorted(Comparator.comparing(value -> value.member().actorId())).toList();
     }
 
-    private static Vec3 target(FrontierWorldState state, Body actor, List<Body> bodies) {
+    /**
+     * The two actors named by the current canonical epoch must approach one another.  Choosing
+     * merely a nearest opponent lets the named defender retreat forever while a different
+     * resident remains locally reachable, so the physical executor can never submit the exact
+     * durable strike it is required to confirm.
+     */
+    private static Vec3 target(FrontierWorldState state, SceneLease lease, Body actor, List<Body> bodies) {
+        StrikePair pair = currentStrikePair(state, lease).orElse(null);
+        if (pair != null) {
+            SubjectId opponent = actor.member().actorId().equals(pair.attackerId()) ? pair.targetId()
+                    : actor.member().actorId().equals(pair.targetId()) ? pair.attackerId() : null;
+            if (opponent != null) return bodies.stream().filter(value -> value.member().actorId().equals(opponent)).findFirst()
+                    .map(value -> value.mob().position()).orElse(actor.mob().position());
+        }
         Body opponent = bodies.stream().filter(value -> value.bioform() != actor.bioform()).min(Comparator
                 .comparingDouble((Body value) -> actor.mob().distanceToSqr(value.mob())).thenComparing(value -> value.member().actorId())).orElse(null);
         if (opponent == null) return actor.mob().position();
@@ -341,6 +355,24 @@ final class FrontierV3SettlementAssaultSceneExecutor {
         return state.humanPopulation().resident(actorId) != null && state.humanPopulation().resident(actorId).role()
                 == io.farfrontier.palemirror.frontier.v3.model.ResidentRole.GUARD;
     }
+
+    /** One exact HOT pair shared by local motion and the physical-intent executor. */
+    static Optional<StrikePair> currentStrikePair(FrontierWorldState state, SceneLease lease) {
+        if (!FrontierSceneBehaviors.isSettlementAssault(lease)) return Optional.empty();
+        SettlementAssault assault = state.strategicPlans().settlementAssaults().get(FrontierSceneBehaviors.settlementAssault(lease).assaultId());
+        return assault == null ? Optional.empty() : currentStrikePair(assault,
+                SettlementAssaultCauseIdentity.hotEpoch(assault, state.physicalIntents().values()));
+    }
+
+    /** Pure canonical selection: epoch parity changes the attacking side, not the pair identity. */
+    static Optional<StrikePair> currentStrikePair(SettlementAssault assault, long epoch) {
+        List<SubjectId> attackers = ((epoch & 1L) == 0L ? assault.combatantAttackerIds() : assault.defenderIds()).stream().sorted().toList();
+        List<SubjectId> targets = ((epoch & 1L) == 0L ? assault.defenderIds() : assault.combatantAttackerIds()).stream().sorted().toList();
+        if (attackers.isEmpty() || targets.isEmpty()) return Optional.empty();
+        return Optional.of(new StrikePair(attackers.get(Math.floorMod(epoch, attackers.size())), targets.get(Math.floorMod(epoch, targets.size()))));
+    }
+
+    record StrikePair(SubjectId attackerId, SubjectId targetId) { }
 
     private static boolean playerWithinSafeRadius(ServerLevel level, SceneLease lease) {
         List<BlockPos> positions = new ArrayList<>(List.of(new BlockPos(lease.handoffPosition().x(), lease.handoffPosition().y(), lease.handoffPosition().z())));

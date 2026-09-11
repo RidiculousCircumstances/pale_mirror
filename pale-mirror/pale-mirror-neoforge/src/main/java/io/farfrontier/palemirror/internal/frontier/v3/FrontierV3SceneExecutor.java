@@ -494,16 +494,10 @@ final class FrontierV3SceneExecutor {
         List<Body> bodies = lease.members().stream().map(member -> body(level, state, lease, member)).flatMap(Optional::stream).toList();
         SettlementAssault assault = settlementAssault ? state.strategicPlans().settlementAssaults().get(FrontierSceneBehaviors.settlementAssault(lease).assaultId()) : null;
         long strikeEpoch = assault == null ? 0L : SettlementAssaultCauseIdentity.hotEpoch(assault, state.physicalIntents().values());
-        boolean hiveTurn = settlementAssault ? (strikeEpoch & 1L) == 0L : false;
-        final boolean initialHiveTurn = hiveTurn;
-        List<Body> attackers = settlementAssault ? bodies.stream().filter(body -> initialHiveTurn ? assault.combatantAttackerIds().contains(body.member().actorId())
-                : assault.defenderIds().contains(body.member().actorId())).toList() : List.of();
-        List<Body> targets = settlementAssault ? bodies.stream().filter(body -> initialHiveTurn ? assault.defenderIds().contains(body.member().actorId())
-                : assault.combatantAttackerIds().contains(body.member().actorId())).toList() : List.of();
-        Body selectedAttacker = settlementAssault ? attackers.stream().sorted(Comparator.comparing(body -> body.member().actorId()))
-                .skip(Math.floorMod(strikeEpoch, Math.max(1, attackers.size()))).findFirst().orElse(null) : null;
+        FrontierV3SettlementAssaultSceneExecutor.StrikePair pair = settlementAssault && assault != null
+                ? FrontierV3SettlementAssaultSceneExecutor.currentStrikePair(assault, strikeEpoch).orElse(null) : null;
         SubjectId sceneCause = FrontierV3SceneBehaviorRegistry.strikeCause(state, lease,
-                selectedAttacker == null ? null : selectedAttacker.member().actorId(), strikeEpoch);
+                pair == null ? null : pair.attackerId(), strikeEpoch);
         if (sceneCause == null) return;
         Optional<PhysicalIntent> pending = state.physicalIntents().values().stream().filter(intent -> intent.kind() == PhysicalIntentKind.SCENE_STRIKE
                 && intent.causeSubjectId().equals(sceneCause) && intent.status() != PhysicalIntentStatus.CONFIRMED)
@@ -511,17 +505,20 @@ final class FrontierV3SceneExecutor {
                 .min(Comparator.comparing(PhysicalIntent::id));
         if (pending.filter(intent -> intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART).isPresent()) return;
         if (pending.isEmpty()) {
+            List<Body> attackers;
+            List<Body> targets;
             if (!settlementAssault) {
-                hiveTurn = confirmedStrikeCount(state, sceneCause) % 2L == 0L;
+                boolean hiveTurn = confirmedStrikeCount(state, sceneCause) % 2L == 0L;
                 final boolean genericHiveTurn = hiveTurn;
                 attackers = bodies.stream().filter(body -> genericHiveTurn ? body.bioform() : !body.bioform() && residentGuard(state, body.member().actorId())).toList();
                 targets = bodies.stream().filter(body -> genericHiveTurn ? !body.bioform() : body.bioform()).toList();
+            } else {
+                attackers = bodies.stream().filter(body -> body.member().actorId().equals(pair.attackerId())).toList();
+                targets = bodies.stream().filter(body -> body.member().actorId().equals(pair.targetId())).toList();
             }
             if (attackers.isEmpty() || targets.isEmpty()) return;
-            Body attacker = settlementAssault ? selectedAttacker : attackers.stream().min(Comparator.comparing(body -> body.member().actorId())).orElseThrow();
-            Body target = settlementAssault ? targets.stream().sorted(Comparator.comparing(body -> body.member().actorId()))
-                    .skip(Math.floorMod(strikeEpoch, Math.max(1, targets.size()))).findFirst().orElseThrow()
-                    : targets.stream().min(Comparator.comparingDouble((Body body) -> attacker.entity().distanceToSqr(body.entity()))
+            Body attacker = settlementAssault ? attackers.getFirst() : attackers.stream().min(Comparator.comparing(body -> body.member().actorId())).orElseThrow();
+            Body target = settlementAssault ? targets.getFirst() : targets.stream().min(Comparator.comparingDouble((Body body) -> attacker.entity().distanceToSqr(body.entity()))
                     .thenComparing(body -> body.member().actorId())).orElseThrow();
             if (attacker.entity().distanceToSqr(target.entity()) > 3.61D) return;
             forgetLastObserved(runtime, lease.id());

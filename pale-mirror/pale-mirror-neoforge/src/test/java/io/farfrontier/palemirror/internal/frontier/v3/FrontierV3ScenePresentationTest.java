@@ -73,4 +73,21 @@ class FrontierV3ScenePresentationTest {
         assertEquals(HumanTacticalFunction.CIVILIAN, HumanTacticalFunctionProjection.derive(state, civilian.id()));
         assertFalse(FrontierSceneLabels.ambientActorNameVisible(state, civilian.id(), false));
     }
+
+    @Test
+    void keepsHotMotionBoundToTheExactCanonicalAssaultPair(@TempDir Path directory) {
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
+                FrontierV3FixtureCatalog.settlementAssaultConfiguration(new WorldId("frontier:scene-hot-pair"), 74L),
+                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
+        var assault = runtime.decodedState().orElseThrow().strategicPlans().settlementAssaults().values().iterator().next();
+
+        var first = FrontierV3SettlementAssaultSceneExecutor.currentStrikePair(assault, 0L).orElseThrow();
+        var second = FrontierV3SettlementAssaultSceneExecutor.currentStrikePair(assault, 1L).orElseThrow();
+
+        assertEquals(assault.combatantAttackerIds().stream().sorted().toList().getFirst(), first.attackerId());
+        assertEquals(assault.defenderIds().stream().sorted().toList().getFirst(), first.targetId());
+        assertEquals(assault.defenderIds().stream().sorted().toList().get(1 % assault.defenderIds().size()), second.attackerId());
+        assertEquals(assault.combatantAttackerIds().stream().sorted().toList().get(1 % assault.combatantAttackerIds().size()), second.targetId());
+        runtime.shutdown();
+    }
 }
