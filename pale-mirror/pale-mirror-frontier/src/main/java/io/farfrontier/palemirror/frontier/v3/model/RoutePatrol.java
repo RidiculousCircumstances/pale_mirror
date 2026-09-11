@@ -17,8 +17,17 @@ import java.util.Optional;
  */
 public record RoutePatrol(SubjectId taskId, SubjectId settlementId, RouteUnitManifest unit,
                           TraversalTopology inspectionRoute, PatrolAssembly assembly,
-                          PatrolTravel travel, RoutePatrolStatus status,
+                          PatrolTravel travel, TacticalPlan tacticalPlan, RoutePatrolStatus status,
                           Optional<BlockPosition> obstruction) {
+    /** Legacy fixture constructor; production admission always supplies the task-bound plan. */
+    public RoutePatrol(SubjectId taskId, SubjectId settlementId, RouteUnitManifest unit, TraversalTopology inspectionRoute,
+                       PatrolAssembly assembly, PatrolTravel travel, RoutePatrolStatus status, Optional<BlockPosition> obstruction) {
+        this(taskId, settlementId, unit, inspectionRoute, assembly, travel,
+                TacticalPlan.routePatrol(new StrategicTask(taskId, new SubjectId("objective:implicit-" + taskId.value().replace(':', '-')),
+                        settlementId, StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE, Optional.empty(),
+                        List.of(StrategicTaskRequirement.AVAILABLE_GUARD), List.of(), StrategicTaskStatus.PENDING), unit,
+                        inspectionRoute.linearCorridorSurfaces().stream().map(SurfaceAnchor::support).toList()), status, obstruction);
+    }
     /** Compiles the one permitted human ingress and inspection column at patrol admission. */
     public static RoutePatrol planned(FrontierWorldState state, SubjectId taskId, Settlement settlement, RouteUnitManifest unit) {
         return planned(state, new StrategicTask(taskId, new SubjectId("objective:implicit-" + taskId.value().replace(':', '-')),
@@ -43,7 +52,9 @@ public record RoutePatrol(SubjectId taskId, SubjectId settlementId, RouteUnitMan
                 0, inspection.linearCorridorSurfaces().size() - 2);
         PatrolTravel travel = new PatrolTravel(unit.leaderId(), leaderRoute, java.util.Map.of(unit.leaderId(), new PatrolTravel.Member(leaderRoute, 0),
                 scout, new PatrolTravel.Member(scoutRoute, 0)));
-        return new RoutePatrol(taskId, settlement.id(), unit, inspection, assembly, travel, RoutePatrolStatus.ASSEMBLING, Optional.empty());
+        return new RoutePatrol(taskId, settlement.id(), unit, inspection, assembly, travel,
+                TacticalPlan.routePatrol(task, unit, inspection.linearCorridorSurfaces().stream().map(SurfaceAnchor::support).toList()),
+                RoutePatrolStatus.ASSEMBLING, Optional.empty());
     }
 
     /** The operation route is the durable causal plan; it is not rediscovered from Minecraft. */
@@ -68,6 +79,7 @@ public record RoutePatrol(SubjectId taskId, SubjectId settlementId, RouteUnitMan
         taskId = Objects.requireNonNull(taskId, "patrol task"); settlementId = Objects.requireNonNull(settlementId, "patrol settlement");
         unit = Objects.requireNonNull(unit, "patrol unit"); inspectionRoute = requireInspectionRoute(inspectionRoute);
         assembly = Objects.requireNonNull(assembly, "patrol assembly"); travel = Objects.requireNonNull(travel, "patrol travel");
+        tacticalPlan = Objects.requireNonNull(tacticalPlan, "patrol tactical plan");
         status = Objects.requireNonNull(status, "patrol status"); obstruction = Objects.requireNonNull(obstruction, "patrol obstruction");
         if (unit.kind() != RouteUnitKind.PATROL || !unit.ownerId().equals(taskId)
                 || !unit.id().equals(RouteUnitManifest.idFor(RouteUnitKind.PATROL, taskId))) {
@@ -77,6 +89,11 @@ public record RoutePatrol(SubjectId taskId, SubjectId settlementId, RouteUnitMan
                 || !travel.members().keySet().equals(assembly.members().keySet()) || !travel.leaderId().equals(unit.leaderId())) {
             throw new IllegalArgumentException("patrol movement state must retain exactly its named unit");
         }
+        if (!tacticalPlan.operationId().equals(taskId) || !tacticalPlan.objectiveIds().equals(List.of(taskId))
+                || !tacticalPlan.policy().equals(TacticalPolicyRegistry.ROUTE_PATROL)) {
+            throw new IllegalArgumentException("patrol must retain its own route tactical plan");
+        }
+        tacticalPlan.validateMembers(unit.memberIds());
         List<SurfaceAnchor> inspection = inspectionRoute.linearCorridorSurfaces();
         if (!travel.leaderRoute().linearCorridorSurfaces().equals(inspection.subList(1, inspection.size()))) {
             throw new IllegalArgumentException("patrol leader route must retain the inspected route after its ingress edge");
@@ -132,12 +149,14 @@ public record RoutePatrol(SubjectId taskId, SubjectId settlementId, RouteUnitMan
         SubjectId actor = Objects.requireNonNull(actorId, "patrol advancing actor");
         if (status == RoutePatrolStatus.ASSEMBLING) {
             PatrolAssembly nextAssembly = assembly.advanceOne(actor);
-            return new RoutePatrol(taskId, settlementId, unit, inspectionRoute, nextAssembly, travel,
+            TacticalPlan nextPlan = nextAssembly.complete() ? tacticalPlan.withPhase(TacticalPlanPhase.TRAVEL) : tacticalPlan;
+            return new RoutePatrol(taskId, settlementId, unit, inspectionRoute, nextAssembly, travel, nextPlan,
                     nextAssembly.complete() ? RoutePatrolStatus.EN_ROUTE : RoutePatrolStatus.ASSEMBLING, Optional.empty());
         }
         if (status == RoutePatrolStatus.EN_ROUTE) {
             PatrolTravel nextTravel = travel.advanceOne(actor);
-            return new RoutePatrol(taskId, settlementId, unit, inspectionRoute, assembly, nextTravel,
+            TacticalPlan nextPlan = nextTravel.complete() ? tacticalPlan.withPhase(TacticalPlanPhase.COMPLETE) : tacticalPlan;
+            return new RoutePatrol(taskId, settlementId, unit, inspectionRoute, assembly, nextTravel, nextPlan,
                     nextTravel.complete() ? RoutePatrolStatus.ROUTE_CLEAR : RoutePatrolStatus.EN_ROUTE, Optional.empty());
         }
         throw new IllegalArgumentException("only an active patrol may advance");
@@ -146,15 +165,18 @@ public record RoutePatrol(SubjectId taskId, SubjectId settlementId, RouteUnitMan
         if (!active() || !FrontierRouteNetwork.containsOperationSurfaceCell(route(), Objects.requireNonNull(position, "patrol obstruction"))) {
             throw new IllegalArgumentException("patrol cannot confirm a foreign obstruction");
         }
-        return new RoutePatrol(taskId, settlementId, unit, inspectionRoute, assembly, travel, RoutePatrolStatus.OBSTRUCTION_CONFIRMED, Optional.of(position));
+        return new RoutePatrol(taskId, settlementId, unit, inspectionRoute, assembly, travel,
+                tacticalPlan.withPhase(TacticalPlanPhase.CONTACT), RoutePatrolStatus.OBSTRUCTION_CONFIRMED, Optional.of(position));
     }
     public RoutePatrol block() {
         if (!active()) throw new IllegalArgumentException("only an active patrol may block");
-        return new RoutePatrol(taskId, settlementId, unit, inspectionRoute, assembly, travel, RoutePatrolStatus.BLOCKED, Optional.empty());
+        return new RoutePatrol(taskId, settlementId, unit, inspectionRoute, assembly, travel,
+                tacticalPlan.withPhase(TacticalPlanPhase.ABORTED), RoutePatrolStatus.BLOCKED, Optional.empty());
     }
     public RoutePatrol fail() {
         if (!active()) throw new IllegalArgumentException("only an active patrol may fail");
-        return new RoutePatrol(taskId, settlementId, unit, inspectionRoute, assembly, travel, RoutePatrolStatus.FAILED, Optional.empty());
+        return new RoutePatrol(taskId, settlementId, unit, inspectionRoute, assembly, travel,
+                tacticalPlan.withPhase(TacticalPlanPhase.ABORTED), RoutePatrolStatus.FAILED, Optional.empty());
     }
 
     private static TraversalTopology requireInspectionRoute(TraversalTopology route) {

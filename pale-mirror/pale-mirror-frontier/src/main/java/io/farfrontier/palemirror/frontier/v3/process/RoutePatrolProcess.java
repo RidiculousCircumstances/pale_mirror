@@ -43,6 +43,7 @@ public final class RoutePatrolProcess {
     static List<ProposedEvent> planProgress(FrontierWorldState state, ScheduledAction action) {
         RoutePatrol patrol = state.strategicPlans().routePatrols().get(action.subject());
         if (patrol == null || !patrol.active()) return List.of();
+        requireCurrentPlan(state, patrol);
         if (state.sceneLeases().values().stream().anyMatch(lease -> lease.status() != SceneLeaseStatus.CLOSED
                 && FrontierSceneBehaviors.isRoutePatrol(lease)
                 && FrontierSceneBehaviors.routePatrol(lease).taskId().equals(patrol.taskId()))) return List.of();
@@ -92,6 +93,9 @@ public final class RoutePatrolProcess {
                 || !patrol.inspectionRoute().equals(RoutePatrol.inspectionTopology(state, task, FrontierWorldStateSupport.settlement(state.bootstrap(), patrol.settlementId())))) {
             throw new IllegalArgumentException("route patrol start must retain the current canonical route");
         }
+        if (!patrol.tacticalPlan().equals(TacticalPlan.routePatrol(task, patrol.unit(), patrol.route()))) {
+            throw new IllegalArgumentException("route patrol start has a substituted tactical plan");
+        }
         for (var entry : patrol.assembly().bodies().entrySet()) if (!state.actorLocations().get(entry.getKey()).body().equals(entry.getValue())) {
             throw new IllegalArgumentException("route patrol ingress must begin at each exact current resident body");
         }
@@ -102,6 +106,7 @@ public final class RoutePatrolProcess {
     public static FrontierWorldState reduceAdvanced(FrontierWorldState state, SubjectId subject, RoutePatrolAdvanced advanced) {
         RoutePatrol patrol = state.strategicPlans().routePatrols().get(advanced.taskId());
         if (patrol == null || !subject.equals(patrol.settlementId())) throw new IllegalArgumentException("route patrol advancement has a foreign owner");
+        requireCurrentPlan(state, patrol);
         if (!patrol.safeAdvances().contains(advanced.actorId())) throw new IllegalArgumentException("route patrol advance does not name a safe retained member");
         RoutePatrol next = patrol.advance(advanced.actorId());
         BodyPosition body = next.status() == RoutePatrolStatus.ASSEMBLING ? next.assembly().bodies().get(advanced.actorId())
@@ -118,6 +123,7 @@ public final class RoutePatrolProcess {
         if (patrol == null || !subject.equals(patrol.settlementId()) || !state.physicalDeltas().containsKey(confirmed.position())) {
             throw new IllegalArgumentException("route patrol obstruction lacks physical evidence");
         }
+        requireCurrentPlan(state, patrol);
         return state.withStrategicPlans(state.strategicPlans().confirmPatrolObstruction(confirmed.taskId(), confirmed.position()));
     }
 
@@ -127,12 +133,14 @@ public final class RoutePatrolProcess {
                 .anyMatch(member -> state.actorLocations().get(member).condition().status() == ActorLifeStatus.ALIVE)) {
             throw new IllegalArgumentException("route patrol failure lacks a dead guard");
         }
+        requireCurrentPlan(state, patrol);
         return state.withStrategicPlans(state.strategicPlans().failPatrol(failed.taskId()));
     }
 
     static FrontierWorldState reduceBlocked(FrontierWorldState state, SubjectId subject, RoutePatrolBlocked blocked) {
         RoutePatrol patrol = state.strategicPlans().routePatrols().get(blocked.taskId());
         if (patrol == null || !subject.equals(patrol.settlementId()) || !patrol.active()) throw new IllegalArgumentException("route patrol block has a foreign owner");
+        requireCurrentPlan(state, patrol);
         return state.withStrategicPlans(state.strategicPlans().blockPatrol(blocked.taskId()));
     }
 
@@ -159,5 +167,10 @@ public final class RoutePatrolProcess {
             throw new IllegalStateException("route patrol has no current matching strategic task");
         }
         return task;
+    }
+    private static void requireCurrentPlan(FrontierWorldState state, RoutePatrol patrol) {
+        if (!patrol.tacticalPlan().currentFor(state.strategicPlans())) {
+            throw new IllegalStateException("route patrol has stale tactical authority");
+        }
     }
 }

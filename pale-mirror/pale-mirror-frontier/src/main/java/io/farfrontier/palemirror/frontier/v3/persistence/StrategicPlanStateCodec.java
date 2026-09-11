@@ -38,7 +38,8 @@ public final class StrategicPlanStateCodec {
         for (RoutePatrol patrol : plans.routePatrols().values().stream().sorted(Comparator.comparing(RoutePatrol::taskId)).toList()) {
             writeSubject(output, patrol.taskId()); writeSubject(output, patrol.settlementId()); RouteUnitManifestCodec.write(output, patrol.unit());
             TraversalTopologyStateCodec.write(output, patrol.inspectionRoute()); PatrolStateCodec.writeAssembly(output, patrol.assembly());
-            PatrolStateCodec.writeTravel(output, patrol.travel()); output.writeByte(patrol.status().wireTag()); output.writeBoolean(patrol.obstruction().isPresent());
+            PatrolStateCodec.writeTravel(output, patrol.travel()); TacticalPlanStateCodec.write(output, patrol.tacticalPlan());
+            output.writeByte(patrol.status().wireTag()); output.writeBoolean(patrol.obstruction().isPresent());
             if (patrol.obstruction().isPresent()) writePosition(output, patrol.obstruction().orElseThrow());
         }
         writeCount(output, plans.routeEngagements().size());
@@ -190,8 +191,10 @@ public final class StrategicPlanStateCodec {
             SubjectId task = readSubject(input), settlement = readSubject(input);
             RouteUnitManifest unit = RouteUnitManifestCodec.read(input); TraversalTopology inspection = TraversalTopologyStateCodec.read(input);
             PatrolAssembly assembly = PatrolStateCodec.readAssembly(input); PatrolTravel travel = PatrolStateCodec.readTravel(input);
+            TacticalPlan tacticalPlan = TacticalPlanStateCodec.read(input);
             int status = input.readUnsignedByte(); Optional<BlockPosition> obstruction = input.readBoolean() ? Optional.of(readPosition(input)) : Optional.empty();
-            if (status >= RoutePatrolStatus.values().length || patrols.put(task, new RoutePatrol(task, settlement, unit, inspection, assembly, travel, FrontierWireTags.require(RoutePatrolStatus.class, status), obstruction)) != null) {
+            if (status >= RoutePatrolStatus.values().length || patrols.put(task, new RoutePatrol(task, settlement, unit, inspection, assembly, travel,
+                    tacticalPlan, FrontierWireTags.require(RoutePatrolStatus.class, status), obstruction)) != null) {
                 throw new IllegalArgumentException("invalid or duplicate route patrol");
             }
         }

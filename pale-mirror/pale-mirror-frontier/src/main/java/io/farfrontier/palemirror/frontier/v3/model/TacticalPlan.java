@@ -59,4 +59,18 @@ public record TacticalPlan(SubjectId id, SubjectId operationId, SubjectId author
                 TacticalBehaviour.DEFEND_CARGO, TacticalBehaviour.OBSERVE_OBSTRUCTION, TacticalBehaviour.RETREAT_TO_PORT),
                 route.getFirst(), route.getLast(), route.getFirst());
     }
+
+    public static TacticalPlan routePatrol(StrategicTask task, RouteUnitManifest unit, List<BlockPosition> route) {
+        Objects.requireNonNull(task, "patrol tactical task"); Objects.requireNonNull(unit, "patrol tactical unit");
+        if (task.kind() != StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE || route.size() < 2) {
+            throw new IllegalArgumentException("patrol tactical plan requires one exact patrol task and route");
+        }
+        java.util.Map<SubjectId, TacticalRole> roles = new java.util.LinkedHashMap<>();
+        for (SubjectId member : unit.memberIds()) roles.put(member, member.equals(unit.leaderId()) ? TacticalRole.LEADER : TacticalRole.SCOUT);
+        String suffix = task.id().value().substring(task.id().value().indexOf(':') + 1).replace(':', '-');
+        return new TacticalPlan(new SubjectId("plan:patrol-" + suffix), task.id(), task.authorityId(), task.authorityEpoch(), 0L,
+                TacticalPolicyRegistry.ROUTE_PATROL, TacticalPlanPhase.ASSEMBLE, List.of(task.id()), roles,
+                List.of(TacticalBehaviour.HOLD_FORMATION, TacticalBehaviour.ADVANCE_CHECKPOINT, TacticalBehaviour.OBSERVE_OBSTRUCTION,
+                        TacticalBehaviour.RETREAT_TO_PORT), route.getFirst(), route.getLast(), route.getFirst());
+    }
 }
