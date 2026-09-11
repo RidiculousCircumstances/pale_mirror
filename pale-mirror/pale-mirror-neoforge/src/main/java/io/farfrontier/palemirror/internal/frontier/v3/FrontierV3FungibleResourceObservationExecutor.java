@@ -49,7 +49,7 @@ final class FrontierV3FungibleResourceObservationExecutor {
                 .sorted(Comparator.comparing(CustodyAccount::id)).toList()) {
             ResourceCustody.Container custody = (ResourceCustody.Container) account.custody();
             ContainerSurface surface = state.inventory().surfaces().get(custody.containerId());
-            if (surface == null || surface.status() != ContainerSurfaceStatus.ACTIVE || !ReferenceContainerCustody.isReferenceContainer(state, custody.containerId())) continue;
+            if (surface == null || surface.status() != ContainerSurfaceStatus.ACTIVE) continue;
             BlockPos position = new BlockPos(surface.position().x(), surface.position().y(), surface.position().z());
             if (!level.hasChunkAt(position) || !level.shouldTickBlocksAt(position)
                     || !(level.getBlockEntity(position) instanceof ChestBlockEntity chest)) continue;
@@ -58,14 +58,15 @@ final class FrontierV3FungibleResourceObservationExecutor {
                 release(runtime, account, lease);
                 return;
             }
-            if (lease != null && (!lease.live() || lease.status() != PhysicalCustodyLeaseStatus.ACQUIRED)) continue;
+            if (ReferenceContainerCustody.isReferenceContainer(state, custody.containerId())
+                    && (lease == null || !lease.live() || lease.status() != PhysicalCustodyLeaseStatus.ACQUIRED)) continue;
             long epoch = lease == null ? nextEpoch(state, custody.containerId()) : lease.authorityEpoch();
             if (!observe(level, runtime, state, account, chest, epoch)) return;
         }
     }
 
-    private static boolean observe(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
-                                   CustodyAccount account, ChestBlockEntity chest, long epoch) {
+    static boolean observe(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
+                           CustodyAccount account, ChestBlockEntity chest, long epoch) {
         List<FungiblePhysicalObservation.Stack> stacks = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(chest, state,
                 ((ResourceCustody.Container) account.custody()).containerId());
         List<PhysicalStackBinding> expected;

@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord;
+import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceTransition;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
@@ -12,6 +13,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceCustody;
+import io.farfrontier.palemirror.frontier.v3.model.FungibleResourceLedger;
 import io.farfrontier.palemirror.frontier.v3.persistence.AppendReceipt;
 import io.farfrontier.palemirror.frontier.v3.persistence.CompactionReceipt;
 import io.farfrontier.palemirror.frontier.v3.persistence.Durability;
@@ -33,6 +35,7 @@ import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /** Materialized player withdrawal and return evidence for exact v3 inventory custody. */
@@ -44,8 +47,7 @@ public final class FrontierV3PlayerCustodyGameTests {
     @GameTest(batch = "pm-frontier-v3-player-withdrawal", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void activeChestTransfersOneExactStackToAndFromItsRealPlayer(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); WorldId world = new WorldId("frontier:player-withdrawal-game-test");
-        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
-                FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.configuration(world, 91L), new EphemeralStore(), 10_000);
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime = exactWheatRuntime(world);
         SubjectId container = new SubjectId("container:1-depot"); BlockPos chestPosition = helper.absolutePos(new BlockPos(58, 8, 0));
         level.setBlock(chestPosition.below(), Blocks.STONE.defaultBlockState(), 3);
         ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.claimFreshChest(level, chestPosition, container);
@@ -88,13 +90,13 @@ public final class FrontierV3PlayerCustodyGameTests {
         FrontierV3CommandSubmission.submit(runtime, "fungible-player-withdrawal-prepare", container.value(), new ContainerSurfaceTransition(container, ContainerSurfaceStatus.PREPARED));
         FrontierV3CommandSubmission.submit(runtime, "fungible-player-withdrawal-active", container.value(), new ContainerSurfaceTransition(container, ContainerSurfaceStatus.ACTIVE));
         chest.setItem(0, new ItemStack(Items.WHEAT, 64)); chest.setChanged();
-        FrontierV3FungibleResourceObservationExecutor.tick(level, runtime);
+        observeFungibleChest(level, runtime, chest, container);
         FrontierWorldState bound = state(runtime);
         helper.assertTrue(!bound.inventory().fungibleResources().bindings().isEmpty(), "the full observed stack must become HOT before a player may split it");
 
         var player = helper.makeMockServerPlayerInLevel();
         chest.setItem(0, new ItemStack(Items.WHEAT, 32)); player.getInventory().setItem(0, new ItemStack(Items.WHEAT, 32)); chest.setChanged();
-        FrontierV3FungibleResourceObservationExecutor.tick(level, runtime);
+        observeFungibleChest(level, runtime, chest, container);
         FrontierWorldState moved = state(runtime);
         var playerAccount = moved.inventory().fungibleResources().accounts().values().stream()
                 .filter(account -> account.custody().equals(new ResourceCustody.Player(player.getUUID()))).findFirst().orElse(null);
@@ -105,7 +107,7 @@ public final class FrontierV3PlayerCustodyGameTests {
         helper.assertTrue(moved.inventory().fungibleResources().totalQuantity(new SubjectId("settlement:1"), "minecraft:wheat") == 64,
                 "the split must conserve every ordinary item unit");
         chest.setItem(0, new ItemStack(Items.WHEAT, 64)); player.getInventory().setItem(0, ItemStack.EMPTY); chest.setChanged();
-        FrontierV3FungibleResourceObservationExecutor.tick(level, runtime);
+        observeFungibleChest(level, runtime, chest, container);
         FrontierWorldState returned = state(runtime);
         helper.assertTrue(returned.inventory().fungibleResources().accounts().values().stream()
                         .noneMatch(account -> account.custody().equals(new ResourceCustody.Player(player.getUUID()))),
@@ -127,12 +129,12 @@ public final class FrontierV3PlayerCustodyGameTests {
         FrontierV3CommandSubmission.submit(runtime, "fungible-hopper-prepare", container.value(), new ContainerSurfaceTransition(container, ContainerSurfaceStatus.PREPARED));
         FrontierV3CommandSubmission.submit(runtime, "fungible-hopper-active", container.value(), new ContainerSurfaceTransition(container, ContainerSurfaceStatus.ACTIVE));
         chest.setItem(0, new ItemStack(Items.WHEAT, 64)); chest.setChanged();
-        FrontierV3FungibleResourceObservationExecutor.tick(level, runtime);
+        observeFungibleChest(level, runtime, chest, container);
         BlockPos hopperPosition = chestPosition.east(); level.setBlock(hopperPosition.below(), Blocks.STONE.defaultBlockState(), 3);
         level.setBlock(hopperPosition, Blocks.HOPPER.defaultBlockState(), 3);
         HopperBlockEntity hopper = (HopperBlockEntity) level.getBlockEntity(hopperPosition);
         hopper.setItem(0, chest.removeItemNoUpdate(0)); hopper.setChanged(); chest.setChanged();
-        FrontierV3FungibleResourceObservationExecutor.tick(level, runtime);
+        observeFungibleChest(level, runtime, chest, container);
         helper.assertTrue(state(runtime).inventory().fungibleResources().accounts().values().stream()
                         .anyMatch(account -> account.custody() instanceof ResourceCustody.WorldCarrier),
                 "one observed hopper stack remains a HOT carrier account instead of unbounded COLD stock");
@@ -154,25 +156,54 @@ public final class FrontierV3PlayerCustodyGameTests {
         FrontierV3CommandSubmission.submit(runtime, "fungible-drop-prepare", container.value(), new ContainerSurfaceTransition(container, ContainerSurfaceStatus.PREPARED));
         FrontierV3CommandSubmission.submit(runtime, "fungible-drop-active", container.value(), new ContainerSurfaceTransition(container, ContainerSurfaceStatus.ACTIVE));
         chest.setItem(0, new ItemStack(Items.WHEAT, 64)); chest.setChanged();
-        FrontierV3FungibleResourceObservationExecutor.tick(level, runtime);
+        observeFungibleChest(level, runtime, chest, container);
         ItemEntity drop = new ItemEntity(level, chestPosition.getX() + 0.5D, chestPosition.getY() + 0.5D, chestPosition.getZ() + 0.5D,
                 chest.removeItemNoUpdate(0)); chest.setChanged(); level.addFreshEntity(drop);
-        FrontierV3FungibleResourceObservationExecutor.tick(level, runtime);
-        helper.assertTrue(state(runtime).inventory().fungibleResources().bindings().values().stream()
-                        .anyMatch(binding -> binding.address() instanceof io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress.WorldEntity),
-                "the world item entity must become the one HOT physical binding before pickup");
-        var player = helper.makeMockServerPlayerInLevel(); player.getInventory().setItem(0, drop.getItem().copy()); drop.discard();
-        FrontierV3FungibleResourceObservationExecutor.tick(level, runtime);
-        helper.assertTrue(state(runtime).inventory().fungibleResources().accounts().values().stream()
-                        .anyMatch(account -> account.custody().equals(new ResourceCustody.Player(player.getUUID()))),
-                "one real player pickup transfers the same live fungible portion without reopening COLD custody");
-        helper.assertTrue(state(runtime).inventory().fungibleResources().totalQuantity(new SubjectId("settlement:1"), "minecraft:wheat") == 64,
-                "drop and pickup preserve the exact canonical total");
-        runtime.shutdown(); helper.succeed();
+        helper.runAfterDelay(1, () -> {
+            helper.assertTrue(level.getEntity(drop.getUUID()) == drop && drop.getItem().getCount() == 64,
+                    "the physical drop must be live and retain the exact departed stack before observation");
+            observeFungibleChest(level, runtime, chest, container);
+            helper.assertTrue(state(runtime).inventory().fungibleResources().bindings().values().stream()
+                            .anyMatch(binding -> binding.address() instanceof io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress.WorldEntity),
+                    "the world item entity must become the one HOT physical binding before pickup");
+            var player = helper.makeMockServerPlayerInLevel(); player.getInventory().setItem(0, drop.getItem().copy()); drop.discard();
+            FrontierV3FungibleResourceObservationExecutor.tick(level, runtime);
+            helper.assertTrue(state(runtime).inventory().fungibleResources().accounts().values().stream()
+                            .anyMatch(account -> account.custody().equals(new ResourceCustody.Player(player.getUUID()))),
+                    "one real player pickup transfers the same live fungible portion without reopening COLD custody");
+            helper.assertTrue(state(runtime).inventory().fungibleResources().totalQuantity(new SubjectId("settlement:1"), "minecraft:wheat") == 64,
+                    "drop and pickup preserve the exact canonical total");
+            runtime.shutdown(); helper.succeed();
+        });
     }
 
     private static FrontierWorldState state(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         return new FrontierWorldStateCodec().decode(runtime.checkpointImage().orElseThrow().canonicalState());
+    }
+
+    private static void observeFungibleChest(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                             ChestBlockEntity chest, SubjectId container) {
+        FrontierWorldState state = state(runtime);
+        var account = state.inventory().fungibleResources().accounts().values().stream().filter(value -> value.custody()
+                .equals(new ResourceCustody.Container(container))).findFirst().orElseThrow();
+        long epoch = state.inventory().fungibleResources().bindings().values().stream().filter(binding -> binding.accountId().equals(account.id()))
+                .mapToLong(io.farfrontier.palemirror.frontier.v3.model.PhysicalStackBinding::authorityEpoch).findFirst().orElse(1L);
+        FrontierV3FungibleResourceObservationExecutor.observe(level, runtime, state, account, chest, epoch);
+    }
+
+    /** Retains the independent exact-item observer fixture after the fresh fungible bootstrap cut. */
+    private static FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> exactWheatRuntime(WorldId world) {
+        FrontierEngineConfiguration<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> base =
+                FrontierWorldRuntimeDefinition.configuration(world, 91L);
+        SubjectId settlement = new SubjectId("settlement:1"), account = new SubjectId("custody:container-1-depot"), lot = new SubjectId("lot:bootstrap-1-wheat");
+        FungibleResourceLedger resources = base.initialState().inventory().fungibleResources().destroy(account, Map.of(lot, 64), Map.of());
+        ExactItemStack wheat = new ExactItemStack(new SubjectId("item:bootstrap-1-wheat"), settlement, "minecraft:wheat", 64,
+                new InventoryCustody.ContainerSlot(FrontierWorldState.depotId(settlement), 0));
+        FrontierWorldState state = base.initialState().withInventory(base.initialState().inventory().withFungibleResources(resources).store(wheat));
+        FrontierEngineConfiguration<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> configuration =
+                new FrontierEngineConfiguration<>(base.worldId(), state, base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(), base.reducer(),
+                        base.stateCodec(), base.projectionMapper(), base.limits(), base.initialSchedules(), base.transactionCommitter(), base.stateValidator(), base.executionMetrics());
+        return FrontierV3ServerRuntime.start(configuration, new EphemeralStore(), 10_000);
     }
     /** GameTest-only store; filesystem restart behavior is covered by the server-runtime test. */
     private static final class EphemeralStore implements FrontierStore {
