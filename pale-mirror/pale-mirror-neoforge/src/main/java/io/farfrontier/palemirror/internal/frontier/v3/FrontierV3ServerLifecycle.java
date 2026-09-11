@@ -546,7 +546,18 @@ public final class FrontierV3ServerLifecycle {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
         return FrontierV3PhysicalWorld.isPhysical(level) && runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
-                && (FrontierV3AmbientActorExecutor.recognizes(runtime, entity) || FrontierV3SceneExecutor.recognizes(runtime, entity));
+                && (recognizesManagedAmbientCarrier(runtime, FrontierV3AmbientActorExecutor.ManagedCarrier.from(entity))
+                || FrontierV3SceneExecutor.recognizes(runtime, entity));
+    }
+
+    /**
+     * The ambient half of {@link #recognizesManagedCarrier(ServerLevel, Entity)} after its exact
+     * Entity adapter.  It keeps the runtime provider, join recognition, and source firewall on
+     * one production decision without requiring a synthetic Minecraft entity in focused tests.
+     */
+    static boolean recognizesManagedAmbientCarrier(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                                   FrontierV3AmbientActorExecutor.ManagedCarrier carrier) {
+        return FrontierV3AmbientActorExecutor.recognizes(runtime, carrier);
     }
 
     /** Returns true only when this v3 runtime durably accepted the managed HOT death. */

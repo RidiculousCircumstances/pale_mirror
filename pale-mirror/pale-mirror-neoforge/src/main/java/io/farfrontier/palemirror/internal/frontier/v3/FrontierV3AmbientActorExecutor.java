@@ -454,7 +454,15 @@ final class FrontierV3AmbientActorExecutor {
      * actor kind and an extant ambient lease before a V3 body may enter the physical world.
      */
     static boolean recognizes(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity) {
-        return recognizes(runtime, ManagedCarrier.from(entity), current -> FrontierV3GrayboxExecutor.admissionProvider(runtime, current));
+        return recognizes(runtime, ManagedCarrier.from(entity));
+    }
+
+    /**
+     * Exact non-Minecraft delegate of the Entity entrypoint above.  Lifecycle and source-firewall
+     * composition use this only after the real Entity adapter has supplied its immutable facts.
+     */
+    static boolean recognizes(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, ManagedCarrier carrier) {
+        return recognizes(runtime, carrier, current -> FrontierV3GrayboxExecutor.admissionProvider(runtime, current));
     }
 
     /**

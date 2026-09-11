@@ -32,9 +32,17 @@ public final class SourceGrayboxEntityAdmission {
 
     /** Package-visible seam: the event bridge supplies only a strict canonical V3 proof. */
     static boolean rejects(ResourceKey<Level> dimension, Entity entity, boolean verifiedV3Carrier) {
-        return Objects.requireNonNull(dimension, "dimension").equals(SourceGrayboxWorldBoundary.DIMENSION)
-                && Objects.requireNonNull(entity, "entity") instanceof Mob
-                && !SourceGrayboxMaterializer.recognizesManagedEntity(entity)
-                && !verifiedV3Carrier;
+        Objects.requireNonNull(dimension, "dimension"); Objects.requireNonNull(entity, "entity");
+        return entity instanceof Mob && rejectsSourceMob(dimension.equals(SourceGrayboxWorldBoundary.DIMENSION),
+                SourceGrayboxMaterializer.recognizesManagedEntity(entity), verifiedV3Carrier);
+    }
+
+    /**
+     * Exact firewall decision used by the Entity callback after it has established mob/source
+     * facts.  A retained V3 proof must pass this same gate; otherwise an unindexed restored body
+     * could be canceled after its lifecycle join was accepted.
+     */
+    public static boolean rejectsSourceMob(boolean sourceDimension, boolean sourceManaged, boolean verifiedV3Carrier) {
+        return sourceDimension && !sourceManaged && !verifiedV3Carrier;
     }
 }
