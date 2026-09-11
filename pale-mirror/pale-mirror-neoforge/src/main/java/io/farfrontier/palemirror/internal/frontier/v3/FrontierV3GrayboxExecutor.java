@@ -45,6 +45,7 @@ import java.util.function.Predicate;
 final class FrontierV3GrayboxExecutor {
     private static final int MAX_CELLS_PER_TICK = 64;
     private static final Map<FrontierV3ServerRuntime<?, ?>, Cursor> CURSORS = new IdentityHashMap<>();
+    private static final Map<FrontierV3ServerRuntime<?, ?>, ProjectionWork> WORK = new IdentityHashMap<>();
 
     enum ProjectionResult { APPLIED, CURRENT, CONFLICT, DEFERRED }
     enum BlockBreakObservation { UNMANAGED, ACCEPTED, REJECTED }
@@ -76,9 +77,13 @@ final class FrontierV3GrayboxExecutor {
 
     private static Cursor cursor(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state) {
         Cursor cursor = CURSORS.get(runtime);
+        ProjectionWork work = workFor(runtime);
+        if (cursor != null) work.compatibilityChecks++;
         if (cursor == null || !cursor.input().matches(state)) {
+            work.freshnessConstructions++;
             FrontierGrayboxPlan.StructuralInput input = FrontierGrayboxPlan.structuralInput(state);
             if (cursor == null || !input.equals(cursor.input())) {
+                work.planCompilations++;
                 FrontierGrayboxPlan plan = FrontierGrayboxPlan.compileStructuralBaseline(state);
                 cursor = Cursor.from(input, plan, cursor);
                 CURSORS.put(runtime, cursor);
@@ -110,7 +115,7 @@ final class FrontierV3GrayboxExecutor {
         }
     }
 
-    static void forget(FrontierV3ServerRuntime<?, ?> runtime) { CURSORS.remove(runtime); }
+    static void forget(FrontierV3ServerRuntime<?, ?> runtime) { CURSORS.remove(runtime); WORK.remove(runtime); }
 
     /**
      * Returns the exact immutable baseline retained by an earlier projection turn as a bounded
@@ -121,8 +126,10 @@ final class FrontierV3GrayboxExecutor {
     static Optional<FrontierSettlementAssaultBattlefield.Provider> admissionProvider(
             FrontierV3ServerRuntime<?, ?> runtime, FrontierWorldState state) {
         Cursor cursor = CURSORS.get(runtime);
+        ProjectionWork work = workFor(runtime); work.compatibilityChecks++;
         if (cursor == null || !cursor.input().matches(state)) return Optional.empty();
-        return Optional.of(cursor.providerSnapshot(state));
+        work.providerAcquisitions++;
+        return Optional.of(cursor.providerSnapshot(state, work));
     }
 
     /**
@@ -396,9 +403,9 @@ final class FrontierV3GrayboxExecutor {
         }
         FrontierGrayboxPlan.StructuralInput input() { return input; }
         void replaceInput(FrontierGrayboxPlan.StructuralInput replacement) { input = Objects.requireNonNull(replacement, "structural input"); }
-        FrontierSettlementAssaultBattlefield.Provider providerSnapshot(FrontierWorldState state) {
+        FrontierSettlementAssaultBattlefield.Provider providerSnapshot(FrontierWorldState state, ProjectionWork work) {
             if (structuralBaseline == null) throw new IllegalStateException("test-only cursor has no structural provider baseline");
-            return new ProjectionProviderSnapshot(structuralBaseline, state.physicalDeltas());
+            return new ProjectionProviderSnapshot(structuralBaseline, state.physicalDeltas(), work);
         }
         boolean retainsWorksiteStaging(BlockPos position) { return activeWorksiteStaging.contains(position); }
         Optional<GrayboxCell> nextNaturallyLoaded(Predicate<GrayboxCell> loaded) {
@@ -450,11 +457,22 @@ final class FrontierV3GrayboxExecutor {
 
     /** One immutable, non-enumerable admission view over the projection cursor's retained plan. */
     private record ProjectionProviderSnapshot(FrontierGrayboxPlan structuralBaseline,
-                                              Map<io.farfrontier.palemirror.frontier.v3.model.BlockPosition, PhysicalDelta> physicalDeltas)
+                                              Map<io.farfrontier.palemirror.frontier.v3.model.BlockPosition, PhysicalDelta> physicalDeltas,
+                                              ProjectionWork work)
             implements FrontierSettlementAssaultBattlefield.Provider {
         @Override public Optional<GrayboxCell> cellAt(io.farfrontier.palemirror.frontier.v3.model.BlockPosition position) {
+            work.pointQueries++;
             if (physicalDeltas.containsKey(position)) return Optional.empty();
             return Optional.ofNullable(structuralBaseline.cells().get(position));
         }
     }
+
+    static ProjectionWorkSnapshot projectionWork(FrontierV3ServerRuntime<?, ?> runtime) { return workFor(runtime).snapshot(); }
+    static void resetProjectionWork(FrontierV3ServerRuntime<?, ?> runtime) { WORK.put(runtime, new ProjectionWork()); }
+    private static ProjectionWork workFor(FrontierV3ServerRuntime<?, ?> runtime) { return WORK.computeIfAbsent(runtime, ignored -> new ProjectionWork()); }
+    static final class ProjectionWork {
+        private int compatibilityChecks, freshnessConstructions, planCompilations, providerAcquisitions, pointQueries;
+        ProjectionWorkSnapshot snapshot() { return new ProjectionWorkSnapshot(compatibilityChecks, freshnessConstructions, planCompilations, providerAcquisitions, pointQueries); }
+    }
+    record ProjectionWorkSnapshot(int compatibilityChecks, int freshnessConstructions, int planCompilations, int providerAcquisitions, int pointQueries) { }
 }

@@ -76,9 +76,15 @@ class FrontierV3AmbientAdmissionPolicyTest {
                     "without an earlier compatible projection, assault admission must defer instead of compiling graybox");
 
             FrontierV3GrayboxExecutor.tick(new FullyLoadedPhysicalWorld(), runtime);
+            FrontierV3GrayboxExecutor.resetProjectionWork(runtime);
             FrontierSceneAdmission.ReservationAdmission initial = FrontierV3AmbientActorExecutor.admissionPolicy(runtime, state).admissionFor(state);
             assertEquals(2, initial.settlementAssaultCandidates().size(),
                     "the actor path must receive the snapshot produced by the preceding projector");
+            FrontierV3GrayboxExecutor.ProjectionWorkSnapshot initialWork = FrontierV3GrayboxExecutor.projectionWork(runtime);
+            assertEquals(1, initialWork.compatibilityChecks());
+            assertEquals(0, initialWork.freshnessConstructions());
+            assertEquals(0, initialWork.planCompilations());
+            assertEquals(1, initialWork.providerAcquisitions());
 
             FrontierSettlementAssaultBattlefield.Provider snapshot = FrontierV3GrayboxExecutor.admissionProvider(runtime, state).orElseThrow();
             AtomicInteger queries = new AtomicInteger();
@@ -89,6 +95,7 @@ class FrontierV3AmbientAdmissionPolicyTest {
             int members = state.strategicPlans().settlementAssaults().values().stream()
                     .filter(assault -> assault.status() == SettlementAssaultStatus.COLD_COMBAT)
                     .mapToInt(assault -> assault.attackerIds().size() + assault.defenderIds().size()).sum();
+            assertEquals(members * 3, initialWork.pointQueries());
             assertEquals(members * 3, queries.get(),
                     "admission may query only each named support and its two headroom cells through the projection provider");
             assertEquals(initial.settlementAssaultCandidates(), counted.settlementAssaultCandidates(),

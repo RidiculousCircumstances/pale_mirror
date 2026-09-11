@@ -308,8 +308,13 @@ public record HiveColony(Map<SubjectId, HiveOrgan> addedOrgans, Map<SubjectId, B
 
     private static <T> Map<SubjectId, T> immutable(Map<SubjectId, T> source, String label) {
         Objects.requireNonNull(source, label);
-        LinkedHashMap<SubjectId, T> values = new LinkedHashMap<>();
-        source.forEach((id, value) -> values.put(Objects.requireNonNull(id, label + " id"), Objects.requireNonNull(value, label + " value")));
-        return Map.copyOf(values);
+        source.forEach((id, value) -> {
+            Objects.requireNonNull(id, label + " id");
+            Objects.requireNonNull(value, label + " value");
+        });
+        // State transitions pass unchanged canonical indexes back through their owning HiveColony.
+        // Map.copyOf preserves its own immutable input, making that continuity explicit for
+        // projection freshness without adding a persisted version or a second authority.
+        return Map.copyOf(source);
     }
 }

@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -29,6 +30,12 @@ class HiveNutrientTransferProcessTest {
                 "frontier.hive_nutrient_transfer_started", FrontierWorldRuntimeDefinition.payloadCodecs().encode(new HiveNutrientTransferStarted(transfer))));
 
         FrontierWorldState started = HiveNutrientTransferProcess.reduceStarted(baseline, baseline.bootstrap().hive().id(), transfer);
+        assertSame(baseline.hiveColony().addedOrgans(), started.hiveColony().addedOrgans());
+        assertSame(baseline.hiveColony().bioformLifecycles(), started.hiveColony().bioformLifecycles());
+        assertSame(baseline.hiveColony().mobilizations(), started.hiveColony().mobilizations());
+        assertSame(baseline.hiveColony().nutrientReceipts(), started.hiveColony().nutrientReceipts());
+        assertTrue(baseline.hiveColony().nutrientTransfers() != started.hiveColony().nutrientTransfers(),
+                "only the nutrient-transfer contributor changes at this canonical owner boundary");
         assertEquals(new InventoryCustody.Cargo(transfer.cargoId()), started.inventory().items().get(biomass.id()).custody());
         assertTrue(started.inventory().itemAt(transfer.sourceStoreId(), transfer.sourceSlot().slot()).isEmpty(), "departure removes the source claim before transit");
         FrontierWorldState progressed = started;
