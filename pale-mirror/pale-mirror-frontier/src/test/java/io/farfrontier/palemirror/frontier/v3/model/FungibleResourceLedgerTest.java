@@ -111,6 +111,53 @@ class FungibleResourceLedgerTest {
     }
 
     @Test
+    void observedHandoffIntoAnExistingContainerRetainsBothBalancesBehindOneFreshBinding() {
+        SubjectId sourceLotId = new SubjectId("lot:player-bread");
+        SubjectId destinationLotId = new SubjectId("lot:depot-bread");
+        SubjectId sourceAccountId = new SubjectId("custody:player-source");
+        SubjectId destinationAccountId = new SubjectId("custody:depot-existing");
+        SubjectId destinationContainer = new SubjectId("container:depot-existing");
+        CustodyAccount source = new CustodyAccount(sourceAccountId, new ResourceCustody.Player(uuid(5)), Map.of(sourceLotId, 4), Map.of());
+        CustodyAccount destination = new CustodyAccount(destinationAccountId, new ResourceCustody.Container(destinationContainer), Map.of(destinationLotId, 6), Map.of());
+        PhysicalStackBinding sourceBinding = new PhysicalStackBinding(new SubjectId("binding:player-source"), sourceAccountId,
+                new PhysicalStackAddress.PlayerSlot(uuid(5), 0), 7L, "minecraft:bread", Map.of(sourceLotId, 4), Map.of());
+        FungibleResourceLedger ledger = new FungibleResourceLedger(
+                Map.of(sourceLotId, new ResourceLot(sourceLotId, OWNER, "minecraft:bread", 4, "player", List.of()),
+                        destinationLotId, new ResourceLot(destinationLotId, OWNER, "minecraft:bread", 6, "depot", List.of())),
+                Map.of(), Map.of(sourceAccountId, source, destinationAccountId, destination), Map.of(sourceBinding.id(), sourceBinding));
+        PhysicalStackBinding destinationBinding = new PhysicalStackBinding(new SubjectId("binding:depot-existing"), destinationAccountId,
+                new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(destinationContainer, 0)), 8L,
+                "minecraft:bread", Map.of(sourceLotId, 4, destinationLotId, 6), Map.of());
+
+        FungibleResourceLedger deposited = ledger.transferObservedToExistingAccount(sourceAccountId, destinationAccountId, 7L, 8L,
+                Map.of(sourceLotId, 4), Map.of(), List.of(), List.of(destinationBinding));
+
+        assertEquals(Map.of(destinationLotId, 6, sourceLotId, 4), deposited.accounts().get(destinationAccountId).lotQuantities());
+        assertEquals(10, deposited.totalQuantity(OWNER, "minecraft:bread"));
+        assertEquals(List.of(destinationBinding), deposited.bindings().values().stream().toList());
+        assertThrows(IllegalArgumentException.class, () -> ledger.transferObservedToExistingAccount(sourceAccountId, destinationAccountId, 6L, 8L,
+                Map.of(sourceLotId, 4), Map.of(), List.of(), List.of(destinationBinding)));
+    }
+
+    @Test
+    void oneContainerAccountReconcilesSeveralResourceKindsWithoutCrossKindMerging() {
+        SubjectId carrotId = new SubjectId("lot:carrot");
+        ResourceLot carrot = new ResourceLot(carrotId, OWNER, "minecraft:carrot", 4, "bootstrap", List.of());
+        CustodyAccount account = new CustodyAccount(DEPOT_ACCOUNT, new ResourceCustody.Container(DEPOT),
+                Map.of(LOT, 10, carrotId, 4), Map.of());
+        FungibleResourceLedger ledger = new FungibleResourceLedger(
+                Map.of(LOT, new ResourceLot(LOT, OWNER, "minecraft:bread", 10, "bootstrap", List.of()), carrotId, carrot),
+                Map.of(), Map.of(DEPOT_ACCOUNT, account), Map.of());
+        List<PhysicalStackBinding> bindings = FungiblePhysicalObservation.bind(ledger, DEPOT_ACCOUNT, 2L, List.of(
+                new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(DEPOT, 0)), "minecraft:bread", 10),
+                new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(DEPOT, 1)), "minecraft:carrot", 4)));
+
+        assertEquals(2, bindings.size());
+        assertEquals("minecraft:bread", bindings.getFirst().itemKind());
+        assertEquals("minecraft:carrot", bindings.getLast().itemKind());
+    }
+
+    @Test
     void snapshotRoundTripPreservesLotsClaimsAccountsAndTransientBindingsExactly() {
         WorldId world = new WorldId("frontier:fungible-ledger-round-trip");
         FrontierWorldState baseline = new FrontierWorldStateCodec().decode(FrontierEngines
@@ -120,7 +167,8 @@ class FungibleResourceLedgerTest {
         ResourceLot lot = new ResourceLot(lotId, owner, "minecraft:bread", 10, "snapshot", List.of());
         CustodyAccount account = new CustodyAccount(accountId, new ResourceCustody.Container(containerId), Map.of(lotId, 10), Map.of());
         PhysicalStackBinding binding = new PhysicalStackBinding(new SubjectId("binding:snapshot"), accountId,
-                new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(containerId, 1)), 3L, "minecraft:bread", Map.of(lotId, 10), Map.of());
+                new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(containerId, 1)), 3L, "minecraft:bread",
+                Map.of(lotId, 10), Map.of(new SubjectId("claim:snapshot"), 4));
         FungibleResourceLedger resources = FungibleResourceLedger.empty().issue(lot, account)
                 .reserve(new ClaimAllocation(new SubjectId("claim:snapshot"), new SubjectId("process:snapshot"), owner, "minecraft:bread", 4), accountId)
                 .rebind(accountId, 3L, List.of(binding));

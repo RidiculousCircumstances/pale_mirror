@@ -97,6 +97,28 @@ class ExactInventoryTest {
     }
 
     @Test
+    void fungibleHotBindingCannotOverlapLegacyExactEquipmentOrCargoSlots() {
+        SubjectId container = new SubjectId("container:colliding");
+        SubjectId owner = new SubjectId("settlement:one");
+        SubjectId item = new SubjectId("item:tool");
+        SubjectId lot = new SubjectId("lot:bread");
+        SubjectId account = new SubjectId("custody:colliding");
+        ExactItemStack tool = new ExactItemStack(item, owner, "minecraft:iron_pickaxe", 1,
+                new InventoryCustody.ContainerSlot(container, 0));
+        FungibleResourceLedger resources = FungibleResourceLedger.empty().issue(
+                new ResourceLot(lot, owner, "minecraft:bread", 4, "bootstrap", List.of()),
+                new CustodyAccount(account, new ResourceCustody.Container(container), Map.of(lot, 4), Map.of()))
+                .rebind(account, 2L, List.of(new PhysicalStackBinding(new SubjectId("binding:colliding"), account,
+                        new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(container, 0)), 2L,
+                        "minecraft:bread", Map.of(lot, 4), Map.of())));
+
+        assertThrows(IllegalArgumentException.class, () -> new ExactInventory(
+                Map.of(container, new ContainerRecord(container, owner, 2)), Map.of(item, tool), Map.of(), Map.of(),
+                Map.of(), Map.of(), surfaceFor(container), EconomicLedger.fromClaimHolders(
+                        List.of(new ContainerRecord(container, owner, 2)), List.of(tool), List.of()), resources));
+    }
+
+    @Test
     void loadingCargoMovesTheSameExactStackWithoutDuplicatingIt() {
         SubjectId container = new SubjectId("container:depot");
         SubjectId owner = new SubjectId("settlement:one");

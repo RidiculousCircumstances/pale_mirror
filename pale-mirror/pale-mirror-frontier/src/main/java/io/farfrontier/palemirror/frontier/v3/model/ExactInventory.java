@@ -90,7 +90,7 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
             requireDistinct(carrier.getValue(), "world carrier custody");
             for (SubjectId item : carrier.getValue()) require(items.get(item), new InventoryCustody.WorldCarrier(carrier.getKey()), "world carrier reverse custody");
         }
-        validateFungibleResourceCustody(containers, cargo, fungibleResources);
+        validateFungibleResourceCustody(containers, cargo, occupiedSlots, fungibleResources);
         if (!slots.equals(occupiedSlots)) throw new IllegalArgumentException("container slot index must exactly match exact item custody");
     }
 
@@ -441,6 +441,7 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
 
     private static void validateFungibleResourceCustody(Map<SubjectId, ContainerRecord> containers,
                                                         Map<SubjectId, CargoBatch> cargo,
+                                                        Map<InventoryCustody.ContainerSlot, SubjectId> occupiedSlots,
                                                         FungibleResourceLedger fungibleResources) {
         Map<ResourceCustody, SubjectId> accountsByCustody = new HashMap<>();
         for (CustodyAccount account : fungibleResources.accounts().values()) {
@@ -479,6 +480,9 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
                         || !(account.custody() instanceof ResourceCustody.Container container)
                         || !container.containerId().equals(slot.slot().containerId())) {
                     throw new IllegalArgumentException("fungible physical binding has no matching owned container account");
+                }
+                if (occupiedSlots.containsKey(slot.slot())) {
+                    throw new IllegalArgumentException("fungible physical binding overlaps an exact-item slot");
                 }
             }
         }

@@ -96,17 +96,52 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
                                                                Map<SubjectId, Integer> claimQuantities,
                                                                List<PhysicalStackBinding> remainingSource,
                                                                List<PhysicalStackBinding> destinationBindings) {
+        return transferObserved(fromId, destination, false, sourceEpoch, destinationEpoch, lotQuantities, claimQuantities,
+                remainingSource, destinationBindings);
+    }
+
+    /**
+     * Reconciles a physical transfer into an already-known custody account without releasing
+     * either side to COLD ownership between the source and destination observations.
+     */
+    public FungibleResourceLedger transferObservedToExistingAccount(SubjectId fromId, SubjectId destinationId, long sourceEpoch,
+                                                                    long destinationEpoch, Map<SubjectId, Integer> lotQuantities,
+                                                                    Map<SubjectId, Integer> claimQuantities,
+                                                                    List<PhysicalStackBinding> remainingSource,
+                                                                    List<PhysicalStackBinding> destinationBindings) {
+        return transferObserved(fromId, requireAccount(destinationId), true, sourceEpoch, destinationEpoch, lotQuantities,
+                claimQuantities, remainingSource, destinationBindings);
+    }
+
+    private FungibleResourceLedger transferObserved(SubjectId fromId, CustodyAccount destination, boolean destinationExists,
+                                                     long sourceEpoch, long destinationEpoch,
+                                                     Map<SubjectId, Integer> lotQuantities,
+                                                     Map<SubjectId, Integer> claimQuantities,
+                                                     List<PhysicalStackBinding> remainingSource,
+                                                     List<PhysicalStackBinding> destinationBindings) {
         CustodyAccount from = requireAccount(fromId); Objects.requireNonNull(destination, "observed destination account");
         Objects.requireNonNull(remainingSource, "observed remaining source layout"); Objects.requireNonNull(destinationBindings, "observed destination layout");
-        if (accounts.containsKey(destination.id()) || sourceEpoch < 1 || destinationEpoch < 1) throw new IllegalArgumentException("observed handoff has an invalid new custody account or epoch");
+        if (from.id().equals(destination.id()) || accounts.containsKey(destination.id()) != destinationExists
+                || sourceEpoch < 1 || destinationEpoch < 1) {
+            throw new IllegalArgumentException("observed handoff has an invalid destination account or epoch");
+        }
         List<PhysicalStackBinding> current = bindings.values().stream().filter(binding -> binding.accountId().equals(from.id())).toList();
         if (current.isEmpty() || current.stream().anyMatch(binding -> binding.authorityEpoch() != sourceEpoch)) {
             throw new IllegalArgumentException("observed handoff does not own the current source binding");
         }
+        List<PhysicalStackBinding> destinationCurrent = bindings.values().stream()
+                .filter(binding -> binding.accountId().equals(destination.id())).toList();
+        if (destinationCurrent.stream().anyMatch(binding -> binding.authorityEpoch() != destinationEpoch)) {
+            throw new IllegalArgumentException("observed handoff does not own the current destination binding");
+        }
         requireSubset(from.lotQuantities(), lotQuantities, "observed transfer lots"); requireOptionalSubset(from.claimQuantities(), claimQuantities, "observed transfer claims");
         if (!claimQuantities.isEmpty() && sum(lotQuantities) != sum(claimQuantities)) throw new IllegalArgumentException("observed claimed transfer must preserve exact quantity");
-        if (!destination.lotQuantities().equals(lotQuantities) || !destination.claimQuantities().equals(claimQuantities)) {
-            throw new IllegalArgumentException("observed destination must retain exactly the transferred quantities");
+        CustodyAccount finalDestination = destinationExists
+                ? accountWithAdded(destination, lotQuantities, claimQuantities)
+                : destination;
+        if (!destinationExists && (!destination.lotQuantities().equals(lotQuantities)
+                || !destination.claimQuantities().equals(claimQuantities))) {
+            throw new IllegalArgumentException("observed destination does not retain exactly the transferred quantities");
         }
         Map<SubjectId, Integer> remainingLots = subtract(from.lotQuantities(), lotQuantities);
         Map<SubjectId, Integer> remainingClaims = subtract(from.claimQuantities(), claimQuantities);
@@ -114,15 +149,16 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         requireBindings(remainingSource, from.id(), sourceEpoch, "observed source layout");
         requireBindings(destinationBindings, destination.id(), destinationEpoch, "observed destination layout");
         if (!boundQuantities(remainingSource, true).equals(remainingLots) || !boundQuantities(remainingSource, false).equals(remainingClaims)
-                || !boundQuantities(destinationBindings, true).equals(destination.lotQuantities())
-                || !boundQuantities(destinationBindings, false).equals(destination.claimQuantities())) {
+                || !boundQuantities(destinationBindings, true).equals(finalDestination.lotQuantities())
+                || !boundQuantities(destinationBindings, false).equals(finalDestination.claimQuantities())) {
             throw new IllegalArgumentException("observed handoff layout does not exactly account for its custody");
         }
         Map<SubjectId, CustodyAccount> nextAccounts = new HashMap<>(accounts);
         if (remainingLots.isEmpty()) nextAccounts.remove(from.id());
         else nextAccounts.put(from.id(), new CustodyAccount(from.id(), from.custody(), remainingLots, remainingClaims));
-        nextAccounts.put(destination.id(), destination);
+        nextAccounts.put(destination.id(), finalDestination);
         Map<SubjectId, PhysicalStackBinding> nextBindings = withoutBindingsFor(from.id());
+        if (destinationExists) nextBindings = withoutBindingsFor(nextBindings, destination.id());
         for (PhysicalStackBinding binding : remainingSource) if (nextBindings.put(binding.id(), binding) != null) throw new IllegalArgumentException("observed source binding identity is already live");
         for (PhysicalStackBinding binding : destinationBindings) if (nextBindings.put(binding.id(), binding) != null) throw new IllegalArgumentException("observed destination binding identity is already live");
         return new FungibleResourceLedger(lots, claims, nextAccounts, nextBindings);
@@ -240,8 +276,14 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
             binding.claimQuantities().forEach((id, quantity) -> { ClaimAllocation claim = claims.get(id); if (claim == null || !claim.itemKind().equals(binding.itemKind())) throw new IllegalArgumentException("physical stack binding has incompatible claim evidence");
                 boundClaims.computeIfAbsent(account.id(), ignored -> new HashMap<>()).merge(id, quantity, Integer::sum); });
         }
-        boundLots.forEach((account, quantities) -> requireSubset(accounts.get(account).lotQuantities(), quantities, "physical stack lots"));
-        boundClaims.forEach((account, quantities) -> requireSubset(accounts.get(account).claimQuantities(), quantities, "physical stack claims"));
+        boundLots.forEach((account, quantities) -> {
+            if (!accounts.get(account).lotQuantities().equals(quantities)) {
+                throw new IllegalArgumentException("physical stack bindings must cover their complete active account");
+            }
+            if (!accounts.get(account).claimQuantities().equals(boundClaims.getOrDefault(account, Map.of()))) {
+                throw new IllegalArgumentException("physical stack bindings must cover their complete active claim allocation");
+            }
+        });
     }
 
     private ResourceLot requireLot(SubjectId id) { ResourceLot lot = lots.get(Objects.requireNonNull(id, "resource lot")); if (lot == null) throw new IllegalArgumentException("unknown resource lot"); return lot; }
@@ -254,8 +296,12 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         Map<SubjectId, CustodyAccount> next = new HashMap<>(accounts); next.put(account.id(), account); return new FungibleResourceLedger(nextLots, nextClaims, next, nextBindings);
     }
     private Map<SubjectId, PhysicalStackBinding> withoutBindingsFor(SubjectId accountId) {
-        Map<SubjectId, PhysicalStackBinding> next = new HashMap<>(bindings);
-        bindings.values().stream().filter(binding -> binding.accountId().equals(accountId)).map(PhysicalStackBinding::id).forEach(next::remove);
+        return withoutBindingsFor(bindings, accountId);
+    }
+    private static Map<SubjectId, PhysicalStackBinding> withoutBindingsFor(Map<SubjectId, PhysicalStackBinding> source,
+                                                                            SubjectId accountId) {
+        Map<SubjectId, PhysicalStackBinding> next = new HashMap<>(source);
+        source.values().stream().filter(binding -> binding.accountId().equals(accountId)).map(PhysicalStackBinding::id).forEach(next::remove);
         return next;
     }
     private void requireNoPhysicalBinding(SubjectId accountId, String operation) {
