@@ -1,6 +1,6 @@
 # PM-F02C-COLD-ADMISSION-STRUCTURE-26: close the COLD admission boundary
 
-Specification revision: 1. Status: `EXECUTING_METHOD_BUILD`.
+Specification revision: 2. Status: `TERMINAL_METHOD_REJECTED`.
 Parent slice: F0.2C. Risk: critical-code. Engineer: supervising root.
 Executor: `/root/f02c_shared_assault_challenge24/terra_cold_admission_structure26`,
 one fresh `gpt-5.6-terra`, reasoning `high`.
@@ -74,3 +74,31 @@ Use branch `terra/f02c-cold-admission-structure-26`, worktree
 worktrees/evidence and unrelated services. Assignment/liveness epoch:
 `2026-09-11T00:24:16Z`; first check follows ten complete minutes of silence.
 The first economy audit is due at `2026-09-11T01:24:16Z` if still active.
+
+## Terminal method review
+
+Candidate `7635e08847f05e7c8ab1b66bc9fb5e10f3718d4e`, parent
+`e5284b782c68af29319e7c11ba75947421dc0254`, tree
+`96b1673b9dfd1b274d01077f0f0aee3f2cfec8a1` is clean and changes only the
+declared process and test paths. The focused selection ran two named tests
+green in 2.43 seconds and the complete assault-process test class ran 14/14
+green in 15.04 seconds. Production JAR
+`9a0a9fcd37f219513c139019f45a45bacd785f5cf30493d0d497789fe382c802`
+contains no newly introduced test observer, callback or fault control.
+
+The method is rejected. The bytecode assertion inspects only direct references
+inside `planApproachProgress`; it does not traverse `coldAvailable` into
+`FrontierSceneAdmission.reservedByOtherThanSettlementAssault`, so the original
+physical-provider dependency can return transitively without failing it. The
+behavior test proves eventual COLD combat but not the required exact advancement
+event and complete continuation action. The retained negative log has no exact
+mutation source/diff/content identity, failed XML or compiled-output identity.
+A fresh read-only challenger independently reached the same findings. No
+aggregate/full gate, GameTest, Minecraft or native carrier was run.
+
+This is execution nonconformance to explicit revision-1 acceptance requirements,
+not evidence that the context packet omitted those requirements. The executor
+context is terminal. Do not enlarge the successor packet or start another proof
+repair. The supervising engineer must make a product-value decision about using
+the independently readable source correction at checkpoint `e5284b78` before
+any final gate.

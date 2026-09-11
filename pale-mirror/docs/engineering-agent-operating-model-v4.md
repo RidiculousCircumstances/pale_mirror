@@ -111,6 +111,11 @@ mutate the candidate or make the engineer a hidden second coder.
   needs a history lesson to be understood, the builder confuses evidence tiers
   or environments, or accepted facts are repeatedly re-proved. Resolve it by
   shortening the order and replacing the context, not by adding more narrative.
+- At terminal review, classify a miss as a context defect only when the required
+  invariant, evidence shape or exclusion was absent or materially ambiguous in
+  the active packet. If the packet stated it explicitly and the builder returned
+  a weaker result, record execution nonconformance; do not reward it by expanding
+  the next packet or replaying predecessor debugging history.
 - Context replacement is not micromanagement: the fresh builder retains full
   freedom over implementation, helpers and focused verification inside the
   bounded outcome. Do not add heartbeats or intermediate design approvals to
