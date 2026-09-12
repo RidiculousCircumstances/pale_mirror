@@ -35,8 +35,12 @@ public record FencedRecoveryBinding(SubjectId bindingId, FencedRecoveryAsset ass
 
     FencedRecoveryBinding running() {
         require(FencedRecoveryPhase.PREPARED);
+        // A scene body's retained COLD pose is the sole reversible attempted projection. Cargo,
+        // containers and effects become externally observable attempts as soon as execution
+        // starts and must subsequently be inspected rather than rolled back.
         return new FencedRecoveryBinding(bindingId, asset, ownerId, ownerRevision, authorityEpoch,
-                FencedRecoveryPhase.RUNNING, reversibleCheckpoint, 0, FencedRecoveryDisposition.INSPECT, "physical-attempt");
+                FencedRecoveryPhase.RUNNING, asset == FencedRecoveryAsset.BODY && reversibleCheckpoint,
+                0, FencedRecoveryDisposition.INSPECT, "physical-attempt");
     }
     FencedRecoveryBinding observed() {
         if (phase != FencedRecoveryPhase.RUNNING && phase != FencedRecoveryPhase.PREPARED) throw new IllegalArgumentException("recovery observation is not current");

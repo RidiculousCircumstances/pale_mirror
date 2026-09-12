@@ -41,7 +41,11 @@ final class CargoCarrierReleaseStateSupport {
                 operation.tacticalPlan().withPhase(TacticalPlanPhase.ABORTED)));
         Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases()); leases.put(lease.id(), lease.withStatus(SceneLeaseStatus.DRAINING));
         StrategicPlanState plans = state.strategicPlans().interruptRouteOperation(operation.id(), operation.settlementId());
+        // The carrier has become ordinary world/player-visible custody. Persist that observation
+        // before the interruption is visible; a restart may inspect or retain it, never roll it
+        // back to the former shipment just because the scene's old chunk is absent.
+        FencedRecoveryState recovery = FrontierSceneLeaseStateSupport.observeCargoCarrier(state.fencedRecovery(), lease);
         return state.withChanges(FrontierWorldStateUpdate.begin().inventory(inventory).contracts(contracts).operations(operations)
-                .sceneLeases(leases).strategicPlans(plans));
+                .sceneLeases(leases).strategicPlans(plans).fencedRecovery(recovery));
     }
 }

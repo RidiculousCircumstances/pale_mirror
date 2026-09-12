@@ -38,6 +38,8 @@ class CargoCarrierReleaseStateTest {
                 operation.currentPosition(), new SimInstant(2_550L), engine.checkpoint().revision().value(),
                 Optional.empty(), operation.participantIds());
         FrontierWorldState hot = before.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+        SubjectId recoveryBinding = FrontierSceneLeaseStateSupport.cargoRecoveryBindingId(operation.cargoId());
+        assertEquals(FencedRecoveryPhase.RUNNING, hot.fencedRecovery().current().get(recoveryBinding).phase());
         UUID carrier = CargoCarrierIdentity.id(lease);
         CargoCarrierReleased release = new CargoCarrierReleased(leaseId, operation.cargoId(), carrier, Optional.of(UUID.fromString("00000000-0000-0000-0000-000000000051")));
         FrontierWorldState interrupted = hot.releaseCargoCarrier(release);
@@ -52,6 +54,8 @@ class CargoCarrierReleaseStateTest {
         assertEquals(ContractStatus.INTERRUPTED, interrupted.contracts().values().stream().filter(contract -> contract.cargoId().equals(operation.cargoId())).findFirst().orElseThrow().status());
         assertEquals(OperationStage.INTERRUPTED, interrupted.operations().get(operation.id()).stage());
         assertEquals(SceneLeaseStatus.DRAINING, interrupted.sceneLeases().get(leaseId).status());
+        assertEquals(FencedRecoveryPhase.OBSERVED, interrupted.fencedRecovery().current().get(recoveryBinding).phase(),
+                "world/player-visible cargo cannot be rolled back into the prior shipment");
         assertTrue(interrupted.strategicPlans().routeEngagements().isEmpty());
         assertEquals(release, FrontierWorldRuntimeDefinition.payloadCodecs().decode(release.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(release)));
         assertEquals(interrupted, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(interrupted)));

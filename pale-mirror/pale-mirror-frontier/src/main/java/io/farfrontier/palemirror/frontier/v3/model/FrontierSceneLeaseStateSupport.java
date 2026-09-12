@@ -17,7 +17,7 @@ public final class FrontierSceneLeaseStateSupport {
 
     static FrontierWorldState prepare(FrontierWorldState state, SceneLease lease) {
         Map<SceneLeaseId, SceneLease> leases = withPreparedLease(state, lease);
-        return copy(state, state.actorLocations(), leases, state.ambientLeases(), state.strategicPlans(), prepareBodies(state.fencedRecovery(), lease));
+        return copy(state, state.actorLocations(), leases, state.ambientLeases(), state.strategicPlans(), prepareRecovery(state.fencedRecovery(), lease));
     }
 
     private static Map<SceneLeaseId, SceneLease> withPreparedLease(FrontierWorldState state, SceneLease lease) {
@@ -72,7 +72,7 @@ public final class FrontierSceneLeaseStateSupport {
         // enter any exact HOT scene without being despawned and recreated.
         FrontierWorldState captureState = copy(state, actors, state.sceneLeases(), ambient, state.strategicPlans());
         SceneLease lease = handoff.lease();
-        return copy(captureState, actors, withPreparedLease(captureState, lease), ambient, captureState.strategicPlans(), prepareBodies(captureState.fencedRecovery(), lease));
+        return copy(captureState, actors, withPreparedLease(captureState, lease), ambient, captureState.strategicPlans(), prepareRecovery(captureState.fencedRecovery(), lease));
     }
 
     static FrontierWorldState transition(FrontierWorldState state, SceneLeaseId leaseId, SceneLeaseStatus nextStatus) {
@@ -80,7 +80,7 @@ public final class FrontierSceneLeaseStateSupport {
         if (current == null || !current.status().canTransitionTo(nextStatus)) throw new IllegalArgumentException("scene lease transition is not allowed");
         StrategicPlanState plans = FrontierSceneBehaviors.transitionPlans(state, current, nextStatus);
         Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases()); leases.put(leaseId, current.withStatus(nextStatus));
-        FencedRecoveryState recovery = nextStatus == SceneLeaseStatus.HOT ? runningBodies(state.fencedRecovery(), current) : state.fencedRecovery();
+        FencedRecoveryState recovery = nextStatus == SceneLeaseStatus.HOT ? runningRecovery(state.fencedRecovery(), current) : state.fencedRecovery();
         return copy(state, state.actorLocations(), leases, state.ambientLeases(), plans, recovery);
     }
 
@@ -142,7 +142,7 @@ public final class FrontierSceneLeaseStateSupport {
         }
         StrategicPlanState plans = FrontierSceneBehaviors.releasePlans(state, current);
         Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases()); leases.put(leaseId, current.withStatus(SceneLeaseStatus.CLOSED));
-        return copy(state, actors, leases, state.ambientLeases(), plans, confirmBodies(state, state.fencedRecovery(), current));
+        return copy(state, actors, leases, state.ambientLeases(), plans, confirmRecovery(state, state.fencedRecovery(), current));
     }
 
     /** A PREPARED lease has not transferred authority to its provisional Minecraft bodies. */
@@ -153,7 +153,7 @@ public final class FrontierSceneLeaseStateSupport {
         }
         Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases());
         leases.put(leaseId, current.withStatus(SceneLeaseStatus.CLOSED));
-        return copy(state, state.actorLocations(), leases, state.ambientLeases(), state.strategicPlans(), revokePreparedBodies(state.fencedRecovery(), current));
+        return copy(state, state.actorLocations(), leases, state.ambientLeases(), state.strategicPlans(), revokePreparedRecovery(state.fencedRecovery(), current));
     }
 
     private static FrontierWorldState copy(FrontierWorldState state, Map<SubjectId, ActorLocation> actors,
@@ -171,6 +171,10 @@ public final class FrontierSceneLeaseStateSupport {
     public static SubjectId bodyRecoveryBindingId(SubjectId actorId) { return new SubjectId("recovery:body_" + actorId.value().replace(':', '_')); }
     /** Stable owner identity for an exact scene epoch; it is deliberately not an ambient roster. */
     public static SubjectId recoveryOwner(SceneLease lease) { return new SubjectId("scene:" + lease.id().value().replace(':', '_')); }
+    static SubjectId cargoRecoveryBindingId(SubjectId cargoId) { return new SubjectId("recovery:cargo_" + cargoId.value().replace(':', '_')); }
+    private static FencedRecoveryState prepareRecovery(FencedRecoveryState recovery, SceneLease lease) {
+        return prepareCargo(prepareBodies(recovery, lease), lease);
+    }
     private static FencedRecoveryState prepareBodies(FencedRecoveryState recovery, SceneLease lease) {
         FencedRecoveryState next = recovery; SubjectId owner = recoveryOwner(lease);
         for (SceneMember member : lease.members()) {
@@ -178,6 +182,15 @@ public final class FrontierSceneLeaseStateSupport {
             next = next.prepare(FencedRecoveryBinding.prepared(id, FencedRecoveryAsset.BODY, owner, lease.revision(), next.nextEpoch(id), true));
         }
         return next;
+    }
+    private static FencedRecoveryState prepareCargo(FencedRecoveryState recovery, SceneLease lease) {
+        if (!FrontierSceneBehaviors.isLogistics(lease)) return recovery;
+        SubjectId id = cargoRecoveryBindingId(FrontierSceneBehaviors.logistics(lease).cargoId());
+        return recovery.prepare(FencedRecoveryBinding.prepared(id, FencedRecoveryAsset.CARGO, recoveryOwner(lease), lease.revision(),
+                recovery.nextEpoch(id), true));
+    }
+    private static FencedRecoveryState runningRecovery(FencedRecoveryState recovery, SceneLease lease) {
+        return runningCargo(runningBodies(recovery, lease), lease);
     }
     private static FencedRecoveryState runningBodies(FencedRecoveryState recovery, SceneLease lease) {
         FencedRecoveryState next = recovery;
@@ -188,6 +201,17 @@ public final class FrontierSceneLeaseStateSupport {
             else if (binding.phase() != FencedRecoveryPhase.RUNNING) throw new IllegalArgumentException("scene body recovery authority cannot be reclaimed");
         }
         return next;
+    }
+    private static FencedRecoveryState runningCargo(FencedRecoveryState recovery, SceneLease lease) {
+        if (!FrontierSceneBehaviors.isLogistics(lease)) return recovery;
+        SubjectId id = cargoRecoveryBindingId(FrontierSceneBehaviors.logistics(lease).cargoId()); FencedRecoveryBinding binding = recovery.current().get(id);
+        if (binding == null || !binding.ownerId().equals(recoveryOwner(lease)) || binding.ownerRevision() != lease.revision()) {
+            throw new IllegalArgumentException("scene cargo recovery authority is absent");
+        }
+        return binding.phase() == FencedRecoveryPhase.PREPARED ? recovery.running(id, binding.authorityEpoch()) : recovery;
+    }
+    private static FencedRecoveryState confirmRecovery(FrontierWorldState state, FencedRecoveryState recovery, SceneLease lease) {
+        return confirmCargo(confirmBodies(state, recovery, lease), lease);
     }
     private static FencedRecoveryState confirmBodies(FrontierWorldState state, FencedRecoveryState recovery, SceneLease lease) {
         FencedRecoveryState next = recovery;
@@ -200,12 +224,36 @@ public final class FrontierSceneLeaseStateSupport {
         }
         return next;
     }
+    private static FencedRecoveryState confirmCargo(FencedRecoveryState recovery, SceneLease lease) {
+        if (!FrontierSceneBehaviors.isLogistics(lease)) return recovery;
+        SubjectId id = cargoRecoveryBindingId(FrontierSceneBehaviors.logistics(lease).cargoId()); FencedRecoveryBinding binding = recovery.current().get(id);
+        if (binding == null) throw new IllegalArgumentException("scene cargo recovery authority is absent at release");
+        long epoch = binding.authorityEpoch();
+        FencedRecoveryState observed = binding.phase() == FencedRecoveryPhase.OBSERVED ? recovery : recovery.observed(id, epoch);
+        return observed.confirm(id, epoch);
+    }
+    static FencedRecoveryState observeCargoCarrier(FencedRecoveryState recovery, SceneLease lease) {
+        if (!FrontierSceneBehaviors.isLogistics(lease)) throw new IllegalArgumentException("cargo recovery requires logistics scene");
+        SubjectId id = cargoRecoveryBindingId(FrontierSceneBehaviors.logistics(lease).cargoId()); FencedRecoveryBinding binding = recovery.current().get(id);
+        if (binding == null || binding.phase() != FencedRecoveryPhase.RUNNING || !binding.ownerId().equals(recoveryOwner(lease))
+                || binding.ownerRevision() != lease.revision()) throw new IllegalArgumentException("cargo recovery observation is stale");
+        return recovery.observed(id, binding.authorityEpoch());
+    }
+    private static FencedRecoveryState revokePreparedRecovery(FencedRecoveryState recovery, SceneLease lease) {
+        return revokePreparedCargo(revokePreparedBodies(recovery, lease), lease);
+    }
     private static FencedRecoveryState revokePreparedBodies(FencedRecoveryState recovery, SceneLease lease) {
         FencedRecoveryState next = recovery;
         for (SceneMember member : lease.members()) {
             SubjectId id = bodyRecoveryBindingId(member.actorId()); next = next.revokeToCold(id, next.current().get(id).authorityEpoch());
         }
         return next;
+    }
+    private static FencedRecoveryState revokePreparedCargo(FencedRecoveryState recovery, SceneLease lease) {
+        if (!FrontierSceneBehaviors.isLogistics(lease)) return recovery;
+        SubjectId id = cargoRecoveryBindingId(FrontierSceneBehaviors.logistics(lease).cargoId()); FencedRecoveryBinding binding = recovery.current().get(id);
+        if (binding == null) throw new IllegalArgumentException("prepared scene cargo recovery authority is absent");
+        return recovery.revokeToCold(id, binding.authorityEpoch());
     }
     private static FencedRecoveryState revokeReversibleBodies(FencedRecoveryState recovery, SceneLease lease) {
         FencedRecoveryState next = recovery;
