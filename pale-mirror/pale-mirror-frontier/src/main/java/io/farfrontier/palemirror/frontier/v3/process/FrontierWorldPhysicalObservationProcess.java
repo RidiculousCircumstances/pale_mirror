@@ -177,6 +177,9 @@ public final class FrontierWorldPhysicalObservationProcess {
             transferred = ledger.transferObservedToExistingAccount(observed.sourceAccountId(), existing.id(), observed.sourceEpoch(),
                     observed.destinationEpoch(), observed.lotQuantities(), observed.claimQuantities(), observed.remainingSource(), observed.destinationBindings());
         }
+        if (!observed.playerSaveFence().isEmpty()) {
+            transferred = transferred.fenceUnresolvedPlayerSave(observed.destinationAccount().id(), observed.playerSaveFence());
+        }
         return state.withInventory(state.inventory().withFungibleResources(transferred));
     }
 

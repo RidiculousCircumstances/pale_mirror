@@ -109,6 +109,12 @@ public final class FrontierV3PlayerCustodyGameTests {
                 "one physical partial withdrawal must create one exact player portion");
         helper.assertTrue(moved.inventory().fungibleResources().bindings().values().stream().anyMatch(binding -> binding.accountId().equals(playerAccount.id())),
                 "the player portion remains HOT and therefore cannot become concurrent COLD stock");
+        var playerBinding = moved.inventory().fungibleResources().bindings().values().stream()
+                .filter(binding -> binding.accountId().equals(playerAccount.id())).findFirst().orElseThrow();
+        helper.assertTrue(!playerBinding.playerSaveFence().isEmpty()
+                        && playerBinding.playerSaveFence().equals(player.getPersistentData()
+                        .getCompound("pale_mirror.frontier_v3.player_custody_save_fence").getString("token")),
+                "the accepted production handoff must bind the same canonical and player-save fence before a later player save");
         helper.assertTrue(moved.inventory().fungibleResources().totalQuantity(new SubjectId("settlement:1"), "minecraft:wheat") == 64,
                 "the split must conserve every ordinary item unit");
         chest.setItem(0, new ItemStack(Items.WHEAT, 64)); player.getInventory().setItem(0, ItemStack.EMPTY); chest.setChanged();
@@ -204,6 +210,31 @@ public final class FrontierV3PlayerCustodyGameTests {
         FrontierV3PlayerCustodyRecovery.forget(runtime); runtime.shutdown(); helper.succeed();
     }
 
+    @GameTest(batch = "pm-frontier-v3-player-withdrawal", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void ordinarySavedEmptyPlayerSlotRemainsLocalAmbiguityAndCannotReplayCanonicalCustody(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); var player = helper.makeMockServerPlayerInLevel();
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
+                recoveredPlayerRuntime(new WorldId("frontier:player-custody-ordinary-empty-game-test"), player.getUUID());
+        FrontierV3PlayerCustodyRecovery.beginRecovery(runtime);
+        var expected = FrontierV3PlayerResourceDiagnostic.expected(state(runtime), "custody:player-" + player.getUUID());
+        helper.assertTrue(expected != null, "the fixture requires one exact durable player-custody binding");
+        var savedFence = new net.minecraft.nbt.CompoundTag();
+        savedFence.putString("token", expected.playerSaveFence()); savedFence.putString("account", expected.accountId().value());
+        savedFence.putString("binding", expected.bindingId().value()); savedFence.putInt("slot", expected.slot());
+        player.getPersistentData().put("pale_mirror.frontier_v3.player_custody_save_fence", savedFence);
+
+        FrontierV3FungibleResourceObservationExecutor.tick(level, runtime);
+        helper.assertTrue(player.getInventory().getItem(9).isEmpty(),
+                "an ordinary durable empty/moved/consumed player slot must not be replaced from canonical custody");
+        FrontierWorldState retained = state(runtime);
+        helper.assertTrue(retained.inventory().fungibleResources().accounts().values().stream()
+                        .anyMatch(account -> account.custody().equals(new ResourceCustody.Player(player.getUUID()))),
+                "the local ambiguity must retain the one canonical custody account rather than minting or replaying a second transfer");
+        helper.assertTrue(retained.inventory().fungibleResources().totalQuantity(new SubjectId("settlement:1"), "minecraft:carrot") == 32,
+                "the divergent saved slot leaves exact canonical conservation intact without player-stack overwrite");
+        FrontierV3PlayerCustodyRecovery.forget(runtime); runtime.shutdown(); helper.succeed();
+    }
+
     private static FrontierWorldState state(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         return new FrontierWorldStateCodec().decode(runtime.checkpointImage().orElseThrow().canonicalState());
     }
@@ -245,7 +276,7 @@ public final class FrontierV3PlayerCustodyGameTests {
         ResourceLot lot = new ResourceLot(lotId, settlement, "minecraft:carrot", 32, "game-test-recovery", List.of());
         CustodyAccount account = new CustodyAccount(accountId, new ResourceCustody.Player(playerId), Map.of(lotId, 32), Map.of());
         PhysicalStackBinding binding = new PhysicalStackBinding(bindingId, accountId, new PhysicalStackAddress.PlayerSlot(playerId, 9), 1L,
-                "minecraft:carrot", Map.of(lotId, 32), Map.of());
+                "minecraft:carrot", Map.of(lotId, 32), Map.of(), "00000000-0000-0000-0000-000000000901");
         FungibleResourceLedger prior = base.initialState().inventory().fungibleResources();
         Map<SubjectId, ResourceLot> lots = new LinkedHashMap<>(prior.lots()); lots.put(lotId, lot);
         Map<SubjectId, CustodyAccount> accounts = new LinkedHashMap<>(prior.accounts()); accounts.put(accountId, account);

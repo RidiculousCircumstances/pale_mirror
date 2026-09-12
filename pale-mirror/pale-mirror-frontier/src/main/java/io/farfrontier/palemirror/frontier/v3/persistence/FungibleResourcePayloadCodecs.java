@@ -70,11 +70,11 @@ final class FungibleResourcePayloadCodecs {
             writeSubject(output, observed.sourceAccountId()); writeFungibleAccount(output, observed.destinationAccount());
             output.writeLong(observed.sourceEpoch()); output.writeLong(observed.destinationEpoch()); writeFungibleQuantities(output, observed.lotQuantities());
             writeFungibleQuantities(output, observed.claimQuantities()); writeFungibleBindings(output, observed.remainingSource()); writeFungibleBindings(output, observed.destinationBindings());
-            writeSubjects(output, observed.forfeitedClaimIds());
+            writeSubjects(output, observed.forfeitedClaimIds()); writeString(output, observed.playerSaveFence());
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new FungibleResourceHandoffObserved(readSubject(input).value(),
                 readFungibleAccount(input), input.readLong(), input.readLong(), readFungibleQuantities(input), readFungibleQuantities(input),
-                readFungibleBindings(input), readFungibleBindings(input), readSubjects(input))); }
+                readFungibleBindings(input), readFungibleBindings(input), readSubjects(input), readString(input))); }
     }
 
     private static final class FungibleStackBindingsReleasedCodec implements PayloadCodec {
@@ -154,14 +154,14 @@ final class FungibleResourcePayloadCodecs {
         output.writeShort(bindings.size());
         for (PhysicalStackBinding binding : bindings) {
             writeSubject(output, binding.id()); writeSubject(output, binding.accountId()); writePhysicalStackAddress(output, binding.address()); output.writeLong(binding.authorityEpoch());
-            writeString(output, binding.itemKind()); writeFungibleQuantities(output, binding.lotQuantities()); writeFungibleQuantities(output, binding.claimQuantities());
+            writeString(output, binding.itemKind()); writeFungibleQuantities(output, binding.lotQuantities()); writeFungibleQuantities(output, binding.claimQuantities()); writeString(output, binding.playerSaveFence());
         }
     }
 
     private static List<PhysicalStackBinding> readFungibleBindings(DataInputStream input) throws IOException {
         List<PhysicalStackBinding> bindings = new ArrayList<>();
         for (int index = 0, count = input.readUnsignedShort(); index < count; index++) bindings.add(new PhysicalStackBinding(readSubject(input).value(),
-                readSubject(input).value(), readPhysicalStackAddress(input), input.readLong(), readString(input), readFungibleQuantities(input), readFungibleQuantities(input)));
+                readSubject(input).value(), readPhysicalStackAddress(input), input.readLong(), readString(input), readFungibleQuantities(input), readFungibleQuantities(input), readString(input)));
         return bindings;
     }
 

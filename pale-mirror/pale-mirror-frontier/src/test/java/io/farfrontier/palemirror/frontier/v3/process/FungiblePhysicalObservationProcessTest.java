@@ -78,11 +78,13 @@ class FungiblePhysicalObservationProcessTest {
         PhysicalStackBinding playerBinding = new PhysicalStackBinding(new SubjectId("binding:physical-player"), playerAccount,
                 new PhysicalStackAddress.PlayerSlot(player, 0), 5L, "minecraft:bread", Map.of(lotId, 4), Map.of());
         FungibleResourceHandoffObserved handoff = new FungibleResourceHandoffObserved(accountId, destination, 4L, 5L, Map.of(lotId, 4), Map.of(),
-                List.of(remaining), List.of(playerBinding));
+                List.of(remaining), List.of(playerBinding)).withPlayerSaveFence(UUID.fromString("00000000-0000-0000-0000-000000000777"));
         assertEquals(handoff, FrontierWorldRuntimeDefinition.payloadCodecs().decode(handoff.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(handoff)));
         assertInstanceOf(CommandResult.Accepted.class, engine.submit(command(engine, world, "handoff", handoff)));
         FrontierWorldState transferred = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         assertEquals(Map.of(lotId, 4), transferred.inventory().fungibleResources().accounts().get(playerAccount).lotQuantities());
+        assertEquals("00000000-0000-0000-0000-000000000777", transferred.inventory().fungibleResources().bindings()
+                .get(playerBinding.id()).playerSaveFence(), "the exact canonical handoff must retain its durable player-save fence");
         assertEquals(10, transferred.inventory().fungibleResources().totalQuantity(owner, "minecraft:bread"));
 
         CustodyAccount forgedDestination = new CustodyAccount(accountId, new ResourceCustody.Container(container), Map.of(lotId, 6), Map.of());
@@ -160,7 +162,8 @@ class FungiblePhysicalObservationProcessTest {
         UUID player = UUID.fromString("00000000-0000-0000-0000-000000000144");
         FungibleResourceHandoffObserved theft = FungiblePhysicalHandoff.departToNew(active.inventory().fungibleResources(), accountId, 7L,
                 source, 32, new SubjectId("custody:player-claim-theft"), new ResourceCustody.Player(player), 1L,
-                new PhysicalStackAddress.PlayerSlot(player, 0)).forfeitMovedClaims();
+                new PhysicalStackAddress.PlayerSlot(player, 0)).forfeitMovedClaims()
+                .withPlayerSaveFence(UUID.fromString("00000000-0000-0000-0000-000000000778"));
 
         assertEquals(theft, FrontierWorldRuntimeDefinition.payloadCodecs().decode(theft.type(),
                 FrontierWorldRuntimeDefinition.payloadCodecs().encode(theft)));
@@ -173,6 +176,8 @@ class FungiblePhysicalObservationProcessTest {
         assertFalse(afterTheft.inventory().fungibleResources().claims().containsKey(claimId));
         assertEquals(Map.of(), afterTheft.inventory().fungibleResources().accounts().get(accountId).claimQuantities());
         assertEquals(Map.of(), afterTheft.inventory().fungibleResources().accounts().get(theft.destinationAccount().id()).claimQuantities());
+        assertEquals("00000000-0000-0000-0000-000000000778", afterTheft.inventory().fungibleResources().bindings()
+                .get(theft.destinationBindings().getFirst().id()).playerSaveFence(), "claimed player theft retains the same exact save fence");
         assertEquals(64, afterTheft.inventory().fungibleResources().totalQuantity(hive, "minecraft:rotten_flesh"));
         assertEquals(afterTheft, new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().decode(
                 new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().encode(afterTheft)));

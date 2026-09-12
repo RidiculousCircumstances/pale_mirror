@@ -45,8 +45,8 @@ final class FrontierV3FungibleResourceObservationExecutor {
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return;
-        // This is deliberately before ordinary return/departure observation: an empty slot
-        // captured at startup is the one reversible crash window, not an ordinary return.
+        // This is deliberately before ordinary return/departure observation: only an exact
+        // canonical-first fence without its later persisted player witness is reversible.
         if (FrontierV3PlayerCustodyRecovery.reconcileOne(level, runtime, state)) return;
         if (observeOneCargoCarrierDeparture(level, runtime, state)) return;
         if (observeOneWorldPickup(level, runtime, state)) return;
@@ -126,8 +126,13 @@ final class FrontierV3FungibleResourceObservationExecutor {
                     source.binding(), source.remainingQuantity(), destinationId, new ResourceCustody.Player(playerId), 1L,
                     new PhysicalStackAddress.PlayerSlot(playerId, target.slot())));
             if (observed == null) return false;
+            observed = observed.withPlayerSaveFence(UUID.randomUUID());
             CommandResult result = FrontierV3CommandSubmission.submit(runtime, "fungible-player-withdrawal", account.id().value(), observed);
-            return result instanceof CommandResult.Accepted;
+            if (result instanceof CommandResult.Accepted) {
+                FrontierV3PlayerCustodyRecovery.armDurablePlayerSave(target.player(), observed);
+                return true;
+            }
+            return false;
         } catch (IllegalArgumentException invalid) {
             return false;
         }
@@ -174,8 +179,12 @@ final class FrontierV3FungibleResourceObservationExecutor {
                         current.getFirst().authorityEpoch(), current.getFirst(), 0, new SubjectId("custody:player-" + playerId),
                         new ResourceCustody.Player(playerId), 1L, new PhysicalStackAddress.PlayerSlot(playerId, target.slot())));
                 if (observed == null) continue;
+                observed = observed.withPlayerSaveFence(UUID.randomUUID());
                 CommandResult result = FrontierV3CommandSubmission.submit(runtime, "fungible-world-pickup", source.id().value(), observed);
-                if (result instanceof CommandResult.Accepted) return true;
+                if (result instanceof CommandResult.Accepted) {
+                    FrontierV3PlayerCustodyRecovery.armDurablePlayerSave(target.player(), observed);
+                    return true;
+                }
             } catch (IllegalArgumentException ignored) {
                 // This is unverifiable physical drift; retaining the current HOT account is fail closed.
             }
@@ -213,8 +222,12 @@ final class FrontierV3FungibleResourceObservationExecutor {
                         new SubjectId("custody:player-" + playerId), new ResourceCustody.Player(playerId), 1L,
                         new PhysicalStackAddress.PlayerSlot(playerId, target.slot())));
                 if (observed == null) continue;
+                observed = observed.withPlayerSaveFence(UUID.randomUUID());
                 CommandResult result = FrontierV3CommandSubmission.submit(runtime, "fungible-cargo-carrier-withdrawal", source.id().value(), observed);
-                if (result instanceof CommandResult.Accepted) return true;
+                if (result instanceof CommandResult.Accepted) {
+                    FrontierV3PlayerCustodyRecovery.armDurablePlayerSave(target.player(), observed);
+                    return true;
+                }
             } catch (IllegalArgumentException ignored) {
                 // Physical stacks that cannot prove one complete custody transaction remain fenced.
             }

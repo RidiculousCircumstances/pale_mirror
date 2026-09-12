@@ -70,7 +70,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
             Map<SubjectId, Integer> bindingClaims = new HashMap<>(binding.claimQuantities());
             if (allocated > 0) bindingClaims.put(claim.id(), allocated);
             PhysicalStackBinding retained = new PhysicalStackBinding(binding.id(), binding.accountId(), binding.address(), binding.authorityEpoch(),
-                    binding.itemKind(), binding.lotQuantities(), bindingClaims);
+                    binding.itemKind(), binding.lotQuantities(), bindingClaims, binding.playerSaveFence());
             next.put(retained.id(), retained);
             remaining -= allocated;
         }
@@ -106,7 +106,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         bindings.forEach((id, binding) -> {
             Map<SubjectId, Integer> bindingClaims = new HashMap<>(binding.claimQuantities()); claimIds.forEach(bindingClaims::remove);
             nextBindings.put(id, new PhysicalStackBinding(binding.id(), binding.accountId(), binding.address(), binding.authorityEpoch(),
-                    binding.itemKind(), binding.lotQuantities(), bindingClaims));
+                    binding.itemKind(), binding.lotQuantities(), bindingClaims, binding.playerSaveFence()));
         });
         return new FungibleResourceLedger(lots, nextClaims, nextAccounts, nextBindings);
     }
@@ -406,6 +406,28 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
             throw new IllegalArgumentException("physical custody release does not match the current authority epoch");
         }
         Map<SubjectId, PhysicalStackBinding> next = withoutBindingsFor(accountId);
+        return new FungibleResourceLedger(lots, claims, accounts, next);
+    }
+
+    /**
+     * Records the one durable canonical-first player-save gap for a freshly observed player
+     * handoff.  This token is not a generic restart repair permission: it is meaningful only
+     * while this exact HOT binding still owns the exact player slot.
+     */
+    public FungibleResourceLedger fenceUnresolvedPlayerSave(SubjectId accountId, String fence) {
+        CustodyAccount account = requireAccount(accountId);
+        if (!(account.custody() instanceof ResourceCustody.Player player) || fence == null || fence.isEmpty()) {
+            throw new IllegalArgumentException("player save fence requires one player custody account");
+        }
+        List<PhysicalStackBinding> current = bindings.values().stream().filter(binding -> binding.accountId().equals(accountId)).toList();
+        if (current.size() != 1 || !(current.getFirst().address() instanceof PhysicalStackAddress.PlayerSlot slot)
+                || !slot.playerId().equals(player.playerId()) || !current.getFirst().playerSaveFence().isEmpty()) {
+            throw new IllegalArgumentException("player save fence requires one unfenced current player binding");
+        }
+        PhysicalStackBinding prior = current.getFirst();
+        PhysicalStackBinding fenced = new PhysicalStackBinding(prior.id(), prior.accountId(), prior.address(), prior.authorityEpoch(),
+                prior.itemKind(), prior.lotQuantities(), prior.claimQuantities(), fence);
+        Map<SubjectId, PhysicalStackBinding> next = new HashMap<>(bindings); next.put(fenced.id(), fenced);
         return new FungibleResourceLedger(lots, claims, accounts, next);
     }
 

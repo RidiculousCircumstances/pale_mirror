@@ -55,7 +55,7 @@ final class FrontierV3PlayerResourceDiagnostic {
         int canonicalQuantity = account.lotQuantities().values().stream().mapToInt(Integer::intValue).sum();
         if (canonicalQuantity != binding.quantity()) return null;
         return new Expected(account.id(), custody.playerId(), address.slot(), canonicalQuantity, binding.id(), binding.authorityEpoch(),
-                binding.itemKind(), binding.quantity());
+                binding.itemKind(), binding.quantity(), binding.playerSaveFence());
     }
 
     /** Package-visible immutable physical read for focused tests; production supplies a live ServerPlayer only. */
@@ -82,7 +82,7 @@ final class FrontierV3PlayerResourceDiagnostic {
     }
 
     record Expected(SubjectId accountId, UUID playerId, int slot, int canonicalQuantity, SubjectId bindingId,
-                    long authorityEpoch, String itemKind, int bindingQuantity) { }
+                    long authorityEpoch, String itemKind, int bindingQuantity, String playerSaveFence) { }
 
     record Actual(String itemKind, int count) { }
 }

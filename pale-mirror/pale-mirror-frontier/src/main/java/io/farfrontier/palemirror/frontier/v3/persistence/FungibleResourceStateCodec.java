@@ -39,7 +39,7 @@ final class FungibleResourceStateCodec {
         for (PhysicalStackBinding binding : ledger.bindings().values().stream().sorted(Comparator.comparing(PhysicalStackBinding::id)).toList()) {
             writeString(output, binding.id().value()); writeString(output, binding.accountId().value()); writePhysicalAddress(output, binding.address());
             output.writeLong(binding.authorityEpoch()); writeString(output, binding.itemKind()); writeQuantities(output, binding.lotQuantities());
-            writeQuantities(output, binding.claimQuantities());
+            writeQuantities(output, binding.claimQuantities()); writeString(output, binding.playerSaveFence());
         }
     }
 
@@ -64,7 +64,7 @@ final class FungibleResourceStateCodec {
         Map<SubjectId, PhysicalStackBinding> bindings = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId id = new SubjectId(readString(input)); PhysicalStackBinding binding = new PhysicalStackBinding(id,
-                    new SubjectId(readString(input)), readPhysicalAddress(input), input.readLong(), readString(input), readQuantities(input), readQuantities(input));
+                    new SubjectId(readString(input)), readPhysicalAddress(input), input.readLong(), readString(input), readQuantities(input), readQuantities(input), readString(input));
             if (bindings.put(id, binding) != null) throw new IllegalArgumentException("duplicate physical stack binding id");
         }
         return new FungibleResourceLedger(lots, claims, accounts, bindings);

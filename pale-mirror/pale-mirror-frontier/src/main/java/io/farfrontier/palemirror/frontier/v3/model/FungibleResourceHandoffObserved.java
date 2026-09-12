@@ -12,13 +12,21 @@ public record FungibleResourceHandoffObserved(SubjectId sourceAccountId, Custody
                                               long sourceEpoch, long destinationEpoch,
                                               Map<SubjectId, Integer> lotQuantities, Map<SubjectId, Integer> claimQuantities,
                                               List<PhysicalStackBinding> remainingSource, List<PhysicalStackBinding> destinationBindings,
-                                              java.util.Set<SubjectId> forfeitedClaimIds)
+                                              java.util.Set<SubjectId> forfeitedClaimIds, String playerSaveFence)
         implements FrontierPayload {
     public FungibleResourceHandoffObserved(SubjectId sourceAccountId, CustodyAccount destinationAccount, long sourceEpoch, long destinationEpoch,
                                             Map<SubjectId, Integer> lotQuantities, Map<SubjectId, Integer> claimQuantities,
                                             List<PhysicalStackBinding> remainingSource, List<PhysicalStackBinding> destinationBindings) {
         this(sourceAccountId, destinationAccount, sourceEpoch, destinationEpoch, lotQuantities, claimQuantities,
-                remainingSource, destinationBindings, java.util.Set.of());
+                remainingSource, destinationBindings, java.util.Set.of(), "");
+    }
+
+    public FungibleResourceHandoffObserved(SubjectId sourceAccountId, CustodyAccount destinationAccount, long sourceEpoch, long destinationEpoch,
+                                            Map<SubjectId, Integer> lotQuantities, Map<SubjectId, Integer> claimQuantities,
+                                            List<PhysicalStackBinding> remainingSource, List<PhysicalStackBinding> destinationBindings,
+                                            java.util.Set<SubjectId> forfeitedClaimIds) {
+        this(sourceAccountId, destinationAccount, sourceEpoch, destinationEpoch, lotQuantities, claimQuantities,
+                remainingSource, destinationBindings, forfeitedClaimIds, "");
     }
 
     public FungibleResourceHandoffObserved {
@@ -34,13 +42,22 @@ public record FungibleResourceHandoffObserved(SubjectId sourceAccountId, Custody
         if (!forfeitedClaimIds.isEmpty() && !forfeitedClaimIds.equals(claimQuantities.keySet())) {
             throw new IllegalArgumentException("handoff forfeiture must name exactly its moved claim portions");
         }
+        playerSaveFence = Objects.requireNonNull(playerSaveFence, "player save fence");
+        if (!playerSaveFence.isEmpty()) {
+            if (!(destinationAccount.custody() instanceof ResourceCustody.Player)
+                    || destinationBindings.size() != 1 || !(destinationBindings.getFirst().address() instanceof PhysicalStackAddress.PlayerSlot)) {
+                throw new IllegalArgumentException("player save fence requires one player destination binding");
+            }
+            try { java.util.UUID.fromString(playerSaveFence); }
+            catch (IllegalArgumentException invalid) { throw new IllegalArgumentException("player save fence must be a UUID", invalid); }
+        }
     }
     @Override public String type() { return "frontier.fungible_resource_handoff_observed"; }
 
     /** Binds a physical departure of a reserved portion to the one owning-work forfeiture path. */
     public FungibleResourceHandoffObserved forfeitMovedClaims() {
         return claimQuantities.isEmpty() ? this : new FungibleResourceHandoffObserved(sourceAccountId, destinationAccount, sourceEpoch,
-                destinationEpoch, lotQuantities, claimQuantities, remainingSource, destinationBindings, claimQuantities.keySet());
+                destinationEpoch, lotQuantities, claimQuantities, remainingSource, destinationBindings, claimQuantities.keySet(), playerSaveFence);
     }
 
     /** Replays the same observed layout after its named allocations have been atomically released. */
@@ -49,14 +66,21 @@ public record FungibleResourceHandoffObserved(SubjectId sourceAccountId, Custody
         return new FungibleResourceHandoffObserved(sourceAccountId,
                 new CustodyAccount(destinationAccount.id(), destinationAccount.custody(), destinationAccount.lotQuantities(), Map.of()),
                 sourceEpoch, destinationEpoch, lotQuantities, Map.of(), without(forfeitedClaimIds, remainingSource),
-                without(forfeitedClaimIds, destinationBindings));
+                without(forfeitedClaimIds, destinationBindings), java.util.Set.of(), playerSaveFence);
+    }
+
+    /** Binds one newly observed player handoff to the later player-save durability fence. */
+    public FungibleResourceHandoffObserved withPlayerSaveFence(java.util.UUID fence) {
+        Objects.requireNonNull(fence, "player save fence");
+        return new FungibleResourceHandoffObserved(sourceAccountId, destinationAccount, sourceEpoch, destinationEpoch,
+                lotQuantities, claimQuantities, remainingSource, destinationBindings, forfeitedClaimIds, fence.toString());
     }
 
     private static List<PhysicalStackBinding> without(java.util.Set<SubjectId> claimIds, List<PhysicalStackBinding> values) {
         return values.stream().map(binding -> {
             java.util.Map<SubjectId, Integer> claims = new java.util.HashMap<>(binding.claimQuantities()); claimIds.forEach(claims::remove);
             return new PhysicalStackBinding(binding.id(), binding.accountId(), binding.address(), binding.authorityEpoch(), binding.itemKind(),
-                    binding.lotQuantities(), claims);
+                    binding.lotQuantities(), claims, binding.playerSaveFence());
         }).toList();
     }
 

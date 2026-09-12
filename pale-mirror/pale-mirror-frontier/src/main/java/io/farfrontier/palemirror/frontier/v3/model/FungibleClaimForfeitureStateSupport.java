@@ -29,6 +29,9 @@ public final class FungibleClaimForfeitureStateSupport {
                 effective.destinationEpoch(), effective.lotQuantities(), effective.claimQuantities(), effective.remainingSource(), effective.destinationBindings())
                 : cleared.transferObservedToExistingAccount(effective.sourceAccountId(), existing.id(), effective.sourceEpoch(), effective.destinationEpoch(),
                 effective.lotQuantities(), effective.claimQuantities(), effective.remainingSource(), effective.destinationBindings());
+        if (!effective.playerSaveFence().isEmpty()) {
+            transferred = transferred.fenceUnresolvedPlayerSave(effective.destinationAccount().id(), effective.playerSaveFence());
+        }
         ExactInventory inventory = state.inventory().withFungibleResources(transferred);
         if (plan.reservationId() != null) inventory = inventory.withEconomics(inventory.economics().release(plan.reservationId()));
         StrategicPlanState plans = state.strategicPlans().transitionTask(plan.taskId(), StrategicTaskStatus.BLOCKED);

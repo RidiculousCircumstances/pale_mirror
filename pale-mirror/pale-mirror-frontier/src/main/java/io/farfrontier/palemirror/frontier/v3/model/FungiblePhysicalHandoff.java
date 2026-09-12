@@ -68,7 +68,7 @@ public final class FungiblePhysicalHandoff {
         for (PhysicalStackBinding binding : current) {
             if (!binding.id().equals(sourceBinding.id())) remaining.add(binding);
             else if (remainingQuantity > 0) remaining.add(new PhysicalStackBinding(binding.id(), binding.accountId(), binding.address(), binding.authorityEpoch(),
-                    binding.itemKind(), retainedLots, retainedClaims));
+                    binding.itemKind(), retainedLots, retainedClaims, binding.playerSaveFence()));
         }
         SubjectId bindingId = new SubjectId("binding:" + destination.id().value().replace(':', '-') + "-e" + destinationEpoch + "-s0");
         PhysicalStackBinding arrived = new PhysicalStackBinding(bindingId, destination.id(), destinationAddress, destinationEpoch,
@@ -102,7 +102,7 @@ public final class FungiblePhysicalHandoff {
         List<PhysicalStackBinding> destinationBindings = new ArrayList<>();
         for (PhysicalStackBinding binding : destinationCurrent) {
             destinationBindings.add(binding.id().equals(destinationBinding.id()) ? new PhysicalStackBinding(binding.id(), binding.accountId(),
-                    binding.address(), binding.authorityEpoch(), binding.itemKind(), finalLots, finalClaims) : binding);
+                    binding.address(), binding.authorityEpoch(), binding.itemKind(), finalLots, finalClaims, binding.playerSaveFence()) : binding);
         }
         return new FungibleResourceHandoffObserved(source.id(), new CustodyAccount(destination.id(), destination.custody(),
                 add(destination.lotQuantities(), sourceBinding.lotQuantities()), add(destination.claimQuantities(), sourceBinding.claimQuantities())),

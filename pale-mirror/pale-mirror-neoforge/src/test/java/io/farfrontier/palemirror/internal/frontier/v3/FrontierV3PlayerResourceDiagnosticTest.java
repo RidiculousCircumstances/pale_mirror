@@ -22,7 +22,8 @@ class FrontierV3PlayerResourceDiagnosticTest {
         CheckpointImage checkpoint = new CheckpointImage(new WorldId("frontier:player-resource-diagnostic"), new Revision(4L),
                 new SimInstant(9L), new byte[] {1}, List.of(), List.of());
         FrontierV3PlayerResourceDiagnostic.Expected expected = new FrontierV3PlayerResourceDiagnostic.Expected(
-                new SubjectId(ACCOUNT), PLAYER, 9, 32, new SubjectId("binding:player-wheat"), 7L, "minecraft:wheat", 32);
+                new SubjectId(ACCOUNT), PLAYER, 9, 32, new SubjectId("binding:player-wheat"), 7L, "minecraft:wheat", 32,
+                "bf39347d-cb86-3221-b6b7-7b89a1dcb4cf");
 
         String matched = FrontierV3PlayerResourceDiagnostic.render(checkpoint, ACCOUNT, expected,
                 new FrontierV3PlayerResourceDiagnostic.Actual("minecraft:wheat", 32));
