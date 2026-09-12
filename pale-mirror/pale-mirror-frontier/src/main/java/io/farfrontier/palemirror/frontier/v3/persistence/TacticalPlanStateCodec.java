@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWireTags;
 import io.farfrontier.palemirror.frontier.v3.model.TacticalBehaviour;
+import io.farfrontier.palemirror.frontier.v3.model.TacticalBehaviourRegistry;
 import io.farfrontier.palemirror.frontier.v3.model.TacticalPlan;
 import io.farfrontier.palemirror.frontier.v3.model.TacticalPlanPhase;
 import io.farfrontier.palemirror.frontier.v3.model.TacticalPolicyDescriptor;
@@ -33,7 +34,9 @@ final class TacticalPlanStateCodec {
             subject(output, entry.getKey()); output.writeByte(FrontierWireTags.tag(entry.getValue()));
         }
         output.writeByte(plan.permittedBehaviours().size());
-        for (TacticalBehaviour behaviour : plan.permittedBehaviours()) output.writeByte(FrontierWireTags.tag(behaviour));
+        for (TacticalBehaviour behaviour : plan.permittedBehaviours()) {
+            output.writeByte(FrontierWireTags.tag(TacticalBehaviourRegistry.require(plan.policy(), behaviour)));
+        }
         position(output, plan.rendezvous()); position(output, plan.fallback()); position(output, plan.retreat());
     }
 
@@ -55,7 +58,7 @@ final class TacticalPlanStateCodec {
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) {
             TacticalBehaviour behaviour = FrontierWireTags.require(TacticalBehaviour.class, input.readUnsignedByte());
             if (behaviours.contains(behaviour)) throw new IllegalArgumentException("duplicate tactical behaviour");
-            behaviours.add(behaviour);
+            behaviours.add(TacticalBehaviourRegistry.require(policy, behaviour));
         }
         return new TacticalPlan(id, operation, authority, authorityEpoch, planEpoch, policy, phase, objectives, roles, behaviours,
                 position(input), position(input), position(input));

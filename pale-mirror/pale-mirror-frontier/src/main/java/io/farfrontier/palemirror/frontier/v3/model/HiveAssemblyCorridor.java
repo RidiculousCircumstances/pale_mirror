@@ -62,9 +62,10 @@ public final class HiveAssemblyCorridor {
     }
 
     /**
-     * Compiles the return from the canonical current survivor bodies to their own retained
-     * hibernaculum trays. It deliberately uses the same immutable terrain/organ geometry and
-     * collision schedule as departure; no loaded-world route or synthetic relocation is used.
+     * Compiles the return from canonical survivor bodies to their retained trays.  A settlement
+     * expedition first reverses its own immutable outbound corridor: a battle's public-access
+     * floor is provider geometry, not necessarily a terrain-height cell.  Only once the body is
+     * back at its retained terrain/hive approach do we compile the ordinary homeward corridor.
      */
     public static HiveReturnAssembly compileReturn(FrontierWorldState state, HiveMobilization mobilization) {
         Objects.requireNonNull(state, "hive return state");
@@ -79,6 +80,7 @@ public final class HiveAssemblyCorridor {
         Set<BlockPosition> physicalHiveCells = new LinkedHashSet<>(intactOrgans);
         hiveOrgans.forEach(organ -> physicalHiveCells.addAll(HiveOrganSupportPlan.foundationCells(state.bootstrap().terrain(), organ)));
         Set<SurfaceAnchor> blockedBodySurfaces = blockedBodySurfaces(state, physicalHiveCells);
+        Map<SubjectId, SettlementAssaultAttacker> outbound = retainedOutboundAssault(state, mobilization);
         Map<SubjectId, HiveOrgan> homes = new LinkedHashMap<>();
         Map<SubjectId, SurfaceAnchor> destinations = new LinkedHashMap<>();
         for (SubjectId member : mobilization.memberIds()) {
@@ -98,7 +100,8 @@ public final class HiveAssemblyCorridor {
             SurfaceAnchor start = state.actorLocations().get(member).supportingSurface();
             SurfaceAnchor destination = destinations.get(member);
             HiveOrgan home = homes.get(member);
-            List<SurfaceAnchor> surfaces = route(state, home, start, destination, allHomeSurfaces, intactOrgans, blockedBodySurfaces);
+            List<SurfaceAnchor> surfaces = returnRoute(state, home, start, destination, allHomeSurfaces, intactOrgans,
+                    blockedBodySurfaces, outbound.get(member));
             TraversalTopology topology = TraversalTopology.corridor(new TraversalTopologyId("topology:hive-return:"
                     + mobilization.id().value() + ":" + member.value()), 0L, mobilization.id(), TraversalKind.GROUND_BIOFORM,
                     Set.of(TraversalCapability.GROUND_BIOFORM), surfaces);
@@ -109,6 +112,77 @@ public final class HiveAssemblyCorridor {
             throw new IllegalArgumentException("hive return has no jointly completable retained approaches");
         }
         return result;
+    }
+
+    private static Map<SubjectId, SettlementAssaultAttacker> retainedOutboundAssault(FrontierWorldState state,
+                                                                                        HiveMobilization mobilization) {
+        return state.strategicPlans().settlementAssaults().values().stream()
+                .filter(assault -> assault.taskId().equals(mobilization.taskId()))
+                .filter(assault -> new LinkedHashSet<>(assault.attackerIds()).equals(new LinkedHashSet<>(mobilization.memberIds())))
+                .findFirst().map(assault -> assault.attackers().stream()
+                        .collect(java.util.stream.Collectors.toMap(SettlementAssaultAttacker::actorId, value -> value,
+                                (left, right) -> { throw new IllegalArgumentException("retained assault duplicates an attacker"); }, LinkedHashMap::new)))
+                .map(Map::copyOf).orElseGet(Map::of);
+    }
+
+    private static List<SurfaceAnchor> returnRoute(FrontierWorldState state, HiveOrgan home, SurfaceAnchor start,
+                                                    SurfaceAnchor destination, Set<SurfaceAnchor> allHomeSurfaces,
+                                                    Set<BlockPosition> intactOrgans, Set<SurfaceAnchor> blockedBodySurfaces,
+                                                    SettlementAssaultAttacker outbound) {
+        if (outbound == null) return route(state, home, start, destination, allHomeSurfaces, intactOrgans, blockedBodySurfaces);
+        List<SurfaceAnchor> assaultSurfaces = outbound.route().stream().map(SurfaceAnchor::new).toList();
+        if (assaultSurfaces.isEmpty() || !start.equals(assaultSurfaces.getLast())) {
+            // A COLD child may resolve before its first strategic travel edge.  In that case the
+            // actor is still on its ordinary terrain/hive approach and needs no remote leg.
+            return route(state, home, start, destination, allHomeSurfaces, intactOrgans, blockedBodySurfaces);
+        }
+        List<SurfaceAnchor> reverse = expandAssaultWaypoints(assaultSurfaces.reversed());
+        List<SurfaceAnchor> homeward = route(state, home, reverse.getLast(), destination, allHomeSurfaces, intactOrgans, blockedBodySurfaces);
+        java.util.ArrayList<SurfaceAnchor> result = new java.util.ArrayList<>(reverse);
+        result.addAll(homeward.subList(1, homeward.size()));
+        return withoutCycles(result);
+    }
+
+    /**
+     * COLD assault travel retains strategic waypoints at a coarser cadence than HOT body edges.
+     * Reverse them into bounded unit edges without consulting loaded blocks; subsequent HOT
+     * observation remains the sole authority that can report an obstruction or conflict.
+     */
+    private static List<SurfaceAnchor> expandAssaultWaypoints(List<SurfaceAnchor> waypoints) {
+        java.util.ArrayList<SurfaceAnchor> result = new java.util.ArrayList<>();
+        for (SurfaceAnchor waypoint : waypoints) {
+            if (result.isEmpty()) {
+                result.add(waypoint);
+                continue;
+            }
+            SurfaceAnchor prior = result.getLast();
+            int horizontal = Math.abs(waypoint.x() - prior.x()) + Math.abs(waypoint.z() - prior.z());
+            if (horizontal == 0) throw new IllegalArgumentException("retained assault route has a vertical-only edge");
+            int x = prior.x(), z = prior.z();
+            for (int step = 1; step <= horizontal; step++) {
+                if (x != waypoint.x()) x += Integer.signum(waypoint.x() - x);
+                else z += Integer.signum(waypoint.z() - z);
+                int y = prior.y() + Math.toIntExact(Math.floorDiv((long) (waypoint.y() - prior.y()) * step, horizontal));
+                result.add(SurfaceAnchor.at(x, y, z));
+            }
+        }
+        return List.copyOf(result);
+    }
+
+    /** A reverse COLD leg and homeward corridor can meet at an earlier surveyed surface. */
+    private static List<SurfaceAnchor> withoutCycles(List<SurfaceAnchor> surfaces) {
+        java.util.ArrayList<SurfaceAnchor> result = new java.util.ArrayList<>();
+        Map<SurfaceAnchor, Integer> indexes = new HashMap<>();
+        for (SurfaceAnchor surface : surfaces) {
+            Integer prior = indexes.get(surface);
+            if (prior == null) {
+                indexes.put(surface, result.size());
+                result.add(surface);
+                continue;
+            }
+            while (result.size() > prior + 1) indexes.remove(result.removeLast());
+        }
+        return List.copyOf(result);
     }
 
     private static List<SurfaceAnchor> route(FrontierWorldState state, HiveOrgan home, SurfaceAnchor start,

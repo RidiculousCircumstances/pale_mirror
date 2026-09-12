@@ -438,7 +438,10 @@ final class FrontierV3SceneExecutor {
         for (Body actor : bodies) {
             Optional<ActorDirective> directive = logisticsDirective(state, lease, actor.member().actorId());
             if (directive.isPresent() && !directive.orElseThrow().movement().permitsObservedSupport(supportPosition(actor.entity().blockPosition()))) continue;
-            FrontierV3ControlledMobMotion.moveToward(level, actor.entity(), localTarget(state, actor, bodies, lease));
+            if (directive.isPresent()) {
+                FrontierV3ControlledMobMotion.moveWithinEnvelope(level, actor.entity(), localTarget(state, actor, bodies, lease),
+                        directive.orElseThrow().movement().envelope());
+            } else FrontierV3ControlledMobMotion.moveToward(level, actor.entity(), localTarget(state, actor, bodies, lease));
         }
     }
 
@@ -576,7 +579,7 @@ final class FrontierV3SceneExecutor {
                 if (!travel.arrived()) {
                     ActorDirective directive = OperationFront.logistics(operation).directive(operation, lease.id(), actor.member().actorId());
                     BlockPosition target = directive.movement().nextCheckpoint();
-                    return new Vec3(target.x() + 0.5D, target.y(), target.z() + 0.5D);
+                    return new Vec3(target.x() + 0.5D, target.y() + 1.0D, target.z() + 0.5D);
                 }
             }
         }

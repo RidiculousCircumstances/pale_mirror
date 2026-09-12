@@ -1,11 +1,15 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
+import io.farfrontier.palemirror.frontier.v3.model.LocalNavigationEnvelope;
+import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,13 +32,32 @@ final class FrontierV3ControlledMobMotion {
     private static final double MAX_WALK_GRADE = 1.0D;
     private static final double VERTICAL_SPEED = 0.125D;
     private static final int MAX_PENDING_INTENTS = 4_096;
+    private static final int MAX_AVOIDANCE_TURNS = 8;
     /** Ephemeral one-tick physical intents; canonical goals/cursors remain in the domain. */
     private static final Map<Mob, MotionIntent> PENDING = new IdentityHashMap<>();
+    /** Ephemeral collision latitude, bounded to a retained local envelope and target. */
+    private static final Map<Mob, Avoidance> AVOIDANCE = new IdentityHashMap<>();
 
     private FrontierV3ControlledMobMotion() { }
 
     static void moveToward(ServerLevel level, Mob actor, Vec3 target) {
-        submit(level, actor, target, false);
+        submit(level, actor, target, false, null);
+    }
+
+    /**
+     * Moves only inside the immutable HOT latitude retained by the current directive.
+     *
+     * <p>This is deliberately an actuator boundary, not a local path planner: it may choose a
+     * collision-free intermediate body column in the supplied envelope, but it never changes
+     * the directive's destination/checkpoint.  The caller still commits canonical progress only
+     * after observing that exact checkpoint.</p>
+     */
+    static void moveWithinEnvelope(ServerLevel level, Mob actor, Vec3 target, LocalNavigationEnvelope envelope) {
+        if (!insideEnvelope(level, actor, target, envelope) || !insideEnvelope(target, envelope)) {
+            stop(actor);
+            return;
+        }
+        submit(level, actor, target, false, envelope);
     }
 
     /**
@@ -43,10 +66,10 @@ final class FrontierV3ControlledMobMotion {
      * choose a route, change a cursor, or create a second canonical movement authority.
      */
     static void followContinuously(ServerLevel level, Mob actor, Vec3 target) {
-        submit(level, actor, target, true);
+        submit(level, actor, target, true, null);
     }
 
-    private static void submit(ServerLevel level, Mob actor, Vec3 target, boolean continuous) {
+    private static void submit(ServerLevel level, Mob actor, Vec3 target, boolean continuous, LocalNavigationEnvelope envelope) {
         actor.setNoAi(true);
         // NoAI suppresses Minecraft's goal selector, not physical gravity.  Reassert the latter
         // because a retained entity can carry an old mod/AI no-gravity flag across a HOT handoff.
@@ -60,15 +83,21 @@ final class FrontierV3ControlledMobMotion {
         // a licence to fly or to infer a route and is therefore left for the canonical planner.
         if (Math.abs(delta.y) > MAX_WALK_GRADE + ARRIVAL_DISTANCE) { stop(actor); return; }
         MotionIntent pending = PENDING.get(actor);
+        Avoidance avoidance = AVOIDANCE.get(actor);
+        if (avoidance != null && !avoidance.target().equals(target)) AVOIDANCE.remove(actor);
         // The normal production order is canonical executor (post tick) → entity pre-tick on
-        // the next server tick.  Keep an already-due one-tick intent if another observer runs
-        // before that pre-tick: overwriting it with a new future timestamp creates a permanent
+        // the next server tick. Keep an already-due intent if another observer runs before that
+        // pre-tick: overwriting it with a new timestamp creates a permanent
         // stop/go loop whose outcome depends on event callback order rather than physical state.
         if (pending != null && pending.applyAtGameTime() <= level.getGameTime() + 1L) {
             return;
         }
         if (PENDING.size() < MAX_PENDING_INTENTS || pending != null) {
-            PENDING.put(actor, new MotionIntent(level.getGameTime() + 1L, target, continuous));
+            // This is eligible at the next entity-pre boundary, which is ordinarily the next
+            // server tick because the canonical executor runs at post-tick. Using the current
+            // canonical time also makes a GameTest's legitimate catch-up callbacks execute the
+            // same retained one-tick actuator turns rather than stranding one future intent.
+            PENDING.put(actor, new MotionIntent(level.getGameTime(), target, continuous, envelope));
         }
     }
 
@@ -76,14 +105,15 @@ final class FrontierV3ControlledMobMotion {
     static void advance(Mob actor) {
         MotionIntent intent = PENDING.get(actor);
         if (intent == null) return;
-        if (!(actor.level() instanceof ServerLevel level) || actor.isRemoved() || !actor.isAlive()) { PENDING.remove(actor); return; }
+        if (!(actor.level() instanceof ServerLevel level) || actor.isRemoved() || !actor.isAlive()) { PENDING.remove(actor); AVOIDANCE.remove(actor); return; }
         if (level.getGameTime() < intent.applyAtGameTime()) return;
         PENDING.remove(actor);
-        apply(level, actor, intent.target(), intent.continuous());
+        apply(level, actor, intent.target(), intent.continuous(), intent.envelope());
     }
 
     static void stop(Mob actor) {
         PENDING.remove(actor);
+        AVOIDANCE.remove(actor);
         // The prior authority may already have submitted a collision move or left an ordinary
         // Minecraft velocity on the body.  Cancelling only our queued intent lets that residual
         // velocity carry a newly leased worker across its retained support between the durable
@@ -102,7 +132,7 @@ final class FrontierV3ControlledMobMotion {
         return intent == null ? "IDLE" : "PENDING_AT_" + intent.applyAtGameTime();
     }
 
-    private static void apply(ServerLevel level, Mob actor, Vec3 target, boolean continuous) {
+    private static void apply(ServerLevel level, Mob actor, Vec3 target, boolean continuous, LocalNavigationEnvelope envelope) {
         Vec3 delta = target.subtract(actor.position());
         double horizontalDistance = Math.sqrt(delta.x * delta.x + delta.z * delta.z);
         if (!continuous && horizontalDistance <= ARRIVAL_DISTANCE && Math.abs(delta.y) <= ARRIVAL_DISTANCE) { actor.stopInPlace(); return; }
@@ -117,33 +147,73 @@ final class FrontierV3ControlledMobMotion {
         // lateral edge, then a later exact-X/Z turn settles vertically onto the declared lower
         // support. Ascents remain bounded controlled lifts; neither case can invent an alternate
         // edge.
-        double vertical = delta.y < 0.0D ? 0.0D : Math.min(delta.y, VERTICAL_SPEED);
         double speed = Math.min(actor instanceof Zombie ? BIOFORM_SPEED : RESIDENT_SPEED, horizontalDistance);
+        // An envelope is not permission to lift through arbitrary air columns.  It may climb
+        // only when the next horizontal body column has a named higher support; that admits a
+        // retained stair/grade while refusing an early climb toward a distant checkpoint.
+        BlockPosition currentSupport = support(actor.position());
+        int ascentX = (int) Math.floor(actor.getX() + Math.signum(delta.x) * .5D);
+        int ascentZ = (int) Math.floor(actor.getZ() + Math.signum(delta.z) * .5D);
+        boolean localAscent = envelope != null && (envelope.contains(new BlockPosition(ascentX, currentSupport.y() + 1, ascentZ))
+                || emptyCurrentUpperCell(level, actor, currentSupport)
+                && envelope.contains(new BlockPosition(ascentX, currentSupport.y(), ascentZ)));
+        double vertical = envelope != null ? localAscent && delta.y > 0.0D ? Math.min(delta.y, VERTICAL_SPEED) : 0.0D
+                : delta.y < 0.0D ? 0.0D : Math.min(delta.y, VERTICAL_SPEED);
         Vec3 direct = new Vec3(delta.x / horizontalDistance * speed, vertical, delta.z / horizontalDistance * speed);
-        // A retained operation/assembly edge has one persisted next support. Letting the
-        // physical actuator try a side-step or a lifted alternate here would make a blocked
-        // canonical edge look successful without any topology command. The same is true for
-        // ambient presentation: it owns no route cursor, but it still owns one retained
-        // support column for a later exact scene hand-off. A collision-driven lateral fallback
-        // can leave that column even when its visual target is clamped locally. Presentation
-        // may therefore pause at an obstruction; it never sidesteps around it.
-        List<Vec3> candidates = motionCandidates(direct, continuous);
+        // A retained operation/assembly edge has one persisted next support. Only a directive
+        // that carries an explicit local envelope may try a collision-free lateral body column;
+        // the exact checkpoint remains unchanged and the caller alone observes its arrival.
+        // Other retained travel and ambient presentation still pause at an obstruction rather
+        // than inventing an alternate route or leaving their retained hand-off column.
+        Avoidance avoidance = envelope == null ? null : AVOIDANCE.get(actor);
+        if (avoidance != null && !avoidance.target().equals(target)) {
+            AVOIDANCE.remove(actor);
+            avoidance = null;
+        }
+        List<Vec3> candidates = motionCandidates(direct, continuous, envelope != null);
+        if (avoidance != null) {
+            List<Vec3> retainedCandidates = new ArrayList<>(candidates.size() + 1);
+            retainedCandidates.add(avoidance.step());
+            retainedCandidates.addAll(candidates);
+            candidates = retainedCandidates;
+        }
         for (Vec3 step : candidates) {
+            // At the lip of a named stair the body needs one vector whose sampled feet are
+            // still in the old X column while its collision box enters the next upper support.
+            // The already-verified localAscent is that exact support; it is not a free-space
+            // bypass or alternate destination.
+            if (envelope != null && !insideEnvelope(actor.position().add(step), envelope) && !localAscent) continue;
             Vec3 before = actor.position();
             actor.move(MoverType.SELF, step);
             Vec3 moved = actor.position().subtract(before);
+            // A collision may yield a token tangential slide from an attempted diagonal while
+            // making no meaningful part of that candidate.  Treating that as success starves
+            // the following bounded pure-lateral alternative forever at a block corner.
+            // This concerns only physical vector execution; it never changes the retained
+            // checkpoint, port, intent, or local envelope.
+            if (moved.horizontalDistanceSqr() > 1.0E-8D
+                    && moved.horizontalDistanceSqr() < step.horizontalDistanceSqr() * 0.25D) continue;
             if (moved.x * moved.x + moved.z * moved.z <= 1.0E-8D) {
                 // This is still the same retained X/Z edge, not a new route: it is only the
                 // bounded collision step needed to enter an exact thin support such as the
                 // graybox infection/route surface. A full block fails noCollision here; a
                 // lateral candidate exists only for non-canonical continuous ambience.
                 Vec3 lifted = step.add(0.0D, THIN_SURFACE_STEP, 0.0D);
-                if (!level.noCollision(actor, actor.getBoundingBox().move(lifted))) continue;
+                if ((envelope != null && !insideEnvelope(actor.position().add(lifted), envelope) && !localAscent)
+                        || !level.noCollision(actor, actor.getBoundingBox().move(lifted))) continue;
                 before = actor.position(); actor.move(MoverType.SELF, lifted); moved = actor.position().subtract(before);
                 if (moved.x * moved.x + moved.z * moved.z <= 1.0E-8D) continue;
             }
             actor.setYRot((float) Math.toDegrees(Math.atan2(-moved.x, moved.z)));
             actor.yBodyRot = actor.getYRot();
+            boolean continuingAvoidance = avoidance != null && avoidance.step().equals(step);
+            if (envelope != null && (continuingAvoidance || isPureLateral(step, direct))) {
+                int remaining = continuingAvoidance ? avoidance.remainingTurns() - 1 : MAX_AVOIDANCE_TURNS;
+                if (remaining > 0) AVOIDANCE.put(actor, new Avoidance(step, target, remaining));
+                else AVOIDANCE.remove(actor);
+            } else {
+                AVOIDANCE.remove(actor);
+            }
             // Entity.move updates the authoritative server position but, unlike vanilla AI
             // travel, does not itself request an immediate tracker update.  A Zombie's normal
             // tracker interval then coalesces several 20 Hz PM steps into one client-visible
@@ -161,7 +231,19 @@ final class FrontierV3ControlledMobMotion {
      * to choose an alternate spatial edge.
      */
     static List<Vec3> motionCandidates(Vec3 direct, boolean continuous) {
+        return motionCandidates(direct, continuous, false);
+    }
+
+    private static List<Vec3> motionCandidates(Vec3 direct, boolean continuous, boolean localEnvelope) {
         if (direct == null) throw new IllegalArgumentException("motion direct vector is required");
+        if (localEnvelope && direct.horizontalDistanceSqr() > 1.0E-8D) {
+            double horizontal = Math.sqrt(direct.horizontalDistanceSqr());
+            double side = Math.min(horizontal, 0.125D);
+            double leftX = -direct.z / horizontal * side, leftZ = direct.x / horizontal * side;
+            return List.of(direct, new Vec3(direct.x + leftX, direct.y, direct.z + leftZ),
+                    new Vec3(direct.x - leftX, direct.y, direct.z - leftZ),
+                    new Vec3(leftX, 0.0D, leftZ), new Vec3(-leftX, 0.0D, -leftZ));
+        }
         return List.of(direct);
     }
 
@@ -179,5 +261,45 @@ final class FrontierV3ControlledMobMotion {
         if (actor.position().y < before.y - 1.0E-8D) actor.hasImpulse = true;
     }
 
-    private record MotionIntent(long applyAtGameTime, Vec3 target, boolean continuous) { }
+    private static boolean isPureLateral(Vec3 step, Vec3 direct) {
+        return Math.abs(step.x * direct.x + step.z * direct.z) <= 1.0E-8D
+                && step.horizontalDistanceSqr() > 1.0E-8D;
+    }
+
+    /**
+     * A vanilla stair begins collision ascent just before the body crosses the next integer
+     * X/Z column.  Admit that transient only when the retained target direction reaches the
+     * one named upper support immediately ahead; this cannot select a side route or remote
+     * coordinate.
+     */
+    static boolean insideEnvelope(ServerLevel level, Mob actor, Vec3 target, LocalNavigationEnvelope envelope) {
+        if (insideEnvelope(actor.position(), envelope)) return true;
+        Vec3 delta = target.subtract(actor.position());
+        double horizontal = Math.sqrt(delta.x * delta.x + delta.z * delta.z);
+        if (horizontal <= 1.0E-8D) return false;
+        BlockPosition lower = support(actor.position());
+        int nextX = (int) Math.floor(actor.getX() + Math.signum(delta.x) * .5D);
+        int nextZ = (int) Math.floor(actor.getZ() + Math.signum(delta.z) * .5D);
+        return delta.y > 0.0D && envelope.contains(new BlockPosition(nextX, lower.y() + 1, nextZ))
+                || emptyCurrentUpperCell(level, actor, lower)
+                && envelope.contains(new BlockPosition(nextX, lower.y(), nextZ));
+    }
+
+    private static boolean emptyCurrentUpperCell(ServerLevel level, Mob actor, BlockPosition support) {
+        BlockPos upper = new BlockPos((int) Math.floor(actor.getX()), support.y(), (int) Math.floor(actor.getZ()));
+        return level.getBlockState(upper).getCollisionShape(level, upper).isEmpty();
+    }
+
+    private static boolean insideEnvelope(Vec3 feet, LocalNavigationEnvelope envelope) {
+        BlockPosition lower = support(feet);
+        return envelope.contains(lower) || envelope.contains(new BlockPosition(lower.x(), lower.y() + 1, lower.z()));
+    }
+
+    private static BlockPosition support(Vec3 feet) {
+        return new BlockPosition((int) Math.floor(feet.x), (int) Math.floor(feet.y) - 1, (int) Math.floor(feet.z));
+    }
+
+    private record MotionIntent(long applyAtGameTime, Vec3 target, boolean continuous, LocalNavigationEnvelope envelope) { }
+
+    private record Avoidance(Vec3 step, Vec3 target, int remainingTurns) { }
 }

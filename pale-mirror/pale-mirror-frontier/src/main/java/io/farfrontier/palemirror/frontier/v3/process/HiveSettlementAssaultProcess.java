@@ -339,7 +339,14 @@ public final class HiveSettlementAssaultProcess {
         // Strategic COLD movement has no authority to pull an exact identity through an intact
         // cocoon.  Mobilisation is its own lifecycle boundary; until then only deployed forms
         // may be selected for an assault.
-        return HivePhysiologySupport.availableForIndependentOperation(state, id)
+        // A departed mobilisation deliberately remains non-terminal until the same expedition
+        // returns.  Its child assault is therefore not an independent operation, but it is the
+        // sole canonical continuation of that retained parent; treating it as independent here
+        // deadlocks every COLD approach immediately after the atomic departure hand-off.
+        boolean retainedParentOwnsThisAssault = currentAssault != null && state.hiveColony().mobilizations().values().stream()
+                .anyMatch(parent -> parent.status() == HiveMobilizationStatus.DEPARTED && parent.taskId().equals(currentAssault.taskId())
+                        && parent.memberIds().contains(id));
+        return (retainedParentOwnsThisAssault || HivePhysiologySupport.availableForIndependentOperation(state, id))
                 && (ambient == null || ambient.status() == AmbientLeaseStatus.CLOSED)
                 && state.strategicPlans().routeEngagements().values().stream().noneMatch(value -> value.status() != RouteEngagementStatus.RESOLVED && value.attackerIds().contains(id))
                 && state.strategicPlans().settlementAssaults().values().stream().noneMatch(value -> !value.equals(currentAssault)

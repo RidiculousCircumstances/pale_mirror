@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.FixedRatio;
+import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
 import io.farfrontier.palemirror.frontier.v3.api.CommandId;
@@ -10,6 +11,11 @@ import io.farfrontier.palemirror.frontier.v3.api.Revision;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
+import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
@@ -23,6 +29,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -31,6 +38,75 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HiveMobilizationProcessTest {
+    @Test void oneRetainedParentSurvivesAssemblyTravelHotContactRestartAndReturn() {
+        FrontierWorldState state = depart(assemble(fixture()));
+        HiveMobilization parent = state.hiveColony().mobilizations().values().stream().findFirst().orElseThrow();
+        SettlementAssault assault = state.strategicPlans().settlementAssaults().values().stream().findFirst().orElseThrow();
+        SubjectId hive = state.bootstrap().hive().id();
+        assertEquals(parent.expeditionId(), assault.expeditionId());
+        assertEquals(parent.memberIds(), assault.attackerIds(), "assembly hands the exact retained group to its one parent child");
+
+        while (!assault.allAttackersAtBattlefield()) {
+            SettlementAssaultAttacker next = assault.attackers().stream().filter(attacker -> !attacker.atDestination()).findFirst().orElseThrow();
+            state = HiveSettlementAssaultProcess.reduceAdvanced(state, hive,
+                    new SettlementAssaultAttackerAdvanced(assault.id(), next.actorId(), next.routeIndex() + 1));
+            assault = state.strategicPlans().settlementAssaults().get(assault.id());
+        }
+        state = HiveSettlementAssaultProcess.reduceTransition(state, hive,
+                new SettlementAssaultTransition(assault.id(), SettlementAssaultStatus.WAITING_FOR_BATTLE));
+        state = HiveSettlementAssaultProcess.reduceTransition(state, hive,
+                new SettlementAssaultTransition(assault.id(), SettlementAssaultStatus.COLD_COMBAT));
+        assault = state.strategicPlans().settlementAssaults().get(assault.id());
+
+        SubjectId assaultId = assault.id();
+        SettlementAssaultSceneCandidate candidate = state.coldSettlementAssaultSceneCandidates().stream()
+                .filter(value -> value.assaultId().equals(assaultId)).findFirst().orElseThrow();
+        SceneLeaseId leaseId = new SceneLeaseId("lease:integrated-expedition-parent");
+        var worldId = state.bootstrap().worldId();
+        List<SceneMember> members = candidate.memberPositions().keySet().stream().sorted()
+                .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(worldId, leaseId, actor))).toList();
+        SceneLease lease = SceneLease.forCause(leaseId, worldId, new SettlementAssaultSceneCause(assault.id(), assault.settlementId()),
+                candidate.handoffPosition(), new SimInstant(900L), 9L, SceneLeaseStatus.PREPARED, members,
+                SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), Set.of(), Optional.empty());
+        state = state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+        SubjectId attacker = assault.combatantAttackerIds().stream().sorted().findFirst().orElseThrow();
+        SubjectId defender = assault.defenderIds().stream().sorted().findFirst().orElseThrow();
+        SubjectId cause = SettlementAssaultCauseIdentity.strike(assault.id(), attacker, assault.nextStrikeEpoch());
+        PhysicalIntent intent = new PhysicalIntent(SettlementAssaultStrikeReceiptBinding.intentId(state, lease, cause), PhysicalIntentKind.SCENE_STRIKE,
+                PhysicalIntentStatus.PREPARED, cause, List.of(attacker, defender), new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO),
+                0, io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition.SCENE_STRIKE_OBSERVED);
+        state = state.preparePhysicalIntent(intent).transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
+        state = state.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED,
+                Optional.of(new SceneStrikeObservation(new PhysicalObservationId("observation:integrated-expedition-parent"), intent.id(), attacker,
+                        defender, FixedScalar.whole(20), FixedScalar.whole(18))));
+        FrontierWorldState draining = state.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING);
+        state = draining.releaseSceneLease(leaseId, members.stream()
+                .map(member -> new SceneMemberPosition(member.actorId(), draining.actorLocations().get(member.actorId()).body(),
+                        draining.actorLocations().get(member.actorId()).condition().health())).toList());
+        state = new FrontierWorldStateCodec(state.bootstrap()).decode(new FrontierWorldStateCodec(state.bootstrap()).encode(state));
+        assault = state.strategicPlans().settlementAssaults().get(assault.id());
+        assertEquals(parent.expeditionId(), assault.expeditionId());
+        assertEquals(parent.memberIds(), state.hiveColony().mobilizations().get(parent.id()).memberIds());
+        assertEquals(SettlementAssaultStatus.COLD_COMBAT, assault.status(), "the HOT receipt returns to the same COLD child rather than replacing it");
+
+        state = HiveSettlementAssaultProcess.reduceResolved(state, hive, new SettlementAssaultResolved(assault.id(), SettlementAssaultOutcome.ABORTED));
+        state = new FrontierWorldStateCodec(state.bootstrap()).decode(new FrontierWorldStateCodec(state.bootstrap()).encode(state));
+        HiveMobilization returning = state.hiveColony().mobilizations().get(parent.id());
+        assertEquals(HiveMobilizationStatus.RETURNING, returning.status());
+        assertEquals(parent.expeditionId(), returning.expeditionId());
+        while (state.hiveColony().mobilizations().get(parent.id()).status() == HiveMobilizationStatus.RETURNING) {
+            HiveMobilization current = state.hiveColony().mobilizations().get(parent.id());
+            HiveTaskAssembly.Member member = current.returnAssembly().orElseThrow().members().values().stream()
+                    .filter(value -> !value.arrived()).findFirst().orElseThrow();
+            SubjectId actor = current.returnAssembly().orElseThrow().members().entrySet().stream()
+                    .filter(entry -> entry.getValue().equals(member)).map(java.util.Map.Entry::getKey).findFirst().orElseThrow();
+            state = HiveMobilizationProcess.reduceReturnAdvanced(state, hive, new HiveMobilizationReturnAdvanced(parent.id(), actor, member.cursor()));
+        }
+        assertEquals(HiveMobilizationStatus.COMPLETED, state.hiveColony().mobilizations().get(parent.id()).status());
+        FrontierWorldState completed = state;
+        assertTrue(parent.memberIds().stream().allMatch(actor -> completed.hiveColony().bioformLifecycles().get(actor).phase() == BioformLifecyclePhase.ACTIVE));
+    }
+
     @Test void registeredPhysicalReleaseCommandAdmitsTheExactWakingGroup() {
         Fixture fixture = fixture();
         List<ProposedEvent> planned = HiveSettlementAssaultProcess.planStart(fixture.state(),
@@ -539,6 +615,24 @@ class HiveMobilizationProcessTest {
                     new HiveMobilizationAssemblyAdvanced(mobilization.id(), advancing, assembly.members().get(advancing).cursor()));
         }
         throw new AssertionError("bounded retained assembly did not reach its final edge");
+    }
+
+    private static FrontierWorldState depart(Mobilized assembled) {
+        FrontierWorldState state = assembled.state();
+        HiveMobilization initial = assembled.mobilization();
+        SubjectId hive = state.bootstrap().hive().id();
+        for (int step = 0; step < 256; step++) {
+            HiveMobilization current = state.hiveColony().mobilizations().get(initial.id());
+            List<ProposedEvent> planned = HiveMobilizationProcess.planAssemblyProgress(state,
+                    HiveMobilizationProcess.assemblyProgress(initial.id(), 1_000L + step * 20L));
+            HiveMobilizationAssemblyAdvanced advanced = assertInstanceOf(HiveMobilizationAssemblyAdvanced.class, planned.getFirst().payload());
+            state = HiveMobilizationProcess.reduceAssemblyAdvanced(state, hive, advanced);
+            if (!state.hiveColony().mobilizations().get(initial.id()).assembly().orElseThrow().complete()) continue;
+            HiveMobilizationDeparted departed = planned.stream().map(ProposedEvent::payload).filter(HiveMobilizationDeparted.class::isInstance)
+                    .map(HiveMobilizationDeparted.class::cast).findFirst().orElseThrow();
+            return HiveMobilizationProcess.reduceDeparted(state, hive, departed);
+        }
+        throw new AssertionError("bounded assembly did not produce one retained expedition departure");
     }
 
     private static Fixture fixture() { return fixture(TerrainSurfacePlan.uniform(63)); }

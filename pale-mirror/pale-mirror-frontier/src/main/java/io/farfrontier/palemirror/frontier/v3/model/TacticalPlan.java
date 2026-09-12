@@ -28,6 +28,9 @@ public record TacticalPlan(SubjectId id, SubjectId operationId, SubjectId author
                 || permittedBehaviours.stream().distinct().count() != permittedBehaviours.size()) {
             throw new IllegalArgumentException("tactical plan retention is invalid");
         }
+        policy = TacticalPolicyRegistry.require(policy);
+        TacticalPolicyDescriptor retainedPolicy = policy;
+        permittedBehaviours.forEach(behaviour -> TacticalBehaviourRegistry.require(retainedPolicy, behaviour));
     }
 
     public TacticalPlan withPhase(TacticalPlanPhase nextPhase) {
