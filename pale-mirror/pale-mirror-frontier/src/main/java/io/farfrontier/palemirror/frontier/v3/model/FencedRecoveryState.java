@@ -21,7 +21,7 @@ public record FencedRecoveryState(Map<SubjectId, FencedRecoveryBinding> current,
         for (Map.Entry<SubjectId, FencedRecoveryBinding> entry : current.entrySet()) {
             if (!entry.getKey().equals(entry.getValue().bindingId())) throw new IllegalArgumentException("recovery binding key is not exact");
             FencedRecoveryTombstone tombstone = tombstones.get(entry.getKey());
-            if (tombstone != null && (tombstone.asset() != entry.getValue().asset() || !tombstone.ownerId().equals(entry.getValue().ownerId())
+            if (tombstone != null && (tombstone.asset() != entry.getValue().asset()
                     || entry.getValue().authorityEpoch() <= tombstone.retiredEpoch())) {
                 throw new IllegalArgumentException("current recovery authority does not supersede its tombstone");
             }
@@ -33,12 +33,21 @@ public record FencedRecoveryState(Map<SubjectId, FencedRecoveryBinding> current,
 
     public static FencedRecoveryState empty() { return new FencedRecoveryState(Map.of(), Map.of()); }
 
+    /** Monotonic allocator for an exact binding identity; callers never infer an epoch from a scene revision. */
+    public long nextEpoch(SubjectId bindingId) {
+        Objects.requireNonNull(bindingId, "recovery binding id");
+        FencedRecoveryBinding live = current.get(bindingId);
+        FencedRecoveryTombstone retired = tombstones.get(bindingId);
+        long prior = Math.max(live == null ? 0L : live.authorityEpoch(), retired == null ? 0L : retired.retiredEpoch());
+        if (prior == Long.MAX_VALUE) throw new IllegalArgumentException("recovery authority epoch is exhausted");
+        return prior + 1L;
+    }
+
     public FencedRecoveryState prepare(FencedRecoveryBinding binding) {
         Objects.requireNonNull(binding, "recovery binding"); binding.require(FencedRecoveryPhase.PREPARED);
         if (current.containsKey(binding.bindingId())) throw new IllegalArgumentException("recovery binding is already current");
         FencedRecoveryTombstone prior = tombstones.get(binding.bindingId());
-        if (prior != null && (prior.asset() != binding.asset() || !prior.ownerId().equals(binding.ownerId())
-                || binding.authorityEpoch() <= prior.retiredEpoch())) {
+        if (prior != null && (prior.asset() != binding.asset() || binding.authorityEpoch() <= prior.retiredEpoch())) {
             throw new IllegalArgumentException("recovery binding reuses a stale authority epoch or owner");
         }
         Map<SubjectId, FencedRecoveryBinding> next = new LinkedHashMap<>(current); next.put(binding.bindingId(), binding);

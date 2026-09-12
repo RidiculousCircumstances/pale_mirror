@@ -124,6 +124,34 @@ class RoutePatrolSceneSupportTest {
         assertFalse(result.actorLocations().get(dead).condition().status() == ActorLifeStatus.ALIVE);
     }
 
+    @Test
+    void exactHotPatrolBodiesReceiveOneDurableFenceAndARecordedDeathRetiresOnlyThatBody() {
+        FrontierWorldState state = patrolState(new WorldId("frontier:route-patrol-recovery-fence"));
+        FrontierRoutePatrolSceneSupport.Candidate candidate = FrontierRoutePatrolSceneSupport.candidates(state).stream().findFirst().orElseThrow();
+        SceneLeaseId leaseId = new SceneLeaseId("lease:route-patrol-recovery-fence");
+        var world = state.bootstrap().worldId();
+        SceneLease lease = SceneLease.forCause(leaseId, world, new RoutePatrolSceneCause(candidate.taskId()),
+                candidate.handoffPosition(), new SimInstant(10), 1L, SceneLeaseStatus.PREPARED,
+                candidate.memberBodies().keySet().stream().sorted().map(id -> new SceneMember(id,
+                        SceneLease.deterministicEntityId(world, leaseId, id))).toList(),
+                candidate.memberBodies(), Set.of(), Optional.empty());
+
+        FrontierWorldState prepared = state.prepareSceneLease(lease);
+        assertTrue(lease.members().stream().allMatch(member -> prepared.fencedRecovery().current()
+                .get(FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(member.actorId())).phase() == FencedRecoveryPhase.PREPARED));
+        FrontierWorldState hot = prepared.transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+        assertTrue(lease.members().stream().allMatch(member -> hot.fencedRecovery().current()
+                .get(FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(member.actorId())).phase() == FencedRecoveryPhase.RUNNING));
+
+        SubjectId dead = lease.members().getFirst().actorId();
+        FrontierWorldState afterDeath = hot.recordActorDeath(new ActorDied(leaseId, dead,
+                hot.sceneLeases().get(leaseId).memberPosition(dead), "recovery-fence-death"), 11L);
+        SubjectId bindingId = FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(dead);
+        assertFalse(afterDeath.fencedRecovery().current().containsKey(bindingId));
+        assertEquals(FencedRecoveryDisposition.REJECT_STALE, afterDeath.fencedRecovery().lateLoad(bindingId,
+                FencedRecoveryAsset.BODY, FrontierSceneLeaseStateSupport.recoveryOwner(lease), 1L));
+    }
+
     private static FrontierWorldState patrolState(WorldId world) {
         FrontierWorldState state = FrontierV3FixtureCatalog.steppedRouteConfiguration(world, 41L).initialState();
         Settlement settlement = state.bootstrap().settlements().getFirst();

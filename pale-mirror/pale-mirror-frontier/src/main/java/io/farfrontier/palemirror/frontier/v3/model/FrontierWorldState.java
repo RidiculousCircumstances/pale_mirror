@@ -903,9 +903,15 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         Map<SubjectId, ActorLocation> nextActors = new LinkedHashMap<>(actorLocations);
         nextActors.put(death.actorId(), current.deadAt(death.body()));
         FrontierSceneBehaviors.SceneDeathOutcome outcome = FrontierSceneBehaviors.afterActorDeath(this, lease, death.actorId(), atTick);
+        FencedRecoveryState recovery = fencedRecovery;
+        SubjectId recoveryBinding = FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(death.actorId());
+        FencedRecoveryBinding binding = recovery.current().get(recoveryBinding);
+        if (binding != null && binding.phase() == FencedRecoveryPhase.RUNNING) {
+            recovery = recovery.observed(recoveryBinding, binding.authorityEpoch()).confirm(recoveryBinding, binding.authorityEpoch());
+        }
         return withChanges(FrontierWorldStateUpdate.begin().actorLocations(nextActors).humanPopulation(outcome.humanPopulation())
                 .resourceSites(outcome.resourceSites()).strategicPlans(outcome.strategicPlans()).physicalIntents(outcome.physicalIntents())
-                .serviceWorks(outcome.serviceWorks()));
+                .serviceWorks(outcome.serviceWorks()).fencedRecovery(recovery));
     }
     public FrontierWorldState failOperation(SubjectId operationId) { return FrontierOperationStateSupport.fail(this, operationId); }
     private void requireCurrentTacticalPlan(RouteOperation operation) {
