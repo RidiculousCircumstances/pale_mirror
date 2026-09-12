@@ -55,7 +55,35 @@ final class FencedRecoveryStateCodec {
                 new SubjectId(FrontierWorldStateCodec.readString(input)), input.readLong(), input.readLong(), phase(input.readUnsignedByte()),
                 input.readBoolean(), input.readUnsignedByte(), disposition(input.readUnsignedByte()), FrontierWorldStateCodec.readString(input));
     }
-    private static FencedRecoveryAsset asset(int tag) { return switch (tag) { case 1 -> FencedRecoveryAsset.BODY; case 2 -> FencedRecoveryAsset.CARGO; case 3 -> FencedRecoveryAsset.CONTAINER; case 4 -> FencedRecoveryAsset.EFFECT; default -> throw new IllegalArgumentException("unknown fenced recovery asset"); }; }
-    private static FencedRecoveryPhase phase(int tag) { return switch (tag) { case 1 -> FencedRecoveryPhase.PREPARED; case 2 -> FencedRecoveryPhase.RUNNING; case 3 -> FencedRecoveryPhase.OBSERVED; case 4 -> FencedRecoveryPhase.CONFIRMED; case 5 -> FencedRecoveryPhase.AMBIGUOUS; default -> throw new IllegalArgumentException("unknown fenced recovery phase"); }; }
-    private static FencedRecoveryDisposition disposition(int tag) { return switch (tag) { case 1 -> FencedRecoveryDisposition.RECLAIM; case 2 -> FencedRecoveryDisposition.RESUME_COLD; case 3 -> FencedRecoveryDisposition.INSPECT; case 4 -> FencedRecoveryDisposition.RETRY; case 5 -> FencedRecoveryDisposition.REPAIR; case 6 -> FencedRecoveryDisposition.ABANDON; case 7 -> FencedRecoveryDisposition.REJECT_STALE; default -> throw new IllegalArgumentException("unknown fenced recovery disposition"); }; }
+    private static FencedRecoveryAsset asset(int tag) {
+        return switch (tag) {
+            case 1 -> FencedRecoveryAsset.BODY;
+            case 2 -> FencedRecoveryAsset.CARGO;
+            case 3 -> FencedRecoveryAsset.CONTAINER;
+            case 4 -> FencedRecoveryAsset.EFFECT;
+            default -> throw new IllegalArgumentException("unknown fenced recovery asset");
+        };
+    }
+    private static FencedRecoveryPhase phase(int tag) {
+        return switch (tag) {
+            case 1 -> FencedRecoveryPhase.PREPARED;
+            case 2 -> FencedRecoveryPhase.RUNNING;
+            case 3 -> FencedRecoveryPhase.OBSERVED;
+            case 4 -> FencedRecoveryPhase.CONFIRMED;
+            case 5 -> FencedRecoveryPhase.AMBIGUOUS;
+            default -> throw new IllegalArgumentException("unknown fenced recovery phase");
+        };
+    }
+    private static FencedRecoveryDisposition disposition(int tag) {
+        return switch (tag) {
+            case 1 -> FencedRecoveryDisposition.RECLAIM;
+            case 2 -> FencedRecoveryDisposition.RESUME_COLD;
+            case 3 -> FencedRecoveryDisposition.INSPECT;
+            case 4 -> FencedRecoveryDisposition.RETRY;
+            case 5 -> FencedRecoveryDisposition.REPAIR;
+            case 6 -> FencedRecoveryDisposition.ABANDON;
+            case 7 -> FencedRecoveryDisposition.REJECT_STALE;
+            default -> throw new IllegalArgumentException("unknown fenced recovery disposition");
+        };
+    }
 }

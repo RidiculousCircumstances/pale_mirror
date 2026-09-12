@@ -31,7 +31,11 @@ public final class FencedRecoveryPayloads {
         @Override public String type() { return "frontier.fenced_recovery_revoked_to_cold"; }
     }
     public record Ambiguous(SubjectId bindingId, long expectedEpoch, String reason, FencedRecoveryDisposition action) implements FrontierPayload {
-        public Ambiguous { require(bindingId, expectedEpoch); Objects.requireNonNull(reason, "recovery reason"); Objects.requireNonNull(action, "recovery action"); if (reason.isBlank() || reason.length() > 96) throw new IllegalArgumentException("recovery ambiguity reason is invalid"); }
+        public Ambiguous {
+            require(bindingId, expectedEpoch); Objects.requireNonNull(reason, "recovery reason");
+            Objects.requireNonNull(action, "recovery action");
+            if (reason.isBlank() || reason.length() > 96) throw new IllegalArgumentException("recovery ambiguity reason is invalid");
+        }
         @Override public String type() { return "frontier.fenced_recovery_ambiguous"; }
     }
     public record Abandoned(SubjectId bindingId, long expectedEpoch) implements FrontierPayload {

@@ -175,7 +175,8 @@ public final class FrontierSceneLeaseStateSupport {
     public static SubjectId bodyRecoveryBindingId(SubjectId actorId) { return new SubjectId("recovery:body_" + actorId.value().replace(':', '_')); }
     /** Stable owner identity for an exact scene epoch; it is deliberately not an ambient roster. */
     public static SubjectId recoveryOwner(SceneLease lease) { return new SubjectId("scene:" + lease.id().value().replace(':', '_')); }
-    static SubjectId cargoRecoveryBindingId(SubjectId cargoId) { return new SubjectId("recovery:cargo_" + cargoId.value().replace(':', '_')); }
+    /** Stable physical-cargo key shared with the naturally loaded stale-carrier guard. */
+    public static SubjectId cargoRecoveryBindingId(SubjectId cargoId) { return new SubjectId("recovery:cargo_" + cargoId.value().replace(':', '_')); }
     private static FencedRecoveryState prepareRecovery(FencedRecoveryState recovery, SceneLease lease) {
         return prepareCargo(prepareBodies(recovery, lease), lease);
     }

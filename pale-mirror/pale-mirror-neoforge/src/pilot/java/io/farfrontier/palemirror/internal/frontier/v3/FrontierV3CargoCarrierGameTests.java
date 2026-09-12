@@ -15,6 +15,8 @@ import io.farfrontier.palemirror.frontier.v3.model.CustodyAccount;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateUpdate;
+import io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryState;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import io.farfrontier.palemirror.frontier.v3.model.OperationStage;
@@ -22,9 +24,11 @@ import io.farfrontier.palemirror.frontier.v3.model.ResourceCustody;
 import io.farfrontier.palemirror.frontier.v3.model.SceneEngagementCandidate;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeasePrepared;
+import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseReleased;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseTransition;
 import io.farfrontier.palemirror.frontier.v3.model.SceneMember;
+import io.farfrontier.palemirror.frontier.v3.model.SceneMemberPosition;
 import io.farfrontier.palemirror.frontier.v3.persistence.AppendReceipt;
 import io.farfrontier.palemirror.frontier.v3.persistence.CompactionReceipt;
 import io.farfrontier.palemirror.frontier.v3.persistence.Durability;
@@ -188,6 +192,35 @@ public final class FrontierV3CargoCarrierGameTests {
                 discard(level, lease); lease.members().forEach(member -> { Entity body = level.getEntity(member.entityId()); if (body != null) body.discard(); });
                 runtime.shutdown(); throw failure;
             }
+        });
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-cargo", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 30)
+    public static void closedCargoProjectionRequiresItsExactRecoveryFenceBeforeStaleCleanup(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(4, 8, 4));
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime = runtime("frontier:scene-cargo-stale-fence");
+        FrontierWorldState initial = state(runtime); SceneEngagementCandidate candidate = initial.coldEngagementSceneCandidates().getFirst();
+        SceneLease lease = FrontierV3GameTestSceneLeases.exact(initial, runtime.checkpointImage().orElseThrow(), candidate,
+                new SceneLeaseId("lease:frontier-v3-cargo-stale-fence"));
+        prepareSupport(level, cargoPosition(origin, lease));
+        FrontierV3CommandSubmission.submit(runtime, "scene-cargo-stale-prepare", lease.id().value(), new SceneLeasePrepared(lease));
+        MinecartChest cart = addOwnedCarrier(helper, level, state(runtime), lease, cargoPosition(origin, lease));
+        FrontierV3CommandSubmission.submit(runtime, "scene-cargo-stale-hot", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
+        helper.runAfterDelay(2L, () -> {
+            try {
+                FrontierV3CommandSubmission.submit(runtime, "scene-cargo-stale-drain", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
+                FrontierV3CommandSubmission.submit(runtime, "scene-cargo-stale-release", lease.id().value(), new SceneLeaseReleased(lease.id(),
+                        lease.members().stream().map(member -> new SceneMemberPosition(member.actorId(), lease.memberPosition(member.actorId()))).toList()));
+                FrontierWorldState closed = state(runtime);
+                FrontierWorldState unfenced = closed.withChanges(FrontierWorldStateUpdate.begin().fencedRecovery(FencedRecoveryState.empty()));
+                FrontierV3SceneExecutor.cleanClosedBodies(level, unfenced);
+                helper.assertTrue(level.getEntity(cart.getUUID()) == cart && !cart.isRemoved(),
+                        "canonical cargo alone must not delete a naturally returned cart without its exact retired recovery fence");
+                FrontierV3SceneExecutor.cleanClosedBodies(level, closed);
+                helper.assertTrue(level.getEntity(cart.getUUID()) == null,
+                        "the same closed carrier must be removed only after its exact durable tombstone rejects the old projection");
+                runtime.shutdown(); helper.succeed();
+            } catch (RuntimeException failure) { discard(level, lease); runtime.shutdown(); throw failure; }
         });
     }
 

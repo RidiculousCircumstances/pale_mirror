@@ -146,7 +146,10 @@ final class FrontierV3CargoCarrierExecutor {
     }
 
     static void discardClosed(ServerLevel level, FrontierWorldState state, SceneLease lease) {
-        if (intact(level, state, lease)) {
+        // A canonical cargo batch alone is not authority to delete a naturally returned cart.
+        // It must be the exact retired scene-cargo binding.  Released player/world custody is
+        // intentionally not intact and therefore remains outside this cleanup path.
+        if (intact(level, state, lease) && FrontierV3ClosedProjectionFence.cargoIsStale(state, lease)) {
             Entity carrier = carrier(level, lease); FrontierV3CargoCarrierPresentation.discard(carrier, lease); carrier.discard();
         }
     }

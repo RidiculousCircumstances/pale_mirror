@@ -79,7 +79,9 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         ambientLeases = FrontierWorldStateSupport.immutableMap(ambientLeases, "ambient leases"); routeConstructions = FrontierWorldStateSupport.immutableMap(routeConstructions, "route constructions");
         routeMaintenances = FrontierWorldStateSupport.immutableMap(routeMaintenances, "route maintenances");
         Objects.requireNonNull(routeTopology, "route topology"); Objects.requireNonNull(strategicPlans, "strategic plans"); Objects.requireNonNull(humanPopulation, "human population");
-        Objects.requireNonNull(companies, "company registry"); Objects.requireNonNull(resourceSites, "resource sites"); Objects.requireNonNull(replicaCustody, "replica custody"); Objects.requireNonNull(deferredAftermath, "deferred aftermath"); Objects.requireNonNull(fencedRecovery, "fenced recovery");
+        Objects.requireNonNull(companies, "company registry"); Objects.requireNonNull(resourceSites, "resource sites");
+        Objects.requireNonNull(replicaCustody, "replica custody"); Objects.requireNonNull(deferredAftermath, "deferred aftermath");
+        Objects.requireNonNull(fencedRecovery, "fenced recovery");
         if (!fullValidationDeferred()) {
             resourceSites.validate(bootstrap); strategicPlans.validate(bootstrap, routeTopology, humanPopulation); strategicPlans.hiveOperationKnowledge().validate(bootstrap, hiveColony, actorLocations);
             strategicPlans.hiveSettlementKnowledge().validate(bootstrap, hiveColony, actorLocations);
@@ -495,7 +497,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                             Map<SceneLeaseId, SceneLease> leases, HiveColony colony, Map<SubjectId, StructureDamage> damage,
                             Map<BlockPosition, PhysicalDelta> deltas, Map<SubjectId, AmbientActorLease> ambient) {
         return new FrontierWorldState(bootstrap, actors, structures, nextInfection, nextInventory, jobs, serviceWorks, nextContracts, nextOperations,
-                logisticsHistory, intents, observations, leases, colony, damage, deltas, ambient, routeConstructions, routeMaintenances, routeTopology, strategicPlans, humanPopulation, companies, resourceSites, replicaCustody, deferredAftermath, fencedRecovery);
+                logisticsHistory, intents, observations, leases, colony, damage, deltas, ambient, routeConstructions, routeMaintenances,
+                routeTopology, strategicPlans, humanPopulation, companies, resourceSites, replicaCustody, deferredAftermath, fencedRecovery);
     }
     public FrontierWorldState withChanges(FrontierWorldStateUpdate change) {
         change = Objects.requireNonNull(change, "state change");
