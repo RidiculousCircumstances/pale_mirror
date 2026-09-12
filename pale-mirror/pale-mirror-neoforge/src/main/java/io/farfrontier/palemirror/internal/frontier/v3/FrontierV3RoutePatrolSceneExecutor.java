@@ -162,21 +162,17 @@ final class FrontierV3RoutePatrolSceneExecutor {
         BodyPosition current = lease.memberPosition(actorId);
         RoutePatrol next = retained.advance(actorId); BodyPosition target = FrontierRoutePatrolSceneSupport.bodies(next).get(actorId);
         if (!at(body, current.supportingSurface())) {
-            if (at(body, target.supportingSurface())) observe(level, runtime, lease, retained, actorId, target);
+            if (at(body, target.supportingSurface())) observeFormation(level, runtime, lease, retained,
+                    FrontierRoutePatrolSceneSupport.bodies(retained.advanceFormation()));
             else if (!reacquire(level, body, current.supportingSurface())) conflict(level, runtime, lease, "cursor-body-mismatch");
             return;
         }
-        if (at(body, target.supportingSurface())) { observe(level, runtime, lease, retained, actorId, target); return; }
+        if (at(body, target.supportingSurface())) { observeFormation(level, runtime, lease, retained,
+                FrontierRoutePatrolSceneSupport.bodies(retained.advanceFormation())); return; }
         if (!clearNextBody(level, body, target.supportingSurface())) { block(level, runtime, lease, retained); return; }
         FrontierV3ControlledMobMotion.moveToward(level, body, point(target.supportingSurface()));
     }
 
-    private static void observe(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease, RoutePatrol patrol,
-                                SubjectId actorId, BodyPosition observed) {
-        CommandResult result = submit(runtime, "route-patrol-traversal", lease.id().value(),
-                new RoutePatrolTraversalObserved(patrol.taskId(), lease.id(), actorId, observed));
-        FrontierV3DiagnosticTrace.recordScene(level.getServer(), "route_patrol_traversal", lease, result);
-    }
     private static void observeFormation(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease,
                                          RoutePatrol patrol, Map<SubjectId, BodyPosition> bodies) {
         CommandResult result = submit(runtime, "route-patrol-formation", lease.id().value(),
