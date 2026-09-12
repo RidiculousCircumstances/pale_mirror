@@ -25,6 +25,7 @@ final class FrontierInfrastructureProcessModule implements FrontierWorldProcessM
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
         if (command.payload() instanceof RoutePatrolTraversalObserved observed) return planPatrolTraversal(state, observed);
+        if (command.payload() instanceof RoutePatrolFormationObserved observed) return planPatrolFormation(state, observed);
         if (command.payload() instanceof RoutePatrolBlocked blocked) return planPatrolBlocked(state, blocked);
         if (command.payload() instanceof RoutePatrolObstructionConfirmed confirmed) return planPatrolObstruction(state, confirmed, command.submittedAt().ticks());
         if (command.payload() instanceof RouteConstructionAssemblyAdvanced advanced) {
@@ -74,6 +75,19 @@ final class FrontierInfrastructureProcessModule implements FrontierWorldProcessM
                 events.add(new ProposedEvent(patrol.settlementId(), new StrategicTaskTransition(patrol.taskId(), StrategicTaskStatus.COMPLETED)));
             }
             return new CommandPlan.Accepted(List.copyOf(events));
+        } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+    }
+
+    private static CommandPlan planPatrolFormation(FrontierWorldState state, RoutePatrolFormationObserved observed) {
+        try {
+            RoutePatrol patrol = FrontierRoutePatrolSceneSupport.require(state, new RoutePatrolSceneCause(observed.taskId()));
+            SceneLease lease = state.sceneLeases().get(observed.leaseId());
+            if (lease == null || !FrontierSceneBehaviors.isRoutePatrol(lease)
+                    || !FrontierSceneBehaviors.routePatrol(lease).taskId().equals(patrol.taskId())
+                    || !patrol.advanceFormation().travel().bodies().equals(observed.bodies())) {
+                throw new IllegalArgumentException("route-patrol formation observation is stale or partial");
+            }
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(patrol.settlementId(), observed)));
         } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
     }
 
