@@ -751,7 +751,7 @@ final class FrontierV3SceneExecutor {
             // actor ID and expected body type are the complete safe identity; relaxing the
             // revision check is confined to deletion of that stale projection and never to
             // admission or mutation.
-            if (ownedByClosedLease(entity, state, lease, member)) entity.discard();
+            if (ownedByClosedLease(entity, state, lease, member) && fencedAsStale(state, lease, member)) entity.discard();
         }));
         // Only logistics scenes have a cargo carrier.  A typed assault is deliberately
         // cargo-free; asking its typed cause for a legacy cargo ID would turn normal cleanup
@@ -943,6 +943,15 @@ final class FrontierV3SceneExecutor {
         return (bioform(state, member.actorId()) ? entity instanceof Zombie : entity instanceof Villager) && !entity.isRemoved()
                 && member.entityId().equals(entity.getUUID()) && lease.id().value().equals(entity.getPersistentData().getString(LEASE_KEY))
                 && member.actorId().value().equals(entity.getPersistentData().getString(ACTOR_KEY));
+    }
+    /** A closed lease never regains an old body merely because its chunk eventually returns. */
+    private static boolean fencedAsStale(FrontierWorldState state, SceneLease lease, SceneMember member) {
+        SubjectId bindingId = io.farfrontier.palemirror.frontier.v3.model.FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(member.actorId());
+        io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryTombstone tombstone = state.fencedRecovery().tombstones().get(bindingId);
+        if (tombstone == null) return true; // Compacted or malformed historical projection: reject, never adopt.
+        return state.fencedRecovery().lateLoad(bindingId, io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryAsset.BODY,
+                io.farfrontier.palemirror.frontier.v3.model.FrontierSceneLeaseStateSupport.recoveryOwner(lease), tombstone.retiredEpoch())
+                == io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryDisposition.REJECT_STALE;
     }
     private static boolean bioform(FrontierWorldState state, SubjectId actorId) {
         return java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
