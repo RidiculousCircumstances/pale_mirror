@@ -57,10 +57,9 @@ final class FrontierV3SceneReadiness {
             BlockPos candidate = new BlockPos(canonical.x(), canonical.y() - 1, canonical.z());
             if (!level.hasChunkAt(candidate)) return "UNLOADED";
             if (FrontierV3SceneBehaviorRegistry.standingPositionProvider(lease).resolve(level, candidate) == null) {
-                // Harvest has one intentionally different pass-through crop station. Keep a
-                // real fence/full-block obstruction intelligible instead of reporting the
-                // generic-floor predicate or silently leaving a PREPARED field as HARVESTING.
-                return FrontierSceneBehaviors.isResourceSiteHarvest(lease) ? "HARVEST_STATION_OBSTRUCTED" : "AWAITING_EXACT_FLOOR";
+                // The closed behavior registry, rather than generic lifecycle code, names a
+                // real pass-through-station obstruction intelligibly for its owning process.
+                return FrontierV3SceneBehaviorRegistry.standingUnavailableReason(lease);
             }
         }
         return allCurrent ? "CURRENT" : "READY";

@@ -34,29 +34,29 @@ final class FrontierV3SceneBehaviorRegistry {
                         return assault == null || attacker == null ? null : SettlementAssaultCauseIdentity.strike(assault.id(), attacker, epoch);
                     }, false,
                     FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
-                    Optional.empty()),
+                    Optional.empty(), "AWAITING_EXACT_FLOOR"),
             new Behavior(SceneCauseKind.ENGINEERING_WORKSITE, FrontierV3EngineeringWorkSceneExecutor::tick,
                     (state, lease, attacker, epoch) -> null, false, FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
-                    Optional.empty()),
+                    Optional.empty(), "AWAITING_EXACT_FLOOR"),
             new Behavior(SceneCauseKind.MEDICAL_TREATMENT, FrontierV3MedicalTreatmentSceneExecutor::tick,
                     (state, lease, attacker, epoch) -> null, false, FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
-                    Optional.empty()),
+                    Optional.empty(), "AWAITING_EXACT_FLOOR"),
             new Behavior(SceneCauseKind.RESOURCE_SITE_HARVEST, FrontierV3ResourceSiteHarvestSceneExecutor::tick,
                     (state, lease, attacker, epoch) -> null, false, FrontierV3ResourceSiteHarvestSceneExecutor::harvestStandingPosition,
-                    Optional.of(FrontierV3ResourceSiteHarvestSceneExecutor::harvestStandingPosition)),
+                    Optional.of(FrontierV3ResourceSiteHarvestSceneExecutor::harvestStandingPosition), "HARVEST_STATION_OBSTRUCTED"),
             new Behavior(SceneCauseKind.PRODUCTION_WORK, FrontierV3ProductionWorkSceneExecutor::tick,
                     (state, lease, attacker, epoch) -> null, false, FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
-                    Optional.empty()),
+                    Optional.empty(), "AWAITING_EXACT_FLOOR"),
             new Behavior(SceneCauseKind.SERVICE_WORK, FrontierV3SettlementServiceWorkSceneExecutor::tick,
                     (state, lease, attacker, epoch) -> null, false, FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
-                    Optional.empty()),
+                    Optional.empty(), "AWAITING_EXACT_FLOOR"),
             new Behavior(SceneCauseKind.ROUTE_PATROL, FrontierV3RoutePatrolSceneExecutor::tick,
                     (state, lease, attacker, epoch) -> null, false, FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
-                    Optional.empty()),
+                    Optional.empty(), "AWAITING_EXACT_FLOOR"),
             new Behavior(SceneCauseKind.LOGISTICS, FrontierV3SceneExecutor::tickLogistics,
                     (state, lease, attacker, epoch) -> FrontierSceneBehaviors.logistics(lease).engagementId().isPresent() ? FrontierSceneBehaviors.logistics(lease).operationId() : null, true,
                     FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
-                    Optional.empty())));
+                    Optional.empty(), "AWAITING_EXACT_FLOOR")));
 
     private final List<Behavior> ordered;
 
@@ -113,6 +113,19 @@ final class FrontierV3SceneBehaviorRegistry {
         throw new IllegalStateException("unregistered NeoForge scene cause: " + lease.cause().kind());
     }
 
+    /** A registered physical policy also owns its read-only unavailable-station explanation. */
+    static String standingUnavailableReason(SceneLease lease) {
+        return standingUnavailableReason(lease.cause().kind());
+    }
+
+    static String standingUnavailableReason(SceneCauseKind causeKind) {
+        Objects.requireNonNull(causeKind, "scene cause kind");
+        for (Behavior behavior : CURRENT.ordered) {
+            if (behavior.kind() == causeKind) return behavior.standingUnavailableReason();
+        }
+        throw new IllegalStateException("unregistered NeoForge scene cause: " + causeKind);
+    }
+
     /**
      * A pre-lease ambient body may use only one registered behavior's standing rule.  The
      * ambient executor never classifies a process/cause itself; duplicate claims fail closed
@@ -132,13 +145,17 @@ final class FrontierV3SceneBehaviorRegistry {
     }
 
     record Behavior(SceneCauseKind kind, Tick tick, StrikeCause strikeCause, boolean hasCargoCarrier,
-                    StandingPositionProvider standingPositionProvider, Optional<StandingPositionProvider> preLeaseStandingPositionProvider) {
+                    StandingPositionProvider standingPositionProvider, Optional<StandingPositionProvider> preLeaseStandingPositionProvider,
+                    String standingUnavailableReason) {
         Behavior {
             Objects.requireNonNull(kind, "scene kind");
             Objects.requireNonNull(tick, "scene tick");
             Objects.requireNonNull(strikeCause, "scene strike cause");
             Objects.requireNonNull(standingPositionProvider, "scene standing provider");
             Objects.requireNonNull(preLeaseStandingPositionProvider, "pre-lease scene standing provider");
+            if (standingUnavailableReason == null || !standingUnavailableReason.matches("[A-Z_]+")) {
+                throw new IllegalArgumentException("scene standing unavailable reason");
+            }
         }
     }
 

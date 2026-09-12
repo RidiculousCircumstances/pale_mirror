@@ -8,6 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.api.ScheduleId;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSitePhase;
+import io.farfrontier.palemirror.frontier.v3.model.SceneCauseKind;
 import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
 import io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor;
 import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess;
@@ -81,6 +82,14 @@ class FrontierV3ResourceSiteHarvestSceneExecutorTest {
         assertTrue(FrontierV3PreLeaseDemandGate.holdsForTypedHandoff(true, true),
                 "a demanded typed candidate may retain its exact ambient body for hand-off");
         assertFalse(FrontierV3PreLeaseDemandGate.holdsForTypedHandoff(false, true));
+    }
+
+    @Test
+    void registeredHarvestStandingPolicyReportsItsOwnTypedObstruction() {
+        assertEquals("HARVEST_STATION_OBSTRUCTED", FrontierV3SceneBehaviorRegistry.standingUnavailableReason(
+                SceneCauseKind.RESOURCE_SITE_HARVEST));
+        assertEquals("AWAITING_EXACT_FLOOR", FrontierV3SceneBehaviorRegistry.standingUnavailableReason(
+                SceneCauseKind.ENGINEERING_WORKSITE));
     }
 
     private static CheckpointImage checkpoint(long instant, long dueAt) {
