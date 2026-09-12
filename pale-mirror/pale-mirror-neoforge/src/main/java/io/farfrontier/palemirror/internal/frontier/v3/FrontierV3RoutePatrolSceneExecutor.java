@@ -147,7 +147,9 @@ final class FrontierV3RoutePatrolSceneExecutor {
         boolean arrived = true;
         for (SceneMember candidate : lease.members()) {
             Entity candidateEntity = level.getEntity(candidate.entityId()); BodyPosition targetBody = formationBodies.get(candidate.actorId());
-            if (!(candidateEntity instanceof Mob candidateBody) || targetBody == null) { conflict(level, runtime, lease, "formation-member-unavailable"); return; }
+            if (!(candidateEntity instanceof Mob candidateBody) || targetBody == null) {
+                block(level, runtime, lease, retained, RoutePatrolBlockReason.MISSING_OWNED_BODY); return;
+            }
             if (!at(candidateBody, targetBody.supportingSurface())) { arrived = false; break; }
         }
         if (arrived) { observeFormation(level, runtime, lease, retained, formationBodies); return; }
