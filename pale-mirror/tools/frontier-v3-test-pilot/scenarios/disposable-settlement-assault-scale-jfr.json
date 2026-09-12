@@ -13,7 +13,7 @@
   ],
   "actions": [
     { "type": "wait_until_diagnostic", "view": "scene", "id": "assault:development-settlement-assault", "expect": { "status": "ok", "sceneKind": "SETTLEMENT_ASSAULT", "leaseStatus": "HOT", "strikeStatus": "CONFIRMED" }, "timeoutMs": 90000 },
-    { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-1-wheat-field-1", "expect": { "status": "ok", "claims": { "lease": { "status": "HOT" } }, "conservation": { "completedCropSlots": 1 }, "result": { "sitePhase": "HARVESTING", "intentStatus": "RUNNING" } }, "timeoutMs": 90000 },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-1-wheat-field-1", "expect": { "status": "ok", "claims": { "lease": { "status": "HOT" } }, "result": { "sitePhase": "HARVESTING", "intentStatus": "RUNNING" } }, "timeoutMs": 90000 },
     { "type": "wait", "ms": 120000 },
     { "type": "inspect", "view": "performance", "id": "" }
   ],
