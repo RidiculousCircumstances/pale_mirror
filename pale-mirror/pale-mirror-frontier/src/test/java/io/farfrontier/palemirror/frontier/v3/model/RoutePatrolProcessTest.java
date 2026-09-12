@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.process.StrategicObjectiveProcess;
+import io.farfrontier.palemirror.frontier.v3.process.RoutePatrolProcess;
 
 import io.farfrontier.palemirror.frontier.v3.api.CommandId;
 import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
@@ -23,6 +24,23 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RoutePatrolProcessTest {
+    @Test
+    void coldFormationAdvanceMovesEveryExactResidentOnItsNonFlatRetainedEdge() {
+        var fixture = FrontierDevelopmentScenarios.routePatrolFixture(new WorldId("frontier:patrol-formation-cold"), 713L);
+        FrontierWorldState state = fixture.state();
+        RoutePatrol before = state.strategicPlans().routePatrols().get(fixture.taskId());
+        RoutePatrol expected = before.advanceFormation();
+
+        FrontierWorldState advanced = RoutePatrolProcess.reduceFormationAdvanced(state, before.settlementId(),
+                new RoutePatrolFormationAdvanced(before.taskId()));
+
+        assertEquals(expected, advanced.strategicPlans().routePatrols().get(before.taskId()));
+        assertEquals(FrontierRoutePatrolSceneSupport.bodies(expected), before.memberIds().stream()
+                .collect(java.util.stream.Collectors.toMap(member -> member, member -> advanced.actorLocations().get(member).body())));
+        assertNotEquals(FrontierRoutePatrolSceneSupport.bodies(before), FrontierRoutePatrolSceneSupport.bodies(expected),
+                "the retained formation must cross a real next edge rather than rewriting a single guard");
+    }
+
     @Test
     void routeLossWakeupDoesNotCreateACompetingStrategicRetryWhileDeliveryOwnsTheLane() {
         WorldId world = new WorldId("frontier:route-loss-deferred-objective");
