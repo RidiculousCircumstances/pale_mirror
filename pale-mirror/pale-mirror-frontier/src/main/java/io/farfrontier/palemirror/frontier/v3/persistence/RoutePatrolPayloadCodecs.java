@@ -79,6 +79,19 @@ final class RoutePatrolPayloadCodecs {
                 new RoutePatrolTraversalObserved(subject(input), new SceneLeaseId(FrontierWorldPayloadCodecs.readString(input)), subject(input),
                         new BodyPosition(input.readInt(), input.readInt(), input.readInt()))); }
     }; }
+    static PayloadCodec formationObserved() { return new PayloadCodec() {
+        @Override public String type() { return "frontier.route_patrol_formation_observed"; }
+        @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+            RoutePatrolFormationObserved observed = (RoutePatrolFormationObserved) payload;
+            subject(output, observed.taskId()); FrontierWorldPayloadCodecs.writeString(output, observed.leaseId().value()); output.writeByte(observed.bodies().size());
+            for (SubjectId actor : observed.bodies().keySet().stream().sorted().toList()) { subject(output, actor); BodyPosition body = observed.bodies().get(actor); output.writeInt(body.x()); output.writeInt(body.y()); output.writeInt(body.z()); }
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
+            SubjectId task = subject(input); SceneLeaseId lease = new SceneLeaseId(FrontierWorldPayloadCodecs.readString(input)); Map<SubjectId, BodyPosition> bodies = new LinkedHashMap<>();
+            for (int index = 0, count = input.readUnsignedByte(); index < count; index++) bodies.put(subject(input), new BodyPosition(input.readInt(), input.readInt(), input.readInt()));
+            return new RoutePatrolFormationObserved(task, lease, bodies);
+        }); }
+    }; }
     private static void writePatrol(DataOutputStream output, RoutePatrol patrol) throws IOException {
         subject(output, patrol.taskId()); subject(output, patrol.settlementId()); RouteUnitManifestCodec.write(output, patrol.unit());
         TraversalTopologyStateCodec.write(output, patrol.inspectionRoute()); PatrolStateCodec.writeAssembly(output, patrol.assembly()); PatrolStateCodec.writeTravel(output, patrol.travel());
