@@ -148,6 +148,22 @@ final class FrontierDevelopmentScenarios {
     }
 
     /**
+     * Full-bootstrap pressure ingress: two disjoint current owners meet at Northwatch, while
+     * all twelve settlement authorities and both hive seed nests remain the production ones.
+     * It injects neither lease nor body; one ordinary visit admits each eligible front.
+     */
+    static MultiFrontPressureFixture multiFrontPressureFixture(WorldId worldId, long seed) {
+        SettlementAssaultFixture assault = settlementAssaultFixture(worldId, seed);
+        FrontierResourceSiteHarvestFixture.Fixture harvest = FrontierResourceSiteHarvestFixture.create(assault.state());
+        SettlementAssault retained = harvest.state().strategicPlans().settlementAssaults().get(assault.assaultId());
+        if (retained == null || retained.status() != SettlementAssaultStatus.COLD_COMBAT
+                || harvest.state().coldSettlementAssaultSceneCandidates().size() != 1) {
+            throw new IllegalStateException("multi-front fixture lost the retained COLD assault");
+        }
+        return new MultiFrontPressureFixture(harvest.state(), harvest.instant(), harvest.schedules(), assault.assaultId(), harvest.jobId());
+    }
+
+    /**
      * Keeps one genuine COLD combat action due after bootstrap.  Unlike the HOT-scene carrier,
      * this fixture does not suppress combat for a visitor: the ordinary duration driver owns
      * the exact bomber strike and its aftermath before any player loads the target chunk.
@@ -944,6 +960,10 @@ final class FrontierDevelopmentScenarios {
         SettlementAssaultFixture {
             schedules = List.copyOf(schedules);
         }
+    }
+    record MultiFrontPressureFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules,
+                                     SubjectId assaultId, SubjectId harvestJobId) {
+        MultiFrontPressureFixture { schedules = List.copyOf(schedules); }
     }
 
     record RouteConstructionFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules, SubjectId projectId) {

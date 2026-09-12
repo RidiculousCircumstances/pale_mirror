@@ -87,9 +87,23 @@ class FrontierV3FixtureCatalogTest {
     }
 
     @Test
+    void fullPressureFixtureRetainsDisjointColdAssaultAndHarvestOwnersWithoutBodies() {
+        FrontierWorldState state = FrontierV3FixtureCatalog.multiFrontPressureConfiguration(
+                new WorldId("frontier:multi-front-pressure"), 41L).initialState();
+        assertEquals(12, state.bootstrap().settlements().size());
+        assertEquals(2, state.bootstrap().hive().seedNests().size());
+        assertEquals(1, state.coldSettlementAssaultSceneCandidates().size());
+        ResourceSiteHarvestJob harvest = (ResourceSiteHarvestJob) state.resourceSites().site(new SubjectId("site:1-wheat-field"))
+                .activeWork().orElseThrow();
+        assertTrue(harvest.atCurrentCropStation() && state.sceneLeases().isEmpty() && state.ambientLeases().isEmpty(),
+                "one natural visit must be the only physical admission for both retained fronts");
+        assertTrue(state.strategicPlans().settlementAssaults().values().stream().allMatch(value -> value.status() == SettlementAssaultStatus.COLD_COMBAT));
+    }
+
+    @Test
     void everyDeclaredFixtureProfileHasExactlyOneLoadedProviderAndRequiredEvidenceContract() {
         List<FrontierV3FixtureCatalog.Profile> profiles = FrontierV3FixtureCatalog.profiles();
-        assertEquals(32, profiles.size());
+        assertEquals(33, profiles.size());
         assertEquals(profiles.size(), profiles.stream().map(FrontierV3FixtureCatalog.Profile::id).distinct().count());
         for (int index = 0; index < profiles.size(); index++) {
             FrontierV3FixtureCatalog.Profile profile = profiles.get(index);

@@ -22,6 +22,11 @@ final class FrontierResourceSiteHarvestFixture {
 
     static Fixture create(WorldId worldId, long seed) {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(worldId, seed));
+        return create(state);
+    }
+
+    /** Composes the same ordinary harvest ingress with an already-retained disjoint front. */
+    static Fixture create(FrontierWorldState state) {
         SubjectId siteId = new SubjectId("site:1-wheat-field");
         List<ProposedEvent> preparation = ResourceSiteProcess.planPreparation(state, ResourceSiteProcess.preparation(siteId, 4_000L));
         state = ResourceSiteProcess.reducePreparationStarted(state, siteId, (ResourceSitePreparationStarted) preparation.getFirst().payload());
