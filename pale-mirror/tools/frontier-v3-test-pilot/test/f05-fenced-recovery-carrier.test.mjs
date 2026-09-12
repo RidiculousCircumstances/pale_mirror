@@ -11,6 +11,9 @@ const declaration = JSON.parse(source); const outerAttempt = 'a0b1c2d3-e4f5-4678
 
 test('F0.5 carrier binds the exact route fence before and after its persistent restart', () => {
   const manifest = validManifest(); const sha = digest(source);
+  // The native claim is the exact local handoff envelope, so retain no unrelated
+  // ten-chunk terrain while the ordinary stop flushes its player demand.
+  assert.equal(declaration.server.viewDistance, 2);
   assert.deepEqual(assertF05FencedRecoveryDeclaration(declaration), {
     scenario: 'disposable_f05_fenced_route_recovery', operation: 'operation:supply-1-2', binding: 'recovery:body_resident_1-16' });
   assert.deepEqual(assertF05FencedRecoveryIdentity({ declaration, declarationSha256: sha, manifest, outerAttempt }),

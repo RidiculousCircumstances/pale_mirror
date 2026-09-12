@@ -2,7 +2,7 @@
   "schema": 1,
   "id": "disposable_f05_fenced_route_recovery",
   "isolation": { "mode": "disposable_lite", "seed": 41 },
-  "server": { "host": "127.0.0.1", "port": 25575, "profile": "scene-return" },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "scene-return", "viewDistance": 2 },
   "pilot": { "username": "PMTestPilot" },
   "setup": [
     { "type": "command", "command": "/time set day" },
