@@ -73,6 +73,12 @@ final class FrontierV3PlayerCustodyRecovery {
                 return false;
             }
             player.getInventory().setItem(captured.slot(), stack);
+            // This is the completion half of a canonical-first partial save.  It shares the
+            // exact durable fence with an ordinary handoff: the next vanilla player save
+            // persists it together with this materialized slot.  Thus a later legitimate
+            // move/consume/drop is an ambiguity, whereas a crash before that save remains
+            // the one reversible missing-witness window.
+            armDurablePlayerSave(player, captured);
             player.containerMenu.broadcastChanges();
             PaleMirrorMod.LOGGER.info("Frontier v3 restored fenced player custody account={} player={} slot={} kind={} count={}",
                     captured.accountId(), captured.playerId(), captured.slot(), captured.itemKind(), captured.bindingQuantity());
@@ -89,9 +95,20 @@ final class FrontierV3PlayerCustodyRecovery {
         PhysicalStackBinding binding = observed.destinationBindings().getFirst();
         if (!(binding.address() instanceof PhysicalStackAddress.PlayerSlot slot)
                 || slot.slot() < 0 || slot.slot() >= player.getInventory().getContainerSize()) return;
+        armDurablePlayerSave(player, observed.playerSaveFence(), observed.destinationAccount().id(), binding.id(), slot.slot());
+    }
+
+    /** Records the completion witness for a recovered canonical-first player binding. */
+    private static void armDurablePlayerSave(ServerPlayer player, FrontierV3PlayerResourceDiagnostic.Expected expected) {
+        if (expected.playerSaveFence().isEmpty() || expected.slot() < 0
+                || expected.slot() >= player.getInventory().getContainerSize()) return;
+        armDurablePlayerSave(player, expected.playerSaveFence(), expected.accountId(), expected.bindingId(), expected.slot());
+    }
+
+    private static void armDurablePlayerSave(ServerPlayer player, String token, SubjectId accountId, SubjectId bindingId, int slot) {
         CompoundTag fence = new CompoundTag();
-        fence.putString("token", observed.playerSaveFence()); fence.putString("account", observed.destinationAccount().id().value());
-        fence.putString("binding", binding.id().value()); fence.putInt("slot", slot.slot());
+        fence.putString("token", token); fence.putString("account", accountId.value());
+        fence.putString("binding", bindingId.value()); fence.putInt("slot", slot);
         player.getPersistentData().put(SAVE_FENCE_KEY, fence);
     }
 
