@@ -93,7 +93,7 @@ final class FrontierV3RoutePatrolSceneExecutor {
             case PREPARED -> materialize(level, runtime, state, lease);
             case HOT -> patrol(level, runtime, state, lease);
             case DRAINING -> FrontierV3SceneExecutor.release(level, runtime, lease);
-            case UNKNOWN_AFTER_RESTART -> FrontierV3SceneExecutor.reclaim(level, runtime, state, lease);
+            case UNKNOWN_AFTER_RESTART -> recover(level, runtime, state, lease);
             case CONFLICT, CLOSED -> { }
         }
     }
@@ -106,6 +106,21 @@ final class FrontierV3RoutePatrolSceneExecutor {
         FrontierV3SceneExecutor.rememberObserved(level, runtime, state, lease);
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "route_patrol_hot", lease,
                 submit(runtime, "route-patrol-hot", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT)));
+    }
+
+    /**
+     * A patrol's retained formation is a reversible COLD checkpoint.  With no ordinary demand,
+     * do not wait forever for an old saved chunk: persist the revoke first, then let any later
+     * natural body load meet the canonical tombstone instead of recreating progress.
+     */
+    private static void recover(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                FrontierWorldState state, SceneLease lease) {
+        if (!FrontierV3SceneExecutor.demandExists(level, lease.handoffPosition())) {
+            FrontierV3DiagnosticTrace.recordScene(level.getServer(), "route_patrol_recovery_revoked", lease,
+                    submit(runtime, "route-patrol-recovery-revoked", lease.id().value(), new SceneLeaseRecoveryRevoked(lease.id())));
+            return;
+        }
+        FrontierV3SceneExecutor.reclaim(level, runtime, state, lease);
     }
 
     private static void patrol(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,

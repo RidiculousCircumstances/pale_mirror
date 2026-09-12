@@ -51,7 +51,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.operation_travel_advanced", "frontier.operation_travel_segment_completed", "frontier.operation_cold_suspended",
             "frontier.operation_failed", "frontier.terminal_logistics_compacted", "frontier.scene_lease_prepared",
             "frontier.scene_lease_handoff", "frontier.scene_lease_transition", "frontier.scene_lease_released_v2",
-            "frontier.scene_lease_recovery_unresolved", "frontier.actor_died", "frontier.settlement_assault_scene_lease_prepared",
+            "frontier.scene_lease_recovery_unresolved", "frontier.scene_lease_recovery_revoked", "frontier.actor_died", "frontier.settlement_assault_scene_lease_prepared",
             "frontier.settlement_assault_scene_lease_handoff", "frontier.engineering_work_scene_lease_prepared",
             "frontier.engineering_work_scene_lease_handoff");
     private static final Set<String> POPULATION = types(
@@ -284,7 +284,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.operation_assembly_advanced", "frontier.operation_assembly_deferred",
             "frontier.operation_travel_segment_completed", "frontier.operation_travel_advanced", "frontier.operation_travel_started",
             "frontier.scene_lease_prepared", "frontier.scene_lease_handoff", "frontier.scene_lease_transition",
-            "frontier.scene_lease_released_v2", "frontier.scene_lease_recovery_unresolved", "frontier.actor_died",
+            "frontier.scene_lease_released_v2", "frontier.scene_lease_recovery_unresolved", "frontier.scene_lease_recovery_revoked", "frontier.actor_died",
             "frontier.settlement_assault_scene_lease_prepared", "frontier.settlement_assault_scene_lease_handoff",
             "frontier.engineering_work_scene_lease_prepared", "frontier.engineering_work_scene_lease_handoff"); }
     private static Set<String> populationCommands() { return types(
@@ -389,7 +389,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.operation_advanced", "frontier.operation_assembly_advanced", "frontier.operation_assembly_deferred", "frontier.operation_travel_started",
                     "frontier.operation_travel_advanced", "frontier.operation_travel_segment_completed", "frontier.operation_cold_suspended", "frontier.operation_failed",
                     "frontier.terminal_logistics_compacted", "frontier.scene_lease_prepared", "frontier.scene_lease_handoff", "frontier.scene_lease_transition",
-                    "frontier.scene_lease_released_v2", "frontier.scene_lease_recovery_unresolved", "frontier.actor_died", "frontier.settlement_assault_scene_lease_prepared",
+                    "frontier.scene_lease_released_v2", "frontier.scene_lease_recovery_unresolved", "frontier.scene_lease_recovery_revoked", "frontier.actor_died", "frontier.settlement_assault_scene_lease_prepared",
                     "frontier.settlement_assault_scene_lease_handoff", "frontier.engineering_work_scene_lease_prepared", "frontier.engineering_work_scene_lease_handoff",
                     // The shared release executor owns the physical confirmation of every typed
                     // scene.  A blocked production scene therefore finalizes through this

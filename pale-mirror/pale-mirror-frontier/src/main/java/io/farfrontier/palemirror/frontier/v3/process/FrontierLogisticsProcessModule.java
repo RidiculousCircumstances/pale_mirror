@@ -97,6 +97,7 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
         }
         if (command.payload() instanceof SceneLeaseReleased released) return planSceneReleased(state, command, released);
         if (command.payload() instanceof SceneLeaseRecoveryUnresolved unresolved) return planRecoveryUnresolved(state, command, unresolved);
+        if (command.payload() instanceof SceneLeaseRecoveryRevoked revoked) return planRecoveryRevoked(state, command, revoked);
         if (command.payload() instanceof ActorDied death) return planActorDied(state, death);
         return FrontierWorldCommandPlanner.rejected("logistics process does not admit command: " + command.payload().type());
     }
@@ -124,6 +125,7 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
             case SceneLeaseTransition transition -> reduceSceneTransition(state, event.subject(), transition);
             case SceneLeaseReleased released -> reduceSceneReleased(state, event.subject(), released);
             case SceneLeaseRecoveryUnresolved unresolved -> reduceRecoveryUnresolved(state, event.subject(), unresolved);
+            case SceneLeaseRecoveryRevoked revoked -> reduceRecoveryRevoked(state, event.subject(), revoked);
             case ActorDied death -> reduceActorDied(state, event.subject(), event.instant().ticks(), death);
             case OperationFailed failed -> reduceOperationFailed(state, event.subject(), failed);
             case TerminalLogisticsCompacted compacted -> reduceCompacted(state, event.subject(), event.instant().ticks(), compacted);
@@ -145,6 +147,15 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
             return FrontierWorldCommandPlanner.rejected("scene recovery evidence does not bind one unresolved restart lease");
         }
         try { return new CommandPlan.Accepted(FrontierSceneContinuationPlanner.recoveryUnresolvedEvents(state, lease, command.submittedAt().ticks(), unresolved)); }
+        catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+    }
+
+    private static CommandPlan planRecoveryRevoked(FrontierWorldState state, FrontierCommand command, SceneLeaseRecoveryRevoked revoked) {
+        SceneLease lease = state.sceneLeases().get(revoked.leaseId());
+        if (lease == null || lease.status() != SceneLeaseStatus.UNKNOWN_AFTER_RESTART || !FrontierSceneBehaviors.isRoutePatrol(lease)) {
+            return FrontierWorldCommandPlanner.rejected("scene recovery revoke does not bind one unknown patrol lease");
+        }
+        try { return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierSceneOwnerSupport.owner(state, lease), revoked))); }
         catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
     }
 
@@ -328,6 +339,14 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
         SceneLease lease = state.sceneLeases().get(unresolved.leaseId());
         if (lease == null || !subject.equals(FrontierSceneOwnerSupport.owner(state, lease))) throw new IllegalArgumentException("scene recovery evidence lacks its owning scene");
         return FrontierSceneLeaseStateSupport.recoveryUnresolved(state, unresolved);
+    }
+
+    private static FrontierWorldState reduceRecoveryRevoked(FrontierWorldState state, SubjectId subject, SceneLeaseRecoveryRevoked revoked) {
+        SceneLease lease = state.sceneLeases().get(revoked.leaseId());
+        if (lease == null || !subject.equals(FrontierSceneOwnerSupport.owner(state, lease))) {
+            throw new IllegalArgumentException("scene recovery revoke lacks its owning scene");
+        }
+        return FrontierSceneLeaseStateSupport.revokeUnknownPatrolToCold(state, revoked);
     }
 
     private static FrontierWorldState reduceActorDied(FrontierWorldState state, SubjectId subject, long atTick, ActorDied death) {

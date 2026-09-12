@@ -105,6 +105,24 @@ public final class FrontierSceneLeaseStateSupport {
         return copy(state, state.actorLocations(), leases, state.ambientLeases(), state.strategicPlans(), state.fencedRecovery());
     }
 
+    /**
+     * Releases a restart-unknown patrol without waiting for a player to load its old chunk.
+     * Patrol has no cargo, container, player custody, or physical effect to infer: its retained
+     * formation is an explicitly reversible COLD checkpoint. Other scene families must declare
+     * their own recovery contract instead of borrowing this pose-only path.
+     */
+    public static FrontierWorldState revokeUnknownPatrolToCold(FrontierWorldState state, SceneLeaseRecoveryRevoked revoked) {
+        SceneLease current = state.sceneLeases().get(revoked.leaseId());
+        if (current == null || current.status() != SceneLeaseStatus.UNKNOWN_AFTER_RESTART || current.recoveryEvidence().isPresent()
+                || !FrontierSceneBehaviors.isRoutePatrol(current)) {
+            throw new IllegalArgumentException("recovery revoke requires one uninspected route-patrol lease");
+        }
+        FencedRecoveryState recovery = revokeReversibleBodies(state.fencedRecovery(), current);
+        Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases());
+        leases.put(current.id(), current.withStatus(SceneLeaseStatus.CLOSED));
+        return copy(state, state.actorLocations(), leases, state.ambientLeases(), state.strategicPlans(), recovery);
+    }
+
     static FrontierWorldState release(FrontierWorldState state, SceneLeaseId leaseId, List<SceneMemberPosition> positions) {
         SceneLease current = state.sceneLeases().get(leaseId);
         if (current == null || current.status() != SceneLeaseStatus.DRAINING) throw new IllegalArgumentException("only a draining scene lease can be released");
@@ -149,8 +167,10 @@ public final class FrontierSceneLeaseStateSupport {
         return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).sceneLeases(leases)
                 .ambientLeases(ambient).strategicPlans(plans).fencedRecovery(recovery));
     }
-    static SubjectId bodyRecoveryBindingId(SubjectId actorId) { return new SubjectId("recovery:body_" + actorId.value().replace(':', '_')); }
-    static SubjectId recoveryOwner(SceneLease lease) { return new SubjectId("scene:" + lease.id().value().replace(':', '_')); }
+    /** Stable physical-body key used by runtime stale-load guards as well as canonical recovery. */
+    public static SubjectId bodyRecoveryBindingId(SubjectId actorId) { return new SubjectId("recovery:body_" + actorId.value().replace(':', '_')); }
+    /** Stable owner identity for an exact scene epoch; it is deliberately not an ambient roster. */
+    public static SubjectId recoveryOwner(SceneLease lease) { return new SubjectId("scene:" + lease.id().value().replace(':', '_')); }
     private static FencedRecoveryState prepareBodies(FencedRecoveryState recovery, SceneLease lease) {
         FencedRecoveryState next = recovery; SubjectId owner = recoveryOwner(lease);
         for (SceneMember member : lease.members()) {
@@ -184,6 +204,20 @@ public final class FrontierSceneLeaseStateSupport {
         FencedRecoveryState next = recovery;
         for (SceneMember member : lease.members()) {
             SubjectId id = bodyRecoveryBindingId(member.actorId()); next = next.revokeToCold(id, next.current().get(id).authorityEpoch());
+        }
+        return next;
+    }
+    private static FencedRecoveryState revokeReversibleBodies(FencedRecoveryState recovery, SceneLease lease) {
+        FencedRecoveryState next = recovery;
+        SubjectId owner = recoveryOwner(lease);
+        for (SceneMember member : lease.members()) {
+            SubjectId id = bodyRecoveryBindingId(member.actorId());
+            FencedRecoveryBinding binding = next.current().get(id);
+            if (binding == null || binding.asset() != FencedRecoveryAsset.BODY || !binding.ownerId().equals(owner)
+                    || binding.ownerRevision() != lease.revision()) {
+                throw new IllegalArgumentException("scene recovery revoke lacks exact body authority");
+            }
+            next = next.revokeToCold(id, binding.authorityEpoch());
         }
         return next;
     }

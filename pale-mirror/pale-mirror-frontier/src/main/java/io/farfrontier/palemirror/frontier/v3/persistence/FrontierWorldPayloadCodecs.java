@@ -20,7 +20,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             new OperationAdvancedCodec(), new OperationAssemblyAdvancedCodec(), new OperationAssemblyDeferredCodec(), new OperationTravelStartedCodec(),
             new OperationTravelAdvancedCodec(), new OperationTravelSegmentCompletedCodec(), new OperationColdSuspendedCodec(), new SceneLeasePreparedCodec(),
             new SceneLeaseHandoffCodec(), new SettlementAssaultSceneLeasePreparedCodec(), new SettlementAssaultSceneLeaseHandoffCodec(),
-            new SceneLeaseTransitionCodec(), new SceneLeaseReleasedCodec(), new ActorDiedCodec(), new SceneRecoveryPayloadCodec(), new OperationFailedCodec(), new TerminalLogisticsCompactedCodec())),
+            new SceneLeaseTransitionCodec(), new SceneLeaseReleasedCodec(), new ActorDiedCodec(), new SceneRecoveryPayloadCodec(), new SceneRecoveryRevokedPayloadCodec(), new OperationFailedCodec(), new TerminalLogisticsCompactedCodec())),
             EngineeringWorkScenePayloadCodecs.codecs()); }
     static PayloadCodecs populationCodecs() { return PayloadCodecs.merge(new PayloadCodecs(List.of(
             HumanPopulationPayloadCodecs.born(), HumanPopulationPayloadCodecs.migrated(), HumanPopulationPayloadCodecs.birthStarted(), HumanPopulationPayloadCodecs.birthCancelled(),

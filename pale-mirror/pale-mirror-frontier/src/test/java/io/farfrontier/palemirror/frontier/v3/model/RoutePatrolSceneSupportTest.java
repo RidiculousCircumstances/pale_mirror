@@ -4,6 +4,16 @@ import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
+import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
+import io.farfrontier.palemirror.frontier.v3.api.CommandId;
+import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierEngine;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
+import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
+import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration;
+import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
+import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -11,6 +21,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -150,6 +161,52 @@ class RoutePatrolSceneSupportTest {
         assertFalse(afterDeath.fencedRecovery().current().containsKey(bindingId));
         assertEquals(FencedRecoveryDisposition.REJECT_STALE, afterDeath.fencedRecovery().lateLoad(bindingId,
                 FencedRecoveryAsset.BODY, FrontierSceneLeaseStateSupport.recoveryOwner(lease), 1L));
+    }
+
+    @Test
+    void noVisitRestartRevokesOnlyThePatrolPoseThenFencesItsLateBodyBeforeNewColdAdmission() {
+        WorldId world = new WorldId("frontier:route-patrol-no-visit-recovery");
+        FrontierWorldState state = patrolState(world);
+        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(world, 41L);
+        FrontierEngine<FrontierWorldProjection> engine = FrontierEngines.create(new FrontierEngineConfiguration<>(world, state,
+                base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(),
+                base.projectionMapper(), base.limits(), base.initialSchedules(), base.transactionCommitter()));
+        FrontierRoutePatrolSceneSupport.Candidate candidate = FrontierRoutePatrolSceneSupport.candidates(state).stream().findFirst().orElseThrow();
+        SceneLease first = patrolLease(state, new SceneLeaseId("lease:route-patrol-no-visit-first"), candidate, 1L);
+
+        submit(engine, world, "prepare", new RoutePatrolSceneLeasePrepared(first));
+        submit(engine, world, "hot", new SceneLeaseTransition(first.id(), SceneLeaseStatus.HOT));
+        submit(engine, world, "unknown", new SceneLeaseTransition(first.id(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART));
+        submit(engine, world, "revoke", new SceneLeaseRecoveryRevoked(first.id()));
+        FrontierWorldState revoked = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertEquals(SceneLeaseStatus.CLOSED, revoked.sceneLeases().get(first.id()).status());
+        for (SceneMember member : first.members()) {
+            SubjectId binding = FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(member.actorId());
+            assertEquals(FencedRecoveryDisposition.REJECT_STALE, revoked.fencedRecovery().lateLoad(binding,
+                    FencedRecoveryAsset.BODY, FrontierSceneLeaseStateSupport.recoveryOwner(first), 1L));
+        }
+
+        SceneLease next = patrolLease(revoked, new SceneLeaseId("lease:route-patrol-no-visit-next"), candidate, 2L);
+        FrontierWorldState resumedCold = revoked.prepareSceneLease(next);
+        assertTrue(next.members().stream().allMatch(member -> resumedCold.fencedRecovery().current()
+                .get(FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(member.actorId())).authorityEpoch() == 2L));
+    }
+
+    private static SceneLease patrolLease(FrontierWorldState state, SceneLeaseId leaseId,
+                                          FrontierRoutePatrolSceneSupport.Candidate candidate, long revision) {
+        var world = state.bootstrap().worldId();
+        return SceneLease.forCause(leaseId, world, new RoutePatrolSceneCause(candidate.taskId()), candidate.handoffPosition(),
+                SimInstant.ZERO, revision, SceneLeaseStatus.PREPARED, candidate.memberBodies().keySet().stream().sorted()
+                        .map(id -> new SceneMember(id, SceneLease.deterministicEntityId(world, leaseId, id))).toList(),
+                candidate.memberBodies(), Set.of(), Optional.empty());
+    }
+
+    private static void submit(FrontierEngine<FrontierWorldProjection> engine, WorldId world, String suffix, FrontierPayload payload) {
+        var checkpoint = engine.checkpoint();
+        CommandId id = new CommandId("command:route-patrol-no-visit-" + suffix);
+        CommandResult result = engine.submit(new FrontierCommand(FrontierCommand.SCHEMA_VERSION, id, world,
+                checkpoint.revision(), checkpoint.instant(), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id), payload));
+        assertInstanceOf(CommandResult.Accepted.class, result, result.toString());
     }
 
     private static FrontierWorldState patrolState(WorldId world) {
