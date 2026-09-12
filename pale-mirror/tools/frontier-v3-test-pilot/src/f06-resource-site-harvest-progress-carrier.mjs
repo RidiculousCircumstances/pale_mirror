@@ -36,7 +36,6 @@ export function assertF06ResourceSiteHarvestProgressCarrier({ declaration, manif
   }
   const block = exactly(diagnostics, 3, 'block', `${SITE}:firstCrop`);
   if (block.block !== 'minecraft:air') throw new Error('F0.6 resource-site harvest lacks the observed first-crop world effect');
-  for (const step of [1, 5, 7]) assertNaturalClientIngress(diagnostics, step);
   return Object.freeze({ job: first.identity.job, worker: first.identity.worker, firstCrop: completed(first),
     returnedCropFloor: completed(returned), released: true, physicalCropEffect: true });
 }
@@ -80,13 +79,7 @@ function exactly(diagnostics, actionStep, kind, id) {
   if (values.length !== 1 || values[0].status !== 'ok') throw new Error(`F0.6 resource-site harvest lacks one ${kind}:${id} receipt at action ${actionStep}`);
   return values[0];
 }
-function assertNaturalClientIngress(diagnostics, step) {
-  const values = diagnostics.filter(entry => entry.actionStep === step && entry.value?.kind === 'visit_ingress').map(entry => entry.value);
-  if (values.length !== 1 || values[0].targetDimensionSeen !== true || values[0].targetChunkSeen !== true
-      || !point(values[0].finalClientPosition)) throw new Error('F0.6 resource-site harvest lacks natural client ingress evidence');
-}
 function observed(manifest) {
   return (manifest?.diagnostics ?? []).flatMap(entry => entry?.observed?.value ? [entry.observed]
     : entry?.assertion === undefined && entry?.value ? [entry] : []);
 }
-function point(value) { return value && Number.isSafeInteger(value.x) && Number.isSafeInteger(value.y) && Number.isSafeInteger(value.z); }

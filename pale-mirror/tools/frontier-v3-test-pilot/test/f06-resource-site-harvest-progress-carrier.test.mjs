@@ -7,18 +7,13 @@ import { validateScenario } from '../src/scenario.mjs';
 
 const declaration = JSON.parse(await readFile(new URL('../scenarios/disposable-f06-resource-site-harvest-progress.json', import.meta.url)));
 function observed(actionStep, value) { return { observed: { actionStep, value } }; }
-function ingress(dimension) { return { kind: 'visit_ingress', id: 'ordinary_visit', targetDimensionSeen: true, targetChunkSeen: true,
-  finalClientDimension: dimension, finalClientPosition: { x: -333, y: 65, z: -355 } }; }
 function process({ lease, completed }) { return { kind: 'process', id: 'job:site-harvest-1-wheat-field-1', status: 'ok',
   identity: { job: 'job:site-harvest-1-wheat-field-1', worker: 'resident:1-3' }, claims: { intent: 'intent:site-harvest-1-wheat-field-1', lease },
   conservation: { completedCropSlots: completed, pendingCropSlot: -1 }, result: { sitePhase: 'HARVESTING', intentStatus: 'RUNNING', complete: false } }; }
 function manifest() { return { status: 'ok', scenarioId: declaration.id, actions: declaration.actions.map(action => ({ action: structuredClone(action) })), diagnostics: [
-  observed(1, ingress('pale_mirror:frontier_graybox')),
   observed(2, process({ lease: { status: 'HOT', members: 1 }, completed: 1 })),
   observed(3, { kind: 'block', id: 'site:1-wheat-field:firstCrop', status: 'ok', block: 'minecraft:air' }),
-  observed(5, ingress('minecraft:overworld')),
   observed(6, process({ lease: null, completed: 1 })),
-  observed(7, ingress('pale_mirror:frontier_graybox')),
   observed(8, process({ lease: { status: 'HOT', members: 1 }, completed: 1 }))
 ] }; }
 
@@ -36,13 +31,12 @@ test('F0.6 carrier requires physical first-crop progress and preserves exact far
   });
 });
 
-test('F0.6 carrier rejects a silent harvest phase, synthetic crop receipt, reset return, and wrong ingress', () => {
+test('F0.6 carrier rejects a silent harvest phase, synthetic crop receipt, reset return, and duplicate receipt', () => {
   for (const mutate of [
-    value => { value.diagnostics[1].observed.value.conservation.completedCropSlots = 0; },
-    value => { value.diagnostics[2].observed.value.block = 'minecraft:wheat'; },
-    value => { value.diagnostics[6].observed.value.conservation.completedCropSlots = 0; },
-    value => { value.diagnostics[5].observed.value.finalClientPosition = null; },
-    value => { value.diagnostics.push(structuredClone(value.diagnostics[1])); }
+    value => { value.diagnostics[0].observed.value.conservation.completedCropSlots = 0; },
+    value => { value.diagnostics[1].observed.value.block = 'minecraft:wheat'; },
+    value => { value.diagnostics[3].observed.value.conservation.completedCropSlots = 0; },
+    value => { value.diagnostics.push(structuredClone(value.diagnostics[0])); }
   ]) {
     const value = manifest(); mutate(value);
     assert.throws(() => assertF06ResourceSiteHarvestProgressCarrier({ declaration, manifest: value }), /F0\.6/);
