@@ -53,7 +53,7 @@ public final class RoutePatrolProcess {
         // A scheduled COLD turn is one operation boundary, never a hidden batch of resident
         // teleports.  HOT supplies the same edge through observed arrival.
         for (int advance = 0; advance < 1; advance++) {
-            if (current.memberIds().stream().noneMatch(member -> state.actorLocations().get(member).condition().status() == ActorLifeStatus.ALIVE)) {
+            if (current.memberIds().stream().anyMatch(member -> state.actorLocations().get(member).condition().status() != ActorLifeStatus.ALIVE)) {
                 events.add(new ProposedEvent(current.settlementId(), new RoutePatrolFailed(current.taskId())));
                 events.add(transition(task, StrategicTaskStatus.BLOCKED));
                 return List.copyOf(events);
@@ -127,10 +127,11 @@ public final class RoutePatrolProcess {
         return state.withStrategicPlans(state.strategicPlans().confirmPatrolObstruction(confirmed.taskId(), confirmed.position()));
     }
 
-    static FrontierWorldState reduceFailed(FrontierWorldState state, SubjectId subject, RoutePatrolFailed failed) {
+    /** One named patrol member loss is terminal evidence for this exact roster; no substitute may continue it. */
+    public static FrontierWorldState reduceFailed(FrontierWorldState state, SubjectId subject, RoutePatrolFailed failed) {
         RoutePatrol patrol = state.strategicPlans().routePatrols().get(failed.taskId());
         if (patrol == null || !subject.equals(patrol.settlementId()) || patrol.memberIds().stream()
-                .anyMatch(member -> state.actorLocations().get(member).condition().status() == ActorLifeStatus.ALIVE)) {
+                .allMatch(member -> state.actorLocations().get(member).condition().status() == ActorLifeStatus.ALIVE)) {
             throw new IllegalArgumentException("route patrol failure lacks a dead guard");
         }
         requireCurrentPlan(state, patrol);

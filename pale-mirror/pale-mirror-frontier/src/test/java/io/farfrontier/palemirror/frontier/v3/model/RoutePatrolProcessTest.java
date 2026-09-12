@@ -21,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RoutePatrolProcessTest {
@@ -39,6 +40,25 @@ class RoutePatrolProcessTest {
                 .collect(java.util.stream.Collectors.toMap(member -> member, member -> advanced.actorLocations().get(member).body())));
         assertNotEquals(FrontierRoutePatrolSceneSupport.bodies(before), FrontierRoutePatrolSceneSupport.bodies(expected),
                 "the retained formation must cross a real next edge rather than rewriting a single guard");
+    }
+
+    @Test
+    void oneColdRosterLossFailsTheExactPatrolInsteadOfSelectingAReplacementGuard() {
+        var fixture = FrontierDevelopmentScenarios.routePatrolFixture(new WorldId("frontier:patrol-cold-loss"), 713L);
+        FrontierWorldState state = fixture.state();
+        RoutePatrol patrol = state.strategicPlans().routePatrols().get(fixture.taskId());
+        SubjectId lost = patrol.memberIds().getFirst();
+        java.util.Map<SubjectId, ActorLocation> locations = new java.util.LinkedHashMap<>(state.actorLocations());
+        ActorLocation before = locations.get(lost);
+        locations.put(lost, new ActorLocation(before.body(), ActorCondition.dead()));
+        FrontierWorldState withLoss = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(locations));
+
+        FrontierWorldState failed = RoutePatrolProcess.reduceFailed(withLoss, patrol.settlementId(), new RoutePatrolFailed(patrol.taskId()));
+
+        assertEquals(RoutePatrolStatus.FAILED, failed.strategicPlans().routePatrols().get(patrol.taskId()).status());
+        assertEquals(patrol.memberIds(), failed.strategicPlans().routePatrols().get(patrol.taskId()).memberIds());
+        assertThrows(IllegalArgumentException.class,
+                () -> RoutePatrolProcess.reduceFailed(state, patrol.settlementId(), new RoutePatrolFailed(patrol.taskId())));
     }
 
     @Test
