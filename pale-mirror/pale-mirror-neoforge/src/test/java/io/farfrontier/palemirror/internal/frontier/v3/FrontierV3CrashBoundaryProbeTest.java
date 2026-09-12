@@ -115,6 +115,16 @@ class FrontierV3CrashBoundaryProbeTest {
     }
 
     @Test
+    void typedFungibleWindowAdmitsOnlyTheExactCanonicalAfterPhysicalArrival() {
+        FrontierV3CrashBoundaryProbe probe = FrontierV3CrashBoundaryProbe.from(properties(7L, "custody:container-1-depot",
+                FrontierV3CrashBoundaryProbe.TYPED_OBSERVATION_DURABLE_BEFORE_NEXT_PROCESS_CHECKPOINT,
+                "frontier.fungible_resource_handoff_observed")::get, ignored -> { });
+        assertTrue(probe.matches(transaction(7L, "custody:container-1-depot", "frontier.fungible_resource_handoff_observed")));
+        assertFalse(probe.matches(transaction(7L, "custody:container-1-depot", "frontier.resource_site_harvest_progressed")));
+        assertFalse(probe.matches(transaction(8L, "custody:container-1-depot", "frontier.fungible_resource_handoff_observed")));
+    }
+
+    @Test
     void physicalWindowCannotBeMistakenForAGenericWalAppend() {
         FrontierV3CrashBoundaryProbe probe = FrontierV3CrashBoundaryProbe.from(properties(7L, "site:crash-owner",
                 FrontierV3CrashBoundaryProbe.PHYSICAL_EFFECT_VISIBLE_BEFORE_TYPED_OBSERVATION,

@@ -36,11 +36,12 @@ final class FrontierV3CrashBoundaryProbe {
     static final String TYPED_OBSERVATION_DURABLE_BEFORE_NEXT_PROCESS_CHECKPOINT = "typed_observation_durable_before_next_process_checkpoint";
     static final String HOT_CHECKPOINT_DURABLE_BEFORE_DRAIN_RELEASE = "hot_checkpoint_durable_before_drain_release";
     static final String RELEASE_DURABLE_BEFORE_COLD_RESUMPTION = "release_durable_before_cold_resumption";
-    private static final java.util.Map<String, String> DURABLE_PAYLOADS = java.util.Map.of(
-            LEASE_RECORDED_BEFORE_PHYSICAL_MATERIALIZATION, "frontier.resource_site_harvest_scene_lease_prepared",
-            TYPED_OBSERVATION_DURABLE_BEFORE_NEXT_PROCESS_CHECKPOINT, "frontier.resource_site_harvest_progressed",
-            HOT_CHECKPOINT_DURABLE_BEFORE_DRAIN_RELEASE, "frontier.resource_site_harvest_hot_traversal_advanced",
-            RELEASE_DURABLE_BEFORE_COLD_RESUMPTION, "frontier.scene_lease_released_v2");
+    private static final java.util.Map<String, java.util.Set<String>> DURABLE_PAYLOADS = java.util.Map.of(
+            LEASE_RECORDED_BEFORE_PHYSICAL_MATERIALIZATION, java.util.Set.of("frontier.resource_site_harvest_scene_lease_prepared"),
+            TYPED_OBSERVATION_DURABLE_BEFORE_NEXT_PROCESS_CHECKPOINT,
+            java.util.Set.of("frontier.resource_site_harvest_progressed", "frontier.fungible_resource_handoff_observed"),
+            HOT_CHECKPOINT_DURABLE_BEFORE_DRAIN_RELEASE, java.util.Set.of("frontier.resource_site_harvest_hot_traversal_advanced"),
+            RELEASE_DURABLE_BEFORE_COLD_RESUMPTION, java.util.Set.of("frontier.scene_lease_released_v2"));
     private static final String HARVEST_PHYSICAL_PAYLOAD = "frontier.resource_site_harvest_progressed";
     private static final String FUNGIBLE_PLAYER_PHYSICAL_PAYLOAD = "frontier.fungible_resource_handoff_observed";
     private static final String PILOT_RUN_ID = "pale_mirror.frontier_v3.pilot.run_id";
@@ -124,7 +125,13 @@ final class FrontierV3CrashBoundaryProbe {
     void afterVisibleFungiblePlayerDeparture(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, CustodyAccount account) {
         Objects.requireNonNull(level, "level");
         fungiblePlayerDepartureBecameVisible(account);
-        afterVisiblePhysicalEffect(runtime, () -> level.getServer().saveEverything(true, true, true));
+        afterVisiblePhysicalEffect(runtime, () -> {
+            // MinecraftServer.saveEverything flushes world/chunk storage but does not serialize
+            // connected ServerPlayer data. The player list is the real vanilla ownership save
+            // boundary for the already-observed menu move; capture it before the crash marker.
+            level.getServer().saveEverything(true, true, true);
+            level.getServer().getPlayerList().saveAll();
+        });
     }
 
     private void afterVisiblePhysicalEffect(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
@@ -255,12 +262,12 @@ final class FrontierV3CrashBoundaryProbe {
             if (!runId.matches("[0-9a-f-]{36}") || !stable(boundary) || !stable(owner) || revision < -1L || !stable(payload)) {
                 throw new IllegalArgumentException("test-only crash arm is malformed");
             }
-            String durablePayload = DURABLE_PAYLOADS.get(boundary);
-            if (durablePayload == null && !PHYSICAL_EFFECT_VISIBLE_BEFORE_TYPED_OBSERVATION.equals(boundary)) {
+            java.util.Set<String> durablePayloads = DURABLE_PAYLOADS.get(boundary);
+            if (durablePayloads == null && !PHYSICAL_EFFECT_VISIBLE_BEFORE_TYPED_OBSERVATION.equals(boundary)) {
                 throw new IllegalArgumentException("test-only crash arm names a boundary without an installed pilot hook");
             }
-            if ((durablePayload == null && !java.util.Set.of(HARVEST_PHYSICAL_PAYLOAD, FUNGIBLE_PLAYER_PHYSICAL_PAYLOAD).contains(payload))
-                    || (durablePayload != null && !durablePayload.equals(payload))) {
+            if ((durablePayloads == null && !java.util.Set.of(HARVEST_PHYSICAL_PAYLOAD, FUNGIBLE_PLAYER_PHYSICAL_PAYLOAD).contains(payload))
+                    || (durablePayloads != null && !durablePayloads.contains(payload))) {
                 throw new IllegalArgumentException("test-only crash arm payload does not match semantic boundary");
             }
         }

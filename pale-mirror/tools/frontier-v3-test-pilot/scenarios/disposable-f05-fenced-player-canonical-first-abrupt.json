@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "id": "disposable_f05_fenced_player_canonical_first_abrupt",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "world", "viewDistance": 8 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/time set day" },
+    { "type": "command", "command": "/clear PMTestPilot" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -340, "y": 65, "z": -329 }, "settleMs": 1000 }
+  ],
+  "actions": [
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "surface": "ACTIVE", "custody": { "status": "ACQUIRED" } }, "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "resource", "id": "custody:container-1-depot", "expect": { "status": "ok", "quantity": 64, "bindingCount": 1, "custody": { "kind": "CONTAINER", "container": "container:1-depot" } }, "timeoutMs": 30000 },
+    { "type": "open_container", "position": { "diagnostic": { "view": "container", "id": "container:1-depot", "field": "position" } }, "timeoutMs": 30000 },
+    { "type": "split_move_from_container", "item": "minecraft:wheat", "sourceCount": 64, "movedCount": 32, "timeoutMs": 30000, "causalMilestone": "canonical_before_player_save" },
+    { "type": "inspect", "view": "resource", "id": "custody:container-1-depot", "causalMilestone": "canonical_recovered_source" },
+    { "type": "inspect", "view": "resource", "id": "custody:player-bf39347d-cb86-3221-b6b7-7b89a1dcb4cf", "causalMilestone": "canonical_recovered_player" }
+  ],
+  "restart": {
+    "mode": "abrupt",
+    "afterAction": 4,
+    "resumeSetup": [
+      { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -340, "y": 65, "z": -329 }, "settleMs": 1000 }
+    ]
+  },
+  "crash": {
+    "phase": "before_restart",
+    "boundary": "typed_observation_durable_before_next_process_checkpoint",
+    "owner": "custody:container-1-depot",
+    "payloadType": "frontier.fungible_resource_handoff_observed",
+    "expectedRevision": "observed_at_boundary",
+    "playerSave": { "player": "bf39347d-cb86-3221-b6b7-7b89a1dcb4cf", "item": "minecraft:wheat", "expectedCount": 0 }
+  },
+  "assertions": [
+    { "after": 5, "view": "resource", "id": "custody:container-1-depot", "expect": { "status": "ok", "quantity": 32, "custody": { "kind": "CONTAINER", "container": "container:1-depot" } } },
+    { "after": 6, "view": "resource", "id": "custody:player-bf39347d-cb86-3221-b6b7-7b89a1dcb4cf", "expect": { "status": "ok", "quantity": 32, "custody": { "kind": "PLAYER", "player": "bf39347d-cb86-3221-b6b7-7b89a1dcb4cf" } } }
+  ],
+  "frames": []
+}

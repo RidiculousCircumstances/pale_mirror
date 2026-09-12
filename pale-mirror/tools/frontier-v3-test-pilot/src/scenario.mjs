@@ -125,6 +125,11 @@ export function validateScenario(scenario) {
         || scenario.crash.expectedAuthorityEpoch < 0)))) {
     throw new Error('crash needs an abrupt restart plus one exact phase/boundary/owner/revision/payload');
   }
+  if (scenario.crash?.playerSave !== undefined && (!validPlayerSaveSnapshot(scenario.crash.playerSave)
+      || scenario.crash.payloadType !== 'frontier.fungible_resource_handoff_observed'
+      || !['physical_effect_visible_before_typed_observation', 'typed_observation_durable_before_next_process_checkpoint'].includes(scenario.crash.boundary))) {
+    throw new Error('player-save crash evidence needs one exact fungible physical or canonical boundary');
+  }
   const causalMilestones = new Set();
   for (const [phase, allowed] of [['setup', SETUP_ACTIONS], ['actions', EVIDENCE_ACTIONS]]) {
     const actions = scenario[phase] ?? [];
@@ -381,6 +386,13 @@ function requiredId(value, prefix) { return typeof value === 'string' && value.s
 function validItemKind(value) { return typeof value === 'string' && /^[a-z0-9_.-]+:[a-z0-9_./-]+$/.test(value); }
 
 function validStackCount(value) { return Number.isInteger(value) && value >= 1 && value <= 64; }
+
+/** Read-only post-kill playerdata observation for the two physical/canonical arrival orders. */
+function validPlayerSaveSnapshot(value) {
+  return value && typeof value === 'object' && Object.keys(value).sort().join(',') === 'expectedCount,item,player'
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value.player)
+    && validItemKind(value.item) && Number.isInteger(value.expectedCount) && value.expectedCount >= 0 && value.expectedCount <= 64;
+}
 
 function validatePosition(value) {
   if (!value || !Number.isInteger(value.x) || !Number.isInteger(value.y) || !Number.isInteger(value.z)) {

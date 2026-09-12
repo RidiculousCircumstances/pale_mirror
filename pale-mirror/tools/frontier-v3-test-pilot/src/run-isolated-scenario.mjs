@@ -24,6 +24,7 @@ import { admitSaveOwnerObserverContract, requireSaveOwnerObserverEvidence } from
 import { assertRecoveryCarrierManifest } from './f02b-native-semantic.mjs';
 import { persistentRecoveryMetadata, resolveIsolatedScenarioOuterAttempt } from './isolated-scenario-attempt.mjs';
 import { armNaturalDemandEpisode, awaitNaturalDemandEpisodeArmed, stopPilotNaturalDemandCarrier } from './natural-demand-episode.mjs';
+import { snapshotPlayerSave } from './player-save-snapshot.mjs';
 
 const [scenarioPath, outputPath = `build/frontier-v3-scenarios/${basename(process.argv[2] ?? 'scenario.json', '.json')}-${Date.now()}.json`] = process.argv.slice(2);
 if (!scenarioPath) throw new Error('usage: npm run scenario:isolated -- <scenario.json> [manifest.json]');
@@ -164,6 +165,13 @@ try {
     await writeScenario(beforeRestartScenario, recovery.before);
     if (scenario.crash !== undefined) {
       crashEvidence = await runPilotUntilCrash(beforeRestartScenario, beforeRestartManifest, server, clientSegments, 'before_restart', scenario.crash);
+      if (scenario.crash.playerSave !== undefined) {
+        // The owned server JVM is already gone here. Capture the actual persisted player bytes
+        // before a replacement process can load or save them; this distinguishes physical-first
+        // from canonical-first arrival without manufacturing either side of the handoff.
+        crashEvidence = Object.freeze({ ...crashEvidence,
+          playerSave: await snapshotPlayerSave(disposableWorld, scenario.crash.playerSave) });
+      }
       server = null;
     } else {
       await runPilot(beforeRestartScenario, beforeRestartManifest, server, clientSegments, 'before_restart', {
