@@ -119,7 +119,7 @@ final class FrontierV3SceneDiagnosticJson {
     }
 
     private static String patrolTraversal(io.farfrontier.palemirror.frontier.v3.model.RoutePatrol patrol) {
-        if (patrol == null) return ",\"patrolStatus\":\"\",\"patrolRouteIndex\":-1,\"patrolCurrent\":null,\"patrolNextSurface\":null,\"patrolNextBody\":null";
+        if (patrol == null) return ",\"patrolStatus\":\"\",\"patrolBlockReason\":\"\",\"patrolRouteIndex\":-1,\"patrolCurrent\":null,\"patrolNextSurface\":null,\"patrolNextBody\":null";
         var bodies = FrontierRoutePatrolSceneSupport.bodies(patrol);
         var leader = bodies.get(patrol.guardId());
         io.farfrontier.palemirror.frontier.v3.model.BodyPosition nextBody = null;
@@ -127,7 +127,8 @@ final class FrontierV3SceneDiagnosticJson {
             try { nextBody = FrontierRoutePatrolSceneSupport.bodies(patrol.advanceFormation()).get(patrol.guardId()); }
             catch (IllegalArgumentException unavailable) { nextBody = null; }
         }
-        return ",\"patrolStatus\":\"" + patrol.status() + "\",\"patrolRouteIndex\":" + patrol.routeIndex()
+        return ",\"patrolStatus\":\"" + patrol.status() + "\",\"patrolBlockReason\":\""
+                + patrol.blockReason().map(Enum::name).orElse("") + "\",\"patrolRouteIndex\":" + patrol.routeIndex()
                 + ",\"patrolCurrent\":" + FrontierV3DiagnosticJson.position(leader.supportingSurface().support())
                 + ",\"patrolNextSurface\":" + (nextBody == null ? "null" : FrontierV3DiagnosticJson.position(nextBody.supportingSurface().support()))
                 + ",\"patrolNextBody\":" + (nextBody == null ? "null" : FrontierV3DiagnosticJson.position(nextBody));
