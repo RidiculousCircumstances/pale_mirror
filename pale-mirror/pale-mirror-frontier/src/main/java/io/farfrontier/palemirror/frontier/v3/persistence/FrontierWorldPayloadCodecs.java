@@ -11,7 +11,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             PhysicalDeltaPayloadCodecs.single(), PhysicalDeltaPayloadCodecs.batch(), new ExactItemCustodyChangedCodec(), new ExactItemDestroyedCodec(),
             new InventoryConflictObservedCodec(), new ContainerSurfaceTransitionCodec(), new ResourceDepositedCodec(),
             new CargoCarrierReleasedPayloadCodec())), FungibleResourcePayloadCodecs.observationCodecs()); }
-    static PayloadCodecs replicaCustodyCodecs() { return new PayloadCodecs(PhysicalReplicaCustodyPayloadCodecs.codecs()); }
+    static PayloadCodecs replicaCustodyCodecs() { return PayloadCodecs.merge(new PayloadCodecs(PhysicalReplicaCustodyPayloadCodecs.codecs()), new PayloadCodecs(FencedRecoveryPayloadCodecs.codecs())); }
     static PayloadCodecs ambientCodecs() { return new PayloadCodecs(List.of(new AmbientActorDiedCodec(),
             new AmbientActorObservedCodec(), AmbientLeasePayloadCodecs.prepared(), AmbientLeasePayloadCodecs.transition(), AmbientLeasePayloadCodecs.released(),
             AmbientLeasePayloadCodecs.restartAbsenceObserved())); }

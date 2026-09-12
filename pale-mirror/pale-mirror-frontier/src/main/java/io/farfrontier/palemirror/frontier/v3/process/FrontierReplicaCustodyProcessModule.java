@@ -7,6 +7,7 @@ import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateUpdate;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyPayloads.*;
+import io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryPayloads.*;
 
 import java.util.List;
 
@@ -32,6 +33,13 @@ final class FrontierReplicaCustodyProcessModule implements FrontierWorldProcessM
                 }
                 case CustodyReleased released -> { state.replicaCustody().release(released.scopeId(), released.expectedEpoch(),
                         released.expectedCanonicalRevision(), released.expectedReplicaRevision()); yield accepted(released.scopeId(), released); }
+                case Prepared prepared -> { state.fencedRecovery().prepare(prepared.binding()); yield accepted(prepared.binding().bindingId(), prepared); }
+                case Running running -> { state.fencedRecovery().running(running.bindingId(), running.expectedEpoch()); yield accepted(running.bindingId(), running); }
+                case Observed observed -> { state.fencedRecovery().observed(observed.bindingId(), observed.expectedEpoch()); yield accepted(observed.bindingId(), observed); }
+                case Confirmed confirmed -> { state.fencedRecovery().confirm(confirmed.bindingId(), confirmed.expectedEpoch()); yield accepted(confirmed.bindingId(), confirmed); }
+                case RevokedToCold revoked -> { state.fencedRecovery().revokeToCold(revoked.bindingId(), revoked.expectedEpoch()); yield accepted(revoked.bindingId(), revoked); }
+                case Ambiguous ambiguous -> { state.fencedRecovery().ambiguous(ambiguous.bindingId(), ambiguous.expectedEpoch(), ambiguous.reason(), ambiguous.action()); yield accepted(ambiguous.bindingId(), ambiguous); }
+                case Abandoned abandoned -> { state.fencedRecovery().abandon(abandoned.bindingId(), abandoned.expectedEpoch()); yield accepted(abandoned.bindingId(), abandoned); }
                 default -> FrontierWorldCommandPlanner.rejected("replica custody process does not admit command: " + command.payload().type());
             };
         } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
@@ -51,12 +59,22 @@ final class FrontierReplicaCustodyProcessModule implements FrontierWorldProcessM
                 case CustodyUnresolved unresolved -> replace(state, state.replicaCustody().unresolved(unresolved.scopeId(), unresolved.expectedEpoch(),
                         unresolved.expectedCanonicalRevision(), unresolved.expectedReplicaRevision(), unresolved.reason()));
                 case CustodyReleased released -> replace(state, state.replicaCustody().release(released.scopeId(), released.expectedEpoch(), released.expectedCanonicalRevision(), released.expectedReplicaRevision()));
+                case Prepared prepared -> replaceRecovery(state, state.fencedRecovery().prepare(prepared.binding()));
+                case Running running -> replaceRecovery(state, state.fencedRecovery().running(running.bindingId(), running.expectedEpoch()));
+                case Observed observed -> replaceRecovery(state, state.fencedRecovery().observed(observed.bindingId(), observed.expectedEpoch()));
+                case Confirmed confirmed -> replaceRecovery(state, state.fencedRecovery().confirm(confirmed.bindingId(), confirmed.expectedEpoch()));
+                case RevokedToCold revoked -> replaceRecovery(state, state.fencedRecovery().revokeToCold(revoked.bindingId(), revoked.expectedEpoch()));
+                case Ambiguous ambiguous -> replaceRecovery(state, state.fencedRecovery().ambiguous(ambiguous.bindingId(), ambiguous.expectedEpoch(), ambiguous.reason(), ambiguous.action()));
+                case Abandoned abandoned -> replaceRecovery(state, state.fencedRecovery().abandon(abandoned.bindingId(), abandoned.expectedEpoch()));
                 default -> throw new IllegalArgumentException("replica custody process does not own event: " + event.payload().type());
             };
         } catch (IllegalArgumentException invalid) { throw new IllegalArgumentException("replica custody event rejected: " + invalid.getMessage(), invalid); }
     }
     private static FrontierWorldState replace(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyState next) {
         return state.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(next));
+    }
+    private static FrontierWorldState replaceRecovery(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryState next) {
+        return state.withChanges(FrontierWorldStateUpdate.begin().fencedRecovery(next));
     }
     private static CommandPlan accepted(io.farfrontier.palemirror.frontier.v3.api.SubjectId subject, io.farfrontier.palemirror.frontier.v3.api.FrontierPayload payload) {
         return new CommandPlan.Accepted(List.of(new ProposedEvent(subject, payload)));
