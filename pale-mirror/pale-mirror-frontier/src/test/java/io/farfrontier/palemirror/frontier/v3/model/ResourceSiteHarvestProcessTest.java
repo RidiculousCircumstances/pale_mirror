@@ -364,6 +364,40 @@ class ResourceSiteHarvestProcessTest {
     }
 
     @Test
+    void repeatedHotColdSwitchesKeepOneFarmerWorkCursorAndUnstartedCropCustody() {
+        ColdHarvest initial = coldHarvestAfterSteps(125L, 0);
+        FrontierWorldState state = initial.state();
+        SubjectId site = initial.site();
+        SubjectId worker = initial.job().workerId();
+        SubjectId jobId = initial.job().id();
+        for (int cycle = 0; cycle < 8; cycle++) {
+            ResourceSiteHarvestJob before = (ResourceSiteHarvestJob) state.resourceSites().site(site).activeWork().orElseThrow();
+            SceneLease lease = newHarvestLease(state, site, before, "neutral-switch-" + cycle);
+            FrontierWorldState hot = state.prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT);
+            BodyPosition observed = before.nextTraversalSurface().standingBody();
+            FrontierWorldState checkpointed = ResourceSiteHarvestProcess.reduceHotTraversalAdvanced(hot, site,
+                    new ResourceSiteHarvestHotTraversalAdvanced(before.id(), lease.id(), worker, observed, before.traversalCursor() + 1));
+            FrontierWorldState draining = checkpointed.transitionSceneLease(lease.id(), SceneLeaseStatus.DRAINING);
+            state = draining.releaseSceneLease(lease.id(), List.of(new SceneMemberPosition(worker, observed,
+                    draining.actorLocations().get(worker).condition().health())));
+            ResourceSiteHarvestJob released = (ResourceSiteHarvestJob) state.resourceSites().site(site).activeWork().orElseThrow();
+            state = ResourceSiteHarvestProcess.reduceColdTraversalAdvanced(state, site,
+                    new ResourceSiteHarvestColdTraversalAdvanced(released.id(), worker, released.traversalCursor() + 1));
+            if (cycle == 3) state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+        }
+
+        ResourceSiteHarvestJob after = (ResourceSiteHarvestJob) state.resourceSites().site(site).activeWork().orElseThrow();
+        assertEquals(jobId, after.id());
+        assertEquals(worker, after.workerId());
+        assertEquals(16, after.traversalCursor(), "each switch has exactly one observed HOT and one COLD topology edge");
+        assertEquals(after.traversal().linearCorridorSurfaces().get(after.traversalCursor()).standingBody(),
+                state.actorLocations().get(worker).body());
+        assertEquals(0, after.progress().completedCropSlots(), "neutral transition cannot begin or replay crop custody");
+        assertFalse(state.inventory().items().containsKey(after.outputItemId()));
+        assertEquals(PhysicalIntentStatus.RUNNING, state.physicalIntents().get(after.intentId()).status());
+    }
+
+    @Test
     void fieldWorkerRetainsOneAdjacentTopologyAndCannotPrepareACropBeforeObservedArrival() {
         FrontierWorldState ready = ready(initial()); SubjectId site = new SubjectId("site:1-wheat-field");
         FrontierWorldState tasked = harvestTask(ready, site, 22_000L); StrategicTask task = onlyHarvestTask(tasked);
