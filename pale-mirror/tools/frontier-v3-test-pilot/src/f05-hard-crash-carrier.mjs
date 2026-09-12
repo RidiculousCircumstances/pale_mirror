@@ -28,7 +28,7 @@ export function assertF05HardCrashCarrier({ windows, physicalFirst, canonicalFir
   const first = playerOrder(physicalFirst, 'physical_effect_visible_before_typed_observation', 32,
     'disposable_f03_fungible_player_abrupt', { sourceAction: 7, playerAction: 8 });
   const second = playerOrder(canonicalFirst, 'typed_observation_durable_before_next_process_checkpoint', 0,
-    'disposable_f05_fenced_player_canonical_first_abrupt', { sourceAction: 5, playerAction: 6 });
+    'disposable_f05_fenced_player_canonical_first_abrupt', { sourceAction: 6, playerAction: 7 });
   const facts = [...windowFacts, first, second].sort((left, right) => left.boundary.localeCompare(right.boundary));
   if (!isDeepStrictEqual(facts.map(value => value.boundary), [...WINDOWS].sort())) {
     throw new Error('F0.5 hard-crash receipt has missing, duplicate, or substituted semantic windows');

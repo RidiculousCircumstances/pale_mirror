@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { assertF05HardCrashCarrier, selectF05ResourceWindows } from '../src/f05-hard-crash-carrier.mjs';
+import { restartSegments, validateScenario } from '../src/scenario.mjs';
 
 const artifact = 'a'.repeat(64);
 const windows = [
@@ -51,7 +52,24 @@ test('native launcher accepts only its checkout or exact task-private sibling as
   assert.ok(launcher.includes("const taskPrivateRoot = `${resolve(project, '..')}-tmp/`;"));
   assert.match(launcher, /processRoot\.startsWith\(`\$\{project\}\/`\).*processRoot\.startsWith\(taskPrivateRoot\)/s);
   assert.match(launcher, /--reuse-resource-windows=/);
+  assert.match(launcher, /--reuse-physical-first=/);
+  assert.match(launcher, /retained physical-first manifest does not match the current packaged artifact/);
   assert.match(launcher, /prepared === undefined \? \{\} : \{ FRONTIER_V3_PREPARED_BUILD_IDENTITY: prepared \}/);
+});
+
+test('canonical-first player order retains ordinary demand until its post-WAL observation boundary', async () => {
+  const declaration = JSON.parse(await readFile(new URL('../scenarios/disposable-f05-fenced-player-canonical-first-abrupt.json', import.meta.url), 'utf8'));
+  assert.doesNotThrow(() => validateScenario(declaration));
+  assert.equal(declaration.restart.afterAction, 5);
+  assert.deepEqual(declaration.actions.slice(3, 5).map((action) => action.type),
+    ['split_move_from_container', 'wait_until_diagnostic']);
+  assert.deepEqual(declaration.actions[4].expect, { status: 'ok', quantity: 32,
+    custody: { kind: 'CONTAINER', container: 'container:1-depot' } });
+  const segments = restartSegments(declaration);
+  assert.equal(segments.before.actions.length, 5);
+  assert.deepEqual(segments.after.assertions.map((value) => value.after), [1, 2]);
+  assert.deepEqual(segments.after.assertions.map((value) => value.id),
+    ['custody:container-1-depot', 'custody:player-bf39347d-cb86-3221-b6b7-7b89a1dcb4cf']);
 });
 
 function crash({ boundary, owner, payloadType }) {
@@ -71,7 +89,7 @@ function player(scenarioId, boundary, expectedCount) {
   const value = crash({ boundary, owner: 'custody:container-1-depot', payloadType: 'frontier.fungible_resource_handoff_observed' });
   value.scenarioId = scenarioId;
   value.recovery.crash.playerSave = { player: 'bf39347d-cb86-3221-b6b7-7b89a1dcb4cf', item: 'minecraft:wheat', expectedCount, itemCount: expectedCount, exists: expectedCount > 0, sha256: expectedCount > 0 ? 'c'.repeat(64) : null };
-  const [sourceAction, playerAction] = scenarioId === 'disposable_f03_fungible_player_abrupt' ? [7, 8] : [5, 6];
+  const [sourceAction, playerAction] = scenarioId === 'disposable_f03_fungible_player_abrupt' ? [7, 8] : [6, 7];
   value.diagnostics = [resource(sourceAction, 'custody:container-1-depot'), resource(playerAction, 'custody:player-bf39347d-cb86-3221-b6b7-7b89a1dcb4cf')];
   return value;
 }
