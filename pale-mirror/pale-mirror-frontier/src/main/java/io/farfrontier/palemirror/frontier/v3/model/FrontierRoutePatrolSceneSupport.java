@@ -89,6 +89,15 @@ public final class FrontierRoutePatrolSceneSupport {
                 .sceneLeases(leases));
     }
 
+    public static FrontierWorldState advanceFormationObserved(FrontierWorldState state, RoutePatrol current, SceneLeaseId leaseId,
+                                                              Map<SubjectId, BodyPosition> observedBodies) {
+        requireCurrentPlan(state, current); SceneLease lease = requireHotLease(state, current, leaseId);
+        RoutePatrol next = current.advanceFormation(); Map<SubjectId, BodyPosition> expected = bodies(next);
+        if (!expected.equals(observedBodies)) throw new IllegalArgumentException("route-patrol formation observation did not reach its retained edge");
+        Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases()); leases.put(leaseId, lease.withMemberPositions(expected));
+        return state.withChanges(FrontierWorldStateUpdate.begin().strategicPlans(state.strategicPlans().advancePatrolFormation(current.taskId())).sceneLeases(leases));
+    }
+
     public static BodyPosition releasedBody(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed) {
         RoutePatrol patrol = require(state, FrontierSceneBehaviors.routePatrol(lease));
         requireCurrentPlan(state, patrol);

@@ -61,6 +61,7 @@ final class FrontierInfrastructureProcessModule implements FrontierWorldProcessM
             case RoutePatrolSceneLeasePrepared prepared -> reducePatrolPrepared(state, event.subject(), event, prepared);
             case RoutePatrolSceneLeaseHandoff handoff -> reducePatrolHandoff(state, event.subject(), event, handoff);
             case RoutePatrolTraversalObserved observed -> reducePatrolTraversal(state, event.subject(), observed);
+            case RoutePatrolFormationObserved observed -> reducePatrolFormation(state, event.subject(), observed);
             default -> throw new IllegalArgumentException("infrastructure process does not own event: " + event.payload().type());
         };
     }
@@ -135,6 +136,11 @@ final class FrontierInfrastructureProcessModule implements FrontierWorldProcessM
         RoutePatrol patrol = FrontierRoutePatrolSceneSupport.require(state, new RoutePatrolSceneCause(observed.taskId()));
         if (!subject.equals(patrol.settlementId())) throw new IllegalArgumentException("route-patrol traversal has a foreign owner");
         return FrontierRoutePatrolSceneSupport.advanceObserved(state, patrol, observed.leaseId(), observed.actorId(), observed.observedBody());
+    }
+    private static FrontierWorldState reducePatrolFormation(FrontierWorldState state, SubjectId subject, RoutePatrolFormationObserved observed) {
+        RoutePatrol patrol = FrontierRoutePatrolSceneSupport.require(state, new RoutePatrolSceneCause(observed.taskId()));
+        if (!subject.equals(patrol.settlementId())) throw new IllegalArgumentException("route-patrol formation has a foreign owner");
+        return FrontierRoutePatrolSceneSupport.advanceFormationObserved(state, patrol, observed.leaseId(), observed.bodies());
     }
 
     private static CommandPlan planEngineeringAssemblyAdvance(FrontierWorldState state, FrontierCommand command,
