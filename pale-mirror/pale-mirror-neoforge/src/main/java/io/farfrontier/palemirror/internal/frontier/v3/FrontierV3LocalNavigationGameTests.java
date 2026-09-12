@@ -16,6 +16,7 @@ import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -76,7 +77,51 @@ public final class FrontierV3LocalNavigationGameTests {
         });
     }
 
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft", template = "bastion/mobs/empty")
+    public static void hotWorkerPacesOneRetainedEdgeContinuouslyUntilItsCanonicalDueTurn(GameTestHelper helper) {
+        // This stock blank template has its safe interior at local z=2; z=10 is a real
+        // template wall and would turn a cadence proof into an obstruction test.
+        BlockPos origin = helper.absolutePos(new BlockPos(2, 0, 2));
+        for (int x = 0; x <= 5; x++) helper.getLevel().setBlock(origin.offset(x, 0, 0), Blocks.STONE.defaultBlockState(), 3);
+        // GameTestHelper converts spawn vectors from template-relative to world coordinates;
+        // the retained checkpoint below is already absolute because it comes from the physical
+        // provider. Mixing the two would place the body outside this natural test cell.
+        Zombie worker = helper.spawnWithNoFreeWill(EntityType.ZOMBIE, new Vec3(2.5D, 1.0D, 2.5D));
+        Vec3 nextCanonicalCheckpoint = new Vec3(origin.getX() + 5.5D, origin.getY() + 1.0D, origin.getZ() + .5D);
+        // Schedule the whole retained edge before the first callback.  Recursive one-tick
+        // callbacks are not a real cadence proof: GameTest may fast-forward a server catch-up
+        // and expire the test before it schedules the next callback.
+        for (int turn = 1; turn <= 40; turn++) {
+            int remaining = 41 - turn;
+            helper.runAtTickTime(turn, () -> {
+                FrontierV3ServerLifecycle.advanceControlledMob(worker);
+                FrontierV3ControlledMobMotion.moveTowardAtCadence(helper.getLevel(), worker, nextCanonicalCheckpoint, remaining);
+            });
+        }
+        helper.runAtTickTime(41, () -> {
+            FrontierV3ServerLifecycle.advanceControlledMob(worker);
+            List<FrontierV3ControlledMobMotion.MotionSample> trace = FrontierV3ControlledMobMotion.trace(worker);
+            long distinctSubBlockPositions = trace.stream().map(value -> Math.round(value.x() * 1_000.0D)).distinct().count();
+            long timestampedTurns = trace.stream().map(FrontierV3ControlledMobMotion.MotionSample::gameTime).distinct().count();
+            int longestStall = longestStall(trace.stream().map(FrontierV3ControlledMobMotion.MotionSample::x).toList());
+            helper.assertTrue(distinctSubBlockPositions >= 24 && timestampedTurns >= 24 && longestStall <= 2,
+                    "a HOT worker must emit many timestamped sub-block pose changes across one retained edge; trace=" + trace);
+            helper.assertTrue(worker.getX() > origin.getX() + 4.0D && worker.getX() < nextCanonicalCheckpoint.x + .01D,
+                    "smooth local pose may approach the retained next checkpoint but does not create a second canonical route cursor");
+            helper.succeed();
+        });
+    }
+
     private static BlockPosition support(Vec3 feet) {
         return new BlockPosition((int) Math.floor(feet.x), (int) Math.floor(feet.y) - 1, (int) Math.floor(feet.z));
+    }
+
+    private static int longestStall(List<Double> trace) {
+        int longest = 0, current = 0;
+        for (int index = 1; index < trace.size(); index++) {
+            current = Math.abs(trace.get(index) - trace.get(index - 1)) < 0.00001D ? current + 1 : 0;
+            longest = Math.max(longest, current);
+        }
+        return longest;
     }
 }

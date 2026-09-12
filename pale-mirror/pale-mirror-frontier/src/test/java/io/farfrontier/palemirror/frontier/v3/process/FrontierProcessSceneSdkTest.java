@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -145,6 +146,53 @@ class FrontierProcessSceneSdkTest {
         assertThrows(IllegalArgumentException.class, () -> new FrontierProcessSceneSdk.Vocabulary(Set.of("frontier.test.command"),
                 Set.of("frontier.test.observation"), Set.of(), Set.of("frontier.test.lifecycle")));
         assertThrows(IllegalArgumentException.class, () -> new FrontierProcessSceneSdk.Limits(0, 1, 1, 1, 1, 1, 1, 1, 1, 1));
+    }
+
+    @Test
+    void everyPhysicalCapableFamilyHasOneVersionedObserverNeutralityDeclaration() {
+        List<FrontierProcessSceneSdk.DescriptorDefinition> declarations = FrontierDurationProcessDriverRegistry.inventoryDefinitions();
+        FrontierObserverNeutralityContract.requireComplete(declarations);
+        assertEquals(FrontierDurationProcessDriverRegistry.Family.values().length,
+                FrontierObserverNeutralityContract.inventory().size());
+        assertEquals(FrontierObserverNeutralityContract.Measurement.CALIBRATED_COMBAT,
+                FrontierObserverNeutralityContract.declaration(FrontierDurationProcessDriverRegistry.Family.SETTLEMENT_ASSAULT).measurement());
+        assertEquals(FrontierObserverNeutralityContract.Measurement.EXACT_QUIET,
+                FrontierObserverNeutralityContract.declaration(FrontierDurationProcessDriverRegistry.Family.PRODUCTION_WORK).measurement());
+        assertThrows(IllegalArgumentException.class, () -> FrontierObserverNeutralityContract.requireComplete(declarations.subList(1, declarations.size())));
+    }
+
+    @Test
+    void observerComparisonKeepsExactCustodyAndKeyedOpportunityFactsOutOfCalibrationTolerance() {
+        FrontierObserverNeutralityContract.Declaration quiet = FrontierObserverNeutralityContract.declaration(
+                FrontierDurationProcessDriverRegistry.Family.PRODUCTION_WORK);
+        FrontierObserverNeutralityContract.Run baseline = observerRun(quiet, Set.of("actor:1"), Map.of("claim:1", 8L),
+                Set.of("event:process:1:opportunity:4"), new FrontierObserverNeutralityContract.CalibrationSample(8, 8, 0, 96));
+        FrontierObserverNeutralityContract.requireComparable(baseline, baseline);
+        assertThrows(IllegalArgumentException.class, () -> FrontierObserverNeutralityContract.requireComparable(baseline,
+                observerRun(quiet, Set.of("actor:1"), Map.of("claim:1", 7L), Set.of("event:process:1:opportunity:4"),
+                        new FrontierObserverNeutralityContract.CalibrationSample(8, 8, 0, 96))));
+        assertThrows(IllegalArgumentException.class, () -> FrontierObserverNeutralityContract.requireComparable(baseline,
+                observerRun(quiet, Set.of("actor:1"), Map.of("claim:1", 8L), Set.of("event:process:1:opportunity:5"),
+                        new FrontierObserverNeutralityContract.CalibrationSample(8, 8, 0, 96))));
+
+        FrontierObserverNeutralityContract.Declaration combat = FrontierObserverNeutralityContract.declaration(
+                FrontierDurationProcessDriverRegistry.Family.SETTLEMENT_ASSAULT);
+        FrontierObserverNeutralityContract.Run combatBaseline = observerRun(combat, Set.of("actor:assault-1"), Map.of("claim:assault", 1L),
+                Set.of("event:assault:1:roll:4"), new FrontierObserverNeutralityContract.CalibrationSample(16, 9, 3, 12_000));
+        FrontierObserverNeutralityContract.requireComparable(combatBaseline, observerRun(combat, Set.of("actor:assault-1"),
+                Map.of("claim:assault", 1L), Set.of("event:assault:1:roll:4"), new FrontierObserverNeutralityContract.CalibrationSample(16, 11, 5, 12_800)));
+        assertThrows(IllegalArgumentException.class, () -> FrontierObserverNeutralityContract.requireComparable(combatBaseline,
+                observerRun(combat, Set.of("actor:assault-1"), Map.of("claim:assault", 1L), Set.of("event:assault:1:roll:4"),
+                        new FrontierObserverNeutralityContract.CalibrationSample(16, 13, 3, 12_000))));
+    }
+
+    private static FrontierObserverNeutralityContract.Run observerRun(FrontierObserverNeutralityContract.Declaration declaration,
+                                                                       Set<String> actors, java.util.Map<String, Long> claims,
+                                                                       Set<String> opportunities,
+                                                                       FrontierObserverNeutralityContract.CalibrationSample sample) {
+        return new FrontierObserverNeutralityContract.Run(declaration, actors, Set.of("object:1"), claims, Map.of("custody:1", 8L),
+                Set.of("stage:complete"), Map.of("work:cursor", 4L), Set.of("topology:route:1"), Set.of("effect:confirmed:1"),
+                Map.of("recovery:1", "observed"), opportunities, sample);
     }
 
     @Test

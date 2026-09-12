@@ -133,6 +133,8 @@ public final class FrontierV3ServerLifecycle {
         }
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
         if ("execution".equals(view)) return FrontierV3PhysicalExecutionDiagnostic.render(checkpoint);
+        if ("first_visibility".equals(view)) return FrontierV3DiagnosticJson.firstVisibility(id, checkpoint,
+                FrontierV3GrayboxExecutor.firstVisibility(runtime, id));
         if ("performance".equals(view)) return FrontierV3PerformanceDiagnostic.render(checkpoint, runtime.executionMetrics().snapshot(),
                 FAST_FORWARD_REMAINING.getOrDefault(server, 0), FAST_FORWARD_TARGETS.get(server), FAST_FORWARD_FAILURES.get(server),
                 FAST_FORWARD_OUTCOMES.get(server));
@@ -454,6 +456,21 @@ public final class FrontierV3ServerLifecycle {
         }
     }
 
+    /** Production ChunkEvent.Load handoff for static first visibility in the selected v3 world. */
+    public static void observeNaturalChunkLoad(ServerLevel level, net.minecraft.world.level.ChunkPos chunk) {
+        Objects.requireNonNull(level, "first visibility level"); Objects.requireNonNull(chunk, "first visibility chunk");
+        if (!ownsPhysicalWorld(level.getServer()) || !FrontierV3PhysicalWorld.isPhysical(level)) return;
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
+        if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return;
+        FrontierV3GrayboxExecutor.observeNaturalChunkLoad(level, runtime, chunk);
+    }
+
+    /** Read-only first-visibility admission fence shared by every scene demand path. */
+    static boolean sceneEligible(ServerLevel level, io.farfrontier.palemirror.frontier.v3.model.BlockPosition position) {
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
+        return runtime == null || !FrontierV3PhysicalWorld.isPhysical(level) || FrontierV3GrayboxExecutor.sceneEligible(runtime, position);
+    }
+
     /**
      * Executes the one closed physical turn used by the server lifecycle.
      *
@@ -488,6 +505,7 @@ public final class FrontierV3ServerLifecycle {
     /** Package seam for focused cleanup proof; all runtime-held Entity/cache state is released here. */
     static void releaseRuntime(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         Objects.requireNonNull(runtime, "runtime");
+        FrontierV3GrayboxExecutor.forgetFirstVisibility(runtime);
         FrontierV3GrayboxExecutor.forget(runtime);
         FrontierV3ResourceSiteExecutor.forget(runtime);
         FrontierV3PlayerCustodyRecovery.forget(runtime);

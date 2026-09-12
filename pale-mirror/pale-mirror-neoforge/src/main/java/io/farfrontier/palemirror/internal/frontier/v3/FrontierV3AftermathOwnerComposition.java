@@ -13,6 +13,10 @@ final class FrontierV3AftermathOwnerComposition {
 
     static void aftermath(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         FrontierV3DeferredAftermathExecutor.tick(level, runtime);
+        // The registered EFFECT stage is the last owner observation before SCENE consumption.
+        // Promote only natural-load chunks whose static boundary was installed for this same
+        // checkpoint; scene admission cannot race a visible but dynamically stale surface.
+        FrontierV3GrayboxExecutor.completeDynamicCatchUp(runtime);
     }
 
     static void tick(FrontierV3AftermathPhysicalWorld world, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {

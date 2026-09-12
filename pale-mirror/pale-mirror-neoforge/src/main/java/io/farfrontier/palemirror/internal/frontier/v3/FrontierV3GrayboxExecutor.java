@@ -7,6 +7,7 @@ import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierGrayboxPlan;
+import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSettlementAssaultBattlefield;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
@@ -20,6 +21,7 @@ import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltasObserved;
 import io.farfrontier.palemirror.frontier.v3.model.StructureDamaged;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -46,9 +48,27 @@ final class FrontierV3GrayboxExecutor {
     private static final int MAX_CELLS_PER_TICK = 64;
     private static final Map<FrontierV3ServerRuntime<?, ?>, Cursor> CURSORS = new IdentityHashMap<>();
     private static final Map<FrontierV3ServerRuntime<?, ?>, ProjectionWork> WORK = new IdentityHashMap<>();
+    /**
+     * A natural chunk load is an exposure boundary, not another best-effort projector turn.
+     * Incomplete/foreign static geometry remains visibly unavailable rather than being filled by
+     * a later 64-cell batch after a player has already seen the chunk.
+     */
+    private static final Map<FrontierV3ServerRuntime<?, ?>, Map<ChunkPos, FirstVisibilityRecord>> FIRST_VISIBILITY = new IdentityHashMap<>();
 
     enum ProjectionResult { APPLIED, CURRENT, CONFLICT, DEFERRED }
     enum BlockBreakObservation { UNMANAGED, ACCEPTED, REJECTED }
+    /**
+     * STATIC_CURRENT means the chunk's immutable cells were installed at the natural-load
+     * boundary.  READY is deliberately delayed until the ordinary physical turn has also
+     * observed the dynamic owners for the same checkpoint; a scene must not become eligible in
+     * the small gap between those two responsibilities.
+     */
+    private enum FirstVisibility { STATIC_CURRENT, READY, BLOCKED }
+    private record FirstVisibilityRecord(FirstVisibility status, long revision, int cells) { }
+    record FirstVisibilitySnapshot(ChunkPos chunk, String status, long revision, int cells) {
+        static FirstVisibilitySnapshot unavailable() { return new FirstVisibilitySnapshot(null, "INVALID", -1L, 0); }
+        static FirstVisibilitySnapshot unobserved(ChunkPos chunk) { return new FirstVisibilitySnapshot(chunk, "UNOBSERVED", -1L, 0); }
+    }
 
     private FrontierV3GrayboxExecutor() { }
 
@@ -98,7 +118,8 @@ final class FrontierV3GrayboxExecutor {
                              FrontierWorldState state, Cursor cursor) {
         FrontierV3GrayboxLedger ledger = world.ledger();
         for (int count = 0; count < MAX_CELLS_PER_TICK; count++) {
-            GrayboxCell cell = cursor.nextNaturallyLoaded(candidate -> world.naturallyLoaded(candidate.position())).orElse(null);
+            GrayboxCell cell = cursor.nextNaturallyLoaded(candidate -> world.naturallyLoaded(candidate.position())
+                    && allowsDeferredProjection(runtime, candidate)).orElse(null);
             if (cell == null) return;
             // A loss is an exact canonical mask over the retained immutable baseline.  Keeping
             // it out of StructuralInput prevents one player break (or one explosion cell) from
@@ -116,6 +137,87 @@ final class FrontierV3GrayboxExecutor {
     }
 
     static void forget(FrontierV3ServerRuntime<?, ?> runtime) { CURSORS.remove(runtime); WORK.remove(runtime); }
+
+    /** Releases only volatile exposure bookkeeping with the normal runtime cleanup. */
+    static void forgetFirstVisibility(FrontierV3ServerRuntime<?, ?> runtime) { FIRST_VISIBILITY.remove(runtime); }
+
+    /**
+     * Actual ChunkEvent.Load composition: install every current static cell in the newly natural
+     * chunk before it can be presented, retaining an explicit blocked state on foreign drift.
+     * This never asks ChunkMap for a chunk, creates a ticket, or replays a world-wide plan.
+     */
+    static void observeNaturalChunkLoad(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, ChunkPos chunk) {
+        Objects.requireNonNull(level, "first visibility level"); Objects.requireNonNull(runtime, "first visibility runtime");
+        Objects.requireNonNull(chunk, "first visibility chunk");
+        FrontierWorldState state = runtime.decodedState().orElse(null);
+        if (state == null || !level.hasChunk(chunk.x, chunk.z)) return;
+        Cursor cursor = cursor(runtime, state); FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
+        List<GrayboxCell> cells = cursor.cellsIn(chunk);
+        FirstVisibility result = FirstVisibility.STATIC_CURRENT;
+        List<GrayboxCell> pending = cells;
+        // Dependencies are confined to one chunk and sorted by height. Revisit only while an
+        // earlier support made a later cell eligible; no unbounded retry/polling is permitted.
+        while (!pending.isEmpty()) {
+            int progressed = 0;
+            List<GrayboxCell> deferred = new ArrayList<>();
+            for (GrayboxCell cell : pending) {
+                ProjectionResult projection = projectFirstVisible(level, ledger, state, cell);
+                if (projection == ProjectionResult.CONFLICT) { result = FirstVisibility.BLOCKED; break; }
+                if (projection == ProjectionResult.DEFERRED) deferred.add(cell);
+                else progressed++;
+            }
+            if (result == FirstVisibility.BLOCKED) break;
+            if (deferred.isEmpty()) break;
+            if (progressed == 0) { result = FirstVisibility.BLOCKED; break; }
+            pending = List.copyOf(deferred);
+        }
+        long revision = runtime.checkpointImage().orElseThrow().revision().value();
+        FIRST_VISIBILITY.computeIfAbsent(runtime, ignored -> new LinkedHashMap<>()).put(chunk, new FirstVisibilityRecord(result, revision, cells.size()));
+    }
+
+    /**
+     * Promotes static first visibility only after the ordinary physical turn has completed its
+     * dynamic observation for that checkpoint, immediately before scene consumption.
+     */
+    static void completeDynamicCatchUp(FrontierV3ServerRuntime<?, ?> runtime) {
+        long revision = runtime.checkpointImage().orElseThrow().revision().value();
+        Map<ChunkPos, FirstVisibilityRecord> records = FIRST_VISIBILITY.get(runtime);
+        if (records == null) return;
+        records.replaceAll((chunk, record) -> record.status() == FirstVisibility.STATIC_CURRENT && record.revision() == revision
+                ? new FirstVisibilityRecord(FirstVisibility.READY, revision, record.cells()) : record);
+    }
+
+    /** A scene can use an exposed chunk only after the static and dynamic visibility boundaries completed. */
+    static boolean sceneEligible(FrontierV3ServerRuntime<?, ?> runtime, BlockPosition position) {
+        FirstVisibilityRecord visibility = FIRST_VISIBILITY.getOrDefault(runtime, Map.of()).get(new ChunkPos(position.x() >> 4, position.z() >> 4));
+        return visibility == null || visibility.status() == FirstVisibility.READY;
+    }
+
+    /** Read-only record of one natural exposure; unknown chunks have not yet been exposed. */
+    static FirstVisibilitySnapshot firstVisibility(FrontierV3ServerRuntime<?, ?> runtime, String id) {
+        String[] parts = Objects.requireNonNull(id, "first visibility id").split(",", -1);
+        if (parts.length != 2) return FirstVisibilitySnapshot.unavailable();
+        try {
+            ChunkPos chunk = new ChunkPos(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
+            FirstVisibilityRecord record = FIRST_VISIBILITY.getOrDefault(runtime, Map.of()).get(chunk);
+            return record == null ? FirstVisibilitySnapshot.unobserved(chunk)
+                    : new FirstVisibilitySnapshot(chunk, record.status().name(), record.revision(), record.cells());
+        } catch (NumberFormatException invalid) { return FirstVisibilitySnapshot.unavailable(); }
+    }
+
+    private static boolean allowsDeferredProjection(FrontierV3ServerRuntime<?, ?> runtime, GrayboxCell cell) {
+        FirstVisibilityRecord visibility = FIRST_VISIBILITY.getOrDefault(runtime, Map.of()).get(new ChunkPos(cell.position().x() >> 4, cell.position().z() >> 4));
+        return visibility == null || visibility.status() != FirstVisibility.BLOCKED;
+    }
+
+    private static ProjectionResult projectFirstVisible(ServerLevel level, FrontierV3GrayboxLedger ledger, FrontierWorldState state, GrayboxCell cell) {
+        PhysicalDelta delta = state.physicalDeltas().get(cell.position());
+        if (delta != null) {
+            if (matchesKnownLoss(delta, cell)) { retainKnownLoss(level, ledger, cell); return ProjectionResult.CURRENT; }
+            return ProjectionResult.CONFLICT;
+        }
+        return project(level, ledger, cell);
+    }
 
     /**
      * Returns the exact immutable baseline retained by an earlier projection turn as a bounded
@@ -410,6 +512,10 @@ final class FrontierV3GrayboxExecutor {
             return new ProjectionProviderSnapshot(structuralBaseline, state.physicalDeltas(), work);
         }
         boolean retainsWorksiteStaging(BlockPos position) { return activeWorksiteStaging.contains(position); }
+        List<GrayboxCell> cellsIn(ChunkPos chunk) {
+            ChunkCells selected = chunk(new ChunkKey(chunk.x, chunk.z));
+            return selected == null ? List.of() : selected.cells();
+        }
         Optional<GrayboxCell> nextNaturallyLoaded(Predicate<GrayboxCell> loaded) {
             if (chunks.isEmpty()) return Optional.empty();
             for (int attempts = 0; attempts < chunks.size(); attempts++) {
@@ -445,6 +551,7 @@ final class FrontierV3GrayboxExecutor {
                 nextIndex = (nextIndex + 1) % cells.size();
                 return cell;
             }
+            List<GrayboxCell> cells() { return cells; }
         }
         private record ChunkKey(int x, int z) implements Comparable<ChunkKey> {
             static ChunkKey of(GrayboxCell cell) {

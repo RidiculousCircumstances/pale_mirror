@@ -40,7 +40,9 @@ public enum FrontierV3DiagnosticView {
     RECOVERY("recovery", true),
     MEDICAL("medical", true),
     TRAVERSAL_FOUNDRY("traversal_foundry", true),
-    HIVE_FOUNDRY("hive_foundry", true);
+    HIVE_FOUNDRY("hive_foundry", true),
+    /** One naturally exposed chunk's static-before-dynamic first-visibility receipt. */
+    FIRST_VISIBILITY("first_visibility", true);
 
     private final String token;
     private final boolean requiresId;

@@ -211,8 +211,9 @@ public final class FrontierDurationProcessDriverRegistry {
                                                  Set<String> installedPayloadCodecs) {
         productionDescriptors = List.copyOf(Objects.requireNonNull(productionDescriptors, "production process descriptors"));
         compose(currentRegistrations(), scheduledKinds, sceneCauses);
-        requireDescriptorComposition(inventoryDefinitions(productionDescriptors), productionDescriptors, scheduledKinds,
-                sceneCauses, installedPayloadCodecs);
+        List<FrontierProcessSceneSdk.DescriptorDefinition> declarations = inventoryDefinitions(productionDescriptors);
+        requireDescriptorComposition(declarations, productionDescriptors, scheduledKinds, sceneCauses, installedPayloadCodecs);
+        FrontierObserverNeutralityContract.requireComplete(declarations);
         CURRENT_SCENE_ADMISSIONS.requireRegisteredProviders(sceneCauses);
     }
 

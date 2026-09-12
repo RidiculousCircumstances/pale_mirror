@@ -11,8 +11,10 @@ import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
+import java.util.ArrayDeque;
 import java.util.List;
 import java.util.Map;
+import java.util.WeakHashMap;
 /**
  * The small, deterministic physical-motion primitive shared by v3 HOT bodies.
  *
@@ -33,15 +35,32 @@ final class FrontierV3ControlledMobMotion {
     private static final double VERTICAL_SPEED = 0.125D;
     private static final int MAX_PENDING_INTENTS = 4_096;
     private static final int MAX_AVOIDANCE_TURNS = 8;
+    private static final int MAX_TRACE_SAMPLES = 96;
     /** Ephemeral one-tick physical intents; canonical goals/cursors remain in the domain. */
     private static final Map<Mob, MotionIntent> PENDING = new IdentityHashMap<>();
     /** Ephemeral collision latitude, bounded to a retained local envelope and target. */
     private static final Map<Mob, Avoidance> AVOIDANCE = new IdentityHashMap<>();
+    /** Bounded read-only evidence of actual accepted collision moves, not an alternate clock. */
+    private static final Map<Mob, ArrayDeque<MotionSample>> TRACE = new WeakHashMap<>();
+
+    record MotionSample(long gameTime, double x, double y, double z, double horizontalVelocity) { }
 
     private FrontierV3ControlledMobMotion() { }
 
     static void moveToward(ServerLevel level, Mob actor, Vec3 target) {
-        submit(level, actor, target, false, null);
+        submit(level, actor, target, false, null, Double.MAX_VALUE);
+    }
+
+    /**
+     * Keeps one already-owned canonical edge visibly in motion until its retained due turn.
+     * The caller supplies only the remaining time of the existing scheduled action; it cannot
+     * manufacture a route, checkpoint or canonical clock.
+     */
+    static void moveTowardAtCadence(ServerLevel level, Mob actor, Vec3 target, long remainingCanonicalTicks) {
+        if (remainingCanonicalTicks < 1L) throw new IllegalArgumentException("remaining canonical ticks");
+        double deltaX = target.x - actor.getX(), deltaZ = target.z - actor.getZ();
+        double pace = Math.max(0.0001D, Math.sqrt(deltaX * deltaX + deltaZ * deltaZ) / remainingCanonicalTicks);
+        submit(level, actor, target, false, null, pace);
     }
 
     /**
@@ -57,7 +76,7 @@ final class FrontierV3ControlledMobMotion {
             stop(actor);
             return;
         }
-        submit(level, actor, target, false, envelope);
+        submit(level, actor, target, false, envelope, Double.MAX_VALUE);
     }
 
     /**
@@ -66,10 +85,10 @@ final class FrontierV3ControlledMobMotion {
      * choose a route, change a cursor, or create a second canonical movement authority.
      */
     static void followContinuously(ServerLevel level, Mob actor, Vec3 target) {
-        submit(level, actor, target, true, null);
+        submit(level, actor, target, true, null, Double.MAX_VALUE);
     }
 
-    private static void submit(ServerLevel level, Mob actor, Vec3 target, boolean continuous, LocalNavigationEnvelope envelope) {
+    private static void submit(ServerLevel level, Mob actor, Vec3 target, boolean continuous, LocalNavigationEnvelope envelope, double maximumStep) {
         actor.setNoAi(true);
         // NoAI suppresses Minecraft's goal selector, not physical gravity.  Reassert the latter
         // because a retained entity can carry an old mod/AI no-gravity flag across a HOT handoff.
@@ -92,12 +111,13 @@ final class FrontierV3ControlledMobMotion {
         if (pending != null && pending.applyAtGameTime() <= level.getGameTime() + 1L) {
             return;
         }
+        if (!Double.isFinite(maximumStep) || maximumStep <= 0.0D) throw new IllegalArgumentException("motion maximum step");
         if (PENDING.size() < MAX_PENDING_INTENTS || pending != null) {
             // This is eligible at the next entity-pre boundary, which is ordinarily the next
             // server tick because the canonical executor runs at post-tick. Using the current
             // canonical time also makes a GameTest's legitimate catch-up callbacks execute the
             // same retained one-tick actuator turns rather than stranding one future intent.
-            PENDING.put(actor, new MotionIntent(level.getGameTime(), target, continuous, envelope));
+            PENDING.put(actor, new MotionIntent(level.getGameTime(), target, continuous, envelope, maximumStep));
         }
     }
 
@@ -108,7 +128,7 @@ final class FrontierV3ControlledMobMotion {
         if (!(actor.level() instanceof ServerLevel level) || actor.isRemoved() || !actor.isAlive()) { PENDING.remove(actor); AVOIDANCE.remove(actor); return; }
         if (level.getGameTime() < intent.applyAtGameTime()) return;
         PENDING.remove(actor);
-        apply(level, actor, intent.target(), intent.continuous(), intent.envelope());
+        apply(level, actor, intent.target(), intent.continuous(), intent.envelope(), intent.maximumStep());
     }
 
     static void stop(Mob actor) {
@@ -132,7 +152,13 @@ final class FrontierV3ControlledMobMotion {
         return intent == null ? "IDLE" : "PENDING_AT_" + intent.applyAtGameTime();
     }
 
-    private static void apply(ServerLevel level, Mob actor, Vec3 target, boolean continuous, LocalNavigationEnvelope envelope) {
+    /** Retained only for bounded diagnostics/tests; callers cannot mutate motion through it. */
+    static List<MotionSample> trace(Mob actor) {
+        ArrayDeque<MotionSample> samples = TRACE.get(actor);
+        return samples == null ? List.of() : List.copyOf(samples);
+    }
+
+    private static void apply(ServerLevel level, Mob actor, Vec3 target, boolean continuous, LocalNavigationEnvelope envelope, double maximumStep) {
         Vec3 delta = target.subtract(actor.position());
         double horizontalDistance = Math.sqrt(delta.x * delta.x + delta.z * delta.z);
         if (!continuous && horizontalDistance <= ARRIVAL_DISTANCE && Math.abs(delta.y) <= ARRIVAL_DISTANCE) { actor.stopInPlace(); return; }
@@ -147,7 +173,7 @@ final class FrontierV3ControlledMobMotion {
         // lateral edge, then a later exact-X/Z turn settles vertically onto the declared lower
         // support. Ascents remain bounded controlled lifts; neither case can invent an alternate
         // edge.
-        double speed = Math.min(actor instanceof Zombie ? BIOFORM_SPEED : RESIDENT_SPEED, horizontalDistance);
+        double speed = Math.min(actor instanceof Zombie ? BIOFORM_SPEED : RESIDENT_SPEED, Math.min(maximumStep, horizontalDistance));
         // An envelope is not permission to lift through arbitrary air columns.  It may climb
         // only when the next horizontal body column has a named higher support; that admits a
         // retained stair/grade while refusing an early climb toward a distant checkpoint.
@@ -221,6 +247,7 @@ final class FrontierV3ControlledMobMotion {
             // above remains the sole physical fact, while the normal tracker publishes it on
             // this same tick to every observing player.
             actor.hasImpulse = true;
+            recordMove(level, actor, moved);
             return;
         }
     }
@@ -261,6 +288,12 @@ final class FrontierV3ControlledMobMotion {
         if (actor.position().y < before.y - 1.0E-8D) actor.hasImpulse = true;
     }
 
+    private static void recordMove(ServerLevel level, Mob actor, Vec3 moved) {
+        ArrayDeque<MotionSample> samples = TRACE.computeIfAbsent(actor, ignored -> new ArrayDeque<>());
+        if (samples.size() == MAX_TRACE_SAMPLES) samples.removeFirst();
+        samples.addLast(new MotionSample(level.getGameTime(), actor.getX(), actor.getY(), actor.getZ(), Math.sqrt(moved.horizontalDistanceSqr())));
+    }
+
     private static boolean isPureLateral(Vec3 step, Vec3 direct) {
         return Math.abs(step.x * direct.x + step.z * direct.z) <= 1.0E-8D
                 && step.horizontalDistanceSqr() > 1.0E-8D;
@@ -299,7 +332,7 @@ final class FrontierV3ControlledMobMotion {
         return new BlockPosition((int) Math.floor(feet.x), (int) Math.floor(feet.y) - 1, (int) Math.floor(feet.z));
     }
 
-    private record MotionIntent(long applyAtGameTime, Vec3 target, boolean continuous, LocalNavigationEnvelope envelope) { }
+    private record MotionIntent(long applyAtGameTime, Vec3 target, boolean continuous, LocalNavigationEnvelope envelope, double maximumStep) { }
 
     private record Avoidance(Vec3 step, Vec3 target, int remainingTurns) { }
 }

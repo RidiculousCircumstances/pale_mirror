@@ -172,7 +172,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                     // cell (the horizontal successor before gravity settles one block down).
                     // It is still only the exact retained edge: keep driving that same target,
                     // without advancing or rewriting the cursor, until an endpoint is observed.
-                    moveToTraversalSurface(level, worker, target);
+                    moveToTraversalSurface(level, runtime, job, worker, target);
                 } else conflict(level, runtime, lease, mismatchReason(worker, job));
                 return;
             }
@@ -186,7 +186,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                             checkpoint(job, lease, worker), binding.orElseThrow());
                 }
             } else {
-                moveToTraversalSurface(level, worker, target);
+                moveToTraversalSurface(level, runtime, job, worker, target);
             }
             return;
         }
@@ -241,9 +241,14 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 + ":retained=" + job.traversal().linearCorridorSurfaces().get(job.traversalCursor()).standingBody();
     }
 
-    private static void moveToTraversalSurface(ServerLevel level, Mob worker, io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor surface) {
-        FrontierV3ControlledMobMotion.moveToward(level, worker,
-                new Vec3(surface.x() + 0.5D, surface.y() + 1.0D, surface.z() + 0.5D));
+    private static void moveToTraversalSurface(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                               io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob job,
+                                               Mob worker, io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor surface) {
+        var checkpoint = runtime.checkpointImage().orElseThrow();
+        long remaining = FrontierV3TraversalScheduleGate.binding(checkpoint, job.id())
+                .map(action -> Math.max(1L, action.dueAt().ticks() - checkpoint.instant().ticks())).orElse(1L);
+        FrontierV3ControlledMobMotion.moveTowardAtCadence(level, worker,
+                new Vec3(surface.x() + 0.5D, surface.y() + 1.0D, surface.z() + 0.5D), remaining);
     }
 
     /** Emits the complete observed causal checkpoint; the reducer rejects any stale or foreign tuple. */

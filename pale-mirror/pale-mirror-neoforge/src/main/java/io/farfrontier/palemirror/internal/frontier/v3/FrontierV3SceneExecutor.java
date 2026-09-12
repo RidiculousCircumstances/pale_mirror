@@ -766,7 +766,7 @@ final class FrontierV3SceneExecutor {
     }
 
     static boolean demandExists(ServerLevel level, BlockPosition anchor) {
-        return demandSnapshot(level, anchor).active();
+        return FrontierV3ServerLifecycle.sceneEligible(level, anchor) && demandSnapshot(level, anchor).active();
     }
 
     /**
