@@ -184,11 +184,11 @@ final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule 
         if (intent == null) throw new IllegalArgumentException("physical intent transition has no prepared intent");
         if (intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING) {
             if (!subject.equals(FrontierRouteNetwork.OWNER)) throw new IllegalArgumentException("route construction material pickup transition lacks route-network ownership");
-            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+            return fencedTransition(state, intent, transition);
         }
         if (intent.kind() == PhysicalIntentKind.ROUTE_MAINTENANCE || intent.kind() == PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING) {
             if (!subject.equals(FrontierRouteNetwork.OWNER)) throw new IllegalArgumentException("route maintenance transition lacks route-network ownership");
-            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+            return fencedTransition(state, intent, transition);
         }
         if (intent.kind() == PhysicalIntentKind.SETTLEMENT_SERVICE_INPUT_ISSUE) {
             SettlementServiceInputIssueStateSupport.validateIntent(state, intent);
@@ -196,7 +196,7 @@ final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule 
             if (work == null || !subject.equals(work.settlementId())) {
                 throw new IllegalArgumentException("service input issue transition lacks its retained settlement work owner");
             }
-            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+            return fencedTransition(state, intent, transition);
         }
         if (intent.kind() == PhysicalIntentKind.DECONTAMINATION && SettlementServiceDecontaminationStateSupport.owns(state, intent)) {
             SettlementServiceWork work = state.serviceWorks().get(intent.causeSubjectId());
@@ -206,72 +206,84 @@ final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule 
             if (transition.status() == PhysicalIntentStatus.RUNNING || transition.status() == PhysicalIntentStatus.CONFIRMED) {
                 SettlementServiceDecontaminationStateSupport.validateIntent(state, intent);
             }
-            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+            return fencedTransition(state, intent, transition);
         }
         if (intent.kind() == PhysicalIntentKind.STRUCTURAL_REPAIR || intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION || intent.kind() == PhysicalIntentKind.DECONTAMINATION) {
             SubjectId owner = intent.kind() == PhysicalIntentKind.DECONTAMINATION ? DecontaminationProcess.owner(state, intent.causeSubjectId()).id()
                     : FrontierWorldStateSupport.semanticOwner(state.bootstrap(), state.hiveColony(), intent.causeSubjectId());
             if (!subject.equals(owner)) throw new IllegalArgumentException("structural repair transition lacks its owning settlement");
             if (intent.kind() == PhysicalIntentKind.DECONTAMINATION) DecontaminationProcess.taskForIntent(state, intent, StrategicTaskStatus.ACTIVE);
-            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+            return fencedTransition(state, intent, transition);
         }
         if (intent.kind() == PhysicalIntentKind.EXPLOSION) {
             if (!subject.equals(state.bootstrap().hive().id())) throw new IllegalArgumentException("explosion transition lacks hive ownership");
-            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+            return fencedTransition(state, intent, transition);
         }
         if (intent.kind() == PhysicalIntentKind.SCENE_STRIKE) {
             if (!subject.equals(SceneStrikeStateSupport.owner(state, intent))) throw new IllegalArgumentException("scene strike transition lacks exact scene ownership");
-            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+            return fencedTransition(state, intent, transition);
         }
         if (intent.kind() == PhysicalIntentKind.RESOURCE_SITE_PREPARATION || intent.kind() == PhysicalIntentKind.RESOURCE_SITE_HARVEST) {
             if (!subject.equals(intent.causeSubjectId())) throw new IllegalArgumentException("resource-site transition lacks site ownership");
-            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+            return fencedTransition(state, intent, transition);
         }
         if (intent.kind() == PhysicalIntentKind.PRODUCTION_TRANSFORMATION) {
             ProductionJob job = state.productionJobs().get(intent.causeSubjectId());
             if (job == null || !subject.equals(job.settlementId())) throw new IllegalArgumentException("production transformation transition lacks settlement ownership");
-            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+            return fencedTransition(state, intent, transition);
         }
-        if (intent.kind() == PhysicalIntentKind.CARGO_LOADING) return CargoLoadingStateSupport.reduceTransition(state, subject, intent, transition);
+        if (intent.kind() == PhysicalIntentKind.CARGO_LOADING) return fence(state, intent, transition,
+                CargoLoadingStateSupport.reduceTransition(state, subject, intent, transition));
         if (intent.kind() == PhysicalIntentKind.HIVE_NUTRIENT_DEPARTURE || intent.kind() == PhysicalIntentKind.HIVE_NUTRIENT_ARRIVAL) {
             if (!subject.equals(state.bootstrap().hive().id())) throw new IllegalArgumentException("hive nutrient endpoint transition lacks hive ownership");
-            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+            return fencedTransition(state, intent, transition);
         }
         if (intent.kind() == PhysicalIntentKind.EQUIPMENT_ISSUE) {
             if (transition.status() == PhysicalIntentStatus.RUNNING) EquipmentIssueStateSupport.validateIntent(state, intent);
             if (!subject.equals(intent.causeSubjectId())) throw new IllegalArgumentException("equipment issue transition lacks settlement ownership");
-            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+            return fencedTransition(state, intent, transition);
         }
         if (intent.kind() == PhysicalIntentKind.EQUIPMENT_RETURN) {
             if (transition.status() == PhysicalIntentStatus.RUNNING) EquipmentReturnStateSupport.validateIntent(state, intent);
             if (!subject.equals(intent.causeSubjectId())) throw new IllegalArgumentException("equipment return transition lacks settlement ownership");
-            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+            return fencedTransition(state, intent, transition);
         }
         if (intent.kind() == PhysicalIntentKind.EXACT_ITEM_CONSUMPTION) {
             HiveGrowthJob job = state.hiveColony().growthJobs().get(intent.causeSubjectId());
             if (job != null) {
                 if (!subject.equals(job.hiveId())) throw new IllegalArgumentException("hive growth consumption transition lacks hive ownership");
-                return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+                return fencedTransition(state, intent, transition);
             }
             ResidentBirthJob birth = state.humanPopulation().birthJobs().get(intent.causeSubjectId());
             if (birth != null) {
                 if (!subject.equals(birth.settlementId())) throw new IllegalArgumentException("resident birth consumption transition lacks settlement ownership");
-                return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+                return fencedTransition(state, intent, transition);
             }
             MedicalEvacuationOperation medical = state.humanPopulation().medicalOperations().get(intent.causeSubjectId());
             if (medical != null) {
                 MedicalTreatmentProcess.operationForIntent(state, intent);
                 if (!subject.equals(medical.settlementId())) throw new IllegalArgumentException("medical treatment consumption transition lacks settlement ownership");
-                return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+                return fencedTransition(state, intent, transition);
             }
             if (!state.humanPopulation().provisions().containsKey(intent.causeSubjectId()) || !subject.equals(intent.causeSubjectId())) {
                 throw new IllegalArgumentException("settlement provision consumption transition lacks settlement ownership");
             }
-            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+            return fencedTransition(state, intent, transition);
         }
         RouteOperation operation = state.operations().get(intent.causeSubjectId());
         if (operation == null || !subject.equals(operation.settlementId())) throw new IllegalArgumentException("physical intent transition subject does not own operation");
-        return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+        return fencedTransition(state, intent, transition);
+    }
+
+    private static FrontierWorldState fencedTransition(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentTransition transition) {
+        return fence(state, intent, transition, state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation()));
+    }
+
+    /** Apply the fence only after the owning reducer has accepted the exact physical transition. */
+    private static FrontierWorldState fence(FrontierWorldState before, PhysicalIntent intent, PhysicalIntentTransition transition,
+                                            FrontierWorldState reduced) {
+        return reduced.withChanges(FrontierWorldStateUpdate.begin().fencedRecovery(
+                FencedRecoveryPhysicalIntentSupport.transition(before.fencedRecovery(), intent, transition.status())));
     }
 
     private static FrontierWorldState reduceStructureDamaged(FrontierWorldState state, SubjectId subject, StructureDamaged damage) {

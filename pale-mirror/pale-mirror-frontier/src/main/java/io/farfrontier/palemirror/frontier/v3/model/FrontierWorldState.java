@@ -777,7 +777,9 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         if (HumanEquipmentStateSupport.owns(intent)) HumanEquipmentStateSupport.validateIntent(this, intent);
         Map<PhysicalIntentId, PhysicalIntent> next = new LinkedHashMap<>(physicalIntents);
         next.put(intent.id(), intent);
-        return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations, next, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+        FrontierWorldState prepared = next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations, next, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+        return prepared.withChanges(FrontierWorldStateUpdate.begin().fencedRecovery(
+                FencedRecoveryPhysicalIntentSupport.prepared(fencedRecovery, intent)));
     }
     public FrontierWorldState transitionPhysicalIntent(PhysicalIntentId intentId, PhysicalIntentStatus nextStatus, java.util.Optional<PhysicalEffectObservation> observation) {
         PhysicalIntent current = physicalIntents.get(Objects.requireNonNull(intentId, "physical intent id"));
