@@ -50,8 +50,13 @@ public record FencedRecoveryState(Map<SubjectId, FencedRecoveryBinding> current,
         if (prior != null && (prior.asset() != binding.asset() || binding.authorityEpoch() <= prior.retiredEpoch())) {
             throw new IllegalArgumentException("recovery binding reuses a stale authority epoch or owner");
         }
-        Map<SubjectId, FencedRecoveryBinding> next = new LinkedHashMap<>(current); next.put(binding.bindingId(), binding);
-        return new FencedRecoveryState(next, tombstones);
+        // A retained tombstone is a diagnostic exactness aid, not permission to accept an
+        // otherwise unknown projection: lateLoad fails closed even when the bounded retention
+        // tail has compacted an old entry.  Make room only as part of the same durable new
+        // authority transition. A successor for the same identity itself fences all old epochs.
+        FencedRecoveryState retained = compactForNewBinding(binding.bindingId());
+        Map<SubjectId, FencedRecoveryBinding> next = new LinkedHashMap<>(retained.current); next.put(binding.bindingId(), binding);
+        return new FencedRecoveryState(next, retained.tombstones);
     }
 
     public FencedRecoveryState running(SubjectId bindingId, long epoch) {
@@ -103,6 +108,16 @@ public record FencedRecoveryState(Map<SubjectId, FencedRecoveryBinding> current,
             if (current.containsKey(id)) throw new IllegalArgumentException("cannot compact a current recovery authority");
             next.remove(id);
         }
+        return new FencedRecoveryState(current, next);
+    }
+
+    /** Deterministic bounded retention policy; unknown late projections still reject by default. */
+    private FencedRecoveryState compactForNewBinding(SubjectId incomingId) {
+        if (current.size() + tombstones.size() < MAX_BINDINGS) return this;
+        SubjectId retired = tombstones.keySet().stream().filter(id -> !id.equals(incomingId)).sorted().findFirst()
+                .orElseGet(() -> tombstones.containsKey(incomingId) ? incomingId : null);
+        if (retired == null) throw new IllegalArgumentException("recovery current-authority limit exceeded");
+        Map<SubjectId, FencedRecoveryTombstone> next = new LinkedHashMap<>(tombstones); next.remove(retired);
         return new FencedRecoveryState(current, next);
     }
 
