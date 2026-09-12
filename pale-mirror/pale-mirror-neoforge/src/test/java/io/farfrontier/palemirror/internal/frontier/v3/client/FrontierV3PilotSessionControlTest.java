@@ -115,10 +115,11 @@ class FrontierV3PilotSessionControlTest {
             FrontierV3PilotSessionControl.markAwaitingLifecycleFinalClose();
             Files.writeString(lifecycle.resolve("close-client-after_restart.token"), runId + ":after_restart\n", StandardCharsets.UTF_8);
             assertTrue(FrontierV3PilotSessionControl.requestLifecycleFinalClose());
-            assertTrue(FrontierV3PilotSessionControl.publishNormalDisconnectAcknowledgement(afterRestart));
-            assertFalse(FrontierV3PilotSessionControl.publishNormalDisconnectAcknowledgement(afterRestart));
             assertThrows(IllegalStateException.class,
                     () -> FrontierV3PilotSessionControl.publishNormalDisconnectAcknowledgement(beforeRestart));
+            assertTrue(FrontierV3PilotSessionControl.publishNormalDisconnectAcknowledgement(afterRestart));
+            assertFalse(FrontierV3PilotSessionControl.publishNormalDisconnectAcknowledgement(afterRestart));
+            assertFalse(FrontierV3PilotSessionControl.publishNormalDisconnectAcknowledgement(null));
             assertTrue(Files.isRegularFile(signals.resolve("client_normally_disconnected-before_restart.json")));
             assertTrue(Files.isRegularFile(signals.resolve("client_normally_disconnected-after_restart.json")));
         } finally {

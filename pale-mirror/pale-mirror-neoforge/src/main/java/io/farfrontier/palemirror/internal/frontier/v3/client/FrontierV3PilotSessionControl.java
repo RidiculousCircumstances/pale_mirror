@@ -421,11 +421,17 @@ final class FrontierV3PilotSessionControl {
         if (!awaitingResume && !finalCloseRequested) {
             throw new IllegalStateException("normal disconnect acknowledgement has no active lifecycle boundary");
         }
+        String suffix = lifecycleSegment();
+        // Minecraft's ordinary final disconnect first reports the active connection, then can
+        // report the same already-closed segment with a nullable connection while it clears the
+        // LocalPlayer. A sealed acknowledgement has no remaining authority to steal, so that
+        // second callback is safely idempotent. Identity remains mandatory before the first
+        // publication for every segment.
+        if (normalDisconnectAcknowledgements.contains(suffix)) return false;
         if (activeConnection == null || activeConnection != observedConnection) {
             throw new IllegalStateException("normal disconnect callback is foreign to active connection");
         }
-        String suffix = lifecycleSegment();
-        if (!normalDisconnectAcknowledgements.add(suffix)) return false;
+        normalDisconnectAcknowledgements.add(suffix);
         publishLifecycleSignal("client_normally_disconnected", suffix, new JsonObject());
         return true;
     }
