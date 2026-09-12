@@ -430,7 +430,14 @@ class FrontierV3ServerRuntimeTest {
         assertEquals(0, FrontierV3PhysicalIntentRestartSafety.quarantineWithManagedPostcondition(recovered, intentId::equals));
         assertEquals(PhysicalIntentStatus.RUNNING, worldState(recovered).physicalIntents().get(intentId).status());
         assertEquals(1, FrontierV3PhysicalIntentRestartSafety.quarantineWithManagedPostcondition(recovered, ignored -> false));
-        assertEquals(PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, worldState(recovered).physicalIntents().get(intentId).status());
+        FrontierWorldState quarantined = worldState(recovered);
+        assertEquals(PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, quarantined.physicalIntents().get(intentId).status());
+        var recovery = quarantined.fencedRecovery().current().get(
+                io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryPhysicalIntentSupport.bindingId(intent));
+        assertEquals(io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryAsset.EFFECT, recovery.asset());
+        assertEquals(io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryPhase.AMBIGUOUS, recovery.phase());
+        assertEquals(io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryDisposition.INSPECT, recovery.nextAction(),
+                "the restart inspector preserves a managed effect as a local recovery question, never a replay or runtime quarantine");
     }
 
     @Test
