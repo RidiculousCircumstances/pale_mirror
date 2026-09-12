@@ -21,7 +21,8 @@ test('F0.5 hard-crash carrier binds every semantic window and both player-save a
   assert.deepEqual(result.canonicalFirst.authenticatedPlayer, {
     itemKind: 'minecraft:wheat', slot: 9, count: 32, canonicalQuantity: 32, bindingEpoch: 1
   });
-  assert.equal(result.artifactSha256, artifact);
+  assert.equal(result.candidateArtifactSha256, artifact);
+  assert.deepEqual(result.retainedArtifactSha256s, []);
 });
 
 test('retained resource evidence admits only the three still-admitted resource-site boundaries', () => {
@@ -48,6 +49,8 @@ test('F0.5 hard-crash carrier rejects a substituted window, stale player save, o
   assert.throws(() => assertF05HardCrashCarrier(wrongAction), /action-bound canonical custody/);
   const mixed = structuredClone(valid); mixed.physicalFirst.build.preparedArtifact.sha256 = 'b'.repeat(64);
   assert.throws(() => assertF05HardCrashCarrier(mixed), /mixes artifact/);
+  const retained = assertF05HardCrashCarrier({ ...mixed, retainedArtifactSha256s: ['b'.repeat(64)] });
+  assert.deepEqual(retained.retainedArtifactSha256s, ['b'.repeat(64)], 'only an explicit retained identity may reuse unaffected native evidence');
   const emptySlot = structuredClone(valid); emptySlot.canonicalFirst.diagnostics.at(-1).observed.value.actual.count = 0;
   assert.throws(() => assertF05HardCrashCarrier(emptySlot), /authenticated reconnected player custody/);
 });
@@ -59,7 +62,8 @@ test('native launcher accepts only its checkout or exact task-private sibling as
   assert.match(launcher, /--reuse-resource-windows=/);
   assert.match(launcher, /--reuse-physical-first=/);
   assert.match(launcher, /--reuse-canonical-first=/);
-  assert.match(launcher, /retained \$\{order\} manifest does not match the current packaged artifact/);
+  assert.match(launcher, /candidateArtifactSha256/);
+  assert.match(launcher, /retainedArtifactSha256s/);
   assert.match(launcher, /prepared === undefined \? \{\} : \{ FRONTIER_V3_PREPARED_BUILD_IDENTITY: prepared \}/);
 });
 

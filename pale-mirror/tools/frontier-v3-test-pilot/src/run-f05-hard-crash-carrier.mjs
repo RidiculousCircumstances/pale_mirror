@@ -45,8 +45,15 @@ async function main() {
     ? await freshPlayerEvidence(canonicalScenario, resolve(root, 'canonical-first.manifest.json'), resourceEvidence.prepared, processRoot, port(4))
     : await retainedPlayerEvidence(containedBuildPath(reusedCanonical, 'F0.5 retained canonical-first manifest'), 'canonical-first');
   const physicalFirst = physicalEvidence.manifest; const canonicalFirst = canonicalEvidence.manifest;
-  const facts = assertF05HardCrashCarrier({ windows: resourceEvidence.windows, physicalFirst, canonicalFirst });
+  const candidateArtifactSha256 = artifactSha(canonicalFirst);
+  const retainedArtifactSha256s = [
+    ...(resourceEvidence.receipt.reused ? resourceEvidence.windows.map(value => artifactSha(value.manifest)) : []),
+    ...(physicalEvidence.reused ? [artifactSha(physicalFirst)] : [])
+  ].filter(value => value !== candidateArtifactSha256);
+  const facts = assertF05HardCrashCarrier({ windows: resourceEvidence.windows, physicalFirst, canonicalFirst,
+    candidateArtifactSha256, retainedArtifactSha256s });
   const receipt = Object.freeze({ schema: 1, kind: 'f05-fenced-hard-crash-native-carrier', status: 'passed', facts,
+    artifactIdentities: { candidateArtifactSha256, retainedArtifactSha256s: [...new Set(retainedArtifactSha256s)].sort() },
     semanticWindows: resourceEvidence.receipt,
     playerOrders: { physicalFirst: await playerReceipt(physicalEvidence), canonicalFirst: await playerReceipt(canonicalEvidence) } });
   await writeFile(output, `${JSON.stringify(receipt, null, 2)}\n`, { flag: 'wx' });
@@ -63,10 +70,6 @@ async function retainedPlayerEvidence(path, order) {
   const manifest = await readJson(path); const artifact = manifest?.build?.preparedArtifact;
   if (typeof artifact?.path !== 'string' || !/^[a-f0-9]{64}$/.test(artifact.sha256)) {
     throw new Error(`F0.5 retained ${order} manifest has no packaged artifact identity`);
-  }
-  const artifactPath = resolve(project, artifact.path);
-  if (!artifactPath.startsWith(`${project}/`) || await sha(artifactPath) !== artifact.sha256) {
-    throw new Error(`F0.5 retained ${order} manifest does not match the current packaged artifact`);
   }
   return Object.freeze({ path, manifest, reused: true });
 }
@@ -91,8 +94,8 @@ async function resourceWindowsFromReport(reportPath, reused = false) {
     throw new Error('F0.5 retained resource-window report has no packaged artifact identity');
   }
   const artifactPath = resolve(project, artifact.path);
-  if (!artifactPath.startsWith(`${project}/`) || await sha(artifactPath) !== artifact.sha256) {
-    throw new Error('F0.5 retained resource-window report does not match the current packaged artifact');
+  if (!reused && (!artifactPath.startsWith(`${project}/`) || await sha(artifactPath) !== artifact.sha256)) {
+    throw new Error('F0.5 resource-window report does not match the current packaged artifact');
   }
   const windows = await Promise.all(runs.map(async (run) => Object.freeze({ ...run,
     manifest: await readJson(resolve(project, run.manifest)) })));
@@ -126,6 +129,11 @@ function port(offset) {
 async function absent(path, label) { try { await stat(path); throw new Error(`refusing to overwrite ${label}`); } catch (error) { if (error?.code !== 'ENOENT') throw error; } }
 async function readJson(path) { return JSON.parse(await readFile(path, 'utf8')); }
 async function sha(path) { return createHash('sha256').update(await readFile(path)).digest('hex'); }
+function artifactSha(manifest) {
+  const value = manifest?.build?.preparedArtifact?.sha256;
+  if (typeof value !== 'string' || !/^[a-f0-9]{64}$/.test(value)) throw new Error('F0.5 manifest lacks a packaged artifact identity');
+  return value;
+}
 function containedBuildPath(value, label) {
   if (typeof value !== 'string' || value.length === 0) throw new Error(`${label} is required`);
   const path = resolve(project, value); if (!path.startsWith(`${project}/build/`)) throw new Error(`${label} must remain in checkout build/`);

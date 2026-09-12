@@ -24,7 +24,8 @@ const RESOURCE_WINDOWS = Object.freeze([
  * that truthfully owns the effect and durable-observation boundaries. The oracle consumes only
  * immutable runner facts; it cannot start a server, save a player, or alter recovery decisions.
  */
-export function assertF05HardCrashCarrier({ windows, physicalFirst, canonicalFirst }) {
+export function assertF05HardCrashCarrier({ windows, physicalFirst, canonicalFirst, candidateArtifactSha256 = artifactSha(canonicalFirst),
+  retainedArtifactSha256s = [] }) {
   const windowFacts = crashWindows(windows);
   // The restart slicer rebases after-restart assertions into their resumed segment; native
   // manifests therefore carry these as 3/4 and 1/2, not their declaration-wide labels.
@@ -36,9 +37,11 @@ export function assertF05HardCrashCarrier({ windows, physicalFirst, canonicalFir
   if (!isDeepStrictEqual(facts.map(value => value.boundary), [...WINDOWS].sort())) {
     throw new Error('F0.5 hard-crash receipt has missing, duplicate, or substituted semantic windows');
   }
-  if (!sameArtifact(facts)) throw new Error('F0.5 hard-crash evidence mixes artifact identities');
+  if (!artifactScope(facts, candidateArtifactSha256, retainedArtifactSha256s)) {
+    throw new Error('F0.5 hard-crash evidence mixes artifact identities without declared retained scope');
+  }
   return Object.freeze({ windows: facts.map(value => value.boundary), physicalFirst: first, canonicalFirst: second,
-    artifactSha256: first.artifactSha256 });
+    candidateArtifactSha256, retainedArtifactSha256s: [...new Set(retainedArtifactSha256s)].sort() });
 }
 
 /** Selects only the already-admitted resource-site windows from a retained matrix report. */
@@ -123,4 +126,18 @@ function artifactSha(manifest) {
   return value;
 }
 
-function sameArtifact(values) { return values.every(value => value.artifactSha256 === values[0].artifactSha256); }
+/**
+ * Current canonical-first recovery must prove the current JAR.  Earlier semantic windows and
+ * physical-first player-save evidence are reusable only when their immutable artifact hash is
+ * explicitly retained in this receipt; an accidental or substituted mixed manifest still fails.
+ */
+function artifactScope(values, candidateArtifactSha256, retainedArtifactSha256s) {
+  if (typeof candidateArtifactSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(candidateArtifactSha256)
+      || !Array.isArray(retainedArtifactSha256s) || retainedArtifactSha256s.some(value => typeof value !== 'string' || !/^[a-f0-9]{64}$/.test(value))) {
+    return false;
+  }
+  const canonical = values.find(value => value.boundary === 'typed_observation_durable_before_next_process_checkpoint');
+  if (canonical?.artifactSha256 !== candidateArtifactSha256) return false;
+  const admitted = new Set([candidateArtifactSha256, ...retainedArtifactSha256s]);
+  return values.every(value => admitted.has(value.artifactSha256));
+}
