@@ -29,13 +29,15 @@ test('F0.5 route recovery declaration passes the runner diagnostic grammar', asy
 test('F0.5 carrier rejects a replacement epoch or malformed route declaration', () => {
   const changed = validManifest(); changed.diagnostics[1].observed.value.epoch = 3;
   assert.throws(() => assertF05FencedRecoveryCarrier(changed), /replaced or weakened/);
+  const prematureReclaim = validManifest(); prematureReclaim.diagnostics[0].observed.value.nextAction = 'RECLAIM';
+  assert.throws(() => assertF05FencedRecoveryCarrier(prematureReclaim), /exact current body fence/);
   const malformed = structuredClone(declaration); malformed.actions[7].id = 'recovery:body_resident_1-28';
   assert.throws(() => assertF05FencedRecoveryDeclaration(malformed), /exact ordinary reclaim path/);
 });
 
 function validManifest() {
   const runId = randomUUID(); const sha = digest(source); const value = epoch => ({ kind: 'recovery', id: 'recovery:body_resident_1-16', status: 'ok', asset: 'BODY',
-    owner: 'scene:lease_route_recovery', ownerRevision: 7, epoch, phase: 'RUNNING', reversible: true, attempts: 0, nextAction: 'RECLAIM' });
+    owner: 'scene:lease_route_recovery', ownerRevision: 7, epoch, phase: 'RUNNING', reversible: true, attempts: 0, nextAction: 'INSPECT' });
   return { schema: 2, status: 'ok', scenarioId: declaration.id, scenarioSha256: sha, scenarioDeclarationSha256: sha, runId,
     recovery: { mode: 'graceful', splitAfterAction: 9, clientSession: { runId: outerAttempt, reusedJvm: true } },
     actions: declaration.actions.map((action, index) => ({ action, correlation: `scenario:${runId}:${index + 1}` })),

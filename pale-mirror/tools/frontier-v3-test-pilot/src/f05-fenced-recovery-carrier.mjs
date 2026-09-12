@@ -45,12 +45,12 @@ export function assertF05FencedRecoveryIdentity({ declaration, declarationSha256
 
 function recoveryInspection(action) { return action?.type === 'inspect' && action.view === 'recovery' && action.id === BINDING; }
 function recoveryWait(action) { return action?.type === 'wait_until_diagnostic' && action.view === 'recovery' && action.id === BINDING
-  && action.expect?.status === 'ok' && action.expect.asset === 'BODY' && action.expect.phase === 'RUNNING' && action.expect.nextAction === 'RECLAIM'; }
+  && action.expect?.status === 'ok' && action.expect.asset === 'BODY' && action.expect.phase === 'RUNNING' && action.expect.nextAction === 'INSPECT'; }
 function exactFence(manifest, actionStep) {
   const matches = (manifest?.diagnostics ?? []).filter(entry => entry?.observed?.actionStep === actionStep
     && entry.observed.value?.kind === 'recovery' && entry.observed.value.id === BINDING && entry.observed.value.status === 'ok');
   const value = matches.length === 1 ? matches[0].observed.value : null;
-  if (!value || value.asset !== 'BODY' || value.phase !== 'RUNNING' || value.nextAction !== 'RECLAIM'
+  if (!value || value.asset !== 'BODY' || value.phase !== 'RUNNING' || value.nextAction !== 'INSPECT'
       || typeof value.owner !== 'string' || !value.owner.startsWith('scene:') || !positive(value.ownerRevision) || !positive(value.epoch)
       || value.reversible !== true || value.attempts !== 0) throw new Error('F0.5 fenced recovery lacks one exact current body fence');
   return value;
