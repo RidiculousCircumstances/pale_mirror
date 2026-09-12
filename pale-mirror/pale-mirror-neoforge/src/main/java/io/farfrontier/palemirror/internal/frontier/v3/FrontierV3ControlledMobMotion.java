@@ -40,6 +40,8 @@ final class FrontierV3ControlledMobMotion {
     private static final Map<Mob, MotionIntent> PENDING = new IdentityHashMap<>();
     /** Ephemeral collision latitude, bounded to a retained local envelope and target. */
     private static final Map<Mob, Avoidance> AVOIDANCE = new IdentityHashMap<>();
+    /** Ephemeral endpoint hysteresis for a single retained edge, never a canonical cursor. */
+    private static final Map<Mob, RetainedEdgePacing> PACING = new IdentityHashMap<>();
     /** Bounded read-only evidence of actual accepted collision moves, not an alternate clock. */
     private static final Map<Mob, ArrayDeque<MotionSample>> TRACE = new WeakHashMap<>();
 
@@ -52,15 +54,33 @@ final class FrontierV3ControlledMobMotion {
     }
 
     /**
-     * Keeps one already-owned canonical edge visibly in motion until its retained due turn.
-     * The caller supplies only the remaining time of the existing scheduled action; it cannot
-     * manufacture a route, checkpoint or canonical clock.
+     * Keeps the one retained pedestrian edge visibly active at normal Minecraft walking cadence
+     * while its canonical action remains pending.  Its only physical targets are the current
+     * and immediately-next canonical supports: it cannot inspect a later corridor position,
+     * manufacture a route/cursor, or turn presentation into a second progress clock.
      */
-    static void moveTowardAtCadence(ServerLevel level, Mob actor, Vec3 target, long remainingCanonicalTicks) {
-        if (remainingCanonicalTicks < 1L) throw new IllegalArgumentException("remaining canonical ticks");
-        double deltaX = target.x - actor.getX(), deltaZ = target.z - actor.getZ();
-        double pace = Math.max(0.0001D, Math.sqrt(deltaX * deltaX + deltaZ * deltaZ) / remainingCanonicalTicks);
-        submit(level, actor, target, false, null, pace);
+    static void keepRetainedEdgeActive(ServerLevel level, Mob actor, Vec3 current, Vec3 next,
+                                       long remainingCanonicalTicks) {
+        if (remainingCanonicalTicks < 0L) throw new IllegalArgumentException("remaining canonical ticks");
+        double toNext = horizontalDistance(actor.position(), next);
+        int nextArrivalTicks = Math.max(1, (int) Math.ceil(toNext / walkingSpeed(actor)));
+        // At the due crossing window, keep the physical witness on the exact next checkpoint.
+        // Before that, normal-paced edge-local motion deliberately reverses on the two retained
+        // supports.  A 200-tick process retry must not appear to players as a .005-block/tick
+        // crawl or a multi-second stop; nor can it put the actor beyond the next observed node.
+        if (remainingCanonicalTicks <= nextArrivalTicks) {
+            PACING.remove(actor);
+            moveToward(level, actor, next);
+        } else {
+            RetainedEdgePacing pacing = PACING.get(actor);
+            if (pacing == null || !pacing.current().equals(current) || !pacing.next().equals(next)) {
+                pacing = new RetainedEdgePacing(current, next, next);
+            } else if (horizontalDistance(actor.position(), pacing.target()) <= ARRIVAL_DISTANCE) {
+                pacing = new RetainedEdgePacing(current, next, pacing.target().equals(next) ? current : next);
+            }
+            PACING.put(actor, pacing);
+            moveToward(level, actor, pacing.target());
+        }
     }
 
     /**
@@ -125,7 +145,9 @@ final class FrontierV3ControlledMobMotion {
     static void advance(Mob actor) {
         MotionIntent intent = PENDING.get(actor);
         if (intent == null) return;
-        if (!(actor.level() instanceof ServerLevel level) || actor.isRemoved() || !actor.isAlive()) { PENDING.remove(actor); AVOIDANCE.remove(actor); return; }
+        if (!(actor.level() instanceof ServerLevel level) || actor.isRemoved() || !actor.isAlive()) {
+            PENDING.remove(actor); AVOIDANCE.remove(actor); PACING.remove(actor); return;
+        }
         if (level.getGameTime() < intent.applyAtGameTime()) return;
         PENDING.remove(actor);
         apply(level, actor, intent.target(), intent.continuous(), intent.envelope(), intent.maximumStep());
@@ -134,6 +156,7 @@ final class FrontierV3ControlledMobMotion {
     static void stop(Mob actor) {
         PENDING.remove(actor);
         AVOIDANCE.remove(actor);
+        PACING.remove(actor);
         // The prior authority may already have submitted a collision move or left an ordinary
         // Minecraft velocity on the body.  Cancelling only our queued intent lets that residual
         // velocity carry a newly leased worker across its retained support between the durable
@@ -173,7 +196,7 @@ final class FrontierV3ControlledMobMotion {
         // lateral edge, then a later exact-X/Z turn settles vertically onto the declared lower
         // support. Ascents remain bounded controlled lifts; neither case can invent an alternate
         // edge.
-        double speed = Math.min(actor instanceof Zombie ? BIOFORM_SPEED : RESIDENT_SPEED, Math.min(maximumStep, horizontalDistance));
+        double speed = Math.min(walkingSpeed(actor), Math.min(maximumStep, horizontalDistance));
         // An envelope is not permission to lift through arbitrary air columns.  It may climb
         // only when the next horizontal body column has a named higher support; that admits a
         // retained stair/grade while refusing an early climb toward a distant checkpoint.
@@ -294,6 +317,13 @@ final class FrontierV3ControlledMobMotion {
         samples.addLast(new MotionSample(level.getGameTime(), actor.getX(), actor.getY(), actor.getZ(), Math.sqrt(moved.horizontalDistanceSqr())));
     }
 
+    private static double walkingSpeed(Mob actor) { return actor instanceof Zombie ? BIOFORM_SPEED : RESIDENT_SPEED; }
+
+    private static double horizontalDistance(Vec3 left, Vec3 right) {
+        double x = left.x - right.x, z = left.z - right.z;
+        return Math.sqrt(x * x + z * z);
+    }
+
     private static boolean isPureLateral(Vec3 step, Vec3 direct) {
         return Math.abs(step.x * direct.x + step.z * direct.z) <= 1.0E-8D
                 && step.horizontalDistanceSqr() > 1.0E-8D;
@@ -333,6 +363,7 @@ final class FrontierV3ControlledMobMotion {
     }
 
     private record MotionIntent(long applyAtGameTime, Vec3 target, boolean continuous, LocalNavigationEnvelope envelope, double maximumStep) { }
+    private record RetainedEdgePacing(Vec3 current, Vec3 next, Vec3 target) { }
 
     private record Avoidance(Vec3 step, Vec3 target, int remainingTurns) { }
 }
