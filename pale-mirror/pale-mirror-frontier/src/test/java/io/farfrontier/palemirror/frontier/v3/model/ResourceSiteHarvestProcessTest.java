@@ -631,7 +631,7 @@ class ResourceSiteHarvestProcessTest {
         HotHarvest hot = hotHarvestAfterColdSteps(0);
         ResourceSiteHarvestJob job = hot.job();
         BlockPosition crop = FrontierResourceSitePlan.compile(hot.state().bootstrap()).get(hot.site()).cropSlots().getFirst();
-        ResourceSiteConflictObserved observed = new ResourceSiteConflictObserved(hot.site(), crop, "player:contract");
+        ResourceSiteConflictObserved observed = new ResourceSiteConflictObserved(hot.site(), crop, ResourceSiteConflictReason.PLAYER_REMOVED_MANAGED_CELL);
         CommandId commandId = new CommandId("command:site-harvest-player-break");
         FrontierCommand command = new FrontierCommand(1, commandId, hot.state().bootstrap().worldId(), new Revision(1L), new SimInstant(22_302L),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), observed);
@@ -645,8 +645,19 @@ class ResourceSiteHarvestProcessTest {
         FrontierWorldState conflicted = ResourceSiteProcess.reduceConflict(hot.state(), hot.site(), observed);
 
         assertEquals(ResourceSitePhase.CONFLICT, conflicted.resourceSites().site(hot.site()).phase());
-        assertEquals(PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, conflicted.physicalIntents().get(job.intentId()).status(),
-                "a RUNNING effect retains recovery custody after its accepted player conflict");
+        assertEquals(PhysicalIntentStatus.CONFLICTED, conflicted.physicalIntents().get(job.intentId()).status(),
+                "a player action reaches terminal owned disposition rather than restart custody");
+        assertEquals(ResourceSiteConflictReason.PLAYER_REMOVED_MANAGED_CELL,
+                conflicted.resourceSites().site(hot.site()).conflictDisposition().orElseThrow().reason());
+        assertEquals(ResourceSiteConflictPolicy.TERMINAL_REPAIR_REQUIRED,
+                conflicted.resourceSites().site(hot.site()).conflictDisposition().orElseThrow().policy());
+        var bindingId = FencedRecoveryPhysicalIntentSupport.bindingId(hot.state().physicalIntents().get(job.intentId()));
+        assertFalse(conflicted.fencedRecovery().current().containsKey(bindingId),
+                "a direct player action must retire its fence instead of creating restart inspection custody");
+        assertEquals(FencedRecoveryDisposition.ABANDON, conflicted.fencedRecovery().tombstones().get(bindingId).disposition());
+        assertEquals(conflicted.resourceSites().site(hot.site()).conflictDisposition(),
+                new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(conflicted)).resourceSites().site(hot.site()).conflictDisposition(),
+                "the precise player disposition must survive canonical recovery rather than becoming generic CONFLICT");
         assertEquals(StrategicTaskStatus.BLOCKED, conflicted.strategicPlans().tasks().get(job.taskId()).status());
         assertEquals(SceneLeaseStatus.DRAINING, conflicted.sceneLeases().get(hot.lease().id()).status(),
                 "the former HOT worker has no second physical interpretation after admission");
@@ -670,10 +681,10 @@ class ResourceSiteHarvestProcessTest {
         FrontierWorldState prepared = hot.state().withChanges(FrontierWorldStateUpdate.begin().physicalIntents(intents));
 
         FrontierWorldState conflicted = ResourceSiteProcess.reduceConflict(prepared, hot.site(),
-                new ResourceSiteConflictObserved(hot.site(), crop, "player:prepared-contract"));
+                new ResourceSiteConflictObserved(hot.site(), crop, ResourceSiteConflictReason.PLAYER_REMOVED_MANAGED_CELL));
 
-        assertEquals(PhysicalIntentStatus.PREPARED, conflicted.physicalIntents().get(job.intentId()).status(),
-                "the traversal-only profile must not invent RUNNING/unknown recovery custody");
+        assertEquals(PhysicalIntentStatus.CONFLICTED, conflicted.physicalIntents().get(job.intentId()).status(),
+                "the traversal-only profile records terminal player disposition without restart custody");
         assertEquals(ResourceSitePhase.CONFLICT, conflicted.resourceSites().site(hot.site()).phase());
     }
 

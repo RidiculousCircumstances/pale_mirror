@@ -46,14 +46,9 @@ final class ResourceSitePhysicalIntentStateSupport {
                 .map(ResourceSiteHarvestJob::outputItemId).filter(subject::equals).isPresent());
     }
 
-    /**
-     * A player-conflicted traversal-only harvest retains its PREPARED effect request as terminal
-     * custody evidence.  It is deliberately narrower than a generally live intent: the exact
-     * conflicted field and its retained harvest job still own every referenced subject, while no
-     * executor may resume the job.
-     */
+    /** The terminal field disposition retains exact causal ownership without a resumable intent. */
     static boolean ownsPreparedConflictIntent(ResourceSiteState sites, PhysicalIntent intent) {
-        if (intent.kind() != PhysicalIntentKind.RESOURCE_SITE_HARVEST || intent.status() != PhysicalIntentStatus.PREPARED) return false;
+        if (intent.kind() != PhysicalIntentKind.RESOURCE_SITE_HARVEST || intent.status() != PhysicalIntentStatus.CONFLICTED) return false;
         ResourceSiteLifecycle lifecycle = sites.sites().get(intent.causeSubjectId());
         if (lifecycle == null || lifecycle.phase() != ResourceSitePhase.CONFLICT) return false;
         try {
@@ -96,7 +91,9 @@ final class ResourceSitePhysicalIntentStateSupport {
         if (intent.kind() == PhysicalIntentKind.RESOURCE_SITE_PREPARATION) preparation(lifecycle, intent.id());
         else if (intent.kind() == PhysicalIntentKind.RESOURCE_SITE_HARVEST) harvest(lifecycle, intent.id());
         else throw new IllegalArgumentException("resource-site conflict has a foreign physical intent");
-        return replace(state, state.resourceSites().replace(lifecycle.conflicted()), nextIntents, state.physicalObservations());
+        ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).get(lifecycle.siteId());
+        return replace(state, state.resourceSites().replace(lifecycle.conflicted(ResourceSiteConflictDisposition.recovery(site.cropSlots().getFirst()))),
+                nextIntents, state.physicalObservations());
     }
 
     static void validateState(ResourceSiteState sites, Map<PhysicalIntentId, PhysicalIntent> intents,

@@ -26,6 +26,12 @@ final class ResourceSiteStateCodec {
             output.writeLong(lifecycle.growthEpoch()); output.writeByte(lifecycle.growthStage());
             output.writeBoolean(lifecycle.activeWork().isPresent());
             if (lifecycle.activeWork().isPresent()) writeWork(output, lifecycle.activeWork().orElseThrow());
+            output.writeBoolean(lifecycle.conflictDisposition().isPresent());
+            if (lifecycle.conflictDisposition().isPresent()) {
+                ResourceSiteConflictDisposition disposition = lifecycle.conflictDisposition().orElseThrow();
+                output.writeInt(disposition.position().x()); output.writeInt(disposition.position().y()); output.writeInt(disposition.position().z());
+                output.writeByte(disposition.reason().wireTag()); output.writeByte(disposition.policy().wireTag());
+            }
         }
     }
 
@@ -37,7 +43,14 @@ final class ResourceSiteStateCodec {
             long epoch = input.readLong(); int stage = input.readUnsignedByte(); boolean hasWork = input.readBoolean();
             if (phase >= ResourceSitePhase.values().length) throw new IllegalArgumentException("unknown resource-site phase");
             Optional<ResourceSiteWork> work = hasWork ? Optional.of(readWork(input)) : Optional.empty();
-            ResourceSiteLifecycle lifecycle = new ResourceSiteLifecycle(siteId, FrontierWireTags.require(ResourceSitePhase.class, phase), epoch, stage, work);
+            Optional<ResourceSiteConflictDisposition> disposition = Optional.empty();
+            if (input.readBoolean()) {
+                BlockPosition position = new BlockPosition(input.readInt(), input.readInt(), input.readInt());
+                disposition = Optional.of(new ResourceSiteConflictDisposition(position,
+                        FrontierWireTags.require(ResourceSiteConflictReason.class, input.readUnsignedByte()),
+                        FrontierWireTags.require(ResourceSiteConflictPolicy.class, input.readUnsignedByte())));
+            }
+            ResourceSiteLifecycle lifecycle = new ResourceSiteLifecycle(siteId, FrontierWireTags.require(ResourceSitePhase.class, phase), epoch, stage, work, disposition);
             if (sites.put(siteId, lifecycle) != null) throw new IllegalArgumentException("duplicate resource-site lifecycle");
         }
         return new ResourceSiteState(sites);

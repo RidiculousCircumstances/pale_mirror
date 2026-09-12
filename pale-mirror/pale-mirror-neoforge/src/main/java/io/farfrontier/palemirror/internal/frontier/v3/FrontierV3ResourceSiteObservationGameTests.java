@@ -9,6 +9,8 @@ import io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSitePlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSite;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteConflictPolicy;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteConflictReason;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSitePhase;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSitePrepared;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSitePreparationStarted;
@@ -52,6 +54,12 @@ public final class FrontierV3ResourceSiteObservationGameTests {
                 "an owned player break must first receive one durable canonical conflict receipt");
         helper.assertValueEqual(runtime.decodedState().orElseThrow().resourceSites().site(siteId).phase(), ResourceSitePhase.CONFLICT,
                 "the accepted observation must move only its owning site to CONFLICT before Minecraft mutates the cell");
+        helper.assertValueEqual(runtime.decodedState().orElseThrow().resourceSites().site(siteId).conflictDisposition().orElseThrow().reason(),
+                ResourceSiteConflictReason.PLAYER_REMOVED_MANAGED_CELL,
+                "the production player-break entry must persist its exact owning reason, not a generic conflict label");
+        helper.assertValueEqual(runtime.decodedState().orElseThrow().resourceSites().site(siteId).conflictDisposition().orElseThrow().policy(),
+                ResourceSiteConflictPolicy.TERMINAL_REPAIR_REQUIRED,
+                "a normal player action must retain terminal repair policy rather than restart recovery custody");
         helper.assertValueEqual(ledger.claim(siteId).status(), FrontierV3ResourceSiteLedger.Status.CONFLICT,
                 "the physical ownership ledger must carry the same local conflict boundary");
         helper.assertTrue(FrontierV3DiagnosticTrace.latest(level.getServer(), cause)

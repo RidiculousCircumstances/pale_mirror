@@ -70,12 +70,12 @@ class ResourceSitePreparationProcessTest {
     @Test
     void oneObservedOwnedCropLossIsDurablySiteSpecificAndCannotNameForeignGeometry() {
         FrontierWorldState growing = prepared(); BlockPosition crop = FrontierResourceSitePlan.compile(growing.bootstrap()).get(new SubjectId("site:1-wheat-field")).cropSlots().getFirst();
-        ResourceSiteConflictObserved loss = new ResourceSiteConflictObserved(new SubjectId("site:1-wheat-field"), crop, "player:test");
+        ResourceSiteConflictObserved loss = new ResourceSiteConflictObserved(new SubjectId("site:1-wheat-field"), crop, ResourceSiteConflictReason.PLAYER_REMOVED_MANAGED_CELL);
 
         assertEquals(ResourceSitePhase.CONFLICT, ResourceSiteProcess.reduceConflict(growing, loss.siteId(), loss).resourceSites().site(loss.siteId()).phase());
         assertEquals(loss, FrontierWorldRuntimeDefinition.payloadCodecs().decode(loss.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(loss)));
         assertThrows(IllegalArgumentException.class, () -> ResourceSiteProcess.reduceConflict(growing, loss.siteId(),
-                new ResourceSiteConflictObserved(loss.siteId(), new BlockPosition(crop.x() - 1, crop.y(), crop.z()), "player:test")));
+                new ResourceSiteConflictObserved(loss.siteId(), new BlockPosition(crop.x() - 1, crop.y(), crop.z()), ResourceSiteConflictReason.PLAYER_REMOVED_MANAGED_CELL)));
     }
 
     private static FrontierWorldState prepared() {

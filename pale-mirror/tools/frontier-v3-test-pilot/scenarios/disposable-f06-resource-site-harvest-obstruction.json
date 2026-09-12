@@ -14,11 +14,11 @@
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -333, "y": 65, "z": -355 }, "settleMs": 0, "causalMilestone": "obstruction_demand" },
     { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-1-wheat-field-1", "expect": { "status": "ok", "claims": { "lease": { "status": "HOT" } }, "conservation": { "completedCropSlots": 1 }, "result": { "sitePhase": "HARVESTING", "intentStatus": "RUNNING" } }, "timeoutMs": 30000, "causalMilestone": "first_crop_before_obstruction" },
     { "type": "break", "position": { "x": -342, "y": 64, "z": -346 }, "causalMilestone": "next_crop_obstructed" },
-    { "type": "wait_until_diagnostic", "view": "site", "id": "site:1-wheat-field", "expect": { "status": "ok", "phase": "CONFLICT" }, "timeoutMs": 30000, "causalMilestone": "typed_harvest_conflict" },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-1-wheat-field-1", "expect": { "status": "ok", "conservation": { "completedCropSlots": 1 }, "result": { "sitePhase": "CONFLICT", "intentStatus": "CONFLICTED", "obstruction": { "position": { "x": -342, "y": 64, "z": -346 }, "reason": "PLAYER_REMOVED_MANAGED_CELL", "policy": "TERMINAL_REPAIR_REQUIRED" } } }, "timeoutMs": 30000, "causalMilestone": "typed_player_crop_disposition" },
     { "type": "inspect", "view": "process", "id": "job:site-harvest-1-wheat-field-1", "causalMilestone": "conflict_owner_observed" }
   ],
   "assertions": [
     { "after": 2, "view": "process", "id": "job:site-harvest-1-wheat-field-1", "expect": { "status": "ok", "conservation": { "completedCropSlots": 1 }, "result": { "sitePhase": "HARVESTING", "intentStatus": "RUNNING" } } },
-    { "after": 4, "view": "site", "id": "site:1-wheat-field", "expect": { "status": "ok", "phase": "CONFLICT" } }
+    { "after": 4, "view": "process", "id": "job:site-harvest-1-wheat-field-1", "expect": { "status": "ok", "conservation": { "completedCropSlots": 1 }, "result": { "sitePhase": "CONFLICT", "intentStatus": "CONFLICTED", "obstruction": { "position": { "x": -342, "y": 64, "z": -346 }, "reason": "PLAYER_REMOVED_MANAGED_CELL", "policy": "TERMINAL_REPAIR_REQUIRED" } } } }
   ]
 }

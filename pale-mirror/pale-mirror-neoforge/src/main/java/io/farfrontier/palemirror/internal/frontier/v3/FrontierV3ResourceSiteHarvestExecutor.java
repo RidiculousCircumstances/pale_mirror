@@ -251,7 +251,8 @@ final class FrontierV3ResourceSiteHarvestExecutor {
                 .allMatch(slot -> level.hasChunkAt(new BlockPos(slot.x(), slot.y(), slot.z())));
     }
     private static void fail(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierV3ResourceSiteLedger ledger, Target target, String cause) {
-        unknown(runtime, target.intent().id(), cause); FrontierV3ResourceSiteExecutor.recordConflict(runtime, ledger, target.site(), target.site().cropSlots().getFirst(), cause);
+        unknown(runtime, target.intent().id(), cause); FrontierV3ResourceSiteExecutor.recordConflict(runtime, ledger, target.site(), target.site().cropSlots().getFirst(),
+                io.farfrontier.palemirror.frontier.v3.model.ResourceSiteConflictReason.OBSERVED_MANAGED_CELL_MISMATCH);
     }
     private static void unknown(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntentId id, String phase) {
         transition(runtime, id, PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty(), phase);

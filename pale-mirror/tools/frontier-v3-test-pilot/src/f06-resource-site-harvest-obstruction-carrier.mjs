@@ -14,11 +14,17 @@ export function assertF06ResourceSiteHarvestObstructionCarrier({ declaration, ma
   });
   const facts = observed(manifest);
   const active = exactly(facts, 2, 'process', JOB);
-  const conflict = exactly(facts, 4, 'site', SITE);
+  const conflict = exactly(facts, 4, 'process', JOB);
   if (active.claims?.lease?.status !== 'HOT' || active.conservation?.completedCropSlots !== 1
       || active.result?.sitePhase !== 'HARVESTING' || active.result?.intentStatus !== 'RUNNING'
-      || conflict.phase !== 'CONFLICT') throw new Error('F0.6 harvest obstruction did not replace active work with its typed owner result');
-  return Object.freeze({ job: active.identity?.job, firstCrop: 1, conflict: SITE });
+      || conflict.conservation?.completedCropSlots !== 1 || conflict.result?.sitePhase !== 'CONFLICT'
+      || conflict.result?.intentStatus !== 'CONFLICTED'
+      || !isDeepStrictEqual(conflict.result?.obstruction, { position: { x: -342, y: 64, z: -346 },
+        reason: 'PLAYER_REMOVED_MANAGED_CELL', policy: 'TERMINAL_REPAIR_REQUIRED' })) {
+    throw new Error('F0.6 harvest obstruction did not retain its exact player-owned terminal disposition');
+  }
+  return Object.freeze({ job: active.identity?.job, firstCrop: 1, conflict: SITE,
+    reason: conflict.result.obstruction.reason, policy: conflict.result.obstruction.policy });
 }
 
 export function assertF06ResourceSiteHarvestObstructionDeclaration(declaration) {
@@ -26,9 +32,12 @@ export function assertF06ResourceSiteHarvestObstructionDeclaration(declaration) 
   if (declaration?.id !== SCENARIO || declaration?.server?.profile !== 'resource-site-harvest' || !Array.isArray(actions) || actions.length !== 5
       || actions[0]?.type !== 'visit' || actions[1]?.type !== 'wait_until_diagnostic' || actions[1]?.view !== 'process'
       || actions[1]?.id !== JOB || actions[2]?.type !== 'break' || !isDeepStrictEqual(actions[2]?.position, { x: -342, y: 64, z: -346 })
-      || actions[3]?.type !== 'wait_until_diagnostic' || actions[3]?.view !== 'site' || actions[3]?.id !== SITE
-      || actions[3]?.expect?.phase !== 'CONFLICT' || actions[4]?.type !== 'inspect' || actions[4]?.view !== 'process' || actions[4]?.id !== JOB) {
-    throw new Error('F0.6 harvest obstruction declaration lacks an active-job-to-conflict boundary');
+      || actions[3]?.type !== 'wait_until_diagnostic' || actions[3]?.view !== 'process' || actions[3]?.id !== JOB
+      || actions[3]?.expect?.result?.sitePhase !== 'CONFLICT' || actions[3]?.expect?.result?.intentStatus !== 'CONFLICTED'
+      || actions[3]?.expect?.result?.obstruction?.reason !== 'PLAYER_REMOVED_MANAGED_CELL'
+      || actions[3]?.expect?.result?.obstruction?.policy !== 'TERMINAL_REPAIR_REQUIRED'
+      || actions[4]?.type !== 'inspect' || actions[4]?.view !== 'process' || actions[4]?.id !== JOB) {
+    throw new Error('F0.6 harvest obstruction declaration lacks an exact typed player disposition boundary');
   }
   return Object.freeze({ scenario: SCENARIO, job: JOB, site: SITE });
 }

@@ -89,7 +89,8 @@ class FrontierReadabilityPlanTest {
     void makesAConflictedFieldLocallyVisibleAsARepairableWarning() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:field-board-conflict"), 91L));
         ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).values().iterator().next();
-        FrontierWorldState conflicted = state.withResourceSites(state.resourceSites().replace(state.resourceSites().site(site.id()).conflicted()));
+        FrontierWorldState conflicted = state.withResourceSites(state.resourceSites().replace(state.resourceSites().site(site.id()).conflicted(
+                ResourceSiteConflictDisposition.terminal(site.cropSlots().getFirst(), ResourceSiteConflictReason.OBSERVED_MANAGED_CELL_MISMATCH))));
         FrontierObjectBoard board = FrontierReadabilityPlan.compile(conflicted).boards().get(site.id());
         assertEquals(FrontierObjectBoard.Tone.WARNING, board.tone());
         assertTrue(board.text().endsWith("DAMAGED · REPAIR NEEDED"));

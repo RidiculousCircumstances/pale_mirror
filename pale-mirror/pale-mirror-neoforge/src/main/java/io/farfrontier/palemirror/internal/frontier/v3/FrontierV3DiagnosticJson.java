@@ -248,6 +248,8 @@ final class FrontierV3DiagnosticJson {
         String intentKind = intent == null ? "MISSING" : intent.kind().name();
         String intentObservationId = intent == null || intent.postconditionObservationId().isEmpty() ? "null"
                 : "\"" + quote(intent.postconditionObservationId().orElseThrow().value()) + "\"";
+        String obstruction = lifecycle.conflictDisposition().map(value -> "{\"position\":" + position(value.position())
+                + ",\"reason\":\"" + value.reason() + "\",\"policy\":\"" + value.policy() + "\"}").orElse("null");
         String actorBody = actor == null ? "null" : position(actor.body());
         int cursorLength = job.traversal().linearCorridorSurfaces().size();
         return base("process", id, checkpoint) + ",\"status\":\"ok\",\"family\":\"frontier.resource-site-harvest\""
@@ -266,7 +268,7 @@ final class FrontierV3DiagnosticJson {
                 + ",\"actorBody\":" + actorBody + "}"
                 + ",\"result\":{\"sitePhase\":\"" + lifecycle.phase() + "\",\"intentKind\":\"" + intentKind
                 + "\",\"intentStatus\":\"" + intentStatus + "\",\"intentObservationId\":" + intentObservationId
-                + ",\"complete\":" + job.progress().complete() + "}}";
+                + ",\"obstruction\":" + obstruction + ",\"complete\":" + job.progress().complete() + "}}";
     }
 
     private static String site(String id, CheckpointImage checkpoint, FrontierWorldState state) {

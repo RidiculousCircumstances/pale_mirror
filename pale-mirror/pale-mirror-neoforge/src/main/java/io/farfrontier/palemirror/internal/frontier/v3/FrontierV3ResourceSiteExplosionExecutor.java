@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSitePlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSite;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteConflictReason;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 
@@ -59,7 +60,7 @@ final class FrontierV3ResourceSiteExplosionExecutor {
             if (FrontierV3ResourceSiteExecutor.matches(level, site, value.candidate().expectedStage())) { ledger.resolve(value); continue; }
             CommandId command = FrontierV3CommandIds.resourceSiteExplosionConflict(value.effectId(), site.id());
             if (!FrontierV3ResourceSiteExecutor.recordConflict(runtime, FrontierV3ResourceSiteLedger.get(level), site,
-                    value.candidate().witness(), "explosion:" + value.effectId(), command)) return;
+                    value.candidate().witness(), ResourceSiteConflictReason.EXPLOSION_DAMAGED_MANAGED_CELL, command)) return;
             ledger.resolve(value);
         }
     }

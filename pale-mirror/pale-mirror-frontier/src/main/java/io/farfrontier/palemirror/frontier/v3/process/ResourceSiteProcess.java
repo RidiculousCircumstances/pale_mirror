@@ -122,7 +122,7 @@ public final class ResourceSiteProcess {
         }
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(conflict.siteId());
         if (lifecycle.phase() == ResourceSitePhase.DESTROYED || lifecycle.phase() == ResourceSitePhase.CONFLICT) return state;
-        ResourceSiteLifecycle conflicted = lifecycle.conflicted();
+        ResourceSiteLifecycle conflicted = lifecycle.conflicted(ResourceSiteConflictDisposition.terminal(conflict.position(), conflict.reason()));
         if (lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance).isEmpty()) {
             return state.withResourceSites(state.resourceSites().replace(conflicted));
         }
@@ -139,11 +139,10 @@ public final class ResourceSiteProcess {
             throw new IllegalArgumentException("resource-site player conflict has no active exact harvest intent");
         }
         Map<PhysicalIntentId, PhysicalIntent> intents = new LinkedHashMap<>(state.physicalIntents());
-        // A player break retires the field job, but traversal-only F0.V has not begun the
-        // non-replayable harvest effect. Keep PREPARED exactly; recovery custody applies only
-        // after a genuinely RUNNING effect.
-        intents.put(intent.id(), intent.status() == PhysicalIntentStatus.PREPARED
-                ? intent : intent.withStatus(PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty()));
+        // A direct physical disposition is not a restart ambiguity.  Both a pre-effect and a
+        // running field intent become terminal under the same exact site owner; only a real
+        // restart path may use UNKNOWN_AFTER_RESTART.
+        intents.put(intent.id(), intent.withStatus(PhysicalIntentStatus.CONFLICTED, Optional.empty()));
         Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases());
         leases.replaceAll((id, lease) -> {
             if (!FrontierSceneBehaviors.isResourceSiteHarvest(lease)
@@ -158,7 +157,8 @@ public final class ResourceSiteProcess {
                 .resourceSites(state.resourceSites().replace(conflicted))
                 .strategicPlans(state.strategicPlans().transitionTask(job.taskId(), StrategicTaskStatus.BLOCKED))
                 .physicalIntents(intents)
-                .sceneLeases(leases));
+                .sceneLeases(leases)
+                .fencedRecovery(FencedRecoveryPhysicalIntentSupport.transition(state.fencedRecovery(), intent, PhysicalIntentStatus.CONFLICTED)));
     }
 
     public static List<ProposedEvent> planConflict(FrontierWorldState state, ResourceSiteConflictObserved conflict) {

@@ -87,6 +87,15 @@ public record FencedRecoveryState(Map<SubjectId, FencedRecoveryBinding> current,
         FencedRecoveryBinding binding = requireCurrent(bindingId, epoch).confirmed();
         return retire(binding, FencedRecoveryDisposition.REJECT_STALE, "confirmed");
     }
+    /** Terminal local owner disposition; it never becomes restart ambiguity or a new claim. */
+    public FencedRecoveryState conflict(SubjectId bindingId, long epoch, String reason) {
+        Objects.requireNonNull(reason, "recovery conflict reason");
+        FencedRecoveryBinding binding = requireCurrent(bindingId, epoch);
+        if (binding.phase() == FencedRecoveryPhase.CONFIRMED || binding.phase() == FencedRecoveryPhase.AMBIGUOUS) {
+            throw new IllegalArgumentException("only a current physical attempt may be terminally conflicted");
+        }
+        return retire(binding, FencedRecoveryDisposition.ABANDON, reason);
+    }
     /** Only a declared reversible checkpoint may return to COLD without inspecting an old projection. */
     public FencedRecoveryState revokeToCold(SubjectId bindingId, long epoch) {
         FencedRecoveryBinding binding = requireCurrent(bindingId, epoch);

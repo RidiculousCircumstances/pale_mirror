@@ -5,7 +5,8 @@ public enum PhysicalIntentStatus {
     PREPARED,
     RUNNING,
     CONFIRMED,
-    UNKNOWN_AFTER_RESTART;
+    UNKNOWN_AFTER_RESTART,
+    CONFLICTED;
 
     public int wireTag() {
         return switch (this) {
@@ -13,6 +14,7 @@ public enum PhysicalIntentStatus {
             case RUNNING -> 1;
             case CONFIRMED -> 2;
             case UNKNOWN_AFTER_RESTART -> 3;
+            case CONFLICTED -> 4;
         };
     }
 }

@@ -555,7 +555,9 @@ public final class FrontierSceneBehaviors {
             ResourceSiteHarvestJob job = FrontierResourceSiteHarvestSceneSupport.require(state, cause(lease));
             if (!job.workerId().equals(actorId)) return SceneDeathOutcome.unchanged(state);
             ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId());
-            ResourceSiteState sites = state.resourceSites().replace(lifecycle.conflicted());
+            ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).get(job.siteId());
+            ResourceSiteState sites = state.resourceSites().replace(lifecycle.conflicted(
+                    ResourceSiteConflictDisposition.terminal(site.cropSlots().getFirst(), ResourceSiteConflictReason.WORKER_DIED)));
             StrategicPlanState plans = state.strategicPlans().transitionTask(job.taskId(), StrategicTaskStatus.BLOCKED);
             io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent = state.physicalIntents().get(job.intentId());
             if (intent == null) throw new IllegalArgumentException("dead harvest worker has no exact physical intent");
