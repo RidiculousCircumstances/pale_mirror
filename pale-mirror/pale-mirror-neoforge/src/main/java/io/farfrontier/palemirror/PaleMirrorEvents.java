@@ -527,6 +527,21 @@ public final class PaleMirrorEvents {
         }
     }
 
+    /**
+     * A player can transfer into a destination chunk that was naturally loaded while the server
+     * was booting, before the v3 runtime existed to retain its ChunkEvent.Load boundary.  The
+     * post-transfer event is the same ordinary ingress boundary: it only fences the exact
+     * destination chunk for the next registered projection turn and never creates demand,
+     * tickets, or a scene.
+     */
+    @SubscribeEvent
+    public static void onPlayerChangedDimension(PlayerEvent.PlayerChangedDimensionEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player) {
+            io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.observeNaturalChunkLoad(
+                    player.serverLevel(), new net.minecraft.world.level.ChunkPos(player.blockPosition()));
+        }
+    }
+
     private static boolean denyExcludedItem(Player player, ItemStack stack, String operation) {
         return SourceItemFirewall.classify(stack).map(blocked -> {
             if (player instanceof ServerPlayer serverPlayer) {
