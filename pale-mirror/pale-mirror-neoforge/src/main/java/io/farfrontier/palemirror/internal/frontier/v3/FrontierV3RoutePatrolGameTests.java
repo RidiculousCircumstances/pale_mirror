@@ -85,21 +85,14 @@ public final class FrontierV3RoutePatrolGameTests {
         SubjectId objectiveId = new SubjectId("objective:route-patrol-game-test"), taskId = new SubjectId("task:route-patrol-game-test");
         StrategicObjective objective = new StrategicObjective(objectiveId, settlement.id(), StrategicObjectiveKind.SETTLEMENT_PATROL_OBSTRUCTED_ROUTE,
                 Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
-        List<SurfaceAnchor> surfaces = initial.routeTopology().supplyWaypoints(initial.bootstrap(), settlement.id()).stream()
-                .limit(4).map(SurfaceAnchor::new).toList();
-        SubjectId operationId = new SubjectId("operation:route-patrol-game-test");
-        SubjectId crew = initial.humanPopulation().residents().values().stream().filter(value -> !value.id().equals(leader) && !value.id().equals(scout))
-                .map(ResidentProfile::id).findFirst().orElseThrow();
-        RouteUnitManifest operationUnit = RouteUnitManifest.cargoEscort(operationId, crew, leader, List.of(leader, scout));
-        RouteOperation operation = new RouteOperation(operationId, settlement.id(), new SubjectId("cargo:route-patrol-game-test"),
-                new SubjectId("destination:route-patrol-game-test"), operationUnit, surfaces.stream().map(SurfaceAnchor::support).toList(), 0,
-                OperationStage.FAILED, Optional.empty(), Optional.empty());
+        List<SurfaceAnchor> surfaces = initial.routeTopology().supplyTraversalTopology(initial.bootstrap(), settlement.id())
+                .linearCorridorSurfaces().stream().limit(4).toList();
         StrategicTask task = new StrategicTask(taskId, objectiveId, settlement.id(), StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE,
-                Optional.empty(), Optional.of(operationId), Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_GUARD), List.of(),
-                StrategicTaskStatus.ACTIVE, Optional.of(surfaces.get(1).support()));
+                Optional.empty(), Optional.empty(), Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_GUARD), List.of(),
+                StrategicTaskStatus.ACTIVE, Optional.empty());
         RouteUnitManifest unit = RouteUnitManifest.patrol(taskId, leader, List.of(scout));
         TraversalTopology inspection = RoutePatrol.inspectionTopology(initial.withChanges(FrontierWorldStateUpdate.begin()
-                .operations(Map.of(operationId, operation)).physicalDeltas(Map.of(surfaces.get(1).support(), new PhysicalDelta(surfaces.get(1).support(),
+                .physicalDeltas(Map.of(surfaces.get(1).support(), new PhysicalDelta(surfaces.get(1).support(),
                         PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, Optional.of(FrontierRouteNetwork.OWNER), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "test")))), task, settlement);
         TraversalTopology leaderRoute = inspection.linearSegment(new TraversalTopologyId("topology:route-patrol-game-test:leader"), 1, 3);
         TraversalTopology scoutRoute = inspection.linearSegment(new TraversalTopologyId("topology:route-patrol-game-test:scout"), 0, 2);
@@ -114,7 +107,7 @@ public final class FrontierV3RoutePatrolGameTests {
                 Optional.empty(), Optional.empty());
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(initial.actorLocations());
         actors.put(leader, ActorLocation.standingOn(surfaces.get(1))); actors.put(scout, ActorLocation.standingOn(surfaces.get(0)));
-        FrontierWorldState state = initial.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).operations(Map.of(operationId, operation))
+        FrontierWorldState state = initial.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors)
                 .physicalDeltas(Map.of(surfaces.get(1).support(), new PhysicalDelta(surfaces.get(1).support(), PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
                         Optional.of(FrontierRouteNetwork.OWNER), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "test")))
                 .strategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task).startPatrol(patrol)));
