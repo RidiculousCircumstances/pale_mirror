@@ -55,7 +55,8 @@ export function assertF06ObserverNeutralityDeclaration(declaration) {
       || actions[8]?.type !== 'break' || !isDeepStrictEqual(actions[8].position, LAST_CROP)
       || !conflict(actions[9]) || actions[10]?.type !== 'inspect' || actions[10].view !== 'site' || actions[10].id !== SITE
       || actions[11]?.type !== 'visit' || actions[11].dimension !== 'minecraft:overworld'
-      || actions[12]?.type !== 'visit' || actions[12].dimension !== DIMENSION || !isDeepStrictEqual(actions[12].position, ARRIVAL) || !conflict(actions[13])) {
+      || actions[12]?.type !== 'visit' || actions[12].dimension !== DIMENSION || !isDeepStrictEqual(actions[12].position, ARRIVAL)
+      || actions[13]?.type !== 'inspect' || actions[13].view !== 'site' || actions[13].id !== SITE) {
     throw new Error('F0.6 observer-neutrality declaration lacks a pre-ingress safe advance, exact field anchor, or first-visibility/intervention continuity');
   }
   return Object.freeze({ scenario: SCENARIO, chunk: CHUNK, arrival: ARRIVAL, staticAnchor: STATIC_ANCHOR, site: SITE });
