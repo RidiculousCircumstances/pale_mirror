@@ -65,7 +65,7 @@ public final class FrontierV3TestPilotClient {
     private static ObservedDiagnostic inspectBaseline;
     private static boolean fastForwardSent;
     private static ObservedDiagnostic fastForwardBaseline;
-    private static ObservedDiagnostic diagnosticWaitBaseline;
+    private static ObservedDiagnostic diagnosticWaitBaseline; private static long diagnosticWaitRequestNanos;
     private static boolean boardInteractionAttempted;
     private static String currentCausalMilestone;
     private static boolean entityInteractionAttempted;
@@ -94,7 +94,7 @@ public final class FrontierV3TestPilotClient {
             breaking = false; placementAttempted = false; visitSent = false; visitChunkReadyTick = -1L; visitIngress = null; visitHandshakeArmed = false; visitHandshakeBaseline = null;
             containerOpenAttempted = false; quickMoveAttempted = false;
             inspectSent = false; inspectBaseline = null; fastForwardSent = false; fastForwardBaseline = null;
-            diagnosticWaitBaseline = null; currentCausalMilestone = null;
+            diagnosticWaitBaseline = null; diagnosticWaitRequestNanos = 0L; currentCausalMilestone = null;
             boardInteractionAttempted = false;
             entityInteractionAttempted = false;
             attackedEntityRuntimeId = -1; entityAttackAttempts = 0; lastEntityAttackTick = Long.MIN_VALUE; lastAttackedEntityPosition = null;
@@ -649,7 +649,7 @@ public final class FrontierV3TestPilotClient {
         ObservedDiagnostic observed = diagnostics.get(new DiagnosticIdentity(view, id));
         boolean increased = !action.has("requireIncreaseAt") || diagnosticWaitBaseline != null && observed != null && increasedAtPath(diagnosticWaitBaseline.value(), observed.value(), action.get("requireIncreaseAt").getAsString());
         if (observed != null && observed.tick() >= actionStartedTick && matches(observed.value(), action.getAsJsonObject("expect")) && increased) { advance("wait_until_diagnostic"); return; }
-        if ((tick - actionStartedTick) % 20L == 0L) minecraft.player.connection.sendCommand("pale_mirror v3 inspect " + view + (id.isBlank() ? "" : " " + id));
+        if (System.nanoTime() - diagnosticWaitRequestNanos >= 1_000_000_000L) { minecraft.player.connection.sendCommand("pale_mirror v3 inspect " + view + (id.isBlank() ? "" : " " + id)); diagnosticWaitRequestNanos = System.nanoTime(); }
         long timeoutMs = action.get("timeoutMs").getAsLong();
         if ((tick - actionStartedTick) * 50L >= timeoutMs) throw new IllegalStateException("timed out waiting for diagnostic " + view + " " + id + " predicate=" + action.get("expect"));
     }
@@ -898,7 +898,7 @@ public final class FrontierV3TestPilotClient {
         index++; actionStartedTick = -1L; currentCausalMilestone = null; breaking = false; placementAttempted = false;
         visitSent = false; visitChunkReadyTick = -1L; visitIngress = null; visitHandshakeArmed = false; visitHandshakeBaseline = null; containerOpenAttempted = false; quickMoveAttempted = false; inspectSent = false; inspectBaseline = null;
         fastForwardSent = false; fastForwardBaseline = null;
-        diagnosticWaitBaseline = null;
+        diagnosticWaitBaseline = null; diagnosticWaitRequestNanos = 0L;
         boardInteractionAttempted = false; entityInteractionAttempted = false;
         attackedEntityRuntimeId = -1; entityAttackAttempts = 0; lastEntityAttackTick = Long.MIN_VALUE; lastAttackedEntityPosition = null;
         if (runningSetup && index >= setup.size()) {
@@ -980,7 +980,7 @@ public final class FrontierV3TestPilotClient {
         boardInteractionAttempted = false; entityInteractionAttempted = false;
         attackedEntityRuntimeId = -1; entityAttackAttempts = 0; lastEntityAttackTick = Long.MIN_VALUE;
         diagnostics.clear(); FrontierV3PilotSessionControl.reset(); fastForwardSent = false; fastForwardBaseline = null; currentCausalMilestone = null;
-        diagnosticWaitBaseline = null;
+        diagnosticWaitBaseline = null; diagnosticWaitRequestNanos = 0L;
     }
     private static void clearExpectedLossTransientState() {
         Minecraft minecraft = Minecraft.getInstance();
@@ -990,7 +990,7 @@ public final class FrontierV3TestPilotClient {
         placementAttempted = false; visitSent = false; visitChunkReadyTick = -1L; visitIngress = null; visitHandshakeArmed = false; visitHandshakeBaseline = null;
         containerOpenAttempted = false; quickMoveAttempted = false; inspectSent = false; inspectBaseline = null;
         fastForwardSent = false; fastForwardBaseline = null; boardInteractionAttempted = false;
-        diagnosticWaitBaseline = null;
+        diagnosticWaitBaseline = null; diagnosticWaitRequestNanos = 0L;
         entityInteractionAttempted = false; attackedEntityRuntimeId = -1; entityAttackAttempts = 0;
         lastEntityAttackTick = Long.MIN_VALUE; lastAttackedEntityPosition = null; diagnostics.clear(); inspectBaseline = null;
     }
