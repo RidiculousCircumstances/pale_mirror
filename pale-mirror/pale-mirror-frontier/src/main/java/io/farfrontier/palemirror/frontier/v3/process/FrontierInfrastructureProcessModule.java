@@ -55,6 +55,7 @@ final class FrontierInfrastructureProcessModule implements FrontierWorldProcessM
             case RouteMaintenanceClosed closed -> RouteMaintenanceStateSupport.reduceClosed(state, event.subject(), closed);
             case RoutePatrolStarted started -> RoutePatrolProcess.reduceStarted(state, event.subject(), started);
             case RoutePatrolAdvanced advanced -> RoutePatrolProcess.reduceAdvanced(state, event.subject(), advanced);
+            case RoutePatrolFormationAdvanced advanced -> reducePatrolFormationAdvanced(state, event.subject(), advanced);
             case RoutePatrolObstructionConfirmed confirmed -> RoutePatrolProcess.reduceObstruction(state, event.subject(), confirmed);
             case RoutePatrolFailed failed -> RoutePatrolProcess.reduceFailed(state, event.subject(), failed);
             case RoutePatrolBlocked blocked -> RoutePatrolProcess.reduceBlocked(state, event.subject(), blocked);
@@ -141,6 +142,11 @@ final class FrontierInfrastructureProcessModule implements FrontierWorldProcessM
         RoutePatrol patrol = FrontierRoutePatrolSceneSupport.require(state, new RoutePatrolSceneCause(observed.taskId()));
         if (!subject.equals(patrol.settlementId())) throw new IllegalArgumentException("route-patrol formation has a foreign owner");
         return FrontierRoutePatrolSceneSupport.advanceFormationObserved(state, patrol, observed.leaseId(), observed.bodies());
+    }
+    private static FrontierWorldState reducePatrolFormationAdvanced(FrontierWorldState state, SubjectId subject, RoutePatrolFormationAdvanced advanced) {
+        RoutePatrol patrol = state.strategicPlans().routePatrols().get(advanced.taskId());
+        if (patrol == null || !subject.equals(patrol.settlementId()) || patrol.status() != RoutePatrolStatus.EN_ROUTE) throw new IllegalArgumentException("route-patrol formation advance has foreign owner");
+        return state.withStrategicPlans(state.strategicPlans().advancePatrolFormation(advanced.taskId()));
     }
 
     private static CommandPlan planEngineeringAssemblyAdvance(FrontierWorldState state, FrontierCommand command,

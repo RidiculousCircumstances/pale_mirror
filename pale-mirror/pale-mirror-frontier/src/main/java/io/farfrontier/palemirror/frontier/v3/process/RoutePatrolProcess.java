@@ -68,6 +68,14 @@ public final class RoutePatrolProcess {
                 events.add(new ProposedEvent(current.settlementId(), new ScheduleEffect.Created(reconsideration)));
                 return List.copyOf(events);
             }
+            if (current.status() == RoutePatrolStatus.EN_ROUTE) {
+                RoutePatrol next = current.advanceFormation();
+                // COLD owns the same retained formation edge; no actor/body coordinate is selected here.
+                events.add(new ProposedEvent(current.settlementId(), new RoutePatrolFormationAdvanced(current.taskId())));
+                current = next;
+                if (current.status() == RoutePatrolStatus.ROUTE_CLEAR) { events.add(transition(task, StrategicTaskStatus.COMPLETED)); return List.copyOf(events); }
+                break;
+            }
             List<SubjectId> advances = current.safeAdvances();
             if (advances.isEmpty()) {
                 events.add(new ProposedEvent(current.settlementId(), new RoutePatrolBlocked(current.taskId())));
