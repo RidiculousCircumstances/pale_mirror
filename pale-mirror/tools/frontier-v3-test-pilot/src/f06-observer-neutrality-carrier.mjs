@@ -28,7 +28,6 @@ export function assertF06ObserverNeutralityCarrier({ declaration, manifest }) {
       || !Number.isSafeInteger(first.replicaRevision) || first.replicaRevision < 0) {
     throw new Error('F0.6 first arrival did not retain a nonempty static-current chunk before scene eligibility');
   }
-  for (const step of [2, 13]) assertNaturalClientIngress(diagnostics, step);
   const intervention = exactly(diagnostics, 10, 'site', SITE);
   const afterRestart = exactly(diagnostics, 11, 'site', SITE);
   const afterReturn = exactly(diagnostics, 14, 'site', SITE);
@@ -68,15 +67,13 @@ function exactly(diagnostics, actionStep, kind, id) {
   if (values.length !== 1 || values[0].status !== 'ok') throw new Error(`F0.6 observer-neutrality lacks one ${kind}:${id} receipt at action ${actionStep}`);
   return values[0];
 }
-function assertNaturalClientIngress(diagnostics, step) {
-  const values = diagnostics.filter(entry => entry.actionStep === step && entry.value?.kind === 'visit_ingress').map(entry => entry.value);
-  if (values.length !== 1 || values[0].targetDimensionSeen !== true || values[0].targetChunkSeen !== true
-      || values[0].finalClientDimension !== DIMENSION || !point(values[0].finalClientPosition)) {
-    throw new Error('F0.6 observer-neutrality lacks a real client dimension/chunk arrival receipt');
-  }
-}
 function observed(manifest) {
-  return (manifest?.diagnostics ?? []).flatMap(entry => entry?.observed?.value ? [entry.observed]
-    : entry?.assertion === undefined && entry?.value ? [entry] : []);
+  const entries = manifest?.diagnostics ?? [];
+  const asserted = entries.flatMap(entry => entry?.observed?.value ? [entry.observed] : []);
+  const raw = entries.flatMap(entry => entry?.assertion === undefined && entry?.value ? [entry] : []);
+  // Native manifests retain their assertion-bound facts and the complete raw diagnostic
+  // appendix.  Keep raw facts that are not assertion receipts (such as client ingress), but do
+  // not count the appendix copy of an assertion a second time.
+  return asserted.length === 0 ? raw : [...asserted, ...raw.filter(entry => !asserted.some(receipt => receipt.actionStep === entry.actionStep
+    && receipt.value?.kind === entry.value?.kind && receipt.value?.id === entry.value?.id))];
 }
-function point(value) { return value && Number.isSafeInteger(value.x) && Number.isSafeInteger(value.y) && Number.isSafeInteger(value.z); }

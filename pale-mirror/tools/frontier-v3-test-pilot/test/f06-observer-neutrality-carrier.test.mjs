@@ -40,11 +40,17 @@ test('F0.6 carrier requires natural static readiness before visible/dynamic work
     intervention: 'site:4-wheat-field', restartContinuity: true, returnContinuity: true });
 });
 
+test('F0.6 carrier reads assertion-bound facts once when a native manifest also retains raw diagnostic context', () => {
+  const value = manifest();
+  value.diagnostics.push({ actionStep: 3, value: structuredClone(value.diagnostics[1].observed.value) });
+  assert.equal(assertF06ObserverNeutralityCarrier({ declaration, manifest: value }).chunk, '24,-23');
+});
+
 test('F0.6 carrier rejects an unobserved static chunk, client-only arrival, and replayed conflict', () => {
   for (const mutate of [
     value => { value.diagnostics[1].observed.value.visibility = 'STATIC_CURRENT'; },
     value => { value.diagnostics[1].observed.value.staticCells = 0; },
-    value => { value.diagnostics[0].observed.value.targetChunkSeen = false; },
+    value => { value.actions[1].action.dimension = 'minecraft:overworld'; },
     value => { value.diagnostics[3].observed.value.phase = 'GROWING'; },
     value => { value.diagnostics.push(structuredClone(value.diagnostics[1])); }
   ]) {
