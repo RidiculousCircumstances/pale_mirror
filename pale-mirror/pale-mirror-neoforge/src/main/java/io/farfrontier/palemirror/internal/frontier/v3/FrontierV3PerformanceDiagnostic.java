@@ -56,9 +56,9 @@ final class FrontierV3PerformanceDiagnostic {
                 .append("\",\"fastForwardFailure\":").append(fastForwardFailure == null ? "null" : "\"" + quote(fastForwardFailure) + "\"")
                 .append(",\"fastForwardTargetOutcome\":").append(outcome == null ? "null" : outcome(outcome))
                 .append(",\"stages\":[");
-        appendStages(value, metrics.stages()); value.append("],\"queues\":["); appendQueues(value, metrics.queues());
+        appendStages(value, metrics.stages()); value.append("],\"queues\":["); appendQueues(value, metrics.queues()); value.append(']');
         if (state != null) value.append(",\"frontier\":").append(frontier(state, checkpoint));
-        return FrontierV3DiagnosticJson.bounded("performance", "", checkpoint, value.append("]}").toString());
+        return FrontierV3DiagnosticJson.bounded("performance", "", checkpoint, value.append('}').toString());
     }
 
     private static String frontier(FrontierWorldState state, CheckpointImage checkpoint) {
@@ -68,6 +68,7 @@ final class FrontierV3PerformanceDiagnostic {
         Set<io.farfrontier.palemirror.frontier.v3.api.SubjectId> bindings = new HashSet<>();
         state.sceneLeases().values().stream().filter(lease -> lease.status() == SceneLeaseStatus.PREPARED || lease.status() == SceneLeaseStatus.HOT
                 || lease.status() == SceneLeaseStatus.DRAINING).forEach(lease -> lease.members().forEach(member -> bindings.add(member.actorId())));
+        long sceneActorBindings = bindings.size();
         long hotAmbient = state.ambientLeases().values().stream().filter(lease -> lease.status()
                 == io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus.HOT).peek(lease -> bindings.add(lease.actorId())).count();
         long activeAssaults = state.strategicPlans().settlementAssaults().values().stream().filter(assault -> assault.status()
@@ -81,7 +82,7 @@ final class FrontierV3PerformanceDiagnostic {
         return "{\"settlements\":" + state.bootstrap().settlements().size() + ",\"seedNests\":" + state.bootstrap().hive().seedNests().size()
                 + ",\"settlementDecisionAuthorities\":" + settlementAuthorities + ",\"hivemindDecisionAuthorities\":" + hivemindAuthorities
                 + ",\"activeSceneLeases\":" + activeScenes
-                + ",\"hotSceneLeases\":" + hotScenes + ",\"hotAmbientLeases\":" + hotAmbient + ",\"managedActorBindings\":" + bindings.size()
+                + ",\"hotSceneLeases\":" + hotScenes + ",\"sceneActorBindings\":" + sceneActorBindings + ",\"hotAmbientLeases\":" + hotAmbient + ",\"managedActorBindings\":" + bindings.size()
                 + ",\"activeAssaults\":" + activeAssaults + ",\"activeRouteEngagements\":" + activeEngagements
                 + ",\"physicalIntents\":" + state.physicalIntents().size() + ",\"physicalObservations\":" + state.physicalObservations().size()
                 + ",\"deferredAftermath\":" + state.deferredAftermath().entries().size() + ",\"recoveryCurrent\":" + state.fencedRecovery().current().size()

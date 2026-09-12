@@ -918,48 +918,34 @@ final class FrontierDevelopmentScenarios {
     }
 
     record HiveGrowthFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules) {
-        HiveGrowthFixture {
-            schedules = List.copyOf(schedules);
-        }
+        HiveGrowthFixture { schedules = List.copyOf(schedules); }
     }
 
     record HiveNutrientTransferFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules, SubjectId transferId) {
-        HiveNutrientTransferFixture {
-            schedules = List.copyOf(schedules);
-        }
+        HiveNutrientTransferFixture { schedules = List.copyOf(schedules); }
     }
 
     record RouteSceneReturnFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules) {
-        RouteSceneReturnFixture {
-            schedules = List.copyOf(schedules);
-        }
+        RouteSceneReturnFixture { schedules = List.copyOf(schedules); }
     }
 
     record RoutePatrolFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules,
                               SubjectId taskId, RoutePatrol patrol) {
-        RoutePatrolFixture {
-            schedules = List.copyOf(schedules);
-        }
+        RoutePatrolFixture { schedules = List.copyOf(schedules); }
     }
 
     record RouteMaintenanceFairnessFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules,
                                            SubjectId coldSourceMaintenanceId, SubjectId loadedRepairMaintenanceId) {
-        RouteMaintenanceFairnessFixture {
-            schedules = List.copyOf(schedules);
-        }
+        RouteMaintenanceFairnessFixture { schedules = List.copyOf(schedules); }
     }
 
     record AmbientScoutPatrolFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules,
                                      SubjectId scoutId, BlockPosition priorPosition, BlockPosition nextGoalPosition) {
-        AmbientScoutPatrolFixture {
-            schedules = List.copyOf(schedules);
-        }
+        AmbientScoutPatrolFixture { schedules = List.copyOf(schedules); }
     }
 
     record SettlementAssaultFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules, SubjectId assaultId) {
-        SettlementAssaultFixture {
-            schedules = List.copyOf(schedules);
-        }
+        SettlementAssaultFixture { schedules = List.copyOf(schedules); }
     }
     record MultiFrontPressureFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules,
                                      SubjectId assaultId, SubjectId harvestJobId) {
@@ -967,48 +953,34 @@ final class FrontierDevelopmentScenarios {
     }
 
     record RouteConstructionFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules, SubjectId projectId) {
-        RouteConstructionFixture {
-            schedules = List.copyOf(schedules);
-        }
+        RouteConstructionFixture { schedules = List.copyOf(schedules); }
     }
 
     record OperationAssemblyFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules, SubjectId operationId) {
-        OperationAssemblyFixture {
-            schedules = List.copyOf(schedules);
-        }
+        OperationAssemblyFixture { schedules = List.copyOf(schedules); }
     }
 
     record HealthQuarantineFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules,
                                    SubjectId settlementId, InfectionCell contact) {
-        HealthQuarantineFixture {
-            schedules = List.copyOf(schedules);
-        }
+        HealthQuarantineFixture { schedules = List.copyOf(schedules); }
     }
 
     record MedicalTreatmentFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules) {
-        MedicalTreatmentFixture {
-            schedules = List.copyOf(schedules);
-        }
+        MedicalTreatmentFixture { schedules = List.copyOf(schedules); }
     }
 
     record ServiceDecontaminationFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules,
                                          SubjectId settlementId, InfectionCell cell, SubjectId reagentId) {
-        ServiceDecontaminationFixture {
-            schedules = List.copyOf(schedules);
-        }
+        ServiceDecontaminationFixture { schedules = List.copyOf(schedules); }
     }
 
     record ResidentTransitFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules,
                                   ResidentMigrationJourney journey) {
-        ResidentTransitFixture {
-            schedules = List.copyOf(schedules);
-        }
+        ResidentTransitFixture { schedules = List.copyOf(schedules); }
     }
 
     record MaterializedProductionFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules, SubjectId orderId) {
-        MaterializedProductionFixture {
-            schedules = List.copyOf(schedules);
-        }
+        MaterializedProductionFixture { schedules = List.copyOf(schedules); }
     }
 
     record HiveMobilizationFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules,

@@ -174,6 +174,7 @@ class FrontierV3DiagnosticJsonTest {
 
         assertTrue(value.contains("\"frontier\":{") && value.contains("\"settlements\":12") && value.contains("\"seedNests\":2")
                 && value.contains("\"settlementDecisionAuthorities\":12") && value.contains("\"hivemindDecisionAuthorities\":1")
+                && value.contains("\"queues\":[],\"frontier\":{") && value.contains("\"sceneActorBindings\":0")
                 && value.contains("\"managedActorBindings\":0")
                 && value.contains("\"checkpointBytes\":3"), "the pressure cut is a bounded canonical count, not a level census");
     }

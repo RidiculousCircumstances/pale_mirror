@@ -14,11 +14,11 @@
   "actions": [
     { "type": "wait_until_diagnostic", "view": "scene", "id": "assault:development-settlement-assault", "expect": { "status": "ok", "sceneKind": "SETTLEMENT_ASSAULT", "leaseStatus": "HOT", "strikeStatus": "CONFIRMED" }, "timeoutMs": 90000 },
     { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-1-wheat-field-1", "expect": { "status": "ok", "claims": { "lease": { "status": "HOT" } }, "result": { "sitePhase": "HARVESTING", "intentStatus": "RUNNING" } }, "timeoutMs": 90000 },
-    { "type": "wait_until_diagnostic", "view": "performance", "id": "", "expect": { "status": "ok", "frontier": { "hotSceneLeases": 2, "managedActorBindings": 29 } }, "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "performance", "id": "", "expect": { "status": "ok", "frontier": { "hotSceneLeases": 2, "sceneActorBindings": 29, "managedActorBindings": 42 } }, "timeoutMs": 30000 },
     { "type": "wait", "ms": 120000 }
   ],
   "assertions": [
-    { "after": 3, "view": "performance", "id": "", "expect": { "status": "ok", "frontier": { "settlements": 12, "seedNests": 2, "settlementDecisionAuthorities": 12, "hivemindDecisionAuthorities": 1, "activeSceneLeases": 2, "hotSceneLeases": 2, "managedActorBindings": 29 } } }
+    { "after": 3, "view": "performance", "id": "", "expect": { "status": "ok", "frontier": { "settlements": 12, "seedNests": 2, "settlementDecisionAuthorities": 12, "hivemindDecisionAuthorities": 1, "activeSceneLeases": 2, "hotSceneLeases": 2, "sceneActorBindings": 29, "managedActorBindings": 42 } } }
   ],
   "frames": [
     { "after": 4, "name": "scale-multi-front-hot" }

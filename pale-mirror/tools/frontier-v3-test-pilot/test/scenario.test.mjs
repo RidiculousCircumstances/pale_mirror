@@ -416,7 +416,7 @@ test('scale pressure captures its exact HOT union before the passive JFR interva
   assert.equal(pressure.actions[0].view, 'scene');
   assert.equal(pressure.actions[1].view, 'process');
   assert.deepEqual(pressure.actions[2], { type: 'wait_until_diagnostic', view: 'performance', id: '', expect: {
-    status: 'ok', frontier: { hotSceneLeases: 2, managedActorBindings: 29 }
+    status: 'ok', frontier: { hotSceneLeases: 2, sceneActorBindings: 29, managedActorBindings: 42 }
   }, timeoutMs: 30000 });
   assert.deepEqual(pressure.actions[3], { type: 'wait', ms: 120000 });
 });
