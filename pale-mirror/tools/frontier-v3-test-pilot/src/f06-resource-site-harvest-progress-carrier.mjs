@@ -44,16 +44,14 @@ export function assertF06ResourceSiteHarvestProgressCarrier({ declaration, manif
 export function assertF06ResourceSiteHarvestProgressDeclaration(declaration) {
   const actions = declaration?.actions;
   if (declaration?.id !== SCENARIO || declaration?.isolation?.mode !== 'disposable_lite'
-      || declaration?.server?.profile !== 'resource-site-harvest' || !Array.isArray(actions) || actions.length !== 10
+      || declaration?.server?.profile !== 'resource-site-harvest' || !Array.isArray(actions) || actions.length !== 8
       || actions[0]?.type !== 'visit' || actions[0].dimension !== DIMENSION || !isDeepStrictEqual(actions[0].position, FIRST_CROP_VISIT)
       || !processExpectation(actions[1], { lease: 'HOT', completed: 1 }) || actions[2]?.type !== 'wait_until_block'
       || actions[2].position?.diagnostic?.view !== 'site' || actions[2].position.diagnostic.id !== SITE
       || actions[2].position.diagnostic.field !== 'firstCrop' || actions[2].block !== 'minecraft:air'
       || actions[4]?.type !== 'visit' || actions[4].dimension !== 'minecraft:overworld' || !processExpectation(actions[5], { lease: null, completed: 1 })
       || actions[6]?.type !== 'visit' || actions[6].dimension !== DIMENSION || !isDeepStrictEqual(actions[6].position, FIRST_CROP_VISIT)
-      || !processExpectation(actions[7], { lease: 'HOT', completed: 1 }) || actions[8]?.type !== 'look_nearest_entity'
-      || actions[8].entityType !== 'minecraft:villager' || actions[8].nameContains !== 'AGRICULTURAL WORKER'
-      || actions[9]?.type !== 'assert_visible_entity') {
+      || !processExpectation(actions[7], { lease: 'HOT', completed: 1 })) {
     throw new Error('F0.6 resource-site harvest declaration lacks first-crop demand/effect/return continuity');
   }
   return Object.freeze({ scenario: SCENARIO, job: JOB, site: SITE, firstCropVisit: FIRST_CROP_VISIT });

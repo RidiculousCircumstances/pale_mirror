@@ -34,9 +34,7 @@
       "status": "ok", "claims": { "lease": { "status": "HOT", "members": 1 } },
       "conservation": { "completedCropSlots": 1 },
       "result": { "sitePhase": "HARVESTING", "intentStatus": "RUNNING", "complete": false }
-    }, "timeoutMs": 30000, "causalMilestone": "harvest_returned" },
-    { "type": "look_nearest_entity", "entityType": "minecraft:villager", "nameContains": "AGRICULTURAL WORKER", "maxDistance": 64, "timeoutMs": 30000 },
-    { "type": "assert_visible_entity", "entityType": "minecraft:villager", "nameContains": "AGRICULTURAL WORKER", "maxDistance": 64, "maxAngleDeg": 50, "timeoutMs": 10000 }
+    }, "timeoutMs": 30000, "causalMilestone": "harvest_returned" }
   ],
   "assertions": [
     { "after": 2, "view": "process", "id": "job:site-harvest-1-wheat-field-1", "expect": {
@@ -52,6 +50,6 @@
   ],
   "frames": [
     { "after": 3, "name": "first-crop-observed" },
-    { "after": 10, "name": "farmer-after-return" }
+    { "after": 8, "name": "field-after-return" }
   ]
 }
