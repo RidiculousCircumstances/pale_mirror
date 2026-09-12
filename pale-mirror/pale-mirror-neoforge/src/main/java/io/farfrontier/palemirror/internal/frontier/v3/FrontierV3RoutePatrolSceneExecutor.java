@@ -137,9 +137,12 @@ final class FrontierV3RoutePatrolSceneExecutor {
             submit(runtime, "route-patrol-obstruction", lease.id().value(), new RoutePatrolObstructionConfirmed(retained.taskId(), obstruction.orElseThrow()));
             return;
         }
-        List<SubjectId> safe = retained.safeAdvances();
-        if (safe.isEmpty()) { block(level, runtime, lease, retained); return; }
-        RoutePatrol formation = retained.advanceFormation();
+        RoutePatrol formation;
+        try {
+            formation = retained.advanceFormation();
+        } catch (IllegalArgumentException invalidFormation) {
+            block(level, runtime, lease, retained); return;
+        }
         Map<SubjectId, BodyPosition> formationBodies = FrontierRoutePatrolSceneSupport.bodies(formation);
         boolean arrived = true;
         for (SceneMember candidate : lease.members()) {
@@ -155,22 +158,6 @@ final class FrontierV3RoutePatrolSceneExecutor {
                 FrontierV3ControlledMobMotion.moveToward(level, candidateBody, point(targetBody.supportingSurface()));
             }
         }
-        SubjectId actorId = safe.getFirst();
-        SceneMember member = lease.members().stream().filter(value -> value.actorId().equals(actorId)).findFirst().orElseThrow();
-        Entity entity = level.getEntity(member.entityId());
-        if (!(entity instanceof Mob body) || !body.isAlive() || !FrontierV3SceneExecutor.recognizes(runtime, body)) { conflict(level, runtime, lease, "member-unavailable"); return; }
-        BodyPosition current = lease.memberPosition(actorId);
-        RoutePatrol next = retained.advance(actorId); BodyPosition target = FrontierRoutePatrolSceneSupport.bodies(next).get(actorId);
-        if (!at(body, current.supportingSurface())) {
-            if (at(body, target.supportingSurface())) observeFormation(level, runtime, lease, retained,
-                    FrontierRoutePatrolSceneSupport.bodies(retained.advanceFormation()));
-            else if (!reacquire(level, body, current.supportingSurface())) conflict(level, runtime, lease, "cursor-body-mismatch");
-            return;
-        }
-        if (at(body, target.supportingSurface())) { observeFormation(level, runtime, lease, retained,
-                FrontierRoutePatrolSceneSupport.bodies(retained.advanceFormation())); return; }
-        if (!clearNextBody(level, body, target.supportingSurface())) { block(level, runtime, lease, retained); return; }
-        FrontierV3ControlledMobMotion.moveToward(level, body, point(target.supportingSurface()));
     }
 
     private static void observeFormation(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease,
@@ -187,10 +174,6 @@ final class FrontierV3RoutePatrolSceneExecutor {
     private static Vec3 point(SurfaceAnchor surface) { return FrontierV3SurfaceObservation.point(surface); }
     private static boolean clearNextBody(ServerLevel level, Mob body, SurfaceAnchor surface) {
         return level.noCollision(body, body.getBoundingBox().move(point(surface).subtract(body.position())));
-    }
-    private static boolean reacquire(ServerLevel level, Mob body, SurfaceAnchor surface) {
-        if (!FrontierV3SurfaceObservation.mayReacquire(body, surface) || !clearNextBody(level, body, surface)) return false;
-        FrontierV3ControlledMobMotion.moveToward(level, body, point(surface)); return true;
     }
     private static void drain(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease) {
         submit(runtime, "route-patrol-draining", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));

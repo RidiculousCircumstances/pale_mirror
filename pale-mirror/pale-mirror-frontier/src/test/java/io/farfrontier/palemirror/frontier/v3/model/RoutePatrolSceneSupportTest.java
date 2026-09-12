@@ -27,10 +27,10 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Pure M2 boundary: one retained patrol edge, no generic guard or actor-location rewrite. */
+/** Pure M2 boundary: one retained full-roster patrol edge, no generic guard or actor-location rewrite. */
 class RoutePatrolSceneSupportTest {
     @Test
-    void observedArrivalAdvancesOnlyOneRetainedMemberAndLeaseFormation() {
+    void observedFormationArrivalAdvancesTheWholeRetainedRosterAndLeaseFormation() {
         FrontierWorldState state = patrolState(new WorldId("frontier:route-patrol-scene"));
         FrontierRoutePatrolSceneSupport.Candidate candidate = FrontierRoutePatrolSceneSupport.candidates(state).stream().findFirst().orElseThrow();
         SceneLeaseId leaseId = new SceneLeaseId("lease:route-patrol-test");
@@ -42,11 +42,10 @@ class RoutePatrolSceneSupportTest {
                 candidate.memberBodies(), Set.of(), Optional.empty());
         state = state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         RoutePatrol before = state.strategicPlans().routePatrols().get(candidate.taskId());
-        SubjectId actor = before.safeAdvances().getFirst();
-        RoutePatrol expected = before.advance(actor);
-        BodyPosition target = FrontierRoutePatrolSceneSupport.bodies(expected).get(actor);
+        RoutePatrol expected = before.advanceFormation();
+        var targets = FrontierRoutePatrolSceneSupport.bodies(expected);
 
-        FrontierWorldState advanced = FrontierRoutePatrolSceneSupport.advanceObserved(state, before, leaseId, actor, target);
+        FrontierWorldState advanced = FrontierRoutePatrolSceneSupport.advanceFormationObserved(state, before, leaseId, targets);
 
         assertEquals(expected, advanced.strategicPlans().routePatrols().get(candidate.taskId()));
         assertEquals(FrontierRoutePatrolSceneSupport.bodies(expected), advanced.sceneLeases().get(leaseId).memberPositions());
@@ -67,11 +66,10 @@ class RoutePatrolSceneSupportTest {
                 candidate.memberBodies(), Set.of(), Optional.empty());
         state = state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         RoutePatrol patrol = state.strategicPlans().routePatrols().get(candidate.taskId());
-        SubjectId actor = patrol.safeAdvances().getFirst();
-        BodyPosition current = FrontierRoutePatrolSceneSupport.bodies(patrol).get(actor);
 
         FrontierWorldState hot = state;
-        assertThrows(IllegalArgumentException.class, () -> FrontierRoutePatrolSceneSupport.advanceObserved(hot, patrol, leaseId, actor, current));
+        assertThrows(IllegalArgumentException.class, () -> FrontierRoutePatrolSceneSupport.advanceFormationObserved(hot, patrol, leaseId,
+                FrontierRoutePatrolSceneSupport.bodies(patrol)));
         assertEquals(patrol, state.strategicPlans().routePatrols().get(candidate.taskId()));
         assertEquals(candidate.memberBodies(), state.sceneLeases().get(leaseId).memberPositions());
     }
@@ -89,18 +87,17 @@ class RoutePatrolSceneSupportTest {
                 candidate.memberBodies(), Set.of(), Optional.empty());
         state = state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         RoutePatrol patrol = state.strategicPlans().routePatrols().get(candidate.taskId());
-        SubjectId actor = patrol.safeAdvances().getFirst();
-        BodyPosition next = FrontierRoutePatrolSceneSupport.bodies(patrol.advance(actor)).get(actor);
+        var next = FrontierRoutePatrolSceneSupport.bodies(patrol.advanceFormation());
         SubjectId owner = patrol.settlementId();
         FrontierWorldState reconsidered = state.withStrategicPlans(state.strategicPlans().reconsider(owner,
                 state.strategicPlans().requireDecisionAuthority(owner).commitmentIds(), List.of()));
 
         assertTrue(FrontierRoutePatrolSceneSupport.candidates(reconsidered).isEmpty());
         assertThrows(IllegalArgumentException.class,
-                () -> FrontierRoutePatrolSceneSupport.advanceObserved(reconsidered, patrol, leaseId, actor, next));
+                () -> FrontierRoutePatrolSceneSupport.advanceFormationObserved(reconsidered, patrol, leaseId, next));
         assertThrows(IllegalArgumentException.class,
-                () -> FrontierRoutePatrolSceneSupport.releasedBody(reconsidered, reconsidered.sceneLeases().get(leaseId), actor,
-                        candidate.memberBodies().get(actor)));
+                () -> FrontierRoutePatrolSceneSupport.releasedBody(reconsidered, reconsidered.sceneLeases().get(leaseId), patrol.memberIds().getFirst(),
+                        candidate.memberBodies().get(patrol.memberIds().getFirst())));
     }
 
     @Test

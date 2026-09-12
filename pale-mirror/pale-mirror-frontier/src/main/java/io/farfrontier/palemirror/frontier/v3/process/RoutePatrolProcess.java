@@ -68,26 +68,13 @@ public final class RoutePatrolProcess {
                 events.add(new ProposedEvent(current.settlementId(), new ScheduleEffect.Created(reconsideration)));
                 return List.copyOf(events);
             }
-            if (current.status() == RoutePatrolStatus.EN_ROUTE) {
+            if (current.active()) {
                 RoutePatrol next = current.advanceFormation();
                 // COLD owns the same retained formation edge; no actor/body coordinate is selected here.
                 events.add(new ProposedEvent(current.settlementId(), new RoutePatrolFormationAdvanced(current.taskId())));
                 current = next;
                 if (current.status() == RoutePatrolStatus.ROUTE_CLEAR) { events.add(transition(task, StrategicTaskStatus.COMPLETED)); return List.copyOf(events); }
                 break;
-            }
-            List<SubjectId> advances = current.safeAdvances();
-            if (advances.isEmpty()) {
-                events.add(new ProposedEvent(current.settlementId(), new RoutePatrolBlocked(current.taskId())));
-                events.add(transition(task, StrategicTaskStatus.BLOCKED));
-                return List.copyOf(events);
-            }
-            SubjectId actor = advances.getFirst();
-            current = current.advance(actor);
-            events.add(new ProposedEvent(current.settlementId(), new RoutePatrolAdvanced(current.taskId(), actor)));
-            if (current.status() == RoutePatrolStatus.ROUTE_CLEAR) {
-                events.add(transition(task, StrategicTaskStatus.COMPLETED));
-                return List.copyOf(events);
             }
         }
         events.add(schedule(progress(current, Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().routePatrolStepInterval()))));
@@ -112,20 +99,23 @@ public final class RoutePatrolProcess {
         return state.withStrategicPlans(state.strategicPlans().startPatrol(patrol));
     }
 
-    /** Shared deterministic reducer boundary for the engine and test-only read-only fixture assembly. */
-    public static FrontierWorldState reduceAdvanced(FrontierWorldState state, SubjectId subject, RoutePatrolAdvanced advanced) {
+    /** COLD counterpart of one observed HOT formation edge: update every named body atomically. */
+    public static FrontierWorldState reduceFormationAdvanced(FrontierWorldState state, SubjectId subject, RoutePatrolFormationAdvanced advanced) {
         RoutePatrol patrol = state.strategicPlans().routePatrols().get(advanced.taskId());
-        if (patrol == null || !subject.equals(patrol.settlementId())) throw new IllegalArgumentException("route patrol advancement has a foreign owner");
-        requireCurrentPlan(state, patrol);
-        if (!patrol.safeAdvances().contains(advanced.actorId())) throw new IllegalArgumentException("route patrol advance does not name a safe retained member");
-        RoutePatrol next = patrol.advance(advanced.actorId());
-        BodyPosition body = next.status() == RoutePatrolStatus.ASSEMBLING ? next.assembly().bodies().get(advanced.actorId())
-                : next.travel().bodies().get(advanced.actorId());
-        if (!state.actorLocations().get(advanced.actorId()).body().equals(patrol.status() == RoutePatrolStatus.ASSEMBLING
-                ? patrol.assembly().bodies().get(advanced.actorId()) : patrol.travel().bodies().get(advanced.actorId()))) {
-            throw new IllegalArgumentException("route patrol member body diverged before retained advance");
+        if (patrol == null || !subject.equals(patrol.settlementId()) || !patrol.active()) {
+            throw new IllegalArgumentException("route-patrol formation advance has foreign owner");
         }
-        return state.withStrategicPlans(state.strategicPlans().advancePatrol(advanced.taskId(), advanced.actorId())).withActorBody(advanced.actorId(), body);
+        RoutePatrol next = patrol.advanceFormation();
+        java.util.Map<SubjectId, ActorLocation> locations = new java.util.LinkedHashMap<>(state.actorLocations());
+        for (var entry : FrontierRoutePatrolSceneSupport.bodies(patrol).entrySet()) {
+            ActorLocation current = locations.get(entry.getKey());
+            if (current == null || !current.body().equals(entry.getValue())) {
+                throw new IllegalArgumentException("route-patrol formation advance has a stale resident body");
+            }
+            locations.put(entry.getKey(), current.withBody(FrontierRoutePatrolSceneSupport.bodies(next).get(entry.getKey())));
+        }
+        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(locations)
+                .strategicPlans(state.strategicPlans().advancePatrolFormation(advanced.taskId())));
     }
 
     static FrontierWorldState reduceObstruction(FrontierWorldState state, SubjectId subject, RoutePatrolObstructionConfirmed confirmed) {

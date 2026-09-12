@@ -73,22 +73,6 @@ public final class FrontierRoutePatrolSceneSupport {
         return lease;
     }
 
-    /** Atomically commits exactly the retained next physical arrival, never a world-derived sidestep. */
-    public static FrontierWorldState advanceObserved(FrontierWorldState state, RoutePatrol current, SceneLeaseId leaseId,
-                                                     SubjectId actorId, BodyPosition observedBody) {
-        requireCurrentPlan(state, current);
-        SceneLease lease = requireHotLease(state, current, leaseId);
-        if (!current.safeAdvances().contains(actorId)) throw new IllegalArgumentException("route-patrol observation is not a safe retained advance");
-        RoutePatrol next = current.advance(actorId);
-        Map<SubjectId, BodyPosition> expected = bodies(next);
-        if (!observedBody.equals(expected.get(actorId))) throw new IllegalArgumentException("route-patrol observation did not reach its retained next body");
-        Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases());
-        leases.put(leaseId, lease.withMemberPositions(expected));
-        return state.withChanges(FrontierWorldStateUpdate.begin()
-                .strategicPlans(state.strategicPlans().advancePatrol(current.taskId(), actorId))
-                .sceneLeases(leases));
-    }
-
     public static FrontierWorldState advanceFormationObserved(FrontierWorldState state, RoutePatrol current, SceneLeaseId leaseId,
                                                               Map<SubjectId, BodyPosition> observedBodies) {
         requireCurrentPlan(state, current); SceneLease lease = requireHotLease(state, current, leaseId);

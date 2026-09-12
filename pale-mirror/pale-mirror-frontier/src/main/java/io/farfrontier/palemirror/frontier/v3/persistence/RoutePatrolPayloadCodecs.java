@@ -30,13 +30,6 @@ final class RoutePatrolPayloadCodecs {
         @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> writePatrol(output, ((RoutePatrolStarted) payload).patrol())); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new RoutePatrolStarted(readPatrol(input))); }
     }; }
-    static PayloadCodec advanced() { return new PayloadCodec() {
-        @Override public String type() { return "frontier.route_patrol_advanced"; }
-        @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
-            RoutePatrolAdvanced advanced = (RoutePatrolAdvanced) payload; subject(output, advanced.taskId()); subject(output, advanced.actorId());
-        }); }
-        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new RoutePatrolAdvanced(subject(input), subject(input))); }
-    }; }
     static PayloadCodec obstruction() { return new PayloadCodec() {
         @Override public String type() { return "frontier.route_patrol_obstruction_confirmed"; }
         @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
@@ -67,17 +60,6 @@ final class RoutePatrolPayloadCodecs {
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes,
                 input -> new RoutePatrolSceneLeaseHandoff(readLease(input), readMembers(input))); }
-    }; }
-    static PayloadCodec traversalObserved() { return new PayloadCodec() {
-        @Override public String type() { return "frontier.route_patrol_traversal_observed"; }
-        @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
-            RoutePatrolTraversalObserved observed = (RoutePatrolTraversalObserved) payload;
-            subject(output, observed.taskId()); FrontierWorldPayloadCodecs.writeString(output, observed.leaseId().value()); subject(output, observed.actorId());
-            output.writeInt(observed.observedBody().x()); output.writeInt(observed.observedBody().y()); output.writeInt(observed.observedBody().z());
-        }); }
-        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input ->
-                new RoutePatrolTraversalObserved(subject(input), new SceneLeaseId(FrontierWorldPayloadCodecs.readString(input)), subject(input),
-                        new BodyPosition(input.readInt(), input.readInt(), input.readInt()))); }
     }; }
     static PayloadCodec formationObserved() { return new PayloadCodec() {
         @Override public String type() { return "frontier.route_patrol_formation_observed"; }

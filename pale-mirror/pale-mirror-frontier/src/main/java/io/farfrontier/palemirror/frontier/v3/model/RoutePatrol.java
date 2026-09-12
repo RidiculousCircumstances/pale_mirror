@@ -163,7 +163,13 @@ public record RoutePatrol(SubjectId taskId, SubjectId settlementId, RouteUnitMan
     }
     /** Advances the exact retained column by one shared edge; callers cannot choose a guard. */
     public RoutePatrol advanceFormation() {
-        if (status != RoutePatrolStatus.EN_ROUTE) throw new IllegalArgumentException("only an en-route patrol may advance its formation");
+        if (status == RoutePatrolStatus.ASSEMBLING) {
+            PatrolAssembly nextAssembly = assembly.advanceFormation();
+            TacticalPlan nextPlan = nextAssembly.complete() ? tacticalPlan.withPhase(TacticalPlanPhase.TRAVEL) : tacticalPlan;
+            return new RoutePatrol(taskId, settlementId, unit, inspectionRoute, nextAssembly, travel, nextPlan,
+                    nextAssembly.complete() ? RoutePatrolStatus.EN_ROUTE : RoutePatrolStatus.ASSEMBLING, Optional.empty());
+        }
+        if (status != RoutePatrolStatus.EN_ROUTE) throw new IllegalArgumentException("only an active patrol may advance its formation");
         PatrolTravel nextTravel = travel.advanceFormation();
         TacticalPlan nextPlan = nextTravel.complete() ? tacticalPlan.withPhase(TacticalPlanPhase.COMPLETE) : tacticalPlan;
         return new RoutePatrol(taskId, settlementId, unit, inspectionRoute, assembly, nextTravel, nextPlan,

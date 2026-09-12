@@ -61,6 +61,22 @@ public record PatrolAssembly(Map<SubjectId, Member> members) {
         Map<SubjectId, Member> next = new LinkedHashMap<>(members); next.put(actor, next.get(actor).advanceOne());
         return new PatrolAssembly(next);
     }
+    /**
+     * Advances the retained ingress column as one operation boundary.  A
+     * resident already at its formation cell stays there while every other
+     * resident advances its own immutable pedestrian edge.  The resulting
+     * bodies must remain distinct: no caller can turn an ingress step into a
+     * leader-only teleport.
+     */
+    public PatrolAssembly advanceFormation() {
+        if (complete()) throw new IllegalArgumentException("completed patrol assembly cannot advance");
+        Map<SubjectId, Member> next = new LinkedHashMap<>();
+        members.forEach((actor, member) -> next.put(actor, member.arrived() ? member : member.advanceOne()));
+        if (next.values().stream().map(Member::currentBody).distinct().count() != next.size()) {
+            throw new IllegalArgumentException("patrol assembly formation edge overlaps a retained body");
+        }
+        return new PatrolAssembly(next);
+    }
     public PatrolAssembly advanceCold() {
         PatrolAssembly current = this;
         for (int count = 0; count < MAX_COLD_ADVANCES && !current.complete(); count++) {

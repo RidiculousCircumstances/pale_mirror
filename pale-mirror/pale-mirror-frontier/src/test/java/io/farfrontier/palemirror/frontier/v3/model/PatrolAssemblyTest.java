@@ -41,6 +41,21 @@ class PatrolAssemblyTest {
         assertThrows(IllegalArgumentException.class, () -> blockedAssembly.advanceOne(LEADER));
     }
 
+    @Test
+    void formationIngressAdvancesEveryOutstandingResidentWithoutSelectingALeader() {
+        PatrolAssembly initial = new PatrolAssembly(Map.of(
+                LEADER, new PatrolAssembly.Member(corridor("formation-leader", -2, -1, 0), 0),
+                SCOUT, new PatrolAssembly.Member(corridor("formation-scout", 2, 3, 4), 0)));
+
+        PatrolAssembly next = initial.advanceFormation();
+
+        assertEquals(new BodyPosition(-1, 65, 0), next.bodies().get(LEADER));
+        assertEquals(new BodyPosition(3, 65, 0), next.bodies().get(SCOUT));
+        assertThrows(IllegalArgumentException.class, () -> new PatrolAssembly(Map.of(
+                LEADER, new PatrolAssembly.Member(corridor("overlap-leader", -1, 0), 0),
+                SCOUT, new PatrolAssembly.Member(corridor("overlap-scout", 1, 0), 0))).advanceFormation());
+    }
+
     private static TraversalTopology corridor(String name, int... xs) {
         return TraversalTopology.corridor(new TraversalTopologyId("topology:patrol-assembly-test:" + name), 0L, new SubjectId("task:assembly"),
                 TraversalKind.PEDESTRIAN, Set.of(TraversalCapability.PEDESTRIAN),

@@ -103,10 +103,10 @@ final class FrontierDevelopmentScenarios {
             if (current.status() == RoutePatrolStatus.EN_ROUTE) {
                 return new RoutePatrolFixture(state, new SimInstant(1_000L), List.of(), taskId, current);
             }
-            if (current.status() != RoutePatrolStatus.ASSEMBLING || current.safeAdvances().isEmpty()) {
+            if (current.status() != RoutePatrolStatus.ASSEMBLING) {
                 throw new IllegalStateException("route-patrol fixture ingress cannot reach its retained formation");
             }
-            state = RoutePatrolProcess.reduceAdvanced(state, settlement.id(), new RoutePatrolAdvanced(taskId, current.safeAdvances().getFirst()));
+            state = RoutePatrolProcess.reduceFormationAdvanced(state, settlement.id(), new RoutePatrolFormationAdvanced(taskId));
         }
         throw new IllegalStateException("route-patrol fixture ingress did not reach its declared bounded formation");
     }
