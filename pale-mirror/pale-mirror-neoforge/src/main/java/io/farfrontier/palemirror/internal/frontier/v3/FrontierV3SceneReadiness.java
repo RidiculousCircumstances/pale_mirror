@@ -56,7 +56,12 @@ final class FrontierV3SceneReadiness {
             BodyPosition canonical = lease.memberPosition(member.actorId());
             BlockPos candidate = new BlockPos(canonical.x(), canonical.y() - 1, canonical.z());
             if (!level.hasChunkAt(candidate)) return "UNLOADED";
-            if (FrontierV3StandingPosition.aboveExactFloor(level, candidate) == null) return "AWAITING_EXACT_FLOOR";
+            if (FrontierV3SceneBehaviorRegistry.standingPositionProvider(lease).resolve(level, candidate) == null) {
+                // Harvest has one intentionally different pass-through crop station. Keep a
+                // real fence/full-block obstruction intelligible instead of reporting the
+                // generic-floor predicate or silently leaving a PREPARED field as HARVESTING.
+                return FrontierSceneBehaviors.isResourceSiteHarvest(lease) ? "HARVEST_STATION_OBSTRUCTED" : "AWAITING_EXACT_FLOOR";
+            }
         }
         return allCurrent ? "CURRENT" : "READY";
     }

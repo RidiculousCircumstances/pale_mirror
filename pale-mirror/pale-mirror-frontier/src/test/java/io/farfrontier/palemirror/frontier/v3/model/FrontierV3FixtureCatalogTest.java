@@ -15,6 +15,7 @@ import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.process.HiveMobilizationProcess;
 import io.farfrontier.palemirror.frontier.v3.process.HiveSettlementAssaultProcess;
+import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -69,10 +70,26 @@ class FrontierV3FixtureCatalogTest {
                 "revision=" + engine.canonicalState().revision().value() + " schedules=" + engine.checkpoint().schedules());
         assertEquals(provision.requiredRations(), provision.fulfilledRations());
     }
+
+    @Test
+    void harvestFixtureRetainsTheOrdinaryFirstCropBoundaryWithoutInjectingHotWork() {
+        var configuration = FrontierV3FixtureCatalog.resourceSiteHarvestConfiguration(new WorldId("frontier:harvest-first-crop-fixture"), 41L);
+        FrontierWorldState state = configuration.initialState();
+        ResourceSiteHarvestJob job = (ResourceSiteHarvestJob) state.resourceSites().site(new SubjectId("site:1-wheat-field"))
+                .activeWork().orElseThrow();
+        assertTrue(job.atCurrentCropStation() && job.progress().completedCropSlots() == 0 && !job.progress().hasPendingCrop(),
+                "the fixture must stop at the actual farmer's first retained crop station, not pre-consume a field cell");
+        assertEquals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.PREPARED,
+                state.physicalIntents().get(job.intentId()).status());
+        assertTrue(state.sceneLeases().isEmpty(), "natural demand must still be the only source of a HOT harvest lease");
+        assertEquals(1L, configuration.initialSchedules().stream().filter(action -> action.subject().equals(job.id())
+                && action.kind().equals(ResourceSiteHarvestProcess.COLD_PROGRESS_KIND)).count());
+    }
+
     @Test
     void everyDeclaredFixtureProfileHasExactlyOneLoadedProviderAndRequiredEvidenceContract() {
         List<FrontierV3FixtureCatalog.Profile> profiles = FrontierV3FixtureCatalog.profiles();
-        assertEquals(31, profiles.size());
+        assertEquals(32, profiles.size());
         assertEquals(profiles.size(), profiles.stream().map(FrontierV3FixtureCatalog.Profile::id).distinct().count());
         for (int index = 0; index < profiles.size(); index++) {
             FrontierV3FixtureCatalog.Profile profile = profiles.get(index);

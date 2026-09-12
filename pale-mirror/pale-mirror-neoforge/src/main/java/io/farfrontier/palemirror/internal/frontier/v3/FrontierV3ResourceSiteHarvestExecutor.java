@@ -56,9 +56,9 @@ final class FrontierV3ResourceSiteHarvestExecutor {
     private FrontierV3ResourceSiteHarvestExecutor() { }
 
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
-        // F0.V is traversal-only.  This executor owns the durable-before-effect transition and
-        // must therefore stay inert until the process profile admits irreversible crop/output
-        // work; loaded demand may still acquire the separate retained traversal scene.
+        // The registered HOT scene owns the durable-before-effect transition and every crop
+        // checkpoint. This receipt owner only observes the completed field after that scene has
+        // released, so a naturally loaded field can never become an observer-free shortcut.
         if (!effectExecutionAdmitted()) return;
         FrontierWorldState state = runtime.decodedState().orElse(null); if (state == null) return;
         // Never let an unloaded alphabetically first field starve a later naturally loaded one.
@@ -120,22 +120,11 @@ final class FrontierV3ResourceSiteHarvestExecutor {
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, PhysicalIntent intent) {
         Target target = target(state, intent); if (target == null) { unknown(runtime, intent.id(), "missing-canonical-target"); return; }
         // The output is an atomic depot receipt, but it is not eligible until the same retained
-        // worker cursor has observed every physical crop cell.  Do not turn a prepared intent
-        // into a substitute for field work.
-        if (!target.job().progress().complete()) {
-            // This durable transition is the single cross-boundary readiness fact: the exact
-            // mature field and receiving depot were observed in naturally loaded chunks.  It
-            // lets the pure scene-admission model reserve its named farmer without guessing
-            // loaded-world state, while still occurring before the first crop effect.
-            if (intent.status() == PhysicalIntentStatus.PREPARED) {
-                Readiness readiness = readiness(level, state, intent.id()).orElse(null);
-                if (readiness != null && readiness.precondition() == Precondition.READY
-                        && readiness.fieldMatchesMatureStage() && readiness.outputSlotEmpty()) {
-                    transition(runtime, intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty(), "field-ready");
-                }
-            }
-            return;
-        }
+        // worker cursor has observed every physical crop cell.  This owner never changes a
+        // prepared field into RUNNING: the registered HOT field scene does that immediately
+        // before its first observed crop, preventing a naturally loaded field from becoming a
+        // whole-field, observer-free shortcut.
+        if (!target.job().progress().complete()) return;
         // The same progress authority closes its HOT worker scene before the field lifecycle
         // consumes the active job into GROWING.  A receipt one server turn earlier makes a
         // still-DRAINING lease point at a vanished job, so defer rather than relying on tick
@@ -154,12 +143,9 @@ final class FrontierV3ResourceSiteHarvestExecutor {
             else { fail(runtime, ledger, target, "completion-postcondition-conflict"); }
             return;
         }
-        Precondition precondition = precondition(level, target.site(), ledger.claim(target.site().id()), chest, target.output());
-        if (precondition == Precondition.WAITING_FOR_FIELD_PROJECTION) return;
-        if (precondition != Precondition.READY) { fail(runtime, ledger, target, "field-or-depot-precondition"); return; }
-        if (!transition(runtime, intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty(), "running")) return;
-        if (!apply(level, ledger, target.site(), chest, target.output())) { fail(runtime, ledger, target, "partial-harvest"); return; }
-        confirm(runtime, intent, target);
+        // A completed cursor with a PREPARED intent is not an invitation to reconstruct a
+        // physical execution.  It is a stale or foreign tuple and must remain inert until the
+        // owning scene/recovery policy classifies it.
     }
 
     /**

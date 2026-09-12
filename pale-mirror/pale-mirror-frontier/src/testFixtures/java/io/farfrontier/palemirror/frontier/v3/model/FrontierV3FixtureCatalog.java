@@ -66,6 +66,7 @@ public final class FrontierV3FixtureCatalog {
             Map.entry("serviceDecontamination", FrontierV3FixtureCatalog::serviceDecontaminationConfiguration),
             Map.entry("residentTransit", FrontierV3FixtureCatalog::residentTransitConfiguration),
             Map.entry("productionWork", FrontierV3FixtureCatalog::productionWorkConfiguration),
+            Map.entry("resourceSiteHarvest", FrontierV3FixtureCatalog::resourceSiteHarvestConfiguration),
             Map.entry("productionInputTheft", FrontierV3FixtureCatalog::productionInputTheftConfiguration),
             Map.entry("productionObstructionLiveness", FrontierV3FixtureCatalog::productionObstructionLivenessConfiguration),
             Map.entry("productionWorkerDeath", FrontierV3FixtureCatalog::productionWorkerDeathConfiguration),
@@ -239,6 +240,16 @@ public final class FrontierV3FixtureCatalog {
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> productionWorkConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.MaterializedProductionFixture fixture = FrontierDevelopmentScenarios.materializedProductionWorkFixture(worldId, seed);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
+    }
+
+    /**
+     * A mature field at its first retained crop station. The fixture establishes only ordinary
+     * canonical preparation and COLD traversal; a real player visit must still admit the exact
+     * farmer scene and perform every visible crop effect.
+     */
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> resourceSiteHarvestConfiguration(WorldId worldId, long seed) {
+        FrontierResourceSiteHarvestFixture.Fixture fixture = FrontierResourceSiteHarvestFixture.create(worldId, seed);
         return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
     }
 

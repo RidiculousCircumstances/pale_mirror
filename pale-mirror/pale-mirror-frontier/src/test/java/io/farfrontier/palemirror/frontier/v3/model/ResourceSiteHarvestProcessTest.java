@@ -37,16 +37,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResourceSiteHarvestProcessTest {
     @Test
-    void f0vReferenceRejectsIrreversibleCropAdmissionUntilF0v2OwnsTheCounterpart() {
-        assertFalse(ResourceSiteHarvestProcess.irreversibleCropEffectsAdmitted(),
-                "the F0.V/F0.1 reference must not let HOT observation complete a crop before COLD has an owned counterpart");
+    void cropExecutionRequiresItsExactHotFieldSceneRatherThanAStandaloneReceiptOwner() {
+        assertTrue(ResourceSiteHarvestProcess.irreversibleCropEffectsAdmitted(),
+                "the current physical-effect owner must admit observed HOT crop work");
         HotHarvest hot = hotHarvestAfterColdSteps(0);
         CommandId commandId = new CommandId("command:site-harvest-f0v2-gate");
         FrontierCommand command = new FrontierCommand(1, commandId, hot.state().bootstrap().worldId(), new Revision(1L),
                 new SimInstant(22_302L), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId),
                 new ResourceSiteHarvestProgressed(hot.job().id(), 1));
         assertTrue(FrontierWorldProcessCatalog.planCommand("resource-sites", hot.state(), command) instanceof CommandPlan.Rejected,
-                "a forged HOT crop observation must fail before event/WAL admission while the F0.2 counterpart is unavailable");
+                "a forged crop observation must fail before event/WAL admission without its exact HOT field scene");
     }
 
     @Test
@@ -101,7 +101,7 @@ class ResourceSiteHarvestProcessTest {
     }
 
     @Test
-    void exactMatureFieldReservesOneNamedWheatStackAndDefersItsReceiptUntilF0v2() {
+    void exactMatureFieldReservesOneNamedWheatStackUntilItsHotSceneReachesRunning() {
         FrontierWorldState ready = ready(initial()); SubjectId site = new SubjectId("site:1-wheat-field");
         FrontierWorldState tasked = harvestTask(ready, site, 22_000L); StrategicTask task = onlyHarvestTask(tasked);
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planned = ResourceSiteHarvestProcess.plan(tasked,
@@ -134,7 +134,7 @@ class ResourceSiteHarvestProcessTest {
         ResourceSiteHarvestObservation receipt = receipt(prepared.intent(), started.job(), output);
         PhysicalIntentTransition confirmed = new PhysicalIntentTransition(prepared.intent().id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
         assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestProcess.planTransition(completedTraversal, prepared.intent(), confirmed, 22_200L),
-                "F0.1 must reject even a complete observed crop receipt until F0.2 owns the irreversible consequence");
+                "a complete crop receipt cannot skip the durable RUNNING boundary");
         assertFalse(harvesting.inventory().items().containsKey(output.id()));
         assertEquals(PhysicalIntentStatus.PREPARED, harvesting.physicalIntents().get(prepared.intent().id()).status());
     }

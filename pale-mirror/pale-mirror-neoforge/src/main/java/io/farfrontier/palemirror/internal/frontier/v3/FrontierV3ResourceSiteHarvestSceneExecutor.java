@@ -20,6 +20,7 @@ import io.farfrontier.palemirror.frontier.v3.model.SceneMember;
 import io.farfrontier.palemirror.frontier.v3.model.SceneMemberPosition;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientActorLease;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
@@ -193,11 +194,22 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         if (!job.atCurrentCropStation() || !atTraversalSurface(worker, job.traversal().linearCorridorSurfaces().get(job.traversalCursor()))) {
             conflict(level, runtime, lease, stationMismatchReason(worker, job)); return;
         }
-        // The F0.V/F0.1 reference is deliberately traversal-only in both modes.  Keep the
-        // retained crop-effect path below intact for the F0.2 ownership cut, but do not let a
-        // loaded observer turn it into canonical crop/output progress before COLD can carry the
-        // matching consequence and aftermath contract.
-        if (!ResourceSiteHarvestProcess.irreversibleCropEffectsAdmitted()) return;
+        var intent = state.physicalIntents().get(job.intentId());
+        if (intent == null || intent.status() == PhysicalIntentStatus.CONFIRMED
+                || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) {
+            conflict(level, runtime, lease, "field-work-intent-unavailable"); return;
+        }
+        // Persist the only irreversible boundary before the first crop is touched.  The
+        // command planner proves this same HOT lease still owns the exact job, so a loaded
+        // field cannot be consumed by the standalone receipt executor or by COLD.
+        if (intent.status() == PhysicalIntentStatus.PREPARED) {
+            submit(runtime, "resource-site-harvest-running", lease.id().value(),
+                    new io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition(job.intentId(), PhysicalIntentStatus.RUNNING, Optional.empty()));
+            return;
+        }
+        if (intent.status() != PhysicalIntentStatus.RUNNING) {
+            conflict(level, runtime, lease, "field-work-intent-state-" + intent.status().name().toLowerCase(java.util.Locale.ROOT)); return;
+        }
         if (job.progress().hasPendingCrop()) {
             if (!observePreparedCrop(level, state, job, crop)) {
                 conflict(level, runtime, lease, "pending-crop-postcondition"); return;

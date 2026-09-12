@@ -27,8 +27,8 @@ import java.util.OptionalInt;
  * COLD driver advances the same exact farmer and retained approach cursor until the next physical
  * crop station; its HOT driver performs only observed crop work. It produces neither crop nor
  * inventory until the naturally loaded executor observes the whole field reset and the exact
- * tagged stack in that reserved chest slot. F0.2 will give off-screen irreversible crop work its
- * semantic-consequence/deferred-aftermath boundary; F0.1 does not counterfeit that effect.</p>
+ * tagged stack in that reserved chest slot. Irreversible crop work belongs solely to a naturally
+ * demanded HOT scene; no COLD scheduler or standalone receipt owner can consume a field cell.</p>
  */
 public final class ResourceSiteHarvestProcess {
     public static final String COLD_PROGRESS_KIND = "frontier.resource_site.harvest.cold_progress";
@@ -36,13 +36,12 @@ public final class ResourceSiteHarvestProcess {
     private ResourceSiteHarvestProcess() { }
 
     /**
-     * F0.V and F0.1 establish only the shared retained traversal.  A crop transition changes
-     * both the physical field and the canonical output path, so accepting it while COLD has no
-     * matching consequence would make ordinary observation an accelerator.  F0.2 owns the
-     * physical-eligibility, confirmation and deferred-aftermath counterpart that can open this
-     * boundary; preserving the payload/reducer code here does not make it admissible early.
+     * Crop work is admitted only through the durable intent and its exact HOT harvest lease.
+     * The scene owns each observed cell; the separate receipt owner may only close the complete
+     * field into its named depot output.  This keeps observer presence from authoring a second
+     * cursor or a whole-field shortcut.
      */
-    public static boolean irreversibleCropEffectsAdmitted() { return false; }
+    public static boolean irreversibleCropEffectsAdmitted() { return true; }
 
     public static ScheduledAction start(StrategicTask task, long dueAt) {
         if (task.kind() != StrategicTaskKind.HARVEST_RESOURCE_SITE || task.resourceSiteTarget().isEmpty()) {
@@ -268,12 +267,11 @@ public final class ResourceSiteHarvestProcess {
         if (transition.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) {
             return List.of(new ProposedEvent(lifecycle.siteId(), transition), transition(task, StrategicTaskStatus.BLOCKED));
         }
-        if ((transition.status() == PhysicalIntentStatus.RUNNING || transition.status() == PhysicalIntentStatus.CONFIRMED)
-                && !irreversibleCropEffectsAdmitted()) {
-            // This is well-formed but unavailable F0.2 work, not canonical corruption.  It
-            // must return through the ordinary command-policy rejection path so the same
-            // ACTIVE engine can accept later independent F0.1 work.
-            throw new IllegalArgumentException("resource-site harvest physical execution is deferred to the F0.2 effect owner");
+        if (transition.status() == PhysicalIntentStatus.RUNNING && !hotLeaseOwnsCropWork(state, job)) {
+            throw new IllegalArgumentException("resource-site harvest execution requires its exact HOT field scene");
+        }
+        if (transition.status() == PhysicalIntentStatus.CONFIRMED && intent.status() != PhysicalIntentStatus.RUNNING) {
+            throw new IllegalArgumentException("resource-site harvest confirmation requires its durable running boundary");
         }
         if (transition.status() != PhysicalIntentStatus.CONFIRMED) return List.of(new ProposedEvent(lifecycle.siteId(), transition));
         if (!job.progress().complete()) throw new IllegalArgumentException("resource-site harvest output cannot complete before every crop is observed");
@@ -281,6 +279,12 @@ public final class ResourceSiteHarvestProcess {
         return List.of(new ProposedEvent(lifecycle.siteId(), transition), transition(task, StrategicTaskStatus.COMPLETED), new ProposedEvent(lifecycle.siteId(),
                 new ScheduleEffect.Created(ResourceSiteProcess.nextGrowth(next, Math.addExact(now,
                         state.bootstrap().ruleset().cadence().resourceGrowthStageInterval())))));
+    }
+
+    private static boolean hotLeaseOwnsCropWork(FrontierWorldState state, ResourceSiteHarvestJob job) {
+        return state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isResourceSiteHarvest)
+                .anyMatch(lease -> lease.status() == SceneLeaseStatus.HOT
+                        && FrontierSceneBehaviors.resourceSiteHarvest(lease).jobId().equals(job.id()));
     }
 
     public static void validateIntent(FrontierWorldState state, ResourceSiteLifecycle lifecycle, PhysicalIntent intent) {

@@ -19,7 +19,7 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
                         () -> new IllegalArgumentException("resource-site HOT admission has no engine schedule binding")));
                 return new CommandPlan.Accepted(java.util.List.of(new ProposedEvent(
                         FrontierResourceSiteHarvestSceneSupport.owner(state, FrontierSceneBehaviors.resourceSiteHarvest(prepared.lease())), prepared)));
-            } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+            } catch (IllegalArgumentException | IllegalStateException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
         if (command.payload() instanceof ResourceSiteHarvestSceneLeaseHandoff handoff) {
             try {
@@ -42,8 +42,9 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
                         .anyMatch(lease -> lease.status() == SceneLeaseStatus.HOT
                                 && FrontierSceneBehaviors.resourceSiteHarvest(lease).jobId().equals(job.id()));
                 if (!hot) return FrontierWorldCommandPlanner.rejected("resource-site harvest progress requires its HOT scene");
+                ResourceSiteHarvestProcess.reduceProgressed(state, job.siteId(), progressed);
                 return new CommandPlan.Accepted(java.util.List.of(new ProposedEvent(job.siteId(), progressed)));
-            } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+            } catch (IllegalArgumentException | IllegalStateException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
         if (command.payload() instanceof ResourceSiteHarvestCropPrepared prepared) {
             if (!ResourceSiteHarvestProcess.irreversibleCropEffectsAdmitted()) {
