@@ -29,6 +29,8 @@ test('F0.5 route recovery declaration passes the runner diagnostic grammar', asy
 test('F0.5 carrier rejects a replacement epoch or malformed route declaration', () => {
   const changed = validManifest(); changed.diagnostics[1].observed.value.epoch = 3;
   assert.throws(() => assertF05FencedRecoveryCarrier(changed), /replaced or weakened/);
+  const staleWaitCorrelation = validManifest(); staleWaitCorrelation.diagnostics[0].observed.actionStep = 9;
+  assert.throws(() => assertF05FencedRecoveryCarrier(staleWaitCorrelation), /exact current body fence/);
   const prematureReclaim = validManifest(); prematureReclaim.diagnostics[0].observed.value.nextAction = 'RECLAIM';
   assert.throws(() => assertF05FencedRecoveryCarrier(prematureReclaim), /exact current body fence/);
   const malformed = structuredClone(declaration); malformed.actions[7].id = 'recovery:body_resident_1-28';
@@ -41,6 +43,6 @@ function validManifest() {
   return { schema: 2, status: 'ok', scenarioId: declaration.id, scenarioSha256: sha, scenarioDeclarationSha256: sha, runId,
     recovery: { mode: 'graceful', splitAfterAction: 9, clientSession: { runId: outerAttempt, reusedJvm: true } },
     actions: declaration.actions.map((action, index) => ({ action, correlation: `scenario:${runId}:${index + 1}` })),
-    diagnostics: [{ observed: { actionStep: 9, value: value(2) } }, { observed: { actionStep: 11, value: value(2) } }] };
+    diagnostics: [{ observed: { actionStep: 8, value: value(2) } }, { observed: { actionStep: 11, value: value(2) } }] };
 }
 function digest(value) { return createHash('sha256').update(value).digest('hex'); }

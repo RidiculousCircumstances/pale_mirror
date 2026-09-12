@@ -10,7 +10,10 @@ export function assertF05FencedRecoveryCarrier(manifest) {
       || manifest.recovery?.splitAfterAction !== 9 || !Array.isArray(manifest.actions) || manifest.actions.length !== 12) {
     throw new Error('F0.5 fenced recovery manifest lacks one exact persistent lifecycle');
   }
-  const before = exactFence(manifest, 9); const after = exactFence(manifest, 11);
+  // Step 8 is the pre-restart recovery inspection. Step 9 waits on that exact
+  // fact before the graceful split; it intentionally does not emit a duplicate
+  // diagnostic with a new action correlation.
+  const before = exactFence(manifest, 8); const after = exactFence(manifest, 11);
   if (!sameFence(before, after)) throw new Error('F0.5 fenced recovery replaced or weakened the active body authority across restart');
   return Object.freeze({ operation: OPERATION, binding: BINDING, epoch: before.epoch, owner: before.owner, ownerRevision: before.ownerRevision });
 }

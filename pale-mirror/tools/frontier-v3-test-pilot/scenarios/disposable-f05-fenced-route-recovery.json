@@ -30,7 +30,7 @@
   "restart": { "mode": "graceful", "afterAction": 9,
     "resumeSetup": [ { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -360, "y": 65, "z": -340 }, "settleMs": 1000 } ] },
   "assertions": [
-    { "after": 9, "view": "recovery", "id": "recovery:body_resident_1-16", "expect": { "status": "ok", "asset": "BODY", "phase": "RUNNING", "nextAction": "INSPECT" } },
+    { "after": 8, "view": "recovery", "id": "recovery:body_resident_1-16", "expect": { "status": "ok", "asset": "BODY", "phase": "RUNNING", "nextAction": "INSPECT" } },
     { "after": 11, "view": "recovery", "id": "recovery:body_resident_1-16", "expect": { "status": "ok", "asset": "BODY", "phase": "RUNNING", "nextAction": "INSPECT" } }
   ]
 }
