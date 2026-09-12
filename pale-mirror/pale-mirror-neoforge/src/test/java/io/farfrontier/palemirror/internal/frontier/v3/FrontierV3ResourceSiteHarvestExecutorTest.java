@@ -13,8 +13,8 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrontierV3ResourceSiteHarvestExecutorTest {
     @Test
@@ -38,9 +38,9 @@ class FrontierV3ResourceSiteHarvestExecutorTest {
     }
 
     @Test
-    void traversalOnlyProfileNeverSchedulesAnEffectExecutorForPreparedHarvests() {
-        assertFalse(FrontierV3ResourceSiteHarvestExecutor.effectExecutionAdmitted(),
-                "loaded traversal demand must not arm the crop-effect executor before F0.2");
+    void currentProfileAdmitsCropEffectsOnlyThroughTheExactHotSceneOwner() {
+        assertTrue(FrontierV3ResourceSiteHarvestExecutor.effectExecutionAdmitted(),
+                "the current profile admits observed crop work through its exact HOT scene owner");
     }
 
     private static PhysicalIntent intent(String settlement) {

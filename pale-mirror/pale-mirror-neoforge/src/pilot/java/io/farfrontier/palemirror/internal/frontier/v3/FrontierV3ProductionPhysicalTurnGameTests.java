@@ -80,7 +80,10 @@ public final class FrontierV3ProductionPhysicalTurnGameTests {
         ServerLevel level = helper.getLevel();
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(level);
         try {
-            ChunkPos loaded = level.getChunkAt(helper.absolutePos(BlockPos.ZERO)).getPos();
+            // The GameTest template has already loaded this exact chunk.  Its coordinate is
+            // sufficient for the callback contract; asking ServerLevel for it here would turn
+            // a first-visibility test into a forbidden forced-chunk-load path.
+            ChunkPos loaded = new ChunkPos(helper.absolutePos(BlockPos.ZERO));
             FrontierV3GrayboxExecutor.observeNaturalChunkLoad(level, runtime, loaded);
             FrontierV3GrayboxExecutor.FirstVisibilitySnapshot queued = FrontierV3GrayboxExecutor.firstVisibility(runtime,
                     loaded.x + "," + loaded.z);
@@ -108,7 +111,7 @@ public final class FrontierV3ProductionPhysicalTurnGameTests {
         ServerLevel level = helper.getLevel();
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(level);
         try {
-            ChunkPos destination = new ChunkPos(loadedChunk(level, helper).x + 96, loadedChunk(level, helper).z + 96);
+            ChunkPos destination = new ChunkPos(loadedChunk(helper).x + 96, loadedChunk(helper).z + 96);
             helper.assertTrue(!level.hasChunk(destination.x, destination.z),
                     "the destination has no installed holder at the transfer event boundary");
             FrontierV3GrayboxExecutor.observePlayerIngress(runtime, destination);
@@ -135,7 +138,7 @@ public final class FrontierV3ProductionPhysicalTurnGameTests {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(level);
         try {
             var player = helper.makeMockServerPlayerInLevel();
-            ChunkPos destination = loadedChunk(level, helper);
+            ChunkPos destination = loadedChunk(helper);
             player.absMoveTo(destination.getMinBlockX() + 8.5D, 64.0D, destination.getMinBlockZ() + 8.5D,
                     player.getYRot(), player.getXRot());
             helper.assertValueEqual(FrontierV3GrayboxExecutor.firstVisibility(runtime, destination.x + "," + destination.z).status(),
@@ -151,8 +154,8 @@ public final class FrontierV3ProductionPhysicalTurnGameTests {
         helper.succeed();
     }
 
-    private static ChunkPos loadedChunk(ServerLevel level, GameTestHelper helper) {
-        return level.getChunkAt(helper.absolutePos(BlockPos.ZERO)).getPos();
+    private static ChunkPos loadedChunk(GameTestHelper helper) {
+        return new ChunkPos(helper.absolutePos(BlockPos.ZERO));
     }
 
     private static FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime(ServerLevel level) {
