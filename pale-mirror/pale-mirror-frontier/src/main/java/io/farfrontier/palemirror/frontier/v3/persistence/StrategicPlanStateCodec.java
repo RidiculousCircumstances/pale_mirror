@@ -41,6 +41,8 @@ public final class StrategicPlanStateCodec {
             PatrolStateCodec.writeTravel(output, patrol.travel()); TacticalPlanStateCodec.write(output, patrol.tacticalPlan());
             output.writeByte(patrol.status().wireTag()); output.writeBoolean(patrol.obstruction().isPresent());
             if (patrol.obstruction().isPresent()) writePosition(output, patrol.obstruction().orElseThrow());
+            output.writeBoolean(patrol.blockReason().isPresent());
+            if (patrol.blockReason().isPresent()) output.writeByte(patrol.blockReason().orElseThrow().ordinal());
         }
         writeCount(output, plans.routeEngagements().size());
         for (RouteEngagement engagement : plans.routeEngagements().values().stream().sorted(Comparator.comparing(RouteEngagement::id)).toList()) {
@@ -194,8 +196,9 @@ public final class StrategicPlanStateCodec {
             PatrolAssembly assembly = PatrolStateCodec.readAssembly(input); PatrolTravel travel = PatrolStateCodec.readTravel(input);
             TacticalPlan tacticalPlan = TacticalPlanStateCodec.read(input);
             int status = input.readUnsignedByte(); Optional<BlockPosition> obstruction = input.readBoolean() ? Optional.of(readPosition(input)) : Optional.empty();
+            Optional<RoutePatrolBlockReason> blockReason = input.readBoolean() ? Optional.of(readPatrolBlockReason(input)) : Optional.empty();
             if (status >= RoutePatrolStatus.values().length || patrols.put(task, new RoutePatrol(task, settlement, unit, inspection, assembly, travel,
-                    tacticalPlan, FrontierWireTags.require(RoutePatrolStatus.class, status), obstruction)) != null) {
+                    tacticalPlan, FrontierWireTags.require(RoutePatrolStatus.class, status), obstruction, blockReason)) != null) {
                 throw new IllegalArgumentException("invalid or duplicate route patrol");
             }
         }
@@ -379,6 +382,11 @@ public final class StrategicPlanStateCodec {
     }
     private static SettlementAssaultOutcome readAssaultOutcome(DataInputStream input) throws IOException {
         return FrontierWireTags.require(SettlementAssaultOutcome.class, input.readUnsignedByte());
+    }
+    private static RoutePatrolBlockReason readPatrolBlockReason(DataInputStream input) throws IOException {
+        int value = input.readUnsignedByte();
+        if (value >= RoutePatrolBlockReason.values().length) throw new IllegalArgumentException("unknown route patrol block reason");
+        return RoutePatrolBlockReason.values()[value];
     }
     private static void writePosition(DataOutputStream output, BlockPosition position) throws IOException { output.writeInt(position.x()); output.writeInt(position.y()); output.writeInt(position.z()); }
     private static BlockPosition readPosition(DataInputStream input) throws IOException { return new BlockPosition(input.readInt(), input.readInt(), input.readInt()); }

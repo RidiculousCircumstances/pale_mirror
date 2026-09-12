@@ -440,10 +440,10 @@ public final class StrategicPlanState {
                 hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine, settlementAssaults, decisionAuthorities, frontEffects);
     }
 
-    public StrategicPlanState blockPatrol(SubjectId taskId) {
+    public StrategicPlanState blockPatrol(SubjectId taskId, RoutePatrolBlockReason reason) {
         RoutePatrol current = routePatrols.get(taskId);
         if (current == null) throw new IllegalArgumentException("unknown route patrol");
-        Map<SubjectId, RoutePatrol> next = new LinkedHashMap<>(routePatrols); next.put(taskId, current.block());
+        Map<SubjectId, RoutePatrol> next = new LinkedHashMap<>(routePatrols); next.put(taskId, current.block(reason));
         return new StrategicPlanState(objectives, tasks, next, routeEngagements, infectionKnowledge, hiveOperationKnowledge,
                 hiveTerritoryKnowledge, hiveSettlementKnowledge, hiveDoctrine, settlementAssaults, decisionAuthorities, frontEffects);
     }

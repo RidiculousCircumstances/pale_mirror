@@ -141,7 +141,7 @@ final class FrontierV3RoutePatrolSceneExecutor {
         try {
             formation = retained.advanceFormation();
         } catch (IllegalArgumentException invalidFormation) {
-            block(level, runtime, lease, retained); return;
+            block(level, runtime, lease, retained, RoutePatrolBlockReason.NO_OPEN_RETAINED_EDGE); return;
         }
         Map<SubjectId, BodyPosition> formationBodies = FrontierRoutePatrolSceneSupport.bodies(formation);
         boolean arrived = true;
@@ -153,8 +153,11 @@ final class FrontierV3RoutePatrolSceneExecutor {
         if (arrived) { observeFormation(level, runtime, lease, retained, formationBodies); return; }
         for (SceneMember candidate : lease.members()) {
             Entity candidateEntity = level.getEntity(candidate.entityId()); BodyPosition targetBody = formationBodies.get(candidate.actorId());
-            if (candidateEntity instanceof Mob candidateBody && targetBody != null && !at(candidateBody, targetBody.supportingSurface())
-                    && clearNextBody(level, candidateBody, targetBody.supportingSurface())) {
+            if (!(candidateEntity instanceof Mob candidateBody) || targetBody == null) continue;
+            if (!at(candidateBody, targetBody.supportingSurface())) {
+                if (!clearNextBody(level, candidateBody, targetBody.supportingSurface())) {
+                    block(level, runtime, lease, retained, RoutePatrolBlockReason.OCCUPIED_NEXT_BODY); return;
+                }
                 FrontierV3ControlledMobMotion.moveToward(level, candidateBody, point(targetBody.supportingSurface()));
             }
         }
@@ -166,8 +169,9 @@ final class FrontierV3RoutePatrolSceneExecutor {
                 new RoutePatrolFormationObserved(patrol.taskId(), lease.id(), bodies));
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "route_patrol_formation", lease, result);
     }
-    private static void block(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease, RoutePatrol patrol) {
-        CommandResult result = submit(runtime, "route-patrol-blocked", lease.id().value(), new RoutePatrolBlocked(patrol.taskId()));
+    private static void block(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease, RoutePatrol patrol,
+                              RoutePatrolBlockReason reason) {
+        CommandResult result = submit(runtime, "route-patrol-blocked", lease.id().value(), new RoutePatrolBlocked(patrol.taskId(), reason));
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "route_patrol_blocked", lease, result);
     }
     private static boolean at(Mob body, SurfaceAnchor surface) { return FrontierV3SurfaceObservation.at(body, surface); }

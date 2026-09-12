@@ -62,6 +62,21 @@ class RoutePatrolProcessTest {
     }
 
     @Test
+    void typedBlockedPatrolRoundTripsWithoutConvertingItsReasonIntoRecoveryUnknown() {
+        var fixture = FrontierDevelopmentScenarios.routePatrolFixture(new WorldId("frontier:patrol-block-reason"), 713L);
+        FrontierWorldState state = fixture.state();
+        RoutePatrol patrol = state.strategicPlans().routePatrols().get(fixture.taskId());
+        FrontierWorldState blocked = state.withStrategicPlans(state.strategicPlans()
+                .blockPatrol(patrol.taskId(), RoutePatrolBlockReason.OCCUPIED_NEXT_BODY));
+
+        FrontierWorldState recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(blocked));
+
+        RoutePatrol restored = recovered.strategicPlans().routePatrols().get(patrol.taskId());
+        assertEquals(RoutePatrolStatus.BLOCKED, restored.status());
+        assertEquals(RoutePatrolBlockReason.OCCUPIED_NEXT_BODY, restored.blockReason().orElseThrow());
+    }
+
+    @Test
     void routeLossWakeupDoesNotCreateACompetingStrategicRetryWhileDeliveryOwnsTheLane() {
         WorldId world = new WorldId("frontier:route-loss-deferred-objective");
         var engine = FrontierEngines.create(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(world, 41L));

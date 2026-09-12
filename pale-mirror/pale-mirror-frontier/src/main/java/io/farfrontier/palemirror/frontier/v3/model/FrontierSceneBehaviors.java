@@ -751,7 +751,7 @@ public final class FrontierSceneBehaviors {
             // Death is the patrol's terminal evidence.  Keep task and patrol terminal states in
             // the same authoritative transaction; a later generic continuation would leave a
             // briefly active task with a dead member and permit a second planner to race it.
-            StrategicPlanState plans = state.strategicPlans().blockPatrol(patrol.taskId())
+            StrategicPlanState plans = state.strategicPlans().blockPatrol(patrol.taskId(), RoutePatrolBlockReason.MISSING_OWNED_BODY)
                     .transitionTask(patrol.taskId(), StrategicTaskStatus.BLOCKED);
             return new SceneDeathOutcome(state.humanPopulation(), state.resourceSites(), plans,
                     state.physicalIntents(), state.serviceWorks());

@@ -69,7 +69,14 @@ public final class RoutePatrolProcess {
                 return List.copyOf(events);
             }
             if (current.active()) {
-                RoutePatrol next = current.advanceFormation();
+                RoutePatrol next;
+                try {
+                    next = current.advanceFormation();
+                } catch (IllegalArgumentException unavailable) {
+                    events.add(new ProposedEvent(current.settlementId(), new RoutePatrolBlocked(current.taskId(), RoutePatrolBlockReason.NO_OPEN_RETAINED_EDGE)));
+                    events.add(transition(task, StrategicTaskStatus.BLOCKED));
+                    return List.copyOf(events);
+                }
                 // COLD owns the same retained formation edge; no actor/body coordinate is selected here.
                 events.add(new ProposedEvent(current.settlementId(), new RoutePatrolFormationAdvanced(current.taskId())));
                 current = next;
@@ -142,7 +149,7 @@ public final class RoutePatrolProcess {
         RoutePatrol patrol = state.strategicPlans().routePatrols().get(blocked.taskId());
         if (patrol == null || !subject.equals(patrol.settlementId()) || !patrol.active()) throw new IllegalArgumentException("route patrol block has a foreign owner");
         requireCurrentPlan(state, patrol);
-        return state.withStrategicPlans(state.strategicPlans().blockPatrol(blocked.taskId()));
+        return state.withStrategicPlans(state.strategicPlans().blockPatrol(blocked.taskId(), blocked.reason()));
     }
 
     static ScheduledAction progress(RoutePatrol patrol, long due) { return new ScheduledAction(new ScheduleId("schedule:route-patrol-progress-" + patrol.taskId().value().replace(':', '-')),

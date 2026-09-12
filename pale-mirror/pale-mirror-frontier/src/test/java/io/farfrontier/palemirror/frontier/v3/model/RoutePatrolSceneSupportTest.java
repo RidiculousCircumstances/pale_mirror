@@ -128,6 +128,8 @@ class RoutePatrolSceneSupportTest {
                 state.sceneLeases().get(leaseId).memberPosition(dead), "test-owned-body-loss"), 11L);
 
         assertEquals(RoutePatrolStatus.BLOCKED, result.strategicPlans().routePatrols().get(candidate.taskId()).status());
+        assertEquals(RoutePatrolBlockReason.MISSING_OWNED_BODY,
+                result.strategicPlans().routePatrols().get(candidate.taskId()).blockReason().orElseThrow());
         assertEquals(StrategicTaskStatus.BLOCKED, result.strategicPlans().tasks().get(candidate.taskId()).status());
         assertFalse(result.actorLocations().get(dead).condition().status() == ActorLifeStatus.ALIVE);
     }

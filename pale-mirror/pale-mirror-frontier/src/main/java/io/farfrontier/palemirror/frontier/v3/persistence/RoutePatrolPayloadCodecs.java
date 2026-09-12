@@ -44,8 +44,8 @@ final class RoutePatrolPayloadCodecs {
     }; }
     static PayloadCodec blocked() { return new PayloadCodec() {
         @Override public String type() { return "frontier.route_patrol_blocked"; }
-        @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> subject(output, ((RoutePatrolBlocked) payload).taskId())); }
-        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new RoutePatrolBlocked(subject(input))); }
+        @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> { RoutePatrolBlocked blocked = (RoutePatrolBlocked) payload; subject(output, blocked.taskId()); output.writeByte(blocked.reason().ordinal()); }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> { int reason = input.readUnsignedByte(); if (reason >= RoutePatrolBlockReason.values().length) throw new IllegalArgumentException("unknown route patrol block reason"); return new RoutePatrolBlocked(subject(input), RoutePatrolBlockReason.values()[reason]); }); }
     }; }
     static PayloadCodec prepared() { return new PayloadCodec() {
         @Override public String type() { return "frontier.route_patrol_scene_lease_prepared"; }
@@ -85,19 +85,27 @@ final class RoutePatrolPayloadCodecs {
         TacticalPlanStateCodec.write(output, patrol.tacticalPlan());
         output.writeByte(patrol.status().wireTag()); output.writeBoolean(patrol.obstruction().isPresent());
         if (patrol.obstruction().isPresent()) position(output, patrol.obstruction().orElseThrow());
+        output.writeBoolean(patrol.blockReason().isPresent());
+        if (patrol.blockReason().isPresent()) output.writeByte(patrol.blockReason().orElseThrow().ordinal());
     }
     private static RoutePatrol readPatrol(DataInputStream input) throws IOException {
         SubjectId task = subject(input), settlement = subject(input); RouteUnitManifest unit = RouteUnitManifestCodec.read(input);
         TraversalTopology inspection = TraversalTopologyStateCodec.read(input); PatrolAssembly assembly = PatrolStateCodec.readAssembly(input); PatrolTravel travel = PatrolStateCodec.readTravel(input);
         TacticalPlan tacticalPlan = TacticalPlanStateCodec.read(input);
         int status = input.readUnsignedByte(); Optional<BlockPosition> obstruction = input.readBoolean() ? Optional.of(position(input)) : Optional.empty();
+        Optional<RoutePatrolBlockReason> blockReason = input.readBoolean() ? Optional.of(blockReason(input)) : Optional.empty();
         if (status >= RoutePatrolStatus.values().length) throw new IllegalArgumentException("unknown route patrol status");
-        return new RoutePatrol(task, settlement, unit, inspection, assembly, travel, tacticalPlan, FrontierWireTags.require(RoutePatrolStatus.class, status), obstruction);
+        return new RoutePatrol(task, settlement, unit, inspection, assembly, travel, tacticalPlan, FrontierWireTags.require(RoutePatrolStatus.class, status), obstruction, blockReason);
     }
     private static void subject(DataOutputStream output, SubjectId id) throws IOException { FrontierWorldPayloadCodecs.writeSubject(output, id); }
     private static SubjectId subject(DataInputStream input) throws IOException { return FrontierWorldPayloadCodecs.readSubject(input).value(); }
     private static void position(DataOutputStream output, BlockPosition position) throws IOException { output.writeInt(position.x()); output.writeInt(position.y()); output.writeInt(position.z()); }
     private static BlockPosition position(DataInputStream input) throws IOException { return new BlockPosition(input.readInt(), input.readInt(), input.readInt()); }
+    private static RoutePatrolBlockReason blockReason(DataInputStream input) throws IOException {
+        int value = input.readUnsignedByte();
+        if (value >= RoutePatrolBlockReason.values().length) throw new IllegalArgumentException("unknown route patrol block reason");
+        return RoutePatrolBlockReason.values()[value];
+    }
 
     private static void writeLease(DataOutputStream output, SceneLease lease) throws IOException {
         if (!(lease.cause() instanceof RoutePatrolSceneCause cause)) throw new IllegalArgumentException("route-patrol WAL payload requires its typed cause");
