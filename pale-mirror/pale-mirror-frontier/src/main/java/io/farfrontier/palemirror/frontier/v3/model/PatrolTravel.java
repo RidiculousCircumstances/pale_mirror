@@ -96,6 +96,22 @@ public record PatrolTravel(SubjectId leaderId, TraversalTopology leaderRoute,
         return new PatrolTravel(leaderId, leaderRoute, next);
     }
 
+    /** One retained formation edge.  A patrol never promotes an arbitrary first safe guard
+     * into an independent route cursor: every non-arrived member must have one legal,
+     * distinct next pedestrian body before the column advances together. */
+    public PatrolTravel advanceFormation() {
+        if (complete()) throw new IllegalStateException("complete patrol formation has no next edge");
+        Set<BodyPosition> nextBodies = new LinkedHashSet<>();
+        Map<SubjectId, Member> next = new LinkedHashMap<>();
+        for (Map.Entry<SubjectId, Member> entry : members.entrySet()) {
+            Member member = entry.getValue();
+            Member advanced = member.arrived() ? member : member.advanceOne();
+            if (!nextBodies.add(advanced.currentBody())) throw new IllegalArgumentException("patrol formation edge overlaps");
+            next.put(entry.getKey(), advanced);
+        }
+        return new PatrolTravel(leaderId, leaderRoute, next);
+    }
+
     /**
      * Bounded deterministic COLD progression. Each inner transition is the
      * same retained one-edge transition as HOT; it stops rather than crossing

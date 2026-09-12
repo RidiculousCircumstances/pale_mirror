@@ -161,6 +161,14 @@ public record RoutePatrol(SubjectId taskId, SubjectId settlementId, RouteUnitMan
         }
         throw new IllegalArgumentException("only an active patrol may advance");
     }
+    /** Advances the exact retained column by one shared edge; callers cannot choose a guard. */
+    public RoutePatrol advanceFormation() {
+        if (status != RoutePatrolStatus.EN_ROUTE) throw new IllegalArgumentException("only an en-route patrol may advance its formation");
+        PatrolTravel nextTravel = travel.advanceFormation();
+        TacticalPlan nextPlan = nextTravel.complete() ? tacticalPlan.withPhase(TacticalPlanPhase.COMPLETE) : tacticalPlan;
+        return new RoutePatrol(taskId, settlementId, unit, inspectionRoute, assembly, nextTravel, nextPlan,
+                nextTravel.complete() ? RoutePatrolStatus.ROUTE_CLEAR : RoutePatrolStatus.EN_ROUTE, Optional.empty());
+    }
     public RoutePatrol confirm(BlockPosition position) {
         if (!active() || !FrontierRouteNetwork.containsOperationSurfaceCell(route(), Objects.requireNonNull(position, "patrol obstruction"))) {
             throw new IllegalArgumentException("patrol cannot confirm a foreign obstruction");

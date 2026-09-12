@@ -50,7 +50,9 @@ public final class RoutePatrolProcess {
         StrategicTask task = task(state, patrol.taskId(), StrategicTaskStatus.ACTIVE);
         RoutePatrol current = patrol;
         List<ProposedEvent> events = new ArrayList<>();
-        for (int advance = 0; advance < PatrolTravel.MAX_COLD_ADVANCES; advance++) {
+        // A scheduled COLD turn is one operation boundary, never a hidden batch of resident
+        // teleports.  HOT supplies the same edge through observed arrival.
+        for (int advance = 0; advance < 1; advance++) {
             if (current.memberIds().stream().noneMatch(member -> state.actorLocations().get(member).condition().status() == ActorLifeStatus.ALIVE)) {
                 events.add(new ProposedEvent(current.settlementId(), new RoutePatrolFailed(current.taskId())));
                 events.add(transition(task, StrategicTaskStatus.BLOCKED));
