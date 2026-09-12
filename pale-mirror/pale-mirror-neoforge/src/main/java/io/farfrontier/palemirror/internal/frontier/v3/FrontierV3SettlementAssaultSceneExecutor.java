@@ -250,7 +250,8 @@ final class FrontierV3SettlementAssaultSceneExecutor {
             conflict(level, runtime, lease, "hot-body-unavailable");
             return;
         }
-        for (Body actor : bodies) FrontierV3ControlledMobMotion.moveToward(level, actor.mob(), target(state, lease, actor, bodies));
+        for (Body actor : bodies) FrontierV3ControlledMobMotion.moveWithinWorldBounds(level, actor.mob(),
+                target(state, lease, actor, bodies), state.bootstrap().bounds());
         if (confirmedStrikeForThisLease(state, lease)) {
             // One HOT lease owns one exact COLD epoch.  Its durable receipt remains visible
             // across restart while ordinary demand loss decides when the completed lease drains;

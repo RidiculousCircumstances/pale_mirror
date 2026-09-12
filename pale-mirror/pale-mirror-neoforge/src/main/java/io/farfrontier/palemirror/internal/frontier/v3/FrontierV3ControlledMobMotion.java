@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.LocalNavigationEnvelope;
+import io.farfrontier.palemirror.frontier.v3.model.WorldBounds;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
@@ -50,7 +51,20 @@ final class FrontierV3ControlledMobMotion {
     private FrontierV3ControlledMobMotion() { }
 
     static void moveToward(ServerLevel level, Mob actor, Vec3 target) {
-        submit(level, actor, target, false, null, Double.MAX_VALUE);
+        submit(level, actor, target, false, null, null, Double.MAX_VALUE);
+    }
+
+    /**
+     * Retains the canonical frontier edge while a local physical scene executes a moving
+     * tactical target.  This is a spatial safety fence only: it neither changes that target nor
+     * selects an alternate route, scene position, or COLD continuation.
+     */
+    static void moveWithinWorldBounds(ServerLevel level, Mob actor, Vec3 target, WorldBounds bounds) {
+        if (!insideWorldBounds(actor.position(), bounds)) {
+            stop(actor);
+            return;
+        }
+        submit(level, actor, target, false, null, bounds, Double.MAX_VALUE);
     }
 
     /**
@@ -96,7 +110,7 @@ final class FrontierV3ControlledMobMotion {
             stop(actor);
             return;
         }
-        submit(level, actor, target, false, envelope, Double.MAX_VALUE);
+        submit(level, actor, target, false, envelope, null, Double.MAX_VALUE);
     }
 
     /**
@@ -105,10 +119,11 @@ final class FrontierV3ControlledMobMotion {
      * choose a route, change a cursor, or create a second canonical movement authority.
      */
     static void followContinuously(ServerLevel level, Mob actor, Vec3 target) {
-        submit(level, actor, target, true, null, Double.MAX_VALUE);
+        submit(level, actor, target, true, null, null, Double.MAX_VALUE);
     }
 
-    private static void submit(ServerLevel level, Mob actor, Vec3 target, boolean continuous, LocalNavigationEnvelope envelope, double maximumStep) {
+    private static void submit(ServerLevel level, Mob actor, Vec3 target, boolean continuous, LocalNavigationEnvelope envelope,
+                               WorldBounds bounds, double maximumStep) {
         actor.setNoAi(true);
         // NoAI suppresses Minecraft's goal selector, not physical gravity.  Reassert the latter
         // because a retained entity can carry an old mod/AI no-gravity flag across a HOT handoff.
@@ -137,7 +152,7 @@ final class FrontierV3ControlledMobMotion {
             // server tick because the canonical executor runs at post-tick. Using the current
             // canonical time also makes a GameTest's legitimate catch-up callbacks execute the
             // same retained one-tick actuator turns rather than stranding one future intent.
-            PENDING.put(actor, new MotionIntent(level.getGameTime(), target, continuous, envelope, maximumStep));
+            PENDING.put(actor, new MotionIntent(level.getGameTime(), target, continuous, envelope, bounds, maximumStep));
         }
     }
 
@@ -150,7 +165,7 @@ final class FrontierV3ControlledMobMotion {
         }
         if (level.getGameTime() < intent.applyAtGameTime()) return;
         PENDING.remove(actor);
-        apply(level, actor, intent.target(), intent.continuous(), intent.envelope(), intent.maximumStep());
+        apply(level, actor, intent.target(), intent.continuous(), intent.envelope(), intent.bounds(), intent.maximumStep());
     }
 
     static void stop(Mob actor) {
@@ -181,7 +196,8 @@ final class FrontierV3ControlledMobMotion {
         return samples == null ? List.of() : List.copyOf(samples);
     }
 
-    private static void apply(ServerLevel level, Mob actor, Vec3 target, boolean continuous, LocalNavigationEnvelope envelope, double maximumStep) {
+    private static void apply(ServerLevel level, Mob actor, Vec3 target, boolean continuous, LocalNavigationEnvelope envelope,
+                              WorldBounds bounds, double maximumStep) {
         Vec3 delta = target.subtract(actor.position());
         double horizontalDistance = Math.sqrt(delta.x * delta.x + delta.z * delta.z);
         if (!continuous && horizontalDistance <= ARRIVAL_DISTANCE && Math.abs(delta.y) <= ARRIVAL_DISTANCE) { actor.stopInPlace(); return; }
@@ -231,7 +247,8 @@ final class FrontierV3ControlledMobMotion {
             // still in the old X column while its collision box enters the next upper support.
             // The already-verified localAscent is that exact support; it is not a free-space
             // bypass or alternate destination.
-            if (envelope != null && !insideEnvelope(actor.position().add(step), envelope) && !localAscent) continue;
+            if ((envelope != null && !insideEnvelope(actor.position().add(step), envelope) && !localAscent)
+                    || bounds != null && !insideWorldBounds(actor.position().add(step), bounds)) continue;
             Vec3 before = actor.position();
             actor.move(MoverType.SELF, step);
             Vec3 moved = actor.position().subtract(before);
@@ -249,6 +266,7 @@ final class FrontierV3ControlledMobMotion {
                 // lateral candidate exists only for non-canonical continuous ambience.
                 Vec3 lifted = step.add(0.0D, THIN_SURFACE_STEP, 0.0D);
                 if ((envelope != null && !insideEnvelope(actor.position().add(lifted), envelope) && !localAscent)
+                        || bounds != null && !insideWorldBounds(actor.position().add(lifted), bounds)
                         || !level.noCollision(actor, actor.getBoundingBox().move(lifted))) continue;
                 before = actor.position(); actor.move(MoverType.SELF, lifted); moved = actor.position().subtract(before);
                 if (moved.x * moved.x + moved.z * moved.z <= 1.0E-8D) continue;
@@ -348,6 +366,11 @@ final class FrontierV3ControlledMobMotion {
                 && envelope.contains(new BlockPosition(nextX, lower.y(), nextZ));
     }
 
+    /** Package-visible exact horizontal conversion used by the assault release regression. */
+    static boolean insideWorldBounds(Vec3 feet, WorldBounds bounds) {
+        return bounds.contains(new BlockPosition((int) Math.floor(feet.x), 0, (int) Math.floor(feet.z)));
+    }
+
     private static boolean emptyCurrentUpperCell(ServerLevel level, Mob actor, BlockPosition support) {
         BlockPos upper = new BlockPos((int) Math.floor(actor.getX()), support.y(), (int) Math.floor(actor.getZ()));
         return level.getBlockState(upper).getCollisionShape(level, upper).isEmpty();
@@ -362,7 +385,8 @@ final class FrontierV3ControlledMobMotion {
         return new BlockPosition((int) Math.floor(feet.x), (int) Math.floor(feet.y) - 1, (int) Math.floor(feet.z));
     }
 
-    private record MotionIntent(long applyAtGameTime, Vec3 target, boolean continuous, LocalNavigationEnvelope envelope, double maximumStep) { }
+    private record MotionIntent(long applyAtGameTime, Vec3 target, boolean continuous, LocalNavigationEnvelope envelope,
+                                WorldBounds bounds, double maximumStep) { }
     private record RetainedEdgePacing(Vec3 current, Vec3 next, Vec3 target) { }
 
     private record Avoidance(Vec3 step, Vec3 target, int remainingTurns) { }
