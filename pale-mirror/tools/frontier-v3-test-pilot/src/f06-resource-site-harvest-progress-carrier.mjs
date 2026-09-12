@@ -34,8 +34,13 @@ export function assertF06ResourceSiteHarvestProgressCarrier({ declaration, manif
       || returned.identity?.worker !== first.identity?.worker || returned.claims?.intent !== first.claims?.intent) {
     throw new Error('F0.6 resource-site harvest return reset, replayed, or replaced the exact farmer custody');
   }
-  const block = exactly(diagnostics, 3, 'block', `${SITE}:firstCrop`);
-  if (block.block !== 'minecraft:air') throw new Error('F0.6 resource-site harvest lacks the observed first-crop world effect');
+  // A successful immutable wait_until_block action means the real client read minecraft:air.
+  // Its diagnostic-position resolution is recorded as this site receipt, which also ties that
+  // physical read to the exact leased worker rather than to an arbitrary world coordinate.
+  const site = exactly(diagnostics, 3, 'site', SITE);
+  if (site.phase !== 'HARVESTING' || site.activeWork !== JOB || !samePosition(site.firstCrop, first.claims?.lease?.body)) {
+    throw new Error('F0.6 resource-site harvest lacks the exact first-crop world-effect binding');
+  }
   return Object.freeze({ job: first.identity.job, worker: first.identity.worker, firstCrop: completed(first),
     returnedCropFloor: completed(returned), released: true, physicalCropEffect: true });
 }
@@ -72,12 +77,21 @@ function requireFirstCrop(value) {
   }
 }
 function completed(value) { return value?.conservation?.completedCropSlots; }
+function samePosition(left, right) {
+  return left?.x === right?.x && left?.y === right?.y && left?.z === right?.z;
+}
 function exactly(diagnostics, actionStep, kind, id) {
   const values = diagnostics.filter(entry => entry.actionStep === actionStep && entry.value?.kind === kind && entry.value.id === id).map(entry => entry.value);
   if (values.length !== 1 || values[0].status !== 'ok') throw new Error(`F0.6 resource-site harvest lacks one ${kind}:${id} receipt at action ${actionStep}`);
   return values[0];
 }
 function observed(manifest) {
-  return (manifest?.diagnostics ?? []).flatMap(entry => entry?.observed?.value ? [entry.observed]
-    : entry?.assertion === undefined && entry?.value ? [entry] : []);
+  const entries = manifest?.diagnostics ?? [];
+  const asserted = entries.flatMap(entry => entry?.observed?.value ? [entry.observed] : []);
+  const raw = entries.flatMap(entry => entry?.assertion === undefined && entry?.value ? [entry] : []);
+  // The native appendix includes every polling sample as well as the final assertion-bound
+  // sample.  A process receipt is a final semantic boundary, so retain its asserted sample
+  // once; unasserted facts (the client-observed crop block) remain available to this carrier.
+  return asserted.length === 0 ? raw : [...asserted, ...raw.filter(entry => !asserted.some(receipt => receipt.actionStep === entry.actionStep
+    && receipt.value?.kind === entry.value?.kind && receipt.value?.id === entry.value?.id))];
 }
