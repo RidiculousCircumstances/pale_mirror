@@ -16,7 +16,8 @@
     { "type": "split_move_from_container", "item": "minecraft:wheat", "sourceCount": 64, "movedCount": 32, "timeoutMs": 30000, "causalMilestone": "player_departure_before_canonical_observation" },
     { "type": "wait_until_diagnostic", "view": "resource", "id": "custody:container-1-depot", "expect": { "status": "ok", "quantity": 32, "custody": { "kind": "CONTAINER", "container": "container:1-depot" } }, "timeoutMs": 30000, "causalMilestone": "canonical_observation_before_player_save" },
     { "type": "inspect", "view": "resource", "id": "custody:container-1-depot", "causalMilestone": "canonical_recovered_source" },
-    { "type": "inspect", "view": "resource", "id": "custody:player-bf39347d-cb86-3221-b6b7-7b89a1dcb4cf", "causalMilestone": "canonical_recovered_player" }
+    { "type": "inspect", "view": "resource", "id": "custody:player-bf39347d-cb86-3221-b6b7-7b89a1dcb4cf", "causalMilestone": "canonical_recovered_player" },
+    { "type": "inspect", "view": "player_resource", "id": "custody:player-bf39347d-cb86-3221-b6b7-7b89a1dcb4cf", "causalMilestone": "authenticated_reconnected_player_slot" }
   ],
   "restart": {
     "mode": "abrupt",
@@ -35,7 +36,8 @@
   },
   "assertions": [
     { "after": 6, "view": "resource", "id": "custody:container-1-depot", "expect": { "status": "ok", "quantity": 32, "custody": { "kind": "CONTAINER", "container": "container:1-depot" } } },
-    { "after": 7, "view": "resource", "id": "custody:player-bf39347d-cb86-3221-b6b7-7b89a1dcb4cf", "expect": { "status": "ok", "quantity": 32, "custody": { "kind": "PLAYER", "player": "bf39347d-cb86-3221-b6b7-7b89a1dcb4cf" } } }
+    { "after": 7, "view": "resource", "id": "custody:player-bf39347d-cb86-3221-b6b7-7b89a1dcb4cf", "expect": { "status": "ok", "quantity": 32, "custody": { "kind": "PLAYER", "player": "bf39347d-cb86-3221-b6b7-7b89a1dcb4cf" } } },
+    { "after": 8, "view": "player_resource", "id": "custody:player-bf39347d-cb86-3221-b6b7-7b89a1dcb4cf", "expect": { "status": "ok", "player": "bf39347d-cb86-3221-b6b7-7b89a1dcb4cf", "slot": 9, "canonicalQuantity": 32, "binding": { "itemKind": "minecraft:wheat", "quantity": 32 }, "actual": { "itemKind": "minecraft:wheat", "count": 32 }, "matchesCanonical": true } }
   ],
   "frames": []
 }

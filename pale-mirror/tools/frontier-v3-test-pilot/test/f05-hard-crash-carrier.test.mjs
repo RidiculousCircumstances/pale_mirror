@@ -18,6 +18,9 @@ test('F0.5 hard-crash carrier binds every semantic window and both player-save a
   assert.equal(result.windows.length, 5);
   assert.equal(result.physicalFirst.playerSaveCount, 32);
   assert.equal(result.canonicalFirst.playerSaveCount, 0);
+  assert.deepEqual(result.canonicalFirst.authenticatedPlayer, {
+    itemKind: 'minecraft:wheat', slot: 9, count: 32, canonicalQuantity: 32, bindingEpoch: 1
+  });
   assert.equal(result.artifactSha256, artifact);
 });
 
@@ -45,6 +48,8 @@ test('F0.5 hard-crash carrier rejects a substituted window, stale player save, o
   assert.throws(() => assertF05HardCrashCarrier(wrongAction), /action-bound canonical custody/);
   const mixed = structuredClone(valid); mixed.physicalFirst.build.preparedArtifact.sha256 = 'b'.repeat(64);
   assert.throws(() => assertF05HardCrashCarrier(mixed), /mixes artifact/);
+  const emptySlot = structuredClone(valid); emptySlot.canonicalFirst.diagnostics.at(-1).observed.value.actual.count = 0;
+  assert.throws(() => assertF05HardCrashCarrier(emptySlot), /authenticated reconnected player custody/);
 });
 
 test('native launcher accepts only its checkout or exact task-private sibling as a process namespace', async () => {
@@ -70,9 +75,11 @@ test('canonical-first player order retains ordinary demand until its post-WAL ob
     custody: { kind: 'CONTAINER', container: 'container:1-depot' } });
   const segments = restartSegments(declaration);
   assert.equal(segments.before.actions.length, 5);
-  assert.deepEqual(segments.after.assertions.map((value) => value.after), [1, 2]);
+  assert.deepEqual(segments.after.assertions.map((value) => value.after), [1, 2, 3]);
   assert.deepEqual(segments.after.assertions.map((value) => value.id),
-    ['custody:container-1-depot', 'custody:player-bf39347d-cb86-3221-b6b7-7b89a1dcb4cf']);
+    ['custody:container-1-depot', 'custody:player-bf39347d-cb86-3221-b6b7-7b89a1dcb4cf', 'custody:player-bf39347d-cb86-3221-b6b7-7b89a1dcb4cf']);
+  assert.equal(segments.after.assertions.at(-1).view, 'player_resource',
+    'the recovery half reads the server-authenticated player slot, not the canonical ledger twice');
 });
 
 function crash({ boundary, owner, payloadType }) {
@@ -95,8 +102,16 @@ function player(scenarioId, boundary, expectedCount) {
   value.recovery.crash.playerSave = { player: 'bf39347d-cb86-3221-b6b7-7b89a1dcb4cf', item: 'minecraft:wheat', expectedCount, itemCount: expectedCount, exists: expectedCount > 0, sha256: expectedCount > 0 ? 'c'.repeat(64) : null };
   const [sourceAction, playerAction] = scenarioId === 'disposable_f03_fungible_player_abrupt' ? [3, 4] : [1, 2];
   value.diagnostics = [resource(sourceAction, 'custody:container-1-depot'), resource(playerAction, 'custody:player-bf39347d-cb86-3221-b6b7-7b89a1dcb4cf')];
+  if (scenarioId === 'disposable_f05_fenced_player_canonical_first_abrupt') value.diagnostics.push(playerResource(3));
   return value;
 }
 
 function resource(after, id) { return { assertion: { after, view: 'resource', id }, observed: { value: { status: 'ok', id, quantity: 32 } } }; }
+function playerResource(after) {
+  const id = 'custody:player-bf39347d-cb86-3221-b6b7-7b89a1dcb4cf';
+  return { assertion: { after, view: 'player_resource', id }, observed: { value: {
+    status: 'ok', id, player: 'bf39347d-cb86-3221-b6b7-7b89a1dcb4cf', slot: 9, canonicalQuantity: 32,
+    binding: { epoch: 1, itemKind: 'minecraft:wheat', quantity: 32 }, actual: { itemKind: 'minecraft:wheat', count: 32 }, matchesCanonical: true
+  } } };
+}
 function lifecycle() { return ['expected_loss_armed', 'crash_controller_fired', 'owned_server_exit', 'client_expected_loss', 'game_port_closed'].map(barrier => ({ barrier })); }

@@ -31,7 +31,7 @@ export function assertF05HardCrashCarrier({ windows, physicalFirst, canonicalFir
   const first = playerOrder(physicalFirst, 'physical_effect_visible_before_typed_observation', SOURCE, 32,
     'disposable_f03_fungible_player_abrupt', { sourceAction: 3, playerAction: 4 });
   const second = playerOrder(canonicalFirst, 'typed_observation_durable_before_next_process_checkpoint', CANONICAL_HANDOFF_OWNER, 0,
-    'disposable_f05_fenced_player_canonical_first_abrupt', { sourceAction: 1, playerAction: 2 });
+    'disposable_f05_fenced_player_canonical_first_abrupt', { sourceAction: 1, playerAction: 2, authenticatedPlayerAction: 3 });
   const facts = [...windowFacts, first, second].sort((left, right) => left.boundary.localeCompare(right.boundary));
   if (!isDeepStrictEqual(facts.map(value => value.boundary), [...WINDOWS].sort())) {
     throw new Error('F0.5 hard-crash receipt has missing, duplicate, or substituted semantic windows');
@@ -82,7 +82,10 @@ function playerOrder(manifest, boundary, owner, expectedSave, scenarioId, action
   if (source.quantity !== 32 || player.quantity !== 32 || source.quantity + player.quantity !== 64) {
     throw new Error('F0.5 player-save arrival receipt is not conserved after recovery');
   }
+  const authenticatedPlayer = actions.authenticatedPlayerAction === undefined ? null
+    : playerResource(manifest, actions.authenticatedPlayerAction);
   return Object.freeze({ boundary, playerSaveCount: save.itemCount, sourceQuantity: source.quantity, playerQuantity: player.quantity,
+    ...(authenticatedPlayer === null ? {} : { authenticatedPlayer }),
     artifactSha256: artifactSha(manifest) });
 }
 
@@ -99,6 +102,19 @@ function resource(manifest, actionStep, id) {
     throw new Error(`F0.5 player-save receipt lacks action-bound canonical custody ${id}@${actionStep}`);
   }
   return value;
+}
+
+/** The server reads this exact live slot after the ordinary authenticated reconnect; the client never supplies it. */
+function playerResource(manifest, actionStep) {
+  const value = manifest?.diagnostics?.find(entry => entry?.assertion?.after === actionStep && entry.assertion.view === 'player_resource'
+    && entry.assertion.id === PLAYER_ACCOUNT)?.observed?.value;
+  if (value?.status !== 'ok' || value.id !== PLAYER_ACCOUNT || value.player !== PLAYER || value.slot !== 9
+      || value.canonicalQuantity !== 32 || value.binding?.itemKind !== 'minecraft:wheat' || value.binding?.quantity !== 32
+      || value.actual?.itemKind !== 'minecraft:wheat' || value.actual?.count !== 32 || value.matchesCanonical !== true) {
+    throw new Error(`F0.5 player-save receipt lacks authenticated reconnected player custody ${PLAYER_ACCOUNT}@${actionStep}`);
+  }
+  return Object.freeze({ itemKind: value.actual.itemKind, slot: value.slot, count: value.actual.count,
+    canonicalQuantity: value.canonicalQuantity, bindingEpoch: value.binding.epoch });
 }
 
 function artifactSha(manifest) {
