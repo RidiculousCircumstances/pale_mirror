@@ -162,6 +162,15 @@ public final class PaleMirrorEvents {
             event.setCanceled(true);
             return;
         }
+        if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel level
+                && event.getEntity() instanceof ServerPlayer player) {
+            // ServerLevel.addDuringTeleport invokes the shared source-firewall composition
+            // before adding a destination player to its entity manager.  Retain the exact
+            // destination as an exposure fence here, before any ordinary scene may observe it.
+            // This is intentionally not a demand, ticket, or block mutation.
+            io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.observePlayerIngress(
+                    level, new net.minecraft.world.level.ChunkPos(player.blockPosition()));
+        }
         if (SourceGrayboxRuntime.availableForSelectedLaunch()
                 && event.getLevel() instanceof net.minecraft.server.level.ServerLevel level
                 && SourceGrayboxRuntime.recognizesManagedEntity(event.getEntity())) {
@@ -523,27 +532,6 @@ public final class PaleMirrorEvents {
             io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.observeNaturalChunkLoad(level, event.getChunk().getPos());
             if (SourceGrayboxRuntime.availableForSelectedLaunch() && SourceGrayboxRuntime.isGrayboxLevel(level)) {
                 SourceGrayboxRuntime.forServer(level.getServer()).observeChunkLoaded(level);
-            }
-        }
-    }
-
-    /**
-     * A player can transfer into a destination chunk that was naturally loaded while the server
-     * was booting, before the v3 runtime existed to retain its ChunkEvent.Load boundary.  The
-     * post-transfer event is the same ordinary ingress boundary: it only fences the exact
-     * destination chunk for the next registered projection turn and never creates demand,
-     * tickets, or a scene.
-     */
-    @SubscribeEvent
-    public static void onPlayerChangedDimension(PlayerEvent.PlayerChangedDimensionEvent event) {
-        if (event.getEntity() instanceof ServerPlayer player) {
-            // NeoForge publishes this transfer event while the player still exposes its source
-            // level.  Use the event's destination key; using serverLevel() here silently fences
-            // the old chunk and leaves the newly visible chunk unobserved.
-            net.minecraft.server.level.ServerLevel destination = player.getServer().getLevel(event.getTo());
-            if (destination != null) {
-                io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.observePlayerIngress(
-                        destination, new net.minecraft.world.level.ChunkPos(player.blockPosition()));
             }
         }
     }
