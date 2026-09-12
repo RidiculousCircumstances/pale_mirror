@@ -118,6 +118,12 @@ class SettlementProvisionProcessTest {
         FrontierWorldState conflicted = state(engine);
         assertEquals(SettlementProvisionStatus.CONFLICT, conflicted.humanPopulation().provision(settlement.id()).status());
         assertEquals(64, conflicted.inventory().items().get(new SubjectId("item:provision-bread")).count());
+        FencedRecoveryBinding recovery = conflicted.fencedRecovery().current().get(FencedRecoveryPhysicalIntentSupport.bindingId(intent));
+        assertEquals(FencedRecoveryAsset.EFFECT, recovery.asset());
+        assertEquals(FencedRecoveryPhase.AMBIGUOUS, recovery.phase());
+        assertEquals(FencedRecoveryDisposition.INSPECT, recovery.nextAction());
+        assertEquals(EngineStatus.Kind.ACTIVE, engine.status().kind(),
+                "an uninspected player-facing effect is fenced locally rather than globally quarantining the world");
     }
 
     @Test
@@ -175,6 +181,10 @@ class SettlementProvisionProcessTest {
         assertInstanceOf(CommandResult.Accepted.class, submit(engine, world, "confirmed", new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(receipt))));
 
         FrontierWorldState settled = state(engine); assertEquals(SettlementProvisionStatus.SECURE, settled.humanPopulation().provision(settlement.id()).status());
+        FencedRecoveryTombstone tombstone = settled.fencedRecovery().tombstones().get(FencedRecoveryPhysicalIntentSupport.bindingId(intent));
+        assertEquals(FencedRecoveryDisposition.REJECT_STALE,
+                settled.fencedRecovery().lateLoad(tombstone.bindingId(), FencedRecoveryAsset.EFFECT, intent.causeSubjectId(), tombstone.retiredEpoch()),
+                "a confirmed effect leaves an exact tombstone; a late projection may not replay the consumed ration");
         ExactItemStack remaining = settled.inventory().items().get(new SubjectId("item:provision-bread"));
         assertEquals(64 - expected, remaining.count()); assertEquals(settlement.id(), remaining.economicOwnerId());
     }

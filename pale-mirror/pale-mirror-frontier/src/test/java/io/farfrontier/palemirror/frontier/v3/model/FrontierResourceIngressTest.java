@@ -23,6 +23,10 @@ class FrontierResourceIngressTest {
         FrontierEngine<FrontierWorldProjection> engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(worldId, 91L));
         SubjectId container = new SubjectId("container:1-depot");
         accept(engine, worldId, "command:ingress-prepared", new ContainerSurfaceTransition(container, ContainerSurfaceStatus.PREPARED));
+        FrontierWorldState prepared = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        ContainerRecord record = prepared.inventory().containers().get(container);
+        FencedRecoveryBinding preparedFence = prepared.fencedRecovery().current().get(FencedRecoveryContainerSupport.bindingId(record));
+        assertEquals(FencedRecoveryPhase.PREPARED, preparedFence.phase());
         accept(engine, worldId, "command:ingress-active", new ContainerSurfaceTransition(container, ContainerSurfaceStatus.ACTIVE));
         ExactItemStack iron = new ExactItemStack(new SubjectId("item:ingress-test-iron"), new SubjectId("settlement:1"), "minecraft:iron_ingot", 64,
                 new InventoryCustody.ContainerSlot(container, 4));
@@ -42,6 +46,14 @@ class FrontierResourceIngressTest {
         ExactItemStack wrongClaim = new ExactItemStack(new SubjectId("item:ingress-wrong-claim"), new SubjectId("hive:frontier"), "minecraft:iron_ingot", 64,
                 new InventoryCustody.ContainerSlot(container, 5));
         assertInstanceOf(CommandResult.Rejected.class, engine.submit(command(engine, worldId, "command:ingress-wrong-claim", new ResourceDeposited(wrongClaim))));
+
+        accept(engine, worldId, "command:ingress-conflict", new ContainerSurfaceTransition(container, ContainerSurfaceStatus.CONFLICT));
+        FrontierWorldState conflicted = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        FencedRecoveryBinding localConflict = conflicted.fencedRecovery().current().get(FencedRecoveryContainerSupport.bindingId(record));
+        assertEquals(FencedRecoveryPhase.AMBIGUOUS, localConflict.phase());
+        assertEquals(FencedRecoveryDisposition.INSPECT, localConflict.nextAction());
+        assertEquals(io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.ACTIVE, engine.status().kind(),
+                "a conflicting physical container surface is an owned local inspection, never a world quarantine");
     }
 
     private static void accept(FrontierEngine<FrontierWorldProjection> engine, WorldId worldId, String commandId, FrontierPayload payload) {

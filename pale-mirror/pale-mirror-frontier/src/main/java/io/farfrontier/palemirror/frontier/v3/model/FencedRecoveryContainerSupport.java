@@ -6,7 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 public final class FencedRecoveryContainerSupport {
     private FencedRecoveryContainerSupport() { }
     public static FencedRecoveryState transition(FencedRecoveryState recovery, ContainerRecord container, ContainerSurfaceStatus status) {
-        SubjectId id = new SubjectId("recovery:container_" + container.id().value().replace(':', '_'));
+        SubjectId id = bindingId(container);
         return switch (status) {
             case PREPARED -> recovery.prepare(FencedRecoveryBinding.prepared(id, FencedRecoveryAsset.CONTAINER, container.ownerId(), 0L,
                     recovery.nextEpoch(id), true));
@@ -20,6 +20,10 @@ public final class FencedRecoveryContainerSupport {
             }
             case UNMATERIALIZED -> throw new IllegalArgumentException("container surface cannot recover to unmaterialized");
         };
+    }
+    /** Stable exact physical-surface identity; callers never infer a container fence from a slot. */
+    public static SubjectId bindingId(ContainerRecord container) {
+        return new SubjectId("recovery:container_" + container.id().value().replace(':', '_'));
     }
     private static FencedRecoveryBinding current(FencedRecoveryState recovery, SubjectId id, ContainerRecord container) {
         FencedRecoveryBinding binding = recovery.current().get(id);
