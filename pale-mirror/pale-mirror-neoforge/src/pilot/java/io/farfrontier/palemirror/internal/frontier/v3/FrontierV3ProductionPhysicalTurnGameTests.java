@@ -103,6 +103,36 @@ public final class FrontierV3ProductionPhysicalTurnGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "pm-frontier-v3-scene-aftermath", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
+    public static void playerIngressFencesAnUnloadedDestinationWithoutCreatingAChunk(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(level);
+        try {
+            ChunkPos destination = new ChunkPos(loadedChunk(level, helper).x + 96, loadedChunk(level, helper).z + 96);
+            helper.assertTrue(!level.hasChunk(destination.x, destination.z),
+                    "the destination has no installed holder at the transfer event boundary");
+            FrontierV3GrayboxExecutor.observePlayerIngress(runtime, destination);
+            FrontierV3GrayboxExecutor.FirstVisibilitySnapshot queued = FrontierV3GrayboxExecutor.firstVisibility(runtime,
+                    destination.x + "," + destination.z);
+            helper.assertValueEqual(queued.status(), "PENDING",
+                    "player ingress retains the exposure fence without asking ChunkMap to create a holder");
+            helper.assertTrue(!FrontierV3GrayboxExecutor.sceneEligible(runtime,
+                            new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(destination.getMinBlockX(), 64, destination.getMinBlockZ())),
+                    "an ingress-fenced destination cannot admit a scene before natural availability and the registered projection turn");
+            helper.assertTrue(!level.hasChunk(destination.x, destination.z),
+                    "the read-only player ingress fence neither creates a ticket nor force-loads its destination");
+        } finally {
+            FrontierV3GrayboxExecutor.forgetFirstVisibility(runtime);
+            FrontierV3GrayboxExecutor.forget(runtime);
+            runtime.shutdown();
+        }
+        helper.succeed();
+    }
+
+    private static ChunkPos loadedChunk(ServerLevel level, GameTestHelper helper) {
+        return level.getChunkAt(helper.absolutePos(BlockPos.ZERO)).getPos();
+    }
+
     private static FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime(ServerLevel level) {
         WorldId world = new WorldId("frontier:production-physical-turn-" + level.getSeed());
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration =

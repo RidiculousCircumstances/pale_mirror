@@ -465,6 +465,15 @@ public final class FrontierV3ServerLifecycle {
         FrontierV3GrayboxExecutor.observeNaturalChunkLoad(level, runtime, chunk);
     }
 
+    /** Player-transfer exposure can precede the destination chunk holder's normal load callback. */
+    public static void observePlayerIngress(ServerLevel level, net.minecraft.world.level.ChunkPos chunk) {
+        Objects.requireNonNull(level, "first visibility level"); Objects.requireNonNull(chunk, "first visibility chunk");
+        if (!ownsPhysicalWorld(level.getServer()) || !FrontierV3PhysicalWorld.isPhysical(level)) return;
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
+        if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return;
+        FrontierV3GrayboxExecutor.observePlayerIngress(runtime, chunk);
+    }
+
     /** Read-only first-visibility admission fence shared by every scene demand path. */
     static boolean sceneEligible(ServerLevel level, io.farfrontier.palemirror.frontier.v3.model.BlockPosition position) {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());

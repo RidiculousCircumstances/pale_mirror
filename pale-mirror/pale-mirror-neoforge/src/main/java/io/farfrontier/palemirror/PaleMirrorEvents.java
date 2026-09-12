@@ -542,7 +542,7 @@ public final class PaleMirrorEvents {
             // the old chunk and leaves the newly visible chunk unobserved.
             net.minecraft.server.level.ServerLevel destination = player.getServer().getLevel(event.getTo());
             if (destination != null) {
-                io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.observeNaturalChunkLoad(
+                io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.observePlayerIngress(
                         destination, new net.minecraft.world.level.ChunkPos(player.blockPosition()));
             }
         }

@@ -154,6 +154,21 @@ final class FrontierV3GrayboxExecutor {
         Objects.requireNonNull(level, "first visibility level"); Objects.requireNonNull(runtime, "first visibility runtime");
         Objects.requireNonNull(chunk, "first visibility chunk");
         if (runtime.decodedState().isEmpty() || !level.hasChunk(chunk.x, chunk.z)) return;
+        retainFirstVisibility(runtime, chunk);
+    }
+
+    /**
+     * Records a player's exact destination before vanilla has necessarily installed its chunk
+     * holder.  This is only an exposure fence: the registered turn still waits for natural
+     * availability before inspecting or changing a block, and it never creates a ticket.
+     */
+    static void observePlayerIngress(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, ChunkPos chunk) {
+        Objects.requireNonNull(runtime, "first visibility runtime"); Objects.requireNonNull(chunk, "first visibility chunk");
+        if (runtime.decodedState().isEmpty()) return;
+        retainFirstVisibility(runtime, chunk);
+    }
+
+    private static void retainFirstVisibility(FrontierV3ServerRuntime<?, ?> runtime, ChunkPos chunk) {
         FIRST_VISIBILITY.computeIfAbsent(runtime, ignored -> new LinkedHashMap<>())
                 .putIfAbsent(chunk, new FirstVisibilityRecord(FirstVisibility.PENDING, -1L, 0));
     }
