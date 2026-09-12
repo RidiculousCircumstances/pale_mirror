@@ -409,6 +409,18 @@ test('checked-in scenarios parse through the declared runner boundary', async ()
   }
 });
 
+test('scale pressure captures its exact HOT union before the passive JFR interval', async () => {
+  const source = await readFile(new URL('../scenarios/disposable-settlement-assault-scale-jfr.json', import.meta.url), 'utf8');
+  const pressure = JSON.parse(source);
+  assert.doesNotThrow(() => validateScenario(pressure));
+  assert.equal(pressure.actions[0].view, 'scene');
+  assert.equal(pressure.actions[1].view, 'process');
+  assert.deepEqual(pressure.actions[2], { type: 'wait_until_diagnostic', view: 'performance', id: '', expect: {
+    status: 'ok', frontier: { hotSceneLeases: 2, managedActorBindings: 29 }
+  }, timeoutMs: 30000 });
+  assert.deepEqual(pressure.actions[3], { type: 'wait', ms: 120000 });
+});
+
 test('F0.3 abrupt player recovery re-enters ordinary source demand before custody inspection', async () => {
   const source = await readFile(new URL('../scenarios/disposable-f03-fungible-player-abrupt.json', import.meta.url), 'utf8');
   const abrupt = JSON.parse(source);
