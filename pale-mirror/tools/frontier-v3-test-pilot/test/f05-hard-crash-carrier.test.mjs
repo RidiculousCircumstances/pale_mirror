@@ -92,7 +92,7 @@ function player(scenarioId, boundary, expectedCount) {
   const value = crash({ boundary, owner, payloadType: 'frontier.fungible_resource_handoff_observed' });
   value.scenarioId = scenarioId;
   value.recovery.crash.playerSave = { player: 'bf39347d-cb86-3221-b6b7-7b89a1dcb4cf', item: 'minecraft:wheat', expectedCount, itemCount: expectedCount, exists: expectedCount > 0, sha256: expectedCount > 0 ? 'c'.repeat(64) : null };
-  const [sourceAction, playerAction] = scenarioId === 'disposable_f03_fungible_player_abrupt' ? [7, 8] : [6, 7];
+  const [sourceAction, playerAction] = scenarioId === 'disposable_f03_fungible_player_abrupt' ? [3, 4] : [1, 2];
   value.diagnostics = [resource(sourceAction, 'custody:container-1-depot'), resource(playerAction, 'custody:player-bf39347d-cb86-3221-b6b7-7b89a1dcb4cf')];
   return value;
 }

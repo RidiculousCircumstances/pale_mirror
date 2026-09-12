@@ -26,10 +26,12 @@ const RESOURCE_WINDOWS = Object.freeze([
  */
 export function assertF05HardCrashCarrier({ windows, physicalFirst, canonicalFirst }) {
   const windowFacts = crashWindows(windows);
+  // The restart slicer rebases after-restart assertions into their resumed segment; native
+  // manifests therefore carry these as 3/4 and 1/2, not their declaration-wide labels.
   const first = playerOrder(physicalFirst, 'physical_effect_visible_before_typed_observation', SOURCE, 32,
-    'disposable_f03_fungible_player_abrupt', { sourceAction: 7, playerAction: 8 });
+    'disposable_f03_fungible_player_abrupt', { sourceAction: 3, playerAction: 4 });
   const second = playerOrder(canonicalFirst, 'typed_observation_durable_before_next_process_checkpoint', CANONICAL_HANDOFF_OWNER, 0,
-    'disposable_f05_fenced_player_canonical_first_abrupt', { sourceAction: 6, playerAction: 7 });
+    'disposable_f05_fenced_player_canonical_first_abrupt', { sourceAction: 1, playerAction: 2 });
   const facts = [...windowFacts, first, second].sort((left, right) => left.boundary.localeCompare(right.boundary));
   if (!isDeepStrictEqual(facts.map(value => value.boundary), [...WINDOWS].sort())) {
     throw new Error('F0.5 hard-crash receipt has missing, duplicate, or substituted semantic windows');
