@@ -11,6 +11,8 @@ import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerRecord;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurface;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
+import io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryBinding;
+import io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryTombstone;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSitePlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSiteHarvestSceneSupport;
@@ -148,6 +150,7 @@ final class FrontierV3DiagnosticJson {
             case "intent" -> intent(id, checkpoint, state, harvestReadiness, equipmentIssueReadiness, equipmentReturnReadiness);
             case "trace" -> trace(id, checkpoint, trace);
             case "transit" -> transit(id, checkpoint, state);
+            case "recovery" -> recovery(id, checkpoint, state);
             case "route_topology" -> routeTopology(id, checkpoint, state);
             default -> unavailable(kind, id, checkpoint, "unknown_view");
         };
@@ -179,6 +182,24 @@ final class FrontierV3DiagnosticJson {
                 + ",\"sceneLeases\":" + state.sceneLeases().size()
                 + ",\"items\":" + state.inventory().items().size()
                 + ",\"inventoryConflicts\":" + state.inventory().conflicts().size() + "}";
+    }
+
+    /** One exact durable recovery fence, rendered read-only for a crash/reconciliation receipt. */
+    private static String recovery(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+        SubjectId bindingId = subject(id).orElse(null);
+        if (bindingId == null) return unavailable("recovery", id, checkpoint, "not_found");
+        FencedRecoveryBinding current = state.fencedRecovery().current().get(bindingId);
+        if (current != null) return base("recovery", id, checkpoint) + ",\"status\":\"ok\",\"asset\":\"" + current.asset()
+                + "\",\"owner\":\"" + quote(current.ownerId().value()) + "\",\"ownerRevision\":" + current.ownerRevision()
+                + ",\"epoch\":" + current.authorityEpoch() + ",\"phase\":\"" + current.phase()
+                + "\",\"reversible\":" + current.reversibleCheckpoint() + ",\"attempts\":" + current.recoveryAttempts()
+                + ",\"nextAction\":\"" + current.nextAction() + "\",\"reason\":\"" + quote(current.reason()) + "\"}";
+        FencedRecoveryTombstone tombstone = state.fencedRecovery().tombstones().get(bindingId);
+        if (tombstone == null) return unavailable("recovery", id, checkpoint, "not_found");
+        return base("recovery", id, checkpoint) + ",\"status\":\"retired\",\"asset\":\"" + tombstone.asset()
+                + "\",\"owner\":\"" + quote(tombstone.ownerId().value()) + "\",\"ownerRevision\":" + tombstone.ownerRevision()
+                + ",\"epoch\":" + tombstone.retiredEpoch() + ",\"disposition\":\"" + tombstone.disposition()
+                + "\",\"reason\":\"" + quote(tombstone.reason()) + "\"}";
     }
 
     /**

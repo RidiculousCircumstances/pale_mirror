@@ -35,6 +35,7 @@ public enum FrontierV3DiagnosticView {
     INTENT("intent", true),
     TRACE("trace", true),
     TRANSIT("transit", true),
+    RECOVERY("recovery", true),
     MEDICAL("medical", true),
     TRAVERSAL_FOUNDRY("traversal_foundry", true),
     HIVE_FOUNDRY("hive_foundry", true);

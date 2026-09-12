@@ -18,6 +18,10 @@ import io.farfrontier.palemirror.frontier.v3.model.HiveTaskAssembly;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationStatus;
 import io.farfrontier.palemirror.frontier.v3.model.ExactInventory;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
+import io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryAsset;
+import io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryBinding;
+import io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryState;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateUpdate;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDelta;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaKind;
@@ -52,6 +56,28 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class FrontierV3DiagnosticJsonTest {
+    @Test
+    void recoveryDiagnosticReadsOneExactCurrentOrRetiredFenceWithoutChangingCanonicalState() {
+        var configuration = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:diagnostic-recovery"), 41L);
+        FrontierWorldState initial = configuration.initialState();
+        SubjectId bindingId = new SubjectId("recovery:intent_diagnostic");
+        FencedRecoveryState prepared = FencedRecoveryState.empty().prepare(FencedRecoveryBinding.prepared(bindingId,
+                FencedRecoveryAsset.EFFECT, new SubjectId("settlement:1"), 7L, 1L, false));
+        FrontierWorldState fenced = initial.withChanges(FrontierWorldStateUpdate.begin().fencedRecovery(prepared));
+        CheckpointImage checkpoint = new CheckpointImage(configuration.worldId(), new io.farfrontier.palemirror.frontier.v3.api.Revision(4L),
+                new SimInstant(9L), new byte[] {1}, List.of(), List.of());
+
+        String current = FrontierV3DiagnosticJson.render("recovery", bindingId.value(), checkpoint, fenced, Optional.empty());
+        FrontierWorldState retired = fenced.withChanges(FrontierWorldStateUpdate.begin().fencedRecovery(
+                prepared.running(bindingId, 1L).observed(bindingId, 1L).confirm(bindingId, 1L)));
+        String tombstone = FrontierV3DiagnosticJson.render("recovery", bindingId.value(), checkpoint, retired, Optional.empty());
+
+        assertTrue(current.contains("\"status\":\"ok\"") && current.contains("\"asset\":\"EFFECT\"")
+                && current.contains("\"ownerRevision\":7") && current.contains("\"epoch\":1") && current.contains("\"phase\":\"PREPARED\""));
+        assertTrue(tombstone.contains("\"status\":\"retired\"") && tombstone.contains("\"disposition\":\"REJECT_STALE\""));
+        assertEquals(prepared, fenced.fencedRecovery(), "a diagnostic receipt is never recovery authority or a mutation path");
+    }
+
     @Test
     void returningHiveDiagnosticIsAParseablePilotDocument() {
         var configuration = FrontierV3FixtureCatalog.hiveReturnConfiguration(new WorldId("frontier:diagnostic-hive-return"), 41L);
