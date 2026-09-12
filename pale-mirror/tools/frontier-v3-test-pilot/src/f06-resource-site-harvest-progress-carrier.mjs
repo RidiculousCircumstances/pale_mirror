@@ -14,7 +14,7 @@ const FIRST_CROP_VISIT = Object.freeze({ x: -333, y: 65, z: -355 });
  */
 export function assertF06ResourceSiteHarvestProgressCarrier({ declaration, manifest }) {
   assertF06ResourceSiteHarvestProgressDeclaration(declaration);
-  if (manifest?.status !== 'ok' || manifest.scenarioId !== SCENARIO || manifest.recovery !== undefined
+  if (manifest?.status !== 'ok' || manifest.scenarioId !== SCENARIO || manifest.recovery != null
       || !Array.isArray(manifest.actions) || manifest.actions.length !== declaration.actions.length) {
     throw new Error('F0.6 resource-site harvest manifest lacks its declared ordinary lifecycle');
   }
