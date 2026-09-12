@@ -169,9 +169,16 @@ final class FrontierV3GrayboxExecutor {
                                                        FrontierWorldState state, Cursor cursor) {
         Map<ChunkPos, FirstVisibilityRecord> records = FIRST_VISIBILITY.get(runtime);
         if (records == null) return;
-        for (Map.Entry<ChunkPos, FirstVisibilityRecord> entry : records.entrySet()) {
-            if (entry.getValue().status() != FirstVisibility.PENDING) continue;
-            ChunkPos chunk = entry.getKey();
+        // A client state packet may make an adjacent vanilla chunk naturally loaded while this
+        // registered turn is projecting the current one.  Snapshot only the already-pending
+        // keys: that new exposure is a distinct boundary for the next ordinary turn, never a
+        // concurrent modification or an unbounded same-turn cascade.
+        List<ChunkPos> pendingChunks = records.entrySet().stream()
+                .filter(entry -> entry.getValue().status() == FirstVisibility.PENDING)
+                .map(Map.Entry::getKey).toList();
+        for (ChunkPos chunk : pendingChunks) {
+            FirstVisibilityRecord record = records.get(chunk);
+            if (record == null || record.status() != FirstVisibility.PENDING) continue;
             if (!level.hasChunk(chunk.x, chunk.z)) continue;
             FirstVisibility result = FirstVisibility.STATIC_CURRENT;
             List<GrayboxCell> cells = cursor.cellsIn(chunk);
@@ -194,7 +201,7 @@ final class FrontierV3GrayboxExecutor {
                 pending = List.copyOf(deferred);
             }
             long revision = runtime.checkpointImage().orElseThrow().revision().value();
-            entry.setValue(new FirstVisibilityRecord(result, revision, cells.size()));
+            records.replace(chunk, record, new FirstVisibilityRecord(result, revision, cells.size()));
         }
     }
 
