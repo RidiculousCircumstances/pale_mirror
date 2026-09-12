@@ -726,10 +726,13 @@ public final class FrontierV3SceneGameTests {
 
     @GameTest(batch = "pm-frontier-v3-scene-explosion", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void hotBomberMaterializesOneOwnedTntAndDoesNotReplayItsDisappearance(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(48, 8, 0));
+        ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(0, 8, 0));
         // GameTest cells run concurrently in one Minecraft level. Every physical UUID derives
         // from canonical identity, so this fixture must derive its world/lease identity from
         // its own stable cell instead of competing with another TNT scene for the same body.
+        // Keep physical bodies in that same cell: the former +48 offset crossed into a
+        // neighbouring concurrent TNT fixture and let its real blast remove this fixture's
+        // bomber before the durable-effect assertion ran.
         String fixture = "scene-explosion-game-test-" + origin.getX() + "-" + origin.getZ();
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
                 FrontierV3ServerRuntime.start(FrontierV3FixtureCatalog.hotSceneStrikeConfiguration(new WorldId("frontier:" + fixture), 91L), new EphemeralStore(), 20_000);
@@ -743,7 +746,11 @@ public final class FrontierV3SceneGameTests {
         }
         SubjectId bomber = lease.members().stream().map(SceneMember::actorId).filter(actor -> state(runtime).bootstrap().hive().bioforms().stream()
                 .anyMatch(bioform -> bioform.id().equals(actor) && bioform.isExplosiveAssaulter())).findFirst().orElseThrow();
-        helper.runAfterDelay(1L, () -> {
+        // Entity indexing can trail the first GameTest callback when the core suite starts
+        // many cells together.  Wait for the same two ordinary ticks as the real-TNT
+        // fixture below, so this assertion observes the owned body rather than that
+        // incidental admission race.
+        helper.runAfterDelay(2L, () -> {
             Entity bomberBody = level.getEntity(lease.members().stream().filter(member -> member.actorId().equals(bomber)).findFirst().orElseThrow().entityId());
             helper.assertTrue(bomberBody != null, "the exact HOT bomber body must be materialized");
             bomberBody.setPos(origin.getX() + 0.5D, origin.getY(), origin.getZ() + 0.5D);
