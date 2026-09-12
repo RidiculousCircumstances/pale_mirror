@@ -53,6 +53,8 @@ test('F0.5 hard-crash carrier rejects a substituted window, stale player save, o
   assert.deepEqual(retained.retainedArtifactSha256s, ['b'.repeat(64)], 'only an explicit retained identity may reuse unaffected native evidence');
   const emptySlot = structuredClone(valid); emptySlot.canonicalFirst.diagnostics.at(-1).observed.value.actual.count = 0;
   assert.throws(() => assertF05HardCrashCarrier(emptySlot), /authenticated reconnected player custody/);
+  const unresolvedCleanup = structuredClone(valid); delete unresolvedCleanup.canonicalFirst.terminalCleanup;
+  assert.throws(() => assertF05HardCrashCarrier(unresolvedCleanup), /post-semantic replacement-server disposal/);
 });
 
 test('native launcher accepts only its checkout or exact task-private sibling as a process namespace', async () => {
@@ -107,6 +109,9 @@ function player(scenarioId, boundary, expectedCount) {
   const [sourceAction, playerAction] = scenarioId === 'disposable_f03_fungible_player_abrupt' ? [3, 4] : [1, 2];
   value.diagnostics = [resource(sourceAction, 'custody:container-1-depot'), resource(playerAction, 'custody:player-bf39347d-cb86-3221-b6b7-7b89a1dcb4cf')];
   if (scenarioId === 'disposable_f05_fenced_player_canonical_first_abrupt') value.diagnostics.push(playerResource(3));
+  if (scenarioId === 'disposable_f05_fenced_player_canonical_first_abrupt') {
+    value.terminalCleanup = { mode: 'exact_owned_post_semantic_disposal', serverPid: 4321, port: 25579, portClosed: true };
+  }
   return value;
 }
 

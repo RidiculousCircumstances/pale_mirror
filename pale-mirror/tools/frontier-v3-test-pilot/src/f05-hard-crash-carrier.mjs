@@ -32,7 +32,8 @@ export function assertF05HardCrashCarrier({ windows, physicalFirst, canonicalFir
   const first = playerOrder(physicalFirst, 'physical_effect_visible_before_typed_observation', SOURCE, 32,
     'disposable_f03_fungible_player_abrupt', { sourceAction: 3, playerAction: 4 });
   const second = playerOrder(canonicalFirst, 'typed_observation_durable_before_next_process_checkpoint', CANONICAL_HANDOFF_OWNER, 0,
-    'disposable_f05_fenced_player_canonical_first_abrupt', { sourceAction: 1, playerAction: 2, authenticatedPlayerAction: 3 });
+    'disposable_f05_fenced_player_canonical_first_abrupt', { sourceAction: 1, playerAction: 2, authenticatedPlayerAction: 3,
+      terminalCleanup: 'exact_owned_post_semantic_disposal' });
   const facts = [...windowFacts, first, second].sort((left, right) => left.boundary.localeCompare(right.boundary));
   if (!isDeepStrictEqual(facts.map(value => value.boundary), [...WINDOWS].sort())) {
     throw new Error('F0.5 hard-crash receipt has missing, duplicate, or substituted semantic windows');
@@ -80,6 +81,11 @@ function playerOrder(manifest, boundary, owner, expectedSave, scenarioId, action
       || !completedCrashProtocol(manifest) || save?.player !== PLAYER || save.item !== 'minecraft:wheat'
       || save.expectedCount !== expectedSave || save.itemCount !== expectedSave || typeof save.exists !== 'boolean') {
     throw new Error('F0.5 player-save arrival receipt is incomplete or foreign');
+  }
+  if (actions.terminalCleanup !== undefined && (manifest.terminalCleanup?.mode !== actions.terminalCleanup
+      || manifest.terminalCleanup.portClosed !== true || !Number.isInteger(manifest.terminalCleanup.serverPid)
+      || manifest.terminalCleanup.serverPid <= 1)) {
+    throw new Error('F0.5 canonical-first receipt lacks exact post-semantic replacement-server disposal');
   }
   const source = resource(manifest, actions.sourceAction, SOURCE); const player = resource(manifest, actions.playerAction, PLAYER_ACCOUNT);
   if (source.quantity !== 32 || player.quantity !== 32 || source.quantity + player.quantity !== 64) {

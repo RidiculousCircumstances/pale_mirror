@@ -141,6 +141,7 @@ const recoveryCheckpoints = {};
 const usePersistentClient = process.env.FRONTIER_V3_PILOT_USE_PERSISTENT_CLIENT !== 'false' && scenario.crash === undefined;
 let crashEvidence = null;
 let failure = null;
+let terminalCleanup = null;
 const gracefulSaveGateReceipts = [];
 // Native F0.3 receipts bind the actual all-holder server-thread admission that
 // preceded each ordinary durable halt.  This remains pilot-only evidence and
@@ -267,7 +268,17 @@ try {
     originalFailure: failure,
     cleanup: async (attempt) => {
       const serverStopped = await attempt('server_cleanup', async () => {
-        if (server != null && !abruptStopAttempted) await stopServerForCleanup(server, port);
+        if (server != null && !abruptStopAttempted) {
+          // An abrupt-recovery scenario has already proved its authenticated
+          // post-restart assertions before this finally block.  Its replacement
+          // server owns no further semantic boundary: requesting a normal save
+          // here can spend the whole bounded teardown in vanilla chunk unloads
+          // without strengthening the preceding crash proof.  Dispose only the
+          // exact nonce-announced JVM instead. Ordinary and failed paths still
+          // require Minecraft's durable-stop acknowledgement.
+          if (completed && recoveryMetadata?.mode === 'abrupt') terminalCleanup = await disposeCompletedAbruptRecoveryServer(server, port);
+          else await stopServerForCleanup(server, port);
+        }
       });
       const scenariosRemoved = await attempt('ephemeral_scenarios', async () => {
         await Promise.all([ephemeralScenario, beforeRestartScenario, afterRestartScenario].map((path) => rm(path, { force: true })));
@@ -325,6 +336,7 @@ if (completed) {
   manifest.clientSegments = clientSegments;
   manifest.gracefulSaveGate = gracefulSaveGateReceipts;
   manifest.naturalDemandStops = naturalDemandStops;
+  manifest.terminalCleanup = terminalCleanup;
   manifest.ownerObservation = ownerObservationFact(server?.ownerObservation ?? lastServerAttempt?.ownerObservation ?? retainedOwnerObservation);
   manifest.ownerObservationRequirement = ownerObservationRequirementFact(ownerObservationRequirement,
     server?.ownerObservation ?? lastServerAttempt?.ownerObservation ?? retainedOwnerObservation);
@@ -850,6 +862,26 @@ async function stopServerForCleanup(server, serverPort) {
       releaseWrapper(server.child);
     }
     throw failure;
+  }
+}
+
+/**
+ * The replacement server of a completed deliberate crash scenario has no later
+ * save/restart claim.  This is bounded process disposal, never a substitute
+ * for a durable save acknowledgement or a recovery boundary.
+ */
+async function disposeCompletedAbruptRecoveryServer(server, serverPort) {
+  if (!Number.isInteger(server.serverPid) || server.serverPid <= 1) {
+    throw new Error('completed abrupt-recovery server lacks its exact JVM identity');
+  }
+  try {
+    killIfPresent(server.serverPid);
+    await ownedServerExit(server, serverPort, 45_000,
+      'completed abrupt-recovery scenario retained its exact replacement JVM or game port');
+    return Object.freeze({ mode: 'exact_owned_post_semantic_disposal', serverPid: server.serverPid,
+      port: serverPort, portClosed: true });
+  } finally {
+    releaseWrapper(server.child);
   }
 }
 
