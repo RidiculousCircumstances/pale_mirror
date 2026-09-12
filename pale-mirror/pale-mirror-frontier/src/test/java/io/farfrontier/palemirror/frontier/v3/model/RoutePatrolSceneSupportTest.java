@@ -164,6 +164,23 @@ class RoutePatrolSceneSupportTest {
     }
 
     @Test
+    void physicalSceneConflictIsAVisibleLocalRecoveryAmbiguityRatherThanAWorldwideFailure() {
+        FrontierWorldState state = patrolState(new WorldId("frontier:route-patrol-conflict-recovery"));
+        FrontierRoutePatrolSceneSupport.Candidate candidate = FrontierRoutePatrolSceneSupport.candidates(state).stream().findFirst().orElseThrow();
+        SceneLeaseId leaseId = new SceneLeaseId("lease:route-patrol-conflict-recovery");
+        SceneLease lease = patrolLease(state, leaseId, candidate, 1L);
+        FrontierWorldState conflicted = state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT)
+                .transitionSceneLease(leaseId, SceneLeaseStatus.CONFLICT);
+        assertEquals(SceneLeaseStatus.CONFLICT, conflicted.sceneLeases().get(leaseId).status());
+        assertTrue(lease.members().stream().allMatch(member -> {
+            FencedRecoveryBinding binding = conflicted.fencedRecovery().current()
+                    .get(FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(member.actorId()));
+            return binding.phase() == FencedRecoveryPhase.AMBIGUOUS && binding.nextAction() == FencedRecoveryDisposition.INSPECT;
+        }));
+        assertEquals(state.actorLocations(), conflicted.actorLocations(), "one local physical ambiguity cannot rewrite unrelated canonical positions");
+    }
+
+    @Test
     void noVisitRestartRevokesOnlyThePatrolPoseThenFencesItsLateBodyBeforeNewColdAdmission() {
         WorldId world = new WorldId("frontier:route-patrol-no-visit-recovery");
         FrontierWorldState state = patrolState(world);

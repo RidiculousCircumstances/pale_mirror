@@ -80,7 +80,11 @@ public final class FrontierSceneLeaseStateSupport {
         if (current == null || !current.status().canTransitionTo(nextStatus)) throw new IllegalArgumentException("scene lease transition is not allowed");
         StrategicPlanState plans = FrontierSceneBehaviors.transitionPlans(state, current, nextStatus);
         Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases()); leases.put(leaseId, current.withStatus(nextStatus));
-        FencedRecoveryState recovery = nextStatus == SceneLeaseStatus.HOT ? runningRecovery(state.fencedRecovery(), current) : state.fencedRecovery();
+        FencedRecoveryState recovery = switch (nextStatus) {
+            case HOT -> runningRecovery(state.fencedRecovery(), current);
+            case CONFLICT -> isolateRecovery(state.fencedRecovery(), current, "scene-conflict");
+            default -> state.fencedRecovery();
+        };
         return copy(state, state.actorLocations(), leases, state.ambientLeases(), plans, recovery);
     }
 
@@ -241,6 +245,18 @@ public final class FrontierSceneLeaseStateSupport {
     }
     private static FencedRecoveryState revokePreparedRecovery(FencedRecoveryState recovery, SceneLease lease) {
         return revokePreparedCargo(revokePreparedBodies(recovery, lease), lease);
+    }
+    private static FencedRecoveryState isolateRecovery(FencedRecoveryState recovery, SceneLease lease, String reason) {
+        FencedRecoveryState next = recovery;
+        for (SceneMember member : lease.members()) {
+            SubjectId id = bodyRecoveryBindingId(member.actorId()); FencedRecoveryBinding binding = next.current().get(id);
+            if (binding != null) next = next.ambiguous(id, binding.authorityEpoch(), reason, FencedRecoveryDisposition.INSPECT);
+        }
+        if (FrontierSceneBehaviors.isLogistics(lease)) {
+            SubjectId id = cargoRecoveryBindingId(FrontierSceneBehaviors.logistics(lease).cargoId()); FencedRecoveryBinding binding = next.current().get(id);
+            if (binding != null) next = next.ambiguous(id, binding.authorityEpoch(), reason, FencedRecoveryDisposition.INSPECT);
+        }
+        return next;
     }
     private static FencedRecoveryState revokePreparedBodies(FencedRecoveryState recovery, SceneLease lease) {
         FencedRecoveryState next = recovery;
