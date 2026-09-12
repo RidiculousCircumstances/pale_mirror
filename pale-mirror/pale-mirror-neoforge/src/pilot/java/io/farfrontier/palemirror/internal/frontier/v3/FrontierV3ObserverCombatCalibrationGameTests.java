@@ -177,6 +177,8 @@ public final class FrontierV3ObserverCombatCalibrationGameTests {
         FrontierObserverNeutralityContract.Run coldRun = run(declaration, cold);
         FrontierObserverNeutralityContract.Run hotRun = run(declaration, hot);
         FrontierObserverNeutralityContract.requireComparable(coldRun, hotRun);
+        PaleMirrorMod.LOGGER.info("PMV3_OBSERVER_CALIBRATION version={} seeds=201..216 cold={} hot={} tolerances=successes:3,casualties:3,duration:1200",
+                declaration.version(), coldRun.calibration(), hotRun.calibration());
         helper.assertTrue(java.util.stream.IntStream.range(0, SAMPLES).anyMatch(index -> !cold.get(index).damage().equals(hot.get(index).damage())),
                 "calibration must accept measured physical damage distributions without requiring injected identical hit values");
         boolean foreignRejected = false;

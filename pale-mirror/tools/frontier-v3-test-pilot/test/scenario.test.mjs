@@ -409,7 +409,7 @@ test('checked-in scenarios parse through the declared runner boundary', async ()
   }
 });
 
-test('scale pressure captures its exact HOT union before the passive JFR interval', async () => {
+test('scale pressure retains its exact HOT union at five 30-second JFR boundaries', async () => {
   const source = await readFile(new URL('../scenarios/disposable-settlement-assault-scale-jfr.json', import.meta.url), 'utf8');
   const pressure = JSON.parse(source);
   assert.doesNotThrow(() => validateScenario(pressure));
@@ -418,7 +418,9 @@ test('scale pressure captures its exact HOT union before the passive JFR interva
   assert.deepEqual(pressure.actions[2], { type: 'wait_until_diagnostic', view: 'performance', id: '', expect: {
     status: 'ok', frontier: { hotSceneLeases: 2, sceneActorBindings: 29, managedActorBindings: 42 }
   }, timeoutMs: 30000 });
-  assert.deepEqual(pressure.actions[3], { type: 'wait', ms: 120000 });
+  assert.deepEqual(pressure.actions.slice(3).map(action => action.type), ['wait', 'wait_until_diagnostic', 'wait', 'wait_until_diagnostic', 'wait', 'wait_until_diagnostic', 'wait', 'wait_until_diagnostic']);
+  assert.deepEqual(pressure.actions.filter(action => action.type === 'wait').map(action => action.ms), [30000, 30000, 30000, 30000]);
+  assert.deepEqual(pressure.assertions.map(assertion => assertion.after), [3, 5, 7, 9, 11]);
 });
 
 test('F0.3 abrupt player recovery re-enters ordinary source demand before custody inspection', async () => {
