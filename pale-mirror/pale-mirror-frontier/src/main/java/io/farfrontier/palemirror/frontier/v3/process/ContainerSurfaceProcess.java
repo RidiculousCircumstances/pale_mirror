@@ -30,6 +30,8 @@ public final class ContainerSurfaceProcess {
                                      ContainerSurfaceTransition transition) {
         ContainerRecord container = state.inventory().containers().get(transition.containerId());
         if (container == null || !subject.equals(container.ownerId())) throw new IllegalArgumentException("container surface lacks its canonical owner");
-        return state.withInventory(state.inventory().withSurfaceStatus(transition.containerId(), transition.status()));
+        FrontierWorldState reduced = state.withInventory(state.inventory().withSurfaceStatus(transition.containerId(), transition.status()));
+        return reduced.withChanges(FrontierWorldStateUpdate.begin().fencedRecovery(
+                FencedRecoveryContainerSupport.transition(state.fencedRecovery(), container, transition.status())));
     }
 }
