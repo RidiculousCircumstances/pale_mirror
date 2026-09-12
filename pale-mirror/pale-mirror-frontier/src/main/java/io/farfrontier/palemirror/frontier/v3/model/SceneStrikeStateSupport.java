@@ -50,6 +50,7 @@ public final class SceneStrikeStateSupport {
             throw new IllegalArgumentException("scene strike receipt has no matching exact scene lease");
         }
         validateMembers(intent, observation);
+        validateObservedWound(state.actorLocations(), intent, observation);
         validateSettlementSelection(state.strategicPlans(), state.actorLocations(), state.physicalIntents().values(), lease, intent);
         validateSettlementLeaseBinding(state, lease, intent);
     }
@@ -128,6 +129,27 @@ public final class SceneStrikeStateSupport {
     private static void validateMembers(PhysicalIntent intent, SceneStrikeObservation observation) {
         if (!intent.subjectIds().getFirst().equals(observation.attackerId()) || !intent.subjectIds().getLast().equals(observation.targetId())) {
             throw new IllegalArgumentException("scene strike receipt differs from its exact prepared members");
+        }
+    }
+
+    /**
+     * A non-lethal physical hit is the exact durable wound for the same actor.  A lethal hit is
+     * deliberately different: {@link ActorDied} must have already recorded its body/death
+     * evidence, so a delayed receipt cannot manufacture a death or revive that actor.
+     */
+    private static void validateObservedWound(Map<SubjectId, ActorLocation> actors, PhysicalIntent intent,
+                                              SceneStrikeObservation observation) {
+        ActorLocation target = actors.get(intent.subjectIds().getLast());
+        if (target == null) throw new IllegalArgumentException("scene strike has no target actor");
+        if (observation.targetHealthAfter().compareTo(io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO) == 0) {
+            if (target.condition().status() != ActorLifeStatus.DEAD) {
+                throw new IllegalArgumentException("lethal scene strike requires exact prior death evidence");
+            }
+            return;
+        }
+        if (target.condition().status() != ActorLifeStatus.ALIVE
+                || !target.condition().health().equals(observation.targetHealthBefore())) {
+            throw new IllegalArgumentException("scene strike wound does not match the current exact target health");
         }
     }
 

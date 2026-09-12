@@ -815,7 +815,12 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             SceneStrikeStateSupport.validateObservation(this, current, strike);
             next.put(intentId, current.withStatus(nextStatus, java.util.Optional.of(strike.id())));
             Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(physicalObservations); observations.put(strike.id(), strike);
-            FrontierWorldState confirmed = next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations, next, observations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+            Map<SubjectId, ActorLocation> woundedActors = new LinkedHashMap<>(actorLocations);
+            if (strike.targetHealthAfter().compareTo(io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO) > 0) {
+                ActorLocation target = woundedActors.get(strike.targetId());
+                woundedActors.put(strike.targetId(), new ActorLocation(target.body(), target.condition().withHealth(strike.targetHealthAfter())));
+            }
+            FrontierWorldState confirmed = next(woundedActors, structureConditions, infection, inventory, productionJobs, contracts, operations, next, observations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
             return confirmed.withStrategicPlans(strategicPlans.afterConfirmedHotStrike(current));
         }
         if (current.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXPLOSION) {

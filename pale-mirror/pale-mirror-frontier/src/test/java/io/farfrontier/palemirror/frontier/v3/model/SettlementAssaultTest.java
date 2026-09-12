@@ -3,6 +3,8 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.persistence.StrategicPlanStateCodec;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.process.HiveSettlementAssaultProcess;
+import io.farfrontier.palemirror.frontier.v3.process.FrontierDurationProcessDriverRegistry;
+import io.farfrontier.palemirror.frontier.v3.process.FrontierObserverNeutralityContract;
 
 import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
@@ -22,6 +24,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -102,6 +106,11 @@ class SettlementAssaultTest {
         state = state.preparePhysicalIntent(intent).transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
         SceneStrikeObservation observation = new SceneStrikeObservation(new PhysicalObservationId("observation:hot-receipt-selection"), intent.id(), attacker, target,
                 FixedScalar.whole(20), FixedScalar.whole(18));
+        FrontierWorldState preparedStrike = state;
+        assertThrows(IllegalArgumentException.class, () -> preparedStrike.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED,
+                Optional.of(new SceneStrikeObservation(new PhysicalObservationId("observation:hot-receipt-stale-health"), intent.id(), attacker, target,
+                        FixedScalar.whole(19), FixedScalar.whole(18)))),
+                "a stale physical wound cannot overwrite the current exact target health");
         SubjectId hive = state.bootstrap().hive().id();
         List<SubjectId> currentCommitments = state.strategicPlans().objectives().values().stream()
                 .filter(objective -> objective.ownerId().equals(hive) && objective.status() == StrategicObjectiveStatus.ACTIVE)
@@ -115,6 +124,8 @@ class SettlementAssaultTest {
         state = state.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation));
         assertEquals(1, state.strategicPlans().settlementAssaults().get(assault.id()).nextStrikeEpoch(),
                 "one exact confirmed HOT receipt advances the retained COLD epoch once");
+        assertEquals(FixedScalar.whole(18), state.actorLocations().get(target).condition().health(),
+                "a non-lethal HOT receipt retains the exact wound instead of resetting it at the next COLD boundary");
         String frontPrefix = "front:" + assault.id().value().substring("assault:".length()).replace(':', '-');
         OperationFrontEffectKey effect = new OperationFrontEffectKey(cause, new SubjectId(frontPrefix + "-attack"),
                 new SubjectId(frontPrefix + "-defence"), 0L);
@@ -218,10 +229,78 @@ class SettlementAssaultTest {
         assertEquals(new SettlementAssaultResolved(assault.id(), SettlementAssaultOutcome.ABORTED), terminal.getFirst().payload());
     }
 
+    @Test void fixedSeedCombatCalibrationRetainsExactColdAndHotStrikeFacts() {
+        FrontierObserverNeutralityContract.Declaration declaration = FrontierObserverNeutralityContract.declaration(
+                FrontierDurationProcessDriverRegistry.Family.SETTLEMENT_ASSAULT);
+        CombatFacts coldFacts = new CombatFacts(), hotFacts = new CombatFacts();
+        for (long seed = 201L; seed < 217L; seed++) {
+            CombatSample cold = coldStrike(seed);
+            CombatSample hot = hotStrike(seed, cold.strike());
+            SettlementAssault coldAssault = cold.state().strategicPlans().settlementAssaults().get(cold.assaultId());
+            SettlementAssault hotAssault = hot.state().strategicPlans().settlementAssaults().get(hot.assaultId());
+            assertEquals(cold.strike(), hot.strike(), "HOT must execute the same fixed-seed COLD-selected combatant and damage");
+            assertEquals(coldAssault.nextStrikeEpoch(), hotAssault.nextStrikeEpoch());
+            assertEquals(cold.state().actorLocations().get(cold.strike().targetId()).condition(),
+                    hot.state().actorLocations().get(hot.strike().targetId()).condition(),
+                    "a non-lethal HOT receipt must retain the COLD-equivalent wound through release");
+            coldFacts.append(cold, seed); hotFacts.append(hot, seed);
+        }
+        FrontierObserverNeutralityContract.Run cold = coldFacts.run(declaration);
+        FrontierObserverNeutralityContract.Run hot = hotFacts.run(declaration);
+        FrontierObserverNeutralityContract.requireComparable(cold, hot);
+        assertThrows(IllegalArgumentException.class, () -> FrontierObserverNeutralityContract.requireComparable(cold,
+                new FrontierObserverNeutralityContract.Run(declaration, hot.actorIds(), hot.objectIds(), hot.claims(), hot.custody(),
+                        hot.completedStages(), hot.retainedWork(), hot.legalTopology(), Set.of("cause:substituted"),
+                        hot.recoveryDiscriminators(), hot.randomOpportunityKeys(), hot.calibration())),
+                "combat tolerance must not hide a foreign confirmed effect");
+    }
+
     private static PhysicalIntent strike(FrontierWorldState state, SceneLease lease, SubjectId cause, SubjectId attacker, SubjectId target) {
         return new PhysicalIntent(SettlementAssaultStrikeReceiptBinding.intentId(state, lease, cause), PhysicalIntentKind.SCENE_STRIKE,
                 PhysicalIntentStatus.PREPARED, cause, List.of(attacker, target),
                 new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED);
+    }
+
+    private static CombatSample coldStrike(long seed) {
+        FrontierDevelopmentScenarios.SettlementAssaultFixture fixture = FrontierDevelopmentScenarios.settlementAssaultFixture(
+                new WorldId("frontier:combat-calibration-" + seed), seed);
+        FrontierWorldState before = fixture.state();
+        SettlementAssault assault = before.strategicPlans().settlementAssaults().get(fixture.assaultId());
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> events = HiveSettlementAssaultProcess.planCombat(before,
+                HiveSettlementAssaultProcess.combat(assault, fixture.instant().ticks()));
+        SettlementAssaultStrike strike = events.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                .filter(SettlementAssaultStrike.class::isInstance).map(SettlementAssaultStrike.class::cast).findFirst().orElseThrow();
+        return new CombatSample(HiveSettlementAssaultProcess.reduceStrike(before, assault.hiveId(), strike), assault.id(), strike);
+    }
+
+    private static CombatSample hotStrike(long seed, SettlementAssaultStrike expected) {
+        FrontierDevelopmentScenarios.SettlementAssaultFixture fixture = FrontierDevelopmentScenarios.settlementAssaultFixture(
+                new WorldId("frontier:combat-calibration-" + seed), seed);
+        FrontierWorldState state = fixture.state();
+        SettlementAssault assault = state.strategicPlans().settlementAssaults().get(fixture.assaultId());
+        SettlementAssaultSceneCandidate candidate = state.coldSettlementAssaultSceneCandidates().stream()
+                .filter(value -> value.assaultId().equals(assault.id())).findFirst().orElseThrow();
+        SceneLeaseId leaseId = new SceneLeaseId("lease:combat-calibration-" + seed);
+        WorldId worldId = state.bootstrap().worldId();
+        List<SceneMember> members = candidate.memberPositions().keySet().stream().sorted()
+                .map(id -> new SceneMember(id, SceneLease.deterministicEntityId(worldId, id))).toList();
+        SceneLease lease = SceneLease.forCause(leaseId, worldId,
+                new SettlementAssaultSceneCause(assault.id(), assault.settlementId()), candidate.handoffPosition(), fixture.instant(), 0L,
+                SceneLeaseStatus.PREPARED, members, SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), Set.of(), Optional.empty());
+        state = state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+        SubjectId cause = SettlementAssaultCauseIdentity.strike(assault.id(), expected.attackerId(), expected.epoch());
+        PhysicalIntent intent = strike(state, lease, cause, expected.attackerId(), expected.targetId());
+        FixedScalar before = state.actorLocations().get(expected.targetId()).condition().health();
+        FixedScalar after = before.minus(expected.damage());
+        if (after.compareTo(FixedScalar.ZERO) <= 0) throw new IllegalStateException("calibration fixture unexpectedly needs a lethal receipt");
+        SceneStrikeObservation observation = new SceneStrikeObservation(new PhysicalObservationId("observation:combat-calibration-" + seed), intent.id(),
+                expected.attackerId(), expected.targetId(), before, after);
+        state = state.preparePhysicalIntent(intent).transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty())
+                .transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation));
+        FrontierWorldState draining = state.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING);
+        FrontierWorldState released = draining.releaseSceneLease(leaseId, members.stream().map(member -> new SceneMemberPosition(member.actorId(),
+                draining.actorLocations().get(member.actorId()).body(), draining.actorLocations().get(member.actorId()).condition().health())).toList());
+        return new CombatSample(released, assault.id(), expected);
     }
 
     private static SettlementAssault assault(StrategicTask task, List<SubjectId> attackers, List<SubjectId> defenders) {
@@ -236,5 +315,36 @@ class SettlementAssaultTest {
     private static HiveSettlementKnowledge.Sighting sighting() {
         return new HiveSettlementKnowledge.Sighting(new SubjectId("settlement:northwatch"), new SubjectId("bioform:west-0"),
                 new BlockPosition(10, 64, 10), 100L);
+    }
+
+    private record CombatSample(FrontierWorldState state, SubjectId assaultId, SettlementAssaultStrike strike) { }
+
+    private static final class CombatFacts {
+        private final LinkedHashSet<String> actors = new LinkedHashSet<>(), objects = new LinkedHashSet<>(), stages = new LinkedHashSet<>();
+        private final LinkedHashSet<String> topology = new LinkedHashSet<>(), effects = new LinkedHashSet<>(), opportunities = new LinkedHashSet<>();
+        private final LinkedHashMap<String, Long> claims = new LinkedHashMap<>(), custody = new LinkedHashMap<>(), work = new LinkedHashMap<>();
+        private final LinkedHashMap<String, String> recovery = new LinkedHashMap<>();
+
+        private void append(CombatSample sample, long seed) {
+            SettlementAssault assault = sample.state().strategicPlans().settlementAssaults().get(sample.assaultId());
+            String prefix = "seed:" + seed + ":";
+            assault.attackerIds().forEach(id -> actors.add(prefix + id.value()));
+            assault.defenderIds().forEach(id -> actors.add(prefix + id.value()));
+            objects.add(prefix + assault.id().value());
+            claims.put(prefix + "epoch", (long) assault.nextStrikeEpoch());
+            custody.put(prefix + "target-health", sample.state().actorLocations().get(sample.strike().targetId()).condition().health().raw());
+            stages.add(prefix + assault.status());
+            work.put(prefix + "strike-epoch", (long) assault.nextStrikeEpoch());
+            topology.add(prefix + assault.tacticalPlan().policy());
+            effects.add(prefix + SettlementAssaultCauseIdentity.strike(assault.id(), sample.strike().attackerId(), sample.strike().epoch()).value());
+            recovery.put(prefix + "active-lease", "none");
+            opportunities.add(prefix + sample.strike().attackerId().value() + ":" + sample.strike().targetId().value() + ":" + sample.strike().epoch());
+        }
+
+        private FrontierObserverNeutralityContract.Run run(FrontierObserverNeutralityContract.Declaration declaration) {
+            int samples = objects.size();
+            return new FrontierObserverNeutralityContract.Run(declaration, actors, objects, claims, custody, stages, work, topology, effects,
+                    recovery, opportunities, new FrontierObserverNeutralityContract.CalibrationSample(samples, samples, 0, samples * 20L));
+        }
     }
 }
