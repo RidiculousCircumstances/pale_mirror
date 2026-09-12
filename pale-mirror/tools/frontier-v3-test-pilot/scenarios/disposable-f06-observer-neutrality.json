@@ -11,11 +11,11 @@
     ] }
   ],
   "actions": [
+    { "type": "fast_forward", "ticks": 24000, "timeoutMs": 180000 },
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 388, "y": 65, "z": -355 }, "settleMs": 1000, "causalMilestone": "first_arrival" },
     { "type": "wait_until_diagnostic", "view": "first_visibility", "id": "24,-23", "expect": { "status": "ok", "visibility": "READY" }, "timeoutMs": 30000, "causalMilestone": "static_ready" },
     { "type": "look", "at": { "x": 380, "y": 64, "z": -340 } },
     { "type": "assert_visible_block", "position": { "x": 380, "y": 64, "z": -340 }, "timeoutMs": 10000, "causalMilestone": "static_visible" },
-    { "type": "fast_forward", "ticks": 24000, "timeoutMs": 180000 },
     { "type": "wait_until_block", "position": { "x": 388, "y": 64, "z": -355 }, "block": "minecraft:wheat", "timeoutMs": 90000 },
     { "type": "look", "at": { "x": 388, "y": 64, "z": -355 } },
     { "type": "assert_visible_block", "position": { "x": 388, "y": 64, "z": -355 }, "timeoutMs": 10000 },
@@ -37,13 +37,13 @@
     ]
   },
   "assertions": [
-    { "after": 2, "view": "first_visibility", "id": "24,-23", "expect": { "status": "ok", "visibility": "READY" } },
+    { "after": 3, "view": "first_visibility", "id": "24,-23", "expect": { "status": "ok", "visibility": "READY" } },
     { "after": 10, "view": "site", "id": "site:4-wheat-field", "expect": { "status": "ok", "phase": "CONFLICT" } },
     { "after": 11, "view": "site", "id": "site:4-wheat-field", "expect": { "status": "ok", "phase": "CONFLICT" } },
     { "after": 14, "view": "site", "id": "site:4-wheat-field", "expect": { "status": "ok", "phase": "CONFLICT" } }
   ],
   "frames": [
-    { "after": 4, "name": "first-static-arrival" },
+    { "after": 5, "name": "first-static-arrival" },
     { "after": 8, "name": "field-before-intervention" },
     { "after": 14, "name": "field-after-return" }
   ]

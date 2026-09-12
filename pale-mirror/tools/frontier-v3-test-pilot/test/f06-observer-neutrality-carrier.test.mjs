@@ -11,7 +11,7 @@ function observed(actionStep, value) { return { observed: { actionStep, value } 
 function manifest() {
   return { status: 'ok', scenarioId: declaration.id, recovery: { mode: 'graceful', splitAfterAction: 10 },
     actions: declaration.actions.map(action => ({ action: structuredClone(action) })), diagnostics: [
-      observed(1, ingress()), observed(2, { kind: 'first_visibility', id: '24,-23', status: 'ok', visibility: 'READY', staticCells: 18, replicaRevision: 71 }),
+      observed(2, ingress()), observed(3, { kind: 'first_visibility', id: '24,-23', status: 'ok', visibility: 'READY', staticCells: 18, replicaRevision: 71 }),
       observed(10, conflict()), observed(11, conflict()), observed(13, ingress()), observed(14, conflict())
     ] };
 }
@@ -22,8 +22,10 @@ function conflict() { return { kind: 'site', id: 'site:4-wheat-field', status: '
 test('F0.6 declaration admits the production first-visibility vocabulary and bounds ordinary intervention continuity', () => {
   validateScenario(declaration);
   assert.deepEqual(assertF06ObserverNeutralityDeclaration(declaration).arrival, { x: 388, y: 65, z: -355 });
-  const stale = structuredClone(declaration); stale.actions[1].id = '23,-22';
+  const stale = structuredClone(declaration); stale.actions[2].id = '23,-22';
   assert.throws(() => assertF06ObserverNeutralityDeclaration(stale), /first-visibility/);
+  const unsafe = structuredClone(declaration); [unsafe.actions[0], unsafe.actions[1]] = [unsafe.actions[1], unsafe.actions[0]];
+  assert.throws(() => assertF06ObserverNeutralityDeclaration(unsafe), /pre-ingress safe advance/);
 });
 
 test('F0.6 carrier requires natural static readiness before visible/dynamic work and retains intervention through restart/return', () => {

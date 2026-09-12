@@ -22,12 +22,12 @@ export function assertF06ObserverNeutralityCarrier({ declaration, manifest }) {
     if (!isDeepStrictEqual(manifest.actions[index]?.action, action)) throw new Error('F0.6 observer-neutrality manifest substituted an action');
   });
   const diagnostics = observed(manifest);
-  const first = exactly(diagnostics, 2, 'first_visibility', CHUNK);
+  const first = exactly(diagnostics, 3, 'first_visibility', CHUNK);
   if (first.visibility !== 'READY' || !Number.isSafeInteger(first.staticCells) || first.staticCells < 1
       || !Number.isSafeInteger(first.replicaRevision) || first.replicaRevision < 0) {
     throw new Error('F0.6 first arrival did not retain a nonempty static-current chunk before scene eligibility');
   }
-  for (const step of [1, 13]) assertNaturalClientIngress(diagnostics, step);
+  for (const step of [2, 13]) assertNaturalClientIngress(diagnostics, step);
   const intervention = exactly(diagnostics, 10, 'site', SITE);
   const afterRestart = exactly(diagnostics, 11, 'site', SITE);
   const afterReturn = exactly(diagnostics, 14, 'site', SITE);
@@ -43,15 +43,16 @@ export function assertF06ObserverNeutralityDeclaration(declaration) {
   const actions = declaration?.actions;
   if (declaration?.id !== SCENARIO || declaration?.isolation?.mode !== 'disposable_lite' || declaration?.server?.profile !== 'world'
       || declaration.restart?.mode !== 'graceful' || declaration.restart?.afterAction !== 10 || !Array.isArray(actions) || actions.length !== 14
-      || actions[0]?.type !== 'visit' || actions[0].dimension !== DIMENSION || !isDeepStrictEqual(actions[0].position, ARRIVAL)
-      || actions[1]?.type !== 'wait_until_diagnostic' || actions[1].view !== 'first_visibility' || actions[1].id !== CHUNK
-      || actions[1].expect?.visibility !== 'READY' || actions[2]?.type !== 'look' || !isDeepStrictEqual(actions[2].at, STATIC_ANCHOR)
-      || actions[3]?.type !== 'assert_visible_block' || !isDeepStrictEqual(actions[3].position, STATIC_ANCHOR)
+      || actions[0]?.type !== 'fast_forward' || actions[0].ticks !== 24_000 || actions[0].timeoutMs !== 180_000
+      || actions[1]?.type !== 'visit' || actions[1].dimension !== DIMENSION || !isDeepStrictEqual(actions[1].position, ARRIVAL)
+      || actions[2]?.type !== 'wait_until_diagnostic' || actions[2].view !== 'first_visibility' || actions[2].id !== CHUNK
+      || actions[2].expect?.visibility !== 'READY' || actions[3]?.type !== 'look' || !isDeepStrictEqual(actions[3].at, STATIC_ANCHOR)
+      || actions[4]?.type !== 'assert_visible_block' || !isDeepStrictEqual(actions[4].position, STATIC_ANCHOR)
       || actions[8]?.type !== 'break' || !isDeepStrictEqual(actions[8].position, { x: 388, y: 64, z: -355 })
       || !conflict(actions[9]) || actions[10]?.type !== 'inspect' || actions[10].view !== 'site' || actions[10].id !== SITE
       || actions[11]?.type !== 'visit' || actions[11].dimension !== 'minecraft:overworld'
       || actions[12]?.type !== 'visit' || actions[12].dimension !== DIMENSION || !isDeepStrictEqual(actions[12].position, ARRIVAL) || !conflict(actions[13])) {
-    throw new Error('F0.6 observer-neutrality declaration lacks exact first-visibility/intervention continuity');
+    throw new Error('F0.6 observer-neutrality declaration lacks a pre-ingress safe advance or exact first-visibility/intervention continuity');
   }
   return Object.freeze({ scenario: SCENARIO, chunk: CHUNK, arrival: ARRIVAL, staticAnchor: STATIC_ANCHOR, site: SITE });
 }

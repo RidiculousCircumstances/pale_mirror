@@ -64,9 +64,7 @@ public final class FrontierV3ServerLifecycle {
     private static final WorkBudget TICK_BUDGET = new WorkBudget(128, 512);
     public static final int MAX_FAST_FORWARD_TICKS = 24_000;
     private static final int FAST_FORWARD_SLICE_TICKS = 512;
-
     private FrontierV3ServerLifecycle() { }
-
     /**
      * Reports the physical-world owner selected at server launch.
      *
@@ -78,10 +76,8 @@ public final class FrontierV3ServerLifecycle {
         Objects.requireNonNull(server, "server");
         return v3LaunchOwnsPhysicalWorld();
     }
-
     /** Package-visible so the launch-mode exclusion remains directly testable without a server fixture. */
     static boolean v3LaunchOwnsPhysicalWorld() { return enabled(); }
-
     /**
      * Whether broad server callbacks must leave the frozen source-parity runtime untouched.
      *
@@ -89,7 +85,6 @@ public final class FrontierV3ServerLifecycle {
      * v2 construction, SavedData hydration and projection.</p>
      */
     public static boolean freezesLegacySourceRuntime() { return v3LaunchOwnsPhysicalWorld(); }
-
     /**
      * Returns an operator-facing summary of the v3 world selected for this server.
      *
@@ -113,7 +108,6 @@ public final class FrontierV3ServerLifecycle {
                 .map(FrontierV3ServerLifecycle::formatStatus)
                 .orElse("Frontier v3 is ACTIVE, but its immutable status projection is unavailable.");
     }
-
     /**
      * Emits one bounded, immutable diagnostic document for an operator or external test pilot.
      * This is deliberately a read boundary: no command, schedule, chunk load or WAL write occurs here.
@@ -214,7 +208,6 @@ public final class FrontierV3ServerLifecycle {
                 "trace".equals(view) ? FrontierV3DiagnosticTrace.latest(server, id) : java.util.Optional.empty(), admission, harvestReadiness, sceneReadiness, assemblyReadiness,
                 containerReadiness, equipmentIssueReadiness, equipmentReturnReadiness);
     }
-
     /**
      * Narrow pilot-only read seam for one already-loaded scene anchor.  It deliberately exposes
      * neither the runtime nor an admission operation: the pilot may record the existing cursor,
@@ -238,7 +231,6 @@ public final class FrontierV3ServerLifecycle {
                     anchor -> FrontierV3SceneDemand.observe(level, anchor));
         });
     }
-
     /** Package-visible pure formatter, kept testable without a Minecraft server fixture. */
     static String formatStatus(FrontierWorldProjection projection) {
         Objects.requireNonNull(projection, "projection");
@@ -253,7 +245,6 @@ public final class FrontierV3ServerLifecycle {
                 + " ambient=" + projection.activeAmbientLeaseCount() + "/unknown=" + projection.unknownAmbientLeaseCount()
                 + " | inventoryConflicts=" + projection.inventoryConflictCount();
     }
-
     public static void start(MinecraftServer server) {
         Objects.requireNonNull(server, "server");
         // The server lifecycle publishes both startup callbacks.  The later
@@ -266,7 +257,6 @@ public final class FrontierV3ServerLifecycle {
         ServerLevel physicalWorld = FrontierV3PhysicalWorld.require(server);
         startConfigured(server, initialConfiguration(physicalWorld));
     }
-
     /**
      * Starts an explicit already-built configuration for a moddev-only source set.
      *
@@ -284,7 +274,6 @@ public final class FrontierV3ServerLifecycle {
         FrontierV3PhysicalWorld.require(server);
         startConfigured(server, configuration);
     }
-
     private static void startConfigured(MinecraftServer server,
                                         io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration) {
         ServerLevel physicalWorld = FrontierV3PhysicalWorld.require(server);
@@ -337,13 +326,11 @@ public final class FrontierV3ServerLifecycle {
             PaleMirrorMod.LOGGER.error("Frontier v3 development runtime quarantined at startup: {}", runtime.status().detail().orElse("unknown"));
         }
     }
-
     /** Production bootstrap: profile properties never participate in this decision. */
     private static io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection>
     initialConfiguration(ServerLevel physicalWorld) {
         return initialConfiguration(FrontierV3PhysicalWorld.WORLD_ID, physicalWorld.getSeed());
     }
-
     static io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection>
     initialConfiguration(io.farfrontier.palemirror.frontier.v3.api.WorldId worldId, long seed) {
         return FrontierWorldRuntimeDefinition.configuration(worldId, seed);
