@@ -242,7 +242,7 @@ try {
     lifecycleBarrier(LifecycleBarrier.TERMINAL_ASSERTION_COMPLETE, undefined, undefined, { assertionCount: (scenario.assertions ?? []).length });
     await lifecycleWrites;
   }
-  if (lifecycle !== undefined && lifecycleTerminalAssertion && sessionControlDirectory === undefined) {
+  if (lifecycle !== undefined && lifecycleTerminalAssertion) {
     const segment = lifecycleSegment();
     const close = join(lifecycle.directory, `close-client-${segment}.token`);
     await writeFile(close, `${lifecycle.identity.runId}:${segment}\n`, { encoding: 'utf8', flag: 'wx' });

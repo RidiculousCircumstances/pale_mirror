@@ -273,13 +273,13 @@ final class FrontierV3PilotSessionControl {
      * itself performs the ordinary disconnect that the server must observe.
      */
     static boolean shouldAwaitLifecycleFinalClose() {
-        return !matrix() && controlDirectory() == null && lifecycleDirectory() != null
+        return !matrix() && lifecycleDirectory() != null
                 && "true".equals(System.getProperty(LIFECYCLE_TERMINAL_PROPERTY, "false"))
                 && !awaitingFinalClose && !finalCloseRequested;
     }
 
     static boolean awaitingLifecycleFinalClose() {
-        return !matrix() && controlDirectory() == null && lifecycleDirectory() != null && awaitingFinalClose && !finalCloseRequested;
+        return !matrix() && lifecycleDirectory() != null && awaitingFinalClose && !finalCloseRequested;
     }
 
     static void markAwaitingLifecycleFinalClose() {

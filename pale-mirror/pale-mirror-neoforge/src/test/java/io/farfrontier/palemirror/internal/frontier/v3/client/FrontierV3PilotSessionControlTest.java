@@ -56,22 +56,33 @@ class FrontierV3PilotSessionControlTest {
         Path control = Files.createDirectory(root.resolve("control"));
         Files.writeString(control.resolve("resumed"), "runner-owned\n", StandardCharsets.UTF_8);
         Path lifecycle = Files.createDirectory(root.resolve("lifecycle"));
+        Files.createDirectory(lifecycle.resolve("staging"));
+        Files.createDirectory(lifecycle.resolve("signals"));
+        String runId = UUID.randomUUID().toString();
+        Files.writeString(lifecycle.resolve("identity.json"), "{\"schema\":1,\"runId\":\"%s\"}\n".formatted(runId), StandardCharsets.UTF_8);
         String priorControl = System.getProperty(CONTROL);
         String priorLifecycle = System.getProperty(LIFECYCLE);
         String priorSegment = System.getProperty(LIFECYCLE_SEGMENT);
+        String priorTerminal = System.getProperty(LIFECYCLE_TERMINAL);
         try {
             System.setProperty(CONTROL, control.toString());
             System.setProperty(LIFECYCLE, lifecycle.toString());
+            System.setProperty(LIFECYCLE_TERMINAL, "true");
             // This is the immutable launch-time initial segment.  It must not override the
             // runner-owned resumed marker on the one persistent Minecraft client.
             System.setProperty(LIFECYCLE_SEGMENT, "before_restart");
             FrontierV3PilotSessionControl.reset();
             assertEquals("after_restart", FrontierV3PilotSessionControl.lifecycleSegment());
+            assertTrue(FrontierV3PilotSessionControl.shouldAwaitLifecycleFinalClose());
+            FrontierV3PilotSessionControl.markAwaitingLifecycleFinalClose();
+            Files.writeString(lifecycle.resolve("close-client-after_restart.token"), runId + ":after_restart\n", StandardCharsets.UTF_8);
+            assertTrue(FrontierV3PilotSessionControl.requestLifecycleFinalClose());
         } finally {
             FrontierV3PilotSessionControl.reset();
             restore(CONTROL, priorControl);
             restore(LIFECYCLE, priorLifecycle);
             restore(LIFECYCLE_SEGMENT, priorSegment);
+            restore(LIFECYCLE_TERMINAL, priorTerminal);
         }
     }
 
