@@ -157,7 +157,7 @@ final class FrontierV3RoutePatrolSceneExecutor {
             Entity candidateEntity = level.getEntity(candidate.entityId()); BodyPosition targetBody = formationBodies.get(candidate.actorId());
             if (!(candidateEntity instanceof Mob candidateBody) || targetBody == null) continue;
             if (!at(candidateBody, targetBody.supportingSurface())) {
-                if (!clearNextBody(level, candidateBody, targetBody.supportingSurface())) {
+                if (!clearNextBody(level, candidateBody, targetBody.supportingSurface(), lease)) {
                     block(level, runtime, lease, retained, RoutePatrolBlockReason.OCCUPIED_NEXT_BODY); return;
                 }
                 FrontierV3ControlledMobMotion.moveToward(level, candidateBody, point(targetBody.supportingSurface()));
@@ -178,8 +178,18 @@ final class FrontierV3RoutePatrolSceneExecutor {
     }
     private static boolean at(Mob body, SurfaceAnchor surface) { return FrontierV3SurfaceObservation.at(body, surface); }
     private static Vec3 point(SurfaceAnchor surface) { return FrontierV3SurfaceObservation.point(surface); }
-    private static boolean clearNextBody(ServerLevel level, Mob body, SurfaceAnchor surface) {
-        return level.noCollision(body, body.getBoundingBox().move(point(surface).subtract(body.position())));
+    /**
+     * A formation edge moves the complete retained roster together.  A scout may therefore
+     * enter the leader's current cell while that exact leader is simultaneously leaving it.
+     * Treating that owned, scheduled departure as a foreign obstacle deadlocks every close
+     * column.  Blocks, players, ambient actors and any non-member body remain hard obstacles.
+     */
+    private static boolean clearNextBody(ServerLevel level, Mob body, SurfaceAnchor surface, SceneLease lease) {
+        var target = body.getBoundingBox().move(point(surface).subtract(body.position()));
+        if (level.getBlockCollisions(body, target).iterator().hasNext()) return false;
+        Set<java.util.UUID> formationBodies = lease.members().stream().map(SceneMember::entityId)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        return level.getEntities(body, target, entity -> !formationBodies.contains(entity.getUUID())).isEmpty();
     }
     private static void drain(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease) {
         submit(runtime, "route-patrol-draining", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
