@@ -92,6 +92,11 @@ final class RoutePatrolPayloadCodecs {
             return new RoutePatrolFormationObserved(task, lease, bodies);
         }); }
     }; }
+    static PayloadCodec formationAdvanced() { return new PayloadCodec() {
+        @Override public String type() { return "frontier.route_patrol_formation_advanced"; }
+        @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> subject(output, ((RoutePatrolFormationAdvanced) payload).taskId())); }
+        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new RoutePatrolFormationAdvanced(subject(input))); }
+    }; }
     private static void writePatrol(DataOutputStream output, RoutePatrol patrol) throws IOException {
         subject(output, patrol.taskId()); subject(output, patrol.settlementId()); RouteUnitManifestCodec.write(output, patrol.unit());
         TraversalTopologyStateCodec.write(output, patrol.inspectionRoute()); PatrolStateCodec.writeAssembly(output, patrol.assembly()); PatrolStateCodec.writeTravel(output, patrol.travel());
