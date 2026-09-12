@@ -53,7 +53,8 @@ test('native launcher accepts only its checkout or exact task-private sibling as
   assert.match(launcher, /processRoot\.startsWith\(`\$\{project\}\/`\).*processRoot\.startsWith\(taskPrivateRoot\)/s);
   assert.match(launcher, /--reuse-resource-windows=/);
   assert.match(launcher, /--reuse-physical-first=/);
-  assert.match(launcher, /retained physical-first manifest does not match the current packaged artifact/);
+  assert.match(launcher, /--reuse-canonical-first=/);
+  assert.match(launcher, /retained \$\{order\} manifest does not match the current packaged artifact/);
   assert.match(launcher, /prepared === undefined \? \{\} : \{ FRONTIER_V3_PREPARED_BUILD_IDENTITY: prepared \}/);
 });
 

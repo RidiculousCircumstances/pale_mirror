@@ -17,9 +17,10 @@ async function main() {
   const [outputArgument, ...options] = process.argv.slice(2);
   const reusedReport = options.find((option) => option.startsWith('--reuse-resource-windows='))?.slice('--reuse-resource-windows='.length);
   const reusedPhysical = options.find((option) => option.startsWith('--reuse-physical-first='))?.slice('--reuse-physical-first='.length);
+  const reusedCanonical = options.find((option) => option.startsWith('--reuse-canonical-first='))?.slice('--reuse-canonical-first='.length);
   if (options.length !== new Set(options).size || options.some((option) => !option.startsWith('--reuse-resource-windows=')
-      && !option.startsWith('--reuse-physical-first='))) {
-    throw new Error('F0.5 hard-crash carrier accepts only exact retained resource-window and physical-first options');
+      && !option.startsWith('--reuse-physical-first=') && !option.startsWith('--reuse-canonical-first='))) {
+    throw new Error('F0.5 hard-crash carrier accepts only exact retained resource-window, physical-first, and canonical-first options');
   }
   const output = resolve(outputArgument ?? 'build/f05-native/fenced-hard-crash-carrier.json');
   if (!output.startsWith(`${project}/`) || !process.env.DISPLAY) {
@@ -39,8 +40,10 @@ async function main() {
   // fresh worlds and are intentionally serial rather than competing for any client state.
   const physicalEvidence = reusedPhysical === undefined
     ? await freshPlayerEvidence(physicalScenario, resolve(root, 'physical-first.manifest.json'), resourceEvidence.prepared, processRoot, port(2))
-    : await retainedPlayerEvidence(containedBuildPath(reusedPhysical, 'F0.5 retained physical-first manifest'));
-  const canonicalEvidence = await freshPlayerEvidence(canonicalScenario, resolve(root, 'canonical-first.manifest.json'), resourceEvidence.prepared, processRoot, port(4));
+    : await retainedPlayerEvidence(containedBuildPath(reusedPhysical, 'F0.5 retained physical-first manifest'), 'physical-first');
+  const canonicalEvidence = reusedCanonical === undefined
+    ? await freshPlayerEvidence(canonicalScenario, resolve(root, 'canonical-first.manifest.json'), resourceEvidence.prepared, processRoot, port(4))
+    : await retainedPlayerEvidence(containedBuildPath(reusedCanonical, 'F0.5 retained canonical-first manifest'), 'canonical-first');
   const physicalFirst = physicalEvidence.manifest; const canonicalFirst = canonicalEvidence.manifest;
   const facts = assertF05HardCrashCarrier({ windows: resourceEvidence.windows, physicalFirst, canonicalFirst });
   const receipt = Object.freeze({ schema: 1, kind: 'f05-fenced-hard-crash-native-carrier', status: 'passed', facts,
@@ -56,14 +59,14 @@ async function freshPlayerEvidence(scenario, output, prepared, processRoot, cand
   return Object.freeze({ path: output, manifest: await readJson(output), reused: false });
 }
 
-async function retainedPlayerEvidence(path) {
+async function retainedPlayerEvidence(path, order) {
   const manifest = await readJson(path); const artifact = manifest?.build?.preparedArtifact;
   if (typeof artifact?.path !== 'string' || !/^[a-f0-9]{64}$/.test(artifact.sha256)) {
-    throw new Error('F0.5 retained physical-first manifest has no packaged artifact identity');
+    throw new Error(`F0.5 retained ${order} manifest has no packaged artifact identity`);
   }
   const artifactPath = resolve(project, artifact.path);
   if (!artifactPath.startsWith(`${project}/`) || await sha(artifactPath) !== artifact.sha256) {
-    throw new Error('F0.5 retained physical-first manifest does not match the current packaged artifact');
+    throw new Error(`F0.5 retained ${order} manifest does not match the current packaged artifact`);
   }
   return Object.freeze({ path, manifest, reused: true });
 }
