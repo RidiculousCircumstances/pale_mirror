@@ -82,15 +82,17 @@ final class RoutePatrolPayloadCodecs {
     private static void writePatrol(DataOutputStream output, RoutePatrol patrol) throws IOException {
         subject(output, patrol.taskId()); subject(output, patrol.settlementId()); RouteUnitManifestCodec.write(output, patrol.unit());
         TraversalTopologyStateCodec.write(output, patrol.inspectionRoute()); PatrolStateCodec.writeAssembly(output, patrol.assembly()); PatrolStateCodec.writeTravel(output, patrol.travel());
+        TacticalPlanStateCodec.write(output, patrol.tacticalPlan());
         output.writeByte(patrol.status().wireTag()); output.writeBoolean(patrol.obstruction().isPresent());
         if (patrol.obstruction().isPresent()) position(output, patrol.obstruction().orElseThrow());
     }
     private static RoutePatrol readPatrol(DataInputStream input) throws IOException {
         SubjectId task = subject(input), settlement = subject(input); RouteUnitManifest unit = RouteUnitManifestCodec.read(input);
         TraversalTopology inspection = TraversalTopologyStateCodec.read(input); PatrolAssembly assembly = PatrolStateCodec.readAssembly(input); PatrolTravel travel = PatrolStateCodec.readTravel(input);
+        TacticalPlan tacticalPlan = TacticalPlanStateCodec.read(input);
         int status = input.readUnsignedByte(); Optional<BlockPosition> obstruction = input.readBoolean() ? Optional.of(position(input)) : Optional.empty();
         if (status >= RoutePatrolStatus.values().length) throw new IllegalArgumentException("unknown route patrol status");
-        return new RoutePatrol(task, settlement, unit, inspection, assembly, travel, FrontierWireTags.require(RoutePatrolStatus.class, status), obstruction);
+        return new RoutePatrol(task, settlement, unit, inspection, assembly, travel, tacticalPlan, FrontierWireTags.require(RoutePatrolStatus.class, status), obstruction);
     }
     private static void subject(DataOutputStream output, SubjectId id) throws IOException { FrontierWorldPayloadCodecs.writeSubject(output, id); }
     private static SubjectId subject(DataInputStream input) throws IOException { return FrontierWorldPayloadCodecs.readSubject(input).value(); }
