@@ -129,10 +129,10 @@ public final class FrontierV3ServerLifecycle {
         if ("execution".equals(view)) return FrontierV3PhysicalExecutionDiagnostic.render(checkpoint);
         if ("first_visibility".equals(view)) return FrontierV3DiagnosticJson.firstVisibility(id, checkpoint,
                 FrontierV3GrayboxExecutor.firstVisibility(runtime, id));
-        if ("performance".equals(view)) return FrontierV3PerformanceDiagnostic.render(checkpoint, runtime.executionMetrics().snapshot(),
+        FrontierWorldState state = runtime.decodedState().orElseThrow();
+        if ("performance".equals(view)) return FrontierV3PerformanceDiagnostic.render(checkpoint, runtime.executionMetrics().snapshot(), state,
                 FAST_FORWARD_REMAINING.getOrDefault(server, 0), FAST_FORWARD_TARGETS.get(server), FAST_FORWARD_FAILURES.get(server),
                 FAST_FORWARD_OUTCOMES.get(server));
-        FrontierWorldState state = runtime.decodedState().orElseThrow();
         if ("player_resource".equals(view)) return FrontierV3PlayerResourceDiagnostic.render(checkpoint, state, server, id);
         if ("traversal_foundry".equals(view)) return FrontierV3TraversalFoundryDiagnostic.render(checkpoint, state,
                 FrontierV3PhysicalWorld.require(server), id);

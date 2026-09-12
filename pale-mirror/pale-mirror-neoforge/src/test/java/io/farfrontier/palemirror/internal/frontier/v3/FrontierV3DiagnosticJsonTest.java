@@ -8,6 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierV3FixtureCatalog;
@@ -160,6 +161,21 @@ class FrontierV3DiagnosticJsonTest {
                 && value.contains("\"requestId\":4") && value.contains("\"targetInstant\":12") && value.contains("\"admittedCheckpointInstant\":11")
                 && value.contains("\"status\":\"REJECTED\""));
         assertTrue(value.length() < 8_192, "performance diagnostics retain the ordinary bounded operator response limit");
+    }
+
+    @Test
+    void reportsOnlyBoundedCanonicalPressureFactsWithoutLevelEnumeration() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:performance-pressure"), 91L));
+        CheckpointImage checkpoint = new CheckpointImage(state.bootstrap().worldId(), new io.farfrontier.palemirror.frontier.v3.api.Revision(3L),
+                new SimInstant(12L), new byte[]{1, 2, 3}, List.of(), List.of());
+
+        String value = FrontierV3PerformanceDiagnostic.render(checkpoint, new FrontierV3PerformanceMetrics().snapshot(), state,
+                0, null, null, null);
+
+        assertTrue(value.contains("\"frontier\":{") && value.contains("\"settlements\":12") && value.contains("\"seedNests\":2")
+                && value.contains("\"settlementDecisionAuthorities\":12") && value.contains("\"hivemindDecisionAuthorities\":1")
+                && value.contains("\"managedActorBindings\":0")
+                && value.contains("\"checkpointBytes\":3"), "the pressure cut is a bounded canonical count, not a level census");
     }
 
     @Test

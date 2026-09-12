@@ -2,9 +2,13 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierExecutionMetrics;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
 
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /** Read-only compact rendering of bounded v3 execution telemetry. */
 final class FrontierV3PerformanceDiagnostic {
@@ -28,6 +32,16 @@ final class FrontierV3PerformanceDiagnostic {
      */
     static String render(CheckpointImage checkpoint, FrontierExecutionMetrics.Snapshot metrics, int fastForwardRemaining, Long fastForwardTarget,
                          String fastForwardFailure, FrontierV3ServerLifecycle.FastForwardTargetOutcome outcome) {
+        return render(checkpoint, metrics, null, fastForwardRemaining, fastForwardTarget, fastForwardFailure, outcome);
+    }
+
+    /**
+     * One bounded read-only pressure cut.  It counts retained canonical bindings rather than
+     * scanning a level, loading a chunk, or claiming that a presentation entity is an actor.
+     */
+    static String render(CheckpointImage checkpoint, FrontierExecutionMetrics.Snapshot metrics, FrontierWorldState state,
+                         int fastForwardRemaining, Long fastForwardTarget, String fastForwardFailure,
+                         FrontierV3ServerLifecycle.FastForwardTargetOutcome outcome) {
         if (fastForwardRemaining < 0 || fastForwardRemaining > FrontierV3ServerLifecycle.MAX_FAST_FORWARD_TICKS) {
             throw new IllegalArgumentException("bounded fast-forward remainder");
         }
@@ -43,7 +57,35 @@ final class FrontierV3PerformanceDiagnostic {
                 .append(",\"fastForwardTargetOutcome\":").append(outcome == null ? "null" : outcome(outcome))
                 .append(",\"stages\":[");
         appendStages(value, metrics.stages()); value.append("],\"queues\":["); appendQueues(value, metrics.queues());
+        if (state != null) value.append(",\"frontier\":").append(frontier(state, checkpoint));
         return FrontierV3DiagnosticJson.bounded("performance", "", checkpoint, value.append("]}").toString());
+    }
+
+    private static String frontier(FrontierWorldState state, CheckpointImage checkpoint) {
+        long hotScenes = state.sceneLeases().values().stream().filter(lease -> lease.status() == SceneLeaseStatus.HOT).count();
+        long activeScenes = state.sceneLeases().values().stream().filter(lease -> lease.status() == SceneLeaseStatus.PREPARED
+                || lease.status() == SceneLeaseStatus.HOT || lease.status() == SceneLeaseStatus.DRAINING).count();
+        Set<io.farfrontier.palemirror.frontier.v3.api.SubjectId> bindings = new HashSet<>();
+        state.sceneLeases().values().stream().filter(lease -> lease.status() == SceneLeaseStatus.PREPARED || lease.status() == SceneLeaseStatus.HOT
+                || lease.status() == SceneLeaseStatus.DRAINING).forEach(lease -> lease.members().forEach(member -> bindings.add(member.actorId())));
+        long hotAmbient = state.ambientLeases().values().stream().filter(lease -> lease.status()
+                == io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus.HOT).peek(lease -> bindings.add(lease.actorId())).count();
+        long activeAssaults = state.strategicPlans().settlementAssaults().values().stream().filter(assault -> assault.status()
+                != io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultStatus.RESOLVED).count();
+        long activeEngagements = state.strategicPlans().routeEngagements().values().stream().filter(engagement -> engagement.status()
+                != io.farfrontier.palemirror.frontier.v3.model.RouteEngagementStatus.RESOLVED).count();
+        long settlementAuthorities = state.strategicPlans().decisionAuthorities().authorities().values().stream().filter(authority -> authority.kind()
+                == io.farfrontier.palemirror.frontier.v3.model.DecisionAuthorityKind.SETTLEMENT).count();
+        long hivemindAuthorities = state.strategicPlans().decisionAuthorities().authorities().values().stream().filter(authority -> authority.kind()
+                == io.farfrontier.palemirror.frontier.v3.model.DecisionAuthorityKind.HIVEMIND).count();
+        return "{\"settlements\":" + state.bootstrap().settlements().size() + ",\"seedNests\":" + state.bootstrap().hive().seedNests().size()
+                + ",\"settlementDecisionAuthorities\":" + settlementAuthorities + ",\"hivemindDecisionAuthorities\":" + hivemindAuthorities
+                + ",\"activeSceneLeases\":" + activeScenes
+                + ",\"hotSceneLeases\":" + hotScenes + ",\"hotAmbientLeases\":" + hotAmbient + ",\"managedActorBindings\":" + bindings.size()
+                + ",\"activeAssaults\":" + activeAssaults + ",\"activeRouteEngagements\":" + activeEngagements
+                + ",\"physicalIntents\":" + state.physicalIntents().size() + ",\"physicalObservations\":" + state.physicalObservations().size()
+                + ",\"deferredAftermath\":" + state.deferredAftermath().entries().size() + ",\"recoveryCurrent\":" + state.fencedRecovery().current().size()
+                + ",\"recoveryTombstones\":" + state.fencedRecovery().tombstones().size() + ",\"checkpointBytes\":" + checkpoint.canonicalState().length + "}";
     }
 
     private static String outcome(FrontierV3ServerLifecycle.FastForwardTargetOutcome value) {
