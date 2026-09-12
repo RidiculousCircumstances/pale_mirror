@@ -139,6 +139,22 @@ final class FrontierV3RoutePatrolSceneExecutor {
         }
         List<SubjectId> safe = retained.safeAdvances();
         if (safe.isEmpty()) { block(level, runtime, lease, retained); return; }
+        RoutePatrol formation = retained.advanceFormation();
+        Map<SubjectId, BodyPosition> formationBodies = FrontierRoutePatrolSceneSupport.bodies(formation);
+        boolean arrived = true;
+        for (SceneMember candidate : lease.members()) {
+            Entity candidateEntity = level.getEntity(candidate.entityId()); BodyPosition targetBody = formationBodies.get(candidate.actorId());
+            if (!(candidateEntity instanceof Mob candidateBody) || targetBody == null) { conflict(level, runtime, lease, "formation-member-unavailable"); return; }
+            if (!at(candidateBody, targetBody.supportingSurface())) { arrived = false; break; }
+        }
+        if (arrived) { observeFormation(level, runtime, lease, retained, formationBodies); return; }
+        for (SceneMember candidate : lease.members()) {
+            Entity candidateEntity = level.getEntity(candidate.entityId()); BodyPosition targetBody = formationBodies.get(candidate.actorId());
+            if (candidateEntity instanceof Mob candidateBody && targetBody != null && !at(candidateBody, targetBody.supportingSurface())
+                    && clearNextBody(level, candidateBody, targetBody.supportingSurface())) {
+                FrontierV3ControlledMobMotion.moveToward(level, candidateBody, point(targetBody.supportingSurface()));
+            }
+        }
         SubjectId actorId = safe.getFirst();
         SceneMember member = lease.members().stream().filter(value -> value.actorId().equals(actorId)).findFirst().orElseThrow();
         Entity entity = level.getEntity(member.entityId());
@@ -160,6 +176,12 @@ final class FrontierV3RoutePatrolSceneExecutor {
         CommandResult result = submit(runtime, "route-patrol-traversal", lease.id().value(),
                 new RoutePatrolTraversalObserved(patrol.taskId(), lease.id(), actorId, observed));
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "route_patrol_traversal", lease, result);
+    }
+    private static void observeFormation(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease,
+                                         RoutePatrol patrol, Map<SubjectId, BodyPosition> bodies) {
+        CommandResult result = submit(runtime, "route-patrol-formation", lease.id().value(),
+                new RoutePatrolFormationObserved(patrol.taskId(), lease.id(), bodies));
+        FrontierV3DiagnosticTrace.recordScene(level.getServer(), "route_patrol_formation", lease, result);
     }
     private static void block(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease, RoutePatrol patrol) {
         CommandResult result = submit(runtime, "route-patrol-blocked", lease.id().value(), new RoutePatrolBlocked(patrol.taskId()));
