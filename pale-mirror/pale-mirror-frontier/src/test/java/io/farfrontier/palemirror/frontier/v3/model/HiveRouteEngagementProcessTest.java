@@ -159,6 +159,11 @@ class HiveRouteEngagementProcessTest {
         state = state.transitionSceneLease(leaseId, SceneLeaseStatus.PREPARED).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         assertEquals(SceneLeaseStatus.HOT, state.sceneLeases().get(leaseId).status());
         assertEquals(RouteEngagementStatus.HOT, state.strategicPlans().routeEngagements().get(engagement.id()).status());
+        SubjectId bodyBinding = FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(actorIds.getFirst());
+        assertEquals(2L, state.fencedRecovery().current().get(bodyBinding).authorityEpoch(),
+                "attributed conflict resolution must install a new exact body epoch");
+        assertEquals(FencedRecoveryDisposition.REJECT_STALE, state.fencedRecovery().lateLoad(bodyBinding, FencedRecoveryAsset.BODY,
+                FrontierSceneLeaseStateSupport.recoveryOwner(lease), 1L), "the obstructed body cannot reclaim the replacement scene");
     }
 
     @Test void interceptTaskRejectsAnOperationThatDoesNotExistInCanonicalWorld() {

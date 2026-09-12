@@ -4,6 +4,10 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+
 /** One exact fence for a physical intent; the intent ID is its immutable owner-version boundary. */
 public final class FencedRecoveryPhysicalIntentSupport {
     private FencedRecoveryPhysicalIntentSupport() { }
@@ -26,7 +30,12 @@ public final class FencedRecoveryPhysicalIntentSupport {
         };
     }
     public static SubjectId bindingId(PhysicalIntent intent) {
-        return new SubjectId("recovery:intent_" + intent.id().value().replace(':', '_'));
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(intent.id().value().getBytes(StandardCharsets.UTF_8));
+            return new SubjectId("recovery:intent_" + java.util.HexFormat.of().formatHex(digest));
+        } catch (NoSuchAlgorithmException unavailable) {
+            throw new IllegalStateException("SHA-256 is required for physical intent recovery identity", unavailable);
+        }
     }
     private static FencedRecoveryAsset asset(PhysicalIntent intent) {
         return switch (intent.kind()) {

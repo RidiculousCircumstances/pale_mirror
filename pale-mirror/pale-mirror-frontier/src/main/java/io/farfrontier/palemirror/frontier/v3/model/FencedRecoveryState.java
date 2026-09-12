@@ -59,6 +59,24 @@ public record FencedRecoveryState(Map<SubjectId, FencedRecoveryBinding> current,
         return new FencedRecoveryState(next, retained.tombstones);
     }
 
+    /**
+     * An attributed conflict-resolution boundary fences the unresolved projection before it
+     * prepares its exact successor.  It is deliberately unavailable for running or observed
+     * authority: only an ambiguous local consequence can be superseded without inventing its
+     * postcondition.
+     */
+    FencedRecoveryState supersedeAmbiguous(FencedRecoveryBinding successor, String reason) {
+        Objects.requireNonNull(successor, "recovery successor"); Objects.requireNonNull(reason, "recovery supersession reason");
+        successor.require(FencedRecoveryPhase.PREPARED);
+        FencedRecoveryBinding prior = current.get(successor.bindingId());
+        if (prior == null || prior.phase() != FencedRecoveryPhase.AMBIGUOUS || prior.asset() != successor.asset()
+                || !prior.ownerId().equals(successor.ownerId()) || prior.ownerRevision() != successor.ownerRevision()
+                || successor.authorityEpoch() != prior.authorityEpoch() + 1L) {
+            throw new IllegalArgumentException("recovery successor lacks exact ambiguous authority");
+        }
+        return retire(prior, FencedRecoveryDisposition.REJECT_STALE, reason).prepare(successor);
+    }
+
     public FencedRecoveryState running(SubjectId bindingId, long epoch) {
         FencedRecoveryBinding binding = requireCurrent(bindingId, epoch); return replace(binding.running());
     }

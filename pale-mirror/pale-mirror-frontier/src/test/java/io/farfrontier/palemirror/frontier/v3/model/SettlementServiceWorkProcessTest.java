@@ -197,28 +197,42 @@ class SettlementServiceWorkProcessTest {
         FrontierWorldState admitted = SettlementServiceWorkProcess.reduceStarted(
                 source.withStrategicPlans(source.strategicPlans().transitionTask(started.taskId(), StrategicTaskStatus.ACTIVE)), settlement.id(), started);
         SettlementServiceWork work = admitted.serviceWorks().get(started.work().id());
-        while (work.inputTraversalCursor() < work.inputTraversal().linearCorridorSurfaces().size() - 1) work = work.withInputTraversalCursor(work.inputTraversalCursor() + 1);
-        work = work.withInputIssued();
-        while (work.workTraversalCursor() < work.workTraversal().linearCorridorSurfaces().size() - 1) work = work.withWorkTraversalCursor(work.workTraversalCursor() + 1);
-        work = work.withPhase(SettlementServiceWorkPhase.EFFECT_READY, 0);
-        Map<SubjectId, SettlementServiceWork> works = new LinkedHashMap<>(admitted.serviceWorks()); works.put(work.id(), work);
-        Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent> intents = new LinkedHashMap<>(admitted.physicalIntents());
+        SceneLeaseId leaseId = new SceneLeaseId("lease:service-ready-" + seed);
+        SurfaceAnchor initialSurface = FrontierSettlementServiceWorkSceneSupport.currentSurface(work);
+        SceneLease lease = SceneLease.forCause(leaseId, bootstrap.worldId(), new SettlementServiceWorkSceneCause(work.id()), initialSurface.support(),
+                new SimInstant(1_001L), 1L, SceneLeaseStatus.PREPARED, List.of(new SceneMember(work.workerId(),
+                SceneLease.deterministicEntityId(bootstrap.worldId(), leaseId, work.workerId()))),
+                Map.of(work.workerId(), initialSurface.standingBody()), java.util.Set.of(), Optional.empty());
+        FrontierWorldState ready = admitted.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+        while (work.inputTraversalCursor() < work.inputTraversal().linearCorridorSurfaces().size() - 1) {
+            int next = work.inputTraversalCursor() + 1;
+            ready = SettlementServiceWorkProcess.reduceHotTraversalAdvanced(ready, settlement.id(),
+                    new SettlementServiceWorkTraversalAdvanced(work.id(), leaseId, work.inputTraversal().linearCorridorSurfaces().get(next).standingBody(), next));
+            work = ready.serviceWorks().get(work.id());
+        }
         SettlementServiceInputIssueObservation inputReceipt = new SettlementServiceInputIssueObservation(
                 new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId("observation:service-input-" + seed), work.inputIssueIntentId(),
                 work.id(), work.workerId(), item, work.inputSource());
+        Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent> intents = new LinkedHashMap<>(ready.physicalIntents());
         intents.put(work.inputIssueIntentId(), intents.get(work.inputIssueIntentId()).withStatus(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED,
                 Optional.of(inputReceipt.id())));
-        Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(admitted.physicalObservations());
+        Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(ready.physicalObservations());
         observations.put(inputReceipt.id(), inputReceipt);
-        SceneLeaseId leaseId = new SceneLeaseId("lease:service-ready-" + seed);
-        SceneLease lease = SceneLease.forCause(leaseId, bootstrap.worldId(), new SettlementServiceWorkSceneCause(work.id()), work.workStation().support(),
-                new SimInstant(1_001L), 1L, SceneLeaseStatus.HOT, List.of(new SceneMember(work.workerId(),
-                SceneLease.deterministicEntityId(bootstrap.worldId(), leaseId, work.workerId()))),
-                Map.of(work.workerId(), work.workStation().standingBody()), java.util.Set.of(), Optional.empty());
-        Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(admitted.sceneLeases()); leases.put(leaseId, lease);
-        FrontierWorldState ready = admitted.withChanges(FrontierWorldStateUpdate.begin().serviceWorks(works).physicalIntents(intents).physicalObservations(observations).sceneLeases(leases)
-                .inventory(admitted.inventory().moveObservedItem(item, work.inputSource(), new InventoryCustody.Actor(work.workerId()))));
-        return new ReadyEndpoint(ready, work, ready.physicalIntents().get(work.endpointIntentId()), item, cell);
+        SettlementServiceWork issued = work.withInputIssued();
+        Map<SubjectId, SettlementServiceWork> issuedWorks = new LinkedHashMap<>(ready.serviceWorks()); issuedWorks.put(issued.id(), issued);
+        ready = ready.withChanges(FrontierWorldStateUpdate.begin().serviceWorks(issuedWorks).physicalIntents(intents).physicalObservations(observations)
+                .inventory(ready.inventory().moveObservedItem(item, issued.inputSource(), new InventoryCustody.Actor(issued.workerId()))));
+        work = ready.serviceWorks().get(issued.id());
+        while (work.workTraversalCursor() < work.workTraversal().linearCorridorSurfaces().size() - 1) {
+            int next = work.workTraversalCursor() + 1;
+            ready = SettlementServiceWorkProcess.reduceHotTraversalAdvanced(ready, settlement.id(),
+                    new SettlementServiceWorkTraversalAdvanced(work.id(), leaseId, work.workTraversal().linearCorridorSurfaces().get(next).standingBody(), next));
+            work = ready.serviceWorks().get(work.id());
+        }
+        SettlementServiceWork effectReady = work.withPhase(SettlementServiceWorkPhase.EFFECT_READY, 0);
+        Map<SubjectId, SettlementServiceWork> effectReadyWorks = new LinkedHashMap<>(ready.serviceWorks()); effectReadyWorks.put(effectReady.id(), effectReady);
+        ready = ready.withChanges(FrontierWorldStateUpdate.begin().serviceWorks(effectReadyWorks));
+        return new ReadyEndpoint(ready, effectReady, ready.physicalIntents().get(effectReady.endpointIntentId()), item, cell);
     }
 
     private record ReadyEndpoint(FrontierWorldState state, SettlementServiceWork work,

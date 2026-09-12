@@ -49,6 +49,17 @@ class FencedRecoveryStateTest {
     }
 
     @Test
+    void conflictResolutionCanOnlyFenceTheExactAmbiguousAuthorityBeforePreparingItsSuccessor() {
+        FencedRecoveryState ambiguous = FencedRecoveryState.empty().prepare(binding(BODY, FencedRecoveryAsset.BODY, 1L, true))
+                .running(BODY, 1L).ambiguous(BODY, 1L, "local-obstruction", FencedRecoveryDisposition.INSPECT);
+        FencedRecoveryState successor = ambiguous.supersedeAmbiguous(binding(BODY, FencedRecoveryAsset.BODY, 2L, true), "conflict-resolved");
+
+        assertEquals(2L, successor.current().get(BODY).authorityEpoch());
+        assertEquals(FencedRecoveryDisposition.REJECT_STALE, successor.lateLoad(BODY, FencedRecoveryAsset.BODY, OWNER, 1L));
+        assertThrows(IllegalArgumentException.class, () -> FencedRecoveryState.empty().supersedeAmbiguous(binding(BODY, FencedRecoveryAsset.BODY, 1L, true), "forged"));
+    }
+
+    @Test
     void allFourFamiliesRoundTripSnapshotAndWalReducerRejectsStaleEpochsBeforeMutation() {
         FencedRecoveryState recovery = FencedRecoveryState.empty()
                 .prepare(binding(BODY, FencedRecoveryAsset.BODY, 1L, true))

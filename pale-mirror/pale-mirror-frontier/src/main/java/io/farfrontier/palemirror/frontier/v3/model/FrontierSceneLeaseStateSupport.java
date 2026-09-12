@@ -83,6 +83,11 @@ public final class FrontierSceneLeaseStateSupport {
         FencedRecoveryState recovery = switch (nextStatus) {
             case HOT -> runningRecovery(state.fencedRecovery(), current);
             case CONFLICT -> isolateRecovery(state.fencedRecovery(), current, "scene-conflict");
+            // CONFLICT -> PREPARED is the attributed local-resolution boundary.  The old
+            // materialization is retained as a stale tombstone and this exact lease receives a
+            // new epoch before any body can run again.
+            case PREPARED -> current.status() == SceneLeaseStatus.CONFLICT
+                    ? reprepareConflictRecovery(state.fencedRecovery(), current) : state.fencedRecovery();
             default -> state.fencedRecovery();
         };
         return copy(state, state.actorLocations(), leases, state.ambientLeases(), plans, recovery);
@@ -193,6 +198,18 @@ public final class FrontierSceneLeaseStateSupport {
         SubjectId id = cargoRecoveryBindingId(FrontierSceneBehaviors.logistics(lease).cargoId());
         return recovery.prepare(FencedRecoveryBinding.prepared(id, FencedRecoveryAsset.CARGO, recoveryOwner(lease), lease.revision(),
                 recovery.nextEpoch(id), true));
+    }
+    private static FencedRecoveryState reprepareConflictRecovery(FencedRecoveryState recovery, SceneLease lease) {
+        FencedRecoveryState next = recovery; SubjectId owner = recoveryOwner(lease);
+        for (SceneMember member : lease.members()) {
+            SubjectId id = bodyRecoveryBindingId(member.actorId());
+            next = next.supersedeAmbiguous(FencedRecoveryBinding.prepared(id, FencedRecoveryAsset.BODY, owner, lease.revision(),
+                    next.nextEpoch(id), true), "scene-conflict-resolved");
+        }
+        if (!FrontierSceneBehaviors.isLogistics(lease)) return next;
+        SubjectId id = cargoRecoveryBindingId(FrontierSceneBehaviors.logistics(lease).cargoId());
+        return next.supersedeAmbiguous(FencedRecoveryBinding.prepared(id, FencedRecoveryAsset.CARGO, owner, lease.revision(),
+                next.nextEpoch(id), true), "scene-conflict-resolved");
     }
     private static FencedRecoveryState runningRecovery(FencedRecoveryState recovery, SceneLease lease) {
         return runningCargo(runningBodies(recovery, lease), lease);
