@@ -67,6 +67,13 @@ test('graceful cleanup failure still emits forensics after exact child and port 
   }
 });
 
+test('isolated graceful-stop forensics capture the exact live JVM stack before cleanup', async () => {
+  const source = await readFile(new URL('../src/run-isolated-scenario.mjs', import.meta.url), 'utf8');
+  assert.match(source, /jcmd', \[String\(pid\), 'Thread\.print', '-l'\]/);
+  assert.match(source, /threadDump = \{ status: 'captured'/);
+  assert.match(source, /never turns a[\s\S]*missing Minecraft durable-save fact into an acknowledgement/);
+});
+
 async function portOpen(port) {
   return await new Promise((resolve) => {
     const socket = createConnection({ host: '127.0.0.1', port });

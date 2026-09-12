@@ -855,6 +855,16 @@ async function gracefulShutdownEvidence(server, worldDirectory) {
     try { evidence[`proc_${name}`] = (await readFile(`/proc/${pid}/${name}`, 'utf8')).slice(0, 16 * 1024); }
     catch (failure) { evidence[`proc_${name}`] = { unavailable: failure?.code ?? String(failure) }; }
   }
+  // This is only a bounded forensic capture after the normal durable-save acknowledgement
+  // failed.  It observes the exact nonce-announced child before cleanup; it never turns a
+  // missing Minecraft durable-save fact into an acknowledgement or changes stop ordering.
+  try {
+    const dump = await promisify(execFile)('jcmd', [String(pid), 'Thread.print', '-l'],
+      { timeout: 10_000, maxBuffer: 1_048_576 });
+    evidence.threadDump = { status: 'captured', output: `${dump.stdout}${dump.stderr}` };
+  } catch (failure) {
+    evidence.threadDump = { status: 'unavailable', detail: String(failure?.message ?? failure) };
+  }
   return evidence;
 }
 
