@@ -399,12 +399,12 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
     void validateTransitionFrom(FrontierWorldState previous) {
         Objects.requireNonNull(previous, "previous state");
         if (onlyInfectionPlannerAndHealthChangedFrom(previous)) {
-            validatePlannerAndHealthTransition();
+            FrontierPlannerHealthValidation.validate(bootstrap, humanPopulation, strategicPlans, routeTopology, hiveColony, actorLocations, operations, contracts);
             validateInfectionTransition(previous);
             return;
         }
         if (onlyPlannerAndHealthChangedFrom(previous)) {
-            validatePlannerAndHealthTransition();
+            FrontierPlannerHealthValidation.validate(bootstrap, humanPopulation, strategicPlans, routeTopology, hiveColony, actorLocations, operations, contracts);
             return;
         }
         if (!onlyInfectionChangedFrom(previous)) { validateComplete(); return; }
@@ -455,39 +455,6 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 && physicalDeltas == previous.physicalDeltas && ambientLeases == previous.ambientLeases && routeConstructions == previous.routeConstructions
                 && routeTopology == previous.routeTopology && strategicPlans == previous.strategicPlans && humanPopulation == previous.humanPopulation && companies == previous.companies
                 && resourceSites == previous.resourceSites && replicaCustody == previous.replicaCustody && deferredAftermath == previous.deferredAftermath && fencedRecovery == previous.fencedRecovery && infection != previous.infection;
-    }
-    private void validatePlannerAndHealthTransition() {
-        Set<SubjectId> expectedSettlementPolicies = bootstrap.settlements().stream().map(Settlement::id)
-                .collect(java.util.stream.Collectors.toUnmodifiableSet());
-        if (!humanPopulation.quarantines().keySet().equals(expectedSettlementPolicies)) {
-            throw new IllegalArgumentException("settlement quarantine index must own every and only canonical settlement");
-        }
-        strategicPlans.validate(bootstrap, routeTopology, humanPopulation);
-        validatePlannerActorClaims();
-        FrontierRouteEngagementSupport.validate(bootstrap, hiveColony, actorLocations, operations, strategicPlans);
-        FrontierSettlementAssaultSupport.validate(bootstrap, hiveColony, humanPopulation, actorLocations, strategicPlans);
-    }
-    /** Exact COLD authority remains exclusive even when only a route patrol plan has changed. */
-    private void validatePlannerActorClaims() {
-        Set<SubjectId> operationParticipants = new HashSet<>();
-        for (RouteOperation operation : operations.values()) {
-            if (!FrontierWorldStateSupport.retainsParticipantClaim(contracts, operation)) continue;
-            for (SubjectId participant : operation.participantIds()) {
-                if (!operationParticipants.add(participant)) {
-                    throw new IllegalArgumentException("resident cannot be assigned to multiple active route operations");
-                }
-                boolean patrolClaim = strategicPlans.routePatrols().values().stream()
-                        .anyMatch(patrol -> patrol.active() && patrol.memberIds().contains(participant));
-                if (humanPopulation.migrations().containsKey(participant) || patrolClaim) {
-                    throw new IllegalArgumentException("active route operation participant cannot retain a competing migration or patrol claim");
-                }
-            }
-        }
-        for (ResidentMigrationJourney journey : humanPopulation.migrations().values()) {
-            boolean patrolClaim = strategicPlans.routePatrols().values().stream()
-                    .anyMatch(patrol -> patrol.active() && patrol.memberIds().contains(journey.residentId()));
-            if (patrolClaim) throw new IllegalArgumentException("migration journey resident cannot retain a competing operation or patrol claim");
-        }
     }
     private static long raw(FixedRatio ratio) { return ratio == null ? 0L : ratio.value().raw(); } private static boolean fullValidationDeferred() { return DEFERRED_FULL_VALIDATION_DEPTH.get() > 0; }
     FrontierWorldState next(Map<SubjectId, ActorLocation> actors, Map<SubjectId, StructureCondition> structures,
