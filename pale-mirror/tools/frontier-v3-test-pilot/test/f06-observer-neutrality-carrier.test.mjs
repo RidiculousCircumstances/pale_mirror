@@ -26,6 +26,8 @@ test('F0.6 declaration admits the production first-visibility vocabulary and bou
   assert.throws(() => assertF06ObserverNeutralityDeclaration(stale), /first-visibility/);
   const unsafe = structuredClone(declaration); [unsafe.actions[0], unsafe.actions[1]] = [unsafe.actions[1], unsafe.actions[0]];
   assert.throws(() => assertF06ObserverNeutralityDeclaration(unsafe), /pre-ingress safe advance/);
+  const unrelated = structuredClone(declaration); unrelated.actions[8].position = { x: 388, y: 64, z: -355 };
+  assert.throws(() => assertF06ObserverNeutralityDeclaration(unrelated), /exact field anchor/);
 });
 
 test('F0.6 carrier requires natural static readiness before visible/dynamic work and retains intervention through restart/return', () => {

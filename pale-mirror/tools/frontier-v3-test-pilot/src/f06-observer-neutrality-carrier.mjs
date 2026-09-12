@@ -6,6 +6,7 @@ const CHUNK = '24,-23';
 const ARRIVAL = Object.freeze({ x: 388, y: 65, z: -355 });
 const STATIC_ANCHOR = Object.freeze({ x: 380, y: 64, z: -340 });
 const SITE = 'site:4-wheat-field';
+const LAST_CROP = Object.freeze({ diagnostic: Object.freeze({ view: 'site', id: SITE, field: 'lastCrop' }) });
 
 /**
  * F0.6 receipt predicate. It consumes only action-bound pilot/server observations: a natural
@@ -48,11 +49,14 @@ export function assertF06ObserverNeutralityDeclaration(declaration) {
       || actions[2]?.type !== 'wait_until_diagnostic' || actions[2].view !== 'first_visibility' || actions[2].id !== CHUNK
       || actions[2].expect?.visibility !== 'READY' || actions[3]?.type !== 'look' || !isDeepStrictEqual(actions[3].at, STATIC_ANCHOR)
       || actions[4]?.type !== 'assert_visible_block' || !isDeepStrictEqual(actions[4].position, STATIC_ANCHOR)
-      || actions[8]?.type !== 'break' || !isDeepStrictEqual(actions[8].position, { x: 388, y: 64, z: -355 })
+      || actions[5]?.type !== 'wait_until_block' || !isDeepStrictEqual(actions[5].position, LAST_CROP) || actions[5].block !== 'minecraft:wheat'
+      || actions[6]?.type !== 'look' || !isDeepStrictEqual(actions[6].at, LAST_CROP)
+      || actions[7]?.type !== 'assert_visible_block' || !isDeepStrictEqual(actions[7].position, LAST_CROP)
+      || actions[8]?.type !== 'break' || !isDeepStrictEqual(actions[8].position, LAST_CROP)
       || !conflict(actions[9]) || actions[10]?.type !== 'inspect' || actions[10].view !== 'site' || actions[10].id !== SITE
       || actions[11]?.type !== 'visit' || actions[11].dimension !== 'minecraft:overworld'
       || actions[12]?.type !== 'visit' || actions[12].dimension !== DIMENSION || !isDeepStrictEqual(actions[12].position, ARRIVAL) || !conflict(actions[13])) {
-    throw new Error('F0.6 observer-neutrality declaration lacks a pre-ingress safe advance or exact first-visibility/intervention continuity');
+    throw new Error('F0.6 observer-neutrality declaration lacks a pre-ingress safe advance, exact field anchor, or first-visibility/intervention continuity');
   }
   return Object.freeze({ scenario: SCENARIO, chunk: CHUNK, arrival: ARRIVAL, staticAnchor: STATIC_ANCHOR, site: SITE });
 }
