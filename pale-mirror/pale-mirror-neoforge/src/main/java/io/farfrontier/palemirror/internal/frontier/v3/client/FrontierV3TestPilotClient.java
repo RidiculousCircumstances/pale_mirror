@@ -141,7 +141,7 @@ public final class FrontierV3TestPilotClient {
                 && (FrontierV3PilotSessionControl.awaitingResume() || FrontierV3PilotSessionControl.finalCloseRequested())) {
             if (FrontierV3PilotSessionControl.awaitingResume() || FrontierV3PilotSessionControl.finalCloseRequested()) {
                 try {
-                    FrontierV3PilotSessionControl.publishNormalDisconnectAcknowledgement();
+                    FrontierV3PilotSessionControl.publishNormalDisconnectAcknowledgement(event.getConnection());
                 } catch (IOException | RuntimeException failure) {
                     FrontierV3PilotSessionControl.failPersistentLifecycle("normal_disconnect", failure);
                     return;

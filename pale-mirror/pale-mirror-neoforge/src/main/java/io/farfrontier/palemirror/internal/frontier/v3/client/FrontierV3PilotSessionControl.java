@@ -12,6 +12,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * Development-only control plane for one visible pilot JVM.
@@ -59,9 +61,10 @@ final class FrontierV3PilotSessionControl {
      * A Minecraft logout callback is not itself a lifecycle transition: NeoForge may deliver it
      * more than once while one network connection is closing.  Retain the one semantic
      * acknowledgement which this control plane has already claimed so only the first callback
-     * can publish the immutable signal.  A different suffix is still a protocol violation.
+     * for each authenticated segment can publish its immutable signal. A restart has two
+     * ordinary connections and therefore two distinct, independently owned acknowledgements.
      */
-    private static String normalDisconnectAcknowledgement = "";
+    private static final Set<String> normalDisconnectAcknowledgements = new HashSet<>();
 
     private FrontierV3PilotSessionControl() { }
 
@@ -374,7 +377,7 @@ final class FrontierV3PilotSessionControl {
         scenarioSha256 = "";
         finalSegment = false;
         preparedLifecycleSignal = false;
-        normalDisconnectAcknowledgement = "";
+        normalDisconnectAcknowledgements.clear();
         persistentLifecycleFailure = false;
         expectedCrashSegment = false; expectedLossArmed = false; expectedLossAcknowledged = false; expectedLossCompletedActionPrefix = -1; awaitingExpectedLossProbe = false;
         completion = "";
@@ -413,17 +416,16 @@ final class FrontierV3PilotSessionControl {
      * @return {@code true} only for the callback which owned the acknowledgement; {@code false}
      *         for a duplicate Minecraft callback for that same already-acknowledged segment.
      */
-    static boolean publishNormalDisconnectAcknowledgement() throws IOException {
+    static boolean publishNormalDisconnectAcknowledgement(Object observedConnection) throws IOException {
         if (!enabled()) return false;
         if (!awaitingResume && !finalCloseRequested) {
             throw new IllegalStateException("normal disconnect acknowledgement has no active lifecycle boundary");
         }
-        String suffix = lifecycleSegment();
-        if (!normalDisconnectAcknowledgement.isEmpty()) {
-            if (normalDisconnectAcknowledgement.equals(suffix)) return false;
-            throw new IllegalStateException("normal disconnect acknowledgement belongs to a different segment");
+        if (activeConnection == null || activeConnection != observedConnection) {
+            throw new IllegalStateException("normal disconnect callback is foreign to active connection");
         }
-        normalDisconnectAcknowledgement = suffix;
+        String suffix = lifecycleSegment();
+        if (!normalDisconnectAcknowledgements.add(suffix)) return false;
         publishLifecycleSignal("client_normally_disconnected", suffix, new JsonObject());
         return true;
     }
@@ -473,7 +475,7 @@ final class FrontierV3PilotSessionControl {
         scenarioSha256 = value.get("scenarioSha256").getAsString();
         awaitingFinalClose = false;
         finalCloseRequested = false;
-        normalDisconnectAcknowledgement = "";
+        normalDisconnectAcknowledgements.clear();
         expectedLossArmed = false; expectedLossAcknowledged = false; expectedLossCompletedActionPrefix = -1; awaitingExpectedLossProbe = false;
     }
 

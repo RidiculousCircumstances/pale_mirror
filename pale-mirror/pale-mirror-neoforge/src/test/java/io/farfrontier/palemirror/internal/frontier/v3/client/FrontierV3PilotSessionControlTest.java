@@ -87,6 +87,49 @@ class FrontierV3PilotSessionControlTest {
     }
 
     @Test
+    void restartSessionAcknowledgesBothAuthenticatedDisconnectSegmentsWithoutAcceptingItsPredecessorAgain(@TempDir Path root) throws Exception {
+        Path control = Files.createDirectory(root.resolve("control"));
+        Path lifecycle = Files.createDirectory(root.resolve("lifecycle"));
+        Files.createDirectory(lifecycle.resolve("staging"));
+        Path signals = Files.createDirectory(lifecycle.resolve("signals"));
+        String runId = UUID.randomUUID().toString();
+        Files.writeString(lifecycle.resolve("identity.json"), "{\"schema\":1,\"runId\":\"%s\"}\n".formatted(runId), StandardCharsets.UTF_8);
+        String priorControl = System.getProperty(CONTROL);
+        String priorLifecycle = System.getProperty(LIFECYCLE);
+        String priorTerminal = System.getProperty(LIFECYCLE_TERMINAL);
+        try {
+            System.setProperty(CONTROL, control.toString());
+            System.setProperty(LIFECYCLE, lifecycle.toString());
+            System.setProperty(LIFECYCLE_TERMINAL, "true");
+            FrontierV3PilotSessionControl.reset();
+            Object beforeRestart = new Object();
+            FrontierV3PilotSessionControl.bindActiveConnection(beforeRestart);
+            FrontierV3PilotSessionControl.markAwaitingResume();
+            assertTrue(FrontierV3PilotSessionControl.publishNormalDisconnectAcknowledgement(beforeRestart));
+            assertFalse(FrontierV3PilotSessionControl.publishNormalDisconnectAcknowledgement(beforeRestart));
+
+            Files.writeString(control.resolve("resumed"), "runner-owned\n", StandardCharsets.UTF_8);
+            Object afterRestart = new Object();
+            FrontierV3PilotSessionControl.bindActiveConnection(afterRestart);
+            assertEquals("after_restart", FrontierV3PilotSessionControl.lifecycleSegment());
+            FrontierV3PilotSessionControl.markAwaitingLifecycleFinalClose();
+            Files.writeString(lifecycle.resolve("close-client-after_restart.token"), runId + ":after_restart\n", StandardCharsets.UTF_8);
+            assertTrue(FrontierV3PilotSessionControl.requestLifecycleFinalClose());
+            assertTrue(FrontierV3PilotSessionControl.publishNormalDisconnectAcknowledgement(afterRestart));
+            assertFalse(FrontierV3PilotSessionControl.publishNormalDisconnectAcknowledgement(afterRestart));
+            assertThrows(IllegalStateException.class,
+                    () -> FrontierV3PilotSessionControl.publishNormalDisconnectAcknowledgement(beforeRestart));
+            assertTrue(Files.isRegularFile(signals.resolve("client_normally_disconnected-before_restart.json")));
+            assertTrue(Files.isRegularFile(signals.resolve("client_normally_disconnected-after_restart.json")));
+        } finally {
+            FrontierV3PilotSessionControl.reset();
+            restore(CONTROL, priorControl);
+            restore(LIFECYCLE, priorLifecycle);
+            restore(LIFECYCLE_TERMINAL, priorTerminal);
+        }
+    }
+
+    @Test
     void replacementRestartClientPublishesItsOwnPreparedReceiptRatherThanCollidingWithItsPredecessor(@TempDir Path root) throws Exception {
         Path lifecycle = Files.createDirectory(root.resolve("lifecycle"));
         Files.createDirectory(lifecycle.resolve("staging"));
@@ -180,12 +223,14 @@ class FrontierV3PilotSessionControlTest {
             System.setProperty(lifecycleProperty, lifecycle.toString());
             FrontierV3PilotSessionControl.reset();
             FrontierV3PilotSessionControl.onLogin(scenario);
+            Object connection = new Object();
+            FrontierV3PilotSessionControl.bindActiveConnection(connection);
             FrontierV3PilotSessionControl.markAwaitingFinalClose();
             Files.writeString(control.resolve("close").resolve("0000.token"), runId + ":0\n", StandardCharsets.UTF_8);
             assertTrue(FrontierV3PilotSessionControl.requestFinalClose());
 
-            assertTrue(FrontierV3PilotSessionControl.publishNormalDisconnectAcknowledgement());
-            assertFalse(FrontierV3PilotSessionControl.publishNormalDisconnectAcknowledgement());
+            assertTrue(FrontierV3PilotSessionControl.publishNormalDisconnectAcknowledgement(connection));
+            assertFalse(FrontierV3PilotSessionControl.publishNormalDisconnectAcknowledgement(connection));
             Path acknowledgement = signals.resolve("client_normally_disconnected-final_segment.json");
             assertTrue(Files.isRegularFile(acknowledgement));
             try (var entries = Files.list(signals)) {
