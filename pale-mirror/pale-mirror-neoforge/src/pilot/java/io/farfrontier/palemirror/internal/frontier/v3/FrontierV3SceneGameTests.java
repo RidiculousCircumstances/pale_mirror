@@ -340,6 +340,14 @@ public final class FrontierV3SceneGameTests {
                 Entity formerBody = level.getEntity(lease.members().getFirst().entityId());
                 helper.assertTrue(formerBody != null && !FrontierV3SceneExecutor.recognizes(runtime, formerBody),
                         "a stale body from a closed scene must be denied rather than retained as a permanent exception");
+                var staleMember = lease.members().getFirst();
+                var tombstone = state(runtime).fencedRecovery().tombstones().get(
+                        io.farfrontier.palemirror.frontier.v3.model.FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(staleMember.actorId()));
+                helper.assertTrue(tombstone != null && state(runtime).fencedRecovery().lateLoad(tombstone.bindingId(),
+                                io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryAsset.BODY,
+                                io.farfrontier.palemirror.frontier.v3.model.FrontierSceneLeaseStateSupport.recoveryOwner(lease),
+                                tombstone.retiredEpoch()) == io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryDisposition.REJECT_STALE,
+                        "the same physical stale-body lifecycle must retain an exact tombstone before it discards the old projection");
                 FrontierV3SceneExecutor.cleanClosedBodies(level, state(runtime));
                 helper.assertTrue(level.getEntity(lease.members().getFirst().entityId()) == null,
                         "the shared scene lifecycle must discard a closed projection before another behavior can inherit its lease tag");
