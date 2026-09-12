@@ -435,12 +435,12 @@ public final class FrontierV3ServerLifecycle {
                 // The disposable-pilot fence excludes only canonical progression.
                 // Real loaded-world observation, custody acquire/checkpoint/release,
                 // and their fail-closed physical checks remain ordinary server work.
-                runPhysicalTurn(FrontierV3PhysicalWorld.require(server), runtime);
+                runObservedPhysicalTurn(FrontierV3PhysicalWorld.require(server), runtime);
             } else if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE && FAST_FORWARD_TARGETS.containsKey(server)) {
                 advanceQueuedCanonicalTime(server, runtime);
             } else if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
                 ServerLevel physicalWorld = FrontierV3PhysicalWorld.require(server);
-                runPhysicalTurn(physicalWorld, runtime);
+                runObservedPhysicalTurn(physicalWorld, runtime);
                 runtime.tick(TICK_BUDGET);
                 // A due action may itself fail closed.  Do not mask that primary quarantine by
                 // asking the now-unavailable runtime for a second fast-forward state image.
@@ -490,6 +490,21 @@ public final class FrontierV3ServerLifecycle {
     static void runPhysicalTurn(ServerLevel physicalWorld, FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
         FrontierV3PhysicalExecutors.registry().tick(Objects.requireNonNull(physicalWorld, "physical world"),
                 Objects.requireNonNull(runtime, "runtime"));
+    }
+
+    /**
+     * The ordinary tick is the durable fallback for a destination added before its holder sends
+     * ChunkEvent.Load.  It observes only players already owned by vanilla in this physical
+     * level, then executes the same registered physical turn; no player can create demand,
+     * tickets, or a projection outside that turn.
+     */
+    static void runObservedPhysicalTurn(ServerLevel physicalWorld,
+                                        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
+        for (ServerPlayer player : physicalWorld.players()) {
+            FrontierV3GrayboxExecutor.observePlayerIngress(runtime,
+                    new net.minecraft.world.level.ChunkPos(player.blockPosition()));
+        }
+        runPhysicalTurn(physicalWorld, runtime);
     }
 
     public static void stop(MinecraftServer server) {

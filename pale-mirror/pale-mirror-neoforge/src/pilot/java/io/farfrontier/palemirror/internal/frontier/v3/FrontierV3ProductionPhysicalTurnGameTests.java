@@ -129,6 +129,28 @@ public final class FrontierV3ProductionPhysicalTurnGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "pm-frontier-v3-scene-aftermath", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
+    public static void registeredTurnProjectsAnAlreadyPresentPlayerDestination(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(level);
+        try {
+            var player = helper.makeMockServerPlayerInLevel();
+            ChunkPos destination = loadedChunk(level, helper);
+            player.absMoveTo(destination.getMinBlockX() + 8.5D, 64.0D, destination.getMinBlockZ() + 8.5D,
+                    player.getYRot(), player.getXRot());
+            helper.assertValueEqual(FrontierV3GrayboxExecutor.firstVisibility(runtime, destination.x + "," + destination.z).status(),
+                    "UNOBSERVED", "the player destination has no synthetic prior projection record");
+            FrontierV3ServerLifecycle.runObservedPhysicalTurn(level, runtime);
+            helper.assertValueEqual(FrontierV3GrayboxExecutor.firstVisibility(runtime, destination.x + "," + destination.z).status(),
+                    "READY", "the registered production turn fences and projects an already-present destination before scene consumption");
+        } finally {
+            FrontierV3GrayboxExecutor.forgetFirstVisibility(runtime);
+            FrontierV3GrayboxExecutor.forget(runtime);
+            runtime.shutdown();
+        }
+        helper.succeed();
+    }
+
     private static ChunkPos loadedChunk(ServerLevel level, GameTestHelper helper) {
         return level.getChunkAt(helper.absolutePos(BlockPos.ZERO)).getPos();
     }
