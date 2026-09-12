@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "id": "disposable_f05_fenced_route_recovery",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "scene-return" },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/time set day" },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "summary", "id": "", "expect": { "status": "ok", "settlements": 12, "sites": 12 } },
+      { "view": "operation", "id": "operation:supply-1-2", "expect": { "status": "ok", "stage": "EN_ROUTE", "routeIndex": 0,
+        "participants": ["resident:1-16", "resident:1-28", "resident:1-30"] } }
+    ] },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -360, "y": 65, "z": -340 }, "settleMs": 1000 }
+  ],
+  "actions": [
+    { "type": "wait_until_diagnostic", "view": "scene", "id": "operation:supply-1-2", "expect": { "status": "ok", "leaseStatus": "HOT", "primaryActor": "resident:1-16" }, "timeoutMs": 60000 },
+    { "type": "inspect", "view": "scene", "id": "operation:supply-1-2" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 0, "y": 65, "z": 0 }, "settleMs": 500 },
+    { "type": "wait_until_diagnostic", "view": "scene", "id": "operation:supply-1-2", "expect": { "status": "ok", "leaseStatus": "CLOSED", "primaryActor": "resident:1-16" }, "timeoutMs": 60000 },
+    { "type": "wait_until_diagnostic", "view": "operation", "id": "operation:supply-1-2", "expect": { "status": "ok", "stage": "EN_ROUTE", "routeIndex": 1 }, "timeoutMs": 30000 },
+    { "type": "visit_operation", "operationId": "operation:supply-1-2", "dimension": "pale_mirror:frontier_graybox", "offset": { "x": 10, "y": 1, "z": -10 }, "settleMs": 1000, "timeoutMs": 60000 },
+    { "type": "wait_until_diagnostic", "view": "scene", "id": "operation:supply-1-2", "expect": { "status": "ok", "leaseStatus": "HOT", "primaryActor": "resident:1-16" }, "timeoutMs": 60000 },
+    { "type": "inspect", "view": "recovery", "id": "recovery:body_resident_1-16" },
+    { "type": "wait_until_diagnostic", "view": "recovery", "id": "recovery:body_resident_1-16", "expect": { "status": "ok", "asset": "BODY", "phase": "RUNNING", "nextAction": "RECLAIM" }, "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "scene", "id": "operation:supply-1-2", "expect": { "status": "ok", "leaseStatus": "HOT", "primaryActor": "resident:1-16" }, "timeoutMs": 60000 },
+    { "type": "inspect", "view": "recovery", "id": "recovery:body_resident_1-16" },
+    { "type": "inspect", "view": "scene", "id": "operation:supply-1-2" }
+  ],
+  "restart": { "mode": "graceful", "afterAction": 9,
+    "resumeSetup": [ { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -360, "y": 65, "z": -340 }, "settleMs": 1000 } ] },
+  "assertions": [
+    { "after": 9, "view": "recovery", "id": "recovery:body_resident_1-16", "expect": { "status": "ok", "asset": "BODY", "phase": "RUNNING", "nextAction": "RECLAIM" } },
+    { "after": 11, "view": "recovery", "id": "recovery:body_resident_1-16", "expect": { "status": "ok", "asset": "BODY", "phase": "RUNNING", "nextAction": "RECLAIM" } }
+  ]
+}
