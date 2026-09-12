@@ -122,9 +122,11 @@ final class FrontierV3SceneDiagnosticJson {
         if (patrol == null) return ",\"patrolStatus\":\"\",\"patrolRouteIndex\":-1,\"patrolCurrent\":null,\"patrolNextSurface\":null,\"patrolNextBody\":null";
         var bodies = FrontierRoutePatrolSceneSupport.bodies(patrol);
         var leader = bodies.get(patrol.guardId());
-        java.util.List<SubjectId> safe = patrol.safeAdvances();
-        io.farfrontier.palemirror.frontier.v3.model.BodyPosition nextBody = safe.isEmpty() ? null
-                : FrontierRoutePatrolSceneSupport.bodies(patrol.advance(safe.getFirst())).get(safe.getFirst());
+        io.farfrontier.palemirror.frontier.v3.model.BodyPosition nextBody = null;
+        if (patrol.active()) {
+            try { nextBody = FrontierRoutePatrolSceneSupport.bodies(patrol.advanceFormation()).get(patrol.guardId()); }
+            catch (IllegalArgumentException unavailable) { nextBody = null; }
+        }
         return ",\"patrolStatus\":\"" + patrol.status() + "\",\"patrolRouteIndex\":" + patrol.routeIndex()
                 + ",\"patrolCurrent\":" + FrontierV3DiagnosticJson.position(leader.supportingSurface().support())
                 + ",\"patrolNextSurface\":" + (nextBody == null ? "null" : FrontierV3DiagnosticJson.position(nextBody.supportingSurface().support()))
