@@ -28,7 +28,7 @@
   "crash": {
     "phase": "before_restart",
     "boundary": "typed_observation_durable_before_next_process_checkpoint",
-    "owner": "custody:container-1-depot",
+    "owner": "settlement:1",
     "payloadType": "frontier.fungible_resource_handoff_observed",
     "expectedRevision": "observed_at_boundary",
     "playerSave": { "player": "bf39347d-cb86-3221-b6b7-7b89a1dcb4cf", "item": "minecraft:wheat", "expectedCount": 0 }

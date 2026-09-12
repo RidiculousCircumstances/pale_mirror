@@ -2,6 +2,7 @@ import { isDeepStrictEqual } from 'node:util';
 
 const PLAYER = 'bf39347d-cb86-3221-b6b7-7b89a1dcb4cf';
 const SOURCE = 'custody:container-1-depot';
+const CANONICAL_HANDOFF_OWNER = 'settlement:1';
 const PLAYER_ACCOUNT = `custody:player-${PLAYER}`;
 const WINDOWS = Object.freeze([
   'lease_recorded_before_physical_materialization',
@@ -25,9 +26,9 @@ const RESOURCE_WINDOWS = Object.freeze([
  */
 export function assertF05HardCrashCarrier({ windows, physicalFirst, canonicalFirst }) {
   const windowFacts = crashWindows(windows);
-  const first = playerOrder(physicalFirst, 'physical_effect_visible_before_typed_observation', 32,
+  const first = playerOrder(physicalFirst, 'physical_effect_visible_before_typed_observation', SOURCE, 32,
     'disposable_f03_fungible_player_abrupt', { sourceAction: 7, playerAction: 8 });
-  const second = playerOrder(canonicalFirst, 'typed_observation_durable_before_next_process_checkpoint', 0,
+  const second = playerOrder(canonicalFirst, 'typed_observation_durable_before_next_process_checkpoint', CANONICAL_HANDOFF_OWNER, 0,
     'disposable_f05_fenced_player_canonical_first_abrupt', { sourceAction: 6, playerAction: 7 });
   const facts = [...windowFacts, first, second].sort((left, right) => left.boundary.localeCompare(right.boundary));
   if (!isDeepStrictEqual(facts.map(value => value.boundary), [...WINDOWS].sort())) {
@@ -67,10 +68,10 @@ function crashWindows(values) {
   return facts;
 }
 
-function playerOrder(manifest, boundary, expectedSave, scenarioId, actions) {
+function playerOrder(manifest, boundary, owner, expectedSave, scenarioId, actions) {
   const crash = manifest?.recovery?.crash; const save = crash?.playerSave;
   if (manifest?.status !== 'ok' || manifest.scenarioId !== scenarioId || manifest.recovery?.mode !== 'abrupt'
-      || crash?.boundary !== boundary || crash.owner !== SOURCE || crash.payloadType !== 'frontier.fungible_resource_handoff_observed'
+      || crash?.boundary !== boundary || crash.owner !== owner || crash.payloadType !== 'frontier.fungible_resource_handoff_observed'
       || !completedCrashProtocol(manifest) || save?.player !== PLAYER || save.item !== 'minecraft:wheat'
       || save.expectedCount !== expectedSave || save.itemCount !== expectedSave || typeof save.exists !== 'boolean') {
     throw new Error('F0.5 player-save arrival receipt is incomplete or foreign');

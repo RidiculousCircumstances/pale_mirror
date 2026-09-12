@@ -116,12 +116,14 @@ class FrontierV3CrashBoundaryProbeTest {
 
     @Test
     void typedFungibleWindowAdmitsOnlyTheExactCanonicalAfterPhysicalArrival() {
-        FrontierV3CrashBoundaryProbe probe = FrontierV3CrashBoundaryProbe.from(properties(7L, "custody:container-1-depot",
+        FrontierV3CrashBoundaryProbe probe = FrontierV3CrashBoundaryProbe.from(properties(7L, "settlement:1",
                 FrontierV3CrashBoundaryProbe.TYPED_OBSERVATION_DURABLE_BEFORE_NEXT_PROCESS_CHECKPOINT,
                 "frontier.fungible_resource_handoff_observed")::get, ignored -> { });
-        assertTrue(probe.matches(transaction(7L, "custody:container-1-depot", "frontier.fungible_resource_handoff_observed")));
-        assertFalse(probe.matches(transaction(7L, "custody:container-1-depot", "frontier.resource_site_harvest_progressed")));
-        assertFalse(probe.matches(transaction(8L, "custody:container-1-depot", "frontier.fungible_resource_handoff_observed")));
+        assertTrue(probe.matches(transaction(7L, "settlement:1", "frontier.fungible_resource_handoff_observed")));
+        assertFalse(probe.matches(transaction(7L, "custody:container-1-depot", "frontier.fungible_resource_handoff_observed")),
+                "the source account is diagnostic custody, not the canonical handoff event subject");
+        assertFalse(probe.matches(transaction(7L, "settlement:1", "frontier.resource_site_harvest_progressed")));
+        assertFalse(probe.matches(transaction(8L, "settlement:1", "frontier.fungible_resource_handoff_observed")));
     }
 
     @Test

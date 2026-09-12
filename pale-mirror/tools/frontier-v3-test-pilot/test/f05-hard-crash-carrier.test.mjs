@@ -61,6 +61,8 @@ test('canonical-first player order retains ordinary demand until its post-WAL ob
   const declaration = JSON.parse(await readFile(new URL('../scenarios/disposable-f05-fenced-player-canonical-first-abrupt.json', import.meta.url), 'utf8'));
   assert.doesNotThrow(() => validateScenario(declaration));
   assert.equal(declaration.restart.afterAction, 5);
+  assert.equal(declaration.crash.owner, 'settlement:1',
+    'the durable handoff is fenced by its production settlement event subject, not its source-account diagnostic id');
   assert.deepEqual(declaration.actions.slice(3, 5).map((action) => action.type),
     ['split_move_from_container', 'wait_until_diagnostic']);
   assert.deepEqual(declaration.actions[4].expect, { status: 'ok', quantity: 32,
@@ -86,7 +88,8 @@ function resourceCrash(boundary) {
 }
 
 function player(scenarioId, boundary, expectedCount) {
-  const value = crash({ boundary, owner: 'custody:container-1-depot', payloadType: 'frontier.fungible_resource_handoff_observed' });
+  const owner = scenarioId === 'disposable_f03_fungible_player_abrupt' ? 'custody:container-1-depot' : 'settlement:1';
+  const value = crash({ boundary, owner, payloadType: 'frontier.fungible_resource_handoff_observed' });
   value.scenarioId = scenarioId;
   value.recovery.crash.playerSave = { player: 'bf39347d-cb86-3221-b6b7-7b89a1dcb4cf', item: 'minecraft:wheat', expectedCount, itemCount: expectedCount, exists: expectedCount > 0, sha256: expectedCount > 0 ? 'c'.repeat(64) : null };
   const [sourceAction, playerAction] = scenarioId === 'disposable_f03_fungible_player_abrupt' ? [7, 8] : [6, 7];
