@@ -537,8 +537,14 @@ public final class PaleMirrorEvents {
     @SubscribeEvent
     public static void onPlayerChangedDimension(PlayerEvent.PlayerChangedDimensionEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
-            io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.observeNaturalChunkLoad(
-                    player.serverLevel(), new net.minecraft.world.level.ChunkPos(player.blockPosition()));
+            // NeoForge publishes this transfer event while the player still exposes its source
+            // level.  Use the event's destination key; using serverLevel() here silently fences
+            // the old chunk and leaves the newly visible chunk unobserved.
+            net.minecraft.server.level.ServerLevel destination = player.getServer().getLevel(event.getTo());
+            if (destination != null) {
+                io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.observeNaturalChunkLoad(
+                        destination, new net.minecraft.world.level.ChunkPos(player.blockPosition()));
+            }
         }
     }
 
