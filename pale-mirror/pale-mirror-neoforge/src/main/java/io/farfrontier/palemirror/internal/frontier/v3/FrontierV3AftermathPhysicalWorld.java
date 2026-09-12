@@ -16,6 +16,19 @@ interface FrontierV3AftermathPhysicalWorld {
     FrontierV3GrayboxLedger ledger();
 
     static FrontierV3AftermathPhysicalWorld minecraft(ServerLevel level) {
+        return minecraft(level, 3);
+    }
+
+    /**
+     * First visibility runs after the ChunkEvent.Load callback has returned.  These immutable
+     * static cells need a client update but no vanilla neighbour propagation, which could pull a
+     * second chunk synchronously while its first-load event is still completing.
+     */
+    static FrontierV3AftermathPhysicalWorld firstVisibility(ServerLevel level) {
+        return minecraft(level, 2);
+    }
+
+    private static FrontierV3AftermathPhysicalWorld minecraft(ServerLevel level, int blockUpdateFlags) {
         return new FrontierV3AftermathPhysicalWorld() {
             @Override public boolean naturallyLoaded(BlockPosition position) { return level.hasChunkAt(block(position)); }
             @Override public boolean isAir(BlockPosition position) { return level.getBlockState(block(position)).isAir(); }
@@ -24,7 +37,7 @@ interface FrontierV3AftermathPhysicalWorld {
             }
             @Override public boolean placeMaterial(BlockPosition position, GrayboxMaterial material) {
                 BlockPos block = block(position);
-                return level.setBlock(block, FrontierV3GrayboxExecutor.material(material), 3)
+                return level.setBlock(block, FrontierV3GrayboxExecutor.material(material), blockUpdateFlags)
                         && level.getBlockState(block).equals(FrontierV3GrayboxExecutor.material(material));
             }
             @Override public boolean clear(BlockPosition position) {

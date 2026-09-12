@@ -50,8 +50,10 @@ final class FrontierV3GrayboxExecutor {
     private static final Map<FrontierV3ServerRuntime<?, ?>, ProjectionWork> WORK = new IdentityHashMap<>();
     /**
      * A natural chunk load is an exposure boundary, not another best-effort projector turn.
-     * Incomplete/foreign static geometry remains visibly unavailable rather than being filled by
-     * a later 64-cell batch after a player has already seen the chunk.
+     * The event only records that boundary: vanilla is still completing its own chunk-load call
+     * stack there, so material writes must wait for the registered projection stage.  Incomplete
+     * or foreign static geometry remains visibly unavailable rather than being filled by a later
+     * 64-cell batch after a player has already seen the chunk.
      */
     private static final Map<FrontierV3ServerRuntime<?, ?>, Map<ChunkPos, FirstVisibilityRecord>> FIRST_VISIBILITY = new IdentityHashMap<>();
 
@@ -63,7 +65,7 @@ final class FrontierV3GrayboxExecutor {
      * observed the dynamic owners for the same checkpoint; a scene must not become eligible in
      * the small gap between those two responsibilities.
      */
-    private enum FirstVisibility { STATIC_CURRENT, READY, BLOCKED }
+    private enum FirstVisibility { PENDING, STATIC_CURRENT, READY, BLOCKED }
     private record FirstVisibilityRecord(FirstVisibility status, long revision, int cells) { }
     record FirstVisibilitySnapshot(ChunkPos chunk, String status, long revision, int cells) {
         static FirstVisibilitySnapshot unavailable() { return new FirstVisibilitySnapshot(null, "INVALID", -1L, 0); }
@@ -77,6 +79,7 @@ final class FrontierV3GrayboxExecutor {
         if (state == null) return;
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
         Cursor cursor = cursor(runtime, state);
+        projectPendingFirstVisibility(level, ledger, runtime, state, cursor);
         retireStaleWorksiteStaging(level, ledger, cursor);
         tick(FrontierV3AftermathPhysicalWorld.minecraft(level), runtime, state, cursor);
     }
@@ -142,37 +145,57 @@ final class FrontierV3GrayboxExecutor {
     static void forgetFirstVisibility(FrontierV3ServerRuntime<?, ?> runtime) { FIRST_VISIBILITY.remove(runtime); }
 
     /**
-     * Actual ChunkEvent.Load composition: install every current static cell in the newly natural
-     * chunk before it can be presented, retaining an explicit blocked state on foreign drift.
-     * This never asks ChunkMap for a chunk, creates a ticket, or replays a world-wide plan.
+     * Actual ChunkEvent.Load composition: fence the newly natural chunk before it can be used by
+     * a scene.  The registered projection stage installs its current static cells on the next
+     * ordinary server turn.  This event never asks ChunkMap for a chunk, creates a ticket, or
+     * re-enters vanilla's chunk-load stack with a block mutation.
      */
     static void observeNaturalChunkLoad(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, ChunkPos chunk) {
         Objects.requireNonNull(level, "first visibility level"); Objects.requireNonNull(runtime, "first visibility runtime");
         Objects.requireNonNull(chunk, "first visibility chunk");
-        FrontierWorldState state = runtime.decodedState().orElse(null);
-        if (state == null || !level.hasChunk(chunk.x, chunk.z)) return;
-        Cursor cursor = cursor(runtime, state); FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
-        List<GrayboxCell> cells = cursor.cellsIn(chunk);
-        FirstVisibility result = FirstVisibility.STATIC_CURRENT;
-        List<GrayboxCell> pending = cells;
-        // Dependencies are confined to one chunk and sorted by height. Revisit only while an
-        // earlier support made a later cell eligible; no unbounded retry/polling is permitted.
-        while (!pending.isEmpty()) {
-            int progressed = 0;
-            List<GrayboxCell> deferred = new ArrayList<>();
-            for (GrayboxCell cell : pending) {
-                ProjectionResult projection = projectFirstVisible(level, ledger, state, cell);
-                if (projection == ProjectionResult.CONFLICT) { result = FirstVisibility.BLOCKED; break; }
-                if (projection == ProjectionResult.DEFERRED) deferred.add(cell);
-                else progressed++;
+        if (runtime.decodedState().isEmpty() || !level.hasChunk(chunk.x, chunk.z)) return;
+        FIRST_VISIBILITY.computeIfAbsent(runtime, ignored -> new LinkedHashMap<>())
+                .putIfAbsent(chunk, new FirstVisibilityRecord(FirstVisibility.PENDING, -1L, 0));
+    }
+
+    /**
+     * Completes one already-observed first-visibility boundary from the normal projection
+     * composition.  The special physical adapter sends client state without neighbour updates:
+     * immutable graybox cells have no redstone/physics dependency, and neighbour notification
+     * from a ChunkEvent.Load callback can synchronously request a second chunk.
+     */
+    private static void projectPendingFirstVisibility(ServerLevel level, FrontierV3GrayboxLedger ledger,
+                                                       FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                                       FrontierWorldState state, Cursor cursor) {
+        Map<ChunkPos, FirstVisibilityRecord> records = FIRST_VISIBILITY.get(runtime);
+        if (records == null) return;
+        for (Map.Entry<ChunkPos, FirstVisibilityRecord> entry : records.entrySet()) {
+            if (entry.getValue().status() != FirstVisibility.PENDING) continue;
+            ChunkPos chunk = entry.getKey();
+            if (!level.hasChunk(chunk.x, chunk.z)) continue;
+            FirstVisibility result = FirstVisibility.STATIC_CURRENT;
+            List<GrayboxCell> cells = cursor.cellsIn(chunk);
+            List<GrayboxCell> pending = cells;
+            // Dependencies are confined to one already-loaded chunk and sorted by height.
+            // Revisit only while an earlier support made a later cell eligible; no retry/polling
+            // is permitted outside this single registered projection turn.
+            while (!pending.isEmpty()) {
+                int progressed = 0;
+                List<GrayboxCell> deferred = new ArrayList<>();
+                for (GrayboxCell cell : pending) {
+                    ProjectionResult projection = projectFirstVisible(FrontierV3AftermathPhysicalWorld.firstVisibility(level), ledger, state, cell);
+                    if (projection == ProjectionResult.CONFLICT) { result = FirstVisibility.BLOCKED; break; }
+                    if (projection == ProjectionResult.DEFERRED) deferred.add(cell);
+                    else progressed++;
+                }
+                if (result == FirstVisibility.BLOCKED) break;
+                if (deferred.isEmpty()) break;
+                if (progressed == 0) { result = FirstVisibility.BLOCKED; break; }
+                pending = List.copyOf(deferred);
             }
-            if (result == FirstVisibility.BLOCKED) break;
-            if (deferred.isEmpty()) break;
-            if (progressed == 0) { result = FirstVisibility.BLOCKED; break; }
-            pending = List.copyOf(deferred);
+            long revision = runtime.checkpointImage().orElseThrow().revision().value();
+            entry.setValue(new FirstVisibilityRecord(result, revision, cells.size()));
         }
-        long revision = runtime.checkpointImage().orElseThrow().revision().value();
-        FIRST_VISIBILITY.computeIfAbsent(runtime, ignored -> new LinkedHashMap<>()).put(chunk, new FirstVisibilityRecord(result, revision, cells.size()));
     }
 
     /**
@@ -210,13 +233,14 @@ final class FrontierV3GrayboxExecutor {
         return visibility == null || visibility.status() != FirstVisibility.BLOCKED;
     }
 
-    private static ProjectionResult projectFirstVisible(ServerLevel level, FrontierV3GrayboxLedger ledger, FrontierWorldState state, GrayboxCell cell) {
+    private static ProjectionResult projectFirstVisible(FrontierV3AftermathPhysicalWorld world, FrontierV3GrayboxLedger ledger,
+                                                        FrontierWorldState state, GrayboxCell cell) {
         PhysicalDelta delta = state.physicalDeltas().get(cell.position());
         if (delta != null) {
-            if (matchesKnownLoss(delta, cell)) { retainKnownLoss(level, ledger, cell); return ProjectionResult.CURRENT; }
+            if (matchesKnownLoss(delta, cell)) { retainKnownLoss(world, cell); return ProjectionResult.CURRENT; }
             return ProjectionResult.CONFLICT;
         }
-        return project(level, ledger, cell);
+        return project(world, cell);
     }
 
     /**

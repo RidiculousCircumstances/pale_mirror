@@ -13,6 +13,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierStore;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
@@ -68,6 +69,34 @@ public final class FrontierV3ProductionPhysicalTurnGameTests {
             helper.assertValueEqual(runtime.canonicalState().orElseThrow().revision().value(), revision,
                     "a repeated unavailable physical turn does not manufacture an aftermath revision");
         } finally {
+            FrontierV3GrayboxExecutor.forget(runtime);
+            runtime.shutdown();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-aftermath", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
+    public static void firstVisibilityDefersChunkLoadMaterializationUntilRegisteredProjectionTurn(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(level);
+        try {
+            ChunkPos loaded = level.getChunkAt(helper.absolutePos(BlockPos.ZERO)).getPos();
+            FrontierV3GrayboxExecutor.observeNaturalChunkLoad(level, runtime, loaded);
+            FrontierV3GrayboxExecutor.FirstVisibilitySnapshot queued = FrontierV3GrayboxExecutor.firstVisibility(runtime,
+                    loaded.x + "," + loaded.z);
+            helper.assertValueEqual(queued.status(), "PENDING",
+                    "ChunkEvent.Load only fences first visibility; it must not mutate blocks or re-enter ChunkMap from vanilla's load callback");
+            helper.assertTrue(!FrontierV3GrayboxExecutor.sceneEligible(runtime,
+                            new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(loaded.getMinBlockX(), 64, loaded.getMinBlockZ())),
+                    "a just-loaded chunk remains ineligible until the registered physical projection turn completes");
+
+            FrontierV3ServerLifecycle.runPhysicalTurn(level, runtime);
+            FrontierV3GrayboxExecutor.FirstVisibilitySnapshot completed = FrontierV3GrayboxExecutor.firstVisibility(runtime,
+                    loaded.x + "," + loaded.z);
+            helper.assertValueEqual(completed.status(), "READY",
+                    "the ordinary projection/effect composition, not the ChunkEvent callback, completes static and dynamic first visibility");
+        } finally {
+            FrontierV3GrayboxExecutor.forgetFirstVisibility(runtime);
             FrontierV3GrayboxExecutor.forget(runtime);
             runtime.shutdown();
         }
