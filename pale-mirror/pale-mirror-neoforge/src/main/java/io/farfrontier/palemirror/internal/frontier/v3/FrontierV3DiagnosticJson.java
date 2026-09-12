@@ -159,7 +159,7 @@ final class FrontierV3DiagnosticJson {
 
     static String firstVisibility(String id, CheckpointImage checkpoint, FrontierV3GrayboxExecutor.FirstVisibilitySnapshot value) {
         if (value == null || value.chunk() == null || value.status().equals("INVALID")) return unavailable("first_visibility", id, checkpoint, "invalid_chunk");
-        return base("first_visibility", id, checkpoint) + ",\"status\":\"ok\",\"chunkX\":" + value.chunk().x
+        return PREFIX + base("first_visibility", id, checkpoint) + ",\"status\":\"ok\",\"chunkX\":" + value.chunk().x
                 + ",\"chunkZ\":" + value.chunk().z + ",\"visibility\":\"" + quote(value.status())
                 + "\",\"replicaRevision\":" + value.revision() + ",\"staticCells\":" + value.cells() + "}";
     }

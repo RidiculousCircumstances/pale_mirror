@@ -228,7 +228,10 @@ final class FrontierV3GrayboxExecutor {
         long revision = runtime.checkpointImage().orElseThrow().revision().value();
         Map<ChunkPos, FirstVisibilityRecord> records = FIRST_VISIBILITY.get(runtime);
         if (records == null) return;
-        records.replaceAll((chunk, record) -> record.status() == FirstVisibility.STATIC_CURRENT && record.revision() == revision
+        // EFFECT owners can append an unrelated canonical receipt between the PROJECTION stage
+        // and this final observation boundary.  The fence is one completed registered physical
+        // turn, not accidental equality with the projection-stage checkpoint revision.
+        records.replaceAll((chunk, record) -> record.status() == FirstVisibility.STATIC_CURRENT
                 ? new FirstVisibilityRecord(FirstVisibility.READY, revision, record.cells()) : record);
     }
 
