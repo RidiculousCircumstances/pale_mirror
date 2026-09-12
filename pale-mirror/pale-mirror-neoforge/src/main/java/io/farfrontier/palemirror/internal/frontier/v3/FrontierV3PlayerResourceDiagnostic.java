@@ -46,14 +46,14 @@ final class FrontierV3PlayerResourceDiagnostic {
         CustodyAccount account = resources.accounts().get(accountId);
         if (account == null || !(account.custody() instanceof ResourceCustody.Player custody)) return null;
         List<PhysicalStackBinding> bindings = resources.bindings().values().stream()
-                .filter(binding -> binding.accountId().equals(accountId))
-                .filter(binding -> binding.address() instanceof PhysicalStackAddress.PlayerSlot)
-                .filter(binding -> ((PhysicalStackAddress.PlayerSlot) binding.address()).playerId().equals(custody.playerId()))
-                .sorted(Comparator.comparing(PhysicalStackBinding::id)).toList();
+                .filter(binding -> binding.accountId().equals(accountId)).sorted(Comparator.comparing(PhysicalStackBinding::id)).toList();
         if (bindings.size() != 1) return null;
         PhysicalStackBinding binding = bindings.getFirst();
+        if (!(binding.address() instanceof PhysicalStackAddress.PlayerSlot)
+                || !((PhysicalStackAddress.PlayerSlot) binding.address()).playerId().equals(custody.playerId())) return null;
         PhysicalStackAddress.PlayerSlot address = (PhysicalStackAddress.PlayerSlot) binding.address();
         int canonicalQuantity = account.lotQuantities().values().stream().mapToInt(Integer::intValue).sum();
+        if (canonicalQuantity != binding.quantity()) return null;
         return new Expected(account.id(), custody.playerId(), address.slot(), canonicalQuantity, binding.id(), binding.authorityEpoch(),
                 binding.itemKind(), binding.quantity());
     }

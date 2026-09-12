@@ -14,6 +14,10 @@ import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceCustody;
 import io.farfrontier.palemirror.frontier.v3.model.FungibleResourceLedger;
+import io.farfrontier.palemirror.frontier.v3.model.CustodyAccount;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackBinding;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceLot;
 import io.farfrontier.palemirror.frontier.v3.persistence.AppendReceipt;
 import io.farfrontier.palemirror.frontier.v3.persistence.CompactionReceipt;
 import io.farfrontier.palemirror.frontier.v3.persistence.Durability;
@@ -35,6 +39,7 @@ import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 
@@ -177,6 +182,28 @@ public final class FrontierV3PlayerCustodyGameTests {
         });
     }
 
+    @GameTest(batch = "pm-frontier-v3-player-withdrawal", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void recoveredCanonicalPlayerCustodyRestoresOnlyItsExactEmptyStartupSlot(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); var player = helper.makeMockServerPlayerInLevel();
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
+                recoveredPlayerRuntime(new WorldId("frontier:player-custody-recovery-game-test"), player.getUUID());
+        FrontierV3PlayerCustodyRecovery.beginRecovery(runtime);
+        FrontierV3FungibleResourceObservationExecutor.tick(level, runtime);
+
+        ItemStack restored = player.getInventory().getItem(9);
+        helper.assertTrue(restored.is(Items.CARROT) && restored.getCount() == 32,
+                "a canonical-first abrupt recovery must restore the exact authenticated player slot, kind and count");
+        FrontierWorldState recovered = state(runtime);
+        helper.assertTrue(recovered.inventory().fungibleResources().accounts().values().stream()
+                        .anyMatch(account -> account.custody().equals(new ResourceCustody.Player(player.getUUID()))),
+                "physical reconstitution must retain the same canonical player custody instead of replaying a second handoff");
+        helper.assertTrue(recovered.inventory().fungibleResources().accounts().values().stream()
+                        .filter(account -> account.custody().equals(new ResourceCustody.Player(player.getUUID())))
+                        .flatMapToInt(account -> account.lotQuantities().values().stream().mapToInt(Integer::intValue)).sum() == 32,
+                "the restart repair must conserve the one persisted canonical player portion");
+        FrontierV3PlayerCustodyRecovery.forget(runtime); runtime.shutdown(); helper.succeed();
+    }
+
     private static FrontierWorldState state(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         return new FrontierWorldStateCodec().decode(runtime.checkpointImage().orElseThrow().canonicalState());
     }
@@ -203,6 +230,28 @@ public final class FrontierV3PlayerCustodyGameTests {
         ExactItemStack wheat = new ExactItemStack(new SubjectId("item:bootstrap-1-wheat"), settlement, "minecraft:wheat", 64,
                 new InventoryCustody.ContainerSlot(FrontierWorldState.depotId(settlement), 0));
         FrontierWorldState state = base.initialState().withInventory(base.initialState().inventory().withFungibleResources(resources).store(wheat));
+        FrontierEngineConfiguration<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> configuration =
+                new FrontierEngineConfiguration<>(base.worldId(), state, base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(), base.reducer(),
+                        base.stateCodec(), base.projectionMapper(), base.limits(), base.initialSchedules(), base.transactionCommitter(), base.stateValidator(), base.executionMetrics());
+        return FrontierV3ServerRuntime.start(configuration, new EphemeralStore(), 10_000);
+    }
+
+    private static FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection>
+    recoveredPlayerRuntime(WorldId world, java.util.UUID playerId) {
+        FrontierEngineConfiguration<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> base =
+                FrontierWorldRuntimeDefinition.configuration(world, 91L);
+        SubjectId settlement = new SubjectId("settlement:1"), lotId = new SubjectId("lot:player-recovery-carrot");
+        SubjectId accountId = new SubjectId("custody:player-" + playerId), bindingId = new SubjectId("binding:player-recovery-carrot");
+        ResourceLot lot = new ResourceLot(lotId, settlement, "minecraft:carrot", 32, "game-test-recovery", List.of());
+        CustodyAccount account = new CustodyAccount(accountId, new ResourceCustody.Player(playerId), Map.of(lotId, 32), Map.of());
+        PhysicalStackBinding binding = new PhysicalStackBinding(bindingId, accountId, new PhysicalStackAddress.PlayerSlot(playerId, 9), 1L,
+                "minecraft:carrot", Map.of(lotId, 32), Map.of());
+        FungibleResourceLedger prior = base.initialState().inventory().fungibleResources();
+        Map<SubjectId, ResourceLot> lots = new LinkedHashMap<>(prior.lots()); lots.put(lotId, lot);
+        Map<SubjectId, CustodyAccount> accounts = new LinkedHashMap<>(prior.accounts()); accounts.put(accountId, account);
+        Map<SubjectId, PhysicalStackBinding> bindings = new LinkedHashMap<>(prior.bindings()); bindings.put(bindingId, binding);
+        FrontierWorldState state = base.initialState().withInventory(base.initialState().inventory()
+                .withFungibleResources(new FungibleResourceLedger(lots, prior.claims(), accounts, bindings)));
         FrontierEngineConfiguration<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> configuration =
                 new FrontierEngineConfiguration<>(base.worldId(), state, base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(), base.reducer(),
                         base.stateCodec(), base.projectionMapper(), base.limits(), base.initialSchedules(), base.transactionCommitter(), base.stateValidator(), base.executionMetrics());

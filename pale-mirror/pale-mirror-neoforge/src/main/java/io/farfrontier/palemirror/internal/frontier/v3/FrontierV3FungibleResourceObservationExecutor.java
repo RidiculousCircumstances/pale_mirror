@@ -45,6 +45,9 @@ final class FrontierV3FungibleResourceObservationExecutor {
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return;
+        // This is deliberately before ordinary return/departure observation: an empty slot
+        // captured at startup is the one reversible crash window, not an ordinary return.
+        if (FrontierV3PlayerCustodyRecovery.reconcileOne(level, runtime, state)) return;
         if (observeOneCargoCarrierDeparture(level, runtime, state)) return;
         if (observeOneWorldPickup(level, runtime, state)) return;
         for (CustodyAccount account : state.inventory().fungibleResources().accounts().values().stream()

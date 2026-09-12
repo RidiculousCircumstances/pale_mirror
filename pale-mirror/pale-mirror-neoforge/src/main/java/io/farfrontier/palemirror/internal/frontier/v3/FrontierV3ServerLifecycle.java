@@ -303,6 +303,7 @@ public final class FrontierV3ServerLifecycle {
         }
         if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
             FrontierV3ResourceSiteExecutor.beginRecovery(runtime);
+            FrontierV3PlayerCustodyRecovery.beginRecovery(runtime);
             try {
                 int uninspectable = FrontierV3PhysicalIntentRestartSafety.quarantineUninspectableRunningIntents(runtime, physicalWorld);
                 int ambientUnknown = FrontierV3AmbientLeaseRestartSafety.quarantineActiveLeases(runtime);
@@ -489,6 +490,7 @@ public final class FrontierV3ServerLifecycle {
         Objects.requireNonNull(runtime, "runtime");
         FrontierV3GrayboxExecutor.forget(runtime);
         FrontierV3ResourceSiteExecutor.forget(runtime);
+        FrontierV3PlayerCustodyRecovery.forget(runtime);
         FrontierV3InfectionOverlayExecutor.forget(runtime);
         FrontierV3ObjectBoardExecutor.forget(runtime);
         FrontierV3AmbientActorExecutor.forget(runtime);
