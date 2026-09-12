@@ -24,6 +24,8 @@ import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -313,6 +315,52 @@ class ResourceSiteHarvestProcessTest {
         assertEquals(secondObserved, returned.sceneLeases().get(secondLease.id()).memberPosition(finalJob.workerId()));
         assertEquals(0, finalJob.progress().completedCropSlots(), "F0.1 COLD/HOT travel never removes unloaded crop blocks");
         assertFalse(returned.inventory().items().containsKey(finalJob.outputItemId()), "F0.1 travel never mints the field output");
+    }
+
+    @Test
+    void fixedSeedQuietCalibrationKeepsEightHotColdHandOffsSemanticallyNeutral() {
+        FrontierObserverNeutralityContract.Declaration declaration = FrontierObserverNeutralityContract.declaration(
+                FrontierDurationProcessDriverRegistry.Family.RESOURCE_SITE_HARVEST);
+        CalibrationFacts coldFacts = new CalibrationFacts(), hotColdFacts = new CalibrationFacts();
+
+        for (long seed = 125L; seed < 133L; seed++) {
+            ColdHarvest cold = coldHarvestAfterSteps(seed, 2);
+            HotHarvest hot = hotHarvestAfterColdSteps(seed, 0);
+            ResourceSiteHarvestJob beforeHot = hot.job();
+            BodyPosition firstObserved = beforeHot.nextTraversalSurface().standingBody();
+            FrontierWorldState checkpointed = ResourceSiteHarvestProcess.reduceHotTraversalAdvanced(hot.state(), hot.site(),
+                    new ResourceSiteHarvestHotTraversalAdvanced(beforeHot.id(), hot.lease().id(), beforeHot.workerId(), firstObserved,
+                            beforeHot.traversalCursor() + 1));
+            FrontierWorldState released = checkpointed.transitionSceneLease(hot.lease().id(), SceneLeaseStatus.DRAINING)
+                    .releaseSceneLease(hot.lease().id(), List.of(new SceneMemberPosition(beforeHot.workerId(), firstObserved,
+                            checkpointed.actorLocations().get(beforeHot.workerId()).condition().health())));
+            ResourceSiteHarvestJob afterRelease = (ResourceSiteHarvestJob) released.resourceSites().site(hot.site()).activeWork().orElseThrow();
+            FrontierWorldState switched = ResourceSiteHarvestProcess.reduceColdTraversalAdvanced(released, hot.site(),
+                    new ResourceSiteHarvestColdTraversalAdvanced(afterRelease.id(), afterRelease.workerId(), afterRelease.traversalCursor() + 1));
+            ResourceSiteHarvestJob switchedJob = (ResourceSiteHarvestJob) switched.resourceSites().site(hot.site()).activeWork().orElseThrow();
+            ResourceSiteHarvestJob coldJob = cold.job();
+
+            assertEquals(coldJob.traversalCursor(), switchedJob.traversalCursor(), "HOT/COLD hand-off keeps the fixed-seed cursor");
+            assertEquals(cold.state().actorLocations().get(coldJob.workerId()).body(), switched.actorLocations().get(switchedJob.workerId()).body(),
+                    "HOT observation and COLD advancement keep the same retained worker body");
+            assertEquals(coldJob.traversal(), switchedJob.traversal(), "HOT has no replacement route or cursor topology");
+            assertEquals(cold.state().physicalIntents().get(coldJob.intentId()).status(), switched.physicalIntents().get(switchedJob.intentId()).status(),
+                    "the unchanged traversal effect retains the same recovery classification");
+            coldFacts.append(cold.state(), coldJob, cold.site(), seed);
+            hotColdFacts.append(switched, switchedJob, hot.site(), seed);
+        }
+
+        FrontierObserverNeutralityContract.Run coldBaseline = coldFacts.run(declaration);
+        FrontierObserverNeutralityContract.Run hotCold = hotColdFacts.run(declaration);
+        FrontierObserverNeutralityContract.requireComparable(coldBaseline, hotCold);
+
+        LinkedHashMap<String, Long> alteredCustody = new LinkedHashMap<>(hotCold.custody());
+        alteredCustody.put("seed:125:crop-slots", 1L);
+        assertThrows(IllegalArgumentException.class, () -> FrontierObserverNeutralityContract.requireComparable(coldBaseline,
+                new FrontierObserverNeutralityContract.Run(declaration, hotCold.actorIds(), hotCold.objectIds(), hotCold.claims(), alteredCustody,
+                        hotCold.completedStages(), hotCold.retainedWork(), hotCold.legalTopology(), hotCold.confirmedEffects(),
+                        hotCold.recoveryDiscriminators(), hotCold.randomOpportunityKeys(), hotCold.calibration())),
+                "quiet calibration must fence one lost or minted crop rather than averaging it away");
     }
 
     @Test
@@ -757,7 +805,21 @@ class ResourceSiteHarvestProcessTest {
     }
 
     private static HotHarvest hotHarvestAfterColdSteps(int coldSteps) {
-        FrontierWorldState ready = ready(initial());
+        return hotHarvestAfterColdSteps(125L, coldSteps);
+    }
+
+    private static HotHarvest hotHarvestAfterColdSteps(long seed, int coldSteps) {
+        ColdHarvest cold = coldHarvestAfterSteps(seed, coldSteps);
+        FrontierWorldState state = cold.state();
+        SubjectId site = cold.site();
+        ResourceSiteHarvestJob job = cold.job();
+        SceneLease lease = newHarvestLease(state, site, job, "hot-checkpoint-" + seed + "-" + coldSteps);
+        state = state.prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT);
+        return new HotHarvest(state, site, job, state.sceneLeases().get(lease.id()));
+    }
+
+    private static ColdHarvest coldHarvestAfterSteps(long seed, int coldSteps) {
+        FrontierWorldState ready = ready(initial(seed));
         SubjectId site = new SubjectId("site:1-wheat-field");
         FrontierWorldState tasked = harvestTask(ready, site, 22_000L);
         StrategicTask task = onlyHarvestTask(tasked);
@@ -774,10 +836,7 @@ class ResourceSiteHarvestProcessTest {
             state = ResourceSiteHarvestProcess.reduceColdTraversalAdvanced(state, site,
                     new ResourceSiteHarvestColdTraversalAdvanced(current.id(), current.workerId(), current.traversalCursor() + 1));
         }
-        ResourceSiteHarvestJob job = (ResourceSiteHarvestJob) state.resourceSites().site(site).activeWork().orElseThrow();
-        SceneLease lease = newHarvestLease(state, site, job, "hot-checkpoint-" + coldSteps);
-        state = state.prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT);
-        return new HotHarvest(state, site, job, state.sceneLeases().get(lease.id()));
+        return new ColdHarvest(state, site, (ResourceSiteHarvestJob) state.resourceSites().site(site).activeWork().orElseThrow());
     }
 
     private static SceneLease newHarvestLease(FrontierWorldState state, SubjectId site, ResourceSiteHarvestJob job, String suffix) {
@@ -809,8 +868,45 @@ class ResourceSiteHarvestProcessTest {
 
     private record HotHarvest(FrontierWorldState state, SubjectId site, ResourceSiteHarvestJob job, SceneLease lease) { }
 
+    private record ColdHarvest(FrontierWorldState state, SubjectId site, ResourceSiteHarvestJob job) { }
+
+    private static final class CalibrationFacts {
+        private final LinkedHashSet<String> actors = new LinkedHashSet<>(), objects = new LinkedHashSet<>(), stages = new LinkedHashSet<>();
+        private final LinkedHashSet<String> topology = new LinkedHashSet<>(), opportunities = new LinkedHashSet<>();
+        private final LinkedHashMap<String, Long> claims = new LinkedHashMap<>(), custody = new LinkedHashMap<>(), work = new LinkedHashMap<>();
+        private final LinkedHashMap<String, String> recovery = new LinkedHashMap<>();
+
+        private void append(FrontierWorldState state, ResourceSiteHarvestJob job, SubjectId site, long seed) {
+            String prefix = "seed:" + seed + ":";
+            actors.add(prefix + job.workerId().value());
+            objects.add(prefix + job.id().value());
+            claims.put(prefix + "worker", 1L);
+            custody.put(prefix + "crop-slots", (long) job.progress().completedCropSlots());
+            custody.put(prefix + "body-x", 4_096L + state.actorLocations().get(job.workerId()).body().x());
+            custody.put(prefix + "body-y", 4_096L + state.actorLocations().get(job.workerId()).body().y());
+            custody.put(prefix + "body-z", 4_096L + state.actorLocations().get(job.workerId()).body().z());
+            stages.add(prefix + state.resourceSites().site(site).phase());
+            work.put(prefix + "cursor", (long) job.traversalCursor());
+            topology.add(prefix + job.traversal().linearCorridorSurfaces());
+            recovery.put(prefix + "intent", state.physicalIntents().get(job.intentId()).status().name());
+            recovery.put(prefix + "active-lease", "none");
+            opportunities.add(prefix + job.id().value());
+        }
+
+        private FrontierObserverNeutralityContract.Run run(FrontierObserverNeutralityContract.Declaration declaration) {
+            int samples = actors.size();
+            return new FrontierObserverNeutralityContract.Run(declaration, actors, objects, claims, custody, stages, work, topology,
+                    java.util.Set.of(), recovery, opportunities,
+                    new FrontierObserverNeutralityContract.CalibrationSample(samples, samples, 0, samples * 400L));
+        }
+    }
+
     private static FrontierWorldState initial() {
         return FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:resource-site-harvest"), 125L));
+    }
+
+    private static FrontierWorldState initial(long seed) {
+        return FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:resource-site-harvest-" + seed), seed));
     }
 
     private static long column(int x, int z) {
