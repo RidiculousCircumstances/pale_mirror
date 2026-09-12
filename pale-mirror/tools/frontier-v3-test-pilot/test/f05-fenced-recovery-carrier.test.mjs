@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { assertF05FencedRecoveryCarrier, assertF05FencedRecoveryDeclaration, assertF05FencedRecoveryIdentity } from '../src/f05-fenced-recovery-carrier.mjs';
 import { buildF05FencedRecoveryReceipt, preflightF05FencedRecoveryCarrier } from '../src/run-f05-fenced-recovery-carrier.mjs';
+import { loadScenario } from '../src/scenario.mjs';
 
 const source = await readFile(new URL('../scenarios/disposable-f05-fenced-route-recovery.json', import.meta.url));
 const declaration = JSON.parse(source); const outerAttempt = 'a0b1c2d3-e4f5-4678-9012-3456789abcde';
@@ -18,6 +19,11 @@ test('F0.5 carrier binds the exact route fence before and after its persistent r
   const validated = preflightF05FencedRecoveryCarrier({ declarationSource: source, declarationSha256: sha,
     manifestSource: Buffer.from(JSON.stringify(manifest)), outerAttempt });
   assert.equal(buildF05FencedRecoveryReceipt(validated).recovery.binding, 'recovery:body_resident_1-16');
+});
+
+test('F0.5 route recovery declaration passes the runner diagnostic grammar', async () => {
+  const loaded = await loadScenario(new URL('../scenarios/disposable-f05-fenced-route-recovery.json', import.meta.url));
+  assert.equal(loaded.scenario.id, declaration.id);
 });
 
 test('F0.5 carrier rejects a replacement epoch or malformed route declaration', () => {

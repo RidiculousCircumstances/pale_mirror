@@ -42,7 +42,9 @@ test('summary diagnostics need no object identity while object diagnostics do', 
   assert.throws(() => validateScenario({ ...inspection, actions: [{ type: 'inspect', view: 'site', id: '' }] }), /inspect needs a read-only v3 view and id/);
   assert.doesNotThrow(() => validateScenario({ ...inspection, actions: [{ type: 'inspect', view: 'performance', id: '' }] }));
   assert.doesNotThrow(() => validateScenario({ ...inspection, actions: [{ type: 'inspect', view: 'resource', id: 'custody:container-1-depot' }] }));
+  assert.doesNotThrow(() => validateScenario({ ...inspection, actions: [{ type: 'inspect', view: 'recovery', id: 'recovery:body_resident_1-16' }] }));
   assert.doesNotThrow(() => validateScenario({ ...scenario, assertions: [{ after: 0, view: 'summary', id: '', expect: { status: 'ok' } }] }));
+  assert.doesNotThrow(() => validateScenario({ ...scenario, assertions: [{ after: 0, view: 'recovery', id: 'recovery:body_resident_1-16', expect: { status: 'ok' } }] }));
   assert.throws(() => validateScenario({ ...scenario, assertions: [{ after: 0, view: 'site', id: '', expect: { status: 'ok' } }] }), /invalid diagnostic assertion/);
 });
 
