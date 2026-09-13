@@ -183,6 +183,27 @@ final class FrontierV3GrayboxExecutor {
         Objects.requireNonNull(runtime, "first visibility runtime"); Objects.requireNonNull(chunk, "first visibility chunk");
         if (runtime.decodedState().isEmpty()) return;
         retainFirstVisibility(runtime, chunk);
+        retainSiblingHiveVisibility(runtime, chunk);
+    }
+
+    /**
+     * A seed nest is one player-facing object even where its named organs straddle adjacent
+     * chunks.  Ingress into one naturally loaded organ chunk therefore fences the other
+     * already-natural sibling chunks before any label/cocoon can advertise the nest.  This is
+     * bookkeeping only: it neither asks the chunk manager for a sibling nor compiles a plan.
+     */
+    private static void retainSiblingHiveVisibility(FrontierV3ServerRuntime<?, ?> runtime, ChunkPos ingress) {
+        Cursor cursor = CURSORS.get(runtime);
+        if (cursor == null || cursor.hiveExpectations == null) return;
+        java.util.Set<io.farfrontier.palemirror.frontier.v3.api.SubjectId> entered = cursor.hiveExpectations.cells().entrySet().stream()
+                .filter(entry -> entry.getValue().stream().anyMatch(cell -> cell.position().x() >> 4 == ingress.x && cell.position().z() >> 4 == ingress.z))
+                .map(Map.Entry::getKey).collect(java.util.stream.Collectors.toSet());
+        if (entered.isEmpty()) return;
+        java.util.Set<io.farfrontier.palemirror.frontier.v3.api.SubjectId> siblings = entered.stream()
+                .flatMap(organ -> cursor.hiveExpectations.nestMembers().getOrDefault(organ, List.of()).stream())
+                .collect(java.util.stream.Collectors.toSet());
+        siblings.forEach(organ -> cursor.hiveExpectations.cells().getOrDefault(organ, List.of()).forEach(cell ->
+                retainFirstVisibility(runtime, new ChunkPos(cell.position().x() >> 4, cell.position().z() >> 4))));
     }
 
     private static void retainFirstVisibility(FrontierV3ServerRuntime<?, ?> runtime, ChunkPos chunk) {
