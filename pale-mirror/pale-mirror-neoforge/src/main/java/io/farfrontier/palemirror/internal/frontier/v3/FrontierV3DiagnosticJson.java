@@ -130,6 +130,7 @@ final class FrontierV3DiagnosticJson {
         String value = switch (kind) {
             case "summary" -> summary(checkpoint, state);
             case "process" -> process(id, checkpoint, state);
+            case "process_inventory" -> FrontierV3ProcessInventoryDiagnostic.render(id, checkpoint, state);
             case "site" -> site(id, checkpoint, state);
             case "settlement" -> settlement(id, checkpoint, state);
             case "hive" -> hive(id, checkpoint, state);

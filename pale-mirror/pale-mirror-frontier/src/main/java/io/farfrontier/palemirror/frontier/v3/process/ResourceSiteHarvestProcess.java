@@ -67,7 +67,7 @@ public final class ResourceSiteHarvestProcess {
         OptionalInt slot = state.firstFreeContainerSlot(depot); if (slot.isEmpty()) return blocked(task);
         ResourceSiteHarvestJob job = job(state, lifecycle, task, farmer, new InventoryCustody.ContainerSlot(depot, slot.getAsInt()));
         PhysicalIntent intent = intent(site, job);
-        long firstColdStep = Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval());
+        long firstColdStep = Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().resourceHarvestTraversalInterval());
         return List.of(transition(task, StrategicTaskStatus.ACTIVE), new ProposedEvent(lifecycle.siteId(), new ResourceSiteHarvestStarted(job)),
                 new ProposedEvent(lifecycle.siteId(), new PhysicalIntentPrepared(intent)), schedule(coldProgress(job, firstColdStep)));
     }
@@ -97,7 +97,7 @@ public final class ResourceSiteHarvestProcess {
     public static ProposedEvent advanceBoundContinuation(FrontierWorldState state, ResourceSiteHarvestJob job, ScheduledAction action) {
         Objects.requireNonNull(state, "resource-site harvest continuation state");
         requireContinuationBinding(job, action);
-        long nextDue = Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval());
+        long nextDue = Math.addExact(action.dueAt().ticks(), continuationInterval(state, job));
         return reschedule(action, coldProgress(job, nextDue));
     }
 
@@ -113,7 +113,7 @@ public final class ResourceSiteHarvestProcess {
         // already-durable COLD action must be consumed without a successor; otherwise a stale
         // scheduler turn could recreate field-work after the sole player disposition.
         if (state.resourceSites().site(job.siteId()).phase() != ResourceSitePhase.HARVESTING) return List.of();
-        long nextDue = Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval());
+        long nextDue = Math.addExact(action.dueAt().ticks(), continuationInterval(state, job));
         if (FrontierResourceSiteHarvestSceneSupport.hasNonClosedScene(state, job.id())) {
             // The current engine action is also the HOT checkpoint's only binding.  Advancing its
             // due instant while the scene owns the worker makes a physically observed arrival
@@ -310,6 +310,19 @@ public final class ResourceSiteHarvestProcess {
         return state.resourceSites().sites().values().stream().map(ResourceSiteLifecycle::activeWork).flatMap(java.util.Optional::stream)
                 .filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
                 .filter(job -> job.id().equals(jobId)).findFirst().orElse(null);
+    }
+
+    /**
+     * Traversal has its own persisted cadence.  Reusing the crop-work retry here made a
+     * scheduler due turn the visible stop/start clock of a travelling farmer.  Once the next
+     * retained edge would arrive at the crop station, retain the work retry instead: COLD may
+     * wait for the real HOT crop effect, but it never paces a pending pedestrian edge.
+     */
+    private static long continuationInterval(FrontierWorldState state, ResourceSiteHarvestJob job) {
+        int nextCursor = job.traversalCursor() + 1;
+        return job.hasNextTraversalStep() && nextCursor < job.cropCursor()
+                ? state.bootstrap().ruleset().cadence().resourceHarvestTraversalInterval()
+                : state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval();
     }
 
     private static List<ProposedEvent> blocked(StrategicTask task) {

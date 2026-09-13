@@ -78,7 +78,7 @@ public final class FrontierV3LocalNavigationGameTests {
     }
 
     @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 240)
-    public static void hotWorkerPacesOneRetainedEdgeContinuouslyUntilItsCanonicalDueTurn(GameTestHelper helper) {
+    public static void hotWorkerPursuesOneRetainedEdgeWithoutSyntheticReversal(GameTestHelper helper) {
         // This stock blank template has its safe interior at local z=2; z=10 is a real
         // template wall and would turn a cadence proof into an obstruction test.
         BlockPos origin = helper.absolutePos(new BlockPos(2, 0, 2));
@@ -96,30 +96,27 @@ public final class FrontierV3LocalNavigationGameTests {
         Zombie worker = helper.spawnWithNoFreeWill(EntityType.ZOMBIE, new Vec3(2.5D, 1.0D, 2.5D));
         Vec3 currentCanonicalCheckpoint = new Vec3(origin.getX() + .5D, origin.getY() + 1.0D, origin.getZ() + .5D);
         Vec3 nextCanonicalCheckpoint = new Vec3(origin.getX() + 1.5D, origin.getY() + 1.0D, origin.getZ() + .5D);
-        // Schedule the whole retained edge before the first callback.  Recursive one-tick
-        // callbacks are not a real cadence proof: GameTest may fast-forward a server catch-up
-        // and expire the test before it schedules the next callback.
-        for (int turn = 1; turn <= 200; turn++) {
-            int remaining = 201 - turn;
+        // The physical actuator receives only the retained next checkpoint.  Scheduler time is
+        // intentionally absent: it must not manufacture an edge-local turnaround while a
+        // production process awaits the observed checkpoint command.
+        for (int turn = 1; turn <= 24; turn++) {
             helper.runAtTickTime(turn, () -> {
                 FrontierV3ServerLifecycle.advanceControlledMob(worker);
-                FrontierV3ControlledMobMotion.keepRetainedEdgeActive(helper.getLevel(), worker, currentCanonicalCheckpoint,
-                        nextCanonicalCheckpoint, remaining);
+                FrontierV3ControlledMobMotion.pursueRetainedCheckpoint(helper.getLevel(), worker, nextCanonicalCheckpoint);
             });
         }
-        helper.runAtTickTime(201, () -> {
+        helper.runAtTickTime(25, () -> {
             FrontierV3ServerLifecycle.advanceControlledMob(worker);
             List<FrontierV3ControlledMobMotion.MotionSample> trace = FrontierV3ControlledMobMotion.trace(worker);
             long distinctSubBlockPositions = trace.stream().map(value -> Math.round(value.x() * 1_000.0D)).distinct().count();
             long timestampedTurns = trace.stream().map(FrontierV3ControlledMobMotion.MotionSample::gameTime).distinct().count();
-            int longestStall = longestStall(trace.stream().map(FrontierV3ControlledMobMotion.MotionSample::x).toList());
             long distinctColumns = trace.stream().map(value -> (int) Math.floor(value.x())).distinct().count();
             long normalCadenceTurns = trace.stream().filter(value -> value.horizontalVelocity() >= .15D).count();
-            helper.assertTrue(distinctSubBlockPositions >= 3 && timestampedTurns >= 24 && distinctColumns >= 2
-                            && longestStall <= 2 && normalCadenceTurns >= 24,
-                    "a HOT worker must emit many timestamped sub-block pose changes across the retained corridor: "
+            helper.assertTrue(distinctSubBlockPositions >= 3 && timestampedTurns >= 3 && distinctColumns >= 2
+                            && normalCadenceTurns >= 3,
+                    "a HOT worker must pursue the retained checkpoint at normal cadence without synthetic pacing: "
                             + "samples=" + trace.size() + " subBlocks=" + distinctSubBlockPositions
-                            + " turns=" + timestampedTurns + " columns=" + distinctColumns + " stall=" + longestStall
+                            + " turns=" + timestampedTurns + " columns=" + distinctColumns
                             + " normalCadenceTurns=" + normalCadenceTurns);
             helper.assertTrue(worker.getX() >= currentCanonicalCheckpoint.x - .35D && worker.getX() <= nextCanonicalCheckpoint.x + .35D,
                     "smooth local pose remains on the retained edge and does not create a canonical route cursor");
@@ -139,28 +136,27 @@ public final class FrontierV3LocalNavigationGameTests {
         // Each 16-turn interval models the same production hand-off: physical arrival is
         // observed first, then and only then does the canonical owner expose the next retained
         // edge. The test never invents a presentation cursor or lets a body skip a support.
-        for (int turn = 1; turn <= 80; turn++) {
-            int edge = Math.min(4, (turn - 1) / 16);
-            int withinEdge = (turn - 1) % 16;
+        for (int turn = 1; turn <= 30; turn++) {
+            int edge = Math.min(4, (turn - 1) / 6);
+            int withinEdge = (turn - 1) % 6;
             Vec3 current = new Vec3(origin.getX() + edge + .5D, origin.getY() + 1.0D, origin.getZ() + .5D);
             Vec3 next = new Vec3(origin.getX() + edge + 1.5D, origin.getY() + 1.0D, origin.getZ() + .5D);
-            int remaining = 16 - withinEdge;
             helper.runAtTickTime(turn, () -> {
                 FrontierV3ServerLifecycle.advanceControlledMob(worker);
-                FrontierV3ControlledMobMotion.keepRetainedEdgeActive(helper.getLevel(), worker, current, next, remaining);
+                FrontierV3ControlledMobMotion.pursueRetainedCheckpoint(helper.getLevel(), worker, next);
             });
-            if (withinEdge == 15 && edge < 4) {
+            if (withinEdge == 5 && edge < 4) {
                 helper.runAtTickTime(turn + 1, () -> helper.assertTrue(worker.getBlockX() == (int) Math.floor(next.x()),
                         "the next retained edge may appear only after the exact physical body cell is observed: actual="
                                 + worker.getX() + " expectedCell=" + (int) Math.floor(next.x())));
             }
         }
-        helper.runAtTickTime(81, () -> {
+        helper.runAtTickTime(31, () -> {
             FrontierV3ServerLifecycle.advanceControlledMob(worker);
             List<FrontierV3ControlledMobMotion.MotionSample> trace = FrontierV3ControlledMobMotion.trace(worker);
             long columns = trace.stream().map(value -> (int) Math.floor(value.x())).distinct().count();
             long normalCadenceTurns = trace.stream().filter(value -> value.horizontalVelocity() >= .15D).count();
-            helper.assertTrue(columns >= 5 && normalCadenceTurns >= 40 && longestStall(trace.stream()
+            helper.assertTrue(columns >= 5 && normalCadenceTurns >= 15 && normalCadenceTurns == trace.size() && longestStall(trace.stream()
                             .map(FrontierV3ControlledMobMotion.MotionSample::x).toList()) <= 2,
                     "successive observed retained edges must retain normal cadence without a route/cursor fork: columns="
                             + columns + " normalCadenceTurns=" + normalCadenceTurns + " samples=" + trace.size());

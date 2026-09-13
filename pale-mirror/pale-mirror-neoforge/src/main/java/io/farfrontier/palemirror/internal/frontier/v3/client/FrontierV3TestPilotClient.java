@@ -288,7 +288,6 @@ public final class FrontierV3TestPilotClient {
             reset();
         }
     }
-
     private static void walk(Minecraft minecraft, BlockPos target, double radius) {
         Vec3 current = minecraft.player.position();
         double dx = target.getX() + 0.5D - current.x, dz = target.getZ() + 0.5D - current.z;
@@ -487,25 +486,9 @@ public final class FrontierV3TestPilotClient {
      * possible through this pilot.
      */
     private static void assertVisibleBoard(Minecraft minecraft, JsonObject action) {
-        BlockPos anchor = position(action, "position"); String expectedText = action.get("text").getAsString();
-        double radius = action.has("radius") ? action.get("radius").getAsDouble() : 3.0D;
-        double maxDistance = action.has("maxDistance") ? action.get("maxDistance").getAsDouble() : 64.0D;
-        double maxAngle = Math.cos(Math.toRadians(action.has("maxAngleDeg") ? action.get("maxAngleDeg").getAsDouble() : 50.0D));
-        // See assertVisibleBlock: a received teleport yaw must not erase this purely local
-        // camera framing between the explicit look and the client-side rendered-entity check.
-        look(minecraft, anchor);
-        captureFocus = Vec3.atCenterOf(anchor);
-        Vec3 eye = minecraft.player.getEyePosition(); Vec3 view = minecraft.player.getViewVector(1.0F).normalize(); Vec3 expected = Vec3.atCenterOf(anchor);
-        boolean visible = minecraft.level.getEntitiesOfClass(Display.TextDisplay.class, minecraft.player.getBoundingBox().inflate(maxDistance), display -> {
-            if (display.getCustomName() == null || !display.getCustomName().getString().contains(expectedText)
-                    || display.position().distanceToSqr(expected) > radius * radius) return false;
-            Vec3 delta = display.position().subtract(eye); double distance = delta.length();
-            return distance > 0.0D && distance <= maxDistance && view.dot(delta.scale(1.0D / distance)) >= maxAngle;
-        }).stream().findFirst().isPresent();
-        if (visible) { advance("assert_visible_board"); return; }
-        if ((minecraft.level.getGameTime() - actionStartedTick) * 50L >= action.get("timeoutMs").getAsLong()) {
-            throw new IllegalStateException("camera never saw board text=" + expectedText + " near " + anchor);
-        }
+        BlockPos anchor = position(action, "position");
+        FrontierV3PilotPresentationAssertions.assertVisibleBoard(minecraft, action, actionStartedTick, anchor,
+                value -> look(minecraft, value), value -> captureFocus = Vec3.atCenterOf(value), FrontierV3TestPilotClient::advance);
     }
     /** Presentation-only proof: the player camera sees a locally rendered ordinary entity, not a server-selected UUID. */
     private static void assertVisibleEntity(Minecraft minecraft, JsonObject action) {

@@ -154,6 +154,25 @@ final class FrontierV3GrayboxExecutor {
                 ? Optional.empty() : Optional.of(cursor.structuralBaseline);
     }
 
+    /**
+     * One immutable column index derived when the structural cursor compiles its retained plan.
+     * Dynamic surface owners use it to remain above a whole declared organ column even before
+     * every one of those cells has received its naturally-loaded materialization turn.
+     */
+    static Optional<Map<Long, Integer>> publishedStructuralCeilings(FrontierV3ServerRuntime<?, ?> runtime) {
+        Cursor cursor = CURSORS.get(runtime);
+        return cursor == null || cursor.structuralBaseline == null
+                ? Optional.empty() : Optional.of(cursor.structuralCeilings);
+    }
+
+    static Map<Long, Integer> structuralCeilings(FrontierGrayboxPlan plan) {
+        Map<Long, Integer> ceilings = new java.util.HashMap<>();
+        plan.cells().keySet().forEach(position -> ceilings.merge(columnKey(position.x(), position.z()), position.y(), Math::max));
+        return Map.copyOf(ceilings);
+    }
+
+    static long columnKey(int x, int z) { return ((long) x << 32) ^ (z & 0xffffffffL); }
+
     static Optional<FrontierV3HiveFoundryAudit.HiveExpectations> publishedHiveExpectations(FrontierV3ServerRuntime<?, ?> runtime) {
         Cursor cursor = CURSORS.get(runtime);
         return cursor == null ? Optional.empty() : Optional.ofNullable(cursor.hiveExpectations);
@@ -563,14 +582,17 @@ final class FrontierV3GrayboxExecutor {
     static final class Cursor {
         private FrontierGrayboxPlan.StructuralInput input;
         private final FrontierGrayboxPlan structuralBaseline;
+        private final Map<Long, Integer> structuralCeilings;
         private final FrontierV3HiveFoundryAudit.HiveExpectations hiveExpectations;
         private final List<ChunkCells> chunks;
         private int nextChunkIndex;
 
-        private Cursor(FrontierGrayboxPlan.StructuralInput input, FrontierGrayboxPlan structuralBaseline, FrontierV3HiveFoundryAudit.HiveExpectations hiveExpectations, List<ChunkCells> chunks, int nextChunkIndex,
+        private Cursor(FrontierGrayboxPlan.StructuralInput input, FrontierGrayboxPlan structuralBaseline, Map<Long, Integer> structuralCeilings,
+                       FrontierV3HiveFoundryAudit.HiveExpectations hiveExpectations, List<ChunkCells> chunks, int nextChunkIndex,
                        java.util.Set<BlockPos> activeWorksiteStaging) {
             this.input = input;
             this.structuralBaseline = structuralBaseline;
+            this.structuralCeilings = structuralCeilings;
             this.hiveExpectations = hiveExpectations;
             this.chunks = chunks;
             this.nextChunkIndex = nextChunkIndex;
@@ -581,14 +603,15 @@ final class FrontierV3GrayboxExecutor {
             List<GrayboxCell> cells = plan.cells().values().stream().sorted(Comparator
                     .comparingInt((GrayboxCell cell) -> cell.position().y())
                     .thenComparingInt(cell -> cell.position().x()).thenComparingInt(cell -> cell.position().z())).toList();
-            return fromCells(input, plan, FrontierV3HiveFoundryAudit.expectations(state, plan), cells, prior, plan.cells().values().stream()
+            return fromCells(input, plan, structuralCeilings(plan), FrontierV3HiveFoundryAudit.expectations(state, plan), cells, prior, plan.cells().values().stream()
                     .filter(cell -> cell.semanticPart() == GrayboxSemanticPart.WORKSITE_STAGING)
                     .map(FrontierV3GrayboxExecutor::toMinecraft).collect(java.util.stream.Collectors.toUnmodifiableSet()));
         }
         static Cursor fromCells(FrontierGrayboxPlan.StructuralInput input, List<GrayboxCell> cells, Cursor prior) {
-            return fromCells(input, null, null, cells, prior, java.util.Set.of());
+            return fromCells(input, null, Map.of(), null, cells, prior, java.util.Set.of());
         }
-        private static Cursor fromCells(FrontierGrayboxPlan.StructuralInput input, FrontierGrayboxPlan structuralBaseline, FrontierV3HiveFoundryAudit.HiveExpectations hiveExpectations,
+        private static Cursor fromCells(FrontierGrayboxPlan.StructuralInput input, FrontierGrayboxPlan structuralBaseline, Map<Long, Integer> structuralCeilings,
+                                        FrontierV3HiveFoundryAudit.HiveExpectations hiveExpectations,
                                         List<GrayboxCell> cells, Cursor prior,
                                         java.util.Set<BlockPos> activeWorksiteStaging) {
             Map<ChunkKey, List<GrayboxCell>> grouped = new LinkedHashMap<>();
@@ -598,7 +621,7 @@ final class FrontierV3GrayboxExecutor {
                 return new ChunkCells(entry.getKey(), List.copyOf(entry.getValue()), before);
             }).toList();
             int next = prior == null || chunks.isEmpty() ? 0 : indexOf(chunks, prior.nextChunkKey());
-            return new Cursor(input, structuralBaseline, hiveExpectations, chunks, next, activeWorksiteStaging);
+            return new Cursor(input, structuralBaseline, structuralCeilings, hiveExpectations, chunks, next, activeWorksiteStaging);
         }
         /** Test-only cell ordering probe; production cursors always retain an exact structural input. */
         static Cursor fromCells(List<GrayboxCell> cells, Cursor prior) {

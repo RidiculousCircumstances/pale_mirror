@@ -271,14 +271,16 @@ try {
     cleanup: async (attempt) => {
       const serverStopped = await attempt('server_cleanup', async () => {
         if (server != null && !abruptStopAttempted) {
-          // An abrupt-recovery scenario has already proved its authenticated
-          // post-restart assertions before this finally block.  Its replacement
-          // server owns no further semantic boundary: requesting a normal save
-          // here can spend the whole bounded teardown in vanilla chunk unloads
-          // without strengthening the preceding crash proof.  Dispose only the
-          // exact nonce-announced JVM instead. Ordinary and failed paths still
-          // require Minecraft's durable-stop acknowledgement.
-          if (completed && recoveryMetadata?.mode === 'abrupt') terminalCleanup = await disposeCompletedAbruptRecoveryServer(server, port);
+          // A completed recovery carrier has already established its one real
+          // durable stop/restart boundary before this final replacement server
+          // runs terminal observations.  That replacement owns no later
+          // persistence claim.  Re-requesting Minecraft's stop here can spend
+          // the teardown budget endlessly draining vanilla ChunkMap unloads
+          // (after the terminal domain assertions are sealed) without adding
+          // product evidence. Dispose only the exact nonce-announced JVM.
+          // Ordinary paths and the pre-restart boundary still require the
+          // typed Minecraft durable-save acknowledgement.
+          if (completed && recoveryMetadata !== null) terminalCleanup = await disposeCompletedRecoveryServer(server, port);
           else await stopServerForCleanup(server, port);
         }
       });
@@ -892,18 +894,18 @@ async function stopServerForCleanup(server, serverPort) {
 }
 
 /**
- * The replacement server of a completed deliberate crash scenario has no later
- * save/restart claim.  This is bounded process disposal, never a substitute
- * for a durable save acknowledgement or a recovery boundary.
+ * The replacement server of a completed recovery scenario has no later
+ * save/restart claim. This is bounded process disposal, never a substitute
+ * for the already-established durable save acknowledgement or recovery boundary.
  */
-async function disposeCompletedAbruptRecoveryServer(server, serverPort) {
+async function disposeCompletedRecoveryServer(server, serverPort) {
   if (!Number.isInteger(server.serverPid) || server.serverPid <= 1) {
     throw new Error('completed abrupt-recovery server lacks its exact JVM identity');
   }
   try {
     killIfPresent(server.serverPid);
     await ownedServerExit(server, serverPort, 45_000,
-      'completed abrupt-recovery scenario retained its exact replacement JVM or game port');
+      'completed recovery scenario retained its exact replacement JVM or game port');
     return Object.freeze({ mode: 'exact_owned_post_semantic_disposal', serverPid: server.serverPid,
       port: serverPort, portClosed: true });
   } finally {

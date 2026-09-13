@@ -273,8 +273,8 @@ export function validateScenario(scenario) {
   if (!Array.isArray(assertions)) throw new Error('scenario assertions must be an array');
   for (const assertion of assertions) {
     if (!assertion || !Number.isInteger(assertion.after) || assertion.after < 0 || assertion.after > (scenario.actions ?? []).length
-        || !['summary', 'performance', 'aftermath', 'process', 'site', 'settlement', 'hive', 'hive_transfer', 'hive_mobilization', 'actor', 'item', 'resource', 'player_resource', 'container', 'reference_container', 'market_order', 'operation', 'route_construction', 'route_maintenance', 'route_topology', 'physical_delta', 'medical', 'scene', 'intent', 'trace', 'transit', 'traversal_foundry', 'hive_foundry', 'recovery', 'first_visibility'].includes(assertion.view)
-        || typeof assertion.id !== 'string' || (!['summary', 'performance', 'aftermath'].includes(assertion.view) && !assertion.id)
+        || !['summary', 'performance', 'projection_work', 'aftermath', 'process', 'process_inventory', 'site', 'settlement', 'hive', 'hive_transfer', 'hive_mobilization', 'actor', 'item', 'resource', 'player_resource', 'container', 'reference_container', 'market_order', 'operation', 'route_construction', 'route_maintenance', 'route_topology', 'physical_delta', 'medical', 'scene', 'intent', 'trace', 'transit', 'traversal_foundry', 'hive_foundry', 'recovery', 'first_visibility'].includes(assertion.view)
+        || typeof assertion.id !== 'string' || (!['summary', 'performance', 'projection_work', 'aftermath'].includes(assertion.view) && !assertion.id)
         || !assertion.expect || typeof assertion.expect !== 'object') {
       throw new Error('invalid diagnostic assertion');
     }
@@ -381,8 +381,8 @@ function segment(scenario, first, end, setup, includeFirstBoundary) {
 }
 
 function validDiagnosticIdentity(value) {
-  return ['summary', 'performance', 'aftermath', 'process', 'site', 'settlement', 'hive', 'hive_transfer', 'hive_mobilization', 'actor', 'item', 'resource', 'player_resource', 'container', 'reference_container', 'market_order', 'operation', 'route_construction', 'route_maintenance', 'route_topology', 'physical_delta', 'medical', 'scene', 'intent', 'trace', 'transit', 'traversal_foundry', 'hive_foundry', 'recovery', 'first_visibility'].includes(value.view)
-    && typeof value.id === 'string' && (['summary', 'performance', 'aftermath'].includes(value.view) || Boolean(value.id));
+  return ['summary', 'performance', 'projection_work', 'aftermath', 'process', 'process_inventory', 'site', 'settlement', 'hive', 'hive_transfer', 'hive_mobilization', 'actor', 'item', 'resource', 'player_resource', 'container', 'reference_container', 'market_order', 'operation', 'route_construction', 'route_maintenance', 'route_topology', 'physical_delta', 'medical', 'scene', 'intent', 'trace', 'transit', 'traversal_foundry', 'hive_foundry', 'recovery', 'first_visibility'].includes(value.view)
+    && typeof value.id === 'string' && (['summary', 'performance', 'projection_work', 'aftermath'].includes(value.view) || Boolean(value.id));
 }
 
 function validDiagnosticPath(value) { return typeof value === 'string' && /^[A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z][A-Za-z0-9]*){0,7}$/.test(value); }

@@ -1,5 +1,4 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
-
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
 import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
@@ -133,6 +132,7 @@ public final class FrontierV3ServerLifecycle {
         if ("performance".equals(view)) return FrontierV3PerformanceDiagnostic.render(checkpoint, runtime.executionMetrics().snapshot(), state,
                 FAST_FORWARD_REMAINING.getOrDefault(server, 0), FAST_FORWARD_TARGETS.get(server), FAST_FORWARD_FAILURES.get(server),
                 FAST_FORWARD_OUTCOMES.get(server));
+        if ("projection_work".equals(view)) return FrontierV3ProjectionWorkDiagnostic.render(checkpoint, runtime);
         if ("player_resource".equals(view)) return FrontierV3PlayerResourceDiagnostic.render(checkpoint, state, server, id);
         if ("traversal_foundry".equals(view)) return FrontierV3TraversalFoundryDiagnostic.render(checkpoint, state,
                 FrontierV3PhysicalWorld.require(server), id);

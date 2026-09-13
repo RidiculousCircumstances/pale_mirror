@@ -6,13 +6,21 @@ import java.util.Map;
 
 /** Installed immutable ruleset catalog. Selection is always exact by id, schema and content digest. */
 public final class FrontierRulesets {
-    private static final FrontierRuleset PRODUCTION = ruleset("frontier-v3-production-r2", 4, 20L);
+    /**
+     * R3 separates retained pedestrian-edge cadence from the field's crop-work retry.
+     * A route edge is a visible duty-cycle boundary, while a crop effect remains a
+     * deliberately slower physical-work boundary.
+     */
+    private static final FrontierRuleset PRODUCTION = ruleset("frontier-v3-production-r3", 5, 5L, 20L);
+    /** Exact decoder for the accepted R2 world; it is never selected for a new world. */
+    private static final FrontierRuleset PREVIOUS_PRODUCTION_R2 = ruleset("frontier-v3-production-r2", 4, 200L, 20L);
     /**
      * Explicit anchor for snapshots written before selector persistence existed. It is not a
      * current default: decoding old bytes is a named compatibility migration with fixed data.
      */
-    private static final FrontierRuleset LEGACY_PRE_RULESET_R79 = ruleset("frontier-v3-legacy-pre-ruleset-r79", 3, 100L);
+    private static final FrontierRuleset LEGACY_PRE_RULESET_R79 = ruleset("frontier-v3-legacy-pre-ruleset-r79", 3, 200L, 100L);
     private static final Map<String, FrontierRuleset> INSTALLED = Map.of(PRODUCTION.id(), PRODUCTION,
+            PREVIOUS_PRODUCTION_R2.id(), PREVIOUS_PRODUCTION_R2,
             LEGACY_PRE_RULESET_R79.id(), LEGACY_PRE_RULESET_R79);
 
     private FrontierRulesets() { }
@@ -32,9 +40,10 @@ public final class FrontierRulesets {
         return ruleset;
     }
 
-    private static FrontierRuleset ruleset(String id, int schemaVersion, long routePatrolStepInterval) {
+    private static FrontierRuleset ruleset(String id, int schemaVersion, long resourceHarvestTraversalInterval,
+                                           long routePatrolStepInterval) {
         return new FrontierRuleset(id, schemaVersion,
-                new FrontierRuleset.Cadence(1L, 3_000L, 200L, 24_000L, 400L, 24_000L, 200L, 24_000L, 24_000L,
+                new FrontierRuleset.Cadence(1L, 3_000L, resourceHarvestTraversalInterval, 200L, 24_000L, 400L, 24_000L, 200L, 24_000L, 24_000L,
                         1_200L, 20L, 1_200L, 400L, 24_000L, 600L, 100L, 20L, 800L, 100L, 20L, 20L, 20L,
                         routePatrolStepInterval, 6_000L, 200L, 200L, 100L, 800L, 900L, 1_000L, 2_000L, 6_000L, 1_000L,
                         8_000L, 8_100L, 1_600L, 20L, 3_200L, 100L, 2_400L, 2_400L),

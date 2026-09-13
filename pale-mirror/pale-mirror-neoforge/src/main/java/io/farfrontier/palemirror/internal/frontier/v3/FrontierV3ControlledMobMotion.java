@@ -41,8 +41,6 @@ final class FrontierV3ControlledMobMotion {
     private static final Map<Mob, MotionIntent> PENDING = new IdentityHashMap<>();
     /** Ephemeral collision latitude, bounded to a retained local envelope and target. */
     private static final Map<Mob, Avoidance> AVOIDANCE = new IdentityHashMap<>();
-    /** Ephemeral endpoint hysteresis for a single retained edge, never a canonical cursor. */
-    private static final Map<Mob, RetainedEdgePacing> PACING = new IdentityHashMap<>();
     /** Bounded read-only evidence of actual accepted collision moves, not an alternate clock. */
     private static final Map<Mob, ArrayDeque<MotionSample>> TRACE = new WeakHashMap<>();
 
@@ -68,33 +66,13 @@ final class FrontierV3ControlledMobMotion {
     }
 
     /**
-     * Keeps the one retained pedestrian edge visibly active at normal Minecraft walking cadence
-     * while its canonical action remains pending.  Its only physical targets are the current
-     * and immediately-next canonical supports: it cannot inspect a later corridor position,
-     * manufacture a route/cursor, or turn presentation into a second progress clock.
+     * Pursues precisely the next retained checkpoint.  It deliberately has no pacing target,
+     * turnaround, or scheduler-time input: a process cadence can govern the semantic
+     * checkpoint, never an actor's physical stop/start clock.  Arrival remains only observed
+     * evidence for the owning process; this actuator cannot expose a later route node.
      */
-    static void keepRetainedEdgeActive(ServerLevel level, Mob actor, Vec3 current, Vec3 next,
-                                       long remainingCanonicalTicks) {
-        if (remainingCanonicalTicks < 0L) throw new IllegalArgumentException("remaining canonical ticks");
-        double toNext = horizontalDistance(actor.position(), next);
-        int nextArrivalTicks = Math.max(1, (int) Math.ceil(toNext / walkingSpeed(actor)));
-        // At the due crossing window, keep the physical witness on the exact next checkpoint.
-        // Before that, normal-paced edge-local motion deliberately reverses on the two retained
-        // supports.  A 200-tick process retry must not appear to players as a .005-block/tick
-        // crawl or a multi-second stop; nor can it put the actor beyond the next observed node.
-        if (remainingCanonicalTicks <= nextArrivalTicks) {
-            PACING.remove(actor);
-            moveToward(level, actor, next);
-        } else {
-            RetainedEdgePacing pacing = PACING.get(actor);
-            if (pacing == null || !pacing.current().equals(current) || !pacing.next().equals(next)) {
-                pacing = new RetainedEdgePacing(current, next, next);
-            } else if (horizontalDistance(actor.position(), pacing.target()) <= ARRIVAL_DISTANCE) {
-                pacing = new RetainedEdgePacing(current, next, pacing.target().equals(next) ? current : next);
-            }
-            PACING.put(actor, pacing);
-            moveToward(level, actor, pacing.target());
-        }
+    static void pursueRetainedCheckpoint(ServerLevel level, Mob actor, Vec3 next) {
+        moveToward(level, actor, next);
     }
 
     /**
@@ -161,7 +139,7 @@ final class FrontierV3ControlledMobMotion {
         MotionIntent intent = PENDING.get(actor);
         if (intent == null) return;
         if (!(actor.level() instanceof ServerLevel level) || actor.isRemoved() || !actor.isAlive()) {
-            PENDING.remove(actor); AVOIDANCE.remove(actor); PACING.remove(actor); return;
+            PENDING.remove(actor); AVOIDANCE.remove(actor); return;
         }
         if (level.getGameTime() < intent.applyAtGameTime()) return;
         PENDING.remove(actor);
@@ -171,7 +149,6 @@ final class FrontierV3ControlledMobMotion {
     static void stop(Mob actor) {
         PENDING.remove(actor);
         AVOIDANCE.remove(actor);
-        PACING.remove(actor);
         // The prior authority may already have submitted a collision move or left an ordinary
         // Minecraft velocity on the body.  Cancelling only our queued intent lets that residual
         // velocity carry a newly leased worker across its retained support between the durable
@@ -411,7 +388,5 @@ final class FrontierV3ControlledMobMotion {
 
     private record MotionIntent(long applyAtGameTime, Vec3 target, boolean continuous, LocalNavigationEnvelope envelope,
                                 WorldBounds bounds, double maximumStep) { }
-    private record RetainedEdgePacing(Vec3 current, Vec3 next, Vec3 target) { }
-
     private record Avoidance(Vec3 step, Vec3 target, int remainingTurns) { }
 }

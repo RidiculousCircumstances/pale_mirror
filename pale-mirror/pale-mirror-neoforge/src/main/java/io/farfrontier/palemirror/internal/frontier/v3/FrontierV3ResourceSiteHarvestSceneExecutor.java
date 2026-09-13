@@ -276,14 +276,8 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
     private static void keepTraversalPhysicallyActive(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                       io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob job,
                                                       Mob worker, io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor surface) {
-        var checkpoint = runtime.checkpointImage().orElseThrow();
-        long remaining = FrontierV3TraversalScheduleGate.binding(checkpoint, job.id())
-                .map(action -> Math.max(0L, action.dueAt().ticks() - checkpoint.instant().ticks())).orElse(0L);
-        var current = job.traversal().linearCorridorSurfaces().get(job.traversalCursor());
-        FrontierV3ControlledMobMotion.keepRetainedEdgeActive(level, worker,
-                new Vec3(current.x() + 0.5D, current.y() + 1.0D, current.z() + 0.5D),
-                new Vec3(surface.x() + 0.5D, surface.y() + 1.0D, surface.z() + 0.5D),
-                remaining);
+        FrontierV3ControlledMobMotion.pursueRetainedCheckpoint(level, worker,
+                new Vec3(surface.x() + 0.5D, surface.y() + 1.0D, surface.z() + 0.5D));
     }
 
     /** Emits the complete observed causal checkpoint; the reducer rejects any stale or foreign tuple. */

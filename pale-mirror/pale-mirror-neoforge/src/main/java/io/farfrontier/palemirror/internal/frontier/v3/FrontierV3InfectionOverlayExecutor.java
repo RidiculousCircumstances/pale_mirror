@@ -5,9 +5,10 @@ import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
 import io.farfrontier.palemirror.frontier.v3.api.CommandId;
 import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
-import io.farfrontier.palemirror.frontier.v3.api.Revision;
+import io.farfrontier.palemirror.frontier.v3.api.FixedRatio;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierInfectionOverlayPlan;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierGrayboxPlan;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
@@ -34,6 +35,7 @@ import java.util.Set;
 final class FrontierV3InfectionOverlayExecutor {
     private static final int MAX_CELLS_PER_TICK = 64;
     private static final Map<FrontierV3ServerRuntime<?, ?>, Cursor> CURSORS = new IdentityHashMap<>();
+    private static final Map<FrontierV3ServerRuntime<?, ?>, ProjectionWork> WORK = new IdentityHashMap<>();
 
     enum BlockBreakObservation { UNMANAGED, ACCEPTED, REJECTED }
     enum ProjectionResult { APPLIED, CURRENT, UPDATED, RETRACTED, CONFLICT, DEFERRED }
@@ -41,23 +43,48 @@ final class FrontierV3InfectionOverlayExecutor {
     private FrontierV3InfectionOverlayExecutor() { }
 
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
-        io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = runtime.canonicalState().orElse(null);
-        if (checkpoint == null) return;
+        if (runtime.canonicalState().isEmpty()) return;
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return;
-        Cursor cursor = CURSORS.get(runtime);
-        if (cursor == null || !cursor.revision().equals(checkpoint.revision())) {
-            FrontierInfectionOverlayPlan plan = FrontierInfectionOverlayPlan.compile(state);
-            cursor = Cursor.from(checkpoint.revision(), plan, FrontierV3InfectionOverlayLedger.get(level));
-            CURSORS.put(runtime, cursor);
-        }
+        // The structural owner has already published this immutable plan earlier in the same
+        // physical turn.  Dynamic surface discovery must respect every declared tissue cell,
+        // not only the lower cell that happened to be materialized before the overlay turn.
+        FrontierGrayboxPlan structuralBaseline = FrontierV3GrayboxExecutor.publishedStructuralBaseline(runtime).orElse(null);
+        if (structuralBaseline == null) return;
+        Map<Long, Integer> structuralCeilings = FrontierV3GrayboxExecutor.publishedStructuralCeilings(runtime).orElse(Map.of());
+        Cursor cursor = cursor(runtime, state, FrontierV3InfectionOverlayLedger.get(level));
         FrontierV3InfectionOverlayLedger ledger = FrontierV3InfectionOverlayLedger.get(level);
         int budget = MAX_CELLS_PER_TICK;
         while (budget-- > 0 && cursor.hasRetraction()) reconcileRetraction(level, ledger, cursor.nextRetraction(), state);
-        while (budget-- > 0 && cursor.hasDesired()) project(level, ledger, cursor.nextDesired(), state);
+        while (budget-- > 0 && cursor.hasDesired()) project(level, ledger, cursor.nextDesired(), state, structuralBaseline, structuralCeilings);
     }
 
-    static void forget(FrontierV3ServerRuntime<?, ?> runtime) { CURSORS.remove(runtime); }
+    static void forget(FrontierV3ServerRuntime<?, ?> runtime) { CURSORS.remove(runtime); WORK.remove(runtime); }
+
+    /**
+     * Keeps the dynamic plan on its own canonical contributor boundary.  A resource receipt,
+     * scene lease, or physical observation advances the checkpoint revision very frequently,
+     * but none changes the sparse infection field.  Resetting a global round-robin cursor on
+     * every such revision both recompiles the complete overlay and starves later cells forever.
+     */
+    private static Cursor cursor(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
+                                 FrontierV3InfectionOverlayLedger ledger) {
+        Cursor cursor = CURSORS.get(runtime);
+        ProjectionWork work = workFor(runtime);
+        if (cursor != null) work.compatibilityChecks++;
+        if (cursor == null || !cursor.input().matches(state)) {
+            work.freshnessConstructions++;
+            OverlayInput input = new OverlayInput(state.bootstrap(), state.infection());
+            if (cursor == null || !input.equals(cursor.input())) {
+                work.planCompilations++;
+                cursor = Cursor.from(input, FrontierInfectionOverlayPlan.compile(state), ledger);
+                CURSORS.put(runtime, cursor);
+            } else {
+                cursor.replaceInput(input);
+            }
+        }
+        return cursor;
+    }
 
     /**
      * Returns the exact dynamic overlay already compiled by the overlay owner for this runtime.
@@ -97,9 +124,15 @@ final class FrontierV3InfectionOverlayExecutor {
 
     static ProjectionResult project(ServerLevel level, FrontierV3InfectionOverlayLedger ledger, InfectionOverlayCell desired,
                                     FrontierWorldState state) {
+        return project(level, ledger, desired, state, null, Map.of());
+    }
+
+    private static ProjectionResult project(ServerLevel level, FrontierV3InfectionOverlayLedger ledger, InfectionOverlayCell desired,
+                                            FrontierWorldState state, FrontierGrayboxPlan structuralBaseline,
+                                            Map<Long, Integer> structuralCeilings) {
         FrontierV3InfectionOverlayLedger.Claim claim = ledger.claim(desired.cell());
         if (claim != null) return projectClaim(level, ledger, desired, state, claim);
-        List<BlockPos> positions = discoveredPatch(level, desired);
+        List<BlockPos> positions = discoveredPatch(level, desired, structuralBaseline, structuralCeilings);
         if (positions == null) return ProjectionResult.DEFERRED;
         if (positions.stream().anyMatch(position -> state.physicalDeltas().containsKey(canonical(position)) || !level.getBlockState(position).isAir())) {
             ledger.blocked(desired.cell(), positions, desired.stage());
@@ -188,19 +221,22 @@ final class FrontierV3InfectionOverlayExecutor {
         };
     }
 
-    private static List<BlockPos> discoveredPatch(ServerLevel level, InfectionOverlayCell desired) {
+    private static List<BlockPos> discoveredPatch(ServerLevel level, InfectionOverlayCell desired, FrontierGrayboxPlan structuralBaseline,
+                                                  Map<Long, Integer> structuralCeilings) {
         List<BlockPos> positions = new java.util.ArrayList<>(FrontierV3InfectionOverlayLedger.PATCH_COLUMNS);
         FrontierV3GrayboxLedger structural = FrontierV3GrayboxLedger.get(level);
         for (InfectionOverlayCell.SurfaceColumn column : desired.surfaceColumns()) {
             BlockPos columnProbe = new BlockPos(column.x(), 0, column.z());
             if (!level.hasChunkAt(columnProbe)) return null;
-            BlockPos position = new BlockPos(column.x(), level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, column.x(), column.z()), column.z());
+            int terrainSurface = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, column.x(), column.z());
+            int projectedSurface = surfaceY(terrainSurface, structuralCeilings.get(FrontierV3GrayboxExecutor.columnKey(column.x(), column.z())));
+            BlockPos position = new BlockPos(column.x(), projectedSurface, column.z());
             if (!level.hasChunkAt(position)) return null;
             // The heightmap can legitimately select the top of an already-current PM organ.
             // Infection is an owned surface layer in that case, so place its marker immediately
             // above the proved structural cell.  An unclaimed/foreign non-air baseline remains a
             // conflict below; this is not a repair or a way to overwrite it.
-            while (isCurrentStructuralCell(structural, position)) {
+            while (isStructuralCell(structural, structuralBaseline, position)) {
                 position = position.above();
                 if (!level.hasChunkAt(position)) return null;
             }
@@ -213,9 +249,15 @@ final class FrontierV3InfectionOverlayExecutor {
         return List.copyOf(positions);
     }
 
-    private static boolean isCurrentStructuralCell(FrontierV3GrayboxLedger structural, BlockPos position) {
+    private static boolean isStructuralCell(FrontierV3GrayboxLedger structural, FrontierGrayboxPlan structuralBaseline, BlockPos position) {
         FrontierV3GrayboxLedger.Claim claim = structural.claim(position);
-        return claim != null && !claim.conflicted();
+        return claim != null && !claim.conflicted()
+                || structuralBaseline != null && structuralBaseline.cells().containsKey(canonical(position));
+    }
+
+    /** Chooses air directly above a retained structural column without scanning the whole plan at call time. */
+    static int surfaceY(int terrainSurface, Integer structuralCeiling) {
+        return structuralCeiling == null ? terrainSurface : Math.max(terrainSurface, Math.addExact(structuralCeiling, 1));
     }
 
     private static boolean replace(ServerLevel level, List<BlockPos> positions, BlockState expected) {
@@ -231,28 +273,29 @@ final class FrontierV3InfectionOverlayExecutor {
     private static BlockPosition canonical(BlockPos position) { return new BlockPosition(position.getX(), position.getY(), position.getZ()); }
 
     private static final class Cursor {
-        private final Revision revision;
+        private OverlayInput input;
         private final List<InfectionOverlayCell> desired;
         private final Map<InfectionCell, InfectionOverlayCell> desiredByCell;
         private final List<Map.Entry<InfectionCell, FrontierV3InfectionOverlayLedger.Claim>> retractions;
         private int desiredIndex;
         private int retractionIndex;
 
-        private Cursor(Revision revision, List<InfectionOverlayCell> desired,
+        private Cursor(OverlayInput input, List<InfectionOverlayCell> desired,
                        List<Map.Entry<InfectionCell, FrontierV3InfectionOverlayLedger.Claim>> retractions) {
-            this.revision = revision; this.desired = desired;
+            this.input = input; this.desired = desired;
             this.desiredByCell = desired.stream().collect(java.util.stream.Collectors.toUnmodifiableMap(InfectionOverlayCell::cell, value -> value));
             this.retractions = retractions;
         }
-        static Cursor from(Revision revision, FrontierInfectionOverlayPlan plan, FrontierV3InfectionOverlayLedger ledger) {
+        static Cursor from(OverlayInput input, FrontierInfectionOverlayPlan plan, FrontierV3InfectionOverlayLedger ledger) {
             List<InfectionOverlayCell> desired = plan.cells().values().stream().sorted(Comparator.comparingInt((InfectionOverlayCell cell) -> cell.cell().x())
                     .thenComparingInt(cell -> cell.cell().z())).toList();
             Set<InfectionCell> active = plan.cells().keySet();
             List<Map.Entry<InfectionCell, FrontierV3InfectionOverlayLedger.Claim>> retractions = ledger.orderedClaims().stream()
                     .filter(entry -> !active.contains(entry.getKey())).toList();
-            return new Cursor(revision, desired, retractions);
+            return new Cursor(input, desired, retractions);
         }
-        Revision revision() { return revision; }
+        OverlayInput input() { return input; }
+        void replaceInput(OverlayInput input) { this.input = input; }
         boolean hasDesired() { return !desired.isEmpty(); }
         boolean hasRetraction() { return retractionIndex < retractions.size(); }
         InfectionOverlayCell nextDesired() {
@@ -260,4 +303,27 @@ final class FrontierV3InfectionOverlayExecutor {
         }
         Map.Entry<InfectionCell, FrontierV3InfectionOverlayLedger.Claim> nextRetraction() { return retractions.get(retractionIndex++); }
     }
+
+    /** Fixed-cost freshness test; value equality is permitted only after the infection index changed identity. */
+    private static final class OverlayInput {
+        private final io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrap bootstrap;
+        private final Map<InfectionCell, FixedRatio> infection;
+        private OverlayInput(io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrap bootstrap, Map<InfectionCell, FixedRatio> infection) {
+            this.bootstrap = bootstrap; this.infection = infection;
+        }
+        boolean matches(FrontierWorldState state) { return bootstrap == state.bootstrap() && infection == state.infection(); }
+        @Override public boolean equals(Object other) {
+            return this == other || other instanceof OverlayInput input && bootstrap.equals(input.bootstrap) && infection.equals(input.infection);
+        }
+        @Override public int hashCode() { return java.util.Objects.hash(bootstrap, infection); }
+    }
+
+    static ProjectionWorkSnapshot projectionWork(FrontierV3ServerRuntime<?, ?> runtime) { return workFor(runtime).snapshot(); }
+    static void resetProjectionWork(FrontierV3ServerRuntime<?, ?> runtime) { WORK.put(runtime, new ProjectionWork()); }
+    private static ProjectionWork workFor(FrontierV3ServerRuntime<?, ?> runtime) { return WORK.computeIfAbsent(runtime, ignored -> new ProjectionWork()); }
+    static final class ProjectionWork {
+        private int compatibilityChecks, freshnessConstructions, planCompilations;
+        ProjectionWorkSnapshot snapshot() { return new ProjectionWorkSnapshot(compatibilityChecks, freshnessConstructions, planCompilations); }
+    }
+    record ProjectionWorkSnapshot(int compatibilityChecks, int freshnessConstructions, int planCompilations) { }
 }

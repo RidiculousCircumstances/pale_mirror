@@ -46,7 +46,7 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
     }
 
     /** All elapsed-time choices used by the canonical process layer. */
-    public record Cadence(long resourceInitialPreparationTick, long resourceGrowthStageInterval, long resourceHarvestRetryInterval,
+    public record Cadence(long resourceInitialPreparationTick, long resourceGrowthStageInterval, long resourceHarvestTraversalInterval, long resourceHarvestRetryInterval,
                           long companyFoundationReviewInterval, long strategicReviewInterval, long populationBirthReviewInterval,
                           long populationBirthCompletionDelay, long provisionInitialReviewTick, long provisionReviewInterval,
                           long migrationReviewInterval, long migrationStepInterval, long humanHealthProgressionDelay,
@@ -64,6 +64,7 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
         public Cadence {
             requirePositive(resourceInitialPreparationTick, "resource initial preparation tick");
             requirePositive(resourceGrowthStageInterval, "resource growth stage interval");
+            requirePositive(resourceHarvestTraversalInterval, "resource harvest traversal interval");
             requirePositive(resourceHarvestRetryInterval, "resource harvest retry interval");
             requirePositive(companyFoundationReviewInterval, "company foundation review interval");
             requirePositive(strategicReviewInterval, "strategic review interval");
@@ -105,7 +106,7 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
             requirePositive(hiveSettlementKnowledgeMaxAge, "hive settlement knowledge max age");
         }
         private String canonicalText() {
-            return resourceInitialPreparationTick + "," + resourceGrowthStageInterval + "," + resourceHarvestRetryInterval + "," + companyFoundationReviewInterval
+            return resourceInitialPreparationTick + "," + resourceGrowthStageInterval + "," + resourceHarvestTraversalInterval + "," + resourceHarvestRetryInterval + "," + companyFoundationReviewInterval
                     + "," + strategicReviewInterval + "," + populationBirthReviewInterval + "," + populationBirthCompletionDelay + "," + provisionInitialReviewTick
                     + "," + provisionReviewInterval + "," + migrationReviewInterval + "," + migrationStepInterval + "," + humanHealthProgressionDelay
                     + "," + marketRetryInterval + "," + marketDemandLifetime + "," + hiveInfectionPulseInterval + "," + hiveScoutPatrolInterval

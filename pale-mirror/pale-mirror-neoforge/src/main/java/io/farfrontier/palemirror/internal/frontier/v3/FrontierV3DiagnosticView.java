@@ -13,8 +13,12 @@ import java.util.Arrays;
 public enum FrontierV3DiagnosticView {
     SUMMARY("summary", false),
     PERFORMANCE("performance", false),
+    /** One read-only whole-path counter snapshot for retained structural and infection projection work. */
+    PROJECTION_WORK("projection_work", false),
     AFTERMATH("aftermath", true),
     PROCESS("process", true),
+    /** Bounded read-only inventory of every current settlement harvest process. */
+    PROCESS_INVENTORY("process_inventory", true),
     SITE("site", true),
     SETTLEMENT("settlement", true),
     HIVE("hive", true),

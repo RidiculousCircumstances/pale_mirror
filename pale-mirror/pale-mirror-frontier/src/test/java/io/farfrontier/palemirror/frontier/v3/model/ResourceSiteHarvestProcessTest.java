@@ -117,7 +117,7 @@ class ResourceSiteHarvestProcessTest {
         PhysicalIntentPrepared prepared = (PhysicalIntentPrepared) planned.get(2).payload();
         assertEquals(started.job().intentId(), prepared.intent().id());
         assertEquals(ResourceSiteHarvestProcess.coldProgress(started.job(), 22_100L
-                        + tasked.bootstrap().ruleset().cadence().resourceHarvestRetryInterval()),
+                        + tasked.bootstrap().ruleset().cadence().resourceHarvestTraversalInterval()),
                 ((io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created) planned.get(3).payload()).action());
         harvesting = ResourceSiteHarvestProcess.reducePrepared(harvesting, site, prepared.intent());
         assertEquals(ResourceSitePhase.HARVESTING, harvesting.resourceSites().site(site).phase());
@@ -227,8 +227,8 @@ class ResourceSiteHarvestProcessTest {
                 "command admission validates the complete exact HOT causal checkpoint before it persists an event");
         ScheduleEffect.Rescheduled continued = assertInstanceOf(ScheduleEffect.Rescheduled.class, accepted.events().get(1).payload());
         assertEquals(ResourceSiteHarvestProcess.coldProgress(before, 22_301L).id(), continued.scheduleId());
-        assertEquals(22_301L + hot.state().bootstrap().ruleset().cadence().resourceHarvestRetryInterval(),
-                continued.replacement().dueAt().ticks(), "HOT uses the same bound COLD cadence, never observation time");
+        assertEquals(22_301L + hot.state().bootstrap().ruleset().cadence().resourceHarvestTraversalInterval(),
+                continued.replacement().dueAt().ticks(), "HOT uses the same bound traversal cadence, never observation time");
 
         FrontierWorldState snapshot = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(hot.state()));
         FrontierEvent event = new FrontierEvent(1, new EventId("event:site-harvest-hot-checkpoint"),
