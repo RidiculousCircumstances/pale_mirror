@@ -7,14 +7,7 @@ import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration;
 import io.farfrontier.palemirror.frontier.v3.kernel.StateValidator;
 import io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord;
-import io.farfrontier.palemirror.frontier.v3.model.ActorLocation;
-import io.farfrontier.palemirror.frontier.v3.model.BioformLifecycle;
-import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
-import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateUpdate;
-import io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor;
+import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.persistence.AppendReceipt;
 import io.farfrontier.palemirror.frontier.v3.persistence.CompactionReceipt;
 import io.farfrontier.palemirror.frontier.v3.persistence.Durability;
@@ -174,7 +167,11 @@ public final class FrontierV3AmbientPhysicsGameTests {
     private static Fixture fixture(BlockPos residentSupport, BlockPos bioformSupport) {
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base =
                 FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:ambient-executor-support-loss"), 97L);
-        FrontierWorldState initial = base.initialState();
+        FrontierWorldState source = base.initialState();
+        SubjectId sourceResident = source.humanPopulation().residents().keySet().stream().sorted().findFirst().orElseThrow();
+        BlockPosition sourceFloor = source.actorLocations().get(sourceResident).supportingSurface().support();
+        FrontierWorldState initial = FrontierWorldState.initial(translatedBootstrap(source.bootstrap(),
+                residentSupport.getX() - sourceFloor.x(), residentSupport.getY() - sourceFloor.y(), residentSupport.getZ() - sourceFloor.z()));
         SubjectId resident = initial.humanPopulation().residents().keySet().stream().sorted().findFirst().orElseThrow();
         SubjectId bioform = initial.bootstrap().hive().bioforms().stream().map(form -> form.id()).sorted().findFirst().orElseThrow();
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(initial.actorLocations());
@@ -194,13 +191,27 @@ public final class FrontierV3AmbientPhysicsGameTests {
                 FrontierWorldRuntimeDefinition.configuration(state.bootstrap().worldId(), state.bootstrap().seed());
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration = new FrontierEngineConfiguration<>(base.worldId(), state,
                 base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(state.bootstrap()),
-                // GameTest templates are deliberately placed at far absolute coordinates. This
-                // physical adapter fixture translates only two canonical ambient bodies into
-                // that loaded template, so its bootstrap bounds are intentionally not a
-                // world-topology assertion; transition planners still own every typed lease
-                // and observed-body validation exercised below.
-                base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter(), StateValidator.none(), base.executionMetrics());
+                base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter(), base.stateValidator(), base.executionMetrics());
         return FrontierV3ServerRuntime.start(configuration, new EphemeralStore(), 10_000);
+    }
+
+    /** GameTest coordinates are far from origin; translate the complete authored topology, not just its bounds. */
+    private static FrontierBootstrap translatedBootstrap(FrontierBootstrap source, int dx, int dy, int dz) {
+        java.util.function.Function<BlockPosition, BlockPosition> translate = position -> new BlockPosition(position.x() + dx, position.y() + dy, position.z() + dz);
+        List<Settlement> settlements = source.settlements().stream().map(settlement -> new Settlement(settlement.id(), settlement.displayName(),
+                translate.apply(settlement.anchor()), settlement.residents().stream().map(resident -> new Resident(resident.id(), resident.settlementId(),
+                resident.role(), translate.apply(resident.home()))).toList(), settlement.structures().stream().map(structure -> new SettlementStructure(
+                structure.id(), structure.settlementId(), structure.kind(), translate.apply(structure.anchor()), structure.facing())).toList())).toList();
+        List<HiveNest> nests = source.hive().seedNests().stream().map(nest -> new HiveNest(nest.id(), nest.hiveId(), translate.apply(nest.anchor()))).toList();
+        List<HiveOrgan> organs = source.hive().organs().stream().map(organ -> new HiveOrgan(organ.id(), organ.hiveId(), organ.nestId(), organ.kind(),
+                translate.apply(organ.anchor()), organ.containerId())).toList();
+        List<Bioform> bioforms = source.hive().bioforms().stream().map(bioform -> new Bioform(bioform.id(), bioform.hiveId(), bioform.nestId(),
+                bioform.chassis(), bioform.mutations(), bioform.assignment(), translate.apply(bioform.position()))).toList();
+        Map<TerrainColumn, Integer> surveyed = new LinkedHashMap<>();
+        source.terrain().surveyedSupportY().forEach((column, supportY) -> surveyed.put(new TerrainColumn(column.x() + dx, column.z() + dz), supportY + dy));
+        return new FrontierBootstrap(source.worldId(), source.seed(), new WorldBounds(source.bounds().minX() + dx, source.bounds().minZ() + dz,
+                source.bounds().width(), source.bounds().depth()), settlements, new Hive(source.hive().id(), nests, organs, bioforms), source.ruleset(),
+                new TerrainSurfacePlan(source.terrain().baselineSupportY() + dy, surveyed));
     }
 
     private record Fixture(FrontierWorldState state, SubjectId resident, SubjectId bioform) { }
