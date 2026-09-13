@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.api.Revision;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierObjectBoard;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierReadabilityPlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.HiveOrgan;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
@@ -50,7 +51,7 @@ final class FrontierV3ObjectBoardExecutor {
             CURSORS.put(runtime, cursor);
         }
         FrontierV3ObjectBoardLedger ledger = FrontierV3ObjectBoardLedger.get(level);
-        for (int count = 0; count < MAX_BOARDS_PER_TICK && cursor.hasNext(); count++) project(level, ledger, cursor.next());
+        for (int count = 0; count < MAX_BOARDS_PER_TICK && cursor.hasNext(); count++) project(level, ledger, runtime, state, cursor.next());
     }
 
     static void forget(FrontierV3ServerRuntime<?, ?> runtime) { CURSORS.remove(runtime); }
@@ -77,6 +78,36 @@ final class FrontierV3ObjectBoardExecutor {
         String expected = board.text();
         if (expected.equals(display.getCustomName() == null ? null : display.getCustomName().getString())) return ProjectionResult.CURRENT;
         configure(display, board); return ProjectionResult.UPDATED;
+    }
+
+    /** Production-only first-visibility gate; the fixture overload remains object-generic. */
+    private static ProjectionResult project(ServerLevel level, FrontierV3ObjectBoardLedger ledger,
+                                            FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
+                                            FrontierObjectBoard board) {
+        boolean coherentHive = !isHiveOrgan(state, board.ownerId()) || FrontierV3GrayboxExecutor.publishedStructuralBaseline(runtime)
+                .map(plan -> FrontierV3HiveFoundryAudit.runtimeNestCoherence(state, board.ownerId(), level, plan)
+                        == FrontierV3HiveFoundryAudit.RuntimeCoherence.CURRENT)
+                .orElse(false);
+        if (isHiveOrgan(state, board.ownerId()) && !coherentHive) {
+            // A legacy board can already be present when an upgraded world first exposes its
+            // hibernaculum. Keep the same owned display identity but make its non-interactable
+            // blocked state explicit; silently retaining ACTIVE would advertise a usable organ
+            // over missing or foreign geometry.
+            return project(level, ledger, blockedHiveBoard(board));
+        }
+        return project(level, ledger, board);
+    }
+
+    private static boolean isHiveOrgan(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId owner) {
+        return java.util.stream.Stream.concat(state.bootstrap().hive().organs().stream(), state.hiveColony().addedOrgans().values().stream())
+                .map(HiveOrgan::id).anyMatch(owner::equals);
+    }
+
+    private static FrontierObjectBoard blockedHiveBoard(FrontierObjectBoard board) {
+        String[] lines = board.text().split("\\n", -1);
+        String kind = lines.length > 1 ? lines[1] : "ORGAN";
+        return new FrontierObjectBoard(board.ownerId(), board.position(), FrontierObjectBoard.Tone.WARNING, board.scope(),
+                "HIVE\\n" + kind + "\\nBLOCKED · ORGAN NOT CURRENT");
     }
 
     /**

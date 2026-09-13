@@ -79,7 +79,6 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Objects;
 import java.util.UUID;
 /**
  * Materializes exact ordinary residents and hive bioforms through persisted per-actor HOT leases.
@@ -228,6 +227,11 @@ final class FrontierV3AmbientActorExecutor {
                 if (lease != null && lease.status() == AmbientLeaseStatus.HOT) {
                     Entity body = level.getEntity(entityId(state, actorId));
                     if (body instanceof Mob mob && owned(mob, actorId, bioform(state, actorId))) {
+                        // Demand hysteresis deliberately keeps this HOT body observable while
+                        // no player currently demands it.  It must still use ordinary vanilla
+                        // physics during that grace interval; otherwise a retained legacy
+                        // no-gravity flag can make the body hover until the next demand edge.
+                        FrontierV3ControlledMobMotion.restoreOrdinaryPhysics(mob);
                         FrontierV3AmbientActorCaches.rememberObserved(runtime, actorId, mob, FrontierV3AmbientPendingAdmissions.MAX_ENTRIES);
                         if (FrontierV3AmbientActorLocalTargets.directedGoal(lease)) {
                             if (pursueLocalGoal(level, runtime, state, actorId, mob, lease)) return;
@@ -275,6 +279,7 @@ final class FrontierV3AmbientActorExecutor {
             }
             if (lease.status() == AmbientLeaseStatus.HOT && body instanceof Mob mob && owned(body, actorId, bioform(state, actorId))) {
                 FrontierV3AmbientActorCaches.rememberObserved(runtime, actorId, mob, FrontierV3AmbientPendingAdmissions.MAX_ENTRIES);
+                FrontierV3ControlledMobMotion.restoreOrdinaryPhysics(mob);
                 FrontierV3ScenePresentation.applyAmbientActorPresentation(mob, state, actorId, bioform(state, actorId));
                 if (FrontierV3HotScoutObservation.observe(level, runtime, state, actorId, mob, lease)) {
                     admitted++;

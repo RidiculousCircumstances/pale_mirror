@@ -141,6 +141,18 @@ final class FrontierV3GrayboxExecutor {
 
     static void forget(FrontierV3ServerRuntime<?, ?> runtime) { CURSORS.remove(runtime); WORK.remove(runtime); }
 
+    /**
+     * Returns the immutable structural snapshot already compiled by the projection owner for
+     * this runtime turn.  Consumers at later physical stages may inspect it, but must never
+     * compile a second world-wide baseline on the server tick just to answer a local readiness
+     * question.  An unavailable snapshot is intentionally a closed/pending presentation gate.
+     */
+    static Optional<FrontierGrayboxPlan> publishedStructuralBaseline(FrontierV3ServerRuntime<?, ?> runtime) {
+        Cursor cursor = CURSORS.get(runtime);
+        return cursor == null || cursor.structuralBaseline == null
+                ? Optional.empty() : Optional.of(cursor.structuralBaseline);
+    }
+
     /** Releases only volatile exposure bookkeeping with the normal runtime cleanup. */
     static void forgetFirstVisibility(FrontierV3ServerRuntime<?, ?> runtime) { FIRST_VISIBILITY.remove(runtime); }
 

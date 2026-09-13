@@ -9,12 +9,15 @@ import io.farfrontier.palemirror.api.VisualPoint;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierGrayboxPlan;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierInfectionOverlayPlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxCell;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxMaterial;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxSemanticPart;
 import io.farfrontier.palemirror.frontier.v3.model.HiveOrgan;
 import io.farfrontier.palemirror.frontier.v3.model.HiveOrganSupportPlan;
+import io.farfrontier.palemirror.frontier.v3.model.InfectionCell;
+import io.farfrontier.palemirror.frontier.v3.model.InfectionOverlayCell;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 
@@ -40,6 +43,8 @@ final class FrontierV3HiveFoundryAudit {
     private static final int MAX_FINDINGS = 128;
 
     enum RuntimeCellStatus { CURRENT, PENDING, MISMATCH }
+    /** One read-only whole-organ gate for first-visible labels and cocoon release. */
+    enum RuntimeCoherence { CURRENT, PENDING, CONFLICT }
     enum ObservedCell { AIR, EXPECTED, OTHER }
 
     private FrontierV3HiveFoundryAudit() { }
@@ -101,6 +106,76 @@ final class FrontierV3HiveFoundryAudit {
         return claim != null && !claim.conflicted() && claim.owner().equals(expected.ownerId().value())
                 && claim.material().equals(expected.material().name()) && claim.semanticPart().equals(expected.semanticPart().name())
                 && observed == ObservedCell.EXPECTED ? RuntimeCellStatus.CURRENT : RuntimeCellStatus.MISMATCH;
+    }
+
+    /**
+     * Reports whether every exact current organ cell is both naturally resident and proven by
+     * the structural provenance ledger.  This is an observation gate only: it never loads a
+     * chunk, projects a cell, or repairs a foreign block.  A player-facing organ label must
+     * wait for CURRENT rather than advertising an operational object over an incomplete shell.
+     */
+    static RuntimeCoherence runtimeCoherence(FrontierWorldState state, SubjectId organId, ServerLevel level,
+                                             FrontierGrayboxPlan structuralBaseline) {
+        Objects.requireNonNull(state, "hive coherence state"); Objects.requireNonNull(organId, "hive coherence organ");
+        Objects.requireNonNull(level, "hive coherence level"); Objects.requireNonNull(structuralBaseline, "published structural baseline");
+        Map<BlockPosition, GrayboxCell> expected = ownedCells(structuralBaseline, organId);
+        FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
+        boolean pending = false;
+        for (GrayboxCell cell : expected.values()) {
+            BlockPos position = minecraft(cell.position());
+            if (!level.hasChunkAt(position)) { pending = true; continue; }
+            RuntimeCellStatus status = classify(cell, ledger.claim(position), observed(cell, level.getBlockState(position)));
+            if (status == RuntimeCellStatus.MISMATCH) return RuntimeCoherence.CONFLICT;
+            if (status == RuntimeCellStatus.PENDING) pending = true;
+        }
+        if (pending) return RuntimeCoherence.PENDING;
+        return infectionCoherence(state, expected.keySet(), level);
+    }
+
+    /**
+     * A seed nest is the first-visible hive unit.  Do not let the label or a cocoon in one organ
+     * advertise an operational nest while a sibling organ/foundation or its infection surface
+     * is still pending or foreign.  This remains a bounded read of declared same-nest owners;
+     * it does not cause the other organ columns to load.
+     */
+    static RuntimeCoherence runtimeNestCoherence(FrontierWorldState state, SubjectId organId, ServerLevel level,
+                                                 FrontierGrayboxPlan structuralBaseline) {
+        HiveOrgan selected = organ(state, organId);
+        boolean pending = false;
+        for (HiveOrgan candidate : java.util.stream.Stream.concat(state.bootstrap().hive().organs().stream(), state.hiveColony().addedOrgans().values().stream())
+                .filter(value -> value.nestId().equals(selected.nestId())).sorted(Comparator.comparing(HiveOrgan::id)).toList()) {
+            RuntimeCoherence coherence = runtimeCoherence(state, candidate.id(), level, structuralBaseline);
+            if (coherence == RuntimeCoherence.CONFLICT) return RuntimeCoherence.CONFLICT;
+            if (coherence == RuntimeCoherence.PENDING) pending = true;
+        }
+        return pending ? RuntimeCoherence.PENDING : RuntimeCoherence.CURRENT;
+    }
+
+    /**
+     * An infected hive never advertises an active organ while its canonical whole-patch surface
+     * is merely queued, partially written, foreign, or stale.  The overlay claim is deliberately
+     * checked as a sixteen-column unit: a matching carpet under a single column is not evidence
+     * for a coherent infestation.
+     */
+    private static RuntimeCoherence infectionCoherence(FrontierWorldState state, Set<BlockPosition> organCells, ServerLevel level) {
+        Map<InfectionCell, InfectionOverlayCell> desired = FrontierInfectionOverlayPlan.compile(state).cells();
+        Set<InfectionCell> organInfection = organCells.stream().map(InfectionCell::at)
+                .filter(desired::containsKey).collect(java.util.stream.Collectors.toSet());
+        FrontierV3InfectionOverlayLedger ledger = FrontierV3InfectionOverlayLedger.get(level);
+        boolean pending = false;
+        for (InfectionCell cell : organInfection) {
+            InfectionOverlayCell overlay = desired.get(cell);
+            FrontierV3InfectionOverlayLedger.Claim claim = ledger.claim(cell);
+            if (claim == null || claim.prepared()) { pending = true; continue; }
+            if (!claim.active() || claim.stage() != overlay.stage()) return RuntimeCoherence.CONFLICT;
+            for (BlockPos position : claim.blockPositions()) {
+                if (!level.hasChunkAt(position)) { pending = true; continue; }
+                if (!level.getBlockState(position).equals(FrontierV3InfectionOverlayExecutor.material(overlay.stage()))) {
+                    return RuntimeCoherence.CONFLICT;
+                }
+            }
+        }
+        return pending ? RuntimeCoherence.PENDING : RuntimeCoherence.CURRENT;
     }
 
     private static void inspectRuntime(Map<BlockPosition, GrayboxCell> expected, SubjectId organId, ServerLevel level,

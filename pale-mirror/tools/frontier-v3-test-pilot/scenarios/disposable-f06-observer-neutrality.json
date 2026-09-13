@@ -12,6 +12,7 @@
   ],
   "actions": [
     { "type": "fast_forward", "ticks": 24000, "timeoutMs": 180000 },
+    { "type": "wait_until_diagnostic", "view": "site", "id": "site:4-wheat-field", "expect": { "status": "ok", "phase": "HARVESTING", "growthStage": 7 }, "timeoutMs": 30000, "causalMilestone": "cold_growth_before_first_visit" },
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 388, "y": 65, "z": -355 }, "settleMs": 1000, "causalMilestone": "first_arrival" },
     { "type": "wait_until_diagnostic", "view": "first_visibility", "id": "24,-23", "expect": { "status": "ok", "visibility": "READY" }, "timeoutMs": 30000, "causalMilestone": "static_ready" },
     { "type": "look", "at": { "x": 380, "y": 64, "z": -340 } },
@@ -28,7 +29,7 @@
   ],
   "restart": {
     "mode": "graceful",
-    "afterAction": 10,
+    "afterAction": 11,
     "resumeSetup": [
       { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 388, "y": 65, "z": -355 }, "settleMs": 1000 },
       { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
@@ -37,14 +38,16 @@
     ]
   },
   "assertions": [
-    { "after": 3, "view": "first_visibility", "id": "24,-23", "expect": { "status": "ok", "visibility": "READY" } },
-    { "after": 10, "view": "site", "id": "site:4-wheat-field", "expect": { "status": "ok", "phase": "CONFLICT" } },
+    { "after": 2, "view": "site", "id": "site:4-wheat-field", "expect": { "status": "ok", "phase": "HARVESTING", "growthStage": 7 } },
+    { "after": 4, "view": "first_visibility", "id": "24,-23", "expect": { "status": "ok", "visibility": "READY" } },
     { "after": 11, "view": "site", "id": "site:4-wheat-field", "expect": { "status": "ok", "phase": "CONFLICT" } },
-    { "after": 14, "view": "site", "id": "site:4-wheat-field", "expect": { "status": "ok", "phase": "CONFLICT" } }
+    { "after": 12, "view": "site", "id": "site:4-wheat-field", "expect": { "status": "ok", "phase": "CONFLICT" } },
+    { "after": 15, "view": "site", "id": "site:4-wheat-field", "expect": { "status": "ok", "phase": "CONFLICT" } }
   ],
   "frames": [
-    { "after": 5, "name": "first-static-arrival" },
-    { "after": 8, "name": "field-before-intervention" },
-    { "after": 14, "name": "field-after-return" }
+    { "after": 2, "name": "cold-growth-before-visit", "presentation": "player" },
+    { "after": 6, "name": "first-static-arrival", "presentation": "player" },
+    { "after": 9, "name": "field-before-intervention", "presentation": "player" },
+    { "after": 15, "name": "field-after-return", "presentation": "player" }
   ]
 }

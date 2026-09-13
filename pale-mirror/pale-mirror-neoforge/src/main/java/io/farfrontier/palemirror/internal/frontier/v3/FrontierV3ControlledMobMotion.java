@@ -182,6 +182,30 @@ final class FrontierV3ControlledMobMotion {
     }
 
     /**
+     * Applies only the vanilla-style vertical gravity/collision half that a NoAI Mob skips.
+     * This has no lateral target, route, cursor, or canonical-progress authority.  It exists so
+     * a retained HOT body whose real support is removed falls and takes ordinary collision/fall
+     * outcomes instead of retaining the last projected Y coordinate as a hover datum.
+     */
+    static void advanceOrdinaryGravity(Mob actor) {
+        if (actor == null || actor.isRemoved() || !actor.isAlive() || actor.isNoGravity()) return;
+        Vec3 before = actor.position();
+        Vec3 velocity = actor.getDeltaMovement();
+        double vertical = Math.max(-0.98D, (velocity.y - 0.08D) * 0.98D);
+        actor.move(MoverType.SELF, new Vec3(0.0D, vertical, 0.0D));
+        boolean moved = actor.position().y < before.y - 1.0E-8D;
+        actor.setDeltaMovement(velocity.x, actor.onGround() ? 0.0D : vertical, velocity.z);
+        if (moved) actor.hasImpulse = true;
+    }
+
+    /** Restores the ordinary vertical physics path without selecting a movement target. */
+    static void restoreOrdinaryPhysics(Mob actor) {
+        if (actor == null) return;
+        actor.setNoGravity(false);
+        advanceOrdinaryGravity(actor);
+    }
+
+    /**
      * Bounded read-only inspection for a HOT-scene diagnostic.  It exposes only whether this
      * actuator still owns a one-tick intent and never supplies a destination to any caller.
      */

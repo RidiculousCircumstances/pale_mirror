@@ -46,8 +46,13 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 .filter(lease -> lease.status() != SceneLeaseStatus.CLOSED && lease.status() != SceneLeaseStatus.CONFLICT)
                 .min(Comparator.comparing(SceneLease::id));
         if (active.isPresent()) { execute(level, runtime, state, active.orElseThrow()); return true; }
+        // The canonical job may have crossed several COLD traversal edges before the first
+        // natural arrival.  Its field is still non-interactable until the projection owner has
+        // made that exact mature/partial crop state current in the loaded world.
         Optional<FrontierResourceSiteHarvestSceneSupport.Candidate> candidate = FrontierV3SceneExecutor.firstDemandedCandidate(
-                level, FrontierResourceSiteHarvestSceneSupport.candidates(state), FrontierResourceSiteHarvestSceneSupport.Candidate::cropSlot);
+                level, FrontierResourceSiteHarvestSceneSupport.candidates(state).stream()
+                        .filter(value -> fieldPresentationCurrent(level, state, value)).toList(),
+                FrontierResourceSiteHarvestSceneSupport.Candidate::cropSlot);
         if (candidate.isEmpty()) return false;
         FrontierResourceSiteHarvestSceneSupport.Candidate work = candidate.orElseThrow();
         SceneLease lease = lease(runtime, work);
@@ -58,6 +63,21 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             handoff(level, runtime, state, lease, binding(runtime, work.jobId()));
         }
         return true;
+    }
+
+    private static boolean fieldPresentationCurrent(ServerLevel level, FrontierWorldState state,
+                                                    FrontierResourceSiteHarvestSceneSupport.Candidate candidate) {
+        var lifecycle = state.resourceSites().sites().get(candidate.siteId());
+        var site = FrontierResourceSitePlan.compile(state.bootstrap()).get(candidate.siteId());
+        if (lifecycle == null || site == null || !FrontierV3ResourceSiteExecutor.loaded(level, site)) return false;
+        FrontierV3ResourceSiteLedger.Claim claim = FrontierV3ResourceSiteLedger.get(level).claim(site.id());
+        if (claim == null || claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE
+                || claim.stage() != io.farfrontier.palemirror.frontier.v3.model.ResourceSiteLifecycle.MATURE_STAGE) return false;
+        var job = lifecycle.activeWork().filter(io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob.class::isInstance)
+                .map(io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob.class::cast).orElse(null);
+        return job != null && job.id().equals(candidate.jobId())
+                && claim.harvestedCropSlots() == job.progress().completedCropSlots()
+                && FrontierV3ResourceSiteExecutor.matchesHarvestProgress(level, site, job.progress().completedCropSlots());
     }
 
     private static SceneLease lease(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,

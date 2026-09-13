@@ -91,6 +91,14 @@ final class FrontierV3HiveMobilizationExecutor {
         HiveOrgan hibernaculum = Stream.concat(state.bootstrap().hive().organs().stream(), state.hiveColony().addedOrgans().values().stream())
                 .filter(organ -> organ.id().equals(lifecycle.homeSlot().orElseThrow().hibernaculumId())).findFirst().orElse(null);
         if (hibernaculum == null) { submitConflict(level, runtime, state, mobilization, HiveMobilizationConflictReason.COCOON_CHANGED); return; }
+        // A cocoon is a named organ part, not independent spawn scenery.  First visibility may
+        // expose its local chunk before the rest of the hibernaculum is resident/current; hold
+        // the release boundary until the complete exact organ is coherent, and never repair a
+        // pending or foreign scope from this effect owner.
+        if (FrontierV3GrayboxExecutor.publishedStructuralBaseline(runtime)
+                .map(plan -> FrontierV3HiveFoundryAudit.runtimeNestCoherence(state, hibernaculum.id(), level, plan)
+                        == FrontierV3HiveFoundryAudit.RuntimeCoherence.CURRENT)
+                .orElse(false) == false) return;
         var modelPosition = HiveCocoonPlan.cocoonCell(hibernaculum, lifecycle.homeSlot().orElseThrow());
         BlockPos position = new BlockPos(modelPosition.x(), modelPosition.y(), modelPosition.z());
         if (!FrontierV3PhysicalDemand.exists(level, position)) return;
