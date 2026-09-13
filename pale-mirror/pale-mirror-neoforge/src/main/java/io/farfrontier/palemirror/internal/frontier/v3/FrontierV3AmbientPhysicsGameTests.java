@@ -95,7 +95,7 @@ public final class FrontierV3AmbientPhysicsGameTests {
      * the ambient executor owns PREPARED -> HOT admission, the retained UUID bodies, and every
      * subsequent ordinary-physics turn.
      */
-    @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 70)
+    @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 300)
     public static void demandedManagedResidentAndBioformFallThroughExecutorCadence(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos residentSupport = helper.absolutePos(new BlockPos(2, 10, 2));
@@ -106,9 +106,10 @@ public final class FrontierV3AmbientPhysicsGameTests {
         ServerPlayer observer = helper.makeMockServerPlayerInLevel();
         observer.setPos(residentSupport.getX() + 6.5D, residentSupport.getY() + 1.0D, residentSupport.getZ() + 6.5D);
         double[] initialY = { Double.NaN, Double.NaN };
-        boolean[] exactHotBodies = { false };
+        boolean[] exactHotBodies = { false }, movingBeforeLoss = { false };
+        BodyPosition[] landed = new BodyPosition[2];
 
-        for (int tick = 1; tick <= 55; tick++) {
+        for (int tick = 1; tick <= 285; tick++) {
             int turn = tick;
             helper.runAtTickTime(tick, () -> {
                 drive(level, runtime);
@@ -120,27 +121,41 @@ public final class FrontierV3AmbientPhysicsGameTests {
                             && runtime.decodedState().orElseThrow().ambientLeases().get(fixture.bioform()).status()
                             == io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus.HOT;
                     if (Double.isNaN(initialY[0])) { initialY[0] = resident.getY(); initialY[1] = bioform.getY(); }
+                    if (turn < 24) movingBeforeLoss[0] |= FrontierV3ControlledMobMotion.trace(resident).stream().anyMatch(sample -> sample.horizontalVelocity() > 0.0D)
+                            && FrontierV3ControlledMobMotion.trace(bioform).stream().anyMatch(sample -> sample.horizontalVelocity() > 0.0D);
                 }
-                if (turn == 12) {
+                if (turn == 24) {
                     helper.assertTrue(exactHotBodies[0], "ordinary player demand must admit the canonical resident and active bioform through their exact HOT leases");
-                    helper.getLevel().setBlock(residentSupport, Blocks.AIR.defaultBlockState(), 3);
-                    helper.getLevel().setBlock(bioformSupport, Blocks.AIR.defaultBlockState(), 3);
+                    helper.assertTrue(movingBeforeLoss[0], "both admitted managed bodies must have accepted bounded ordinary horizontal motion before support loss");
+                    // This is the ordinary player input boundary, not a fixture world edit:
+                    // vanilla's server game mode performs both breaks while the executor owns
+                    // the two retained HOT UUIDs.
+                    helper.assertTrue(observer.gameMode.destroyBlock(residentSupport) && observer.gameMode.destroyBlock(bioformSupport),
+                            "the ordinary observer must be able to remove each physical support");
+                }
+                if (turn == 65) {
+                    helper.assertTrue(resident != null && bioform != null, "the exact HOT bodies must remain observable through their fall and landing");
+                    landed[0] = FrontierV3AmbientActorExecutor.observedBody(resident);
+                    landed[1] = FrontierV3AmbientActorExecutor.observedBody(bioform);
+                    helper.assertTrue(!resident.isNoGravity() && !bioform.isNoGravity()
+                                    && resident.getY() < initialY[0] - 2.0D && bioform.getY() < initialY[1] - 2.0D
+                                    && Math.abs(resident.getY() - (residentSupport.getY() - 2.0D)) < 1.0E-6D
+                                    && Math.abs(bioform.getY() - (bioformSupport.getY() - 2.0D)) < 1.0E-6D,
+                            "ordinary collision must land the moving managed bodies without hover, reset, teleport, or a second route");
+                    observer.connection.disconnect(Component.literal("ambient support-loss fixture complete"));
                 }
             });
         }
-        helper.runAtTickTime(56, () -> {
-            Mob resident = managed(level, runtime, fixture.resident());
-            Mob bioform = managed(level, runtime, fixture.bioform());
-            helper.assertTrue(resident != null && bioform != null && exactHotBodies[0],
-                    "the executor must retain one exact resident and one exact bioform; it may not replace either body during support loss");
-            helper.assertTrue(!resident.isNoGravity() && !bioform.isNoGravity(),
-                    "the actual HOT executor must clear retained no-gravity flags before every ordinary-physics turn");
-            helper.assertTrue(resident.getY() < initialY[0] - 2.0D && bioform.getY() < initialY[1] - 2.0D,
-                    "executor-owned bodies must fall after ordinary support removal, not hover or reset: resident=" + resident.position() + " bioform=" + bioform.position());
-            helper.assertTrue(Math.abs(resident.getY() - (residentSupport.getY() - 2.0D)) < 1.0E-6D
-                            && Math.abs(bioform.getY() - (bioformSupport.getY() - 2.0D)) < 1.0E-6D,
-                    "native collision landing must retain the same exact bodies on the lower support rather than teleporting them");
-            observer.connection.disconnect(Component.literal("ambient support-loss fixture complete"));
+        helper.runAtTickTime(286, () -> {
+            FrontierWorldState state = runtime.decodedState().orElseThrow();
+            helper.assertTrue(state.ambientLeases().get(fixture.resident()).status() == io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus.CLOSED
+                            && state.ambientLeases().get(fixture.bioform()).status() == io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus.CLOSED,
+                    "ordinary demand loss must type the existing HOT leases through one bounded release rather than retain a hovering authority");
+            helper.assertTrue(state.actorLocations().get(fixture.resident()).body().equals(landed[0])
+                            && state.actorLocations().get(fixture.bioform()).body().equals(landed[1]),
+                    "the typed release must canonically retain the collision-observed landing bodies, never reset either actor to its removed support");
+            helper.assertTrue(managed(level, runtime, fixture.resident()) == null && managed(level, runtime, fixture.bioform()) == null,
+                    "the released exact bodies must be discarded once, leaving no second route or duplicate HOT body");
             runtime.shutdown(); helper.succeed();
         });
     }
