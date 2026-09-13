@@ -190,11 +190,20 @@ final class FrontierV3InfectionOverlayExecutor {
 
     private static List<BlockPos> discoveredPatch(ServerLevel level, InfectionOverlayCell desired) {
         List<BlockPos> positions = new java.util.ArrayList<>(FrontierV3InfectionOverlayLedger.PATCH_COLUMNS);
+        FrontierV3GrayboxLedger structural = FrontierV3GrayboxLedger.get(level);
         for (InfectionOverlayCell.SurfaceColumn column : desired.surfaceColumns()) {
             BlockPos columnProbe = new BlockPos(column.x(), 0, column.z());
             if (!level.hasChunkAt(columnProbe)) return null;
             BlockPos position = new BlockPos(column.x(), level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, column.x(), column.z()), column.z());
             if (!level.hasChunkAt(position)) return null;
+            // The heightmap can legitimately select the top of an already-current PM organ.
+            // Infection is an owned surface layer in that case, so place its marker immediately
+            // above the proved structural cell.  An unclaimed/foreign non-air baseline remains a
+            // conflict below; this is not a repair or a way to overwrite it.
+            while (isCurrentStructuralCell(structural, position)) {
+                position = position.above();
+                if (!level.hasChunkAt(position)) return null;
+            }
             // A prior interrupted v3 write can itself become the motion-blocking surface.  Keep
             // that exact carpet in the failed baseline so a later retry conflicts rather than
             // silently placing another carpet one block above it.
@@ -202,6 +211,11 @@ final class FrontierV3InfectionOverlayExecutor {
             positions.add(position);
         }
         return List.copyOf(positions);
+    }
+
+    private static boolean isCurrentStructuralCell(FrontierV3GrayboxLedger structural, BlockPos position) {
+        FrontierV3GrayboxLedger.Claim claim = structural.claim(position);
+        return claim != null && !claim.conflicted();
     }
 
     private static boolean replace(ServerLevel level, List<BlockPos> positions, BlockState expected) {

@@ -14,6 +14,7 @@ import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxCell;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxMaterial;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxSemanticPart;
+import io.farfrontier.palemirror.frontier.v3.model.InfectionCell;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDelta;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaKind;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaObserved;
@@ -189,8 +190,11 @@ final class FrontierV3GrayboxExecutor {
     /**
      * A seed nest is one player-facing object even where its named organs straddle adjacent
      * chunks.  Ingress into one naturally loaded organ chunk therefore fences the other
-     * already-natural sibling chunks before any label/cocoon can advertise the nest.  This is
-     * bookkeeping only: it neither asks the chunk manager for a sibling nor compiles a plan.
+     * already-natural sibling chunks before any label/cocoon can advertise the nest.  The
+     * infection owner has a separate, already-published patch snapshot; retain the small set of
+     * corresponding surface chunks too, so the ordinary overlay pass can complete the same
+     * declared nest before its presentation becomes eligible.  This is bookkeeping only: it
+     * neither asks the chunk manager for a sibling nor compiles either plan.
      */
     private static void retainSiblingHiveVisibility(FrontierV3ServerRuntime<?, ?> runtime, ChunkPos ingress) {
         Cursor cursor = CURSORS.get(runtime);
@@ -204,6 +208,12 @@ final class FrontierV3GrayboxExecutor {
                 .collect(java.util.stream.Collectors.toSet());
         siblings.forEach(organ -> cursor.hiveExpectations.cells().getOrDefault(organ, List.of()).forEach(cell ->
                 retainFirstVisibility(runtime, new ChunkPos(cell.position().x() >> 4, cell.position().z() >> 4))));
+        java.util.Set<InfectionCell> infectionCells = siblings.stream()
+                .flatMap(organ -> cursor.hiveExpectations.cells().getOrDefault(organ, List.of()).stream())
+                .map(cell -> InfectionCell.at(cell.position())).collect(java.util.stream.Collectors.toSet());
+        FrontierV3InfectionOverlayExecutor.publishedOverlay(runtime).ifPresent(overlay -> infectionCells.stream()
+                .map(overlay::get).filter(Objects::nonNull).flatMap(cell -> cell.surfaceColumns().stream())
+                .forEach(column -> retainFirstVisibility(runtime, new ChunkPos(column.x() >> 4, column.z() >> 4))));
     }
 
     private static void retainFirstVisibility(FrontierV3ServerRuntime<?, ?> runtime, ChunkPos chunk) {
