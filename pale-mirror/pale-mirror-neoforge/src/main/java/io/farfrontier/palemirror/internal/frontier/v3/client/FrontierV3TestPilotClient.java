@@ -415,8 +415,9 @@ public final class FrontierV3TestPilotClient {
             visitHandshakeArmed = true; visitSent = true; return; }
         if (!visitSent) { String username = minecraft.player.getGameProfile().getName(); minecraft.player.connection.sendCommand("execute in " + dimension + " run tp " + username + " " + target.getX() + " " + target.getY() + " " + target.getZ());
             visitSent = true; return; }
-        String clientDimension = minecraft.level.dimension().location().toString(); boolean ready = clientDimension.equals(dimension) && minecraft.level.hasChunkAt(target);
-        visitIngress.observe(clientDimension, ready, minecraft.player.blockPosition());
+        String clientDimension = minecraft.level.dimension().location().toString(); boolean targetChunkPresent = clientDimension.equals(dimension) && minecraft.level.hasChunkAt(target);
+        visitIngress.observe(clientDimension, targetChunkPresent, minecraft.player.blockPosition());
+        boolean ready = visitIngress.arrivedAt(target);
         if (ready) { if (handshake != null) {
                 String request = handshake.get("request").getAsString(), assault = handshake.get("assault").getAsString();
                 JsonObject handoff = handshake.getAsJsonObject("handoff"); BlockPos expectedHandoff = new BlockPos(handoff.get("x").getAsInt(), handoff.get("y").getAsInt(), handoff.get("z").getAsInt());

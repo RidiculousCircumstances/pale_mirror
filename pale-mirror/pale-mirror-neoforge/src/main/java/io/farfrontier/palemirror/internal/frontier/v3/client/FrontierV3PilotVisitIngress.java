@@ -43,6 +43,10 @@ final class FrontierV3PilotVisitIngress {
 
     boolean targetDimensionSeen() { return targetDimensionSeen; }
     boolean targetChunkSeen() { return targetChunkSeen; }
+    /** A loaded target chunk is not a player arrival; ordinary visit evidence needs both. */
+    boolean arrivedAt(BlockPos target) {
+        return targetDimensionSeen && targetChunkSeen && Objects.requireNonNull(target, "target").equals(finalClientPosition);
+    }
     String finalClientDimension() { return finalClientDimension; }
     BlockPos finalClientPosition() { return finalClientPosition; }
 

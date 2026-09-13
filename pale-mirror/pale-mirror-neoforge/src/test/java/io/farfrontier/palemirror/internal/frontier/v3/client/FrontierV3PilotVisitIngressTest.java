@@ -29,12 +29,17 @@ class FrontierV3PilotVisitIngressTest {
         ingress.observe("minecraft:overworld", true, BlockPos.ZERO);
         assertFalse(ingress.targetDimensionSeen());
         assertFalse(ingress.targetChunkSeen());
+        assertFalse(ingress.arrivedAt(TARGET), "a locally loaded target chunk is not an arrival in another dimension");
 
         ingress.observe(DESTINATION, false, TARGET);
         assertTrue(ingress.targetDimensionSeen());
         assertFalse(ingress.targetChunkSeen());
+        assertFalse(ingress.arrivedAt(TARGET), "the exact local coordinates are insufficient until the target chunk is present");
 
         ingress.observe(DESTINATION, true, TARGET);
+        assertTrue(ingress.arrivedAt(TARGET), "only the exact requested local player position completes an ordinary visit");
+        ingress.observe(DESTINATION, true, TARGET.offset(1, 0, 0));
+        assertFalse(ingress.arrivedAt(TARGET), "a nearby loaded position may not masquerade as the requested first arrival");
         ingress.observe("minecraft:overworld", false, BlockPos.ZERO);
         assertTrue(ingress.targetDimensionSeen());
         assertTrue(ingress.targetChunkSeen());
