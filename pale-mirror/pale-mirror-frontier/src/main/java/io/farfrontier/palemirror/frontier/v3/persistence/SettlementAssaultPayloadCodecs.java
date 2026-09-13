@@ -88,16 +88,14 @@ final class SettlementAssaultPayloadCodecs {
             return FrontierWorldPayloadCodecs.encodeProduction(output -> {
                 SettlementAssaultMarchIssueObserved value = (SettlementAssaultMarchIssueObserved) payload;
                 subject(output, value.assaultId()); FrontierWorldPayloadCodecs.writeString(output, value.leaseId().value());
-                output.writeByte(value.issue().kind().ordinal()); subject(output, value.issue().memberId());
+                output.writeByte(FrontierWireTags.tag(value.issue().kind())); subject(output, value.issue().memberId());
                 FrontierWorldPayloadCodecs.writeString(output, value.issue().edgeId().value()); output.writeShort(value.issue().expectedCursor());
             });
         }
         @Override public FrontierPayload decode(byte[] bytes) {
             return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
                 SubjectId assault = subject(input); var lease = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(FrontierWorldPayloadCodecs.readString(input));
-                int kind = input.readUnsignedByte();
-                if (kind >= ExpeditionMarchIssueKind.values().length) throw new IllegalArgumentException("unknown expedition march issue kind");
-                ExpeditionMarchIssue issue = new ExpeditionMarchIssue(ExpeditionMarchIssueKind.values()[kind], subject(input),
+                ExpeditionMarchIssue issue = new ExpeditionMarchIssue(FrontierWireTags.require(ExpeditionMarchIssueKind.class, input.readUnsignedByte()), subject(input),
                         new TraversalEdgeId(FrontierWorldPayloadCodecs.readString(input)), input.readUnsignedShort());
                 return new SettlementAssaultMarchIssueObserved(assault, lease, issue);
             });
@@ -191,11 +189,10 @@ final class SettlementAssaultPayloadCodecs {
         return new ExpeditionMarch(overseer, cursor, paths, issue);
     }
     private static void writeIssue(DataOutputStream output, ExpeditionMarchIssue issue) throws IOException {
-        output.writeByte(issue.kind().ordinal()); subject(output, issue.memberId()); FrontierWorldPayloadCodecs.writeString(output, issue.edgeId().value()); output.writeShort(issue.expectedCursor());
+        output.writeByte(FrontierWireTags.tag(issue.kind())); subject(output, issue.memberId()); FrontierWorldPayloadCodecs.writeString(output, issue.edgeId().value()); output.writeShort(issue.expectedCursor());
     }
     private static ExpeditionMarchIssue readIssue(DataInputStream input) throws IOException {
-        int kind = input.readUnsignedByte(); if (kind >= ExpeditionMarchIssueKind.values().length) throw new IllegalArgumentException("unknown expedition march issue kind");
-        return new ExpeditionMarchIssue(ExpeditionMarchIssueKind.values()[kind], subject(input), new TraversalEdgeId(FrontierWorldPayloadCodecs.readString(input)), input.readUnsignedShort());
+        return new ExpeditionMarchIssue(FrontierWireTags.require(ExpeditionMarchIssueKind.class, input.readUnsignedByte()), subject(input), new TraversalEdgeId(FrontierWorldPayloadCodecs.readString(input)), input.readUnsignedShort());
     }
 
     private static void subject(DataOutputStream output, SubjectId value) throws IOException { FrontierWorldPayloadCodecs.writeSubject(output, value); }

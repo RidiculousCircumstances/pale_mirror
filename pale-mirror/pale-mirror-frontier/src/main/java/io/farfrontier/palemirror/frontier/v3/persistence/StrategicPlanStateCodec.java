@@ -400,11 +400,10 @@ public final class StrategicPlanStateCodec {
         return new ExpeditionMarch(overseer, cursor, paths, issue);
     }
     private static void writeMarchIssue(DataOutputStream output, ExpeditionMarchIssue issue) throws IOException {
-        output.writeByte(issue.kind().ordinal()); writeSubject(output, issue.memberId()); FrontierWorldPayloadCodecs.writeString(output, issue.edgeId().value()); output.writeShort(issue.expectedCursor());
+        output.writeByte(FrontierWireTags.tag(issue.kind())); writeSubject(output, issue.memberId()); FrontierWorldPayloadCodecs.writeString(output, issue.edgeId().value()); output.writeShort(issue.expectedCursor());
     }
     private static ExpeditionMarchIssue readMarchIssue(DataInputStream input) throws IOException {
-        int kind = input.readUnsignedByte(); if (kind >= ExpeditionMarchIssueKind.values().length) throw new IllegalArgumentException("unknown expedition march issue kind");
-        return new ExpeditionMarchIssue(ExpeditionMarchIssueKind.values()[kind], readSubject(input), new TraversalEdgeId(FrontierWorldPayloadCodecs.readString(input)), input.readUnsignedShort());
+        return new ExpeditionMarchIssue(FrontierWireTags.require(ExpeditionMarchIssueKind.class, input.readUnsignedByte()), readSubject(input), new TraversalEdgeId(FrontierWorldPayloadCodecs.readString(input)), input.readUnsignedShort());
     }
     private static RoutePatrolBlockReason readPatrolBlockReason(DataInputStream input) throws IOException {
         return FrontierWireTags.require(RoutePatrolBlockReason.class, input.readUnsignedByte());
