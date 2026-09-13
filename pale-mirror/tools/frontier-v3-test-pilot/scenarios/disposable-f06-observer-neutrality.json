@@ -3,6 +3,7 @@
   "id": "disposable_f06_observer_neutrality",
   "isolation": { "mode": "disposable_lite", "seed": 41 },
   "server": { "host": "127.0.0.1", "port": 25575, "profile": "world" },
+  "zeroPlayerPrelude": { "advanceTicks": 24000, "timeoutMs": 180000 },
   "pilot": { "username": "PMTestPilot" },
   "setup": [
     { "type": "command", "command": "/time set day" },
@@ -11,7 +12,6 @@
     ] }
   ],
   "actions": [
-    { "type": "fast_forward", "ticks": 24000, "timeoutMs": 180000 },
     { "type": "wait_until_diagnostic", "view": "site", "id": "site:4-wheat-field", "expect": { "status": "ok", "phase": "HARVESTING", "growthStage": 7 }, "timeoutMs": 30000, "causalMilestone": "cold_growth_before_first_visit" },
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 388, "y": 65, "z": -355 }, "settleMs": 1000, "causalMilestone": "first_arrival" },
     { "type": "wait_until_diagnostic", "view": "first_visibility", "id": "24,-23", "expect": { "status": "ok", "visibility": "READY" }, "timeoutMs": 30000, "causalMilestone": "static_ready" },
@@ -29,7 +29,7 @@
   ],
   "restart": {
     "mode": "graceful",
-    "afterAction": 11,
+    "afterAction": 10,
     "resumeSetup": [
       { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 388, "y": 65, "z": -355 }, "settleMs": 1000 },
       { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
@@ -38,16 +38,16 @@
     ]
   },
   "assertions": [
-    { "after": 2, "view": "site", "id": "site:4-wheat-field", "expect": { "status": "ok", "phase": "HARVESTING", "growthStage": 7 } },
-    { "after": 4, "view": "first_visibility", "id": "24,-23", "expect": { "status": "ok", "visibility": "READY" } },
+    { "after": 1, "view": "site", "id": "site:4-wheat-field", "expect": { "status": "ok", "phase": "HARVESTING", "growthStage": 7 } },
+    { "after": 3, "view": "first_visibility", "id": "24,-23", "expect": { "status": "ok", "visibility": "READY" } },
+    { "after": 10, "view": "site", "id": "site:4-wheat-field", "expect": { "status": "ok", "phase": "CONFLICT" } },
     { "after": 11, "view": "site", "id": "site:4-wheat-field", "expect": { "status": "ok", "phase": "CONFLICT" } },
-    { "after": 12, "view": "site", "id": "site:4-wheat-field", "expect": { "status": "ok", "phase": "CONFLICT" } },
-    { "after": 15, "view": "site", "id": "site:4-wheat-field", "expect": { "status": "ok", "phase": "CONFLICT" } }
+    { "after": 14, "view": "site", "id": "site:4-wheat-field", "expect": { "status": "ok", "phase": "CONFLICT" } }
   ],
   "frames": [
-    { "after": 2, "name": "cold-growth-before-visit", "presentation": "player" },
-    { "after": 6, "name": "first-static-arrival", "presentation": "player" },
-    { "after": 9, "name": "field-before-intervention", "presentation": "player" },
-    { "after": 15, "name": "field-after-return", "presentation": "player" }
+    { "after": 1, "name": "cold-growth-before-visit", "presentation": "player" },
+    { "after": 5, "name": "first-static-arrival", "presentation": "player" },
+    { "after": 8, "name": "field-before-intervention", "presentation": "player" },
+    { "after": 14, "name": "field-after-return", "presentation": "player" }
   ]
 }

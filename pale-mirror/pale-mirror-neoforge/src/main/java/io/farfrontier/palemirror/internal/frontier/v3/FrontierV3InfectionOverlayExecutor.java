@@ -59,6 +59,16 @@ final class FrontierV3InfectionOverlayExecutor {
 
     static void forget(FrontierV3ServerRuntime<?, ?> runtime) { CURSORS.remove(runtime); }
 
+    /**
+     * Returns the exact dynamic overlay already compiled by the overlay owner for this runtime.
+     * Read-only presentation gates may inspect this snapshot, but must not compile a second
+     * whole-world overlay from their per-board or per-cocoon hot path.
+     */
+    static Optional<Map<InfectionCell, InfectionOverlayCell>> publishedOverlay(FrontierV3ServerRuntime<?, ?> runtime) {
+        Cursor cursor = CURSORS.get(runtime);
+        return cursor == null ? Optional.empty() : Optional.of(cursor.desiredByCell);
+    }
+
     static BlockBreakObservation observeBlockBreak(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, ServerLevel level,
                                                    BlockPos position, String cause) {
         FrontierV3InfectionOverlayLedger ledger = FrontierV3InfectionOverlayLedger.get(level);
@@ -209,13 +219,16 @@ final class FrontierV3InfectionOverlayExecutor {
     private static final class Cursor {
         private final Revision revision;
         private final List<InfectionOverlayCell> desired;
+        private final Map<InfectionCell, InfectionOverlayCell> desiredByCell;
         private final List<Map.Entry<InfectionCell, FrontierV3InfectionOverlayLedger.Claim>> retractions;
         private int desiredIndex;
         private int retractionIndex;
 
         private Cursor(Revision revision, List<InfectionOverlayCell> desired,
                        List<Map.Entry<InfectionCell, FrontierV3InfectionOverlayLedger.Claim>> retractions) {
-            this.revision = revision; this.desired = desired; this.retractions = retractions;
+            this.revision = revision; this.desired = desired;
+            this.desiredByCell = desired.stream().collect(java.util.stream.Collectors.toUnmodifiableMap(InfectionOverlayCell::cell, value -> value));
+            this.retractions = retractions;
         }
         static Cursor from(Revision revision, FrontierInfectionOverlayPlan plan, FrontierV3InfectionOverlayLedger ledger) {
             List<InfectionOverlayCell> desired = plan.cells().values().stream().sorted(Comparator.comparingInt((InfectionOverlayCell cell) -> cell.cell().x())

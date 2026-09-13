@@ -84,9 +84,11 @@ final class FrontierV3ObjectBoardExecutor {
     private static ProjectionResult project(ServerLevel level, FrontierV3ObjectBoardLedger ledger,
                                             FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
                                             FrontierObjectBoard board) {
-        boolean coherentHive = !isHiveOrgan(state, board.ownerId()) || FrontierV3GrayboxExecutor.publishedStructuralBaseline(runtime)
-                .map(plan -> FrontierV3HiveFoundryAudit.runtimeNestCoherence(state, board.ownerId(), level, plan)
+        boolean coherentHive = !isHiveOrgan(state, board.ownerId()) || FrontierV3GrayboxExecutor.publishedHiveExpectations(runtime)
+                .flatMap(expectations -> FrontierV3InfectionOverlayExecutor.publishedOverlay(runtime)
+                        .map(overlay -> FrontierV3HiveFoundryAudit.runtimeNestCoherence(board.ownerId(), level, expectations, overlay)
                         == FrontierV3HiveFoundryAudit.RuntimeCoherence.CURRENT)
+                )
                 .orElse(false);
         if (isHiveOrgan(state, board.ownerId()) && !coherentHive) {
             // A legacy board can already be present when an upgraded world first exposes its

@@ -8,7 +8,7 @@ import { createConnection } from 'node:net';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defaultPilotProfile, jfrCaptureRequest, loadScenario, pilotCrashBoundary, restartSegments } from './scenario.mjs';
-import { requestRconStop } from './rcon.mjs';
+import { requestRconCommand, requestRconStop } from './rcon.mjs';
 import { PhaseTiming } from './timing.mjs';
 import { writeFailureBundle } from './failure-bundle.mjs';
 import { boundedCleanupFailures, finalizeFailurePath } from './failure-finalization.mjs';
@@ -142,6 +142,7 @@ const usePersistentClient = process.env.FRONTIER_V3_PILOT_USE_PERSISTENT_CLIENT 
 let crashEvidence = null;
 let failure = null;
 let terminalCleanup = null;
+let zeroPlayerPrelude = null;
 const gracefulSaveGateReceipts = [];
 // Native F0.3 receipts bind the actual all-holder server-thread admission that
 // preceded each ordinary durable halt.  This remains pilot-only evidence and
@@ -158,6 +159,7 @@ try {
   // runner asks Minecraft to perform its normal graceful stop without adding
   // any artificial chunk/ticket/quiescence authority.
   server = await startServer(true);
+  if (scenario.zeroPlayerPrelude !== undefined) zeroPlayerPrelude = await runZeroPlayerPrelude(server, scenario.zeroPlayerPrelude);
   if (jfr !== undefined) await startJfrCapture(server, jfr);
   if (recovery == null) {
     await writeScenario(ephemeralScenario, scenario);
@@ -336,6 +338,7 @@ if (completed) {
   manifest.clientSegments = clientSegments;
   manifest.gracefulSaveGate = gracefulSaveGateReceipts;
   manifest.naturalDemandStops = naturalDemandStops;
+  manifest.zeroPlayerPrelude = zeroPlayerPrelude;
   manifest.terminalCleanup = terminalCleanup;
   manifest.ownerObservation = ownerObservationFact(server?.ownerObservation ?? lastServerAttempt?.ownerObservation ?? retainedOwnerObservation);
   manifest.ownerObservationRequirement = ownerObservationRequirementFact(ownerObservationRequirement,
@@ -449,6 +452,29 @@ async function startServer(reset) {
   }
   session.startupLifecycle = 'READY';
   return session;
+}
+
+/**
+ * Executes one server-owned canonical interval while no client process has even been launched.
+ * The receipt is intentionally narrow: it records the exact RCON admission and the server's
+ * own completion log, rather than pretending a later client diagnostic observed COLD time.
+ */
+async function runZeroPlayerPrelude(server, declaration) {
+  const command = `pale_mirror v3 advance ${declaration.advanceTicks}`;
+  let before = server.outputRevision();
+  await requestRconCommand({ port: server.rconPort, password: server.rconPassword, command });
+  const deadline = Date.now() + declaration.timeoutMs;
+  while (Date.now() < deadline) {
+    if (server.output().includes('Frontier v3 completed operator fast-forward')) {
+      return Object.freeze({ status: 'completed', advanceTicks: declaration.advanceTicks, command,
+        clientSegmentsBeforeCompletion: clientSegments.length, serverPid: server.serverPid });
+    }
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
+    await awaitWithin(server.outputAfter(before), Math.min(remaining, 1_000), 'zero-player prelude server output').catch(() => undefined);
+    before = server.outputRevision();
+  }
+  throw new Error('zero-player prelude did not receive the server-owned canonical completion marker');
 }
 
 async function startJfrCapture(server, request) {

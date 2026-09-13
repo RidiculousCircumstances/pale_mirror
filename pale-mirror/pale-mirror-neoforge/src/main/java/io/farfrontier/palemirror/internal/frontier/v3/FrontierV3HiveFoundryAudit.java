@@ -129,7 +129,9 @@ final class FrontierV3HiveFoundryAudit {
             if (status == RuntimeCellStatus.PENDING) pending = true;
         }
         if (pending) return RuntimeCoherence.PENDING;
-        return infectionCoherence(state, expected.keySet(), level);
+        // This direct organ-audit entry point is an explicit inspection operation, not the
+        // board/cocoon runtime path.  Runtime presentation uses the published overlay below.
+        return infectionCoherence(expected.keySet(), FrontierInfectionOverlayPlan.compile(state).cells(), level);
     }
 
     /**
@@ -138,13 +140,32 @@ final class FrontierV3HiveFoundryAudit {
      * is still pending or foreign.  This remains a bounded read of declared same-nest owners;
      * it does not cause the other organ columns to load.
      */
-    static RuntimeCoherence runtimeNestCoherence(FrontierWorldState state, SubjectId organId, ServerLevel level,
-                                                 FrontierGrayboxPlan structuralBaseline) {
-        HiveOrgan selected = organ(state, organId);
+    static HiveExpectations expectations(FrontierWorldState state, FrontierGrayboxPlan structuralBaseline) {
+        Map<SubjectId, List<GrayboxCell>> cells = structuralBaseline.cells().values().stream()
+                .collect(java.util.stream.Collectors.groupingBy(GrayboxCell::ownerId, java.util.LinkedHashMap::new,
+                        java.util.stream.Collectors.toUnmodifiableList()));
+        Map<SubjectId, List<SubjectId>> nestMembers = new java.util.LinkedHashMap<>();
+        java.util.stream.Stream.concat(state.bootstrap().hive().organs().stream(), state.hiveColony().addedOrgans().values().stream())
+                .collect(java.util.stream.Collectors.groupingBy(HiveOrgan::nestId, java.util.LinkedHashMap::new,
+                        java.util.stream.Collectors.mapping(HiveOrgan::id, java.util.stream.Collectors.toList())))
+                .values().forEach(members -> {
+                    List<SubjectId> immutable = members.stream().sorted().toList();
+                    immutable.forEach(member -> nestMembers.put(member, immutable));
+                });
+        return new HiveExpectations(Map.copyOf(cells), Map.copyOf(nestMembers));
+    }
+
+    /**
+     * Bounded first-visible nest check from immutable snapshots published by the two owning
+     * projectors.  It deliberately does no world-plan compilation and no owner enumeration.
+     */
+    static RuntimeCoherence runtimeNestCoherence(SubjectId organId, ServerLevel level, HiveExpectations expectations,
+                                                 Map<InfectionCell, InfectionOverlayCell> overlay) {
+        List<SubjectId> members = expectations.nestMembers().get(organId);
+        if (members == null) return RuntimeCoherence.CONFLICT;
         boolean pending = false;
-        for (HiveOrgan candidate : java.util.stream.Stream.concat(state.bootstrap().hive().organs().stream(), state.hiveColony().addedOrgans().values().stream())
-                .filter(value -> value.nestId().equals(selected.nestId())).sorted(Comparator.comparing(HiveOrgan::id)).toList()) {
-            RuntimeCoherence coherence = runtimeCoherence(state, candidate.id(), level, structuralBaseline);
+        for (SubjectId candidate : members) {
+            RuntimeCoherence coherence = runtimeCoherence(candidate, level, expectations.cells().get(candidate), overlay);
             if (coherence == RuntimeCoherence.CONFLICT) return RuntimeCoherence.CONFLICT;
             if (coherence == RuntimeCoherence.PENDING) pending = true;
         }
@@ -157,8 +178,22 @@ final class FrontierV3HiveFoundryAudit {
      * checked as a sixteen-column unit: a matching carpet under a single column is not evidence
      * for a coherent infestation.
      */
-    private static RuntimeCoherence infectionCoherence(FrontierWorldState state, Set<BlockPosition> organCells, ServerLevel level) {
-        Map<InfectionCell, InfectionOverlayCell> desired = FrontierInfectionOverlayPlan.compile(state).cells();
+    private static RuntimeCoherence runtimeCoherence(SubjectId organId, ServerLevel level, List<GrayboxCell> expected,
+                                                     Map<InfectionCell, InfectionOverlayCell> desired) {
+        if (expected == null || expected.isEmpty()) return RuntimeCoherence.CONFLICT;
+        FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
+        boolean pending = false;
+        for (GrayboxCell cell : expected) {
+            BlockPos position = minecraft(cell.position());
+            if (!level.hasChunkAt(position)) { pending = true; continue; }
+            RuntimeCellStatus status = classify(cell, ledger.claim(position), observed(cell, level.getBlockState(position)));
+            if (status == RuntimeCellStatus.MISMATCH) return RuntimeCoherence.CONFLICT;
+            if (status == RuntimeCellStatus.PENDING) pending = true;
+        }
+        return pending ? RuntimeCoherence.PENDING : infectionCoherence(expected.stream().map(GrayboxCell::position).collect(java.util.stream.Collectors.toUnmodifiableSet()), desired, level);
+    }
+
+    private static RuntimeCoherence infectionCoherence(Set<BlockPosition> organCells, Map<InfectionCell, InfectionOverlayCell> desired, ServerLevel level) {
         Set<InfectionCell> organInfection = organCells.stream().map(InfectionCell::at)
                 .filter(desired::containsKey).collect(java.util.stream.Collectors.toSet());
         FrontierV3InfectionOverlayLedger ledger = FrontierV3InfectionOverlayLedger.get(level);
@@ -177,6 +212,8 @@ final class FrontierV3HiveFoundryAudit {
         }
         return pending ? RuntimeCoherence.PENDING : RuntimeCoherence.CURRENT;
     }
+
+    record HiveExpectations(Map<SubjectId, List<GrayboxCell>> cells, Map<SubjectId, List<SubjectId>> nestMembers) { }
 
     private static void inspectRuntime(Map<BlockPosition, GrayboxCell> expected, SubjectId organId, ServerLevel level,
                                        FoundryAuditPhase phase, List<FoundryFinding> findings, List<FoundryMetric> metrics) {

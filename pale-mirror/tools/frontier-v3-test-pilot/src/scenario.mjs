@@ -108,6 +108,12 @@ export function validateScenario(scenario) {
       || scenario.server.viewDistance < 2 || scenario.server.viewDistance > 32)) {
     throw new Error('server.viewDistance must be an integer 2..32');
   }
+  if (scenario.zeroPlayerPrelude !== undefined && (!scenario.zeroPlayerPrelude
+      || !Number.isInteger(scenario.zeroPlayerPrelude.advanceTicks) || scenario.zeroPlayerPrelude.advanceTicks < 24_000
+      || scenario.zeroPlayerPrelude.advanceTicks > 240_000 || !Number.isInteger(scenario.zeroPlayerPrelude.timeoutMs)
+      || scenario.zeroPlayerPrelude.timeoutMs < 1_000 || scenario.zeroPlayerPrelude.timeoutMs > 300_000)) {
+    throw new Error('zeroPlayerPrelude needs one bounded canonical advance before any client is launched');
+  }
   if (scenario.restart !== undefined && (!scenario.restart || !Number.isInteger(scenario.restart.afterAction)
       || scenario.restart.afterAction < 1 || scenario.restart.afterAction >= (scenario.actions ?? []).length
       || !['graceful', 'abrupt'].includes(scenario.restart.mode)

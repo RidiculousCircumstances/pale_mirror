@@ -9,10 +9,11 @@ const declaration = JSON.parse(await readFile(new URL('../scenarios/disposable-f
 
 function observed(actionStep, value) { return { observed: { actionStep, value } }; }
 function manifest() {
-  return { status: 'ok', scenarioId: declaration.id, recovery: { mode: 'graceful', splitAfterAction: 11 },
+  return { status: 'ok', scenarioId: declaration.id, recovery: { mode: 'graceful', splitAfterAction: 10 },
+    zeroPlayerPrelude: { status: 'completed', advanceTicks: 24000, command: 'pale_mirror v3 advance 24000', clientSegmentsBeforeCompletion: 0, serverPid: 1234 },
     actions: declaration.actions.map(action => ({ action: structuredClone(action) })), diagnostics: [
-      observed(2, cold()), observed(3, ingress()), observed(4, { kind: 'first_visibility', id: '24,-23', status: 'ok', visibility: 'READY', staticCells: 18, replicaRevision: 71 }),
-      observed(11, conflict()), observed(12, conflict()), observed(14, ingress()), observed(15, conflict())
+      observed(1, cold()), observed(2, ingress()), observed(3, { kind: 'first_visibility', id: '24,-23', status: 'ok', visibility: 'READY', staticCells: 18, replicaRevision: 71 }),
+      observed(10, conflict()), observed(11, conflict()), observed(13, ingress()), observed(14, conflict())
     ] };
 }
 function cold() { return { kind: 'site', id: 'site:4-wheat-field', status: 'ok', phase: 'HARVESTING', growthStage: 7,
@@ -24,13 +25,13 @@ function conflict() { return { kind: 'site', id: 'site:4-wheat-field', status: '
 test('F0.6 declaration admits the production first-visibility vocabulary and bounds ordinary intervention continuity', () => {
   validateScenario(declaration);
   assert.deepEqual(assertF06ObserverNeutralityDeclaration(declaration).arrival, { x: 388, y: 65, z: -355 });
-  const stale = structuredClone(declaration); stale.actions[3].id = '23,-22';
+  const stale = structuredClone(declaration); stale.actions[2].id = '23,-22';
   assert.throws(() => assertF06ObserverNeutralityDeclaration(stale), /first-visibility/);
   const unsafe = structuredClone(declaration); [unsafe.actions[0], unsafe.actions[1]] = [unsafe.actions[1], unsafe.actions[0]];
   assert.throws(() => assertF06ObserverNeutralityDeclaration(unsafe), /pre-ingress safe advance/);
-  const unrelated = structuredClone(declaration); unrelated.actions[9].position = { x: 388, y: 64, z: -355 };
+  const unrelated = structuredClone(declaration); unrelated.actions[8].position = { x: 388, y: 64, z: -355 };
   assert.throws(() => assertF06ObserverNeutralityDeclaration(unrelated), /exact field anchor/);
-  const cachedReturn = structuredClone(declaration); cachedReturn.actions[13] = {
+  const cachedReturn = structuredClone(declaration); cachedReturn.actions[12] = {
     type: 'wait_until_diagnostic', view: 'site', id: 'site:4-wheat-field', expect: { status: 'ok', phase: 'CONFLICT' }, timeoutMs: 30000
   };
   assert.throws(() => assertF06ObserverNeutralityDeclaration(cachedReturn), /first-visibility\/intervention continuity/);
@@ -38,13 +39,13 @@ test('F0.6 declaration admits the production first-visibility vocabulary and bou
 
 test('F0.6 carrier requires natural static readiness before visible/dynamic work and retains intervention through restart/return', () => {
   const facts = assertF06ObserverNeutralityCarrier({ declaration, manifest: manifest() });
-  assert.deepEqual(facts, { chunk: '24,-23', coldGrowthStage: 7, coldJob: 'job:site-harvest-4-wheat-field-1', replicaRevision: 71, staticCells: 18,
+  assert.deepEqual(facts, { zeroPlayerPrelude: true, chunk: '24,-23', coldGrowthStage: 7, coldJob: 'job:site-harvest-4-wheat-field-1', replicaRevision: 71, staticCells: 18,
     intervention: 'site:4-wheat-field', restartContinuity: true, returnContinuity: true });
 });
 
 test('F0.6 carrier reads assertion-bound facts once when a native manifest also retains raw diagnostic context', () => {
   const value = manifest();
-  value.diagnostics.push({ actionStep: 4, value: structuredClone(value.diagnostics[2].observed.value) });
+  value.diagnostics.push({ actionStep: 3, value: structuredClone(value.diagnostics[2].observed.value) });
   assert.equal(assertF06ObserverNeutralityCarrier({ declaration, manifest: value }).chunk, '24,-23');
 });
 
@@ -52,7 +53,7 @@ test('F0.6 carrier rejects an unobserved static chunk, client-only arrival, and 
   for (const mutate of [
     value => { value.diagnostics[2].observed.value.visibility = 'STATIC_CURRENT'; },
     value => { value.diagnostics[2].observed.value.staticCells = 0; },
-    value => { value.actions[2].action.dimension = 'minecraft:overworld'; },
+    value => { value.actions[1].action.dimension = 'minecraft:overworld'; },
     value => { value.diagnostics[3].observed.value.phase = 'GROWING'; },
     value => { value.diagnostics.push(structuredClone(value.diagnostics[2])); }
   ]) {

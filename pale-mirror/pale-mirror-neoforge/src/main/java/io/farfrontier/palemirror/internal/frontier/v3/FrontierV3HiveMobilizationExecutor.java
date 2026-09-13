@@ -95,9 +95,11 @@ final class FrontierV3HiveMobilizationExecutor {
         // expose its local chunk before the rest of the hibernaculum is resident/current; hold
         // the release boundary until the complete exact organ is coherent, and never repair a
         // pending or foreign scope from this effect owner.
-        if (FrontierV3GrayboxExecutor.publishedStructuralBaseline(runtime)
-                .map(plan -> FrontierV3HiveFoundryAudit.runtimeNestCoherence(state, hibernaculum.id(), level, plan)
+        if (FrontierV3GrayboxExecutor.publishedHiveExpectations(runtime)
+                .flatMap(expectations -> FrontierV3InfectionOverlayExecutor.publishedOverlay(runtime)
+                        .map(overlay -> FrontierV3HiveFoundryAudit.runtimeNestCoherence(hibernaculum.id(), level, expectations, overlay)
                         == FrontierV3HiveFoundryAudit.RuntimeCoherence.CURRENT)
+                )
                 .orElse(false) == false) return;
         var modelPosition = HiveCocoonPlan.cocoonCell(hibernaculum, lifecycle.homeSlot().orElseThrow());
         BlockPos position = new BlockPos(modelPosition.x(), modelPosition.y(), modelPosition.z());
