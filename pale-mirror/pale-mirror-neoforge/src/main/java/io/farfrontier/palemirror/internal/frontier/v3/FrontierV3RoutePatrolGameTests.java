@@ -78,9 +78,11 @@ public final class FrontierV3RoutePatrolGameTests {
                     FrontierWorldState state = runtime.decodedState().orElseThrow();
                     RoutePatrol patrol = state.strategicPlans().routePatrols().get(fixture.taskId());
                     hotCheckpoint[0] = new RoutePatrolCheckpoint(patrol);
-                    // This is ordinary demand loss: the same player walks outside both the
-                    // demand and safe-drain radii, rather than a fixture deleting the scene.
-                    observer.setPos(fixture.handoff().x() + 256.5D, fixture.handoff().y() + 1.0D, fixture.handoff().z() + 256.5D);
+                    // This is ordinary demand loss: the observer leaves through the normal
+                    // connection path.  Directly changing a mock player's coordinates does
+                    // not update the tracked player section, so it is not valid physical
+                    // evidence that demand has actually departed.
+                    releaseDemand(observer);
                 }
             });
         }
