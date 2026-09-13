@@ -64,6 +64,40 @@ public final class FrontierV3RoutePatrolGameTests {
         });
     }
 
+    /** Ordinary observer loss releases the same exact HOT checkpoint; it is not a new patrol admission. */
+    @GameTest(batch = "pm-frontier-v3-scene-z-route-patrol-return", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 285)
+    public static void ordinaryDemandLossReturnsTheUnchangedFormationAndCursorToCold(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); Fixture fixture = fixture(helper, "ordinary-return"); prepareRouteFloor(level, fixture);
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(fixture.state()); ServerPlayer observer = demand(helper, fixture);
+        RoutePatrolCheckpoint[] hotCheckpoint = new RoutePatrolCheckpoint[1];
+        for (int turn = 1; turn <= 275; turn++) {
+            int current = turn;
+            helper.runAtTickTime(turn, () -> {
+                drive(level, runtime, fixture.taskId(), new RoutePatrolSceneObservation());
+                if (current == 30) {
+                    FrontierWorldState state = runtime.decodedState().orElseThrow();
+                    RoutePatrol patrol = state.strategicPlans().routePatrols().get(fixture.taskId());
+                    hotCheckpoint[0] = new RoutePatrolCheckpoint(patrol);
+                    // This is ordinary demand loss: the same player walks outside both the
+                    // demand and safe-drain radii, rather than a fixture deleting the scene.
+                    observer.setPos(fixture.handoff().x() + 256.5D, fixture.handoff().y() + 1.0D, fixture.handoff().z() + 256.5D);
+                }
+            });
+        }
+        helper.runAtTickTime(276, () -> {
+            FrontierWorldState returned = runtime.decodedState().orElseThrow();
+            SceneLease lease = returned.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isRoutePatrol).findFirst().orElseThrow();
+            RoutePatrol patrol = returned.strategicPlans().routePatrols().get(fixture.taskId());
+            helper.assertTrue(lease.status() == SceneLeaseStatus.CLOSED,
+                    "ordinary no-demand hysteresis must release the existing route-patrol lease to COLD");
+            helper.assertTrue(hotCheckpoint[0].patrol().equals(patrol),
+                    "ordinary demand loss must preserve the same patrol formation and cursor, not admit a replacement");
+            helper.assertTrue(FrontierRoutePatrolSceneSupport.bodies(patrol).equals(memberLocations(returned, patrol)),
+                    "released patrol member locations must equal the retained exact formation");
+            runtime.shutdown(); releaseDemand(observer); helper.succeed();
+        });
+    }
+
     @GameTest(batch = "pm-frontier-v3-scene-z-route-patrol-blocked", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
     public static void occupiedRetainedNextBodyBlocksTheSameDemandedPatrol(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); Fixture fixture = fixture(helper, "occupied"); prepareRouteFloor(level, fixture);
@@ -197,6 +231,14 @@ public final class FrontierV3RoutePatrolGameTests {
 
     private record Fixture(FrontierWorldState state, SubjectId taskId, List<SurfaceAnchor> surfaces, BlockPosition handoff,
                            BodyPosition nextLeaderBody) { }
+
+    private static Map<SubjectId, BodyPosition> memberLocations(FrontierWorldState state, RoutePatrol patrol) {
+        Map<SubjectId, BodyPosition> locations = new LinkedHashMap<>();
+        patrol.memberIds().forEach(member -> locations.put(member, state.actorLocations().get(member).body()));
+        return Map.copyOf(locations);
+    }
+
+    private record RoutePatrolCheckpoint(RoutePatrol patrol) { }
 
     /** Captures the transient physical proof before a finite patrol safely returns to COLD. */
     private static final class RoutePatrolSceneObservation {
