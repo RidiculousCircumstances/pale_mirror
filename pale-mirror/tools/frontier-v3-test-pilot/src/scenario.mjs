@@ -424,7 +424,9 @@ function validResolvablePosition(value) {
         && ['productionCurrent', 'productionNext', 'productionNextBody', 'productionFutureBody'].includes(reference.field))
       || (reference.view === 'scene' && requiredId(reference.id, 'service:') && reference.field === 'serviceCurrent')
       || (reference.view === 'scene' && requiredId(reference.id, 'task:')
-        && ['patrolCurrent', 'patrolNextSurface', 'patrolNextBody'].includes(reference.field)));
+        && ['patrolCurrent', 'patrolNextSurface', 'patrolNextBody'].includes(reference.field))
+      || (reference.view === 'scene' && requiredId(reference.id, 'assault:')
+        && ['marchCurrent', 'marchNextBody'].includes(reference.field)));
 }
 
 function validPlacePosition(value) {

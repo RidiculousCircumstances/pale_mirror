@@ -336,7 +336,8 @@ public final class FrontierSceneBehaviors {
                                                          StrategicPlanState plans, ResourceSiteState resourceSites, Map<SubjectId, ProductionJob> productionJobs,
                                                          Map<SubjectId, SettlementServiceWork> serviceWorks, SceneLease lease, Set<SubjectId> leasedOperations) {
             SettlementAssault assault = FrontierSettlementAssaultSceneSupport.require(plans, cause(lease));
-            boolean march = assault.tacticalPlan().phase() == TacticalPlanPhase.TRAVEL;
+            boolean march = assault.tacticalPlan().phase() == TacticalPlanPhase.TRAVEL
+                    || assault.tacticalPlan().phase() == TacticalPlanPhase.RETREAT && !assault.march().complete();
             if (!march && !FrontierSettlementAssaultSceneSupport.targetIntact(bootstrap, structures, assault) && lease.status() != SceneLeaseStatus.CLOSED) throw new IllegalArgumentException("active assault scene target geometry is destroyed");
             boolean valid = switch (lease.status()) {
                 case PREPARED -> assault.status() == SettlementAssaultStatus.COLD_COMBAT || assault.status() == SettlementAssaultStatus.APPROACHING;
@@ -389,7 +390,13 @@ public final class FrontierSceneBehaviors {
             // Keep the same durable assault, roster and authority.  The physical scene may
             // drain naturally, but it can no longer commit a contact receipt or regain a
             // replacement controller from ambient Minecraft state.
-            StrategicPlanState plans = state.strategicPlans().replaceSettlementAssault(assault.retreatAfterOverseerLoss(actorId));
+            SettlementAssault next = assault.retreatAfterOverseerLoss(actorId);
+            if (assault.tacticalPlan().phase() == TacticalPlanPhase.TRAVEL && !assault.march().complete()) {
+                ExpeditionMarchIssue issue = new ExpeditionMarchIssue(ExpeditionMarchIssueKind.CONTROLLER_LOST, actorId,
+                        assault.march().memberTopologies().get(actorId).edgeAfterCursor(assault.march().cursor()).id(), assault.march().cursor());
+                next = assault.recordMarchIssue(issue).retreatAfterOverseerLoss(actorId);
+            }
+            StrategicPlanState plans = state.strategicPlans().replaceSettlementAssault(next);
             return new SceneDeathOutcome(state.humanPopulation(), state.resourceSites(), plans,
                     state.physicalIntents(), state.serviceWorks());
         }

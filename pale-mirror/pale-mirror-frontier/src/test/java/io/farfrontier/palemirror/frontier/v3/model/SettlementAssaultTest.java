@@ -269,6 +269,52 @@ class SettlementAssaultTest {
         assertEquals(hotAssault.march().cursor() + 1, advanced.strategicPlans().settlementAssaults().get(hotAssault.id()).march().cursor());
     }
 
+    @Test void retainsTypedMarchObstructionAndControllerLossOnTheSameHotExpedition() {
+        for (ExpeditionMarchIssueKind kind : List.of(ExpeditionMarchIssueKind.BLOCKED_EDGE,
+                ExpeditionMarchIssueKind.OCCUPIED_NEXT_BODY, ExpeditionMarchIssueKind.MISSING_OWNED_BODY)) {
+            HotMarch hot = hotMarch("typed-march-" + kind.name().toLowerCase(), 94L);
+            SettlementAssault assault = hot.assault();
+            ExpeditionMarchIssue issue = new ExpeditionMarchIssue(kind, assault.overseerId(),
+                    assault.march().memberTopologies().get(assault.overseerId()).edgeAfterCursor(assault.march().cursor()).id(), assault.march().cursor());
+            FrontierWorldState conflicted = HiveSettlementAssaultProcess.reduceMarchIssueObserved(hot.state(), assault.hiveId(),
+                    new SettlementAssaultMarchIssueObserved(assault.id(), hot.lease().id(), issue));
+            SettlementAssault retained = conflicted.strategicPlans().settlementAssaults().get(assault.id());
+            assertEquals(SettlementAssaultStatus.CONFLICT, retained.status());
+            assertEquals(TacticalPlanPhase.TRAVEL, retained.tacticalPlan().phase());
+            assertEquals(issue, retained.march().issue().orElseThrow());
+            assertEquals(SceneLeaseStatus.CONFLICT, conflicted.sceneLeases().get(hot.lease().id()).status());
+            FrontierWorldState restored = new FrontierWorldStateCodec(conflicted.bootstrap()).decode(new FrontierWorldStateCodec(conflicted.bootstrap()).encode(conflicted));
+            assertEquals(issue, restored.strategicPlans().settlementAssaults().get(assault.id()).march().issue().orElseThrow(),
+                    "the terminal typed issue survives the canonical snapshot envelope");
+        }
+
+        HotMarch controllerHot = hotMarch("typed-controller-loss", 95L);
+        SettlementAssault controllerAssault = controllerHot.assault();
+        FrontierWorldState afterDeath = controllerHot.state().recordActorDeath(new ActorDied(controllerHot.lease().id(), controllerAssault.overseerId(),
+                controllerHot.lease().memberPosition(controllerAssault.overseerId()), "test-march-controller-loss"), 19L);
+        SettlementAssault controllerRetreat = afterDeath.strategicPlans().settlementAssaults().get(controllerAssault.id());
+        assertEquals(ExpeditionMarchIssueKind.CONTROLLER_LOST, controllerRetreat.march().issue().orElseThrow().kind());
+        assertEquals(TacticalPlanPhase.RETREAT, controllerRetreat.tacticalPlan().phase());
+        assertEquals(controllerAssault.expeditionId(), controllerRetreat.expeditionId());
+    }
+
+    private static HotMarch hotMarch(String suffix, long seed) {
+        FrontierDevelopmentScenarios.SettlementAssaultFixture fixture = FrontierDevelopmentScenarios.startedSettlementAssaultFixture(
+                new WorldId("frontier:" + suffix), seed);
+        FrontierWorldState state = fixture.state();
+        SettlementAssault assault = state.strategicPlans().settlementAssaults().get(fixture.assaultId());
+        SettlementAssaultSceneCandidate candidate = FrontierSettlementAssaultSceneSupport.marchCandidate(state, assault).orElseThrow();
+        List<SceneMember> members = candidate.memberPositions().keySet().stream().sorted()
+                .map(id -> new SceneMember(id, SceneLease.deterministicEntityId(state.bootstrap().worldId(), id))).toList();
+        SceneLease lease = SceneLease.forCause(new SceneLeaseId("lease:" + suffix), state.bootstrap().worldId(),
+                new SettlementAssaultSceneCause(assault.id(), assault.settlementId()), candidate.handoffPosition(), fixture.instant(), 3L,
+                SceneLeaseStatus.PREPARED, members, SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), Set.of(), Optional.empty());
+        FrontierWorldState hot = state.prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT);
+        return new HotMarch(hot, hot.strategicPlans().settlementAssaults().get(assault.id()), lease);
+    }
+
+    private record HotMarch(FrontierWorldState state, SettlementAssault assault, SceneLease lease) { }
+
     private static PhysicalIntent strike(FrontierWorldState state, SceneLease lease, SubjectId cause, SubjectId attacker, SubjectId target) {
         return new PhysicalIntent(SettlementAssaultStrikeReceiptBinding.intentId(state, lease, cause), PhysicalIntentKind.SCENE_STRIKE,
                 PhysicalIntentStatus.PREPARED, cause, List.of(attacker, target),

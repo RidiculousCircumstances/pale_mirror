@@ -315,7 +315,9 @@ final class FrontierV3TestPilotScenario {
                 || diagnosticField.equals("productionFutureBody")))
                 || (view.equals("scene") && requiredId(reference, "id", "service:") && diagnosticField.equals("serviceCurrent"))
                 || (view.equals("scene") && requiredId(reference, "id", "task:")
-                && (diagnosticField.equals("patrolCurrent") || diagnosticField.equals("patrolNextSurface") || diagnosticField.equals("patrolNextBody")));
+                && (diagnosticField.equals("patrolCurrent") || diagnosticField.equals("patrolNextSurface") || diagnosticField.equals("patrolNextBody")))
+                || (view.equals("scene") && requiredId(reference, "id", "assault:")
+                && (diagnosticField.equals("marchCurrent") || diagnosticField.equals("marchNextBody")));
     }
 
     /** An ordinary player may place at its observed route future body or exact container position. */

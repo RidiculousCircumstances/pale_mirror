@@ -99,6 +99,10 @@ public record SettlementAssault(SubjectId id, SubjectId taskId, SubjectId hiveId
         ExpeditionMarch next = march.advanceFormation();
         return new SettlementAssault(id, taskId, hiveId, sighting, overseerId, attackers, next, defenderUnit, tacticalPlan, status, nextStrikeEpoch, outcome);
     }
+    public SettlementAssault recordMarchIssue(ExpeditionMarchIssue issue) {
+        return new SettlementAssault(id, taskId, hiveId, sighting, overseerId, attackers, march.recordIssue(issue), defenderUnit,
+                tacticalPlan, status, nextStrikeEpoch, outcome);
+    }
 
     private SettlementAssaultFront front(String lane, List<SubjectId> members) {
         return new SettlementAssaultFront(new SubjectId("front:" + id.value().substring("assault:".length()).replace(':', '-') + "-" + lane),
@@ -129,6 +133,7 @@ public record SettlementAssault(SubjectId id, SubjectId taskId, SubjectId hiveId
                 : next == SettlementAssaultStatus.APPROACHING ? tacticalPlan.withPhase(TacticalPlanPhase.TRAVEL)
                 : next == SettlementAssaultStatus.HOT && !march.complete() ? tacticalPlan.withPhase(TacticalPlanPhase.TRAVEL)
                 : next == SettlementAssaultStatus.COLD_COMBAT && tacticalPlan.phase() == TacticalPlanPhase.RETREAT ? tacticalPlan
+                : next == SettlementAssaultStatus.CONFLICT && (tacticalPlan.phase() == TacticalPlanPhase.TRAVEL || tacticalPlan.phase() == TacticalPlanPhase.RETREAT) ? tacticalPlan
                 : tacticalPlan.withPhase(TacticalPlanPhase.CONTACT);
         return new SettlementAssault(id, taskId, hiveId, sighting, overseerId, attackers, march, defenderUnit, nextPlan, next, nextStrikeEpoch, Optional.empty());
     }

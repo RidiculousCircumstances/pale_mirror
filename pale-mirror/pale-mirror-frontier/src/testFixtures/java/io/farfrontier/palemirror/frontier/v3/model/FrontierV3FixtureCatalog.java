@@ -46,6 +46,7 @@ public final class FrontierV3FixtureCatalog {
             Map.entry("autonomousSupplyInterception", FrontierV3FixtureCatalog::autonomousSupplyInterceptionConfiguration),
             Map.entry("hotSceneStrike", FrontierV3FixtureCatalog::hotSceneStrikeConfiguration),
             Map.entry("settlementAssault", FrontierV3FixtureCatalog::settlementAssaultConfiguration),
+            Map.entry("expeditionMarch", FrontierV3FixtureCatalog::expeditionMarchConfiguration),
             Map.entry("multiFrontPressure", FrontierV3FixtureCatalog::multiFrontPressureConfiguration),
             Map.entry("coldBomberAftermath", FrontierV3FixtureCatalog::coldBomberAftermathConfiguration),
             Map.entry("defenderEquipment", FrontierV3FixtureCatalog::defenderEquipmentConfiguration),
@@ -117,6 +118,12 @@ public final class FrontierV3FixtureCatalog {
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> settlementAssaultConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.SettlementAssaultFixture fixture = FrontierDevelopmentScenarios.settlementAssaultFixture(worldId, seed);
         return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), true);
+    }
+
+    /** Candidate-bound approach fixture: mobilisation has departed, but no COLD edge is pre-run. */
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> expeditionMarchConfiguration(WorldId worldId, long seed) {
+        FrontierDevelopmentScenarios.SettlementAssaultFixture fixture = FrontierDevelopmentScenarios.startedSettlementAssaultFixture(worldId, seed);
+        return configured(worldId, fixture.state(), fixture.instant(), List.of(), true);
     }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> multiFrontPressureConfiguration(WorldId worldId, long seed) {

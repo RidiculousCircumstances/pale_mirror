@@ -196,6 +196,10 @@ public final class HiveSettlementAssaultProcess {
         return FrontierSettlementAssaultSceneSupport.advanceFormationObserved(state, subject, observed);
     }
 
+    public static FrontierWorldState reduceMarchIssueObserved(FrontierWorldState state, SubjectId subject, SettlementAssaultMarchIssueObserved observed) {
+        return FrontierSettlementAssaultSceneSupport.recordMarchIssue(state, subject, observed);
+    }
+
     public static FrontierWorldState reduceTransition(FrontierWorldState state, SubjectId subject, SettlementAssaultTransition transition) {
         SettlementAssault assault = assault(state, transition.assaultId());
         boolean waiting = transition.status() == SettlementAssaultStatus.WAITING_FOR_BATTLE

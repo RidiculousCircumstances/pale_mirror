@@ -83,6 +83,11 @@ final class FrontierV3SceneDiagnosticJson {
                 + "\",\"strikeReceipt\":\"" + FrontierV3DiagnosticJson.quote(strike == null ? "" : strike.postconditionObservationId().map(value -> value.value()).orElse("")) + "\""
                 + ",\"strikeEpoch\":" + strikeEpoch + ",\"nextStrikeEpoch\":" + (assaultState == null ? -1 : assaultState.nextStrikeEpoch())
                 + ",\"assaultStatus\":\"" + (assaultState == null ? "" : assaultState.status()) + "\""
+                + ",\"marchCursor\":" + (assaultState == null ? -1 : assaultState.march().cursor())
+                + ",\"marchEdges\":" + (assaultState == null ? -1 : assaultState.march().edgeCount())
+                + ",\"marchIssue\":\"" + (assaultState == null ? "" : assaultState.march().issue().map(value -> value.kind().name()).orElse("")) + "\""
+                + ",\"marchController\":\"" + FrontierV3DiagnosticJson.quote(assaultState == null ? "" : assaultState.overseerId().value()) + "\""
+                + marchTraversal(assaultState)
                 + ",\"strikeReceiptExact\":" + exactReceipt + ",\"strikeHealthChanged\":" + healthChanged
                 + ",\"strikeHealthBefore\":" + (receipt == null ? -1 : receipt.targetHealthBefore().raw())
                 + ",\"strikeHealthAfter\":" + (receipt == null ? -1 : receipt.targetHealthAfter().raw())
@@ -132,6 +137,18 @@ final class FrontierV3SceneDiagnosticJson {
                 + ",\"patrolCurrent\":" + FrontierV3DiagnosticJson.position(leader.supportingSurface().support())
                 + ",\"patrolNextSurface\":" + (nextBody == null ? "null" : FrontierV3DiagnosticJson.position(nextBody.supportingSurface().support()))
                 + ",\"patrolNextBody\":" + (nextBody == null ? "null" : FrontierV3DiagnosticJson.position(nextBody));
+    }
+
+    private static String marchTraversal(SettlementAssault assault) {
+        if (assault == null) return ",\"marchCurrent\":null,\"marchNextBody\":null";
+        var current = assault.formationBodies().get(assault.overseerId());
+        io.farfrontier.palemirror.frontier.v3.model.BodyPosition next = null;
+        if (!assault.march().complete() && assault.march().issue().isEmpty()) {
+            try { next = assault.nextFormationBodies().get(assault.overseerId()); }
+            catch (IllegalArgumentException unavailable) { next = null; }
+        }
+        return ",\"marchCurrent\":" + FrontierV3DiagnosticJson.position(current.supportingSurface().support())
+                + ",\"marchNextBody\":" + (next == null ? "null" : FrontierV3DiagnosticJson.position(next));
     }
 
     private static SceneLease currentLease(FrontierWorldState state, SubjectId sceneSubject) {

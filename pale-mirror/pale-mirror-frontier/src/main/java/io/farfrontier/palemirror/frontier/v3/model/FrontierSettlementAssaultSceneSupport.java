@@ -108,6 +108,26 @@ public final class FrontierSettlementAssaultSceneSupport {
         return state.withChanges(FrontierWorldStateUpdate.begin().strategicPlans(state.strategicPlans().replaceSettlementAssault(next)).sceneLeases(leases));
     }
 
+    /** Closes the exact loaded march lease with durable, member/edge-specific evidence. */
+    public static FrontierWorldState recordMarchIssue(FrontierWorldState state, SubjectId subject,
+                                                       SettlementAssaultMarchIssueObserved observed) {
+        SettlementAssault assault = state.strategicPlans().settlementAssaults().get(observed.assaultId());
+        if (assault == null || !subject.equals(assault.hiveId()) || assault.status() != SettlementAssaultStatus.HOT
+                || assault.tacticalPlan().phase() != TacticalPlanPhase.TRAVEL) {
+            throw new IllegalArgumentException("expedition march issue has no current HOT travel owner");
+        }
+        SceneLease lease = state.sceneLeases().get(observed.leaseId());
+        if (lease == null || lease.status() != SceneLeaseStatus.HOT || !FrontierSceneBehaviors.isSettlementAssault(lease)
+                || !FrontierSceneBehaviors.settlementAssault(lease).assaultId().equals(assault.id())
+                || !lease.memberPositions().equals(assault.formationBodies())) {
+            throw new IllegalArgumentException("expedition march issue has no matching current lease/cursor");
+        }
+        SettlementAssault blocked = assault.recordMarchIssue(observed.issue()).withStatus(SettlementAssaultStatus.CONFLICT);
+        Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases());
+        leases.put(lease.id(), lease.withStatus(SceneLeaseStatus.CONFLICT));
+        return state.withChanges(FrontierWorldStateUpdate.begin().strategicPlans(state.strategicPlans().replaceSettlementAssault(blocked)).sceneLeases(leases));
+    }
+
     static boolean targetIntact(FrontierWorldState state, SettlementAssault assault) {
         return targetIntact(state.bootstrap(), state.structureConditions(), assault);
     }

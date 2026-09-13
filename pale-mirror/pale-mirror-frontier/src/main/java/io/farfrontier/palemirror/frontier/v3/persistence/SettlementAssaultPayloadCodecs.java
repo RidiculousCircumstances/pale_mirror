@@ -18,7 +18,7 @@ import java.util.Optional;
 final class SettlementAssaultPayloadCodecs {
     private SettlementAssaultPayloadCodecs() { }
 
-    static PayloadCodecs codecs() { return new PayloadCodecs(List.of(started(), advanced(), formationObserved(), transition(), strike(), resolved())); }
+    static PayloadCodecs codecs() { return new PayloadCodecs(List.of(started(), advanced(), formationObserved(), marchIssueObserved(), transition(), strike(), resolved())); }
 
     static PayloadCodec started() { return new PayloadCodec() {
         @Override public String type() { return "frontier.settlement_assault_started"; }
@@ -78,6 +78,28 @@ final class SettlementAssaultPayloadCodecs {
                 java.util.Map<SubjectId, BodyPosition> bodies = new java.util.LinkedHashMap<>();
                 for (int index = 0, count = input.readUnsignedByte(); index < count; index++) bodies.put(subject(input), BodyPosition.above(new SurfaceAnchor(position(input))));
                 return new SettlementAssaultFormationObserved(assault, lease, bodies);
+            });
+        }
+    }; }
+
+    static PayloadCodec marchIssueObserved() { return new PayloadCodec() {
+        @Override public String type() { return "frontier.settlement_assault_march_issue_observed"; }
+        @Override public byte[] encode(FrontierPayload payload) {
+            return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+                SettlementAssaultMarchIssueObserved value = (SettlementAssaultMarchIssueObserved) payload;
+                subject(output, value.assaultId()); FrontierWorldPayloadCodecs.writeString(output, value.leaseId().value());
+                output.writeByte(value.issue().kind().ordinal()); subject(output, value.issue().memberId());
+                FrontierWorldPayloadCodecs.writeString(output, value.issue().edgeId().value()); output.writeShort(value.issue().expectedCursor());
+            });
+        }
+        @Override public FrontierPayload decode(byte[] bytes) {
+            return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
+                SubjectId assault = subject(input); var lease = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(FrontierWorldPayloadCodecs.readString(input));
+                int kind = input.readUnsignedByte();
+                if (kind >= ExpeditionMarchIssueKind.values().length) throw new IllegalArgumentException("unknown expedition march issue kind");
+                ExpeditionMarchIssue issue = new ExpeditionMarchIssue(ExpeditionMarchIssueKind.values()[kind], subject(input),
+                        new TraversalEdgeId(FrontierWorldPayloadCodecs.readString(input)), input.readUnsignedShort());
+                return new SettlementAssaultMarchIssueObserved(assault, lease, issue);
             });
         }
     }; }
@@ -159,11 +181,21 @@ final class SettlementAssaultPayloadCodecs {
         for (var entry : march.memberTopologies().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).toList()) {
             subject(output, entry.getKey()); TraversalTopologyStateCodec.write(output, entry.getValue());
         }
+        output.writeBoolean(march.issue().isPresent());
+        if (march.issue().isPresent()) writeIssue(output, march.issue().orElseThrow());
     }
     private static ExpeditionMarch readMarch(DataInputStream input) throws IOException {
         SubjectId overseer = subject(input); int cursor = input.readUnsignedShort(); java.util.Map<SubjectId, TraversalTopology> paths = new java.util.LinkedHashMap<>();
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) paths.put(subject(input), TraversalTopologyStateCodec.read(input));
-        return new ExpeditionMarch(overseer, cursor, paths);
+        Optional<ExpeditionMarchIssue> issue = input.readBoolean() ? Optional.of(readIssue(input)) : Optional.empty();
+        return new ExpeditionMarch(overseer, cursor, paths, issue);
+    }
+    private static void writeIssue(DataOutputStream output, ExpeditionMarchIssue issue) throws IOException {
+        output.writeByte(issue.kind().ordinal()); subject(output, issue.memberId()); FrontierWorldPayloadCodecs.writeString(output, issue.edgeId().value()); output.writeShort(issue.expectedCursor());
+    }
+    private static ExpeditionMarchIssue readIssue(DataInputStream input) throws IOException {
+        int kind = input.readUnsignedByte(); if (kind >= ExpeditionMarchIssueKind.values().length) throw new IllegalArgumentException("unknown expedition march issue kind");
+        return new ExpeditionMarchIssue(ExpeditionMarchIssueKind.values()[kind], subject(input), new TraversalEdgeId(FrontierWorldPayloadCodecs.readString(input)), input.readUnsignedShort());
     }
 
     private static void subject(DataOutputStream output, SubjectId value) throws IOException { FrontierWorldPayloadCodecs.writeSubject(output, value); }

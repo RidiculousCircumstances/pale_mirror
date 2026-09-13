@@ -11,6 +11,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
+import io.farfrontier.palemirror.frontier.v3.model.ExpeditionMarchIssue;
+import io.farfrontier.palemirror.frontier.v3.model.ExpeditionMarchIssueKind;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierGrayboxPlan;
@@ -29,6 +31,7 @@ import io.farfrontier.palemirror.frontier.v3.model.SettlementAssault;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCandidate;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultCauseIdentity;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultFormationObserved;
+import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultMarchIssueObserved;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCause;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneLeaseHandoff;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneLeasePrepared;
@@ -261,6 +264,10 @@ final class FrontierV3SettlementAssaultSceneExecutor {
                                    FrontierWorldState state, SceneLease lease) {
         SettlementAssault assault = FrontierSettlementAssaultSceneSupport.require(state, FrontierSceneBehaviors.settlementAssault(lease));
         if (assault.tacticalPlan().phase() == TacticalPlanPhase.TRAVEL) { executeMarch(level, runtime, state, lease, assault); return; }
+        if (assault.tacticalPlan().phase() == TacticalPlanPhase.RETREAT) {
+            submit(runtime, "expedition-retreat-draining", new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
+            return;
+        }
         FrontierV3SceneDemand.Snapshot demand = FrontierV3SceneExecutor.demandSnapshot(level, lease.handoffPosition());
         if (FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, lease.id(), level.getGameTime(), demand, playerWithinSafeRadius(level, lease))) {
             FrontierV3DiagnosticTrace.recordScene(level.getServer(), "settlement_assault_draining", lease,
@@ -303,18 +310,29 @@ final class FrontierV3SettlementAssaultSceneExecutor {
             return;
         }
         if (!demand.active()) return;
+        var blocked = assault.march().memberTopologies().entrySet().stream()
+                .filter(entry -> assault.march().cursor() < entry.getValue().edges().size()
+                        && !entry.getValue().edgeAfterCursor(assault.march().cursor()).traversableBy(
+                        io.farfrontier.palemirror.frontier.v3.model.TraversalCapability.GROUND_BIOFORM))
+                .findFirst();
+        if (blocked.isPresent()) {
+            marchIssue(level, runtime, lease, assault, blocked.orElseThrow().getKey(), ExpeditionMarchIssueKind.BLOCKED_EDGE);
+            return;
+        }
         Map<SubjectId, BodyPosition> targets;
-        try { targets = assault.nextFormationBodies(); } catch (IllegalArgumentException invalid) { conflict(level, runtime, lease, "march-no-open-edge"); return; }
+        try { targets = assault.nextFormationBodies(); } catch (IllegalArgumentException invalid) { marchIssue(level, runtime, lease, assault,
+                assault.overseerId(), ExpeditionMarchIssueKind.BLOCKED_EDGE); return; }
         boolean arrived = true;
         Set<java.util.UUID> members = lease.members().stream().map(SceneMember::entityId).collect(java.util.stream.Collectors.toSet());
         for (SceneMember member : lease.members()) {
             Entity entity = level.getEntity(member.entityId()); BodyPosition target = targets.get(member.actorId());
-            if (!(entity instanceof Mob mob) || !mob.isAlive() || target == null) { conflict(level, runtime, lease, "march-missing-owned-body"); return; }
+            if (!(entity instanceof Mob mob) || !mob.isAlive() || target == null) { marchIssue(level, runtime, lease, assault,
+                    member.actorId(), ExpeditionMarchIssueKind.MISSING_OWNED_BODY); return; }
             if (!FrontierV3SurfaceObservation.at(mob, target.supportingSurface())) {
                 arrived = false;
                 var bounds = mob.getBoundingBox().move(FrontierV3SurfaceObservation.point(target.supportingSurface()).subtract(mob.position()));
                 if (level.getBlockCollisions(mob, bounds).iterator().hasNext() || !level.getEntities(mob, bounds, value -> !members.contains(value.getUUID())).isEmpty()) {
-                    conflict(level, runtime, lease, "march-occupied-next-body"); return;
+                    marchIssue(level, runtime, lease, assault, member.actorId(), ExpeditionMarchIssueKind.OCCUPIED_NEXT_BODY); return;
                 }
                 FrontierV3ControlledMobMotion.moveToward(level, mob, FrontierV3SurfaceObservation.point(target.supportingSurface()));
             }
@@ -559,6 +577,23 @@ final class FrontierV3SettlementAssaultSceneExecutor {
     private static void conflict(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease, String reason) {
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "settlement_assault_conflict:" + reason, lease,
                 submit(runtime, "settlement-assault-conflict", new SceneLeaseTransition(lease.id(), SceneLeaseStatus.CONFLICT)));
+    }
+
+    private static void marchIssue(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease,
+                                   SettlementAssault assault, SubjectId member, ExpeditionMarchIssueKind kind) {
+        ExpeditionMarchIssue issue = new ExpeditionMarchIssue(kind, member, edgeAtCursor(assault, member), assault.march().cursor());
+        FrontierV3DiagnosticTrace.recordScene(level.getServer(), "expedition_march_" + kind.name().toLowerCase(java.util.Locale.ROOT), lease,
+                submit(runtime, "expedition-march-issue", new SettlementAssaultMarchIssueObserved(assault.id(), lease.id(), issue)));
+    }
+
+    private static io.farfrontier.palemirror.frontier.v3.model.TraversalEdgeId edgeAtCursor(SettlementAssault assault, SubjectId member) {
+        var matching = assault.march().memberTopologies().get(member);
+        if (matching != null && assault.march().cursor() < matching.edges().size()) {
+            return matching.edgeAfterCursor(assault.march().cursor()).id();
+        }
+        return assault.march().memberTopologies().values().stream()
+                .filter(topology -> assault.march().cursor() < topology.edges().size())
+                .findFirst().orElseThrow().edgeAfterCursor(assault.march().cursor()).id();
     }
 
     private static BodyPosition at(Entity entity) { return new BodyPosition(entity.getBlockX(), entity.getBlockY(), entity.getBlockZ()); }

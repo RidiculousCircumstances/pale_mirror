@@ -390,11 +390,21 @@ public final class StrategicPlanStateCodec {
         for (var entry : march.memberTopologies().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
             writeSubject(output, entry.getKey()); TraversalTopologyStateCodec.write(output, entry.getValue());
         }
+        output.writeBoolean(march.issue().isPresent());
+        if (march.issue().isPresent()) writeMarchIssue(output, march.issue().orElseThrow());
     }
     private static ExpeditionMarch readMarch(DataInputStream input) throws IOException {
         SubjectId overseer = readSubject(input); int cursor = input.readUnsignedShort(); Map<SubjectId, TraversalTopology> paths = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) paths.put(readSubject(input), TraversalTopologyStateCodec.read(input));
-        return new ExpeditionMarch(overseer, cursor, paths);
+        Optional<ExpeditionMarchIssue> issue = input.readBoolean() ? Optional.of(readMarchIssue(input)) : Optional.empty();
+        return new ExpeditionMarch(overseer, cursor, paths, issue);
+    }
+    private static void writeMarchIssue(DataOutputStream output, ExpeditionMarchIssue issue) throws IOException {
+        output.writeByte(issue.kind().ordinal()); writeSubject(output, issue.memberId()); FrontierWorldPayloadCodecs.writeString(output, issue.edgeId().value()); output.writeShort(issue.expectedCursor());
+    }
+    private static ExpeditionMarchIssue readMarchIssue(DataInputStream input) throws IOException {
+        int kind = input.readUnsignedByte(); if (kind >= ExpeditionMarchIssueKind.values().length) throw new IllegalArgumentException("unknown expedition march issue kind");
+        return new ExpeditionMarchIssue(ExpeditionMarchIssueKind.values()[kind], readSubject(input), new TraversalEdgeId(FrontierWorldPayloadCodecs.readString(input)), input.readUnsignedShort());
     }
     private static RoutePatrolBlockReason readPatrolBlockReason(DataInputStream input) throws IOException {
         return FrontierWireTags.require(RoutePatrolBlockReason.class, input.readUnsignedByte());
