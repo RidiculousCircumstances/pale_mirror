@@ -16,7 +16,7 @@
     { "type": "wait_until_diagnostic", "view": "scene", "id": "assault:development-settlement-assault", "expect": { "status": "ok", "sceneKind": "SETTLEMENT_ASSAULT", "leaseStatus": "HOT", "assaultStatus": "HOT", "marchCursor": 0, "marchIssue": "", "marchController": "bioform:west-23" }, "timeoutMs": 90000 },
     { "type": "look", "at": { "diagnostic": { "view": "scene", "id": "assault:development-settlement-assault", "field": "marchCurrent" } } },
     { "type": "assert_visible_entity", "entityType": "minecraft:zombie", "nameContains": "OVERSEER", "maxDistance": 32, "maxAngleDeg": 60, "timeoutMs": 30000 },
-    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 0, "y": 65, "z": 0 }, "settleMs": 0 },
+    { "type": "visit", "dimension": "minecraft:overworld", "position": { "x": 0, "y": 64, "z": 0 }, "settleMs": 0 },
     { "type": "wait_until_diagnostic", "view": "scene", "id": "assault:development-settlement-assault", "expect": { "status": "ok", "sceneKind": "SETTLEMENT_ASSAULT", "leaseStatus": "CLOSED", "assaultStatus": "APPROACHING", "marchIssue": "", "marchController": "bioform:west-23" }, "timeoutMs": 90000 },
     { "type": "inspect", "view": "trace", "id": "assault:assault:development-settlement-assault" }
   ],
