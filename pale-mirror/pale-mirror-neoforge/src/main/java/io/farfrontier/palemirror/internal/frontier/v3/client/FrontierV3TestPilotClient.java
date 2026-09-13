@@ -74,6 +74,8 @@ public final class FrontierV3TestPilotClient {
     private static long lastEntityAttackTick = Long.MIN_VALUE;
     private static Vec3 lastAttackedEntityPosition;
     private static CaptureBarrier captureBarrier;
+    /** Local-only focus retained while the asynchronous X11 frame handshake is in flight. */
+    private static Vec3 captureFocus;
     private static final Map<DiagnosticIdentity, ObservedDiagnostic> diagnostics = new HashMap<>();
     private FrontierV3TestPilotClient() { }
     @SubscribeEvent
@@ -98,7 +100,7 @@ public final class FrontierV3TestPilotClient {
             boardInteractionAttempted = false;
             entityInteractionAttempted = false;
             attackedEntityRuntimeId = -1; entityAttackAttempts = 0; lastEntityAttackTick = Long.MIN_VALUE; lastAttackedEntityPosition = null;
-            captureBarrier = null; diagnostics.clear();
+            captureBarrier = null; captureFocus = null; diagnostics.clear();
             FrontierV3TestPilotPresentation.clear(Minecraft.getInstance());
             if (FrontierV3PilotSessionControl.resumed()) {
                 FrontierV3PilotSessionControl.publishLifecycleSignal("same_client_reconnected_state_cleared", FrontierV3PilotSessionControl.lifecycleSegment(), new JsonObject());
@@ -458,6 +460,11 @@ public final class FrontierV3TestPilotClient {
     private static void assertVisibleBlock(Minecraft minecraft, JsonObject action) {
         BlockPos expected = resolvedPosition(minecraft, action, "position");
         if (expected == null) return;
+        // Teleport acknowledgement can carry the last server-facing yaw one client tick after a
+        // preceding look action.  Keep this read-only presentation assertion aimed locally while
+        // waiting; it still requires the actual target state in the rendered client level.
+        look(minecraft, expected);
+        captureFocus = Vec3.atCenterOf(expected);
         Vec3 delta = Vec3.atCenterOf(expected).subtract(minecraft.player.getEyePosition());
         double distance = delta.length();
         boolean aimed = distance > 0.0D && distance <= 128.0D
@@ -466,7 +473,11 @@ public final class FrontierV3TestPilotClient {
             advance("assert_visible_block"); return;
         }
         if ((minecraft.level.getGameTime() - actionStartedTick) * 50L >= action.get("timeoutMs").getAsLong()) {
-            throw new IllegalStateException("camera never targeted visible block " + expected);
+            throw new IllegalStateException("camera never targeted visible block " + expected
+                    + "; clientBlock=" + minecraft.level.getBlockState(expected)
+                    + " aimed=" + aimed + " distance=" + distance
+                    + " eye=" + minecraft.player.getEyePosition()
+                    + " view=" + minecraft.player.getViewVector(1.0F));
         }
     }
     /**
@@ -480,6 +491,10 @@ public final class FrontierV3TestPilotClient {
         double radius = action.has("radius") ? action.get("radius").getAsDouble() : 3.0D;
         double maxDistance = action.has("maxDistance") ? action.get("maxDistance").getAsDouble() : 64.0D;
         double maxAngle = Math.cos(Math.toRadians(action.has("maxAngleDeg") ? action.get("maxAngleDeg").getAsDouble() : 50.0D));
+        // See assertVisibleBlock: a received teleport yaw must not erase this purely local
+        // camera framing between the explicit look and the client-side rendered-entity check.
+        look(minecraft, anchor);
+        captureFocus = Vec3.atCenterOf(anchor);
         Vec3 eye = minecraft.player.getEyePosition(); Vec3 view = minecraft.player.getViewVector(1.0F).normalize(); Vec3 expected = Vec3.atCenterOf(anchor);
         boolean visible = minecraft.level.getEntitiesOfClass(Display.TextDisplay.class, minecraft.player.getBoundingBox().inflate(maxDistance), display -> {
             if (display.getCustomName() == null || !display.getCustomName().getString().contains(expectedText)
@@ -944,6 +959,7 @@ public final class FrontierV3TestPilotClient {
     /** A filesystem handshake prevents the next chat/command action racing the X11 capture. */
     private static void advanceCaptureBarrier(Minecraft minecraft) {
         CaptureBarrier barrier = captureBarrier;
+        if (captureFocus != null) look(minecraft, captureFocus);
         if (minecraft.level.getGameTime() < barrier.readyAtTick()) return;
         Path control = captureControlDirectory();
         if (control == null) throw new IllegalStateException("visual frame declared without capture-control directory");
@@ -959,7 +975,7 @@ public final class FrontierV3TestPilotClient {
             }
             if (Files.isRegularFile(captured)) {
                 Files.deleteIfExists(ready);
-                captureBarrier = null;
+                captureBarrier = null; captureFocus = null;
                 PaleMirrorMod.LOGGER.info("PMV3_PILOT frame_captured after={} name={}", barrier.after(), barrier.name());
                 if (index >= actions.size()) FrontierV3TestPilotCompletion.complete(actions.size());
             }
@@ -974,7 +990,7 @@ public final class FrontierV3TestPilotClient {
     private static void reset() {
         Minecraft minecraft = Minecraft.getInstance(); minecraft.options.keyUp.setDown(false);
         FrontierV3TestPilotPresentation.reset(minecraft);
-        actions = null; setup = null; frames = null; captureBarrier = null;
+        actions = null; setup = null; frames = null; captureBarrier = null; captureFocus = null;
         runningSetup = false; index = 0; actionStartedTick = -1L; breaking = false;
         visitSent = false; visitChunkReadyTick = -1L; visitIngress = null; visitHandshakeArmed = false; visitHandshakeBaseline = null;
         containerOpenAttempted = false; quickMoveAttempted = false; inspectSent = false; inspectBaseline = null;
@@ -986,7 +1002,7 @@ public final class FrontierV3TestPilotClient {
     private static void clearExpectedLossTransientState() {
         Minecraft minecraft = Minecraft.getInstance();
         minecraft.options.keyUp.setDown(false);
-        actions = null; setup = null; frames = null; captureBarrier = null;
+        actions = null; setup = null; frames = null; captureBarrier = null; captureFocus = null;
         runningSetup = false; index = 0; actionStartedTick = -1L; breaking = false;
         placementAttempted = false; visitSent = false; visitChunkReadyTick = -1L; visitIngress = null; visitHandshakeArmed = false; visitHandshakeBaseline = null;
         containerOpenAttempted = false; quickMoveAttempted = false; inspectSent = false; inspectBaseline = null;
