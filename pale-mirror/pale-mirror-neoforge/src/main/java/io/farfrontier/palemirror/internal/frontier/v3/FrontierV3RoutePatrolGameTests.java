@@ -70,7 +70,7 @@ public final class FrontierV3RoutePatrolGameTests {
         ServerLevel level = helper.getLevel(); Fixture fixture = fixture(helper, "ordinary-return"); prepareRouteFloor(level, fixture);
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(fixture.state()); ServerPlayer observer = demand(helper, fixture);
         RoutePatrolCheckpoint[] hotCheckpoint = new RoutePatrolCheckpoint[1];
-        for (int turn = 1; turn <= 275; turn++) {
+        for (int turn = 1; turn <= 276; turn++) {
             int current = turn;
             helper.runAtTickTime(turn, () -> {
                 drive(level, runtime, fixture.taskId(), new RoutePatrolSceneObservation());
@@ -84,7 +84,7 @@ public final class FrontierV3RoutePatrolGameTests {
                 }
             });
         }
-        helper.runAtTickTime(276, () -> {
+        helper.runAtTickTime(277, () -> {
             FrontierWorldState returned = runtime.decodedState().orElseThrow();
             SceneLease lease = returned.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isRoutePatrol).findFirst().orElseThrow();
             RoutePatrol patrol = returned.strategicPlans().routePatrols().get(fixture.taskId());

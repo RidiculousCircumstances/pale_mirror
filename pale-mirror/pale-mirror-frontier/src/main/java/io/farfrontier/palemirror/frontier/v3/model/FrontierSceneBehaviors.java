@@ -337,6 +337,7 @@ public final class FrontierSceneBehaviors {
                                                          Map<SubjectId, SettlementServiceWork> serviceWorks, SceneLease lease, Set<SubjectId> leasedOperations) {
             SettlementAssault assault = FrontierSettlementAssaultSceneSupport.require(plans, cause(lease));
             boolean march = assault.tacticalPlan().phase() == TacticalPlanPhase.TRAVEL
+                    && assault.status() != SettlementAssaultStatus.COLD_COMBAT
                     || assault.tacticalPlan().phase() == TacticalPlanPhase.RETREAT && !assault.march().complete();
             if (!march && !FrontierSettlementAssaultSceneSupport.targetIntact(bootstrap, structures, assault) && lease.status() != SceneLeaseStatus.CLOSED) throw new IllegalArgumentException("active assault scene target geometry is destroyed");
             boolean valid = switch (lease.status()) {

@@ -78,7 +78,7 @@ public record ExpeditionMarch(SubjectId overseerId, int cursor, Map<SubjectId, T
     }
     private static void requireGroundBioform(TraversalTopology topology) {
         List<TraversalTopology.Edge> edges = topology.edges();
-        if (topology.linearCorridorSurfaces().size() < 2 || edges.stream().anyMatch(edge -> edge.kind() != TraversalKind.GROUND_BIOFORM
+        if (topology.linearCorridorSurfaces().isEmpty() || edges.stream().anyMatch(edge -> edge.kind() != TraversalKind.GROUND_BIOFORM
                 || !edge.capabilities().contains(TraversalCapability.GROUND_BIOFORM))) {
             throw new IllegalArgumentException("expedition requires bounded GROUND_BIOFORM topologies");
         }
