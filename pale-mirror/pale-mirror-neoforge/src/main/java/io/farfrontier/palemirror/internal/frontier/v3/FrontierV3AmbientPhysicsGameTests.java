@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.api.Revision;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration;
+import io.farfrontier.palemirror.frontier.v3.kernel.StateValidator;
 import io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord;
 import io.farfrontier.palemirror.frontier.v3.model.ActorLocation;
 import io.farfrontier.palemirror.frontier.v3.model.BioformLifecycle;
@@ -193,7 +194,12 @@ public final class FrontierV3AmbientPhysicsGameTests {
                 FrontierWorldRuntimeDefinition.configuration(state.bootstrap().worldId(), state.bootstrap().seed());
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration = new FrontierEngineConfiguration<>(base.worldId(), state,
                 base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(state.bootstrap()),
-                base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter(), base.stateValidator(), base.executionMetrics());
+                // GameTest templates are deliberately placed at far absolute coordinates. This
+                // physical adapter fixture translates only two canonical ambient bodies into
+                // that loaded template, so its bootstrap bounds are intentionally not a
+                // world-topology assertion; transition planners still own every typed lease
+                // and observed-body validation exercised below.
+                base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter(), StateValidator.none(), base.executionMetrics());
         return FrontierV3ServerRuntime.start(configuration, new EphemeralStore(), 10_000);
     }
 
