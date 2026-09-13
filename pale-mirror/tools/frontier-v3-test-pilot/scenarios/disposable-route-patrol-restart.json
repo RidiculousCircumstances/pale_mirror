@@ -14,8 +14,8 @@
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -360, "y": 65, "z": -340 }, "settleMs": 1000 }
   ],
   "actions": [
-    { "type": "wait_until_diagnostic", "view": "scene", "id": "task:development-route-patrol", "expect": { "status": "ok", "sceneKind": "ROUTE_PATROL", "leaseStatus": "HOT", "patrolStatus": "EN_ROUTE" }, "timeoutMs": 60000 },
     { "type": "wait_until_diagnostic", "view": "trace", "id": "route-patrol:task:development-route-patrol", "expect": { "status": "ok", "eventKind": "route_patrol_hot", "subject": "task:development-route-patrol" }, "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "scene", "id": "task:development-route-patrol", "expect": { "status": "ok", "sceneKind": "ROUTE_PATROL", "leaseStatus": "HOT", "patrolStatus": "EN_ROUTE" }, "timeoutMs": 60000 },
     { "type": "look", "at": { "diagnostic": { "view": "scene", "id": "task:development-route-patrol", "field": "patrolNextBody" } } },
     { "type": "assert_visible_entity", "entityType": "minecraft:villager", "nameContains": "GUARD", "maxDistance": 32, "maxAngleDeg": 60, "timeoutMs": 30000 },
     { "type": "wait_until_diagnostic", "view": "scene", "id": "task:development-route-patrol", "expect": { "status": "ok", "sceneKind": "ROUTE_PATROL", "leaseStatus": "HOT", "patrolStatus": "EN_ROUTE" }, "timeoutMs": 60000 },
