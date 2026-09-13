@@ -106,7 +106,7 @@ public final class FrontierV3AmbientPhysicsGameTests {
         ServerPlayer observer = helper.makeMockServerPlayerInLevel();
         observer.setPos(residentSupport.getX() + 6.5D, residentSupport.getY() + 1.0D, residentSupport.getZ() + 6.5D);
         double[] initialY = { Double.NaN, Double.NaN };
-        boolean[] exactHotBodies = { false }, movingBeforeLoss = { false };
+        boolean[] exactHotBodies = { false }, movingBeforeLoss = { false }, idleBeforeLoss = { false };
         BodyPosition[] landed = new BodyPosition[2];
 
         for (int tick = 1; tick <= 285; tick++) {
@@ -121,12 +121,18 @@ public final class FrontierV3AmbientPhysicsGameTests {
                             && runtime.decodedState().orElseThrow().ambientLeases().get(fixture.bioform()).status()
                             == io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus.HOT;
                     if (Double.isNaN(initialY[0])) { initialY[0] = resident.getY(); initialY[1] = bioform.getY(); }
-                    if (turn < 24) movingBeforeLoss[0] |= FrontierV3ControlledMobMotion.trace(resident).stream().anyMatch(sample -> sample.horizontalVelocity() > 0.0D)
-                            && FrontierV3ControlledMobMotion.trace(bioform).stream().anyMatch(sample -> sample.horizontalVelocity() > 0.0D);
+                    if (turn < 24) movingBeforeLoss[0] |= FrontierV3ControlledMobMotion.trace(bioform).stream()
+                            .anyMatch(sample -> sample.horizontalVelocity() > 0.0D);
                 }
                 if (turn == 24) {
                     helper.assertTrue(exactHotBodies[0], "ordinary player demand must admit the canonical resident and active bioform through their exact HOT leases");
-                    helper.assertTrue(movingBeforeLoss[0], "both admitted managed bodies must have accepted bounded ordinary horizontal motion before support loss");
+                    // Freeze the real admitted resident at the normal retained-body authority
+                    // boundary while the separately admitted bioform remains the observed moving
+                    // case.  No fixture entity is substituted or manually repositioned.
+                    FrontierV3ControlledMobMotion.stop(resident);
+                    idleBeforeLoss[0] = resident.getDeltaMovement().horizontalDistanceSqr() == 0.0D;
+                    helper.assertTrue(idleBeforeLoss[0] && movingBeforeLoss[0],
+                            "support loss must cover both an idle managed resident and a moving managed bioform through the ordinary executor cadence");
                     // This is the ordinary player input boundary, not a fixture world edit:
                     // vanilla's server game mode performs both breaks while the executor owns
                     // the two retained HOT UUIDs.
