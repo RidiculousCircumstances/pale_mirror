@@ -3,9 +3,14 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.persistence.StrategicPlanStateCodec;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.process.HiveSettlementAssaultProcess;
+import io.farfrontier.palemirror.frontier.v3.process.FrontierWorldProcessCatalog;
+import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 
+import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
+import io.farfrontier.palemirror.frontier.v3.api.CommandId;
 import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
@@ -15,6 +20,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
+import io.farfrontier.palemirror.frontier.v3.api.Revision;
+import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
@@ -227,9 +234,26 @@ class SettlementAssaultTest {
 
     @Test void oneSharedNonFlatFormationCursorSurvivesSnapshotAndRejectsForgedHotArrival() {
         FrontierDevelopmentScenarios.SettlementAssaultFixture fixture = FrontierDevelopmentScenarios.startedSettlementAssaultFixture(
-                new WorldId("frontier:expedition-formation-snapshot"), 93L);
+                new WorldId("frontier:graybox"), 41L);
         FrontierWorldState state = fixture.state();
         SettlementAssault assault = state.strategicPlans().settlementAssaults().get(fixture.assaultId());
+        // This pure codec carrier owns a surveyed one-cell rise as an explicit retained input;
+        // the production fixture remains free to use its exact graybox floor rather than a
+        // test-only heightmap.  The initial bodies remain unchanged, so the following COLD/HOT
+        // hand-off still verifies the same expedition rather than a substituted formation.
+        java.util.Map<SubjectId, TraversalTopology> steppedTopologies = new java.util.LinkedHashMap<>();
+        for (var entry : assault.march().memberTopologies().entrySet()) {
+            TraversalTopology topology = entry.getValue();
+            java.util.List<SurfaceAnchor> surfaces = new java.util.ArrayList<>(topology.linearCorridorSurfaces());
+            SurfaceAnchor first = surfaces.getFirst(), next = surfaces.get(1);
+            surfaces.set(1, new SurfaceAnchor(new BlockPosition(next.x(), first.y() + 1, next.z())));
+            steppedTopologies.put(entry.getKey(), TraversalTopology.corridor(topology.id(), topology.revision(), topology.provenance(),
+                    TraversalKind.GROUND_BIOFORM, java.util.Set.of(TraversalCapability.GROUND_BIOFORM), surfaces));
+        }
+        assault = new SettlementAssault(assault.id(), assault.taskId(), assault.hiveId(), assault.sighting(), assault.overseerId(),
+                assault.attackers(), new ExpeditionMarch(assault.overseerId(), assault.march().cursor(), steppedTopologies),
+                assault.defenderUnit(), assault.tacticalPlan(), assault.status(), assault.nextStrikeEpoch(), assault.outcome());
+        state = state.withStrategicPlans(state.strategicPlans().replaceSettlementAssault(assault));
         assertFalse(assault.march().complete());
         assertTrue(assault.march().memberTopologies().values().stream().anyMatch(path -> java.util.stream.IntStream
                         .range(1, path.linearCorridorSurfaces().size()).anyMatch(index -> path.linearCorridorSurfaces().get(index - 1).y()
@@ -276,8 +300,14 @@ class SettlementAssaultTest {
             SettlementAssault assault = hot.assault();
             ExpeditionMarchIssue issue = new ExpeditionMarchIssue(kind, assault.overseerId(),
                     assault.march().memberTopologies().get(assault.overseerId()).edgeAfterCursor(assault.march().cursor()).id(), assault.march().cursor());
+            SettlementAssaultMarchIssueObserved observed = new SettlementAssaultMarchIssueObserved(assault.id(), hot.lease().id(), issue);
+            CommandId commandId = new CommandId("command:typed-march-" + kind.name().toLowerCase());
+            assertTrue(FrontierWorldProcessCatalog.planCommand("hive", hot.state(), new FrontierCommand(1, commandId,
+                    hot.state().bootstrap().worldId(), new Revision(1L), new SimInstant(19L),
+                    FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), observed)) instanceof CommandPlan.Accepted,
+                    "the loaded exact expedition issue must pass the production command owner before reduction");
             FrontierWorldState conflicted = HiveSettlementAssaultProcess.reduceMarchIssueObserved(hot.state(), assault.hiveId(),
-                    new SettlementAssaultMarchIssueObserved(assault.id(), hot.lease().id(), issue));
+                    observed);
             SettlementAssault retained = conflicted.strategicPlans().settlementAssaults().get(assault.id());
             assertEquals(SettlementAssaultStatus.CONFLICT, retained.status());
             assertEquals(TacticalPlanPhase.TRAVEL, retained.tacticalPlan().phase());

@@ -77,6 +77,20 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
             return new CommandPlan.Accepted(List.of(new ProposedEvent(aftermath.ownerId(), resolved)));
         }
+        if (command.payload() instanceof SettlementAssaultFormationObserved observed) {
+            SettlementAssault assault = state.strategicPlans().settlementAssaults().get(observed.assaultId());
+            if (assault == null) return FrontierWorldCommandPlanner.rejected("expedition formation observation has no assault");
+            try { HiveSettlementAssaultProcess.reduceFormationObserved(state, assault.hiveId(), observed); }
+            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(assault.hiveId(), observed)));
+        }
+        if (command.payload() instanceof SettlementAssaultMarchIssueObserved observed) {
+            SettlementAssault assault = state.strategicPlans().settlementAssaults().get(observed.assaultId());
+            if (assault == null) return FrontierWorldCommandPlanner.rejected("expedition march issue has no assault");
+            try { HiveSettlementAssaultProcess.reduceMarchIssueObserved(state, assault.hiveId(), observed); }
+            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(assault.hiveId(), observed)));
+        }
         return FrontierWorldCommandPlanner.rejected("hive process does not admit command: " + command.payload().type());
     }
 

@@ -133,6 +133,17 @@ class FrontierWorldProcessCatalogTest {
     }
 
     @Test
+    void expeditionMarchPhysicalObservationsHaveTheHiveOwnerBeforeAnExecutorCanSubmitThem() {
+        DeterministicProcessRegistry registry = FrontierWorldRuntimeDefinition.processRegistry();
+        for (String type : List.of(
+                "frontier.settlement_assault_formation_observed",
+                "frontier.settlement_assault_march_issue_observed")) {
+            assertEquals("hive", registry.requireCommandOwner(type), type);
+            assertEquals("hive", registry.requireReducedEventOwner(type), type);
+        }
+    }
+
+    @Test
     void productionWorkPayloadsHaveTheCompleteEconomyContractBeforeAnExecutorCanSubmitThem() {
         DeterministicProcessRegistry registry = FrontierWorldRuntimeDefinition.processRegistry();
         var economy = FrontierWorldProcessCatalog.descriptors().stream()
