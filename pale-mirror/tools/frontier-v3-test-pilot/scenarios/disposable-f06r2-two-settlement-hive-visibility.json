@@ -27,11 +27,11 @@
     { "type": "inspect", "view": "hive_foundry", "id": "settled@organ:east-hibernaculum-1" },
     { "type": "inspect", "view": "hive_foundry", "id": "settled@organ:east-hibernaculum-2" },
     { "type": "inspect", "view": "hive_foundry", "id": "settled@organ:east-hibernaculum-3" },
-    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -447, "y": 74, "z": 392 }, "settleMs": 0, "causalMilestone": "west_nest_player_view" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -430, "y": 74, "z": 400 }, "settleMs": 0, "causalMilestone": "west_nest_player_view" },
     { "type": "look", "at": { "x": -418, "y": 65, "z": 414 } },
     { "type": "assert_visible_block", "position": { "x": -429, "y": 65, "z": 409 }, "timeoutMs": 30000 },
     { "type": "assert_visible_board", "text": "HIBERNACULUM", "position": { "x": -428, "y": 66, "z": 407 }, "radius": 3, "maxDistance": 64, "maxAngleDeg": 80, "timeoutMs": 30000 },
-    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 393, "y": 74, "z": 392 }, "settleMs": 0, "causalMilestone": "east_nest_player_view" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 410, "y": 74, "z": 400 }, "settleMs": 0, "causalMilestone": "east_nest_player_view" },
     { "type": "look", "at": { "x": 422, "y": 65, "z": 414 } },
     { "type": "assert_visible_block", "position": { "x": 411, "y": 65, "z": 409 }, "timeoutMs": 30000 },
     { "type": "assert_visible_board", "text": "HIBERNACULUM", "position": { "x": 412, "y": 66, "z": 407 }, "radius": 3, "maxDistance": 64, "maxAngleDeg": 80, "timeoutMs": 30000 }
