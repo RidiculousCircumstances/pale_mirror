@@ -82,6 +82,12 @@ public final class FrontierV3RoutePatrolGameTests {
                     // connection path.  Directly changing a mock player's coordinates does
                     // not update the tracked player section, so it is not valid physical
                     // evidence that demand has actually departed.
+                    // The full GameTest server reuses one level.  Earlier, completed tests
+                    // can leave their mock observers connected there; those are real global
+                    // demand under production policy, but are stale fixture residue here.
+                    // Remove only those fixture players before asserting this test's own
+                    // ordinary departure.
+                    releasePriorMockDemand(level, observer);
                     releaseDemand(observer);
                 }
             });
@@ -161,6 +167,13 @@ public final class FrontierV3RoutePatrolGameTests {
     }
 
     private static void releaseDemand(ServerPlayer observer) { observer.connection.disconnect(Component.literal("route patrol fixture complete")); }
+
+    private static void releasePriorMockDemand(ServerLevel level, ServerPlayer current) {
+        level.players().stream().filter(ServerPlayer.class::isInstance).map(ServerPlayer.class::cast)
+                .filter(player -> !player.getUUID().equals(current.getUUID()))
+                .filter(player -> player.getGameProfile().getName().equals("test-mock-player"))
+                .toList().forEach(FrontierV3RoutePatrolGameTests::releaseDemand);
+    }
 
     private static void drive(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime,
                               SubjectId taskId, RoutePatrolSceneObservation observation) {
