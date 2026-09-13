@@ -20,7 +20,7 @@
   ],
   "assertions": [
     { "after": 1, "view": "scene", "id": "assault:development-settlement-assault", "expect": { "status": "ok", "sceneKind": "SETTLEMENT_ASSAULT", "leaseStatus": "HOT", "assaultStatus": "HOT", "marchCursor": 0, "marchIssue": "", "marchController": "bioform:west-23" } },
-    { "after": 4, "view": "trace", "id": "assault:assault:development-settlement-assault", "expect": { "status": "ok" } }
+    { "after": 4, "view": "trace", "id": "assault:assault:development-settlement-assault", "expect": { "status": "ok", "eventKind": "expedition_march_occupied_next_body", "subject": "assault:development-settlement-assault", "command": "executor:expedition-march-issue-r21" } }
   ],
   "frames": [
     { "after": 3, "name": "overseer-expedition-player-height-in-progress" }
