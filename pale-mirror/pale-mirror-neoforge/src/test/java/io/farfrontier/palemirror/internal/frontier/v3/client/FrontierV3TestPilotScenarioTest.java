@@ -308,6 +308,19 @@ class FrontierV3TestPilotScenarioTest {
     }
 
     @Test
+    void permitsAnOrdinaryPlayerToObserveAndBlockOnlyThePublishedRoutePatrolNextBody() {
+        FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[
+                {"type":"look","at":{"diagnostic":{"view":"scene","id":"task:development-route-patrol","field":"patrolNextBody"}}},
+                {"type":"place","position":{"diagnostic":{"view":"scene","id":"task:development-route-patrol","field":"patrolNextBody"}},
+                "item":"minecraft:stone","timeoutMs":10000}]}""");
+        assertEquals(2, parsed.actionCount());
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"place","position":{"diagnostic":{"view":"scene","id":"task:development-route-patrol","field":"patrolCurrent"}},
+                "item":"minecraft:stone","timeoutMs":10000}]}"""));
+    }
+
+    @Test
     void permitsOnlyBoundedOrdinaryV3BoardInteractionWithAVisibleCardReceipt() {
         FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"interact_board","text":"WHEAT FIELD","title":"Northwatch",

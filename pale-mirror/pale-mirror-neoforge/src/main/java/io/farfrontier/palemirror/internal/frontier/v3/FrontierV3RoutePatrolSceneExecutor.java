@@ -11,6 +11,7 @@ import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -24,6 +25,10 @@ import java.util.Set;
  * that exact body cell.  A missing/blocked body becomes the patrol's own visible failure path.</p>
  */
 final class FrontierV3RoutePatrolSceneExecutor {
+    /** Lets the ordinary observer read a terminal patrol result before mechanical scene release overwrites its trace. */
+    private static final long TERMINAL_DRAIN_GRACE_TICKS = 40L;
+    private static final Map<FrontierV3ServerRuntime<?, ?>, Map<SceneLeaseId, Long>> TERMINAL_DRAIN_SINCE = new IdentityHashMap<>();
+
     private FrontierV3RoutePatrolSceneExecutor() { }
 
     static boolean tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
@@ -109,13 +114,14 @@ final class FrontierV3RoutePatrolSceneExecutor {
     }
 
     /**
-     * A patrol's retained formation is a reversible COLD checkpoint.  With no ordinary demand,
-     * do not wait forever for an old saved chunk: persist the revoke first, then let any later
-     * natural body load meet the canonical tombstone instead of recreating progress.
+     * A patrol's retained formation is a reversible COLD checkpoint.  A graceful restart starts
+     * before the ordinary client can reconnect, so retain UNKNOWN for one bounded demand grace;
+     * only then revoke the old pose.  Reclaim still accepts only the already loaded exact bodies.
      */
     private static void recover(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                 FrontierWorldState state, SceneLease lease) {
         if (!FrontierV3SceneExecutor.demandExists(level, lease.handoffPosition())) {
+            if (!FrontierV3RestartDemandGrace.expired(runtime, lease.id(), level.getGameTime())) return;
             FrontierV3DiagnosticTrace.recordScene(level.getServer(), "route_patrol_recovery_revoked", lease,
                     submit(runtime, "route-patrol-recovery-revoked", lease.id().value(), new SceneLeaseRecoveryRevoked(lease.id())));
             return;
@@ -126,7 +132,10 @@ final class FrontierV3RoutePatrolSceneExecutor {
     private static void patrol(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                FrontierWorldState state, SceneLease lease) {
         RoutePatrol retained = FrontierRoutePatrolSceneSupport.require(state, FrontierSceneBehaviors.routePatrol(lease));
-        if (!retained.active()) { drain(runtime, lease); return; }
+        if (!retained.active()) {
+            if (terminalDrainGraceExpired(runtime, lease.id(), level.getGameTime())) drain(runtime, lease);
+            return;
+        }
         BlockPosition demand = lease.memberPosition(retained.guardId()).supportingSurface().support();
         FrontierV3SceneDemand.Snapshot demanded = FrontierV3SceneExecutor.demandSnapshot(level, demand);
         if (FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, lease.id(), level.getGameTime(), demanded,
@@ -191,7 +200,18 @@ final class FrontierV3RoutePatrolSceneExecutor {
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
         return level.getEntities(body, target, entity -> !formationBodies.contains(entity.getUUID())).isEmpty();
     }
+    private static boolean terminalDrainGraceExpired(FrontierV3ServerRuntime<?, ?> runtime, SceneLeaseId leaseId, long now) {
+        Map<SceneLeaseId, Long> since = TERMINAL_DRAIN_SINCE.computeIfAbsent(runtime, ignored -> new java.util.LinkedHashMap<>());
+        long started = since.computeIfAbsent(leaseId, ignored -> now);
+        return now - started >= TERMINAL_DRAIN_GRACE_TICKS;
+    }
+
     private static void drain(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease) {
+        Map<SceneLeaseId, Long> since = TERMINAL_DRAIN_SINCE.get(runtime);
+        if (since != null) {
+            since.remove(lease.id());
+            if (since.isEmpty()) TERMINAL_DRAIN_SINCE.remove(runtime);
+        }
         submit(runtime, "route-patrol-draining", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
     }
     private static void conflict(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease, String reason) {

@@ -332,7 +332,7 @@ class RouteConstructionTaskProcessTest {
                 .filter(descriptor -> descriptor.id().equals("infrastructure")).findFirst().orElseThrow();
         assertEquals(java.util.Set.of("frontier.route_construction_assembly_advanced", "frontier.route_maintenance_assembly_advanced",
                         "frontier.route_patrol_scene_lease_prepared", "frontier.route_patrol_scene_lease_handoff",
-                        "frontier.route_patrol_traversal_observed", "frontier.route_patrol_blocked", "frontier.route_patrol_obstruction_confirmed"),
+                        "frontier.route_patrol_formation_observed", "frontier.route_patrol_blocked", "frontier.route_patrol_obstruction_confirmed"),
                 infrastructure.commandPayloadTypes(),
                 "every physical engineering or patrol arrival must remain explicitly owned by the infrastructure command boundary");
     }

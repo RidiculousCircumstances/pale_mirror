@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "id": "disposable_route_patrol_restart",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "route-patrol", "viewDistance": 4 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/gamemode creative PMTestPilot" },
+    { "type": "command", "command": "/time set day" },
+    { "type": "command", "command": "/clear PMTestPilot" },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "summary", "id": "", "expect": { "status": "ok", "settlements": 12, "sites": 12 } }
+    ] },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -360, "y": 65, "z": -340 }, "settleMs": 1000 }
+  ],
+  "actions": [
+    { "type": "wait_until_diagnostic", "view": "scene", "id": "task:development-route-patrol", "expect": { "status": "ok", "sceneKind": "ROUTE_PATROL", "leaseStatus": "HOT", "patrolStatus": "EN_ROUTE" }, "timeoutMs": 60000 },
+    { "type": "wait_until_diagnostic", "view": "trace", "id": "route-patrol:task:development-route-patrol", "expect": { "status": "ok", "eventKind": "route_patrol_hot", "subject": "task:development-route-patrol" }, "timeoutMs": 30000 },
+    { "type": "look", "at": { "diagnostic": { "view": "scene", "id": "task:development-route-patrol", "field": "patrolNextBody" } } },
+    { "type": "assert_visible_entity", "entityType": "minecraft:villager", "nameContains": "GUARD", "maxDistance": 32, "maxAngleDeg": 60, "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "scene", "id": "task:development-route-patrol", "expect": { "status": "ok", "sceneKind": "ROUTE_PATROL", "leaseStatus": "HOT", "patrolStatus": "EN_ROUTE" }, "timeoutMs": 60000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "diagnostic": { "view": "scene", "id": "task:development-route-patrol", "field": "patrolNextBody" } }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "scene", "id": "task:development-route-patrol", "expect": { "status": "ok", "sceneKind": "ROUTE_PATROL", "patrolStatus": "BLOCKED", "patrolBlockReason": "OCCUPIED_NEXT_BODY" }, "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "trace", "id": "route-patrol:task:development-route-patrol", "expect": { "status": "ok", "eventKind": "route_patrol_blocked", "subject": "task:development-route-patrol" }, "timeoutMs": 30000 }
+  ],
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 4,
+    "resumeSetup": [
+      { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -360, "y": 65, "z": -340 }, "settleMs": 1000 }
+    ]
+  },
+  "assertions": [
+    { "after": 5, "view": "scene", "id": "task:development-route-patrol", "expect": { "status": "ok", "sceneKind": "ROUTE_PATROL", "leaseStatus": "HOT", "patrolStatus": "EN_ROUTE" } },
+    { "after": 7, "view": "scene", "id": "task:development-route-patrol", "expect": { "status": "ok", "sceneKind": "ROUTE_PATROL", "patrolStatus": "BLOCKED", "patrolBlockReason": "OCCUPIED_NEXT_BODY" } },
+    { "after": 8, "view": "trace", "id": "route-patrol:task:development-route-patrol", "expect": { "status": "ok", "eventKind": "route_patrol_blocked", "subject": "task:development-route-patrol" } }
+  ],
+  "frames": [
+    { "after": 4, "name": "route-patrol-player-height-in-progress" }
+  ]
+}

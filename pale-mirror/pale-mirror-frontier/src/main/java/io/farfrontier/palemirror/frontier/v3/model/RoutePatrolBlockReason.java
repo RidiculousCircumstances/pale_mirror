@@ -12,5 +12,7 @@ public enum RoutePatrolBlockReason {
     OCCUPIED_NEXT_BODY,
     DAMAGED_SUPPORT,
     PLAYER_OR_WORLD_OBSTRUCTION,
-    RECOVERY_UNRESOLVED
+    RECOVERY_UNRESOLVED;
+
+    public int wireTag() { return FrontierWireTags.tag(this); }
 }

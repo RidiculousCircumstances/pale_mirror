@@ -872,6 +872,7 @@ final class FrontierV3SceneExecutor {
             return lease == null || lease.status() != SceneLeaseStatus.UNKNOWN_AFTER_RESTART;
         });
         if (recovery != null && recovery.isEmpty()) RESTART_RECOVERY_SINCE.remove(runtime);
+        FrontierV3RestartDemandGrace.reap(runtime, state);
     }
 
     private static void forgetColdDemand(FrontierV3ServerRuntime<?, ?> runtime, SceneLeaseId leaseId) {
@@ -898,6 +899,7 @@ final class FrontierV3SceneExecutor {
         COLD_DEMAND_SINCE.remove(runtime);
         LAST_OBSERVED.remove(runtime);
         RESTART_RECOVERY_SINCE.remove(runtime);
+        FrontierV3RestartDemandGrace.forget(runtime);
     }
 
     private static BlockPos spawnCandidate(BlockPosition anchor, int ordinal) {

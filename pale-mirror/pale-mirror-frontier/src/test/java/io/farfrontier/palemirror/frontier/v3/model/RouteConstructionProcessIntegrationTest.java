@@ -32,7 +32,9 @@ class RouteConstructionProcessIntegrationTest {
         CommandId commandId = new CommandId("command:route-reroute-loss");
         assertInstanceOf(CommandResult.Accepted.class, engine.submit(new FrontierCommand(1, commandId, worldId, engine.checkpoint().revision(),
                 engine.checkpoint().instant(), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), new PhysicalDeltaObserved(delta))));
-        for (long tick = 1L; tick <= 2_600L; tick++) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
+        // Patrol formation moves on the actual one-cell retained route; the older macro-edge
+        // cursor reached this loss in 2,600 ticks by implicitly teleporting its bodies.
+        for (long tick = 1L; tick <= 4_000L; tick++) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
         FrontierWorldState after = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         RouteMaintenance candidate = after.routeMaintenances().values().stream()
                 .filter(value -> value.settlementId().equals(settlement) && value.repairCell().equals(loss)).findFirst().orElseThrow();

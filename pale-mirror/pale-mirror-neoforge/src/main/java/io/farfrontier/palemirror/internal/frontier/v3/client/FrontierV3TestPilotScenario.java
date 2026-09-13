@@ -313,7 +313,9 @@ final class FrontierV3TestPilotScenario {
                 || (view.equals("scene") && requiredId(reference, "id", "job:")
                 && (diagnosticField.equals("productionCurrent") || diagnosticField.equals("productionNext") || diagnosticField.equals("productionNextBody")
                 || diagnosticField.equals("productionFutureBody")))
-                || (view.equals("scene") && requiredId(reference, "id", "service:") && diagnosticField.equals("serviceCurrent"));
+                || (view.equals("scene") && requiredId(reference, "id", "service:") && diagnosticField.equals("serviceCurrent"))
+                || (view.equals("scene") && requiredId(reference, "id", "task:")
+                && (diagnosticField.equals("patrolCurrent") || diagnosticField.equals("patrolNextSurface") || diagnosticField.equals("patrolNextBody")));
     }
 
     /** An ordinary player may place at its observed route future body or exact container position. */
@@ -326,7 +328,9 @@ final class FrontierV3TestPilotScenario {
                 && ((reference.get("view").getAsString().equals("scene") && requiredId(reference, "id", "job:")
                     && reference.get("field").getAsString().equals("productionFutureBody"))
                     || (reference.get("view").getAsString().equals("container") && requiredId(reference, "id", "container:")
-                    && reference.get("field").getAsString().equals("position")));
+                    && reference.get("field").getAsString().equals("position"))
+                    || (reference.get("view").getAsString().equals("scene") && requiredId(reference, "id", "task:")
+                    && reference.get("field").getAsString().equals("patrolNextBody")));
     }
 
     private static boolean offset(JsonObject action) {

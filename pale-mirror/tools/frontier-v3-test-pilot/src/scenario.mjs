@@ -422,7 +422,9 @@ function validResolvablePosition(value) {
       || (reference.view === 'process' && requiredId(reference.id, 'job:') && reference.field === 'cursor.retainedBody')
       || (reference.view === 'scene' && requiredId(reference.id, 'job:')
         && ['productionCurrent', 'productionNext', 'productionNextBody', 'productionFutureBody'].includes(reference.field))
-      || (reference.view === 'scene' && requiredId(reference.id, 'service:') && reference.field === 'serviceCurrent'));
+      || (reference.view === 'scene' && requiredId(reference.id, 'service:') && reference.field === 'serviceCurrent')
+      || (reference.view === 'scene' && requiredId(reference.id, 'task:')
+        && ['patrolCurrent', 'patrolNextSurface', 'patrolNextBody'].includes(reference.field)));
 }
 
 function validPlacePosition(value) {
@@ -431,7 +433,8 @@ function validPlacePosition(value) {
   return value && typeof value === 'object' && Object.keys(value).length === 1
     && reference && typeof reference === 'object' && Object.keys(reference).length === 3
     && ((reference.view === 'scene' && requiredId(reference.id, 'job:') && reference.field === 'productionFutureBody')
-      || (reference.view === 'container' && requiredId(reference.id, 'container:') && reference.field === 'position'));
+      || (reference.view === 'container' && requiredId(reference.id, 'container:') && reference.field === 'position')
+      || (reference.view === 'scene' && requiredId(reference.id, 'task:') && reference.field === 'patrolNextBody'));
 }
 
 function validDimension(value) { return typeof value === 'string' && /^[a-z0-9_.-]+:[a-z0-9_./-]+$/.test(value); }

@@ -39,8 +39,9 @@ public final class FrontierRouteNetwork {
         // graph, not an ordered list allowed to duplicate one surface under two node IDs:
         // retracing would make availability, recovery and HOT/COLD cursors ambiguous.  The
         // direct vertical leg is the same real carriageway without the artificial out-and-back.
-        return List.of(origin, lane, new BlockPosition(-405, origin.y(), lane.z()),
-                new BlockPosition(-405, destination.y(), destination.z()), destination);
+        int junctionX = junctionX(bootstrap);
+        return List.of(origin, lane, new BlockPosition(junctionX, origin.y(), lane.z()),
+                new BlockPosition(junctionX, destination.y(), destination.z()), destination);
     }
 
     public static void validateSupplyWaypoints(FrontierBootstrap bootstrap, SubjectId settlementId, List<BlockPosition> route) {
@@ -71,7 +72,18 @@ public final class FrontierRouteNetwork {
      */
     public static BlockPosition maintenanceContainerPosition(FrontierBootstrap bootstrap) {
         Objects.requireNonNull(bootstrap, "bootstrap");
-        return new BlockPosition(-405, 65, 250);
+        int x = junctionX(bootstrap), z = Math.addExact(bootstrap.bounds().minZ(), 762);
+        return new BlockPosition(x, Math.addExact(bootstrap.terrain().supportYAt(x, z), 2), z);
+    }
+
+    /**
+     * The finite production profile declares its junction 107 columns from the western bound.
+     * Keep that topology-relative datum here instead of smuggling an absolute overworld
+     * coordinate into every reconstructed bootstrap: recovery and isolated physical fixtures
+     * may legitimately preserve the same immutable profile at a translated world origin.
+     */
+    private static int junctionX(FrontierBootstrap bootstrap) {
+        return Math.addExact(bootstrap.bounds().minX(), 107);
     }
 
     public static Set<BlockPosition> surfaceCells(FrontierBootstrap bootstrap) {
