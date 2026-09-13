@@ -245,6 +245,13 @@ final class FrontierV3DiagnosticJson {
                 + "\",\"status\":\"" + lease.status() + "\",\"revision\":" + lease.revision()
                 + ",\"members\":" + lease.members().size() + ",\"body\":"
                 + (lease.memberPosition(job.workerId()) == null ? "null" : position(lease.memberPosition(job.workerId()))) + "}";
+        // A normal client may complete its short observed HOT turn before the following pilot
+        // diagnostic.  Preserve the same closed lease as historical evidence without reviving
+        // it as a current authority claim; this distinguishes an exact crop-1 ingress from a
+        // newly invented crop-0 retry even after the physical scene has released.
+        String lastLeaseValue = lease == null ? "null" : "{\"id\":\"" + quote(lease.id().value())
+                + "\",\"status\":\"" + lease.status() + "\",\"revision\":" + lease.revision()
+                + ",\"members\":" + lease.members().size() + "}";
         String intentStatus = intent == null ? "MISSING" : intent.status().name();
         String intentKind = intent == null ? "MISSING" : intent.kind().name();
         String intentObservationId = intent == null || intent.postconditionObservationId().isEmpty() ? "null"
@@ -258,9 +265,12 @@ final class FrontierV3DiagnosticJson {
                 + "\",\"outputItem\":\"" + quote(job.outputItemId().value()) + "\"}"
                 + ",\"claims\":{\"task\":\"" + quote(job.taskId().value()) + "\",\"site\":\"" + quote(job.siteId().value())
                 + "\",\"worker\":\"" + quote(job.workerId().value()) + "\",\"intent\":\"" + quote(job.intentId().value())
-                + "\",\"outputSlot\":" + job.outputSlot().slot() + ",\"lease\":" + leaseValue + "}"
+                + "\",\"outputSlot\":" + job.outputSlot().slot() + ",\"lease\":" + leaseValue
+                + ",\"lastLease\":" + lastLeaseValue + "}"
                 + ",\"conservation\":{\"outputItem\":\"" + quote(job.outputItemId().value()) + "\",\"completedCropSlots\":"
                 + job.progress().completedCropSlots() + ",\"pendingCropSlot\":" + job.progress().pendingCropSlotIndex()
+                + ",\"nextCropSlot\":" + (job.progress().complete() ? -1 : job.progress().nextCropSlotIndex())
+                + ",\"deferredMaterializationSlots\":" + job.progress().completedCropSlots()
                 + ",\"totalCropSlots\":" + ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS + "}"
                 + ",\"schedule\":{\"count\":" + checkpoint.schedules().stream().filter(value -> value.subject().equals(job.id())).count()
                 + ",\"entries\":" + scheduleEntries + "}"

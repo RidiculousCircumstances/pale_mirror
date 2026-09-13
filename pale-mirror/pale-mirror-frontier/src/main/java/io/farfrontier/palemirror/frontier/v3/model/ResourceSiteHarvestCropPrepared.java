@@ -5,7 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.Objects;
 
-/** Durable authority to change exactly the harvest job's current crop cell. */
+/** Durable authority for exactly the harvest job's current crop receipt and deferred physical cell. */
 public record ResourceSiteHarvestCropPrepared(SubjectId jobId, int cropSlotIndex) implements FrontierPayload {
     public ResourceSiteHarvestCropPrepared {
         Objects.requireNonNull(jobId, "resource-site harvest crop job");

@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "id": "disposable_f06r3_cold_semantic",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "world", "viewDistance": 6 },
+  "zeroPlayerPrelude": { "advanceTicks": 24000, "timeoutMs": 180000 },
+  "restart": { "mode": "graceful", "afterAction": 9 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [{ "type": "assert_fixture", "timeoutMs": 30000, "checks": [{ "view": "summary", "id": "", "expect": { "status": "ok", "settlements": 12, "sites": 12 } }] }],
+  "actions": [
+    { "type": "inspect", "view": "process_inventory", "id": "settlements", "causalMilestone": "zero_player_all_current_processes" },
+    { "type": "inspect", "view": "projection_work", "id": "", "causalMilestone": "zero_player_projection_work_bound" },
+    { "type": "inspect", "view": "process", "id": "job:site-harvest-7-wheat-field-1", "causalMilestone": "site7_cold_before_ingress" },
+    { "type": "inspect", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "causalMilestone": "site4_cold_before_ingress" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 150, "y": 64, "z": -10 }, "settleMs": 15000, "causalMilestone": "site7_first_arrival" },
+    { "type": "inspect", "view": "process", "id": "job:site-harvest-7-wheat-field-1", "causalMilestone": "site7_current_after_ingress" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 388, "y": 64, "z": -355 }, "settleMs": 15000, "causalMilestone": "site4_first_arrival" },
+    { "type": "inspect", "view": "process", "id": "job:site-harvest-4-wheat-field-1", "causalMilestone": "site4_current_after_ingress" },
+    { "type": "inspect", "view": "process_inventory", "id": "settlements", "causalMilestone": "two_arrivals_inventory" },
+    { "type": "inspect", "view": "process", "id": "job:site-harvest-7-wheat-field-1", "causalMilestone": "site7_restart_continuity" }
+  ],
+  "assertions": [
+    { "after": 1, "view": "process_inventory", "id": "settlements", "expect": { "status": "ok", "count": 12 } },
+    { "after": 2, "view": "projection_work", "id": "", "expect": { "status": "ok" } },
+    { "after": 3, "view": "process", "id": "job:site-harvest-7-wheat-field-1", "expect": { "status": "ok", "result": { "sitePhase": "HARVESTING", "intentStatus": "PREPARED" }, "conservation": { "completedCropSlots": 1, "pendingCropSlot": -1, "nextCropSlot": 1, "deferredMaterializationSlots": 1 } } },
+    { "after": 4, "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": { "status": "ok", "result": { "sitePhase": "HARVESTING", "intentStatus": "PREPARED" }, "conservation": { "completedCropSlots": 1, "pendingCropSlot": -1, "nextCropSlot": 1, "deferredMaterializationSlots": 1 } } },
+    { "after": 6, "view": "process", "id": "job:site-harvest-7-wheat-field-1", "expect": { "status": "ok", "result": { "sitePhase": "HARVESTING" } } },
+    { "after": 8, "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": { "status": "ok", "result": { "sitePhase": "HARVESTING" } } },
+    { "after": 10, "view": "process", "id": "job:site-harvest-7-wheat-field-1", "expect": { "status": "ok", "result": { "sitePhase": "HARVESTING" } } }
+  ],
+  "frames": []
+}

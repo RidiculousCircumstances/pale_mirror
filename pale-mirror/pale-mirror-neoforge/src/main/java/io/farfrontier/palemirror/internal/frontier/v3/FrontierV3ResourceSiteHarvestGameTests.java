@@ -116,6 +116,25 @@ public final class FrontierV3ResourceSiteHarvestGameTests {
 
     @GameTest(batch = "pm-frontier-v3-resource-harvest", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full",
             timeoutTicks = 40)
+    public static void coldCropReceiptMaterializesItsCurrentPartialFieldOnNaturalFirstLoad(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); ResourceSite site = field(fixtureOrigin(helper), "site:resource-harvest-cold-current"); prepare(level, site);
+        runWhenLit(helper, level, site, () -> {
+            FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
+            helper.assertValueEqual(FrontierV3ResourceSiteExecutor.projectHarvestProgress(level, ledger, site, 1),
+                    FrontierV3ResourceSiteExecutor.StageProjectionResult.UPDATED,
+                    "a naturally loaded COLD receipt must project its exact first completed crop rather than recreate crop-0");
+            helper.assertTrue(ledger.claim(site.id()).harvestedCropSlots() == 1
+                            && FrontierV3ResourceSiteExecutor.matchesHarvestProgress(level, site, 1),
+                    "the resource ledger and visible field retain the same one-crop deferred aftermath");
+            helper.assertValueEqual(FrontierV3ResourceSiteExecutor.projectHarvestProgress(level, ledger, site, 1),
+                    FrontierV3ResourceSiteExecutor.StageProjectionResult.CURRENT,
+                    "repeated natural observation must not replay or reset the COLD crop receipt");
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "pm-frontier-v3-resource-harvest", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full",
+            timeoutTicks = 40)
     public static void completedHotCursorReceiptsOnceWhileRestartOnlyConfirms(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); ResourceSite site = field(fixtureOrigin(helper), "site:resource-harvest-running-completion"); prepare(level, site);
         runWhenLit(helper, level, site, () -> {

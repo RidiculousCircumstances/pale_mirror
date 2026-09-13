@@ -25,22 +25,18 @@ import java.util.OptionalInt;
  *
  * <p>A mature field reserves its farmer, depot slot and output identity in canonical state. Its
  * COLD driver advances the same exact farmer and retained approach cursor until the next physical
- * crop station; its HOT driver performs only observed crop work. It produces neither crop nor
- * inventory until the naturally loaded executor observes the whole field reset and the exact
- * tagged stack in that reserved chest slot. Irreversible crop work belongs solely to a naturally
- * demanded HOT scene; no COLD scheduler or standalone receipt owner can consume a field cell.</p>
+ * crop station.  COLD commits the same bounded per-crop semantic receipt and retains its
+ * deferred materialization in that cursor; natural loading later projects that exact current
+ * partial field.  HOT owns visible pose, local collision, and the loaded physical continuation.
+ * The one named output stack remains an observed depot postcondition, so COLD never writes an
+ * unloaded chest or manufactures a second output receipt.</p>
  */
 public final class ResourceSiteHarvestProcess {
     public static final String COLD_PROGRESS_KIND = "frontier.resource_site.harvest.cold_progress";
 
     private ResourceSiteHarvestProcess() { }
 
-    /**
-     * Crop work is admitted only through the durable intent and its exact HOT harvest lease.
-     * The scene owns each observed cell; the separate receipt owner may only close the complete
-     * field into its named depot output.  This keeps observer presence from authoring a second
-     * cursor or a whole-field shortcut.
-     */
+    /** The final depot output remains a loaded physical postcondition. */
     public static boolean irreversibleCropEffectsAdmitted() { return true; }
 
     public static ScheduledAction start(StrategicTask task, long dueAt) {
@@ -102,9 +98,9 @@ public final class ResourceSiteHarvestProcess {
     }
 
     /**
-     * Advances only the retained pedestrian approach while no harvest scene owns the worker.
-     * Reaching a crop station is deliberately a physical-effect boundary, not permission to
-     * remove an unloaded crop or create its wheat receipt.
+     * Advances one retained COLD work step while no harvest scene owns the worker.  The crop
+     * receipt is canonical and durable before a later natural physical projection; it never
+     * reads or writes an unloaded Minecraft crop or depot surface.
      */
     public static List<ProposedEvent> planColdProgress(FrontierWorldState state, ScheduledAction action) {
         ResourceSiteHarvestJob job = activeJob(state, action.subject());
@@ -127,12 +123,36 @@ public final class ResourceSiteHarvestProcess {
         if (!FrontierSceneAdmission.available(state, List.of(job.workerId()))) {
             return List.of(reschedule(action, action));
         }
-        // Keep the stable due action while the worker is waiting at the next semantic
-        // crop station. A later HOT lease can therefore fence/reschedule this exact action
-        // on release instead of inventing a second COLD schedule.
-        if (!job.hasNextTraversalStep()) return List.of(reschedule(action, coldProgress(job, nextDue)));
-        return List.of(new ProposedEvent(job.siteId(), new ResourceSiteHarvestColdTraversalAdvanced(job.id(), job.workerId(), job.traversalCursor() + 1)),
-                reschedule(action, coldProgress(job, nextDue)));
+        // One COLD receipt is the durable deferred-aftermath bridge: it proves actual crop
+        // ownership changed before an observer arrives, while the next visible crop (and all
+        // further physical work/output) remains for the naturally admitted HOT scene.  Letting
+        // COLD consume a whole unloaded field would erase that exact current next-crop handoff.
+        if (job.progress().completedCropSlots() > 0) {
+            return List.of(reschedule(action, coldProgress(job, nextDue)));
+        }
+        if (!job.hasNextTraversalStep()) return coldCropReceipt(state, action, job);
+        int nextCursor = job.traversalCursor() + 1;
+        ProposedEvent traversal = new ProposedEvent(job.siteId(),
+                new ResourceSiteHarvestColdTraversalAdvanced(job.id(), job.workerId(), nextCursor));
+        // A COLD edge which reaches the current crop station has completed the only retained
+        // approach precondition.  Commit its semantic crop receipt in the same durable action;
+        // otherwise a zero-player interval can end between the approach and an artificial
+        // HOT-only crop boundary, recreating the observed crop-0 first-lease defect.
+        if (nextCursor == job.cropCursor()) return coldCropReceipt(state, action, job, traversal);
+        return List.of(traversal, reschedule(action, coldProgress(job, nextDue)));
+    }
+
+    private static List<ProposedEvent> coldCropReceipt(FrontierWorldState state, ScheduledAction action, ResourceSiteHarvestJob job, ProposedEvent... prefix) {
+        if (!job.atCurrentCropStation() && (prefix.length != 1 || job.traversalCursor() + 1 != job.cropCursor())) {
+            throw new IllegalArgumentException("resource-site COLD crop receipt requires its exact retained station");
+        }
+        ResourceSiteHarvestProgress progressed = job.progress().prepareNextCrop().confirmPreparedCrop();
+        ResourceSiteHarvestJob replacement = job.withProgress(progressed);
+        List<ProposedEvent> events = new java.util.ArrayList<>(List.of(prefix));
+        events.add(new ProposedEvent(job.siteId(), new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex())));
+        events.add(new ProposedEvent(job.siteId(), new ResourceSiteHarvestProgressed(job.id(), progressed.completedCropSlots())));
+        events.add(reschedule(action, coldProgress(replacement, Math.addExact(action.dueAt().ticks(), continuationInterval(state, replacement)))));
+        return List.copyOf(events);
     }
 
     public static FrontierWorldState reduceStarted(FrontierWorldState state, SubjectId subject, ResourceSiteHarvestStarted started) {
@@ -324,6 +344,7 @@ public final class ResourceSiteHarvestProcess {
                 ? state.bootstrap().ruleset().cadence().resourceHarvestTraversalInterval()
                 : state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval();
     }
+
 
     private static List<ProposedEvent> blocked(StrategicTask task) {
         return List.of(transition(task, StrategicTaskStatus.BLOCKED));

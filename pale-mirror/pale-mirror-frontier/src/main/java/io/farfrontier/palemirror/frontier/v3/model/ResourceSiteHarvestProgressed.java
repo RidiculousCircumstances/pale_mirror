@@ -5,7 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.Objects;
 
-/** Observed completion of the one durable pending crop by the job's exact named farmer. */
+/** One durable exact-farmer crop receipt: observed in HOT or semantically completed by bounded COLD work. */
 public record ResourceSiteHarvestProgressed(SubjectId jobId, int completedCropSlots) implements FrontierPayload {
     public ResourceSiteHarvestProgressed {
         Objects.requireNonNull(jobId, "resource-site harvest progress job");

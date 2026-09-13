@@ -56,9 +56,9 @@ final class FrontierV3ResourceSiteHarvestExecutor {
     private FrontierV3ResourceSiteHarvestExecutor() { }
 
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
-        // The registered HOT scene owns the durable-before-effect transition and every crop
-        // checkpoint. This receipt owner only observes the completed field after that scene has
-        // released, so a naturally loaded field can never become an observer-free shortcut.
+        // COLD may retain a canonical deferred crop prefix, while the registered HOT scene owns
+        // visible local work. This receipt owner remains the sole loaded-world final-output
+        // boundary, so a naturally loaded field can never manufacture a second depot stack.
         if (!effectExecutionAdmitted()) return;
         FrontierWorldState state = runtime.decodedState().orElse(null); if (state == null) return;
         // Never let an unloaded alphabetically first field starve a later naturally loaded one.

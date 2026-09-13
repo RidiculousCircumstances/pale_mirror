@@ -25,7 +25,7 @@ export function assertF06r3LiveIntegrityCarrier({ declaration, manifest }) {
   const coldInventory = exactly(diagnostics, 1, 'process_inventory', 'settlements');
   const projectionWork = exactly(diagnostics, 2, 'projection_work', '');
   const postArrivalInventory = exactly(diagnostics, 9, 'process_inventory', 'settlements');
-  assertAllSettlementHarvestes(coldInventory, 'zero-player');
+  assertAllSettlementHarvestes(coldInventory, 'zero-player', true);
   assertProjectionWork(projectionWork);
   assertNoIngressReset(postArrivalInventory, coldInventory);
   const beforeSeven = exactly(diagnostics, 3, 'process', JOBS[0]);
@@ -34,6 +34,7 @@ export function assertF06r3LiveIntegrityCarrier({ declaration, manifest }) {
   const afterFour = exactly(diagnostics, 8, 'process', JOBS[1]);
   const restartSeven = exactly(diagnostics, 10, 'process', JOBS[0]);
   [beforeSeven, beforeFour, afterSeven, afterFour, restartSeven].forEach(assertHarvestCursor);
+  [afterSeven, afterFour].forEach(assertFirstHotLeaseIsNotCropZero);
   if (!sameHarvest(beforeSeven, afterSeven) || !sameHarvest(beforeSeven, restartSeven) || !sameHarvest(beforeFour, afterFour)) {
     throw new Error('F0.6R3 representative first ingress or restart reset an exact COLD harvest identity/cursor');
   }
@@ -51,7 +52,8 @@ export function assertF06r3LiveIntegrityCarrier({ declaration, manifest }) {
   }
   return Object.freeze({ terminalAssertionCount, zeroPlayerAllSites: coldInventory.count, projectionWork: Object.freeze({
     structural: projectionWork.structural, infectionOverlay: projectionWork.infectionOverlay }),
-    coldCursors: Object.freeze(Object.fromEntries(coldInventory.entries.map(entry => [entry.site, entry.cursor]))), representativeFirstArrivals: JOBS,
+    coldCursors: Object.freeze(Object.fromEntries(coldInventory.entries.map(entry => [entry.site, entry.cursor]))),
+    coldCompletedCropSlots: Object.freeze(Object.fromEntries(coldInventory.entries.map(entry => [entry.site, entry.completedCropSlots]))), representativeFirstArrivals: JOBS,
     restartContinuity: true, seedNestOrgans: HIVE_ORGANS.length, playerFrames: manifest.frames.map(frame => frame.path) });
 }
 
@@ -82,7 +84,7 @@ function assertDeclaredAssertions(declaration, manifest) {
   return declared.length;
 }
 
-function assertAllSettlementHarvestes(inventory, boundary) {
+function assertAllSettlementHarvestes(inventory, boundary, requireColdEligible = false) {
   if (inventory.count !== 12 || !Array.isArray(inventory.entries) || inventory.entries.length !== 12) {
     throw new Error(`F0.6R3 ${boundary} process inventory does not contain all current settlements`);
   }
@@ -91,8 +93,11 @@ function assertAllSettlementHarvestes(inventory, boundary) {
     const entry = inventory.entries.find(value => value.site === expected);
     if (entry?.phase !== 'HARVESTING' || entry.job !== `job:site-harvest-${site}-wheat-field-1` || typeof entry.worker !== 'string'
         || !entry.worker.startsWith(`resident:${site}-`) || !Number.isSafeInteger(entry.cursor) || entry.cursor <= 0
-        || entry.cursor !== entry.cropCursor || !Number.isSafeInteger(entry.cursorLength) || entry.cursor >= entry.cursorLength
-        || entry.waitReason !== 'AWAITING_HOT_CROP_EFFECT'
+        || !Number.isSafeInteger(entry.cropCursor) || entry.cursor > entry.cropCursor || !Number.isSafeInteger(entry.cursorLength) || entry.cropCursor >= entry.cursorLength
+        || !Number.isSafeInteger(entry.completedCropSlots) || entry.completedCropSlots <= 0 || entry.pendingCropSlot !== -1
+        || entry.nextCropSlot !== entry.completedCropSlots || entry.deferredMaterializationSlots !== entry.completedCropSlots
+        || !['COLD_ELIGIBLE_SEMANTIC_HARVEST', 'HOT_OWNED_CURRENT_HARVEST'].includes(entry.waitReason)
+        || (requireColdEligible && (entry.coldEligible !== true || entry.waitReason !== 'COLD_ELIGIBLE_SEMANTIC_HARVEST'))
         || !Number.isSafeInteger(entry.dueAt) || entry.dueAt < 0) {
       throw new Error(`F0.6R3 ${boundary} COLD progress is absent or ambiguous for ${expected}`);
     }
@@ -103,7 +108,8 @@ function assertNoIngressReset(inventory, cold) {
   assertAllSettlementHarvestes(inventory, 'post-arrival');
   for (const before of cold.entries) {
     const after = inventory.entries.find(value => value.site === before.site);
-    if (!after || after.job !== before.job || after.worker !== before.worker || after.cursor !== before.cursor || after.cropCursor !== before.cropCursor) {
+    if (!after || after.job !== before.job || after.worker !== before.worker || after.completedCropSlots < before.completedCropSlots
+        || after.completedCropSlots <= 0 || after.nextCropSlot <= 0) {
       throw new Error(`F0.6R3 first ingress reset ${before.site}`);
     }
   }
@@ -112,7 +118,9 @@ function assertNoIngressReset(inventory, cold) {
 function assertHarvestCursor(value) {
   if (value.identity?.job == null || value.identity?.worker == null || !Number.isSafeInteger(value.cursor?.index) || value.cursor.index <= 0
       || !Number.isSafeInteger(value.cursor?.length) || value.cursor.index >= value.cursor.length
-      || value.conservation?.completedCropSlots !== 0 || value.conservation?.pendingCropSlot !== -1
+      || !Number.isSafeInteger(value.conservation?.completedCropSlots) || value.conservation.completedCropSlots <= 0
+      || value.conservation?.nextCropSlot !== value.conservation.completedCropSlots || value.conservation?.deferredMaterializationSlots !== value.conservation.completedCropSlots
+      || value.conservation?.pendingCropSlot !== -1
       || value.result?.sitePhase !== 'HARVESTING' || value.result?.intentStatus !== 'PREPARED') {
     throw new Error('F0.6R3 representative harvest lacks its exact pre-effect COLD cursor');
   }
@@ -121,7 +129,19 @@ function assertHarvestCursor(value) {
 function sameHarvest(left, right) {
   return left.identity?.job === right.identity?.job && left.identity?.worker === right.identity?.worker
     && left.claims?.intent === right.claims?.intent && left.cursor?.index === right.cursor?.index
-    && left.cursor?.length === right.cursor?.length && left.conservation?.completedCropSlots === right.conservation?.completedCropSlots;
+    && left.cursor?.length === right.cursor?.length && right.conservation?.completedCropSlots >= left.conservation?.completedCropSlots
+    && left.conservation?.completedCropSlots > 0;
+}
+
+function assertFirstHotLeaseIsNotCropZero(value) {
+  // `lease` is the live authority fact.  `lastLease` is the same lease retained after a
+  // naturally completed physical turn; it is deliberately diagnostic history, never a
+  // resurrected owner.  Either receipt proves the ordinary ingress admitted the current crop.
+  const lease = value.claims?.lease ?? value.claims?.lastLease;
+  const match = typeof lease?.id === 'string' && lease.id.match(/-crop-(\d+)-r\d+$/);
+  if (!match || Number(match[1]) <= 0) {
+    throw new Error('F0.6R3 natural first ingress did not admit a current non-crop-0 HOT harvest lease');
+  }
 }
 
 function exactly(diagnostics, actionStep, kind, id) {
