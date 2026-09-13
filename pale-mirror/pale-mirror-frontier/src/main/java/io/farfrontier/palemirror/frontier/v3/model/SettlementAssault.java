@@ -15,7 +15,7 @@ import java.util.Optional;
  * defenders are exact resident identities captured at admission, not an aggregate population.</p>
  */
 public record SettlementAssault(SubjectId id, SubjectId taskId, SubjectId hiveId, HiveSettlementKnowledge.Sighting sighting, SubjectId overseerId,
-                         List<SettlementAssaultAttacker> attackers, SettlementDefenderUnit defenderUnit,
+                         List<SettlementAssaultAttacker> attackers, ExpeditionMarch march, SettlementDefenderUnit defenderUnit,
                          TacticalPlan tacticalPlan, SettlementAssaultStatus status, int nextStrikeEpoch, Optional<SettlementAssaultOutcome> outcome) {
     public static final int MAX_ATTACKERS = 16;
     public static final int MAX_DEFENDERS = 24;
@@ -27,6 +27,7 @@ public record SettlementAssault(SubjectId id, SubjectId taskId, SubjectId hiveId
         Objects.requireNonNull(sighting, "assault sighting");
         Objects.requireNonNull(overseerId, "assault overseer");
         attackers = List.copyOf(attackers);
+        march = Objects.requireNonNull(march, "assault expedition march");
         Objects.requireNonNull(defenderUnit, "assault defender unit");
         tacticalPlan = Objects.requireNonNull(tacticalPlan, "assault tactical plan");
         Objects.requireNonNull(status, "assault status");
@@ -37,6 +38,10 @@ public record SettlementAssault(SubjectId id, SubjectId taskId, SubjectId hiveId
         }
         if (!attackers.stream().map(SettlementAssaultAttacker::actorId).toList().contains(overseerId)) {
             throw new IllegalArgumentException("assault must retain its exact mobile Overseer");
+        }
+        if (!march.overseerId().equals(overseerId) || !march.memberIds().equals(new java.util.LinkedHashSet<>(attackers.stream()
+                .map(SettlementAssaultAttacker::actorId).toList()))) {
+            throw new IllegalArgumentException("assault march must retain the exact ordered expedition roster and Overseer");
         }
         if (!id.value().startsWith("assault:") || !defenderUnit.id().equals(new SubjectId("unit:" + id.value().substring("assault:".length())))
                 || !defenderUnit.settlementId().equals(sighting.settlementId())) {
@@ -56,7 +61,7 @@ public record SettlementAssault(SubjectId id, SubjectId taskId, SubjectId hiveId
     public SettlementAssault(SubjectId id, SubjectId taskId, SubjectId hiveId, HiveSettlementKnowledge.Sighting sighting,
                              SubjectId overseerId, List<SettlementAssaultAttacker> attackers, List<SubjectId> defenderIds,
                              SettlementAssaultStatus status, int nextStrikeEpoch, Optional<SettlementAssaultOutcome> outcome) {
-        this(id, taskId, hiveId, sighting, overseerId, attackers, SettlementDefenderUnit.forAssault(id, sighting.settlementId(), defenderIds),
+        this(id, taskId, hiveId, sighting, overseerId, attackers, legacyMarch(id, overseerId, attackers), SettlementDefenderUnit.forAssault(id, sighting.settlementId(), defenderIds),
                 TacticalPlan.hiveExpedition(new StrategicTask(taskId, new SubjectId("objective:implicit-" + taskId.value().replace(':', '-')), hiveId,
                         StrategicTaskKind.ASSAULT_SETTLEMENT, Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD,
                         StrategicTaskRequirement.AVAILABLE_HIVE_BOMBER), List.of(), StrategicTaskStatus.PENDING), id, overseerId,
@@ -67,7 +72,7 @@ public record SettlementAssault(SubjectId id, SubjectId taskId, SubjectId hiveId
     public SettlementAssault(SubjectId id, SubjectId taskId, SubjectId hiveId, HiveSettlementKnowledge.Sighting sighting,
                              SubjectId overseerId, List<SettlementAssaultAttacker> attackers, SettlementDefenderUnit defenderUnit,
                              SettlementAssaultStatus status, int nextStrikeEpoch, Optional<SettlementAssaultOutcome> outcome) {
-        this(id, taskId, hiveId, sighting, overseerId, attackers, defenderUnit,
+        this(id, taskId, hiveId, sighting, overseerId, attackers, legacyMarch(id, overseerId, attackers), defenderUnit,
                 TacticalPlan.hiveExpedition(new StrategicTask(taskId, new SubjectId("objective:implicit-" + taskId.value().replace(':', '-')), hiveId,
                         StrategicTaskKind.ASSAULT_SETTLEMENT, Optional.empty(), List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD,
                         StrategicTaskRequirement.AVAILABLE_HIVE_BOMBER), List.of(), StrategicTaskStatus.PENDING), id, overseerId,
@@ -85,7 +90,15 @@ public record SettlementAssault(SubjectId id, SubjectId taskId, SubjectId hiveId
     public List<SubjectId> defenderIds() { return defenderUnit.memberIds(); }
     public SettlementAssaultFront attackFront() { return front("attack", attackerIds()); }
     public SettlementAssaultFront defenceFront() { return front("defence", defenderIds()); }
-    public boolean allAttackersAtBattlefield() { return attackers.stream().allMatch(SettlementAssaultAttacker::atDestination); }
+    public boolean allAttackersAtBattlefield() { return march.complete(); }
+
+    /** The one current body per exact attacker; no scene or ambient goal owns a substitute. */
+    public java.util.Map<SubjectId, BodyPosition> formationBodies() { return march.bodies(); }
+    public java.util.Map<SubjectId, BodyPosition> nextFormationBodies() { return march.nextBodies(); }
+    public SettlementAssault advanceFormation() {
+        ExpeditionMarch next = march.advanceFormation();
+        return new SettlementAssault(id, taskId, hiveId, sighting, overseerId, attackers, next, defenderUnit, tacticalPlan, status, nextStrikeEpoch, outcome);
+    }
 
     private SettlementAssaultFront front(String lane, List<SubjectId> members) {
         return new SettlementAssaultFront(new SubjectId("front:" + id.value().substring("assault:".length()).replace(':', '-') + "-" + lane),
@@ -105,7 +118,7 @@ public record SettlementAssault(SubjectId id, SubjectId taskId, SubjectId hiveId
             } else next.add(attacker);
         }
         if (!found) throw new IllegalArgumentException("assault has no named attacker");
-        return new SettlementAssault(id, taskId, hiveId, sighting, overseerId, next, defenderUnit, tacticalPlan, status, nextStrikeEpoch, outcome);
+        return new SettlementAssault(id, taskId, hiveId, sighting, overseerId, next, legacyMarch(id, overseerId, next), defenderUnit, tacticalPlan, status, nextStrikeEpoch, outcome);
     }
 
     public SettlementAssault withStatus(SettlementAssaultStatus next) {
@@ -114,9 +127,10 @@ public record SettlementAssault(SubjectId id, SubjectId taskId, SubjectId hiveId
         }
         TacticalPlan nextPlan = next == SettlementAssaultStatus.RESOLVED ? tacticalPlan.withPhase(TacticalPlanPhase.COMPLETE)
                 : next == SettlementAssaultStatus.APPROACHING ? tacticalPlan.withPhase(TacticalPlanPhase.TRAVEL)
+                : next == SettlementAssaultStatus.HOT && !march.complete() ? tacticalPlan.withPhase(TacticalPlanPhase.TRAVEL)
                 : next == SettlementAssaultStatus.COLD_COMBAT && tacticalPlan.phase() == TacticalPlanPhase.RETREAT ? tacticalPlan
                 : tacticalPlan.withPhase(TacticalPlanPhase.CONTACT);
-        return new SettlementAssault(id, taskId, hiveId, sighting, overseerId, attackers, defenderUnit, nextPlan, next, nextStrikeEpoch, Optional.empty());
+        return new SettlementAssault(id, taskId, hiveId, sighting, overseerId, attackers, march, defenderUnit, nextPlan, next, nextStrikeEpoch, Optional.empty());
     }
 
     /** The same expedition retreats after its irreplaceable command owner is physically lost. */
@@ -124,7 +138,7 @@ public record SettlementAssault(SubjectId id, SubjectId taskId, SubjectId hiveId
         if (status != SettlementAssaultStatus.HOT || !overseerId.equals(Objects.requireNonNull(lostActorId, "lost Overseer"))) {
             throw new IllegalArgumentException("only the HOT expedition's exact Overseer loss may order retreat");
         }
-        return new SettlementAssault(id, taskId, hiveId, sighting, overseerId, attackers, defenderUnit,
+        return new SettlementAssault(id, taskId, hiveId, sighting, overseerId, attackers, march, defenderUnit,
                 tacticalPlan.withPhase(TacticalPlanPhase.RETREAT), status, nextStrikeEpoch, outcome);
     }
 
@@ -132,7 +146,7 @@ public record SettlementAssault(SubjectId id, SubjectId taskId, SubjectId hiveId
         if (status != SettlementAssaultStatus.COLD_COMBAT || nextStrikeEpoch != expectedEpoch) {
             throw new IllegalArgumentException("assault strike does not match its current COLD epoch");
         }
-        return new SettlementAssault(id, taskId, hiveId, sighting, overseerId, attackers, defenderUnit, tacticalPlan, status,
+        return new SettlementAssault(id, taskId, hiveId, sighting, overseerId, attackers, march, defenderUnit, tacticalPlan, status,
                 Math.addExact(nextStrikeEpoch, 1), Optional.empty());
     }
 
@@ -141,7 +155,7 @@ public record SettlementAssault(SubjectId id, SubjectId taskId, SubjectId hiveId
         if (status != SettlementAssaultStatus.HOT || nextStrikeEpoch != expectedEpoch) {
             throw new IllegalArgumentException("HOT assault strike does not match its current epoch");
         }
-        return new SettlementAssault(id, taskId, hiveId, sighting, overseerId, attackers, defenderUnit, tacticalPlan, status,
+        return new SettlementAssault(id, taskId, hiveId, sighting, overseerId, attackers, march, defenderUnit, tacticalPlan, status,
                 Math.addExact(nextStrikeEpoch, 1), Optional.empty());
     }
 
@@ -150,13 +164,44 @@ public record SettlementAssault(SubjectId id, SubjectId taskId, SubjectId hiveId
                 || result != SettlementAssaultOutcome.ABORTED && status != SettlementAssaultStatus.COLD_COMBAT) {
             throw new IllegalArgumentException("only COLD assault combat may choose a combat outcome");
         }
-        return new SettlementAssault(id, taskId, hiveId, sighting, overseerId, attackers, defenderUnit, tacticalPlan.withPhase(TacticalPlanPhase.COMPLETE), SettlementAssaultStatus.RESOLVED,
+        return new SettlementAssault(id, taskId, hiveId, sighting, overseerId, attackers, march, defenderUnit, tacticalPlan.withPhase(TacticalPlanPhase.COMPLETE), SettlementAssaultStatus.RESOLVED,
                 nextStrikeEpoch, Optional.of(Objects.requireNonNull(result, "assault outcome")));
     }
 
     public SettlementAssault abort() {
         if (status == SettlementAssaultStatus.RESOLVED) throw new IllegalArgumentException("resolved assault cannot be aborted");
-        return new SettlementAssault(id, taskId, hiveId, sighting, overseerId, attackers, defenderUnit, tacticalPlan.withPhase(TacticalPlanPhase.ABORTED), SettlementAssaultStatus.RESOLVED,
+        return new SettlementAssault(id, taskId, hiveId, sighting, overseerId, attackers, march, defenderUnit, tacticalPlan.withPhase(TacticalPlanPhase.ABORTED), SettlementAssaultStatus.RESOLVED,
                 nextStrikeEpoch, Optional.of(SettlementAssaultOutcome.ABORTED));
+    }
+
+    /** Compatibility constructor for the former per-attacker persistence shape.  The derived
+     * march is still the sole current cursor; old attacker cursors are validated only as input. */
+    public SettlementAssault(SubjectId id, SubjectId taskId, SubjectId hiveId, HiveSettlementKnowledge.Sighting sighting,
+                             SubjectId overseerId, List<SettlementAssaultAttacker> attackers, SettlementDefenderUnit defenderUnit,
+                             TacticalPlan tacticalPlan, SettlementAssaultStatus status, int nextStrikeEpoch, Optional<SettlementAssaultOutcome> outcome) {
+        this(id, taskId, hiveId, sighting, overseerId, attackers, legacyMarch(id, overseerId, attackers), defenderUnit, tacticalPlan, status, nextStrikeEpoch, outcome);
+    }
+
+    private static ExpeditionMarch legacyMarch(SubjectId assaultId, SubjectId overseerId, List<SettlementAssaultAttacker> attackers) {
+        java.util.Map<SubjectId, TraversalTopology> paths = new java.util.LinkedHashMap<>();
+        for (SettlementAssaultAttacker attacker : attackers) {
+            java.util.List<SurfaceAnchor> surfaces = new java.util.ArrayList<>();
+            java.util.List<BlockPosition> route = attacker.route();
+            for (int index = 0; index < route.size(); index++) {
+                BlockPosition from = route.get(index);
+                if (index == 0) { surfaces.add(new SurfaceAnchor(from)); continue; }
+                BlockPosition previous = route.get(index - 1);
+                int x = previous.x(), y = previous.y(), z = previous.z();
+                while (x != from.x() || z != from.z()) {
+                    if (x != from.x()) x += Integer.compare(from.x(), x); else z += Integer.compare(from.z(), z);
+                    if (Math.abs(from.y() - y) <= 1) y = from.y();
+                    surfaces.add(new SurfaceAnchor(new BlockPosition(x, y, z)));
+                }
+            }
+            paths.put(attacker.actorId(), TraversalTopology.corridor(new TraversalTopologyId("topology:expedition:" + assaultId.value() + ":" + attacker.actorId().value()),
+                    1L, assaultId, TraversalKind.GROUND_BIOFORM, java.util.Set.of(TraversalCapability.GROUND_BIOFORM), surfaces));
+        }
+        int cursor = attackers.stream().mapToInt(SettlementAssaultAttacker::routeIndex).min().orElse(0);
+        return new ExpeditionMarch(overseerId, cursor, paths);
     }
 }

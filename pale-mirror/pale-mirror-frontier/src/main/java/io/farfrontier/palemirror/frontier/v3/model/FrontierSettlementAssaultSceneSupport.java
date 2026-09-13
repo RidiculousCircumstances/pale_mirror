@@ -1,7 +1,11 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Optional;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -40,12 +44,28 @@ public final class FrontierSettlementAssaultSceneSupport {
                 .map(assault -> FrontierSettlementAssaultBattlefield.candidate(state, assault, provider)).flatMap(java.util.Optional::stream).toList();
     }
 
+    /** The approach is the same exact assault cause, but owns only its retained hive roster. */
+    public static Optional<SettlementAssaultSceneCandidate> marchCandidate(FrontierWorldState state, SettlementAssault assault) {
+        if (assault.status() != SettlementAssaultStatus.APPROACHING || assault.march().complete()
+                || !assault.tacticalPlan().currentFor(state.strategicPlans())) return Optional.empty();
+        Map<SubjectId, BlockPosition> positions = new LinkedHashMap<>();
+        for (Map.Entry<SubjectId, BodyPosition> member : assault.formationBodies().entrySet()) {
+            ActorLocation actor = state.actorLocations().get(member.getKey());
+            if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE || !actor.body().equals(member.getValue())) return Optional.empty();
+            positions.put(member.getKey(), member.getValue().supportingSurface().support());
+        }
+        return Optional.of(new SettlementAssaultSceneCandidate(assault.id(), assault.settlementId(),
+                positions.get(assault.overseerId()), positions));
+    }
+
     static void validatePrepared(FrontierWorldState state, SceneLease lease) {
         SettlementAssaultSceneCause cause = FrontierSceneBehaviors.settlementAssault(lease);
         SettlementAssault assault = require(state, cause);
-        if (lease.status() != SceneLeaseStatus.PREPARED || assault.status() != SettlementAssaultStatus.COLD_COMBAT
+        boolean march = assault.status() == SettlementAssaultStatus.APPROACHING;
+        if (lease.status() != SceneLeaseStatus.PREPARED || (!march && assault.status() != SettlementAssaultStatus.COLD_COMBAT)
                 || !assault.tacticalPlan().currentFor(state.strategicPlans())
-                || !lease.handoffPosition().equals(assault.settlementAnchor()) || !targetIntact(state, assault)) {
+                || (march ? !lease.handoffPosition().equals(assault.formationBodies().get(assault.overseerId()).supportingSurface().support())
+                : !lease.handoffPosition().equals(assault.settlementAnchor()) || !targetIntact(state, assault))) {
             throw new IllegalArgumentException("assault scene must prepare one intact COLD battle at its retained anchor");
         }
         // The registered NeoForge admission transaction already established that these exact
@@ -53,7 +73,7 @@ public final class FrontierSettlementAssaultSceneSupport {
         // This pure reducer owns canonical identity, status, target and position checks; it must
         // not rebuild a physical projection merely to repeat that observation.
         Set<SubjectId> expected = new HashSet<>(assault.attackerIds());
-        expected.addAll(assault.defenderIds());
+        if (!march) expected.addAll(assault.defenderIds());
         Set<SubjectId> actual = new HashSet<>();
         Set<BlockPosition> floors = new HashSet<>();
         for (SceneMember member : lease.members()) {
@@ -61,12 +81,31 @@ public final class FrontierSettlementAssaultSceneSupport {
             BlockPosition floor = lease.memberPosition(member.actorId()).supportingSurface().support();
             if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE || !actor.supportingSurface().support().equals(floor)
                     || !actual.add(member.actorId()) || !floors.add(floor)
-                    || !FrontierSettlementAssaultBattlefield.localClearFloor(state,
+                    || (march && !actor.body().equals(assault.formationBodies().get(member.actorId()))) || !march && !FrontierSettlementAssaultBattlefield.localClearFloor(state,
                     FrontierWorldStateSupport.settlement(state.bootstrap(), assault.settlementId()), floor)) {
                 throw new IllegalArgumentException("assault scene needs exact living actors at distinct local hand-off floors");
             }
         }
         if (!actual.equals(expected)) throw new IllegalArgumentException("assault scene members must exactly match retained combatants");
+    }
+
+    public static FrontierWorldState advanceFormationObserved(FrontierWorldState state, SubjectId subject,
+                                                               SettlementAssaultFormationObserved observed) {
+        SettlementAssault assault = state.strategicPlans().settlementAssaults().get(observed.assaultId());
+        if (assault == null || !subject.equals(assault.hiveId()) || assault.status() != SettlementAssaultStatus.HOT) {
+            throw new IllegalArgumentException("expedition formation observation has no HOT owner");
+        }
+        SceneLease lease = state.sceneLeases().get(observed.leaseId());
+        if (lease == null || !FrontierSceneBehaviors.isSettlementAssault(lease)
+                || !FrontierSceneBehaviors.settlementAssault(lease).assaultId().equals(assault.id())
+                || !lease.memberPositions().equals(assault.formationBodies())) {
+            throw new IllegalArgumentException("expedition formation observation has no matching lease/cursor");
+        }
+        SettlementAssault next = assault.advanceFormation();
+        if (!next.formationBodies().equals(observed.bodies())) throw new IllegalArgumentException("expedition formation did not reach its retained next edge");
+        Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases());
+        leases.put(lease.id(), lease.withMemberPositions(observed.bodies()));
+        return state.withChanges(FrontierWorldStateUpdate.begin().strategicPlans(state.strategicPlans().replaceSettlementAssault(next)).sceneLeases(leases));
     }
 
     static boolean targetIntact(FrontierWorldState state, SettlementAssault assault) {

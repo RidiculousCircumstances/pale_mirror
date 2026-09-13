@@ -122,7 +122,10 @@ final class FrontierDevelopmentScenarios {
         ScheduledAction next = started.schedules().stream().filter(action -> action.kind().equals("frontier.settlement_assault.progress")).findFirst()
                 .orElseThrow(() -> new IllegalStateException("development assault fixture did not schedule approach"));
         SubjectId hive = state.bootstrap().hive().id();
-        for (int step = 0; step < 256; step++) {
+        // The retained approach now consists of genuine GROUND_BIOFORM topology edges rather
+        // than the former six-point interpolation.  Keep this disposable pure fixture bounded,
+        // but large enough to traverse the 1024-cell world without shortcutting its cursor.
+        for (int step = 0; step < 4_096; step++) {
             List<ProposedEvent> progress = HiveSettlementAssaultProcess.planProgress(state, next);
             for (ProposedEvent event : progress) {
                 if (event.payload() instanceof SettlementAssaultAttackerAdvanced advanced) state = HiveSettlementAssaultProcess.reduceAdvanced(state, hive, advanced);
@@ -304,7 +307,7 @@ final class FrontierDevelopmentScenarios {
         return new RouteConstructionFixture(state, base.instant(), List.of(), ready.id());
     }
 
-    private static SettlementAssaultFixture startedSettlementAssaultFixture(WorldId worldId, long seed) {
+    static SettlementAssaultFixture startedSettlementAssaultFixture(WorldId worldId, long seed) {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(worldId, seed));
         Settlement settlement = state.bootstrap().settlements().getFirst();
         Bioform scout = state.bootstrap().hive().bioforms().stream().filter(Bioform::isScout).findFirst()

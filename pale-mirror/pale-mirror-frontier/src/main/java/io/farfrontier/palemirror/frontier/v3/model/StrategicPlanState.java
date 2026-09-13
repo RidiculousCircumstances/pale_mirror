@@ -601,17 +601,17 @@ public final class StrategicPlanState {
     }
 
     private static boolean allowed(SettlementAssaultStatus current, SettlementAssaultStatus next) {
-        return current == SettlementAssaultStatus.APPROACHING && (next == SettlementAssaultStatus.WAITING_FOR_BATTLE
-                || next == SettlementAssaultStatus.COLD_COMBAT || next == SettlementAssaultStatus.UNKNOWN_AFTER_RESTART
+        return current == SettlementAssaultStatus.APPROACHING && (next == SettlementAssaultStatus.HOT
+                || next == SettlementAssaultStatus.WAITING_FOR_BATTLE || next == SettlementAssaultStatus.COLD_COMBAT || next == SettlementAssaultStatus.UNKNOWN_AFTER_RESTART
                 || next == SettlementAssaultStatus.CONFLICT)
                 || current == SettlementAssaultStatus.WAITING_FOR_BATTLE && (next == SettlementAssaultStatus.COLD_COMBAT
                 || next == SettlementAssaultStatus.UNKNOWN_AFTER_RESTART || next == SettlementAssaultStatus.CONFLICT)
                 || current == SettlementAssaultStatus.COLD_COMBAT && (next == SettlementAssaultStatus.HOT
                 || next == SettlementAssaultStatus.UNKNOWN_AFTER_RESTART || next == SettlementAssaultStatus.CONFLICT)
-                || current == SettlementAssaultStatus.HOT && (next == SettlementAssaultStatus.COLD_COMBAT
+                || current == SettlementAssaultStatus.HOT && (next == SettlementAssaultStatus.APPROACHING || next == SettlementAssaultStatus.COLD_COMBAT
                 || next == SettlementAssaultStatus.UNKNOWN_AFTER_RESTART || next == SettlementAssaultStatus.CONFLICT)
                 || current == SettlementAssaultStatus.UNKNOWN_AFTER_RESTART && (next == SettlementAssaultStatus.HOT
-                || next == SettlementAssaultStatus.COLD_COMBAT)
+                || next == SettlementAssaultStatus.APPROACHING || next == SettlementAssaultStatus.COLD_COMBAT)
                 || current == SettlementAssaultStatus.CONFLICT && next == SettlementAssaultStatus.HOT;
     }
 

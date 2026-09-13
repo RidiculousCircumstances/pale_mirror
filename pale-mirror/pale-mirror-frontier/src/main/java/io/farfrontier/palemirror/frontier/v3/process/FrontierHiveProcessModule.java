@@ -114,6 +114,7 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
             case RouteEngagementCommandAuthorityChanged changed -> HiveRouteEngagementProcess.reduceCommandAuthorityChanged(state, event.subject(), changed);
             case SettlementAssaultStarted started -> HiveSettlementAssaultProcess.reduceStarted(state, event.subject(), started);
             case SettlementAssaultAttackerAdvanced advanced -> HiveSettlementAssaultProcess.reduceAdvanced(state, event.subject(), advanced);
+            case SettlementAssaultFormationObserved observed -> HiveSettlementAssaultProcess.reduceFormationObserved(state, event.subject(), observed);
             case SettlementAssaultTransition transition -> HiveSettlementAssaultProcess.reduceTransition(state, event.subject(), transition);
             case SettlementAssaultStrike strike -> HiveSettlementAssaultProcess.reduceStrike(state, event.subject(), strike);
             case SettlementAssaultResolved resolved -> HiveSettlementAssaultProcess.reduceResolved(state, event.subject(), resolved);

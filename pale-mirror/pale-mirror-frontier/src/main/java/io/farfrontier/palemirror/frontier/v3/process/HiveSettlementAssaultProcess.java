@@ -115,11 +115,16 @@ public final class HiveSettlementAssaultProcess {
         }
         if (!coldAvailable(state, assault)) return List.of(schedule(progress(assault, action.dueAt().ticks()
                 + state.bootstrap().ruleset().cadence().hiveSettlementAssaultStepInterval())));
-        SettlementAssaultAttacker next = assault.attackers().stream().filter(value -> !value.atDestination()).findFirst().orElse(null);
-        if (next == null) return List.of(new ProposedEvent(assault.hiveId(), new SettlementAssaultTransition(assault.id(), SettlementAssaultStatus.WAITING_FOR_BATTLE)),
+        if (assault.march().complete()) return List.of(new ProposedEvent(assault.hiveId(), new SettlementAssaultTransition(assault.id(), SettlementAssaultStatus.WAITING_FOR_BATTLE)),
                 schedule(progress(assault, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveSettlementAssaultStepInterval())));
-        return List.of(new ProposedEvent(assault.hiveId(), new SettlementAssaultAttackerAdvanced(assault.id(), next.actorId(), next.routeIndex() + 1)),
-                schedule(progress(assault, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveSettlementAssaultStepInterval())));
+        // COLD advances exactly one shared formation edge per due action.  The event names the
+        // Overseer only as the retained command owner; it does not restore independent member
+        // cursors.  This gives the same one-edge causality as HOT observations and makes a
+        // demand return/restart resume from an unambiguous formation cursor.
+        SettlementAssaultAttackerAdvanced advance = new SettlementAssaultAttackerAdvanced(assault.id(), assault.overseerId(),
+                assault.march().cursor() + 1);
+        return List.of(new ProposedEvent(assault.hiveId(), advance), schedule(progress(assault.advanceFormation(),
+                action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveSettlementAssaultStepInterval())));
     }
 
     public static List<ProposedEvent> planCombat(FrontierWorldState state, ScheduledAction action) {
@@ -174,9 +179,21 @@ public final class HiveSettlementAssaultProcess {
         if (!subject.equals(assault.hiveId()) || !assault.tacticalPlan().currentFor(state.strategicPlans()) || !coldAvailable(state, assault)) {
             throw new IllegalArgumentException("COLD assault advance has a foreign owner or leased actor");
         }
-        SettlementAssault next = assault.advanceAttacker(advanced.attackerId(), advanced.routeIndex());
-        SettlementAssaultAttacker attacker = next.attackers().stream().filter(value -> value.actorId().equals(advanced.attackerId())).findFirst().orElseThrow();
-        return state.withActorBody(attacker.actorId(), BodyPosition.above(new SurfaceAnchor(attacker.position())), state.strategicPlans().replaceSettlementAssault(next));
+        if (advanced.routeIndex() != assault.march().cursor() + 1 || !assault.attackerIds().contains(advanced.attackerId())) {
+            throw new IllegalArgumentException("COLD assault advance must name the current retained formation edge");
+        }
+        SettlementAssault next = assault.advanceFormation();
+        Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
+        for (Map.Entry<SubjectId, BodyPosition> body : next.formationBodies().entrySet()) {
+            ActorLocation current = actors.get(body.getKey());
+            actors.put(body.getKey(), new ActorLocation(body.getValue(), current.condition()));
+        }
+        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors)
+                .strategicPlans(state.strategicPlans().replaceSettlementAssault(next)));
+    }
+
+    public static FrontierWorldState reduceFormationObserved(FrontierWorldState state, SubjectId subject, SettlementAssaultFormationObserved observed) {
+        return FrontierSettlementAssaultSceneSupport.advanceFormationObserved(state, subject, observed);
     }
 
     public static FrontierWorldState reduceTransition(FrontierWorldState state, SubjectId subject, SettlementAssaultTransition transition) {

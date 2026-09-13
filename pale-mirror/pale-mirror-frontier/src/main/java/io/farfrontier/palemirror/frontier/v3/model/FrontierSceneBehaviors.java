@@ -336,20 +336,21 @@ public final class FrontierSceneBehaviors {
                                                          StrategicPlanState plans, ResourceSiteState resourceSites, Map<SubjectId, ProductionJob> productionJobs,
                                                          Map<SubjectId, SettlementServiceWork> serviceWorks, SceneLease lease, Set<SubjectId> leasedOperations) {
             SettlementAssault assault = FrontierSettlementAssaultSceneSupport.require(plans, cause(lease));
-            if (!FrontierSettlementAssaultSceneSupport.targetIntact(bootstrap, structures, assault) && lease.status() != SceneLeaseStatus.CLOSED) throw new IllegalArgumentException("active assault scene target geometry is destroyed");
+            boolean march = assault.tacticalPlan().phase() == TacticalPlanPhase.TRAVEL;
+            if (!march && !FrontierSettlementAssaultSceneSupport.targetIntact(bootstrap, structures, assault) && lease.status() != SceneLeaseStatus.CLOSED) throw new IllegalArgumentException("active assault scene target geometry is destroyed");
             boolean valid = switch (lease.status()) {
-                case PREPARED -> assault.status() == SettlementAssaultStatus.COLD_COMBAT;
+                case PREPARED -> assault.status() == SettlementAssaultStatus.COLD_COMBAT || assault.status() == SettlementAssaultStatus.APPROACHING;
                 case HOT, DRAINING -> assault.status() == SettlementAssaultStatus.HOT;
                 case UNKNOWN_AFTER_RESTART -> assault.status() == SettlementAssaultStatus.UNKNOWN_AFTER_RESTART;
                 case CONFLICT -> assault.status() == SettlementAssaultStatus.CONFLICT;
                 // A CLOSED lease is the retained receipt for a completed epoch.  It remains
                 // inspectable while the next COLD epoch either reaches HOT, resolves, or
                 // truthfully conflicts after its independent battlefield validation.
-                case CLOSED -> assault.status() == SettlementAssaultStatus.COLD_COMBAT || assault.status() == SettlementAssaultStatus.HOT
+                case CLOSED -> assault.status() == SettlementAssaultStatus.APPROACHING || assault.status() == SettlementAssaultStatus.COLD_COMBAT || assault.status() == SettlementAssaultStatus.HOT
                         || assault.status() == SettlementAssaultStatus.RESOLVED || assault.status() == SettlementAssaultStatus.CONFLICT;
             };
             if (!valid) throw new IllegalArgumentException("assault scene lease and canonical lifecycle disagree");
-            Set<SubjectId> values = new HashSet<>(assault.attackerIds()); values.addAll(assault.defenderIds()); return Set.copyOf(values);
+            Set<SubjectId> values = new HashSet<>(assault.attackerIds()); if (!march) values.addAll(assault.defenderIds()); return Set.copyOf(values);
         }
         @Override public StrategicPlanState transitionPlans(FrontierWorldState state, SceneLease lease, SceneLeaseStatus nextStatus) {
             SettlementAssault assault = FrontierSettlementAssaultSceneSupport.require(state, cause(lease));
@@ -361,7 +362,9 @@ public final class FrontierSceneBehaviors {
             };
         }
         @Override public StrategicPlanState releasePlans(FrontierWorldState state, SceneLease lease) {
-            return state.strategicPlans().transitionSettlementAssault(FrontierSettlementAssaultSceneSupport.require(state, cause(lease)).id(), SettlementAssaultStatus.COLD_COMBAT);
+            SettlementAssault assault = FrontierSettlementAssaultSceneSupport.require(state, cause(lease));
+            return state.strategicPlans().transitionSettlementAssault(assault.id(), assault.tacticalPlan().phase() == TacticalPlanPhase.TRAVEL
+                    ? SettlementAssaultStatus.APPROACHING : SettlementAssaultStatus.COLD_COMBAT);
         }
         @Override public BodyPosition releasedBody(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed) {
             // HOT bodies may be observed between the exact provider-approved assault floors

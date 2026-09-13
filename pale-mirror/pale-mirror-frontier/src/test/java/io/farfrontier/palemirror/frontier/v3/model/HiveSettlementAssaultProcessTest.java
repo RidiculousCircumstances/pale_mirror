@@ -121,7 +121,7 @@ class HiveSettlementAssaultProcessTest {
         state = StrategicObjectiveProcess.reduceTaskTransition(state, fixture.hive(), (StrategicTaskTransition) start.getFirst().payload());
         state = HiveSettlementAssaultProcess.reduceStarted(state, fixture.hive(), (SettlementAssaultStarted) start.get(1).payload());
         ScheduledAction next = scheduled(start, "frontier.settlement_assault.progress");
-        for (int step = 0; step < 256; step++) {
+        for (int step = 0; step < 4_096; step++) {
             List<ProposedEvent> events = HiveSettlementAssaultProcess.planProgress(state, next);
             for (ProposedEvent event : events) {
                 if (event.payload() instanceof SettlementAssaultAttackerAdvanced advanced) state = HiveSettlementAssaultProcess.reduceAdvanced(state, fixture.hive(), advanced);
@@ -242,7 +242,7 @@ class HiveSettlementAssaultProcessTest {
         assertTrue(started.attackers().stream().noneMatch(attacker -> attacker.route().getLast().equals(started.settlementAnchor())));
 
         ScheduledAction next = scheduled(start, "frontier.settlement_assault.progress");
-        for (int step = 0; step < 256; step++) {
+        for (int step = 0; step < 4_096; step++) {
             List<ProposedEvent> events = HiveSettlementAssaultProcess.planProgress(state, next);
             for (ProposedEvent event : events) {
                 if (event.payload() instanceof SettlementAssaultAttackerAdvanced advanced) state = HiveSettlementAssaultProcess.reduceAdvanced(state, fixture.hive(), advanced);
@@ -285,7 +285,7 @@ class HiveSettlementAssaultProcessTest {
         state = StrategicObjectiveProcess.reduceTaskTransition(state, fixture.hive(), (StrategicTaskTransition) start.getFirst().payload());
         state = HiveSettlementAssaultProcess.reduceStarted(state, fixture.hive(), (SettlementAssaultStarted) start.get(1).payload());
         ScheduledAction next = scheduled(start, "frontier.settlement_assault.progress");
-        for (int step = 0; step < 256; step++) {
+        for (int step = 0; step < 4_096; step++) {
             List<ProposedEvent> events = HiveSettlementAssaultProcess.planProgress(state, next);
             for (ProposedEvent event : events) {
                 if (event.payload() instanceof SettlementAssaultAttackerAdvanced advanced) state = HiveSettlementAssaultProcess.reduceAdvanced(state, fixture.hive(), advanced);
@@ -336,7 +336,7 @@ class HiveSettlementAssaultProcessTest {
         ScheduledAction next = scheduled(start, "frontier.settlement_assault.progress");
         ScheduledAction terminal = null;
 
-        for (int step = 0; step < 256; step++) {
+        for (int step = 0; step < 4_096; step++) {
             List<ProposedEvent> events = HiveSettlementAssaultProcess.planProgress(state, next);
             for (ProposedEvent event : events) {
                 if (event.payload() instanceof SettlementAssaultAttackerAdvanced advanced) state = HiveSettlementAssaultProcess.reduceAdvanced(state, fixture.hive(), advanced);

@@ -47,9 +47,8 @@ class HiveMobilizationProcessTest {
         assertEquals(parent.memberIds(), assault.attackerIds(), "assembly hands the exact retained group to its one parent child");
 
         while (!assault.allAttackersAtBattlefield()) {
-            SettlementAssaultAttacker next = assault.attackers().stream().filter(attacker -> !attacker.atDestination()).findFirst().orElseThrow();
             state = HiveSettlementAssaultProcess.reduceAdvanced(state, hive,
-                    new SettlementAssaultAttackerAdvanced(assault.id(), next.actorId(), next.routeIndex() + 1));
+                    new SettlementAssaultAttackerAdvanced(assault.id(), assault.overseerId(), assault.march().cursor() + 1));
             assault = state.strategicPlans().settlementAssaults().get(assault.id());
         }
         state = HiveSettlementAssaultProcess.reduceTransition(state, hive,

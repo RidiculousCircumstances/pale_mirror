@@ -225,6 +225,50 @@ class SettlementAssaultTest {
         assertEquals(new SettlementAssaultResolved(assault.id(), SettlementAssaultOutcome.ABORTED), terminal.getFirst().payload());
     }
 
+    @Test void oneSharedNonFlatFormationCursorSurvivesSnapshotAndRejectsForgedHotArrival() {
+        FrontierDevelopmentScenarios.SettlementAssaultFixture fixture = FrontierDevelopmentScenarios.startedSettlementAssaultFixture(
+                new WorldId("frontier:expedition-formation-snapshot"), 93L);
+        FrontierWorldState state = fixture.state();
+        SettlementAssault assault = state.strategicPlans().settlementAssaults().get(fixture.assaultId());
+        assertFalse(assault.march().complete());
+        assertTrue(assault.march().memberTopologies().values().stream().anyMatch(path -> java.util.stream.IntStream
+                        .range(1, path.linearCorridorSurfaces().size()).anyMatch(index -> path.linearCorridorSurfaces().get(index - 1).y()
+                                != path.linearCorridorSurfaces().get(index).y())),
+                "the retained approach carries non-flat GROUND_BIOFORM topology rather than an endpoint shortcut");
+
+        state = HiveSettlementAssaultProcess.reduceAdvanced(state, state.bootstrap().hive().id(),
+                new SettlementAssaultAttackerAdvanced(assault.id(), assault.overseerId(), assault.march().cursor() + 1));
+        assault = state.strategicPlans().settlementAssaults().get(assault.id());
+        assertEquals(1, assault.march().cursor());
+        FrontierWorldState cold = state;
+        assertEquals(assault.formationBodies(), assault.attackerIds().stream().collect(java.util.stream.Collectors.toMap(
+                id -> id, id -> cold.actorLocations().get(id).body())));
+
+        FrontierWorldState restored = new FrontierWorldStateCodec(state.bootstrap()).decode(new FrontierWorldStateCodec(state.bootstrap()).encode(state));
+        assault = restored.strategicPlans().settlementAssaults().get(assault.id());
+        assertEquals(1, assault.march().cursor());
+        assertEquals(assault.formationBodies(), assault.attackerIds().stream().collect(java.util.stream.Collectors.toMap(
+                id -> id, id -> restored.actorLocations().get(id).body())));
+
+        SettlementAssaultSceneCandidate candidate = FrontierSettlementAssaultSceneSupport.marchCandidate(restored, assault).orElseThrow();
+        SceneLeaseId leaseId = new SceneLeaseId("lease:expedition-formation-snapshot");
+        List<SceneMember> members = candidate.memberPositions().keySet().stream().sorted().map(id -> new SceneMember(id,
+                SceneLease.deterministicEntityId(restored.bootstrap().worldId(), id))).toList();
+        SceneLease lease = SceneLease.forCause(leaseId, restored.bootstrap().worldId(), new SettlementAssaultSceneCause(assault.id(), assault.settlementId()),
+                candidate.handoffPosition(), fixture.instant(), 1L, SceneLeaseStatus.PREPARED, members,
+                SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), Set.of(), Optional.empty());
+        FrontierWorldState hot = restored.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+        SettlementAssault hotAssault = hot.strategicPlans().settlementAssaults().get(assault.id());
+        Map<SubjectId, BodyPosition> forged = new java.util.LinkedHashMap<>(hotAssault.nextFormationBodies());
+        forged.put(hotAssault.overseerId(), hotAssault.formationBodies().get(hotAssault.overseerId()));
+        assertThrows(IllegalArgumentException.class, () -> HiveSettlementAssaultProcess.reduceFormationObserved(hot, hotAssault.hiveId(),
+                new SettlementAssaultFormationObserved(hotAssault.id(), leaseId, forged)),
+                "one missing retained arrival cannot advance a complete formation");
+        FrontierWorldState advanced = HiveSettlementAssaultProcess.reduceFormationObserved(hot, hotAssault.hiveId(),
+                new SettlementAssaultFormationObserved(hotAssault.id(), leaseId, hotAssault.nextFormationBodies()));
+        assertEquals(hotAssault.march().cursor() + 1, advanced.strategicPlans().settlementAssaults().get(hotAssault.id()).march().cursor());
+    }
+
     private static PhysicalIntent strike(FrontierWorldState state, SceneLease lease, SubjectId cause, SubjectId attacker, SubjectId target) {
         return new PhysicalIntent(SettlementAssaultStrikeReceiptBinding.intentId(state, lease, cause), PhysicalIntentKind.SCENE_STRIKE,
                 PhysicalIntentStatus.PREPARED, cause, List.of(attacker, target),

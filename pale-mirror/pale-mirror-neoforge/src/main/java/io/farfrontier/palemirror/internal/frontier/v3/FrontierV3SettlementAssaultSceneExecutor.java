@@ -15,6 +15,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierGrayboxPlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSettlementAssaultBattlefield;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierSettlementAssaultSceneSupport;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseRecoveryUnresolved;
@@ -27,9 +28,11 @@ import io.farfrontier.palemirror.frontier.v3.model.SceneStrikeObservation;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssault;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCandidate;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultCauseIdentity;
+import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultFormationObserved;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCause;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneLeaseHandoff;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneLeasePrepared;
+import io.farfrontier.palemirror.frontier.v3.model.TacticalPlanPhase;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
@@ -67,6 +70,10 @@ final class FrontierV3SettlementAssaultSceneExecutor {
 
     /** @return true when a typed assault scene owns this materialization turn. */
     static boolean tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
+        FrontierWorldState current = state(runtime);
+        if (current != null && current.sceneLeases().values().stream().noneMatch(lease -> isAssault(lease)
+                && lease.status() != SceneLeaseStatus.CLOSED && lease.status() != SceneLeaseStatus.CONFLICT)
+                && admitMarch(level, runtime, current)) return true;
         return tick(runtime, new Turn() {
             @Override public boolean demanded(io.farfrontier.palemirror.frontier.v3.model.BlockPosition position) {
                 return FrontierV3SceneExecutor.demandExists(level, position);
@@ -108,6 +115,20 @@ final class FrontierV3SettlementAssaultSceneExecutor {
             if (FrontierSceneAdmission.available(state, battle.memberPositions().keySet())) turn.prepare(battle, provider, lease);
             else turn.handoff(state, provider, lease);
         });
+    }
+
+    /** Demand may materialize the retained approach before contact; it cannot manufacture a battlefield. */
+    private static boolean admitMarch(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state) {
+        Optional<SettlementAssaultSceneCandidate> candidate = state.strategicPlans().settlementAssaults().values().stream()
+                .sorted(Comparator.comparing(SettlementAssault::id)).map(assault -> FrontierSettlementAssaultSceneSupport.marchCandidate(state, assault))
+                .flatMap(Optional::stream).filter(value -> FrontierV3SceneExecutor.demandExists(level, value.handoffPosition())).findFirst();
+        if (candidate.isEmpty()) return false;
+        SettlementAssaultSceneCandidate march = candidate.orElseThrow();
+        if (!FrontierSceneAdmission.available(state, march.memberPositions().keySet())) return false;
+        SceneLease lease = lease(runtime, march);
+        FrontierV3DiagnosticTrace.recordScene(level.getServer(), "expedition_march_prepared", lease,
+                submit(runtime, "expedition-march-prepare", new SettlementAssaultSceneLeasePrepared(lease)));
+        return true;
     }
 
     interface Turn {
@@ -238,6 +259,8 @@ final class FrontierV3SettlementAssaultSceneExecutor {
 
     private static void executeHot(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                    FrontierWorldState state, SceneLease lease) {
+        SettlementAssault assault = FrontierSettlementAssaultSceneSupport.require(state, FrontierSceneBehaviors.settlementAssault(lease));
+        if (assault.tacticalPlan().phase() == TacticalPlanPhase.TRAVEL) { executeMarch(level, runtime, state, lease, assault); return; }
         FrontierV3SceneDemand.Snapshot demand = FrontierV3SceneExecutor.demandSnapshot(level, lease.handoffPosition());
         if (FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, lease.id(), level.getGameTime(), demand, playerWithinSafeRadius(level, lease))) {
             FrontierV3DiagnosticTrace.recordScene(level.getServer(), "settlement_assault_draining", lease,
@@ -262,6 +285,43 @@ final class FrontierV3SettlementAssaultSceneExecutor {
         if (level.getGameTime() % 20L == 0L) {
             forgetObserved(runtime, lease.id());
             FrontierV3SceneExecutor.executeStrike(level, runtime, state, lease);
+        }
+        rememberObserved(level, runtime, state, lease);
+    }
+
+    private static void executeMarch(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                     FrontierWorldState state, SceneLease lease, SettlementAssault assault) {
+        FrontierV3SceneDemand.Snapshot demand = FrontierV3SceneExecutor.demandSnapshot(level, lease.handoffPosition());
+        if (FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, lease.id(), level.getGameTime(), demand, playerWithinSafeRadius(level, lease))) {
+            submit(runtime, "expedition-march-draining", new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING)); return;
+        }
+        if (assault.march().complete()) {
+            // The last observed formation edge is durable.  Drain this travel-only lease even
+            // while demand remains, so its ordinary release returns the same operation to COLD
+            // contact admission instead of leaving a completed approach permanently HOT.
+            submit(runtime, "expedition-march-complete", new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
+            return;
+        }
+        if (!demand.active()) return;
+        Map<SubjectId, BodyPosition> targets;
+        try { targets = assault.nextFormationBodies(); } catch (IllegalArgumentException invalid) { conflict(level, runtime, lease, "march-no-open-edge"); return; }
+        boolean arrived = true;
+        Set<java.util.UUID> members = lease.members().stream().map(SceneMember::entityId).collect(java.util.stream.Collectors.toSet());
+        for (SceneMember member : lease.members()) {
+            Entity entity = level.getEntity(member.entityId()); BodyPosition target = targets.get(member.actorId());
+            if (!(entity instanceof Mob mob) || !mob.isAlive() || target == null) { conflict(level, runtime, lease, "march-missing-owned-body"); return; }
+            if (!FrontierV3SurfaceObservation.at(mob, target.supportingSurface())) {
+                arrived = false;
+                var bounds = mob.getBoundingBox().move(FrontierV3SurfaceObservation.point(target.supportingSurface()).subtract(mob.position()));
+                if (level.getBlockCollisions(mob, bounds).iterator().hasNext() || !level.getEntities(mob, bounds, value -> !members.contains(value.getUUID())).isEmpty()) {
+                    conflict(level, runtime, lease, "march-occupied-next-body"); return;
+                }
+                FrontierV3ControlledMobMotion.moveToward(level, mob, FrontierV3SurfaceObservation.point(target.supportingSurface()));
+            }
+        }
+        if (arrived) {
+            CommandResult result = submit(runtime, "expedition-march-observed", new SettlementAssaultFormationObserved(assault.id(), lease.id(), targets));
+            FrontierV3DiagnosticTrace.recordScene(level.getServer(), "expedition_march_formation", lease, result);
         }
         rememberObserved(level, runtime, state, lease);
     }

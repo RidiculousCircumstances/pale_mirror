@@ -67,6 +67,7 @@ public final class StrategicPlanStateCodec {
                 for (BlockPosition position : attacker.route()) writePosition(output, position);
                 output.writeByte(attacker.routeIndex());
             }
+            writeMarch(output, assault.march());
             writeCount(output, assault.defenderIds().size());
             for (SubjectId defender : assault.defenderIds()) writeSubject(output, defender);
             TacticalPlanStateCodec.write(output, assault.tacticalPlan());
@@ -232,12 +233,13 @@ public final class StrategicPlanStateCodec {
                 for (int point = 0, routeSize = readCount(input); point < routeSize; point++) route.add(readPosition(input));
                 attackers.add(new SettlementAssaultAttacker(attackerId, route, input.readUnsignedByte()));
             }
+            ExpeditionMarch march = readMarch(input);
             List<SubjectId> defenders = new ArrayList<>();
             for (int defender = 0, defenderCount = readCount(input); defender < defenderCount; defender++) defenders.add(readSubject(input));
             TacticalPlan tacticalPlan = TacticalPlanStateCodec.read(input);
             int status = input.readUnsignedByte(), epoch = input.readInt();
             Optional<SettlementAssaultOutcome> outcome = input.readBoolean() ? Optional.of(readAssaultOutcome(input)) : Optional.empty();
-            if (assaults.put(id, new SettlementAssault(id, task, hive, sighting, overseer, attackers,
+            if (assaults.put(id, new SettlementAssault(id, task, hive, sighting, overseer, attackers, march,
                     SettlementDefenderUnit.forAssault(id, sighting.settlementId(), defenders), tacticalPlan,
                     FrontierWireTags.require(SettlementAssaultStatus.class, status), epoch, outcome)) != null) {
                 throw new IllegalArgumentException("invalid or duplicate settlement assault");
@@ -382,6 +384,17 @@ public final class StrategicPlanStateCodec {
     }
     private static SettlementAssaultOutcome readAssaultOutcome(DataInputStream input) throws IOException {
         return FrontierWireTags.require(SettlementAssaultOutcome.class, input.readUnsignedByte());
+    }
+    private static void writeMarch(DataOutputStream output, ExpeditionMarch march) throws IOException {
+        writeSubject(output, march.overseerId()); output.writeShort(march.cursor()); writeCount(output, march.memberTopologies().size());
+        for (var entry : march.memberTopologies().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
+            writeSubject(output, entry.getKey()); TraversalTopologyStateCodec.write(output, entry.getValue());
+        }
+    }
+    private static ExpeditionMarch readMarch(DataInputStream input) throws IOException {
+        SubjectId overseer = readSubject(input); int cursor = input.readUnsignedShort(); Map<SubjectId, TraversalTopology> paths = new LinkedHashMap<>();
+        for (int index = 0, count = readCount(input); index < count; index++) paths.put(readSubject(input), TraversalTopologyStateCodec.read(input));
+        return new ExpeditionMarch(overseer, cursor, paths);
     }
     private static RoutePatrolBlockReason readPatrolBlockReason(DataInputStream input) throws IOException {
         return FrontierWireTags.require(RoutePatrolBlockReason.class, input.readUnsignedByte());
