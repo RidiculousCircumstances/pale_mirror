@@ -318,7 +318,12 @@ final class FrontierDevelopmentScenarios {
         // precondition, rather than relying on an impossible direct COLD movement later.
         for (Bioform bioform : state.bootstrap().hive().bioforms()) {
             if (bioform.isExplosiveAssaulter() || bioform.isDefender() || bioform.isOverseer()) {
-                state = deployFixtureBioform(state, bioform.id(), state.actorLocations().get(bioform.id()).supportingSurface().support());
+                BlockPosition canonicalBodyCell = state.actorLocations().get(bioform.id()).supportingSurface().support();
+                // The bootstrap's dormant-hive positions are feet cells; the native graybox
+                // exposes their authored floor one cell below.  This fixture establishes the
+                // real mobilised precondition on that exact physical floor, rather than asking
+                // an approach scene to invent a higher substitute surface at hand-off time.
+                state = deployFixtureBioform(state, bioform.id(), canonicalBodyCell.offset(0, -1, 0));
             }
         }
         HiveSettlementKnowledge.Sighting sighting = new HiveSettlementKnowledge.Sighting(settlement.id(), scout.id(), settlement.anchor(), 100L);
