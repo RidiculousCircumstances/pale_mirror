@@ -248,17 +248,10 @@ final class FrontierV3GrayboxExecutor {
     private static void retainSiblingHiveVisibility(FrontierV3ServerRuntime<?, ?> runtime, ChunkPos ingress) {
         Cursor cursor = CURSORS.get(runtime);
         if (cursor == null || cursor.hiveExpectations == null) return;
-        java.util.Set<io.farfrontier.palemirror.frontier.v3.api.SubjectId> entered = cursor.hiveExpectations.cells().entrySet().stream()
-                .filter(entry -> entry.getValue().stream().anyMatch(cell -> cell.position().x() >> 4 == ingress.x && cell.position().z() >> 4 == ingress.z))
-                .map(Map.Entry::getKey).collect(java.util.stream.Collectors.toSet());
-        if (entered.isEmpty()) return;
-        java.util.Set<io.farfrontier.palemirror.frontier.v3.api.SubjectId> siblings = entered.stream()
-                .flatMap(organ -> cursor.hiveExpectations.nestMembers().getOrDefault(organ, List.of()).stream())
-                .collect(java.util.stream.Collectors.toSet());
-        siblings.forEach(organ -> cursor.hiveExpectations.cells().getOrDefault(organ, List.of()).forEach(cell ->
-                retainFirstVisibility(runtime, new ChunkPos(cell.position().x() >> 4, cell.position().z() >> 4))));
+        List<GrayboxCell> siblings = cursor.hiveVisibilityCells(ingress);
+        if (siblings.isEmpty()) return;
+        siblings.forEach(cell -> retainFirstVisibility(runtime, new ChunkPos(cell.position().x() >> 4, cell.position().z() >> 4)));
         java.util.Set<InfectionCell> infectionCells = siblings.stream()
-                .flatMap(organ -> cursor.hiveExpectations.cells().getOrDefault(organ, List.of()).stream())
                 .map(cell -> InfectionCell.at(cell.position())).collect(java.util.stream.Collectors.toSet());
         FrontierV3InfectionOverlayExecutor.publishedOverlay(runtime).ifPresent(overlay -> infectionCells.stream()
                 .map(overlay::get).filter(Objects::nonNull).flatMap(cell -> cell.surfaceColumns().stream())
@@ -619,6 +612,7 @@ final class FrontierV3GrayboxExecutor {
         private final FrontierGrayboxPlan structuralBaseline;
         private final Map<Long, Integer> structuralCeilings;
         private final FrontierV3HiveFoundryAudit.HiveExpectations hiveExpectations;
+        private final Map<ChunkPos, List<GrayboxCell>> hiveVisibilityCells;
         private final List<ChunkCells> chunks;
         private int nextChunkIndex;
 
@@ -629,6 +623,7 @@ final class FrontierV3GrayboxExecutor {
             this.structuralBaseline = structuralBaseline;
             this.structuralCeilings = structuralCeilings;
             this.hiveExpectations = hiveExpectations;
+            this.hiveVisibilityCells = hiveVisibilityFence(hiveExpectations);
             this.chunks = chunks;
             this.nextChunkIndex = nextChunkIndex;
             this.activeWorksiteStaging = activeWorksiteStaging;
@@ -673,6 +668,8 @@ final class FrontierV3GrayboxExecutor {
             ChunkCells selected = chunk(new ChunkKey(chunk.x, chunk.z));
             return selected == null ? List.of() : selected.cells();
         }
+        /** Immutable ingress lookup; never scan all hive cells from a server tick. */
+        List<GrayboxCell> hiveVisibilityCells(ChunkPos ingress) { return hiveVisibilityCells.getOrDefault(ingress, List.of()); }
         Optional<GrayboxCell> nextNaturallyLoaded(Predicate<GrayboxCell> loaded) {
             if (chunks.isEmpty()) return Optional.empty();
             for (int attempts = 0; attempts < chunks.size(); attempts++) {
@@ -684,6 +681,17 @@ final class FrontierV3GrayboxExecutor {
         }
         private ChunkCells chunk(ChunkKey key) {
             return chunks.stream().filter(chunk -> chunk.key().equals(key)).findFirst().orElse(null);
+        }
+        static Map<ChunkPos, List<GrayboxCell>> hiveVisibilityFence(FrontierV3HiveFoundryAudit.HiveExpectations expectations) {
+            if (expectations == null) return Map.of();
+            Map<ChunkPos, List<GrayboxCell>> byIngress = new java.util.HashMap<>();
+            expectations.cells().forEach((organ, cells) -> {
+                List<GrayboxCell> nestCells = expectations.nestMembers().getOrDefault(organ, List.of()).stream()
+                        .flatMap(member -> expectations.cells().getOrDefault(member, List.of()).stream()).toList();
+                cells.stream().map(cell -> new ChunkPos(cell.position().x() >> 4, cell.position().z() >> 4)).distinct()
+                        .forEach(chunk -> byIngress.put(chunk, nestCells));
+            });
+            return Map.copyOf(byIngress);
         }
         private ChunkKey nextChunkKey() { return chunks.isEmpty() ? null : chunks.get(nextChunkIndex).key(); }
         private static int indexOf(List<ChunkCells> chunks, ChunkKey key) {

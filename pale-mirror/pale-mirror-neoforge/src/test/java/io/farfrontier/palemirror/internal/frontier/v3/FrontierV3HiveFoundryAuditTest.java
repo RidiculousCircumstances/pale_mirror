@@ -13,6 +13,7 @@ import io.farfrontier.palemirror.frontier.v3.model.GrayboxSemanticPart;
 import io.farfrontier.palemirror.frontier.v3.model.HiveOrgan;
 import io.farfrontier.palemirror.frontier.v3.model.HiveOrganKind;
 import io.farfrontier.palemirror.frontier.v3.model.TerrainSurfacePlan;
+import net.minecraft.world.level.ChunkPos;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -77,6 +78,21 @@ class FrontierV3HiveFoundryAuditTest {
                 "an exact prior claim makes a later changed block a real conflict");
         assertEquals(FrontierV3HiveMobilizationExecutor.CocoonProjection.CONFLICT,
                 FrontierV3HiveMobilizationExecutor.cocoonProjection(changed, bioform, true));
+    }
+
+    @Test
+    void broadLoadedChunkSetUsesPrecompiledHiveIngressFence() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:hive-fence"), 91L));
+        var plan = io.farfrontier.palemirror.frontier.v3.model.FrontierGrayboxPlan.compileStructuralBaseline(state);
+        var expectations = FrontierV3HiveFoundryAudit.expectations(state, plan);
+        var fence = FrontierV3GrayboxExecutor.Cursor.hiveVisibilityFence(expectations);
+        GrayboxCell representative = expectations.cells().values().stream().flatMap(java.util.Collection::stream).findFirst().orElseThrow();
+        ChunkPos entered = new ChunkPos(representative.position().x() >> 4, representative.position().z() >> 4);
+
+        assertTrue(fence.containsKey(entered), "missing exact organ chunk " + entered + " from " + fence.keySet());
+        for (int chunk = 0; chunk < 2_160; chunk++) {
+            assertTrue(fence.getOrDefault(new ChunkPos(20_000 + chunk, -20_000), java.util.List.of()).isEmpty());
+        }
     }
 
     private static double metric(io.farfrontier.palemirror.api.FoundryAuditReport report, String id) {
