@@ -126,7 +126,8 @@ final class FrontierV3AmbientActorExecutor {
         // Commands submitted below synchronously install a new immutable checkpoint.  Preserve
         // the deterministic actor order, but never let a later actor make another physical
         // decision from the predecessor's stale snapshot.
-        for (SubjectId actorId : FrontierV3ActorProbeSchedule.next(runtime, state, MAX_ACTOR_PROBES_PER_TICK)) {
+        for (SubjectId actorId : FrontierV3ActorProbeSchedule.next(runtime, state, MAX_ACTOR_PROBES_PER_TICK,
+                FrontierV3AmbientAdmissionPolicy.MAX_ACTORS_PER_TICK)) {
             if (admitted >= FrontierV3AmbientAdmissionPolicy.MAX_ACTORS_PER_TICK) return;
             state = runtime.decodedState().orElse(null);
             if (state == null) return;
