@@ -8,14 +8,15 @@ const HIVE_ORGANS = Object.freeze(['west-ganglion', 'west-brood', 'west-store', 
 /** Terminal domain predicate for the three user-observed F0.6R3 regressions. */
 export function assertF06r3LiveIntegrityCarrier({ declaration, manifest }) {
   if (declaration?.id !== SCENARIO || declaration?.zeroPlayerPrelude?.advanceTicks !== 24_000 || declaration?.restart?.mode !== 'graceful'
-      || declaration.restart.afterAction !== 9 || !Array.isArray(declaration.actions) || manifest?.status !== 'ok'
-      || manifest.scenarioId !== SCENARIO || manifest.recovery?.mode !== 'graceful' || manifest.recovery?.splitAfterAction !== 9
+      || declaration.restart.afterAction !== 13 || !Array.isArray(declaration.actions) || manifest?.status !== 'ok'
+      || manifest.scenarioId !== SCENARIO || manifest.recovery?.mode !== 'graceful' || manifest.recovery?.splitAfterAction !== 13
       || !Array.isArray(manifest.actions) || manifest.actions.length !== declaration.actions.length) {
     throw new Error('F0.6R3 live-integrity manifest lacks its declared zero-player/restart lifecycle');
   }
   declaration.actions.forEach((action, index) => {
     if (!isDeepStrictEqual(manifest.actions[index]?.action, action)) throw new Error('F0.6R3 live-integrity manifest substituted an action');
   });
+  assertCurrentFieldActions(declaration.actions);
   const terminalAssertionCount = assertDeclaredAssertions(declaration, manifest);
   const prelude = manifest.zeroPlayerPrelude;
   if (prelude?.status !== 'completed' || prelude.advanceTicks !== 24_000 || prelude.clientSegmentsBeforeCompletion !== 0) {
@@ -24,22 +25,22 @@ export function assertF06r3LiveIntegrityCarrier({ declaration, manifest }) {
   const diagnostics = observed(manifest);
   const coldInventory = exactly(diagnostics, 1, 'process_inventory', 'settlements');
   const projectionWork = exactly(diagnostics, 2, 'projection_work', '');
-  const postArrivalInventory = exactly(diagnostics, 9, 'process_inventory', 'settlements');
+  const postArrivalInventory = exactly(diagnostics, 13, 'process_inventory', 'settlements');
   assertAllSettlementHarvestes(coldInventory, 'zero-player', true);
   assertProjectionWork(projectionWork);
   assertNoIngressReset(postArrivalInventory, coldInventory);
   const beforeSeven = exactly(diagnostics, 3, 'process', JOBS[0]);
   const beforeFour = exactly(diagnostics, 4, 'process', JOBS[1]);
-  const afterSeven = exactly(diagnostics, 6, 'process', JOBS[0]);
-  const afterFour = exactly(diagnostics, 8, 'process', JOBS[1]);
-  const restartSeven = exactly(diagnostics, 10, 'process', JOBS[0]);
+  const afterSeven = exactly(diagnostics, 10, 'process', JOBS[0]);
+  const afterFour = exactly(diagnostics, 12, 'process', JOBS[1]);
+  const restartSeven = exactly(diagnostics, 14, 'process', JOBS[0]);
   [beforeSeven, beforeFour, afterSeven, afterFour, restartSeven].forEach(assertHarvestCursor);
   [afterSeven, afterFour].forEach(assertFirstHotLeaseIsNotCropZero);
   if (!sameHarvest(beforeSeven, afterSeven) || !sameHarvest(beforeSeven, restartSeven) || !sameHarvest(beforeFour, afterFour)) {
     throw new Error('F0.6R3 representative first ingress or restart reset an exact COLD harvest identity/cursor');
   }
   for (const organ of HIVE_ORGANS) {
-    const step = organ.startsWith('west-') ? 13 + HIVE_ORGANS.indexOf(organ) : 24 + HIVE_ORGANS.indexOf(organ) - 6;
+    const step = organ.startsWith('west-') ? 18 + HIVE_ORGANS.indexOf(organ) : 29 + HIVE_ORGANS.indexOf(organ) - 6;
     const foundry = exactly(diagnostics, step, 'hive_foundry', `settled@organ:${organ}`);
     if (foundry.phase !== 'SETTLED' || foundry.passed !== true || foundry.auditPassed !== true || foundry.runtimePending !== 0
         || foundry.runtimeMismatch !== 0 || foundry.runtimeUnverified !== 0 || foundry.blockers !== 0 || foundry.errors !== 0) {
@@ -55,6 +56,20 @@ export function assertF06r3LiveIntegrityCarrier({ declaration, manifest }) {
     coldCursors: Object.freeze(Object.fromEntries(coldInventory.entries.map(entry => [entry.site, entry.cursor]))),
     coldCompletedCropSlots: Object.freeze(Object.fromEntries(coldInventory.entries.map(entry => [entry.site, entry.completedCropSlots]))), representativeFirstArrivals: JOBS,
     restartContinuity: true, seedNestOrgans: HIVE_ORGANS.length, playerFrames: manifest.frames.map(frame => frame.path) });
+}
+
+function assertCurrentFieldActions(actions) {
+  const position = action => action?.position?.diagnostic;
+  const site = 'site:7-wheat-field';
+  if (actions[5]?.type !== 'wait_until_block' || actions[5]?.block !== 'minecraft:wheat'
+      || position(actions[5])?.view !== 'site' || position(actions[5])?.id !== site || position(actions[5])?.field !== 'lastCrop'
+      || actions[6]?.type !== 'look' || actions[7]?.type !== 'assert_visible_block'
+      || actions[8]?.type !== 'wait_until_block' || actions[8]?.block !== 'minecraft:air'
+      || position(actions[8])?.view !== 'site' || position(actions[8])?.id !== site || position(actions[8])?.field !== 'firstCrop'
+      || actions[14]?.type !== 'wait_until_block' || actions[14]?.block !== 'minecraft:wheat'
+      || position(actions[14])?.view !== 'site' || position(actions[14])?.id !== site || position(actions[14])?.field !== 'lastCrop') {
+    throw new Error('F0.6R3 carrier does not prove the complete field and its exact COLD prefix through ordinary ingress and restart');
+  }
 }
 
 function assertProjectionWork(value) {

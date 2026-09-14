@@ -192,6 +192,11 @@ final class FrontierV3GrayboxExecutor {
         Objects.requireNonNull(chunk, "first visibility chunk");
         if (runtime.decodedState().isEmpty() || !level.hasChunk(chunk.x, chunk.z)) return;
         retainFirstVisibility(runtime, chunk);
+        // A ChunkEvent.Load can arrive before the first registered projection turn has compiled
+        // the immutable nest index.  Keep the raw exposure now and derive its declared sibling
+        // fence when that index is available; otherwise a real player can see one organ's board
+        // while the same already-natural nest remains PENDING forever.
+        retainSiblingHiveVisibility(runtime, chunk);
     }
 
     /**
@@ -251,6 +256,11 @@ final class FrontierV3GrayboxExecutor {
                                                        FrontierWorldState state, Cursor cursor) {
         Map<ChunkPos, FirstVisibilityRecord> records = FIRST_VISIBILITY.get(runtime);
         if (records == null) return;
+        // The event callback intentionally never compiles a plan.  Complete the deferred
+        // declared-nest fence here, in the normal projection owner, once the cursor has its
+        // immutable expectations.  This only records already declared chunks; it never asks
+        // vanilla to load a sibling.
+        records.keySet().stream().toList().forEach(chunk -> retainSiblingHiveVisibility(runtime, chunk));
         // A client state packet may make an adjacent vanilla chunk naturally loaded while this
         // registered turn is projecting the current one.  Snapshot only the already-pending
         // keys: that new exposure is a distinct boundary for the next ordinary turn, never a
