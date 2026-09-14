@@ -7,11 +7,13 @@ import java.util.Map;
 /** Installed immutable ruleset catalog. Selection is always exact by id, schema and content digest. */
 public final class FrontierRulesets {
     /**
-     * R3 separates retained pedestrian-edge cadence from the field's crop-work retry.
-     * A route edge is a visible duty-cycle boundary, while a crop effect remains a
-     * deliberately slower physical-work boundary.
+     * R4 keeps the retained pedestrian edge at the server-turn cadence.  R3's five-turn
+     * semantic checkpoint left a HOT farmer visibly pausing at every grid cell even though the
+     * motion actuator was continuous.  Crop work remains a slower, distinct boundary.
      */
-    private static final FrontierRuleset PRODUCTION = ruleset("frontier-v3-production-r3", 5, 5L, 20L);
+    private static final FrontierRuleset PRODUCTION = ruleset("frontier-v3-production-r4", 6, 1L, 20L);
+    /** Exact decoder for the accepted R3 world; it is never selected for a new world. */
+    private static final FrontierRuleset PREVIOUS_PRODUCTION_R3 = ruleset("frontier-v3-production-r3", 5, 5L, 20L);
     /** Exact decoder for the accepted R2 world; it is never selected for a new world. */
     private static final FrontierRuleset PREVIOUS_PRODUCTION_R2 = ruleset("frontier-v3-production-r2", 4, 200L, 20L);
     /**
@@ -20,6 +22,7 @@ public final class FrontierRulesets {
      */
     private static final FrontierRuleset LEGACY_PRE_RULESET_R79 = ruleset("frontier-v3-legacy-pre-ruleset-r79", 3, 200L, 100L);
     private static final Map<String, FrontierRuleset> INSTALLED = Map.of(PRODUCTION.id(), PRODUCTION,
+            PREVIOUS_PRODUCTION_R3.id(), PREVIOUS_PRODUCTION_R3,
             PREVIOUS_PRODUCTION_R2.id(), PREVIOUS_PRODUCTION_R2,
             LEGACY_PRE_RULESET_R79.id(), LEGACY_PRE_RULESET_R79);
 

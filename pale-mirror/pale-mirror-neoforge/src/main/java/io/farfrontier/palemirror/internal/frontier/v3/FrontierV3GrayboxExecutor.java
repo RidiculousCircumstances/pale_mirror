@@ -48,6 +48,10 @@ import java.util.function.Predicate;
  */
 final class FrontierV3GrayboxExecutor {
     private static final int MAX_CELLS_PER_TICK = 64;
+    /** First-visibility work is an ingress queue, never a scan of every resident chunk. */
+    // A first-visible chunk is completed as an indivisible ownership boundary.  One such
+    // boundary can contain an entire facility, so a count of one is the meaningful tick bound.
+    private static final int MAX_FIRST_VISIBILITY_CHUNKS_PER_TICK = 1;
     private static final Map<FrontierV3ServerRuntime<?, ?>, Cursor> CURSORS = new IdentityHashMap<>();
     private static final Map<FrontierV3ServerRuntime<?, ?>, ProjectionWork> WORK = new IdentityHashMap<>();
     /**
@@ -58,6 +62,12 @@ final class FrontierV3GrayboxExecutor {
      * 64-cell batch after a player has already seen the chunk.
      */
     private static final Map<FrontierV3ServerRuntime<?, ?>, Map<ChunkPos, FirstVisibilityRecord>> FIRST_VISIBILITY = new IdentityHashMap<>();
+    /** Ordinary exposure is fair; player ingress and its declared nest fence take precedence. */
+    private static final Map<FrontierV3ServerRuntime<?, ?>, java.util.LinkedHashSet<ChunkPos>> PENDING_FIRST_VISIBILITY = new IdentityHashMap<>();
+    private static final Map<FrontierV3ServerRuntime<?, ?>, java.util.LinkedHashSet<ChunkPos>> PRIORITY_FIRST_VISIBILITY = new IdentityHashMap<>();
+    /** A load callback can precede cursor publication.  Defer only that exact fence, bounded. */
+    private static final Map<FrontierV3ServerRuntime<?, ?>, java.util.LinkedHashSet<ChunkPos>> PENDING_HIVE_FENCES = new IdentityHashMap<>();
+    private static final Map<FrontierV3ServerRuntime<?, ?>, java.util.LinkedHashSet<ChunkPos>> PRIORITY_HIVE_FENCES = new IdentityHashMap<>();
     /**
      * Chunk load is not player ingress.  The graybox dimension can keep generated chunks
      * resident for bootstrap/static ownership work, so a resource facility may only consume
@@ -188,6 +198,8 @@ final class FrontierV3GrayboxExecutor {
     /** Releases only volatile exposure bookkeeping with the normal runtime cleanup. */
     static void forgetFirstVisibility(FrontierV3ServerRuntime<?, ?> runtime) {
         FIRST_VISIBILITY.remove(runtime); PLAYER_INGRESS.remove(runtime);
+        PENDING_FIRST_VISIBILITY.remove(runtime); PRIORITY_FIRST_VISIBILITY.remove(runtime);
+        PENDING_HIVE_FENCES.remove(runtime); PRIORITY_HIVE_FENCES.remove(runtime);
     }
 
     /**
@@ -200,12 +212,12 @@ final class FrontierV3GrayboxExecutor {
         Objects.requireNonNull(level, "first visibility level"); Objects.requireNonNull(runtime, "first visibility runtime");
         Objects.requireNonNull(chunk, "first visibility chunk");
         if (runtime.decodedState().isEmpty() || !level.hasChunk(chunk.x, chunk.z)) return;
-        retainFirstVisibility(runtime, chunk);
+        retainFirstVisibility(runtime, chunk, false);
         // A ChunkEvent.Load can arrive before the first registered projection turn has compiled
         // the immutable nest index.  Keep the raw exposure now and derive its declared sibling
         // fence when that index is available; otherwise a real player can see one organ's board
         // while the same already-natural nest remains PENDING forever.
-        retainSiblingHiveVisibility(runtime, chunk);
+        retainSiblingHiveVisibility(runtime, chunk, false);
     }
 
     /**
@@ -217,8 +229,8 @@ final class FrontierV3GrayboxExecutor {
         Objects.requireNonNull(runtime, "first visibility runtime"); Objects.requireNonNull(chunk, "first visibility chunk");
         if (runtime.decodedState().isEmpty()) return;
         PLAYER_INGRESS.computeIfAbsent(runtime, ignored -> new java.util.LinkedHashSet<>()).add(chunk);
-        retainFirstVisibility(runtime, chunk);
-        retainSiblingHiveVisibility(runtime, chunk);
+        retainFirstVisibility(runtime, chunk, true);
+        retainSiblingHiveVisibility(runtime, chunk, true);
     }
 
     /**
@@ -245,22 +257,26 @@ final class FrontierV3GrayboxExecutor {
      * declared nest before its presentation becomes eligible.  This is bookkeeping only: it
      * neither asks the chunk manager for a sibling nor compiles either plan.
      */
-    private static void retainSiblingHiveVisibility(FrontierV3ServerRuntime<?, ?> runtime, ChunkPos ingress) {
+    private static void retainSiblingHiveVisibility(FrontierV3ServerRuntime<?, ?> runtime, ChunkPos ingress, boolean priority) {
         Cursor cursor = CURSORS.get(runtime);
-        if (cursor == null || cursor.hiveExpectations == null) return;
+        if (cursor == null || cursor.hiveExpectations == null) {
+            hiveFenceQueue(runtime, priority).add(ingress);
+            return;
+        }
         List<GrayboxCell> siblings = cursor.hiveVisibilityCells(ingress);
         if (siblings.isEmpty()) return;
-        siblings.forEach(cell -> retainFirstVisibility(runtime, new ChunkPos(cell.position().x() >> 4, cell.position().z() >> 4)));
+        siblings.forEach(cell -> retainFirstVisibility(runtime, new ChunkPos(cell.position().x() >> 4, cell.position().z() >> 4), priority));
         java.util.Set<InfectionCell> infectionCells = siblings.stream()
                 .map(cell -> InfectionCell.at(cell.position())).collect(java.util.stream.Collectors.toSet());
         FrontierV3InfectionOverlayExecutor.publishedOverlay(runtime).ifPresent(overlay -> infectionCells.stream()
                 .map(overlay::get).filter(Objects::nonNull).flatMap(cell -> cell.surfaceColumns().stream())
-                .forEach(column -> retainFirstVisibility(runtime, new ChunkPos(column.x() >> 4, column.z() >> 4))));
+                .forEach(column -> retainFirstVisibility(runtime, new ChunkPos(column.x() >> 4, column.z() >> 4), priority)));
     }
 
-    private static void retainFirstVisibility(FrontierV3ServerRuntime<?, ?> runtime, ChunkPos chunk) {
-        FIRST_VISIBILITY.computeIfAbsent(runtime, ignored -> new LinkedHashMap<>())
-                .putIfAbsent(chunk, new FirstVisibilityRecord(FirstVisibility.PENDING, -1L, 0));
+    private static void retainFirstVisibility(FrontierV3ServerRuntime<?, ?> runtime, ChunkPos chunk, boolean priority) {
+        Map<ChunkPos, FirstVisibilityRecord> records = FIRST_VISIBILITY.computeIfAbsent(runtime, ignored -> new LinkedHashMap<>());
+        FirstVisibilityRecord record = records.putIfAbsent(chunk, new FirstVisibilityRecord(FirstVisibility.PENDING, -1L, 0));
+        if (record == null || record.status() == FirstVisibility.PENDING) firstVisibilityQueue(runtime, priority).add(chunk);
     }
 
     /**
@@ -274,19 +290,14 @@ final class FrontierV3GrayboxExecutor {
                                                        FrontierWorldState state, Cursor cursor) {
         Map<ChunkPos, FirstVisibilityRecord> records = FIRST_VISIBILITY.get(runtime);
         if (records == null) return;
-        // The event callback intentionally never compiles a plan.  Complete the deferred
-        // declared-nest fence here, in the normal projection owner, once the cursor has its
-        // immutable expectations.  This only records already declared chunks; it never asks
-        // vanilla to load a sibling.
-        records.keySet().stream().toList().forEach(chunk -> retainSiblingHiveVisibility(runtime, chunk));
-        // A client state packet may make an adjacent vanilla chunk naturally loaded while this
-        // registered turn is projecting the current one.  Snapshot only the already-pending
-        // keys: that new exposure is a distinct boundary for the next ordinary turn, never a
-        // concurrent modification or an unbounded same-turn cascade.
-        List<ChunkPos> pendingChunks = records.entrySet().stream()
-                .filter(entry -> entry.getValue().status() == FirstVisibility.PENDING)
-                .map(Map.Entry::getKey).toList();
-        for (ChunkPos chunk : pendingChunks) {
+        // The event callback intentionally never compiles a plan.  Complete only a bounded
+        // queue of the exact callbacks that preceded cursor publication.  Walking every
+        // resident record here used to make a one-player ingress proportional to all loaded
+        // chunks and was the watchdog path observed in production.
+        drainHiveFences(runtime, cursor);
+        for (int processed = 0; processed < MAX_FIRST_VISIBILITY_CHUNKS_PER_TICK; processed++) {
+            ChunkPos chunk = pollFirstVisibility(runtime);
+            if (chunk == null) return;
             FirstVisibilityRecord record = records.get(chunk);
             if (record == null || record.status() != FirstVisibility.PENDING) continue;
             if (!level.hasChunk(chunk.x, chunk.z)) continue;
@@ -313,6 +324,40 @@ final class FrontierV3GrayboxExecutor {
             long revision = runtime.checkpointImage().orElseThrow().revision().value();
             records.replace(chunk, record, new FirstVisibilityRecord(result, revision, cells.size()));
         }
+    }
+
+    private static java.util.LinkedHashSet<ChunkPos> firstVisibilityQueue(FrontierV3ServerRuntime<?, ?> runtime, boolean priority) {
+        return (priority ? PRIORITY_FIRST_VISIBILITY : PENDING_FIRST_VISIBILITY)
+                .computeIfAbsent(runtime, ignored -> new java.util.LinkedHashSet<>());
+    }
+
+    private static java.util.LinkedHashSet<ChunkPos> hiveFenceQueue(FrontierV3ServerRuntime<?, ?> runtime, boolean priority) {
+        return (priority ? PRIORITY_HIVE_FENCES : PENDING_HIVE_FENCES)
+                .computeIfAbsent(runtime, ignored -> new java.util.LinkedHashSet<>());
+    }
+
+    private static ChunkPos pollFirstVisibility(FrontierV3ServerRuntime<?, ?> runtime) {
+        ChunkPos priority = poll(PRIORITY_FIRST_VISIBILITY.get(runtime));
+        return priority != null ? priority : poll(PENDING_FIRST_VISIBILITY.get(runtime));
+    }
+
+    private static void drainHiveFences(FrontierV3ServerRuntime<?, ?> runtime, Cursor cursor) {
+        for (int drained = 0; drained < MAX_FIRST_VISIBILITY_CHUNKS_PER_TICK; drained++) {
+            ChunkPos ingress = poll(PRIORITY_HIVE_FENCES.get(runtime));
+            boolean priority = ingress != null;
+            if (ingress == null) ingress = poll(PENDING_HIVE_FENCES.get(runtime));
+            if (ingress == null) return;
+            // The cursor is now present.  This does bounded declared-neighbour bookkeeping;
+            // it still never requests a chunk from vanilla.
+            retainSiblingHiveVisibility(runtime, ingress, priority);
+        }
+    }
+
+    private static ChunkPos poll(java.util.LinkedHashSet<ChunkPos> queue) {
+        if (queue == null || queue.isEmpty()) return null;
+        java.util.Iterator<ChunkPos> iterator = queue.iterator();
+        ChunkPos next = iterator.next(); iterator.remove();
+        return next;
     }
 
     /**

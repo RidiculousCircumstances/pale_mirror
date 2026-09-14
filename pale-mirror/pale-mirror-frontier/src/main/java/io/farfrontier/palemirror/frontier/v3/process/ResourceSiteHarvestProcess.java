@@ -33,6 +33,8 @@ import java.util.OptionalInt;
  */
 public final class ResourceSiteHarvestProcess {
     public static final String COLD_PROGRESS_KIND = "frontier.resource_site.harvest.cold_progress";
+    /** Keep one exact loaded crop/output boundary for the irreversible physical receipt. */
+    private static final int MAX_COLD_COMPLETED_CROPS = ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS - 1;
 
     private ResourceSiteHarvestProcess() { }
 
@@ -123,11 +125,15 @@ public final class ResourceSiteHarvestProcess {
         if (!FrontierSceneAdmission.available(state, List.of(job.workerId()))) {
             return List.of(reschedule(action, action));
         }
-        // One COLD receipt is the durable deferred-aftermath bridge: it proves actual crop
-        // ownership changed before an observer arrives, while the next visible crop (and all
-        // further physical work/output) remains for the naturally admitted HOT scene.  Letting
-        // COLD consume a whole unloaded field would erase that exact current next-crop handoff.
-        if (job.progress().completedCropSlots() > 0) {
+        // COLD owns the same recurrent duty cycle as HOT while no physical scene owns this
+        // worker.  Stopping after the first receipt left a farmer permanently parked at crop
+        // one across unload/restart intervals, so elapsed zero-player time had no truthful
+        // continuation.  Each step below advances one retained pedestrian edge or one exact
+        // crop receipt; it still never touches an unloaded block or manufactures final output.
+        if (job.progress().completedCropSlots() >= MAX_COLD_COMPLETED_CROPS) {
+            // The final crop is inseparable from the single physical output observation.  This
+            // is a stable, typed HOT boundary after substantial autonomous duty-cycle work, not
+            // the former accidental first-crop parking point.
             return List.of(reschedule(action, coldProgress(job, nextDue)));
         }
         if (!job.hasNextTraversalStep()) return coldCropReceipt(state, action, job);

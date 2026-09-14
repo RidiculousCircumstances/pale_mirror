@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResourceSiteColdHarvestReceiptTest {
     @Test
-    void zeroPlayerColdHarvestCommitsTheFirstDurableCropReceiptBeforeAnyHotLease() {
+    void zeroPlayerColdHarvestContinuesBeyondTheFirstDurableCropReceiptBeforeAnyHotLease() {
         SubjectId site = new SubjectId("site:1-wheat-field");
         FrontierWorldState state = matureField();
         List<ProposedEvent> opportunity = StrategicObjectiveProcess.planResourceHarvestOpportunity(state,
@@ -42,7 +42,7 @@ class ResourceSiteColdHarvestReceiptTest {
             for (ProposedEvent event : ResourceSiteHarvestProcess.planColdProgress(state, action[0])) {
                 if (event.payload() instanceof ResourceSiteHarvestColdTraversalAdvanced traversal) state = ResourceSiteHarvestProcess.reduceColdTraversalAdvanced(state, site, traversal);
                 else if (event.payload() instanceof ResourceSiteHarvestCropPrepared crop) state = ResourceSiteHarvestProcess.reduceCropPrepared(state, site, crop);
-                else if (event.payload() instanceof ResourceSiteHarvestProgressed progressed) state = ResourceSiteHarvestProcess.reduceProgressed(state, site, progressed);
+                else if (event.payload() instanceof ResourceSiteHarvestProgressed secondProgress) state = ResourceSiteHarvestProcess.reduceProgressed(state, site, secondProgress);
                 else if (event.payload() instanceof ScheduleEffect.Rescheduled rescheduled) action[0] = rescheduled.replacement();
                 else throw new AssertionError("unexpected COLD harvest event: " + event.payload());
             }
@@ -53,9 +53,21 @@ class ResourceSiteColdHarvestReceiptTest {
         assertEquals(-1, progressed.progress().pendingCropSlotIndex());
         assertEquals(PhysicalIntentStatus.PREPARED, state.physicalIntents().get(progressed.intentId()).status());
         assertFalse(state.inventory().items().containsKey(progressed.outputItemId()));
-        List<ProposedEvent> awaitingHot = ResourceSiteHarvestProcess.planColdProgress(state, action[0]);
-        assertEquals(1, awaitingHot.size());
-        assertTrue(awaitingHot.getFirst().payload() instanceof ScheduleEffect.Rescheduled);
+        // A prior implementation deliberately retained the same action after crop one.  That
+        // made elapsed zero-player time a semantic no-op and parked every first ingress at the
+        // same slot.  Prove the next complete COLD station/receipt cycle is durable too.
+        while (((ResourceSiteHarvestJob) state.resourceSites().site(site).activeWork().orElseThrow()).progress().completedCropSlots() == 1) {
+            for (ProposedEvent event : ResourceSiteHarvestProcess.planColdProgress(state, action[0])) {
+                if (event.payload() instanceof ResourceSiteHarvestColdTraversalAdvanced traversal) state = ResourceSiteHarvestProcess.reduceColdTraversalAdvanced(state, site, traversal);
+                else if (event.payload() instanceof ResourceSiteHarvestCropPrepared crop) state = ResourceSiteHarvestProcess.reduceCropPrepared(state, site, crop);
+                else if (event.payload() instanceof ResourceSiteHarvestProgressed continuingProgress) state = ResourceSiteHarvestProcess.reduceProgressed(state, site, continuingProgress);
+                else if (event.payload() instanceof ScheduleEffect.Rescheduled rescheduled) action[0] = rescheduled.replacement();
+                else throw new AssertionError("unexpected continuing COLD harvest event: " + event.payload());
+            }
+        }
+        ResourceSiteHarvestJob continued = (ResourceSiteHarvestJob) state.resourceSites().site(site).activeWork().orElseThrow();
+        assertEquals(2, continued.progress().completedCropSlots());
+        assertEquals(2, continued.progress().nextCropSlotIndex(), "the next ingress is no longer parked at crop one");
     }
 
     private static FrontierWorldState matureField() {

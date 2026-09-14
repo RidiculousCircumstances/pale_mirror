@@ -22,8 +22,8 @@
   "assertions": [
     { "after": 1, "view": "process_inventory", "id": "settlements", "expect": { "status": "ok", "count": 12 } },
     { "after": 2, "view": "projection_work", "id": "", "expect": { "status": "ok" } },
-    { "after": 3, "view": "process", "id": "job:site-harvest-7-wheat-field-1", "expect": { "status": "ok", "result": { "sitePhase": "HARVESTING", "intentStatus": "PREPARED" }, "conservation": { "completedCropSlots": 1, "pendingCropSlot": -1, "nextCropSlot": 1, "deferredMaterializationSlots": 1 } } },
-    { "after": 4, "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": { "status": "ok", "result": { "sitePhase": "HARVESTING", "intentStatus": "PREPARED" }, "conservation": { "completedCropSlots": 1, "pendingCropSlot": -1, "nextCropSlot": 1, "deferredMaterializationSlots": 1 } } },
+    { "after": 3, "view": "process", "id": "job:site-harvest-7-wheat-field-1", "expect": { "status": "ok", "result": { "sitePhase": "HARVESTING", "intentStatus": "PREPARED" }, "conservation": { "completedCropSlots": 63, "pendingCropSlot": -1, "nextCropSlot": 63, "deferredMaterializationSlots": 63 } } },
+    { "after": 4, "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": { "status": "ok", "result": { "sitePhase": "HARVESTING", "intentStatus": "PREPARED" }, "conservation": { "completedCropSlots": 63, "pendingCropSlot": -1, "nextCropSlot": 63, "deferredMaterializationSlots": 63 } } },
     { "after": 6, "view": "process", "id": "job:site-harvest-7-wheat-field-1", "expect": { "status": "ok", "result": { "sitePhase": "HARVESTING" } } },
     { "after": 8, "view": "process", "id": "job:site-harvest-4-wheat-field-1", "expect": { "status": "ok", "result": { "sitePhase": "HARVESTING" } } },
     { "after": 10, "view": "process", "id": "job:site-harvest-7-wheat-field-1", "expect": { "status": "ok", "result": { "sitePhase": "HARVESTING" } } }
