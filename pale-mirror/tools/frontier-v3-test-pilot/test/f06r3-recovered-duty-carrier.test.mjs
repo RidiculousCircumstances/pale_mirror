@@ -54,11 +54,11 @@ test('F0.6R3 recovered-duty carrier requires phase-mapped travel, visible work a
   assert.throws(() => assertF06r3RecoveredDutyCarrier({ declaration, ...third }), /responsive ordinary-client ingress/);
 });
 
-test('F0.6R3 recovered-duty carrier rejects the retained same-cell/no-successor-COLD history', async () => {
+test('F0.6R3 recovered-duty carrier rejects a successor that exists but did not advance during the later COLD interval', async () => {
   const declaration = JSON.parse(await readFile(resolve(root, 'scenarios/disposable-f06r3-recovered-duty.json'), 'utf8'));
   const stalled = receipt();
   stalled.manifest.diagnostics.find(entry => entry.actionStep === 2).value.conservation.completedCropSlots = 0;
-  assert.throws(() => assertF06r3RecoveredDutyCarrier({ declaration, ...stalled }), /second released COLD interval/);
+  assert.throws(() => assertF06r3RecoveredDutyCarrier({ declaration, ...stalled }), /create and advance a successor/);
 });
 
 function receipt() {
@@ -83,7 +83,7 @@ function receipt() {
       lifecycle: ['client_normally_disconnected', 'normal_demand_loss_release', 'durable_server_save', 'recovery_server_ready', 'client_normally_disconnected', 'normal_demand_loss_release', 'durable_server_save', 'recovery_server_ready'].map(barrier => ({ barrier })),
       clientSegments: [{ ingressResponsiveness: [{ status: 'ok', ordinaryClientJoined: true, noServerTickStall: true },
         { status: 'ok', ordinaryClientJoined: true, noServerTickStall: true }, { status: 'ok', ordinaryClientJoined: true, noServerTickStall: true }] }],
-      diagnostics: [{ actionStep: 2, value: { ...process(63, 'HOT'), id: 'job:site-harvest-7-wheat-field-2', identity: { worker: 'resident:7-31' } } },
+      diagnostics: [{ actionStep: 2, value: { ...process(63, 'HOT'), id: 'job:site-harvest-7-wheat-field-2', identity: { job: 'job:site-harvest-7-wheat-field-2', worker: 'resident:7-31' } } },
         { actionStep: 3, value: { ...terminalMotion(), id: 'job:site-harvest-7-wheat-field-2' } },
         { actionStep: 4, value: { kind: 'site', id: site, status: 'ok', phase: 'GROWING', growthEpoch: 3, activeWork: '', conflictDisposition: null } },
         { actionStep: 4, value: { kind: 'intent', id: 'intent:site-harvest-7-wheat-field-2', status: 'ok', intentKind: 'RESOURCE_SITE_HARVEST', intentStatus: 'CONFIRMED',

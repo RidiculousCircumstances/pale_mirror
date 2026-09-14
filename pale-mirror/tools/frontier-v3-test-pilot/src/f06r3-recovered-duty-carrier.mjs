@@ -59,7 +59,8 @@ export function assertF06r3RecoveredDutyCarrier({ declaration, beforeRestart, mi
       || facility.completedCropSlots !== 63 || facility.airCropSlots !== 63 || facility.wheatCropSlots !== 1) {
     throw new Error('F0.6R3 restart re-entry did not deliver one complete current field facility to the ordinary client');
   }
-  if (successor.claims?.lease?.status !== 'HOT' || successor.claims.lease.members !== 1 || completed(successor) !== 63 || completed(successor) < completed(after)
+  const successorColdAdvance = assertSuccessorColdAdvance(terminalSite, successor);
+  if (successor.claims?.lease?.status !== 'HOT' || successor.claims.lease.members !== 1 || completed(successor) !== 63
       || successor.identity?.worker !== before.identity.worker || successorSite.phase !== 'GROWING' || successorSite.growthEpoch !== 3
       || successorSite.activeWork !== '' || successorSite.conflictDisposition !== null || successorIntent.intentStatus !== 'CONFIRMED'
       || successorIntent.intentKind !== 'RESOURCE_SITE_HARVEST' || !Array.isArray(successorIntent.subjects)
@@ -70,8 +71,25 @@ export function assertF06r3RecoveredDutyCarrier({ declaration, beforeRestart, mi
   assertLifecycle(manifest.lifecycle);
   assertResponsiveOrdinaryIngress(manifest.clientSegments);
   return Object.freeze({ job: before.identity.job, worker: before.identity.worker, releasedColdAdvance: [completed(before), completed(after)],
-    successorColdAdvance: [completed(after), completed(successor)], sitePhase: site.phase, completeFacility: true,
+    successorColdAdvance, sitePhase: site.phase, completeFacility: true,
     motion: assertMotionDuty(motion), terminal: assertTerminalContinuity(motion, terminalMotion, terminalSite, successor, successorMotion, before.identity.worker) });
+}
+
+/**
+ * The second no-player interval begins after the first harvest's terminal receipt.  At that
+ * point there cannot be a successor cursor to compare with: the site is deliberately growing
+ * and unassigned.  Its later job is therefore measured against that typed unassigned boundary,
+ * not against the predecessor's completed field cursor.  Comparing the two numeric 63 values
+ * was a category error that made real successor COLD work look like a no-op.
+ */
+function assertSuccessorColdAdvance(preColdSite, successor) {
+  if (preColdSite?.phase !== 'GROWING' || preColdSite.growthEpoch !== 2 || preColdSite.activeWork !== ''
+      || preColdSite.conflictDisposition !== null || typeof successor?.identity?.job !== 'string'
+      || !successor.identity.job.endsWith('-2') || !Number.isInteger(completed(successor)) || completed(successor) <= 0) {
+    throw new Error('F0.6R3 second released COLD interval did not create and advance a successor from its unassigned growth boundary');
+  }
+  return Object.freeze({ preCold: Object.freeze({ phase: preColdSite.phase, growthEpoch: preColdSite.growthEpoch, activeWork: preColdSite.activeWork }),
+    successorJob: successor.identity.job, postColdCompletedCropSlots: completed(successor), createdAndAdvancedDuringCold: completed(successor) });
 }
 
 function assertTerminalContinuity(before, terminal, site, successor, successorMotion, worker) {
