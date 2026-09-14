@@ -40,7 +40,7 @@ export function assertF06r3LiveIntegrityCarrier({ declaration, manifest }) {
     throw new Error('F0.6R3 representative first ingress or restart reset an exact COLD harvest identity/cursor');
   }
   for (const organ of HIVE_ORGANS) {
-    const step = organ.startsWith('west-') ? 18 + HIVE_ORGANS.indexOf(organ) : 29 + HIVE_ORGANS.indexOf(organ) - 6;
+    const step = organ.startsWith('west-') ? 19 + HIVE_ORGANS.indexOf(organ) : 30 + HIVE_ORGANS.indexOf(organ) - 6;
     const foundry = exactly(diagnostics, step, 'hive_foundry', `settled@organ:${organ}`);
     if (foundry.phase !== 'SETTLED' || foundry.passed !== true || foundry.auditPassed !== true || foundry.runtimePending !== 0
         || foundry.runtimeMismatch !== 0 || foundry.runtimeUnverified !== 0 || foundry.blockers !== 0 || foundry.errors !== 0) {
@@ -66,8 +66,10 @@ function assertCurrentFieldActions(actions) {
       || actions[6]?.type !== 'look' || actions[7]?.type !== 'assert_visible_block'
       || actions[8]?.type !== 'wait_until_block' || actions[8]?.block !== 'minecraft:air'
       || position(actions[8])?.view !== 'site' || position(actions[8])?.id !== site || position(actions[8])?.field !== 'firstCrop'
-      || actions[14]?.type !== 'wait_until_block' || actions[14]?.block !== 'minecraft:wheat'
-      || position(actions[14])?.view !== 'site' || position(actions[14])?.id !== site || position(actions[14])?.field !== 'lastCrop') {
+      || actions[14]?.type !== 'visit' || actions[14]?.dimension !== 'pale_mirror:frontier_graybox'
+      || actions[14]?.causalMilestone !== 'site7_restart_natural_rearrival'
+      || actions[15]?.type !== 'wait_until_block' || actions[15]?.block !== 'minecraft:wheat'
+      || position(actions[15])?.view !== 'site' || position(actions[15])?.id !== site || position(actions[15])?.field !== 'lastCrop') {
     throw new Error('F0.6R3 carrier does not prove the complete field and its exact COLD prefix through ordinary ingress and restart');
   }
 }

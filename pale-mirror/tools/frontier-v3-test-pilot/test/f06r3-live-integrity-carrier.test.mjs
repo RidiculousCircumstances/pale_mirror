@@ -19,3 +19,16 @@ test('F0.6R3 live-integrity carrier rejects a receipt-only field even when its m
   assert.throws(() => assertF06r3LiveIntegrityCarrier({ declaration: receiptOnly, manifest }),
     /complete field and its exact COLD prefix/);
 });
+
+test('F0.6R3 live-integrity carrier requires a natural post-restart return before inspecting the field', async () => {
+  const declaration = JSON.parse(await readFile(resolve(root, 'scenarios/disposable-f06r3-live-integrity.json'), 'utf8'));
+  const noReturn = structuredClone(declaration);
+  noReturn.actions[14] = { type: 'inspect', view: 'process', id: 'job:site-harvest-7-wheat-field-1' };
+  const manifest = {
+    status: 'ok', scenarioId: noReturn.id,
+    recovery: { mode: 'graceful', splitAfterAction: noReturn.restart.afterAction },
+    actions: noReturn.actions.map(action => ({ action })), diagnostics: []
+  };
+  assert.throws(() => assertF06r3LiveIntegrityCarrier({ declaration: noReturn, manifest }),
+    /complete field and its exact COLD prefix/);
+});
