@@ -17,6 +17,16 @@ class FrontierV3TestPilotScenarioTest {
     }
 
     @Test
+    void permitsOnlyTheBoundedExhaustiveCurrentFacilityProbe() {
+        assertEquals(1, FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"assert_complete_resource_site","siteId":"site:7-wheat-field",
+                "completedCropSlots":1,"timeoutMs":30000}]}""").actionCount());
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"assert_complete_resource_site","siteId":"site:7-wheat-field",
+                "completedCropSlots":65,"timeoutMs":30000}]}"""));
+    }
+
+    @Test
     void rejectsUnknownActionBeforeTheVisibleClientConnects() {
         assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"rewrite_canon"}]}"""));

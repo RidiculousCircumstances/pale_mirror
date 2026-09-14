@@ -17,6 +17,7 @@ import io.farfrontier.palemirror.frontier.v3.model.GrayboxSemanticPart;
 import io.farfrontier.palemirror.frontier.v3.model.InfectionCell;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDelta;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaKind;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSite;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaObserved;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltasObserved;
 import io.farfrontier.palemirror.frontier.v3.model.StructureDamaged;
@@ -57,6 +58,12 @@ final class FrontierV3GrayboxExecutor {
      * 64-cell batch after a player has already seen the chunk.
      */
     private static final Map<FrontierV3ServerRuntime<?, ?>, Map<ChunkPos, FirstVisibilityRecord>> FIRST_VISIBILITY = new IdentityHashMap<>();
+    /**
+     * Chunk load is not player ingress.  The graybox dimension can keep generated chunks
+     * resident for bootstrap/static ownership work, so a resource facility may only consume
+     * COLD state after vanilla has placed an ordinary player at its local boundary.
+     */
+    private static final Map<FrontierV3ServerRuntime<?, ?>, java.util.Set<ChunkPos>> PLAYER_INGRESS = new IdentityHashMap<>();
 
     enum ProjectionResult { APPLIED, CURRENT, CONFLICT, DEFERRED }
     enum BlockBreakObservation { UNMANAGED, ACCEPTED, REJECTED }
@@ -179,7 +186,9 @@ final class FrontierV3GrayboxExecutor {
     }
 
     /** Releases only volatile exposure bookkeeping with the normal runtime cleanup. */
-    static void forgetFirstVisibility(FrontierV3ServerRuntime<?, ?> runtime) { FIRST_VISIBILITY.remove(runtime); }
+    static void forgetFirstVisibility(FrontierV3ServerRuntime<?, ?> runtime) {
+        FIRST_VISIBILITY.remove(runtime); PLAYER_INGRESS.remove(runtime);
+    }
 
     /**
      * Actual ChunkEvent.Load composition: fence the newly natural chunk before it can be used by
@@ -207,8 +216,24 @@ final class FrontierV3GrayboxExecutor {
     static void observePlayerIngress(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, ChunkPos chunk) {
         Objects.requireNonNull(runtime, "first visibility runtime"); Objects.requireNonNull(chunk, "first visibility chunk");
         if (runtime.decodedState().isEmpty()) return;
+        PLAYER_INGRESS.computeIfAbsent(runtime, ignored -> new java.util.LinkedHashSet<>()).add(chunk);
         retainFirstVisibility(runtime, chunk);
         retainSiblingHiveVisibility(runtime, chunk);
+    }
+
+    /**
+     * A player at a farm shell can be one chunk outside its field edge.  This is the bounded
+     * ordinary-visibility neighbourhood, not a ticket or a search: the field still has to be
+     * naturally resident before the resource owner reads or writes one of its cells.
+     */
+    static boolean resourceSitePlayerIngressed(FrontierV3ServerRuntime<?, ?> runtime, ResourceSite site) {
+        return PLAYER_INGRESS.getOrDefault(runtime, java.util.Set.of()).stream()
+                .anyMatch(ingress -> resourceSiteIngressMatches(ingress, site));
+    }
+
+    static boolean resourceSiteIngressMatches(ChunkPos ingress, ResourceSite site) {
+        return site.managedSlots().stream().map(position -> new ChunkPos(position.x() >> 4, position.z() >> 4))
+                .anyMatch(field -> Math.abs(field.x - ingress.x) <= 1 && Math.abs(field.z - ingress.z) <= 1);
     }
 
     /**

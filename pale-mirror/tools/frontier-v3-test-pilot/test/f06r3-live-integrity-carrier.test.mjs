@@ -23,12 +23,25 @@ test('F0.6R3 live-integrity carrier rejects a receipt-only field even when its m
 test('F0.6R3 live-integrity carrier requires a natural post-restart return before inspecting the field', async () => {
   const declaration = JSON.parse(await readFile(resolve(root, 'scenarios/disposable-f06r3-live-integrity.json'), 'utf8'));
   const noReturn = structuredClone(declaration);
-  noReturn.actions[14] = { type: 'inspect', view: 'process', id: 'job:site-harvest-7-wheat-field-1' };
+  noReturn.actions[15] = { type: 'inspect', view: 'process', id: 'job:site-harvest-7-wheat-field-1' };
   const manifest = {
     status: 'ok', scenarioId: noReturn.id,
     recovery: { mode: 'graceful', splitAfterAction: noReturn.restart.afterAction },
     actions: noReturn.actions.map(action => ({ action })), diagnostics: []
   };
   assert.throws(() => assertF06r3LiveIntegrityCarrier({ declaration: noReturn, manifest }),
+    /complete field and its exact COLD prefix/);
+});
+
+test('F0.6R3 live-integrity carrier rejects a crop-only endpoint in place of the complete facility probe', async () => {
+  const declaration = JSON.parse(await readFile(resolve(root, 'scenarios/disposable-f06r3-live-integrity.json'), 'utf8'));
+  const cropOnly = structuredClone(declaration);
+  cropOnly.actions[9] = { type: 'wait_until_block', position: { diagnostic: { view: 'site', id: 'site:7-wheat-field', field: 'lastCrop' } }, block: 'minecraft:wheat', timeoutMs: 30000 };
+  const manifest = {
+    status: 'ok', scenarioId: cropOnly.id,
+    recovery: { mode: 'graceful', splitAfterAction: cropOnly.restart.afterAction },
+    actions: cropOnly.actions.map(action => ({ action })), diagnostics: []
+  };
+  assert.throws(() => assertF06r3LiveIntegrityCarrier({ declaration: cropOnly, manifest }),
     /complete field and its exact COLD prefix/);
 });

@@ -11,7 +11,9 @@ import java.util.Set;
 /** Strict, side-effect-free schema boundary shared by the visible client pilot and unit tests. */
 final class FrontierV3TestPilotScenario {
     private static final Set<String> ACTION_TYPES = Set.of(
-            "wait", "wait_until_block", "wait_until_diagnostic", "wait_until_harvest_result", "fast_forward", "fast_forward_to_instant", "release_fast_forward_hold", "command", "inspect", "look", "look_nearest_entity",
+            "wait", "wait_until_block", "wait_until_diagnostic", "wait_until_harvest_result",
+            "assert_complete_resource_site", "fast_forward", "fast_forward_to_instant",
+            "release_fast_forward_hold", "command", "inspect", "look", "look_nearest_entity",
             "walk", "break", "place", "assert_fixture", "visit", "assert_visible_block", "assert_visible_board", "open_container", "quick_move_from_inventory", "quick_move_from_container", "split_move_from_container",
             "wait_until_container_item", "interact_board", "interact_nearest_entity", "attack_nearest_entity", "visit_operation", "look_operation", "assert_visible_entity");
     record Parsed(JsonArray setup, JsonArray actions, JsonArray frames) {
@@ -65,6 +67,7 @@ final class FrontierV3TestPilotScenario {
                             || !action.get("expect").isJsonObject() || !timeout(action, 300_000L) || !validOptionalIncreasePath(action))) ||
                     (type.equals("wait_until_container_item") && !validContainerItem(action)) ||
                     (type.equals("wait_until_harvest_result") && !validHarvestResult(action)) ||
+                    (type.equals("assert_complete_resource_site") && !validCompleteResourceSite(action)) ||
                     (type.equals("assert_fixture") && !validFixture(action)) ||
                     (type.equals("assert_visible_block") && (!resolvablePosition(action, "position") || !timeout(action, 120_000L))) ||
                     (type.equals("assert_visible_board") && !validVisibleBoard(action)) ||
@@ -129,6 +132,14 @@ final class FrontierV3TestPilotScenario {
         if (!action.has("requireIncreaseAt")) return true;
         return action.get("requireIncreaseAt").isJsonPrimitive()
                 && action.get("requireIncreaseAt").getAsString().matches("[A-Za-z][A-Za-z0-9]*(?:\\.[A-Za-z][A-Za-z0-9]*){0,7}");
+    }
+
+    private static boolean validCompleteResourceSite(JsonObject action) {
+        if (!action.has("siteId") || !action.get("siteId").isJsonPrimitive() || !action.get("siteId").getAsString().matches("site:[1-9][0-9]*-wheat-field")) return false;
+        if (!action.has("completedCropSlots") || !action.get("completedCropSlots").isJsonPrimitive()
+                || !action.get("completedCropSlots").getAsJsonPrimitive().isNumber()) return false;
+        int completed = action.get("completedCropSlots").getAsInt();
+        return completed >= 0 && completed <= 64 && timeout(action, 120_000L);
     }
 
     private static boolean wholeTarget(JsonObject action) {

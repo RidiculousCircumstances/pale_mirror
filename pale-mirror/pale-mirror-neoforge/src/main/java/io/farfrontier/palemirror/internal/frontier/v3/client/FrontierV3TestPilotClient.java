@@ -37,10 +37,7 @@ import static io.farfrontier.palemirror.internal.frontier.v3.client.FrontierV3Pi
 import static io.farfrontier.palemirror.internal.frontier.v3.client.FrontierV3PilotDiagnosticMatcher.harvestComplete;
 import static io.farfrontier.palemirror.internal.frontier.v3.client.FrontierV3PilotDiagnosticMatcher.increasedAtPath;
 import static io.farfrontier.palemirror.internal.frontier.v3.client.FrontierV3PilotDiagnosticMatcher.matches;
-/**
- * Development-only visible pilot. It drives the ordinary NeoForge client interaction layer;
- * it has no v3 API, server state or world-file access. The server still receives normal player packets.
- */
+/** Development-only visible pilot; no v3 API, server-state or world-file access. */
 @EventBusSubscriber(modid = PaleMirrorMod.MOD_ID, value = Dist.CLIENT)
 public final class FrontierV3TestPilotClient {
     private static final String SCENARIO_PROPERTY = "pale_mirror.frontier_v3.test_pilot.scenario";
@@ -248,6 +245,7 @@ public final class FrontierV3TestPilotClient {
             switch (type) {
                 case "wait" -> { if (tick - actionStartedTick >= action.get("ms").getAsLong() / 50L) advance(type); }
                 case "wait_until_block" -> waitUntilBlock(minecraft, action);
+                case "assert_complete_resource_site" -> assertCompleteResourceSite(minecraft, action);
                 case "wait_until_diagnostic" -> waitUntilDiagnostic(minecraft, action);
                 case "wait_until_harvest_result" -> waitUntilHarvestResult(minecraft, action);
                 case "wait_until_container_item" -> waitUntilContainerItem(minecraft, action);
@@ -395,6 +393,33 @@ public final class FrontierV3TestPilotClient {
         if ((minecraft.level.getGameTime() - actionStartedTick) * 50L >= timeoutMs) {
             throw new IllegalStateException("timed out waiting for " + expected + " at " + target + "; client saw " + actual);
         }
+    }
+    /**
+     * Client-side, exhaustive facility predicate.  It reads the naturally delivered level only:
+     * 64 soil cells, 64 exact COLD crop slots and all four source-water cells.  The immutable
+     * site diagnostic supplies identity/geometry, never a server-side success answer.
+     */
+    private static void assertCompleteResourceSite(Minecraft minecraft, JsonObject action) {
+        String siteId = action.get("siteId").getAsString();
+        ObservedDiagnostic observed = diagnostics.get(new DiagnosticIdentity("site", siteId));
+        long tick = minecraft.level.getGameTime();
+        if (observed == null) {
+            if ((tick - actionStartedTick) % 20L == 0L) minecraft.player.connection.sendCommand("pale_mirror v3 inspect site " + siteId);
+            timeout(minecraft, action, "timed out reading immutable site geometry " + siteId); return;
+        }
+        int completed = action.get("completedCropSlots").getAsInt();
+        FrontierV3ResourceSiteFacilityProbe.Result result = FrontierV3ResourceSiteFacilityProbe.inspect(
+                minecraft, observed.value(), completed, siteId);
+        if (!result.current()) {
+            timeout(minecraft, action, "client did not observe complete current facility " + siteId); return;
+        }
+        JsonObject proof = new JsonObject(); proof.addProperty("schema", 1); proof.addProperty("kind", "resource_site_facility"); proof.addProperty("id", siteId);
+        proof.addProperty("status", "ok"); proof.addProperty("cropSlots", 64); proof.addProperty("farmlandSlots", result.farmland());
+        proof.addProperty("waterSlots", result.water()); proof.addProperty("airCropSlots", result.air()); proof.addProperty("wheatCropSlots", result.wheat());
+        proof.addProperty("completedCropSlots", completed); proof.addProperty("clientPhysicalRead", true);
+        FrontierV3PilotSessionControl.stampDiagnostic(proof, index + 1, currentCausalMilestone);
+        diagnostics.put(new DiagnosticIdentity("resource_site_facility", siteId), new ObservedDiagnostic(tick, proof));
+        PaleMirrorMod.LOGGER.info("PMV3_PILOT_DIAGNOSTIC {}", proof); advance("assert_complete_resource_site");
     }
     private static void visit(Minecraft minecraft, JsonObject action) {
         BlockPos target = resolvedPosition(minecraft, action, "position");
@@ -821,23 +846,14 @@ public final class FrontierV3TestPilotClient {
         minecraft.player.setYRot((float) (Mth.atan2(-delta.x, delta.z) * Mth.RAD_TO_DEG));
         minecraft.player.setXRot((float) -(Mth.atan2(delta.y, Math.sqrt(delta.x * delta.x + delta.z * delta.z)) * Mth.RAD_TO_DEG));
     }
-    /**
-     * Looks at either a literal test coordinate or the one explicitly declared
-     * read-only field anchor. The latter prevents a materialization test from
-     * quietly retaining a stale generated coordinate when the immutable field
-     * compiler legitimately chooses another free side of the farm.
-     */
+    /** Looks at a literal coordinate or one declared immutable, read-only field anchor. */
     private static void lookAtPosition(Minecraft minecraft, JsonObject action) {
         BlockPos target = resolvedPosition(minecraft, action, action.has("at") ? "at" : "position");
         if (target == null) return;
         look(minecraft, target);
         advance("look");
     }
-    /**
-     * Resolves a deliberately narrow immutable plan anchor from a read-only
-     * diagnostic. The container form is usable for an ordinary right-click;
-     * it grants neither server-side selection nor any mutation authority.
-     */
+    /** Resolves a narrow immutable plan anchor from a read-only diagnostic. */
     private static BlockPos resolvedPosition(Minecraft minecraft, JsonObject action, String field) {
         JsonObject value = Objects.requireNonNull(action.getAsJsonObject(field), field + " position");
         if (value.has("x") && value.has("y") && value.has("z")) {
@@ -853,7 +869,7 @@ public final class FrontierV3TestPilotClient {
         // a following action uses its recorded diagnostic rather than inventing
         // a second server-side coordinate lookup.
         if (observed != null) {
-            JsonObject anchor = diagnosticAnchor(observed.value(), diagnosticField);
+            JsonObject anchor = FrontierV3ResourceSiteFacilityProbe.anchor(observed.value(), diagnosticField);
             if (anchor == null || !anchor.has("x") || !anchor.has("y") || !anchor.has("z")) {
                 throw new IllegalStateException(view + " diagnostic lacks " + diagnosticField + " for " + id);
             }
@@ -867,23 +883,6 @@ public final class FrontierV3TestPilotClient {
         }
         return null;
     }
-    /**
-     * The parsed scenario permits only a finite published anchor vocabulary.
-     * Dotted fields are therefore structural read-only paths, not a general
-     * JSON query language or a server-side target selector.
-     */
-    private static JsonObject diagnosticAnchor(JsonObject diagnostic, String field) {
-        JsonObject current = diagnostic;
-        String[] segments = field.split("\\.", -1);
-        if (segments.length == 0 || segments.length > 2) return null;
-        for (String segment : segments) {
-            if (segment.isEmpty()) return null;
-            current = current.getAsJsonObject(segment);
-            if (current == null) return null;
-        }
-        return current;
-    }
-
     private static BlockPos position(JsonObject action, String field) {
         JsonObject value = Objects.requireNonNull(action.getAsJsonObject(field), field + " position");
         return new BlockPos(value.get("x").getAsInt(), value.get("y").getAsInt(), value.get("z").getAsInt());

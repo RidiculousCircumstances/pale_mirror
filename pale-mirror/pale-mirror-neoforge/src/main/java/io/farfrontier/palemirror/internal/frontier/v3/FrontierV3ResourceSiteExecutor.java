@@ -66,7 +66,8 @@ final class FrontierV3ResourceSiteExecutor {
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return;
-        FrontierV3ResourceSitePreparationSelection.nextLoaded(state, site -> loaded(level, site)).ifPresent(intent -> execute(level, runtime, state, intent));
+        FrontierV3ResourceSitePreparationSelection.nextLoaded(state,
+                site -> loaded(level, site) && FrontierV3GrayboxExecutor.resourceSitePlayerIngressed(runtime, site)).ifPresent(intent -> execute(level, runtime, state, intent));
         reconcileOneAfterRestart(level, runtime, state);
         projectOneGrowthStage(level, runtime, runtime.decodedState().orElse(state));
     }
@@ -106,7 +107,7 @@ final class FrontierV3ResourceSiteExecutor {
     /** Exact partial field state after a retained harvest cursor, never a cosmetic interpolation. */
     static boolean matchesHarvestProgress(ServerLevel level, ResourceSite site, int completedCropSlots) {
         if (completedCropSlots < 0 || completedCropSlots > site.cropSlots().size()) return false;
-        if (!loaded(level, site)) return false;
+        if (!loaded(level, site) || !matchesInfrastructure(level, site)) return false;
         for (int index = 0; index < site.cropSlots().size(); index++) {
             BlockState expected = index < completedCropSlots ? Blocks.AIR.defaultBlockState() : crop(ResourceSiteLifecycle.MATURE_STAGE);
             if (!level.getBlockState(minecraft(site.cropSlots().get(index))).equals(expected)) return false;
@@ -121,6 +122,8 @@ final class FrontierV3ResourceSiteExecutor {
 
     private static Optional<BlockPosition> firstMismatchClaim(ServerLevel level, ResourceSite site, FrontierV3ResourceSiteLedger.Claim claim) {
         if (claim.stage() != ResourceSiteLifecycle.MATURE_STAGE || claim.harvestedCropSlots() == 0) return firstMismatch(level, site, claim.stage());
+        Optional<BlockPosition> infrastructure = firstInfrastructureMismatch(level, site);
+        if (infrastructure.isPresent()) return infrastructure;
         for (int index = 0; index < site.cropSlots().size(); index++) {
             BlockPosition slot = site.cropSlots().get(index);
             BlockState expected = index < claim.harvestedCropSlots() ? Blocks.AIR.defaultBlockState() : crop(ResourceSiteLifecycle.MATURE_STAGE);
@@ -133,6 +136,8 @@ final class FrontierV3ResourceSiteExecutor {
         Set<SubjectId> pendingRecovery = RECOVERY_SITES.getOrDefault(runtime, Set.of());
         List<ResourceSiteLifecycle> candidates = state.resourceSites().sites().values().stream().filter(FrontierV3ResourceSiteExecutor::projectsGrowthStage)
                 .filter(lifecycle -> !pendingRecovery.contains(lifecycle.siteId()))
+                .filter(lifecycle -> FrontierV3GrayboxExecutor.resourceSitePlayerIngressed(runtime,
+                        FrontierResourceSitePlan.compile(state.bootstrap()).get(lifecycle.siteId())))
                 .sorted(Comparator.comparing(ResourceSiteLifecycle::siteId)).toList();
         if (candidates.isEmpty()) return;
         int index = Math.floorMod(STAGE_CURSORS.getOrDefault(runtime, 0), candidates.size());
@@ -240,7 +245,7 @@ final class FrontierV3ResourceSiteExecutor {
         for (SubjectId siteId : pending.stream().sorted().toList()) {
             ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).get(siteId);
             ResourceSiteLifecycle lifecycle = state.resourceSites().site(siteId);
-            if (site == null || !loaded(level, site)) continue;
+            if (site == null || !loaded(level, site) || !FrontierV3GrayboxExecutor.resourceSitePlayerIngressed(runtime, site)) continue;
             PhysicalIntent intent = state.physicalIntents().values().stream().filter(candidate -> candidate.kind() == PhysicalIntentKind.RESOURCE_SITE_PREPARATION
                     && candidate.status() == PhysicalIntentStatus.CONFIRMED && candidate.causeSubjectId().equals(siteId)).findFirst().orElse(null);
             RestartReconciliation result;
@@ -352,14 +357,20 @@ final class FrontierV3ResourceSiteExecutor {
                 });
     }
     static boolean matches(ServerLevel level, ResourceSite site, int stage) {
+        return matchesInfrastructure(level, site)
+                && site.cropSlots().stream().allMatch(crop -> level.getBlockState(minecraft(crop)).equals(crop(stage)));
+    }
+    private static boolean matchesInfrastructure(ServerLevel level, ResourceSite site) {
         return site.soilSlots().stream().allMatch(soil -> level.getBlockState(minecraft(soil)).is(Blocks.FARMLAND))
-                && site.cropSlots().stream().allMatch(crop -> level.getBlockState(minecraft(crop)).equals(crop(stage)))
                 && site.irrigationSlots().stream().allMatch(irrigation -> level.getBlockState(minecraft(irrigation)).equals(Blocks.WATER.defaultBlockState()));
     }
-    private static Optional<BlockPosition> firstMismatch(ServerLevel level, ResourceSite site, int stage) {
+    private static Optional<BlockPosition> firstInfrastructureMismatch(ServerLevel level, ResourceSite site) {
         return java.util.stream.Stream.concat(site.soilSlots().stream().filter(soil -> !level.getBlockState(minecraft(soil)).is(Blocks.FARMLAND)),
-                java.util.stream.Stream.concat(site.cropSlots().stream().filter(crop -> !level.getBlockState(minecraft(crop)).equals(crop(stage))),
-                        site.irrigationSlots().stream().filter(irrigation -> !level.getBlockState(minecraft(irrigation)).equals(Blocks.WATER.defaultBlockState())))).findFirst();
+                site.irrigationSlots().stream().filter(irrigation -> !level.getBlockState(minecraft(irrigation)).equals(Blocks.WATER.defaultBlockState()))).findFirst();
+    }
+    private static Optional<BlockPosition> firstMismatch(ServerLevel level, ResourceSite site, int stage) {
+        return java.util.stream.Stream.concat(firstInfrastructureMismatch(level, site).stream(),
+                site.cropSlots().stream().filter(crop -> !level.getBlockState(minecraft(crop)).equals(crop(stage)))).findFirst();
     }
     private static boolean projectsGrowthStage(ResourceSiteLifecycle lifecycle) {
         // Growth owns complete-stage projection until the field has physically reached its
