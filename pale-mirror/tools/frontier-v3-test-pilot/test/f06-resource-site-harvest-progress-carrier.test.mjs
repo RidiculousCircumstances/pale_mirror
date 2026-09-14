@@ -26,6 +26,12 @@ test('F0.6 declaration binds ordinary farmer demand to the first retained crop, 
   assert.throws(() => assertF06ResourceSiteHarvestProgressDeclaration(stale), /first-crop/);
 });
 
+test('native ordinary-ingress responsiveness assertion is explicit and fail-closed', () => {
+  assert.doesNotThrow(() => validateScenario({ ...declaration, assertNoServerTickStallDuringIngress: true }));
+  assert.throws(() => validateScenario({ ...declaration, assertNoServerTickStallDuringIngress: false }),
+    /assertNoServerTickStallDuringIngress must be true/);
+});
+
 test('F0.6 carrier requires physical first-crop progress and preserves exact farmer/job custody over departure and return', () => {
   assert.deepEqual(assertF06ResourceSiteHarvestProgressCarrier({ declaration, manifest: manifest() }), {
     job: 'job:site-harvest-1-wheat-field-1', worker: 'resident:1-3', firstCrop: 1, returnedCropFloor: 1,

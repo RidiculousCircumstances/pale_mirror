@@ -16,6 +16,12 @@ import io.farfrontier.palemirror.frontier.v3.model.TerrainSurfacePlan;
 import net.minecraft.world.level.ChunkPos;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -90,9 +96,37 @@ class FrontierV3HiveFoundryAuditTest {
         ChunkPos entered = new ChunkPos(representative.position().x() >> 4, representative.position().z() >> 4);
 
         assertTrue(fence.containsKey(entered), "missing exact organ chunk " + entered + " from " + fence.keySet());
+        // A physical ingress chunk is allowed to contain cells from more than one organ.  Its
+        // fence must be the union of their complete declared nests, not a last-map-write
+        // fragment that leaves the board truthfully but permanently "ORGAN NOT CURRENT".
+        for (Map.Entry<ChunkPos, List<GrayboxCell>> entry : fence.entrySet()) {
+            LinkedHashSet<GrayboxCell> expected = new LinkedHashSet<>();
+            expectations.cells().forEach((organ, cells) -> {
+                boolean touchesIngress = cells.stream().anyMatch(cell ->
+                        (cell.position().x() >> 4) == entry.getKey().x && (cell.position().z() >> 4) == entry.getKey().z);
+                if (touchesIngress) expectations.nestMembers().getOrDefault(organ, List.of()).forEach(member ->
+                        expected.addAll(expectations.cells().getOrDefault(member, List.of())));
+            });
+            assertEquals(expected, new LinkedHashSet<>(entry.getValue()),
+                    "shared ingress " + entry.getKey() + " must retain every touched nest envelope");
+        }
         for (int chunk = 0; chunk < 2_160; chunk++) {
             assertTrue(fence.getOrDefault(new ChunkPos(20_000 + chunk, -20_000), java.util.List.of()).isEmpty());
         }
+    }
+
+    @Test
+    void idleProjectionNeverScansEveryDeclaredChunkToFindOneNaturalChunk() {
+        var cells = new ArrayList<GrayboxCell>();
+        for (int chunk = 0; chunk < 2_160; chunk++) {
+            cells.add(new GrayboxCell(new BlockPosition(chunk << 4, 64, 0), new SubjectId("structure:probe-" + chunk),
+                    GrayboxMaterial.WORKSITE, GrayboxSemanticPart.WORKSITE_STAGING));
+        }
+        var cursor = FrontierV3GrayboxExecutor.Cursor.fromCells(cells, null);
+        var probes = new AtomicInteger();
+
+        assertTrue(cursor.nextNaturallyLoaded(cell -> { probes.incrementAndGet(); return false; }).isEmpty());
+        assertTrue(probes.get() <= 64, "one idle server turn may use its fixed local lookahead, but must not search all 2,160 declared chunks");
     }
 
     private static double metric(io.farfrontier.palemirror.api.FoundryAuditReport report, String id) {

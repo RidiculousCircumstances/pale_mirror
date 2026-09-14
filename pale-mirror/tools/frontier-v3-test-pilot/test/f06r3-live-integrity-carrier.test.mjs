@@ -7,6 +7,13 @@ import { assertF06r3LiveIntegrityCarrier } from '../src/f06r3-live-integrity-car
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
+test('F0.6R3 live-integrity carrier rejects a declaration that omits the ordinary-ingress responsiveness boundary', async () => {
+  const declaration = JSON.parse(await readFile(resolve(root, 'scenarios/disposable-f06r3-live-integrity.json'), 'utf8'));
+  delete declaration.assertNoServerTickStallDuringIngress;
+  const manifest = { status: 'ok', scenarioId: declaration.id, recovery: { mode: 'graceful', splitAfterAction: declaration.restart.afterAction }, actions: declaration.actions.map(action => ({ action })) };
+  assert.throws(() => assertF06r3LiveIntegrityCarrier({ declaration, manifest }), /responsiveness/);
+});
+
 test('F0.6R3 live-integrity carrier rejects a receipt-only field even when its manifest action list is otherwise exact', async () => {
   const declaration = JSON.parse(await readFile(resolve(root, 'scenarios/disposable-f06r3-live-integrity.json'), 'utf8'));
   const receiptOnly = structuredClone(declaration);

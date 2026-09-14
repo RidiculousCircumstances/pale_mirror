@@ -136,6 +136,7 @@ let abruptStopAttempted = false;
 const clientSegments = [];
 let recoveryMetadata = null;
 const recoveryCheckpoints = {};
+let restartZeroPlayerInterlude = null;
 // A crash intentionally destroys the socket. Its recovery uses a fresh ordinary client; the
 // one-client persistent-restart proof stays a separate F0.V.4 scenario.
 const usePersistentClient = process.env.FRONTIER_V3_PILOT_USE_PERSISTENT_CLIENT !== 'false' && scenario.crash === undefined;
@@ -182,8 +183,16 @@ try {
         // the normal stop immediately after its own client segment.  Waiting
         // for a separate demand-loss release changes the save carrier into a
         // global vanilla-generation proof and can reject unrelated work.
-        awaitNormalDemandLoss: !recoveryCarrier
+        awaitNormalDemandLoss: !recoveryCarrier && scenario.restart.zeroPlayerAdvanceTicks === undefined
       });
+      if (scenario.restart.zeroPlayerAdvanceTicks !== undefined) {
+        await awaitNormalDemandLoss(server, 'before_restart');
+        if (scenario.restart.zeroPlayerSettleMs !== undefined) await noPlayerSettle(scenario.restart.zeroPlayerSettleMs);
+        restartZeroPlayerInterlude = await runZeroPlayerPrelude(server, {
+          advanceTicks: scenario.restart.zeroPlayerAdvanceTicks,
+          timeoutMs: scenario.restart.zeroPlayerTimeoutMs
+        });
+      }
     }
     console.log(`PMV3_ISOLATED recovery=before-complete mode=${recovery.mode}`);
     if (server !== null) {
@@ -218,7 +227,7 @@ try {
     await writeFile(resolve(sessionDirectory, 'run-id'), `${runId}\n`, 'utf8');
     await writeScenario(sessionScenario, recovery.before);
     await requirePreparedF0vBuild(project, buildIdentity);
-    const persistentPilot = startPersistentPilot(sourcePath, output, sessionScenario, sessionDirectory);
+    const persistentPilot = await startPersistentPilot(sourcePath, output, sessionScenario, sessionDirectory);
     // The persistent-pilot wrapper is a Node supervisor; only the Minecraft client's own
     // prepared barrier identifies the JVM that later reconnects.  Keep that identity before
     // accepting its after-restart acknowledgement so a wrapper exit cannot masquerade as a
@@ -229,7 +238,18 @@ try {
       (entry) => entry.detail.segment === 'before_restart');
     await awaitLifecycleBarrierFromPilot(LifecycleBarrier.CLIENT_NORMALLY_DISCONNECTED, 300_000, persistentPilot,
       (entry) => entry.detail.segment === 'before_restart');
-    if (naturalDemandStop) await awaitNormalDemandLoss(server, 'before_restart');
+    if (scenario.assertNoServerTickStallDuringIngress === true) {
+      persistentPilot.ingressResponsiveness.push(await assertOrdinaryIngressResponsiveness(
+        persistentPilot.initialServerLogStart, scenario.pilot.username, 'before_restart'));
+    }
+    if (naturalDemandStop || scenario.restart.zeroPlayerAdvanceTicks !== undefined) await awaitNormalDemandLoss(server, 'before_restart');
+    if (scenario.restart.zeroPlayerAdvanceTicks !== undefined) {
+      if (scenario.restart.zeroPlayerSettleMs !== undefined) await noPlayerSettle(scenario.restart.zeroPlayerSettleMs);
+      restartZeroPlayerInterlude = await runZeroPlayerPrelude(server, {
+        advanceTicks: scenario.restart.zeroPlayerAdvanceTicks,
+        timeoutMs: scenario.restart.zeroPlayerTimeoutMs
+      });
+    }
     console.log(`PMV3_ISOLATED recovery=before-complete mode=${recovery.mode} client=persistent`);
     if (recovery.mode === 'graceful') {
       await timedStop('graceful_save_and_port_close', () => stopServerSafely(server, port));
@@ -245,6 +265,9 @@ try {
     server = await startServer(false);
     console.log('PMV3_ISOLATED recovery=server-restarted');
     abruptStopAttempted = false;
+    if (scenario.assertNoServerTickStallDuringIngress === true) {
+      persistentPilot.restartServerLogStart = await logByteLength(serverLog);
+    }
     await writeScenario(sessionScenario, recovery.after);
     // `resumed` is durable test-pilot control evidence while `resume` is the exact nonce the
     // client validates before asking Minecraft to make one ordinary new connection.
@@ -252,6 +275,10 @@ try {
     await writeFile(resolve(sessionDirectory, 'resume'), `${runId}\n`, 'utf8');
     await awaitLifecycleBarrierFromPilot(LifecycleBarrier.SAME_CLIENT_RECONNECTED_STATE_CLEARED, 300_000, persistentPilot,
       (entry) => entry.detail.clientPid === preparedClient.detail.clientPid);
+    if (scenario.assertNoServerTickStallDuringIngress === true) {
+      persistentPilot.ingressResponsiveness.push(await assertOrdinaryIngressResponsiveness(
+        persistentPilot.restartServerLogStart, scenario.pilot.username, 'after_restart'));
+    }
     await finishPersistentPilot(persistentPilot, clientSegments);
     if (naturalDemandStop) await awaitNormalDemandLoss(server, 'after_restart');
     console.log('PMV3_ISOLATED recovery=after-complete client=persistent');
@@ -341,6 +368,7 @@ if (completed) {
   manifest.gracefulSaveGate = gracefulSaveGateReceipts;
   manifest.naturalDemandStops = naturalDemandStops;
   manifest.zeroPlayerPrelude = zeroPlayerPrelude;
+  manifest.restartZeroPlayerInterlude = restartZeroPlayerInterlude;
   manifest.terminalCleanup = terminalCleanup;
   manifest.ownerObservation = ownerObservationFact(server?.ownerObservation ?? lastServerAttempt?.ownerObservation ?? retainedOwnerObservation);
   manifest.ownerObservationRequirement = ownerObservationRequirementFact(ownerObservationRequirement,
@@ -464,10 +492,14 @@ async function startServer(reset) {
 async function runZeroPlayerPrelude(server, declaration) {
   const command = `pale_mirror v3 advance ${declaration.advanceTicks}`;
   let before = server.outputRevision();
+  const outputOffset = server.output().length;
   await requestRconCommand({ port: server.rconPort, password: server.rconPassword, command });
   const deadline = Date.now() + declaration.timeoutMs;
   while (Date.now() < deadline) {
-    if (server.output().includes('Frontier v3 completed operator fast-forward')) {
+    // A restart COLD interlude is the second such request in one server lifetime.  Only the
+    // output appended after this exact RCON admission can acknowledge it; a prior bootstrap
+    // completion marker must not manufacture an elapsed no-player interval.
+    if (server.output().slice(outputOffset).includes('Frontier v3 completed operator fast-forward')) {
       return Object.freeze({ status: 'completed', advanceTicks: declaration.advanceTicks, command,
         clientSegmentsBeforeCompletion: clientSegments.length, serverPid: server.serverPid });
     }
@@ -477,6 +509,11 @@ async function runZeroPlayerPrelude(server, declaration) {
     before = server.outputRevision();
   }
   throw new Error('zero-player prelude did not receive the server-owned canonical completion marker');
+}
+
+/** Declared no-player wall interval lets vanilla retire the departed client's ordinary holders. */
+async function noPlayerSettle(milliseconds) {
+  await new Promise(resolve => setTimeout(resolve, milliseconds));
 }
 
 async function startJfrCapture(server, request) {
@@ -539,6 +576,11 @@ async function runPilot(scenarioFile, manifest, server, clientSegments, segment,
   await requirePreparedF0vBuild(project, buildIdentity);
   const phase = `client_segment.${segment}`;
   timing.begin(phase);
+  // Capture this append-only, exact-JVM log boundary before launching the
+  // ordinary client. Prelude/operator evidence cannot be relabelled as an
+  // ingress result (or vice versa).
+  const serverLogStart = scenario.assertNoServerTickStallDuringIngress === true
+    ? await logByteLength(serverLog) : undefined;
   const pilot = spawn(process.execPath, [resolve(dirname(fileURLToPath(import.meta.url)), 'run-scenario.mjs'), scenarioFile, manifest], {
     cwd: project, env: { ...process.env, FRONTIER_V3_PILOT_PROFILE: 'lite', FRONTIER_V3_GRADLE: gradle,
       FRONTIER_V3_PREPARED_BUILD_IDENTITY: preparedIdentityPath,
@@ -561,10 +603,40 @@ async function runPilot(scenarioFile, manifest, server, clientSegments, segment,
       { clientPid: pilot.pid, segment });
   }
   const clientManifest = JSON.parse(await readFile(manifest, 'utf8'));
-  clientSegments.push({ segment, manifest, runId: clientManifest.runId, timing: clientManifest.timing });
+  const ingressResponsiveness = scenario.assertNoServerTickStallDuringIngress === true
+    ? await assertOrdinaryIngressResponsiveness(serverLogStart, scenario.pilot.username, segment) : undefined;
+  clientSegments.push({ segment, manifest, runId: clientManifest.runId, timing: clientManifest.timing, ingressResponsiveness });
   if (!waitForNormalDemandLoss) return;
   await awaitNormalDemandLoss(server, segment);
 }
+
+async function logByteLength(path) {
+  try { return (await stat(path)).size; }
+  catch (error) {
+    if (error?.code === 'ENOENT') return 0;
+    throw error;
+  }
+}
+
+/**
+ * Binds responsiveness to one actual ordinary-client session. It intentionally
+ * does not score ticks or run a benchmark: the watchdog's observable precursor
+ * is Minecraft's own server-thread warning. A missing join or log rotation is
+ * a failed receipt rather than a green inference.
+ */
+async function assertOrdinaryIngressResponsiveness(offset, username, segment) {
+  const bytes = await readFile(serverLog);
+  if (offset > bytes.length) throw new Error(`server log rotated during ordinary ${segment} client ingress`);
+  const text = bytes.subarray(offset).toString('utf8');
+  const join = new RegExp(`\\b${escapeRegExp(username)} joined the game\\b`).exec(text);
+  if (join === null) throw new Error(`ordinary ${segment} client never joined the exact disposable server`);
+  if (/Can't keep up! Is the server overloaded\?/.test(text.slice(join.index))) {
+    throw new Error(`server tick stall during ordinary ${segment} client ingress/movement interval`);
+  }
+  return Object.freeze({ status: 'ok', ordinaryClientJoined: true, noServerTickStall: true, logStartByte: offset });
+}
+
+function escapeRegExp(value) { return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
 async function awaitNormalDemandLoss(server, segment) {
   // Terminal semantics are frozen before the runner writes this nonce.  The server can now
@@ -690,11 +762,13 @@ async function waitForCrashBoundary(server, pilot, crash, segment, timeoutMs) {
 }
 
 /** Starts exactly one visible Minecraft client JVM for both sides of a restart boundary. */
-function startPersistentPilot(contractScenario, manifest, runtimeScenario, controlDirectory) {
+async function startPersistentPilot(contractScenario, manifest, runtimeScenario, controlDirectory) {
   // The caller checked the exact same identity immediately before this one persistent JVM is
   // born.  Its after-restart half uses the already-running client, not a rebuilt replacement.
   const phase = 'client_segment.persistent_restart';
   timing.begin(phase, { reusableJvm: true });
+  const initialServerLogStart = scenario.assertNoServerTickStallDuringIngress === true
+    ? await logByteLength(serverLog) : undefined;
   const child = spawn(process.execPath, [resolve(dirname(fileURLToPath(import.meta.url)), 'run-scenario.mjs'), contractScenario, manifest], {
     cwd: project,
     env: { ...process.env, FRONTIER_V3_PILOT_PROFILE: 'lite', FRONTIER_V3_GRADLE: gradle,
@@ -704,7 +778,7 @@ function startPersistentPilot(contractScenario, manifest, runtimeScenario, contr
       FRONTIER_V3_PILOT_LIFECYCLE_CONTROL_DIRECTORY: lifecycle.directory },
     stdio: 'inherit'
   });
-  return { child, manifest, phase };
+  return { child, manifest, phase, initialServerLogStart, ingressResponsiveness: [] };
 }
 
 async function finishPersistentPilot(pilot, clientSegments) {
@@ -713,7 +787,7 @@ async function finishPersistentPilot(pilot, clientSegments) {
   if (code !== 0) throw new Error(`persistent isolated native pilot exited with ${code}`);
   const clientManifest = JSON.parse(await readFile(pilot.manifest, 'utf8'));
   clientSegments.push({ segment: 'persistent_restart', manifest: pilot.manifest, runId: clientManifest.runId,
-    timing: clientManifest.timing, reusedJvm: true });
+    timing: clientManifest.timing, reusedJvm: true, ingressResponsiveness: pilot.ingressResponsiveness });
 }
 
 async function awaitLifecycleBarrierFromPilot(barrier, timeoutMs, pilot, predicate = () => true) {

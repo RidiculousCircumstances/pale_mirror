@@ -22,7 +22,6 @@ import io.farfrontier.palemirror.frontier.v3.model.ResourceSite;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteConflictReason;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteConflictObserved;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob;
-import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestProgress;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteLifecycle;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSitePhase;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSitePreparationObservation;
@@ -50,6 +49,39 @@ final class FrontierV3ResourceSiteExecutor {
     enum BlockBreakObservation { UNMANAGED, ACCEPTED, REJECTED }
     enum StageProjectionResult { CURRENT, UPDATED, CONFLICT, DEFERRED }
     enum RestartReconciliation { CURRENT, RECREATED, CONFLICT, DEFERRED }
+    /**
+     * Closed restart ownership classification for one immutable field-slot order.  Do not infer
+     * restart authority from a null claim plus a convenient block pattern: COLD's numeric cursor
+     * and SavedData ownership must agree before a physical prefix can be extended.
+     */
+    enum HarvestRestartPhysicalState {
+        UNOBSERVED,
+        NEUTRAL_UNCLAIMED,
+        OWNED_EXACT,
+        OWNED_BEHIND,
+        FOREIGN_OR_DAMAGED,
+        UNKNOWN
+    }
+    /**
+     * The current single-worker wheat plan deliberately projects one stable ordered slot list.
+     * Its scalar completion is interpreted only against that immutable plan identity; it is not
+     * a universal facility model or a promise that a later spatial/multi-worker plan is linear.
+     * A later plan supplies its own typed projection at this boundary instead of reinterpreting
+     * a positional count against changed geometry.
+     */
+    record ManagedFacilityProgressProjection(SubjectId facilityId, List<BlockPosition> slotPlan, int completedSlots) {
+        ManagedFacilityProgressProjection {
+            facilityId = java.util.Objects.requireNonNull(facilityId, "facility id");
+            slotPlan = List.copyOf(java.util.Objects.requireNonNull(slotPlan, "slot plan"));
+            if (slotPlan.isEmpty() || new java.util.LinkedHashSet<>(slotPlan).size() != slotPlan.size()
+                    || completedSlots < 0 || completedSlots > slotPlan.size()) {
+                throw new IllegalArgumentException("managed facility progress does not match its immutable slot plan");
+            }
+        }
+        BlockState expected(int index) { return index < completedSlots ? Blocks.AIR.defaultBlockState() : crop(ResourceSiteLifecycle.MATURE_STAGE); }
+    }
+    record HarvestRestartClassification(HarvestRestartPhysicalState state, ManagedFacilityProgressProjection projection,
+                                        BlockPosition witness) { }
 
     private FrontierV3ResourceSiteExecutor() { }
 
@@ -106,11 +138,12 @@ final class FrontierV3ResourceSiteExecutor {
 
     /** Exact partial field state after a retained harvest cursor, never a cosmetic interpolation. */
     static boolean matchesHarvestProgress(ServerLevel level, ResourceSite site, int completedCropSlots) {
-        if (completedCropSlots < 0 || completedCropSlots > site.cropSlots().size()) return false;
+        ManagedFacilityProgressProjection projection;
+        try { projection = harvestProjection(site, completedCropSlots); }
+        catch (IllegalArgumentException invalid) { return false; }
         if (!loaded(level, site) || !matchesInfrastructure(level, site)) return false;
-        for (int index = 0; index < site.cropSlots().size(); index++) {
-            BlockState expected = index < completedCropSlots ? Blocks.AIR.defaultBlockState() : crop(ResourceSiteLifecycle.MATURE_STAGE);
-            if (!level.getBlockState(minecraft(site.cropSlots().get(index))).equals(expected)) return false;
+        for (int index = 0; index < projection.slotPlan().size(); index++) {
+            if (!level.getBlockState(minecraft(projection.slotPlan().get(index))).equals(projection.expected(index))) return false;
         }
         return true;
     }
@@ -192,9 +225,7 @@ final class FrontierV3ResourceSiteExecutor {
      * therefore sees the current next crop rather than a freshly recreated crop-0 field.
      */
     static StageProjectionResult projectHarvestProgress(ServerLevel level, FrontierV3ResourceSiteLedger ledger, ResourceSite site, int completedCropSlots) {
-        if (completedCropSlots < 1 || completedCropSlots > ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS) {
-            throw new IllegalArgumentException("resource-site deferred harvest cursor is invalid");
-        }
+        ManagedFacilityProgressProjection projection = harvestProjection(site, completedCropSlots);
         if (!loaded(level, site)) return StageProjectionResult.DEFERRED;
         StageProjectionResult mature = projectStage(level, ledger, site, ResourceSiteLifecycle.MATURE_STAGE);
         if (mature == StageProjectionResult.CONFLICT || mature == StageProjectionResult.DEFERRED) return mature;
@@ -204,8 +235,8 @@ final class FrontierV3ResourceSiteExecutor {
             return StageProjectionResult.CONFLICT;
         }
         if (claim.harvestedCropSlots() == completedCropSlots) return StageProjectionResult.CURRENT;
-        for (int index = claim.harvestedCropSlots(); index < completedCropSlots; index++) {
-            level.setBlock(minecraft(site.cropSlots().get(index)), Blocks.AIR.defaultBlockState(), 3);
+        for (int index = claim.harvestedCropSlots(); index < projection.completedSlots(); index++) {
+            level.setBlock(minecraft(projection.slotPlan().get(index)), Blocks.AIR.defaultBlockState(), 3);
             if (!matchesHarvestProgress(level, site, index + 1)) return StageProjectionResult.CONFLICT;
             ledger.harvestOne(site.id(), index + 1);
         }
@@ -269,21 +300,61 @@ final class FrontierV3ResourceSiteExecutor {
         }
     }
 
-    private static RestartReconciliation reconcileHarvestAfterRestart(ServerLevel level, FrontierV3ResourceSiteLedger ledger, ResourceSite site,
-                                                                       PhysicalIntent preparationIntent, int completedCropSlots) {
-        if (!loaded(level, site)) return RestartReconciliation.DEFERRED;
+    static RestartReconciliation reconcileHarvestAfterRestart(ServerLevel level, FrontierV3ResourceSiteLedger ledger, ResourceSite site,
+                                                              PhysicalIntent preparationIntent, int completedCropSlots) {
+        HarvestRestartClassification classification = classifyHarvestRestart(level, ledger, site, preparationIntent, completedCropSlots);
+        return switch (classification.state()) {
+            case UNOBSERVED -> RestartReconciliation.DEFERRED;
+            case OWNED_EXACT -> RestartReconciliation.CURRENT;
+            // A prior natural visit may have projected an exact owned prefix before the player
+            // left. COLD may advance the canonical cursor while it is unloaded; extend only
+            // that same proven prefix, never a look-alike/foreign field.
+            case OWNED_BEHIND -> projectHarvestReconciliation(level, ledger, site, completedCropSlots);
+            // The persisted COLD cursor can legitimately precede the first physical visit, but
+            // only a complete neutral facility plus its confirmed preparation authority may
+            // become the durable projection claim.
+            case NEUTRAL_UNCLAIMED -> preparationIntent == null ? RestartReconciliation.CONFLICT
+                    : recreateNeutralHarvestField(level, ledger, site, completedCropSlots);
+            case FOREIGN_OR_DAMAGED, UNKNOWN -> RestartReconciliation.CONFLICT;
+        };
+    }
+
+    static HarvestRestartClassification classifyHarvestRestart(ServerLevel level, FrontierV3ResourceSiteLedger ledger, ResourceSite site,
+                                                                PhysicalIntent preparationIntent, int completedCropSlots) {
+        ManagedFacilityProgressProjection projection = harvestProjection(site, completedCropSlots);
+        BlockPosition fallback = projection.slotPlan().getFirst();
+        if (!loaded(level, site)) return new HarvestRestartClassification(HarvestRestartPhysicalState.UNOBSERVED, projection, fallback);
         FrontierV3ResourceSiteLedger.Claim claim = ledger.claim(site.id());
-        if (claim != null && claim.status() == FrontierV3ResourceSiteLedger.Status.ACTIVE && claim.stage() == ResourceSiteLifecycle.MATURE_STAGE
-                && claim.harvestedCropSlots() == completedCropSlots && matchesHarvestProgress(level, site, completedCropSlots)) {
-            return RestartReconciliation.CURRENT;
+        if (claim == null) return new HarvestRestartClassification(baseline(level, site)
+                ? HarvestRestartPhysicalState.NEUTRAL_UNCLAIMED : HarvestRestartPhysicalState.FOREIGN_OR_DAMAGED, projection, fallback);
+        if (preparationIntent == null || !ownsRestartClaim(claim.intentId(), site, preparationIntent.id())) {
+            return new HarvestRestartClassification(HarvestRestartPhysicalState.FOREIGN_OR_DAMAGED, projection, fallback);
         }
-        if (preparationIntent == null || !ownsRestartClaim(claim == null ? projectionClaim(site) : claim.intentId(), site, preparationIntent.id())
-                || !baseline(level, site)) return RestartReconciliation.CONFLICT;
-        if (claim != null && claim.stage() != 0) ledger.updateStage(site.id(), 0);
-        if (!placeWholeField(level, site)) return RestartReconciliation.CONFLICT;
+        if (claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE || claim.stage() != ResourceSiteLifecycle.MATURE_STAGE
+                || claim.harvestedCropSlots() > completedCropSlots) {
+            return new HarvestRestartClassification(HarvestRestartPhysicalState.UNKNOWN, projection, fallback);
+        }
+        if (!matchesHarvestProgress(level, site, claim.harvestedCropSlots())) {
+            return new HarvestRestartClassification(HarvestRestartPhysicalState.FOREIGN_OR_DAMAGED,
+                    projection, firstMismatchClaim(level, site, claim).orElse(fallback));
+        }
+        return new HarvestRestartClassification(claim.harvestedCropSlots() == completedCropSlots
+                ? HarvestRestartPhysicalState.OWNED_EXACT : HarvestRestartPhysicalState.OWNED_BEHIND, projection, fallback);
+    }
+
+    private static RestartReconciliation projectHarvestReconciliation(ServerLevel level, FrontierV3ResourceSiteLedger ledger, ResourceSite site,
+                                                                        int completedCropSlots) {
         StageProjectionResult projected = projectHarvestProgress(level, ledger, site, completedCropSlots);
         return projected == StageProjectionResult.CURRENT || projected == StageProjectionResult.UPDATED
                 ? RestartReconciliation.RECREATED : RestartReconciliation.CONFLICT;
+    }
+
+    private static RestartReconciliation recreateNeutralHarvestField(ServerLevel level, FrontierV3ResourceSiteLedger ledger, ResourceSite site,
+                                                                       int completedCropSlots) {
+        ledger.reserve(site.id(), projectionClaim(site));
+        if (!placeWholeField(level, site)) return RestartReconciliation.CONFLICT;
+        ledger.activate(site.id());
+        return projectHarvestReconciliation(level, ledger, site, completedCropSlots);
     }
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, PhysicalIntent intent) {
@@ -381,6 +452,9 @@ final class FrontierV3ResourceSiteExecutor {
                 || lifecycle.phase() == ResourceSitePhase.HARVESTING;
     }
     private static BlockState crop(int stage) { return Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, stage); }
+    private static ManagedFacilityProgressProjection harvestProjection(ResourceSite site, int completedCropSlots) {
+        return new ManagedFacilityProgressProjection(site.id(), site.cropSlots(), completedCropSlots);
+    }
     private static PhysicalIntentId projectionClaim(ResourceSite site) {
         return new PhysicalIntentId("intent:site-projection-" + site.id().value().substring("site:".length()));
     }

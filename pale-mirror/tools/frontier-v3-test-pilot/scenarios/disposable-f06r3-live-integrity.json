@@ -4,8 +4,9 @@
   "isolation": { "mode": "disposable_lite", "seed": 41 },
   "server": { "host": "127.0.0.1", "port": 25575, "profile": "world", "viewDistance": 6 },
   "zeroPlayerPrelude": { "advanceTicks": 24000, "timeoutMs": 180000 },
-  "restart": { "mode": "graceful", "afterAction": 15 },
+  "restart": { "mode": "graceful", "afterAction": 15, "zeroPlayerAdvanceTicks": 40, "zeroPlayerTimeoutMs": 60000, "zeroPlayerSettleMs": 35000 },
   "pilot": { "username": "PMTestPilot" },
+  "assertNoServerTickStallDuringIngress": true,
   "setup": [{ "type": "assert_fixture", "timeoutMs": 30000, "checks": [{ "view": "summary", "id": "", "expect": { "status": "ok", "settlements": 12, "sites": 12 } }] }],
   "actions": [
     { "type": "inspect", "view": "process_inventory", "id": "settlements", "causalMilestone": "zero_player_all_current_processes" },

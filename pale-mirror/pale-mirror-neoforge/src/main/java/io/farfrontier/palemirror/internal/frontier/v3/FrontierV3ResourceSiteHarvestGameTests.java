@@ -2,6 +2,13 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
+import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
+import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
@@ -21,6 +28,7 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /** Loaded field/depot receipt proof for the exact 64-slot harvest boundary. */
 @GameTestHolder(PaleMirrorMod.MOD_ID)
@@ -193,6 +201,82 @@ public final class FrontierV3ResourceSiteHarvestGameTests {
             helper.assertTrue(FrontierV3ResourceSiteExecutor.matches(level, site, 3)
                             && ledger.claim(site.id()).status() == FrontierV3ResourceSiteLedger.Status.ACTIVE,
                     "recovery preserves the observed field and active exact ownership");
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "pm-frontier-v3-resource-recovery", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full",
+            timeoutTicks = 40)
+    public static void coldHarvestPrefixRestartsFromConfirmedNeutralField(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); ResourceSite site = field(fixtureOrigin(helper), "site:resource-harvest-cold-prefix"); prepare(level, site);
+        runWhenLit(helper, level, site, () -> {
+            PhysicalIntentId preparationId = new PhysicalIntentId("intent:site-prepare-resource-harvest-cold-prefix");
+            BlockPosition origin = site.cropSlots().getFirst();
+            PhysicalIntent preparation = new PhysicalIntent(preparationId, PhysicalIntentKind.RESOURCE_SITE_PREPARATION,
+                    PhysicalIntentStatus.PREPARED, site.id(), List.of(site.id(), new SubjectId("job:site-prepare-resource-harvest-cold-prefix")),
+                    new FixedPosition(FixedScalar.whole(origin.x()), FixedScalar.whole(origin.y()), FixedScalar.whole(origin.z())), 0,
+                    PhysicalPostcondition.RESOURCE_SITE_PREPARED_OBSERVED).withStatus(PhysicalIntentStatus.CONFIRMED,
+                    Optional.of(new PhysicalObservationId("observation:site-prepare-resource-harvest-cold-prefix")));
+            FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
+            helper.assertTrue(FrontierV3ResourceSiteExecutor.baseline(level, site),
+                    "the unvisited restart fixture must begin as the complete neutral field, not a fabricated partial prefix");
+            helper.assertValueEqual(FrontierV3ResourceSiteExecutor.reconcileHarvestAfterRestart(level, ledger, site, preparation, 63),
+                    FrontierV3ResourceSiteExecutor.RestartReconciliation.RECREATED,
+                    "a confirmed COLD prefix recreates complete owned infrastructure then its exact 63-slot aftermath after restart");
+            helper.assertTrue(FrontierV3ResourceSiteExecutor.matchesHarvestProgress(level, site, 63)
+                            && ledger.claim(site.id()).status() == FrontierV3ResourceSiteLedger.Status.ACTIVE,
+                    "restart retains water/support, every crop slot, and the exact COLD prefix under one active field claim");
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "pm-frontier-v3-resource-recovery", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full",
+            timeoutTicks = 40)
+    public static void coldHarvestRestartExtendsAnOwnedPartialFieldWithoutReplacingIt(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); ResourceSite site = field(fixtureOrigin(helper), "site:resource-harvest-cold-owned-prefix"); prepare(level, site);
+        runWhenLit(helper, level, site, () -> {
+            PhysicalIntentId preparationId = new PhysicalIntentId("intent:site-prepare-resource-harvest-cold-owned-prefix");
+            BlockPosition origin = site.cropSlots().getFirst();
+            PhysicalIntent preparation = new PhysicalIntent(preparationId, PhysicalIntentKind.RESOURCE_SITE_PREPARATION,
+                    PhysicalIntentStatus.PREPARED, site.id(), List.of(site.id(), new SubjectId("job:site-prepare-resource-harvest-cold-owned-prefix")),
+                    new FixedPosition(FixedScalar.whole(origin.x()), FixedScalar.whole(origin.y()), FixedScalar.whole(origin.z())), 0,
+                    PhysicalPostcondition.RESOURCE_SITE_PREPARED_OBSERVED).withStatus(PhysicalIntentStatus.CONFIRMED,
+                    Optional.of(new PhysicalObservationId("observation:site-prepare-resource-harvest-cold-owned-prefix")));
+            FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
+            helper.assertValueEqual(FrontierV3ResourceSiteExecutor.classifyHarvestRestart(level, ledger, site, preparation, 63).state(),
+                    FrontierV3ResourceSiteExecutor.HarvestRestartPhysicalState.NEUTRAL_UNCLAIMED,
+                    "a complete neutral facility is typed separately from an owned partial field");
+            ledger.reserve(site.id(), new PhysicalIntentId("intent:site-projection-resource-harvest-cold-owned-prefix"));
+            helper.assertValueEqual(FrontierV3ResourceSiteExecutor.classifyHarvestRestart(level, ledger, site, preparation, 63).state(),
+                    FrontierV3ResourceSiteExecutor.HarvestRestartPhysicalState.UNKNOWN,
+                    "a pending claim is not silently adopted as an active physical field after restart");
+            helper.assertTrue(FrontierV3ResourceSiteExecutor.placeWholeField(level, site), "the owned-prefix fixture must first materialize one complete field");
+            ledger.activate(site.id());
+            helper.assertValueEqual(FrontierV3ResourceSiteExecutor.projectStage(level, ledger, site, 7),
+                    FrontierV3ResourceSiteExecutor.StageProjectionResult.UPDATED, "the owned-prefix fixture must start from the mature current field");
+            for (int index = 0; index < 12; index++) {
+                BlockPosition crop = site.cropSlots().get(index);
+                level.setBlock(new BlockPos(crop.x(), crop.y(), crop.z()), Blocks.AIR.defaultBlockState(), 3);
+                ledger.harvestOne(site.id(), index + 1);
+            }
+            helper.assertTrue(FrontierV3ResourceSiteExecutor.matchesHarvestProgress(level, site, 12),
+                    "the pre-restart world must retain the exact owned 12-slot COLD aftermath");
+            helper.assertValueEqual(FrontierV3ResourceSiteExecutor.classifyHarvestRestart(level, ledger, site, preparation, 63).state(),
+                    FrontierV3ResourceSiteExecutor.HarvestRestartPhysicalState.OWNED_BEHIND,
+                    "one plan-identified owned partial field is eligible only for its canonical COLD catch-up");
+            helper.assertValueEqual(FrontierV3ResourceSiteExecutor.reconcileHarvestAfterRestart(level, ledger, site, preparation, 63),
+                    FrontierV3ResourceSiteExecutor.RestartReconciliation.RECREATED,
+                    "restart extends a matching owned prefix to the durable COLD cursor instead of misclassifying it as foreign drift");
+            helper.assertTrue(FrontierV3ResourceSiteExecutor.matchesHarvestProgress(level, site, 63)
+                            && ledger.claim(site.id()).status() == FrontierV3ResourceSiteLedger.Status.ACTIVE,
+                    "the repaired field keeps its water/support and all slots while advancing only the remaining owned COLD aftermath");
+            helper.assertValueEqual(FrontierV3ResourceSiteExecutor.classifyHarvestRestart(level, ledger, site, preparation, 63).state(),
+                    FrontierV3ResourceSiteExecutor.HarvestRestartPhysicalState.OWNED_EXACT,
+                    "the canonical slot-plan projection distinguishes current ownership from a merely matching-looking facility");
+            BlockPosition foreign = site.cropSlots().getFirst(); level.setBlock(new BlockPos(foreign.x(), foreign.y(), foreign.z()), Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
+            helper.assertValueEqual(FrontierV3ResourceSiteExecutor.classifyHarvestRestart(level, ledger, site, preparation, 63).state(),
+                    FrontierV3ResourceSiteExecutor.HarvestRestartPhysicalState.FOREIGN_OR_DAMAGED,
+                    "a damaged owned slot remains a typed conflict and is never reinterpreted as a restart prefix");
             helper.succeed();
         });
     }

@@ -80,15 +80,16 @@ public final class FrontierV3ProductionPhysicalTurnGameTests {
         ServerLevel level = helper.getLevel();
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(level);
         try {
-            // The GameTest template has already loaded this exact chunk.  Its coordinate is
-            // sufficient for the callback contract; asking ServerLevel for it here would turn
-            // a first-visibility test into a forbidden forced-chunk-load path.
+            // The GameTest template has already loaded this exact chunk.  Ordinary ingress
+            // owns the exposure fence; ChunkEvent.Load can only complete that predeclared
+            // boundary, so bootstrap loading cannot grow a world-sized projection queue.
             ChunkPos loaded = new ChunkPos(helper.absolutePos(BlockPos.ZERO));
+            FrontierV3GrayboxExecutor.observePlayerIngress(runtime, loaded);
             FrontierV3GrayboxExecutor.observeNaturalChunkLoad(level, runtime, loaded);
             FrontierV3GrayboxExecutor.FirstVisibilitySnapshot queued = FrontierV3GrayboxExecutor.firstVisibility(runtime,
                     loaded.x + "," + loaded.z);
             helper.assertValueEqual(queued.status(), "PENDING",
-                    "ChunkEvent.Load only fences first visibility; it must not mutate blocks or re-enter ChunkMap from vanilla's load callback");
+                    "the ingress-fenced ChunkEvent.Load only queues first visibility; it must not mutate blocks or re-enter ChunkMap from vanilla's load callback");
             helper.assertTrue(!FrontierV3GrayboxExecutor.sceneEligible(runtime,
                             new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(loaded.getMinBlockX(), 64, loaded.getMinBlockZ())),
                     "a just-loaded chunk remains ineligible until the registered physical projection turn completes");

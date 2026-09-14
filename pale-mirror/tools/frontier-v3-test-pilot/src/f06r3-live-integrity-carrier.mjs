@@ -8,10 +8,11 @@ const HIVE_ORGANS = Object.freeze(['west-ganglion', 'west-brood', 'west-store', 
 /** Terminal domain predicate for the three user-observed F0.6R3 regressions. */
 export function assertF06r3LiveIntegrityCarrier({ declaration, manifest }) {
   if (declaration?.id !== SCENARIO || declaration?.zeroPlayerPrelude?.advanceTicks !== 24_000 || declaration?.restart?.mode !== 'graceful'
+      || declaration?.restart?.zeroPlayerAdvanceTicks !== 40 || declaration?.assertNoServerTickStallDuringIngress !== true
       || declaration.restart.afterAction !== 15 || !Array.isArray(declaration.actions) || manifest?.status !== 'ok'
       || manifest.scenarioId !== SCENARIO || manifest.recovery?.mode !== 'graceful' || manifest.recovery?.splitAfterAction !== 15
       || !Array.isArray(manifest.actions) || manifest.actions.length !== declaration.actions.length) {
-    throw new Error('F0.6R3 live-integrity manifest lacks its declared zero-player/restart lifecycle');
+    throw new Error('F0.6R3 live-integrity manifest lacks its declared zero-player/restart lifecycle or ordinary-ingress responsiveness boundary');
   }
   declaration.actions.forEach((action, index) => {
     if (!isDeepStrictEqual(manifest.actions[index]?.action, action)) throw new Error('F0.6R3 live-integrity manifest substituted an action');
@@ -22,6 +23,11 @@ export function assertF06r3LiveIntegrityCarrier({ declaration, manifest }) {
   if (prelude?.status !== 'completed' || prelude.advanceTicks !== 24_000 || prelude.clientSegmentsBeforeCompletion !== 0) {
     throw new Error('F0.6R3 did not establish its COLD history before a natural test-player ingress');
   }
+  const restartInterlude = manifest.restartZeroPlayerInterlude;
+  if (restartInterlude?.status !== 'completed' || restartInterlude.advanceTicks !== 40 || restartInterlude.clientSegmentsBeforeCompletion !== 0) {
+    throw new Error('F0.6R3 did not retain a zero-player COLD interval across its graceful restart');
+  }
+  assertResponsiveOrdinaryIngress(manifest.clientSegments);
   const diagnostics = observed(manifest);
   const coldInventory = exactly(diagnostics, 1, 'process_inventory', 'settlements');
   const projectionWork = exactly(diagnostics, 2, 'projection_work', '');
@@ -58,7 +64,7 @@ export function assertF06r3LiveIntegrityCarrier({ declaration, manifest }) {
   }
   return Object.freeze({ terminalAssertionCount, zeroPlayerAllSites: coldInventory.count, projectionWork: Object.freeze({
     structural: projectionWork.structural, infectionOverlay: projectionWork.infectionOverlay }),
-    coldCursors: Object.freeze(Object.fromEntries(coldInventory.entries.map(entry => [entry.site, entry.cursor]))), currentFacility: Object.freeze({ cropSlots: 64, farmlandSlots: 64, waterSlots: 4, completedCropSlots: 1 }),
+    coldCursors: Object.freeze(Object.fromEntries(coldInventory.entries.map(entry => [entry.site, entry.cursor]))), currentFacility: Object.freeze({ cropSlots: 64, farmlandSlots: 64, waterSlots: 4, completedCropSlots: 63 }),
     coldCompletedCropSlots: Object.freeze(Object.fromEntries(coldInventory.entries.map(entry => [entry.site, entry.completedCropSlots]))), representativeFirstArrivals: JOBS,
     restartContinuity: true, seedNestOrgans: HIVE_ORGANS.length, playerFrames: manifest.frames.map(frame => frame.path) });
 }
@@ -82,13 +88,22 @@ function assertCurrentFieldActions(actions) {
 
 function completeFacilityAction(action) {
   return action?.type === 'assert_complete_resource_site' && action.siteId === 'site:7-wheat-field'
-    && action.completedCropSlots === 1 && action.timeoutMs === 30_000;
+    && action.completedCropSlots === 63 && action.timeoutMs === 30_000;
+}
+
+function assertResponsiveOrdinaryIngress(segments) {
+  const results = segments?.flatMap(segment => Array.isArray(segment?.ingressResponsiveness)
+    ? segment.ingressResponsiveness : [segment?.ingressResponsiveness]);
+  if (!Array.isArray(results) || results.length !== 2 || results.some(result => result?.status !== 'ok'
+      || result.ordinaryClientJoined !== true || result.noServerTickStall !== true)) {
+    throw new Error('F0.6R3 native carrier lacks responsive ordinary-client ingress before and after restart');
+  }
 }
 
 function assertCompleteCurrentFacility(diagnostics, step) {
   const proof = exactly(diagnostics, step, 'resource_site_facility', 'site:7-wheat-field');
   if (proof.clientPhysicalRead !== true || proof.cropSlots !== 64 || proof.farmlandSlots !== 64 || proof.waterSlots !== 4
-      || proof.completedCropSlots !== 1 || proof.airCropSlots !== 1 || proof.wheatCropSlots !== 63) {
+      || proof.completedCropSlots !== 63 || proof.airCropSlots !== 63 || proof.wheatCropSlots !== 1) {
     throw new Error('F0.6R3 full current field facility is absent, partial, or not exact for its COLD aftermath');
   }
 }

@@ -100,6 +100,13 @@ export function validateScenario(scenario) {
   if (!scenario.pilot || typeof scenario.pilot.username !== 'string' || !scenario.pilot.username) {
     throw new Error('scenario pilot must contain username');
   }
+  // This opt-in is deliberately a native player-path assertion, not a synthetic
+  // throughput budget. The isolated runner binds it to the exact normal-client
+  // connection interval in the nonce-owned server log.
+  if (scenario.assertNoServerTickStallDuringIngress !== undefined
+      && scenario.assertNoServerTickStallDuringIngress !== true) {
+    throw new Error('assertNoServerTickStallDuringIngress must be true when declared');
+  }
   if (scenario.isolation !== undefined && (!scenario.isolation || scenario.isolation.mode !== 'disposable_lite'
       || !Number.isInteger(scenario.isolation.seed) || scenario.isolation.seed < -2_147_483_648 || scenario.isolation.seed > 2_147_483_647)) {
     throw new Error('isolation must declare disposable_lite with a signed 32-bit seed');
@@ -109,15 +116,28 @@ export function validateScenario(scenario) {
     throw new Error('server.viewDistance must be an integer 2..32');
   }
   if (scenario.zeroPlayerPrelude !== undefined && (!scenario.zeroPlayerPrelude
-      || !Number.isInteger(scenario.zeroPlayerPrelude.advanceTicks) || scenario.zeroPlayerPrelude.advanceTicks < 24_000
+      || !Number.isInteger(scenario.zeroPlayerPrelude.advanceTicks)
+      || scenario.zeroPlayerPrelude.advanceTicks < (scenario.zeroPlayerPrelude.kind === 'cold_duty_cycle' ? 1 : 24_000)
       || scenario.zeroPlayerPrelude.advanceTicks > 240_000 || !Number.isInteger(scenario.zeroPlayerPrelude.timeoutMs)
-      || scenario.zeroPlayerPrelude.timeoutMs < 1_000 || scenario.zeroPlayerPrelude.timeoutMs > 300_000)) {
+      || scenario.zeroPlayerPrelude.timeoutMs < 1_000 || scenario.zeroPlayerPrelude.timeoutMs > 300_000
+      || (scenario.zeroPlayerPrelude.kind !== undefined && scenario.zeroPlayerPrelude.kind !== 'cold_duty_cycle'))) {
     throw new Error('zeroPlayerPrelude needs one bounded canonical advance before any client is launched');
   }
   if (scenario.restart !== undefined && (!scenario.restart || !Number.isInteger(scenario.restart.afterAction)
       || scenario.restart.afterAction < 1 || scenario.restart.afterAction >= (scenario.actions ?? []).length
       || !['graceful', 'abrupt'].includes(scenario.restart.mode)
-      || (scenario.restart.resumeSetup !== undefined && !Array.isArray(scenario.restart.resumeSetup)))) {
+      || (scenario.restart.resumeSetup !== undefined && !Array.isArray(scenario.restart.resumeSetup))
+      // A declared COLD interlude is an ordinary no-player interval between the client
+      // disconnect and the durable restart.  It is deliberately opt-in: recovery carriers
+      // which certify an immediate save retain their original boundary.
+      || (scenario.restart.zeroPlayerAdvanceTicks !== undefined
+          && (!Number.isInteger(scenario.restart.zeroPlayerAdvanceTicks) || scenario.restart.zeroPlayerAdvanceTicks < 1
+              || scenario.restart.zeroPlayerAdvanceTicks > 24_000
+              || !Number.isInteger(scenario.restart.zeroPlayerTimeoutMs) || scenario.restart.zeroPlayerTimeoutMs < 1_000
+              || scenario.restart.zeroPlayerTimeoutMs > 300_000
+              || (scenario.restart.zeroPlayerSettleMs !== undefined
+                  && (!Number.isInteger(scenario.restart.zeroPlayerSettleMs) || scenario.restart.zeroPlayerSettleMs < 0
+                      || scenario.restart.zeroPlayerSettleMs > 120_000)))))) {
     throw new Error('restart needs mode graceful|abrupt and afterAction strictly inside the evidence action range');
   }
   if (scenario.recoveryStop !== undefined && scenario.recoveryStop !== 'natural_demand') {

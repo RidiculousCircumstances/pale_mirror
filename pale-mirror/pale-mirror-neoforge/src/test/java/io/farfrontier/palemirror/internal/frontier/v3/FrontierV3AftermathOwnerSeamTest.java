@@ -50,7 +50,8 @@ class FrontierV3AftermathOwnerSeamTest {
         DeferredAftermath aftermath = cold.deferredAftermath().entries().values().stream().findFirst().orElseThrow();
         DeferredAftermathCell target = aftermath.cells().getFirst();
         assertTrue(cold.physicalDeltas().containsKey(target.position()), "ordinary COLD scheduling commits the loss before either physical owner runs");
-        var baselineTarget = io.farfrontier.palemirror.frontier.v3.model.FrontierGrayboxPlan.compileStructuralBaseline(cold).cells().get(target.position());
+        var structuralPlan = io.farfrontier.palemirror.frontier.v3.model.FrontierGrayboxPlan.compileStructuralBaseline(cold);
+        var baselineTarget = structuralPlan.cells().get(target.position());
         assertTrue(baselineTarget != null && FrontierV3GrayboxExecutor.matchesKnownLoss(cold.physicalDeltas().get(target.position()), baselineTarget),
                 "the ordinary loss must mask the exact projector cell rather than a test-only coordinate");
 
@@ -71,6 +72,9 @@ class FrontierV3AftermathOwnerSeamTest {
             assertEquals(DeferredAftermathCellStatus.PENDING, cell(runtime, aftermath).status(),
                     "codec restart before projector classification retains absence as pending rather than a foreign conflict");
 
+            // The normal projector probes at most two natural chunks per turn rather than
+            // scanning every declared chunk. Known natural chunks are retained in a bounded
+            // fair queue, so this exact deferred owner cannot wait for a world-plan lap.
             for (int tick = 0; tick < 512 && cell(runtime, aftermath).status() != DeferredAftermathCellStatus.REALIZED; tick++) {
                 FrontierV3AftermathOwnerComposition.tick(world, runtime);
             }
