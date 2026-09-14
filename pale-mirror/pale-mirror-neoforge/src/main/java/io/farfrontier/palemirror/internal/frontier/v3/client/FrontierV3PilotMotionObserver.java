@@ -30,7 +30,11 @@ final class FrontierV3PilotMotionObserver {
         if (actionStartedTick != startedTick) { reset(); actionStartedTick = startedTick; }
         long clientTick = elapsedClientTicks++;
         ResourceLocation expectedType = ResourceLocation.parse(action.get("entityType").getAsString());
-        String expectedName = expectedName(action);
+        // Once this bounded action has selected its exact rendered body, a terminal receipt may
+        // legitimately retire the process diagnostic. Keep observing that same runtime body so
+        // the carrier can prove that completion/release did not silently despawn and recreate
+        // the worker between two diagnostic polls.
+        String expectedName = entityRuntimeId < 0 ? expectedName(action) : "";
         if (expectedName == null) {
             if (clientTick * 50L >= action.get("timeoutMs").getAsLong()) {
                 throw new IllegalStateException("motion observation lacks the exact worker presentation diagnostic: " + action.get("id").getAsString());
@@ -81,7 +85,7 @@ final class FrontierV3PilotMotionObserver {
             Vec3 authoritative = authoritativePosition(action);
             samples.add(new Pose(clientTick, gameTime, body.getX(), body.getY(), body.getZ(), velocity.x, velocity.z,
                     authoritative == null ? null : authoritative.x, authoritative == null ? null : authoritative.z,
-                    workAnimation, semanticPhase(action)));
+                    workAnimation, semanticPhase(action, body.getId())));
         }
         if (clientTick < action.get("durationTicks").getAsLong()) return false;
         emit(action, expectedType, interval, actionStep, milestone); return true;
@@ -104,7 +108,13 @@ final class FrontierV3PilotMotionObserver {
         return identity.has("workerPresentation") && identity.get("workerPresentation").isJsonPrimitive()
                 ? identity.get("workerPresentation").getAsString() : null;
     }
-    private static String semanticPhase(JsonObject action) {
+    private static String semanticPhase(JsonObject action, int bodyRuntimeId) {
+        // A station gesture is delivered by the server at PREPARED -> RUNNING and carries its
+        // exact typed duty. Prefer it only for its six-tick bounded lifetime: unlike the
+        // ordinary 20-tick inspect cadence, this keeps a visible interaction from being
+        // labelled with a stale pre-arrival TRAVELLING receipt.
+        String activeCue = io.farfrontier.palemirror.internal.client.PaleMirrorStationWorkGestureClient.observedDutyPhase(bodyRuntimeId);
+        if (activeCue != null) return activeCue;
         JsonObject process = receivedDiagnostic("process", action.get("id").getAsString());
         if (process == null || !process.has("result") || !process.get("result").isJsonObject()) return "UNOBSERVED";
         JsonObject result = process.getAsJsonObject("result");
@@ -151,6 +161,8 @@ final class FrontierV3PilotMotionObserver {
         JsonObject value = new JsonObject(); value.addProperty("kind", "pilot_motion"); value.addProperty("id", action.get("id").getAsString());
         value.addProperty("status", "ok"); value.addProperty("entityType", type.toString()); value.addProperty("sampleEveryTicks", interval);
         value.addProperty("durationTicks", action.get("durationTicks").getAsLong()); value.addProperty("entityRuntimeId", entityRuntimeId);
+        Entity retained = minecraftEntity();
+        if (retained != null) value.addProperty("entityUuid", retained.getUUID().toString());
         JsonArray values = new JsonArray(); for (Pose pose : samples) { JsonObject sample = new JsonObject(); sample.addProperty("tick", pose.tick()); sample.addProperty("serverTick", pose.serverTick());
             sample.addProperty("x", pose.x()); sample.addProperty("y", pose.y()); sample.addProperty("z", pose.z());
             sample.addProperty("velocityX", pose.velocityX()); sample.addProperty("velocityZ", pose.velocityZ()); sample.addProperty("workAnimation", pose.workAnimation());
@@ -158,6 +170,10 @@ final class FrontierV3PilotMotionObserver {
             sample.addProperty("semanticPhase", pose.semanticPhase()); values.add(sample); }
         value.add("samples", values); FrontierV3PilotSessionControl.stampDiagnostic(value, actionStep, milestone);
         PaleMirrorMod.LOGGER.info("PMV3_PILOT_DIAGNOSTIC {}", value);
+    }
+    private static Entity minecraftEntity() {
+        Minecraft minecraft = Minecraft.getInstance();
+        return minecraft.level == null || entityRuntimeId < 0 ? null : minecraft.level.getEntity(entityRuntimeId);
     }
     private record Pose(long tick, long serverTick, double x, double y, double z, double velocityX, double velocityZ,
                         Double authoritativeX, Double authoritativeZ, boolean workAnimation, String semanticPhase) { }

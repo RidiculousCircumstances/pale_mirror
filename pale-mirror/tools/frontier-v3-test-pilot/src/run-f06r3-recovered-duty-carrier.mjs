@@ -23,9 +23,12 @@ async function main() {
   if (code !== 0) throw new Error(`F0.6R3 recovered-duty native scenario failed (${code})`);
   const manifestSource = await readFile(manifestPath); const manifest = JSON.parse(manifestSource);
   const beforePath = resolve(manifest.recovery?.beforeRestartManifest ?? '');
-  const beforeSource = await readFile(beforePath); const facts = assertF06r3RecoveredDutyCarrier({ declaration, beforeRestart: JSON.parse(beforeSource), manifest });
+  const middlePath = resolve(manifest.recovery?.middleRestartManifest ?? '');
+  const [beforeSource, middleSource] = await Promise.all([readFile(beforePath), readFile(middlePath)]);
+  const facts = assertF06r3RecoveredDutyCarrier({ declaration, beforeRestart: JSON.parse(beforeSource), middleRestart: JSON.parse(middleSource), manifest });
   const receipt = { schema: 1, kind: 'f06r3-recovered-duty-native-carrier', status: 'passed', declaration: { scenario, sha256: digest(declarationSource) },
-    finalManifest: { file: relative(dirname(output), manifestPath), sha256: digest(manifestSource) }, beforeRestartManifest: { file: relative(dirname(output), beforePath), sha256: digest(beforeSource) }, facts };
+    finalManifest: { file: relative(dirname(output), manifestPath), sha256: digest(manifestSource) }, beforeRestartManifest: { file: relative(dirname(output), beforePath), sha256: digest(beforeSource) },
+    middleRestartManifest: { file: relative(dirname(output), middlePath), sha256: digest(middleSource) }, facts };
   await writeFile(output, `${JSON.stringify(receipt, null, 2)}\n`, { flag: 'wx' }); console.log(JSON.stringify(receipt));
 }
 function run(args, options) { return new Promise((resolveExit, reject) => { const child = spawn(process.execPath, args, options); child.once('error', reject); child.once('exit', code => resolveExit(code ?? 1)); }); }

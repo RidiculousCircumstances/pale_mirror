@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
@@ -10,6 +11,8 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 
 import java.util.Collection;
+import java.util.Comparator;
+import java.util.stream.Collectors;
 import java.util.Objects;
 import java.util.function.Predicate;
 
@@ -30,10 +33,47 @@ final class FrontierV3FastForwardSafety {
                                         Predicate<PhysicalIntent> affectedAreaLoaded) {
         Objects.requireNonNull(intents, "physical intents"); Objects.requireNonNull(sceneLeases, "scene leases");
         Objects.requireNonNull(affectedAreaLoaded, "affected area loader");
-        return intents.stream().filter(intent -> intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING)
+        return intents.stream().filter(FrontierV3FastForwardSafety::canExecutePhysicalEffect)
                         .anyMatch(affectedAreaLoaded)
                 || sceneLeases.stream().anyMatch(lease -> lease.status() == SceneLeaseStatus.PREPARED
                         || lease.status() == SceneLeaseStatus.HOT || lease.status() == SceneLeaseStatus.DRAINING);
+    }
+
+    /**
+     * Read-only companion to the admission predicate.  A queued COLD interval must report the
+     * exact owned physical boundary which stopped it; a generic busy state is not enough for an
+     * operator to distinguish a normal live effect from a stale scene lease.
+     */
+    static String blockingDescription(ServerLevel level, FrontierWorldState state) {
+        Objects.requireNonNull(level, "physical level"); Objects.requireNonNull(state, "frontier state");
+        return blockingDescription(state.physicalIntents().values(), state.sceneLeases().values(), intent -> affectedAreaLoaded(level, intent));
+    }
+
+    static String blockingDescription(Collection<PhysicalIntent> intents, Collection<SceneLease> sceneLeases,
+                                      Predicate<PhysicalIntent> affectedAreaLoaded) {
+        Objects.requireNonNull(intents, "physical intents"); Objects.requireNonNull(sceneLeases, "scene leases");
+        Objects.requireNonNull(affectedAreaLoaded, "affected area loader");
+        String blockedIntents = intents.stream().filter(FrontierV3FastForwardSafety::canExecutePhysicalEffect)
+                .filter(affectedAreaLoaded).sorted(Comparator.comparing(intent -> intent.id().value()))
+                .map(intent -> "intent=" + intent.id().value() + ":" + intent.kind() + ":" + intent.status()).collect(Collectors.joining(","));
+        String blockedScenes = sceneLeases.stream().filter(lease -> lease.status() == SceneLeaseStatus.PREPARED
+                        || lease.status() == SceneLeaseStatus.HOT || lease.status() == SceneLeaseStatus.DRAINING)
+                .sorted(Comparator.comparing(lease -> lease.id().value()))
+                .map(lease -> "scene=" + lease.id().value() + ":" + lease.status()).collect(Collectors.joining(","));
+        if (blockedIntents.isBlank() && blockedScenes.isBlank()) return "none";
+        return blockedIntents.isBlank() ? blockedScenes : blockedScenes.isBlank() ? blockedIntents : blockedIntents + ";" + blockedScenes;
+    }
+
+    /**
+     * A PREPARED harvest reserves its immutable job but deliberately has no loaded-world effect:
+     * only its later HOT scene may turn it RUNNING and mutate crops/output.  Treating that
+     * inactive reservation as an executable effect made a spawn-loaded field permanently block
+     * genuine COLD continuation. Every other PREPARED intent remains a physical boundary.
+     */
+    static boolean canExecutePhysicalEffect(PhysicalIntent intent) {
+        Objects.requireNonNull(intent, "physical intent");
+        return intent.status() == PhysicalIntentStatus.RUNNING
+                || intent.status() == PhysicalIntentStatus.PREPARED && intent.kind() != PhysicalIntentKind.RESOURCE_SITE_HARVEST;
     }
 
     private static boolean affectedAreaLoaded(ServerLevel level, PhysicalIntent intent) {

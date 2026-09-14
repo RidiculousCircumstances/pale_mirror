@@ -228,6 +228,22 @@ test('restart runner slices action-relative assertions without a second scenario
   assert.throws(() => validateScenario({ ...recoverable, restart: { mode: 'graceful', afterAction: 3 } }), /restart needs/);
 });
 
+test('declared two-boundary recovery keeps each ordinary COLD interval and action range distinct', () => {
+  const recoverable = { ...scenario, setup: [], actions: [
+    { type: 'wait', ms: 10 }, { type: 'wait', ms: 10 }, { type: 'wait', ms: 10 }, { type: 'wait', ms: 10 }, { type: 'wait', ms: 10 }
+  ], assertions: [{ after: 2, view: 'summary', id: '', expect: { status: 'ok' } }, { after: 4, view: 'summary', id: '', expect: { status: 'ok' } }], frames: [],
+  restart: { mode: 'graceful', afterAction: 1, zeroPlayerAdvanceTicks: 1, zeroPlayerTimeoutMs: 1_000,
+    secondary: { afterAction: 3, zeroPlayerAdvanceTicks: 1, zeroPlayerTimeoutMs: 1_000 } } };
+  assert.doesNotThrow(() => validateScenario(recoverable));
+  const segments = restartSegments(recoverable);
+  assert.equal(segments.before.actions.length, 1);
+  assert.equal(segments.middle.actions.length, 2);
+  assert.equal(segments.after.actions.length, 2);
+  assert.deepEqual(segments.middle.assertions.map(value => value.after), [1]);
+  assert.deepEqual(segments.after.assertions.map(value => value.after), [1]);
+  assert.throws(() => validateScenario({ ...recoverable, restart: { ...recoverable.restart, mode: 'abrupt' } }), /restart needs/);
+});
+
 test('an armed crash names one exact durable boundary and cannot broaden an abrupt scenario', () => {
   const recoverable = { ...scenario, actions: [{ type: 'wait', ms: 10 }, { type: 'wait', ms: 10 }], assertions: [], frames: [],
     restart: { mode: 'abrupt', afterAction: 1 }, crash: { phase: 'before_restart', boundary: 'hot_checkpoint_durable_before_drain_release',

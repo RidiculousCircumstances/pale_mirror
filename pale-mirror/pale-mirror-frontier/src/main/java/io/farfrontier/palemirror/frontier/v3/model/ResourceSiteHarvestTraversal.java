@@ -4,7 +4,6 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -32,9 +31,11 @@ public final class ResourceSiteHarvestTraversal {
                 surveyedFieldSurface(bootstrap, site), "field-work");
         List<SurfaceAnchor> corridor = new ArrayList<>(approach);
         for (int index = 1; index < workstations.size(); index++) corridor.add(workstations.get(index));
-        if (new LinkedHashSet<>(corridor).size() != corridor.size()) {
-            throw new IllegalArgumentException("field-work corridor repeats a semantic surface");
-        }
+        // The worker may finish one growth epoch on a crop support which is also a later
+        // slot in the immutable next-epoch plan.  The two visits are separate retained plan
+        // nodes: the first is the actor's inherited body, the latter is the slot's next-epoch
+        // work visit.  Do not collapse that identity into a coordinate or relocate/recreate
+        // the body merely to satisfy a linear-coordinate shortcut.
         return TraversalTopology.corridor(new TraversalTopologyId("topology:field-work-" + jobId.value().replace(':', '-')),
                 revision(corridor), site.id(), TraversalKind.PEDESTRIAN, Set.of(TraversalCapability.PEDESTRIAN), corridor);
     }

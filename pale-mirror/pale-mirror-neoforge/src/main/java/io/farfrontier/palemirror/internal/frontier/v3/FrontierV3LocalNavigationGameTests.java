@@ -179,6 +179,26 @@ public final class FrontierV3LocalNavigationGameTests {
         });
     }
 
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
+    public static void cropTendingIsAStationaryWorkPoseNotAnOrbit(GameTestHelper helper) {
+        BlockPos origin = helper.absolutePos(new BlockPos(2, 0, 2));
+        helper.getLevel().setBlock(origin, Blocks.STONE.defaultBlockState(), 3);
+        helper.getLevel().setBlock(origin.above(), Blocks.AIR.defaultBlockState(), 3);
+        helper.getLevel().setBlock(origin.above(2), Blocks.AIR.defaultBlockState(), 3);
+        Zombie worker = helper.spawnWithNoFreeWill(EntityType.ZOMBIE, new Vec3(2.5D, 1.0D, 2.5D));
+        BlockPosition crop = new BlockPosition(origin.getX(), origin.getY() + 1, origin.getZ());
+        helper.runAtTickTime(1, () -> FrontierV3ControlledMobMotion.tendCurrentCrop(helper.getLevel(), worker, crop));
+        for (int turn = 2; turn <= 16; turn++) helper.runAtTickTime(turn, () -> FrontierV3ControlledMobMotion.advanceAtEntityBoundary(worker));
+        helper.runAtTickTime(17, () -> {
+            List<FrontierV3ControlledMobMotion.MotionSample> trace = FrontierV3ControlledMobMotion.trace(worker);
+            double totalHorizontalMotion = trace.stream().mapToDouble(FrontierV3ControlledMobMotion.MotionSample::horizontalVelocity).sum();
+            helper.assertTrue(totalHorizontalMotion < .01D,
+                    "a retained crop work pose must stay at its exact station rather than circle as filler: " + trace);
+            FrontierV3ControlledMobMotion.stop(worker);
+            helper.succeed();
+        });
+    }
+
     @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 120)
     public static void providerRecurrenceChangesRetainedEdgesOnlyAfterObservedArrival(GameTestHelper helper) {
         BlockPos origin = helper.absolutePos(new BlockPos(2, 0, 2));

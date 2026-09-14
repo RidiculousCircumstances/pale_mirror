@@ -33,9 +33,16 @@ public record TraversalTopology(TraversalTopologyId id, long revision, SubjectId
                 throw new IllegalArgumentException("duplicate traversal node");
             }
         });
-        if (nodeCopy.isEmpty() || nodeCopy.size() > MAX_NODES || new LinkedHashSet<>(nodeCopy.values()).size() != nodeCopy.size()) {
+        if (nodeCopy.isEmpty() || nodeCopy.size() > MAX_NODES) {
             throw new IllegalArgumentException("traversal topology nodes are invalid");
         }
+        // A traversal node is a stable plan identity, not a coordinate alias.  A cyclic or
+        // return journey may legitimately visit the same surveyed support twice under two
+        // distinct retained node identities (for example, a new field epoch can begin with
+        // its farmer standing on the slot it will later harvest).  Coordinates remain exact
+        // on every edge; only a self-edge is invalid below.  Collapsing these nodes by
+        // SurfaceAnchor would lose the second semantic visit and makes a retained actor
+        // impossible to continue without relocation or a fabricated replacement body.
         // Edge cursors and bounded physical scans consume this order.  Preserve the surveyed
         // compiler order rather than letting an immutable-map implementation reorder nodes.
         nodes = Collections.unmodifiableMap(nodeCopy);
@@ -112,7 +119,7 @@ public record TraversalTopology(TraversalTopologyId id, long revision, SubjectId
             if (!expected.equals(edge.from())) throw new IllegalStateException("traversal topology edge order is not one corridor");
             result.add(nodes.get(edge.to())); expected = edge.to();
         }
-        if (new LinkedHashSet<>(result).size() != nodes.size()) throw new IllegalStateException("traversal topology corridor omits or repeats a node");
+        if (result.size() != nodes.size()) throw new IllegalStateException("traversal topology corridor omits or repeats a node");
         return List.copyOf(result);
     }
 

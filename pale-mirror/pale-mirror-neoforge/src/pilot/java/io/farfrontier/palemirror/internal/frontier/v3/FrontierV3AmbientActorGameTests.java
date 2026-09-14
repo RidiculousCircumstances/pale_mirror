@@ -428,6 +428,26 @@ public final class FrontierV3AmbientActorGameTests {
         }));
     }
 
+    @GameTest(batch = "pm-frontier-v3-assembly-grade", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 160)
+    public static void retainedMotionWalksUpOneDeclaredGradeWithoutSlidingUnderItsTarget(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos lowerFeet = helper.absolutePos(new BlockPos(8, 12, 0));
+        BlockPos upperFeet = lowerFeet.offset(1, 1, 0);
+        prepareFloor(level, lowerFeet); prepareFloor(level, upperFeet);
+        Villager body = net.minecraft.world.entity.EntityType.VILLAGER.create(level);
+        if (body == null) throw new IllegalStateException("game test could not create ascending retained-motion resident");
+        body.setPos(lowerFeet.getX() + 0.5D, lowerFeet.getY(), lowerFeet.getZ() + 0.5D);
+        body.setNoAi(true); body.setPersistenceRequired();
+        helper.assertTrue(level.addFreshEntity(body), "the ascending retained-motion fixture must enter the loaded world");
+        helper.runAfterDelay(1L, () -> driveMotion(helper, level, body,
+                new Vec3(upperFeet.getX() + 0.5D, upperFeet.getY(), upperFeet.getZ() + 0.5D), 120, () -> {
+            helper.assertTrue(body.getX() > lowerFeet.getX() + 1.0D && body.getBlockY() == upperFeet.getY(),
+                    "a retained one-block ascent must first clear its current column and then reach its named higher support, never slide beneath it: body="
+                            + body.position() + ", lower=" + lowerFeet + ", upper=" + upperFeet);
+            body.discard(); helper.succeed();
+        }));
+    }
+
     @GameTest(batch = "pm-frontier-v3-ambient-transit-motion", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 260)
     public static void controlledMotionUsesTheClearLaneBesideRouteSurfaceButNeverPassesThroughAFullWall(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(3, 8, 3)); prepareMotionArena(level, origin, 8, 5);

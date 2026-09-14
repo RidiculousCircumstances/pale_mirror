@@ -83,10 +83,15 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
     private static SceneLease lease(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                     FrontierResourceSiteHarvestSceneSupport.Candidate candidate) {
         var checkpoint = runtime.canonicalState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
+        FrontierWorldState current = runtime.decodedState().orElseThrow(() -> new IllegalStateException("v3 runtime has no decoded field state"));
         SceneLeaseId id = new SceneLeaseId("lease:site-harvest-" + candidate.jobId().value().substring("job:site-harvest-".length())
                 + "-crop-" + candidate.cropSlotIndex() + "-r" + checkpoint.revision().value());
         List<SceneMember> members = candidate.memberPositions().keySet().stream().sorted()
-                .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(checkpoint.worldId(), id, actor))).toList();
+                // A harvester's body survives the semantic receipt at the field station.  The
+                // next growth epoch may later assign that same resident again, so field scenes
+                // use the actor-stable physical identity rather than a new lease-derived UUID.
+                // Lease ownership remains fully typed by the scene tags and revision.
+                .map(actor -> new SceneMember(actor, FrontierV3AmbientActorExecutor.entityId(current, actor))).toList();
         return SceneLease.forCause(id, checkpoint.worldId(), new ResourceSiteHarvestSceneCause(candidate.jobId()), candidate.cropSlot(),
                 checkpoint.instant(), checkpoint.revision().value(), SceneLeaseStatus.PREPARED, members,
                 SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), Set.of(), Optional.empty());
@@ -98,8 +103,16 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         switch (lease.status()) {
             case PREPARED -> materialize(level, runtime, state, lease);
             case HOT -> work(level, runtime, state, lease);
-            case DRAINING -> FrontierV3SceneExecutor.release(level, runtime, lease,
-                    releaseBinding(runtime, state, lease));
+            case DRAINING -> {
+                // Completion/release has no residual tending duty.  Keep the exact body at
+                // its observed station, but retire a prior crop gesture before that released
+                // body becomes the visible predecessor of a later growth-epoch assignment.
+                for (SceneMember member : lease.members()) {
+                    Entity entity = level.getEntity(member.entityId());
+                    if (entity instanceof Mob worker) FrontierV3ControlledMobMotion.clearStationWorkGesture(level, worker);
+                }
+                FrontierV3SceneExecutor.release(level, runtime, lease, releaseBinding(runtime, state, lease));
+            }
             case UNKNOWN_AFTER_RESTART -> FrontierV3SceneExecutor.reclaim(level, runtime, state, lease);
             case CONFLICT, CLOSED -> { }
         }
@@ -215,6 +228,10 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         // crop-work phase at the exact station, never permission for a scheduler-paced frozen
         // body.  Keep the visible, station-bounded tending pose active through those turns as
         // well as while the next continuation is not due.
+        // Arrival is the existing observed checkpoint boundary. Publish its station phase
+        // before the later due work turn, so the client cannot keep the preceding travel cue
+        // across a stationary crop dwell.
+        FrontierV3ControlledMobMotion.showHarvestStationDuty(level, worker);
         tendCurrentCrop(level, worker, crop);
         var dueBinding = FrontierV3TraversalScheduleGate.dueBinding(runtime.checkpointImage().orElseThrow(), job.id());
         if (dueBinding.isEmpty()) {
@@ -246,6 +263,11 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         // boundary only on the exact turn that will prepare this crop, then observe/commit it
         // on the next turn under RUNNING.
         if (intent.status() == PhysicalIntentStatus.PREPARED) {
+            // Start the one bounded visible gesture at the durable work boundary, before the
+            // later crop postcondition can expose the next retained edge.  A periodic cue from
+            // the tending loop could begin just as the following traversal was admitted and
+            // read as harvesting while walking.
+            FrontierV3ControlledMobMotion.showStationWorkGesture(level, worker);
             submit(runtime, "resource-site-harvest-running", lease.id().value(),
                     new io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition(job.intentId(), PhysicalIntentStatus.RUNNING, Optional.empty()));
             return;
@@ -306,8 +328,9 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         // retained crop position is therefore already the worker's Y datum. The actuator
         // derives its next local pose every server turn, independent of semantic due cadence.
         FrontierV3ControlledMobMotion.tendCurrentCrop(level, worker, crop);
-        long phaseTick = Math.floorMod(level.getGameTime(), 32L);
-        if (phaseTick % 4L == 0L) worker.swing(net.minecraft.world.InteractionHand.MAIN_HAND, true);
+        // The visible work gesture is emitted at PREPARED -> RUNNING above, not by this
+        // per-turn local hold.  This pose must never create a periodic animation cadence of
+        // its own or overlap a subsequently admitted retained traversal.
     }
 
     /** Emits the complete observed causal checkpoint; the reducer rejects any stale or foreign tuple. */
@@ -406,5 +429,22 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                                                     io.farfrontier.palemirror.frontier.v3.api.SubjectId jobId,
                                                     io.farfrontier.palemirror.frontier.v3.model.ResourceSitePhase phase) {
         return FrontierV3ResourceSiteHarvestReleaseBinding.forPhase(checkpoint, jobId, phase);
+    }
+
+    /** Resource-harvest-specific closed-body retention stays at the registered behavior edge. */
+    static boolean retainsClosedBody(Entity entity, FrontierWorldState state, SceneLease lease, SceneMember member) {
+        if (!FrontierSceneBehaviors.isResourceSiteHarvest(lease)
+                || !member.entityId().equals(FrontierV3AmbientActorExecutor.entityId(state, member.actorId()))
+                || !FrontierV3SceneExecutor.ownedByClosedLease(entity, state, lease, member)) return false;
+        var actor = state.actorLocations().get(member.actorId());
+        if (actor == null || actor.condition().status() != io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.ALIVE) return false;
+        var exact = new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(entity.getBlockX(), entity.getBlockY(), entity.getBlockZ());
+        return exact.equals(actor.body()) && exact.equals(lease.memberPosition(member.actorId()));
+    }
+
+    static boolean adoptableClosedBody(Entity entity, FrontierWorldState state, SceneLease successor, SceneMember member) {
+        return state.sceneLeases().values().stream().filter(previous -> previous.status() == SceneLeaseStatus.CLOSED)
+                .filter(FrontierSceneBehaviors::isResourceSiteHarvest).filter(previous -> previous.members().contains(member))
+                .anyMatch(previous -> retainsClosedBody(entity, state, previous, member));
     }
 }

@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.LocalNavigationEnvelope;
 import io.farfrontier.palemirror.frontier.v3.model.WorldBounds;
+import io.farfrontier.palemirror.internal.network.PaleMirrorNetwork;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
@@ -47,6 +48,16 @@ final class FrontierV3ControlledMobMotion {
      * explicit stop supersedes it.
      */
     private static final Map<Mob, MotionIntent> CONTINUOUS = new IdentityHashMap<>();
+    /** One retained server-authored duty phase per body prevents stale sampling and packet churn. */
+    private static final Map<Mob, String> DUTY_CUES = new IdentityHashMap<>();
+    /**
+     * Presentation-only arrival settling.  A server body can reach an observed station one
+     * tracker update before an ordinary remote client finishes interpolating that same edge.
+     * Do not start reporting the stationary duty until the authoritative body has stayed put
+     * for this short, local hand-off; it has no route/cursor/lease authority.
+     */
+    private static final Map<Mob, StationaryPresentation> STATION_SETTLING = new IdentityHashMap<>();
+    private static final int STATION_SETTLE_TICKS = 6;
     /**
      * HOT bodies deliberately retain NoAI, so their vertical travel cannot be delegated to the
      * vanilla goal loop.  Registration is weak and has no canonical meaning: it merely keeps
@@ -54,7 +65,7 @@ final class FrontierV3ControlledMobMotion {
      * intentionally stationary body after a player removes its support.
      */
     private static final Map<Mob, Boolean> ORDINARY_PHYSICS = new WeakHashMap<>();
-    /** A crop-local tending pose is derived each server turn, never paced by a semantic callback. */
+    /** A crop-local tending pose is retained at one exact station, never paced by a semantic callback. */
     private static final Map<Mob, TendingPose> TENDING = new IdentityHashMap<>();
     /** The entity boundary may be observed explicitly by a test after vanilla already ran it. */
     private static final Map<Mob, AppliedIntent> LAST_ADVANCE = new IdentityHashMap<>();
@@ -101,7 +112,74 @@ final class FrontierV3ControlledMobMotion {
         // route edge supersedes it: retaining the old pose here made the body circle its former
         // crop while the canonical job already declared TRAVELLING toward the next one.
         TENDING.remove(actor);
+        STATION_SETTLING.remove(actor);
+        // A crop gesture is a station-local action.  Vanilla keeps a received swing alive for
+        // several render turns after the semantic crop receipt; leaving it intact when the
+        // next retained edge becomes active makes the same physical body visibly harvest while
+        // walking.  Retiring that presentation state at the sole travel-authority hand-off is
+        // not a position/velocity rewrite and cannot advance a cursor.
+        showTravellingDuty(level, actor);
         submit(level, actor, next, true, null, null, Double.MAX_VALUE);
+    }
+
+    /**
+     * Ends only a station-local visual gesture.  This has no movement, lease, or canonical
+     * progress authority; it is the presentation half of leaving a declared work station.
+     */
+    static void clearStationWorkGesture(ServerLevel level, Mob actor) {
+        DUTY_CUES.remove(actor);
+        STATION_SETTLING.remove(actor);
+        actor.swinging = false;
+        actor.swingTime = 0;
+        PaleMirrorNetwork.sendStationWorkGesture(level, actor, false);
+    }
+
+    /** Starts one bounded client-visible work cue at an already-held crop station. */
+    static void showStationWorkGesture(ServerLevel level, Mob actor) {
+        STATION_SETTLING.remove(actor);
+        DUTY_CUES.put(actor, "HARVESTING:PREPARED");
+        PaleMirrorNetwork.sendStationWorkGesture(level, actor, true);
+    }
+
+    /**
+     * Announces an already observed crop station before its due work turn.  It is a phase
+     * observation only; crop mutation and the visible gesture remain owned by the work branch.
+     */
+    static void showHarvestStationDuty(ServerLevel level, Mob actor) {
+        if (!settledForStationPresentation(level, actor)) return;
+        actor.swinging = false;
+        actor.swingTime = 0;
+        if (!"HARVESTING:PREPARED".equals(DUTY_CUES.put(actor, "HARVESTING:PREPARED"))) {
+            PaleMirrorNetwork.sendStationDutyCue(level, actor, "HARVESTING:PREPARED");
+        }
+    }
+
+    /** Announces the already selected retained edge exactly once; it has no route authority. */
+    private static void showTravellingDuty(ServerLevel level, Mob actor) {
+        TENDING.remove(actor);
+        STATION_SETTLING.remove(actor);
+        actor.swinging = false;
+        actor.swingTime = 0;
+        if (!"TRAVELLING:PREPARED".equals(DUTY_CUES.put(actor, "TRAVELLING:PREPARED"))) {
+            PaleMirrorNetwork.sendStationDutyCue(level, actor, "TRAVELLING:PREPARED");
+        }
+    }
+
+    /**
+     * The station phase is truthful only after the authoritative body has stopped on that
+     * station long enough for its ordinary tracker update to reach remote clients.  The count
+     * is deliberately local and ephemeral: a restart, route hand-off, or body replacement
+     * starts it over and it cannot influence semantic work timing.
+     */
+    private static boolean settledForStationPresentation(ServerLevel level, Mob actor) {
+        Vec3 position = actor.position();
+        StationaryPresentation prior = STATION_SETTLING.get(actor);
+        boolean consecutive = prior != null && prior.gameTime() + 1L == level.getGameTime()
+                && prior.position().distanceToSqr(position) <= 1.0E-6D
+                && actor.getDeltaMovement().horizontalDistanceSqr() <= 1.0E-6D;
+        int turns = consecutive ? prior.turns() + 1 : 1;
+        STATION_SETTLING.put(actor, new StationaryPresentation(level.getGameTime(), position, turns));
+        return turns >= STATION_SETTLE_TICKS;
     }
 
     /**
@@ -130,7 +208,7 @@ final class FrontierV3ControlledMobMotion {
         submit(level, actor, target, true, null, null, Double.MAX_VALUE);
     }
 
-    /** Retains only the current crop cell; time changes its local pose but never a job cursor. */
+    /** Retains only the current crop station; it never creates a local orbit or a job cursor. */
     static void tendCurrentCrop(ServerLevel level, Mob actor, io.farfrontier.palemirror.frontier.v3.model.BlockPosition crop) {
         TendingPose pose = new TendingPose(crop.x() + .5D, crop.y(), crop.z() + .5D);
         TENDING.put(actor, pose);
@@ -200,9 +278,10 @@ final class FrontierV3ControlledMobMotion {
         AppliedIntent previous = LAST_ADVANCE.get(actor);
         if (previous != null && intent == previous.intent() && level.getGameTime() == previous.gameTime()) return;
         if (level.getGameTime() < intent.applyAtGameTime()) return;
-        // Derive the station-local pose at the ordinary entity turn.  It remains bounded by
-        // the immutable current crop/checkpoint and does not introduce a route or semantic
-        // clock, but it prevents the scheduler from becoming the body's cadence owner.
+        // Apply the station-local pose at the ordinary entity turn. It remains bounded by the
+        // immutable current crop/checkpoint and does not introduce a route or semantic clock.
+        // A work dwell is visibly active through the executor's interaction, not synthetic
+        // circular locomotion that would read as filler wandering.
         TendingPose tending = TENDING.get(actor);
         if (tending != null) {
             intent = new MotionIntent(level.getGameTime(), tending.target(level.getGameTime()), true, null, null, Double.MAX_VALUE);
@@ -260,6 +339,8 @@ final class FrontierV3ControlledMobMotion {
         PENDING.remove(actor);
         CONTINUOUS.remove(actor);
         TENDING.remove(actor);
+        DUTY_CUES.remove(actor);
+        STATION_SETTLING.remove(actor);
         LAST_ADVANCE.remove(actor);
         // A stop retires target authority but never rewrites observed physical position or the
         // canonical cursor.
@@ -322,6 +403,15 @@ final class FrontierV3ControlledMobMotion {
         double horizontalDistance = Math.sqrt(delta.x * delta.x + delta.z * delta.z);
         if (!continuous && horizontalDistance <= ARRIVAL_DISTANCE && Math.abs(delta.y) <= ARRIVAL_DISTANCE) { actor.stopInPlace(); return; }
         if (Math.abs(delta.y) > MAX_WALK_GRADE + ARRIVAL_DISTANCE) return;
+        // A one-block retained ascent is an ordinary collision move, but it cannot share the
+        // same shallow diagonal vector as horizontal walking: that lets a NoAI body slide into
+        // the lower adjacent column beneath the named higher support.  Complete the bounded
+        // vertical half in the current clear column first, then walk the already-retained X/Z
+        // edge.  This neither changes the target nor creates a stair/side-route search.
+        if (delta.y > ARRIVAL_DISTANCE) {
+            settleExactAscent(actor, delta.y);
+            return;
+        }
         if (horizontalDistance <= 1.0E-8D) {
             settleExactDescent(actor, delta.y);
             return;
@@ -449,6 +539,13 @@ final class FrontierV3ControlledMobMotion {
         if (actor.position().y < before.y - 1.0E-8D) publishAcceptedMove(actor);
     }
 
+    /** Moves only upward through the current exact clear body column before one retained step. */
+    private static void settleExactAscent(Mob actor, double verticalDelta) {
+        Vec3 before = actor.position();
+        actor.move(MoverType.SELF, new Vec3(0.0D, Math.min(verticalDelta, VERTICAL_SPEED), 0.0D));
+        if (actor.position().y > before.y + 1.0E-8D) publishAcceptedMove(actor);
+    }
+
     /** Requests vanilla's normal position-delta publication after an accepted move. */
     private static void publishAcceptedMove(Mob actor) {
         actor.hasImpulse = true;
@@ -515,9 +612,9 @@ final class FrontierV3ControlledMobMotion {
     private record AppliedIntent(MotionIntent intent, long gameTime) { }
     private record TendingPose(double x, double y, double z) {
         private Vec3 target(long gameTime) {
-            double angle = (Math.PI * 2.0D * Math.floorMod(gameTime, 32L)) / 32.0D;
-            return new Vec3(x + Math.cos(angle) * .16D, y, z + Math.sin(angle) * .16D);
+            return new Vec3(x, y, z);
         }
     }
+    private record StationaryPresentation(long gameTime, Vec3 position, int turns) { }
     private record Avoidance(Vec3 step, Vec3 target, int remainingTurns) { }
 }

@@ -63,6 +63,12 @@ public final class FrontierV3TestPilotClient {
     private static boolean fastForwardSent;
     private static ObservedDiagnostic fastForwardBaseline;
     private static ObservedDiagnostic diagnosticWaitBaseline; private static long diagnosticWaitRequestNanos;
+    /**
+     * A reconnect may deliver a current server receipt before its local world time catches up
+     * to the previous segment. Receipt order, not cross-connection game time, fences a fresh
+     * read-only diagnostic response.
+     */
+    private static long diagnosticReceiptSequence;
     private static boolean boardInteractionAttempted;
     private static String currentCausalMilestone;
     private static boolean entityInteractionAttempted;
@@ -176,7 +182,8 @@ public final class FrontierV3TestPilotClient {
                     // identity in the local evidence itself rather than inferring it from
                     // incidental cross-pipe log ordering in the Node runner.
                     if (!runningSetup && actionStartedTick >= 0L) FrontierV3PilotSessionControl.stampDiagnostic(value, index + 1, currentCausalMilestone);
-                    diagnostics.put(new DiagnosticIdentity(value.get("kind").getAsString(), value.get("id").getAsString()), new ObservedDiagnostic(tick, value));
+                    diagnostics.put(new DiagnosticIdentity(value.get("kind").getAsString(), value.get("id").getAsString()),
+                            new ObservedDiagnostic(tick, ++diagnosticReceiptSequence, value));
                     PaleMirrorMod.LOGGER.info("PMV3_PILOT_DIAGNOSTIC {}", value);
                 }
             } catch (RuntimeException ignored) {
@@ -419,7 +426,7 @@ public final class FrontierV3TestPilotClient {
         proof.addProperty("waterSlots", result.water()); proof.addProperty("airCropSlots", result.air()); proof.addProperty("wheatCropSlots", result.wheat());
         proof.addProperty("completedCropSlots", completed); proof.addProperty("clientPhysicalRead", true);
         FrontierV3PilotSessionControl.stampDiagnostic(proof, index + 1, currentCausalMilestone);
-        diagnostics.put(new DiagnosticIdentity("resource_site_facility", siteId), new ObservedDiagnostic(tick, proof));
+        diagnostics.put(new DiagnosticIdentity("resource_site_facility", siteId), new ObservedDiagnostic(tick, ++diagnosticReceiptSequence, proof));
         PaleMirrorMod.LOGGER.info("PMV3_PILOT_DIAGNOSTIC {}", proof); advance("assert_complete_resource_site");
     }
     private static void visit(Minecraft minecraft, JsonObject action) {
@@ -653,9 +660,6 @@ public final class FrontierV3TestPilotClient {
             lastEntityAttackTick = tick;
         }
         if (entityAttackAttempts >= maximumAttempts) {
-            // This action only sends bounded ordinary player attacks.  A following domain
-            // diagnostic establishes death; local entity removal is presentation timing and
-            // must not make an otherwise completed physical action spin indefinitely.
             advance("attack_nearest_entity");
             return;
         }
@@ -673,7 +677,9 @@ public final class FrontierV3TestPilotClient {
         String view = action.get("view").getAsString(); String id = action.get("id").getAsString(); long tick = minecraft.level.getGameTime();
         ObservedDiagnostic observed = diagnostics.get(new DiagnosticIdentity(view, id));
         boolean increased = !action.has("requireIncreaseAt") || diagnosticWaitBaseline != null && observed != null && increasedAtPath(diagnosticWaitBaseline.value(), observed.value(), action.get("requireIncreaseAt").getAsString());
-        if (observed != null && observed.tick() >= actionStartedTick && matches(observed.value(), action.getAsJsonObject("expect")) && increased) { advance("wait_until_diagnostic"); return; }
+        boolean freshReceipt = observed != null && (diagnosticWaitBaseline == null
+                || observed.receiptSequence() > diagnosticWaitBaseline.receiptSequence());
+        if (freshReceipt && matches(observed.value(), action.getAsJsonObject("expect")) && increased) { advance("wait_until_diagnostic"); return; }
         if (System.nanoTime() - diagnosticWaitRequestNanos >= 1_000_000_000L) { minecraft.player.connection.sendCommand("pale_mirror v3 inspect " + view + (id.isBlank() ? "" : " " + id)); diagnosticWaitRequestNanos = System.nanoTime(); }
         long timeoutMs = action.get("timeoutMs").getAsLong();
         if ((tick - actionStartedTick) * 50L >= timeoutMs) throw new IllegalStateException("timed out waiting for diagnostic " + view + " " + id + " predicate=" + action.get("expect"));
@@ -693,8 +699,6 @@ public final class FrontierV3TestPilotClient {
         ObservedDiagnostic observed = diagnostics.get(new DiagnosticIdentity("performance", ""));
         if (fresh(observed) && observed.value().has("fastForwardRemaining")) {
             int remaining = observed.value().get("fastForwardRemaining").getAsInt();
-            // Identity, not a transient nonzero sample, fences the response.  The server can
-            // finish a 480-tick request in one slice before the next 20-tick client poll.
             if (observed != fastForwardBaseline && remaining == 0) {
                 advance("fast_forward");
                 return;
@@ -865,10 +869,6 @@ public final class FrontierV3TestPilotClient {
         String view = reference.get("view").getAsString(); String id = reference.get("id").getAsString();
         String diagnosticField = reference.get("field").getAsString();
         ObservedDiagnostic observed = diagnostics.get(new DiagnosticIdentity(view, id));
-        // The narrow whitelist is independently enforced by the parsed scenario
-        // schema. A preceding wait may have proved the same immutable anchor, so
-        // a following action uses its recorded diagnostic rather than inventing
-        // a second server-side coordinate lookup.
         if (observed != null) {
             JsonObject anchor = FrontierV3ResourceSiteFacilityProbe.anchor(observed.value(), diagnosticField);
             if (anchor == null || !anchor.has("x") || !anchor.has("y") || !anchor.has("z")) {
@@ -995,6 +995,6 @@ public final class FrontierV3TestPilotClient {
         lastEntityAttackTick = Long.MIN_VALUE; lastAttackedEntityPosition = null; diagnostics.clear(); inspectBaseline = null;
     }
     record DiagnosticIdentity(String view, String id) { }
-    record ObservedDiagnostic(long tick, JsonObject value) { }
+    record ObservedDiagnostic(long tick, long receiptSequence, JsonObject value) { }
     private record CaptureBarrier(int after, String name, String presentation, long readyAtTick, boolean announced) { }
 }

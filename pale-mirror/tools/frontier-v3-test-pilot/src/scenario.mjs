@@ -137,7 +137,19 @@ export function validateScenario(scenario) {
               || scenario.restart.zeroPlayerTimeoutMs > 300_000
               || (scenario.restart.zeroPlayerSettleMs !== undefined
                   && (!Number.isInteger(scenario.restart.zeroPlayerSettleMs) || scenario.restart.zeroPlayerSettleMs < 0
-                      || scenario.restart.zeroPlayerSettleMs > 120_000)))))) {
+                      || scenario.restart.zeroPlayerSettleMs > 120_000))))
+      || (scenario.restart.secondary !== undefined && (!scenario.restart.secondary
+          || scenario.restart.mode !== 'graceful' || scenario.crash !== undefined
+          || !Number.isInteger(scenario.restart.secondary.afterAction)
+          || scenario.restart.secondary.afterAction <= scenario.restart.afterAction
+          || scenario.restart.secondary.afterAction >= (scenario.actions ?? []).length
+          || !Number.isInteger(scenario.restart.secondary.zeroPlayerAdvanceTicks)
+          || scenario.restart.secondary.zeroPlayerAdvanceTicks < 1 || scenario.restart.secondary.zeroPlayerAdvanceTicks > 24_000
+          || !Number.isInteger(scenario.restart.secondary.zeroPlayerTimeoutMs)
+          || scenario.restart.secondary.zeroPlayerTimeoutMs < 1_000 || scenario.restart.secondary.zeroPlayerTimeoutMs > 300_000
+          || (scenario.restart.secondary.zeroPlayerSettleMs !== undefined
+              && (!Number.isInteger(scenario.restart.secondary.zeroPlayerSettleMs)
+                  || scenario.restart.secondary.zeroPlayerSettleMs < 0 || scenario.restart.secondary.zeroPlayerSettleMs > 120_000)))))) {
     throw new Error('restart needs mode graceful|abrupt and afterAction strictly inside the evidence action range');
   }
   if (scenario.recoveryStop !== undefined && scenario.recoveryStop !== 'natural_demand') {
@@ -391,10 +403,16 @@ function loadPilotProfiles(path) {
 export function restartSegments(scenario) {
   if (!scenario.restart) return null;
   const split = scenario.restart.afterAction;
+  const secondary = scenario.restart.secondary;
   return {
     mode: scenario.restart.mode,
     before: segment(scenario, 0, split, scenario.setup ?? [], true),
-    after: segment(scenario, split, scenario.actions.length, scenario.restart.resumeSetup ?? [], false)
+    ...(secondary === undefined ? {} : {
+      middle: segment(scenario, split, secondary.afterAction, scenario.restart.resumeSetup ?? [], false),
+      secondary: { afterAction: secondary.afterAction, ...secondary }
+    }),
+    after: segment(scenario, secondary?.afterAction ?? split, scenario.actions.length,
+      secondary === undefined ? (scenario.restart.resumeSetup ?? []) : (secondary.resumeSetup ?? scenario.restart.resumeSetup ?? []), false)
   };
 }
 

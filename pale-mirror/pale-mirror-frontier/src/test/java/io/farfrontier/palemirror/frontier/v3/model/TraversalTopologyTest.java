@@ -39,6 +39,17 @@ class TraversalTopologyTest {
                 List.of(SurfaceAnchor.at(0, 64, 0), SurfaceAnchor.at(1, 64, 0))));
     }
 
+    @Test void linearCorridorRetainsDistinctPlanNodesWhenAReturnJourneyReusesOneSupport() {
+        SurfaceAnchor start = SurfaceAnchor.at(0, 64, 0);
+        TraversalTopology topology = TraversalTopology.corridor(new TraversalTopologyId("topology:return-visit"), 3L,
+                new SubjectId("route:return-visit"), TraversalKind.PEDESTRIAN, Set.of(TraversalCapability.PEDESTRIAN),
+                List.of(start, SurfaceAnchor.at(1, 64, 0), SurfaceAnchor.at(2, 64, 0), SurfaceAnchor.at(1, 64, 0), start));
+
+        assertEquals(5, topology.nodes().size(), "each retained plan visit has its own stable node identity");
+        assertEquals(List.of(start, SurfaceAnchor.at(1, 64, 0), SurfaceAnchor.at(2, 64, 0), SurfaceAnchor.at(1, 64, 0), start),
+                topology.linearCorridorSurfaces(), "a return does not collapse the final semantic visit into its initial body position");
+    }
+
     @Test void blockedOrUnknownEdgeNeverBecomesAnImplicitTraversalFallback() {
         TraversalNodeId first = new TraversalNodeId("node:first"), second = new TraversalNodeId("node:second");
         TraversalTopology topology = new TraversalTopology(new TraversalTopologyId("topology:blocked"), 4L, new SubjectId("route:test"),

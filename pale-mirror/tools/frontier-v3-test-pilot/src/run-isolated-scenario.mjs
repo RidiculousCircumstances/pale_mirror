@@ -115,10 +115,12 @@ const world = `v3-${scenario.id.replace(/[^a-z0-9_-]/g, '-').slice(0, 36)}-${run
 const output = resolve(project, outputPath);
 const ephemeralScenario = resolve(project, `build/frontier-v3-scenarios/${runId}-scenario.json`);
 const beforeRestartScenario = resolve(project, `build/frontier-v3-scenarios/${runId}-before-restart.json`);
+const middleRestartScenario = resolve(project, `build/frontier-v3-scenarios/${runId}-middle-restart.json`);
 const afterRestartScenario = resolve(project, `build/frontier-v3-scenarios/${runId}-after-restart.json`);
 const sessionDirectory = resolve(project, `build/frontier-v3-scenarios/${runId}-persistent-session`);
 const sessionScenario = resolve(sessionDirectory, 'runtime-scenario.json');
 const beforeRestartManifest = output.replace(/\.json$/i, '') + '.before-restart.json';
+const middleRestartManifest = output.replace(/\.json$/i, '') + '.middle-restart.json';
 const disposableWorld = resolve(project, `pale-mirror-neoforge/build/runs/frontier-v3-pilot-server/${world}`);
 const serverLog = resolve(project, 'pale-mirror-neoforge/build/runs/frontier-v3-pilot-server/logs/latest.log');
 const clientLog = resolve(project, 'pale-mirror-neoforge/build/runs/frontier-v3-pilot-client/logs/latest.log');
@@ -137,9 +139,15 @@ const clientSegments = [];
 let recoveryMetadata = null;
 const recoveryCheckpoints = {};
 let restartZeroPlayerInterlude = null;
+let secondaryRestartZeroPlayerInterlude = null;
 // A crash intentionally destroys the socket. Its recovery uses a fresh ordinary client; the
 // one-client persistent-restart proof stays a separate F0.V.4 scenario.
-const usePersistentClient = process.env.FRONTIER_V3_PILOT_USE_PERSISTENT_CLIENT !== 'false' && scenario.crash === undefined;
+// A second ordinary release/restart has three real player segments.  The persistent pilot is
+// intentionally a one-restart client-reuse proof, so route this declared multi-boundary
+// carrier through fresh ordinary clients rather than pretending its single resume nonce covers
+// another durable server lifetime.
+const usePersistentClient = process.env.FRONTIER_V3_PILOT_USE_PERSISTENT_CLIENT !== 'false' && scenario.crash === undefined
+  && scenario.restart?.secondary === undefined;
 let crashEvidence = null;
 let failure = null;
 let terminalCleanup = null;
@@ -217,9 +225,28 @@ try {
     // ordinary durable stop path if the after-restart pilot fails.
     abruptStopAttempted = false;
     await writeScenario(afterRestartScenario, recovery.after);
-    await runPilot(afterRestartScenario, output, server, clientSegments, 'after_restart');
+    if (recovery.middle === undefined) {
+      await runPilot(afterRestartScenario, output, server, clientSegments, 'after_restart');
+    } else {
+      await writeScenario(middleRestartScenario, recovery.middle);
+      await runPilot(middleRestartScenario, middleRestartManifest, server, clientSegments, 'middle_restart', { awaitNormalDemandLoss: false });
+      await awaitNormalDemandLoss(server, 'middle_restart');
+      if (recovery.secondary.zeroPlayerSettleMs !== undefined) await noPlayerSettle(recovery.secondary.zeroPlayerSettleMs);
+      secondaryRestartZeroPlayerInterlude = await runZeroPlayerPrelude(server, {
+        advanceTicks: recovery.secondary.zeroPlayerAdvanceTicks,
+        timeoutMs: recovery.secondary.zeroPlayerTimeoutMs
+      });
+      await timedStop('secondary_graceful_save_and_port_close', () => stopServerSafely(server, port));
+      await publishLifecycleBarrier(lifecycle, LifecycleBarrier.DURABLE_SERVER_SAVE, { serverRunId: server.serverRunId, boundary: 'secondary' });
+      await publishLifecycleBarrier(lifecycle, LifecycleBarrier.GAME_PORT_CLOSED, { port, boundary: 'secondary' });
+      server = null;
+      server = await startServer(false);
+      await writeScenario(afterRestartScenario, recovery.after);
+      await runPilot(afterRestartScenario, output, server, clientSegments, 'after_restart');
+    }
     console.log('PMV3_ISOLATED recovery=after-complete');
     recoveryMetadata = { mode: recovery.mode, world, splitAfterAction: scenario.restart.afterAction, beforeRestartManifest,
+      ...(recovery.middle === undefined ? {} : { middleRestartManifest, secondarySplitAfterAction: recovery.secondary.afterAction }),
       ...(recoveryCarrier ? { checkpoints: recoveryCheckpoints } : {}),
       crash: crashEvidence };
   } else {
@@ -316,7 +343,7 @@ try {
         }
       });
       const scenariosRemoved = await attempt('ephemeral_scenarios', async () => {
-        await Promise.all([ephemeralScenario, beforeRestartScenario, afterRestartScenario].map((path) => rm(path, { force: true })));
+        await Promise.all([ephemeralScenario, beforeRestartScenario, middleRestartScenario, afterRestartScenario].map((path) => rm(path, { force: true })));
       });
       // A failed recovery run is diagnostic evidence. In particular, never erase the
       // session.lock/world that prevented the next server from starting or the world that
@@ -373,6 +400,7 @@ if (completed) {
   manifest.naturalDemandStops = naturalDemandStops;
   manifest.zeroPlayerPrelude = zeroPlayerPrelude;
   manifest.restartZeroPlayerInterlude = restartZeroPlayerInterlude;
+  manifest.secondaryRestartZeroPlayerInterlude = secondaryRestartZeroPlayerInterlude;
   manifest.terminalCleanup = terminalCleanup;
   manifest.ownerObservation = ownerObservationFact(server?.ownerObservation ?? lastServerAttempt?.ownerObservation ?? retainedOwnerObservation);
   manifest.ownerObservationRequirement = ownerObservationRequirementFact(ownerObservationRequirement,
@@ -495,6 +523,10 @@ async function startServer(reset) {
  */
 async function runZeroPlayerPrelude(server, declaration) {
   const command = `pale_mirror v3 advance ${declaration.advanceTicks}`;
+  // This receipt is specifically about this server-owned interval, not the number of client
+  // segments that occurred earlier in the same multi-restart carrier.  Keeping the prior count
+  // separately prevents a completed earlier ordinary visit from falsifying a genuine COLD window.
+  const clientSegmentsAtAdmission = clientSegments.length;
   let before = server.outputRevision();
   const outputOffset = server.output().length;
   await requestRconCommand({ port: server.rconPort, password: server.rconPassword, command });
@@ -504,8 +536,21 @@ async function runZeroPlayerPrelude(server, declaration) {
     // output appended after this exact RCON admission can acknowledge it; a prior bootstrap
     // completion marker must not manufacture an elapsed no-player interval.
     if (server.output().slice(outputOffset).includes('Frontier v3 completed operator fast-forward')) {
+      const clientSegmentsDuringInterval = clientSegments.length - clientSegmentsAtAdmission;
+      if (clientSegmentsDuringInterval !== 0) {
+        throw new Error('ordinary client segment started during zero-player canonical interval');
+      }
       return Object.freeze({ status: 'completed', advanceTicks: declaration.advanceTicks, command,
-        clientSegmentsBeforeCompletion: clientSegments.length, serverPid: server.serverPid });
+        clientSegmentsBeforeCompletion: clientSegmentsDuringInterval,
+        clientSegmentsBeforeAdmission: clientSegmentsAtAdmission, serverPid: server.serverPid });
+    }
+    // A physically pending operation is a truthful COLD boundary, never a reason to leave a
+    // relative request silently queued until this carrier's wall-clock timeout.  Preserve the
+    // server-owned reason in the failure bundle so the caller can distinguish a genuine
+    // physical hand-off from a missing completion marker.
+    const appended = server.output().slice(outputOffset);
+    if (appended.includes('Frontier v3 rejected relative fast-forward because physical work became pending')) {
+      throw new Error('zero-player prelude was rejected because physical work became pending during the canonical interval');
     }
     const remaining = deadline - Date.now();
     if (remaining <= 0) break;
@@ -590,7 +635,7 @@ async function runPilot(scenarioFile, manifest, server, clientSegments, segment,
       FRONTIER_V3_PREPARED_BUILD_IDENTITY: preparedIdentityPath,
       FRONTIER_V3_PILOT_LIFECYCLE_CONTROL_DIRECTORY: lifecycle.directory,
       FRONTIER_V3_PILOT_LIFECYCLE_SEGMENT: segment,
-      FRONTIER_V3_PILOT_LIFECYCLE_TERMINAL: segment === 'before_restart' ? 'false' : 'true' }, stdio: 'inherit'
+      FRONTIER_V3_PILOT_LIFECYCLE_TERMINAL: ['before_restart', 'middle_restart'].includes(segment) ? 'false' : 'true' }, stdio: 'inherit'
   });
   const code = await exited(pilot);
   timing.end(phase, { exitCode: code });

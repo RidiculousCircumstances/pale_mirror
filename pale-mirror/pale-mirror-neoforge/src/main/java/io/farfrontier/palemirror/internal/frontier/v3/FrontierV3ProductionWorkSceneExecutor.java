@@ -110,7 +110,8 @@ final class FrontierV3ProductionWorkSceneExecutor {
             if (job.traversalCursor() < route.size() - 1 && at(worker, route.get(job.traversalCursor() + 1))) {
                 submit(runtime, "production-work-traversal", lease.id().value(),
                         new ProductionWorkTraversalAdvanced(job.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, route.get(job.traversalCursor() + 1)), job.traversalCursor() + 1));
-            } else if (!reacquireRetainedSurface(level, worker, current)) conflict(level, runtime, lease, "cursor-body-mismatch");
+            } else if (!reacquireRetainedSurface(level, worker, current)) conflict(level, runtime, lease,
+                    cursorBodyMismatch(job.traversalCursor(), worker, current));
             return;
         }
         if (job.workProgress().stage() == ProductionWorkProgress.Stage.APPROACH && job.traversalCursor() == inputCursor) {
@@ -153,6 +154,17 @@ final class FrontierV3ProductionWorkSceneExecutor {
         if (!FrontierV3SurfaceObservation.mayReacquire(worker, surface) || !clearNextBody(level, worker, surface)) return false;
         FrontierV3ControlledMobMotion.moveToward(level, worker, point(surface));
         return true;
+    }
+    /**
+     * A scene conflict is deliberately retained rather than repaired.  Keep its exact observed
+     * and expected cells in the durable trace so an operator can distinguish an ownership
+     * hand-off defect from a genuine loaded-world displacement without treating a generic
+     * CONFLICT phase as a cause.
+     */
+    private static String cursorBodyMismatch(int cursor, Mob worker, SurfaceAnchor expected) {
+        return "cursor-body-mismatch:cursor=" + cursor
+                + ":actual=" + worker.getBlockX() + "," + worker.getBlockY() + "," + worker.getBlockZ()
+                + ":expected=" + expected.x() + "," + expected.y() + "," + expected.z();
     }
     private static void drain(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease) { submit(runtime, "production-work-draining", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING)); }
     private static void conflict(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease, String reason) {

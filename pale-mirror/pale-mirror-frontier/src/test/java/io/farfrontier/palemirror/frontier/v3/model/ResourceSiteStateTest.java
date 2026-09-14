@@ -41,6 +41,27 @@ class ResourceSiteStateTest {
         assertEquals(2L, harvested.growthEpoch()); assertEquals(0, harvested.growthStage());
     }
 
+    @Test
+    void nextGrowthEpochKeepsTheSameFarmerAtItsTerminalCropWithoutCollapsingTheNextSlotVisit() {
+        FrontierWorldState baseline = initial();
+        SubjectId siteId = new SubjectId("site:1-wheat-field");
+        ResourceSite site = FrontierResourceSitePlan.compile(baseline.bootstrap()).get(siteId);
+        SubjectId workerId = new SubjectId("resident:1-1");
+        SurfaceAnchor terminal = new SurfaceAnchor(site.cropSlots().getLast().offset(0, -1, 0));
+        ActorLocation retained = new ActorLocation(terminal.standingBody(), baseline.actorLocations().get(workerId).condition());
+
+        TraversalTopology nextEpoch = ResourceSiteHarvestTraversal.compile(baseline.bootstrap(), site, retained,
+                new SubjectId("job:site-harvest-1-wheat-field-2"));
+
+        assertEquals(terminal, nextEpoch.linearCorridorSurfaces().getFirst(), "the successor begins from the exact retained body support");
+        assertEquals(site.cropSlots().stream().map(crop -> new SurfaceAnchor(crop.offset(0, -1, 0))).toList(),
+                nextEpoch.linearCorridorSurfaces().subList(nextEpoch.linearCorridorSurfaces().size() - site.cropSlots().size(),
+                        nextEpoch.linearCorridorSurfaces().size()),
+                "the immutable per-slot plan remains complete, including its later terminal-slot visit");
+        assertEquals(terminal, nextEpoch.linearCorridorSurfaces().getLast(),
+                "the inherited body and the later work station are distinct plan visits at one exact support");
+    }
+
     private static ResourceSiteHarvestProgress completeProgress() {
         ResourceSiteHarvestProgress progress = ResourceSiteHarvestProgress.notStarted();
         for (int index = 0; index < ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS; index++) {

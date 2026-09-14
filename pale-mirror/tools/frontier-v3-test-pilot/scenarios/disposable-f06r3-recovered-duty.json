@@ -4,7 +4,8 @@
   "isolation": { "mode": "disposable_lite", "seed": 47 },
   "server": { "host": "127.0.0.1", "port": 25575, "profile": "world", "viewDistance": 6 },
   "zeroPlayerPrelude": { "kind": "cold_duty_cycle", "advanceTicks": 21010, "timeoutMs": 180000 },
-  "restart": { "mode": "graceful", "afterAction": 4, "zeroPlayerAdvanceTicks": 24000, "zeroPlayerTimeoutMs": 180000, "zeroPlayerSettleMs": 35000 },
+  "restart": { "mode": "graceful", "afterAction": 4, "zeroPlayerAdvanceTicks": 23800, "zeroPlayerTimeoutMs": 180000, "zeroPlayerSettleMs": 35000,
+    "secondary": { "afterAction": 10, "zeroPlayerAdvanceTicks": 21100, "zeroPlayerTimeoutMs": 180000, "zeroPlayerSettleMs": 35000 } },
   "pilot": { "username": "PMTestPilot" },
   "assertNoServerTickStallDuringIngress": true,
   "setup": [{ "type": "assert_fixture", "timeoutMs": 30000, "checks": [{ "view": "summary", "id": "", "expect": { "status": "ok", "settlements": 12, "sites": 12 } }] }],
@@ -16,11 +17,20 @@
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 150, "y": 65, "z": -10 }, "settleMs": 0, "causalMilestone": "reentry_after_released_cold_restart" },
     { "type": "inspect", "view": "process", "id": "job:site-harvest-7-wheat-field-1", "causalMilestone": "recovered_cold_progress" },
     { "type": "inspect", "view": "site", "id": "site:7-wheat-field", "causalMilestone": "reconciled_current_site" },
-    { "type": "assert_complete_resource_site", "siteId": "site:7-wheat-field", "completedCropSlots": 63, "timeoutMs": 30000, "causalMilestone": "recovered_complete_current_facility" }
+    { "type": "assert_complete_resource_site", "siteId": "site:7-wheat-field", "completedCropSlots": 63, "timeoutMs": 30000, "causalMilestone": "recovered_complete_current_facility" },
+    { "type": "observe_entity_motion", "id": "job:site-harvest-7-wheat-field-1", "entityType": "minecraft:villager", "nameContains": "AGRICULTURAL WORKER", "maxDistance": 64, "durationTicks": 600, "sampleEveryTicks": 1, "timeoutMs": 90000, "causalMilestone": "terminal_receipt_same_farmer_body" },
+    { "type": "wait_until_harvest_result", "siteId": "site:7-wheat-field", "intentId": "intent:site-harvest-7-wheat-field-1", "itemId": "item:site-harvest-7-wheat-field-1-wheat", "settlementId": "settlement:7", "workerId": "resident:7-31", "timeoutMs": 180000, "causalMilestone": "terminal_output_and_growth_epoch" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 150, "y": 65, "z": -10 }, "settleMs": 0, "causalMilestone": "successor_reentry_after_released_cold_restart" },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-7-wheat-field-2", "expect": { "status": "ok", "identity": { "worker": "resident:7-31" }, "claims": { "lease": { "status": "HOT", "members": 1 } }, "result": { "sitePhase": "HARVESTING" } }, "timeoutMs": 90000, "causalMilestone": "same_farmer_declared_successor" },
+    { "type": "observe_entity_motion", "id": "job:site-harvest-7-wheat-field-2", "entityType": "minecraft:villager", "nameContains": "AGRICULTURAL WORKER", "maxDistance": 64, "durationTicks": 600, "sampleEveryTicks": 1, "timeoutMs": 90000, "causalMilestone": "successor_same_farmer_body" },
+    { "type": "wait_until_harvest_result", "siteId": "site:7-wheat-field", "intentId": "intent:site-harvest-7-wheat-field-2", "itemId": "item:site-harvest-7-wheat-field-2-wheat", "settlementId": "settlement:7", "workerId": "resident:7-31", "timeoutMs": 180000, "causalMilestone": "successor_terminal_output_and_growth_epoch" }
   ],
   "assertions": [
     { "after": 2, "view": "process", "id": "job:site-harvest-7-wheat-field-1", "expect": { "status": "ok", "claims": { "lease": { "status": "HOT" } }, "result": { "sitePhase": "HARVESTING" } } },
     { "after": 6, "view": "process", "id": "job:site-harvest-7-wheat-field-1", "expect": { "status": "ok", "conservation": { "completedCropSlots": 63, "deferredMaterializationSlots": 63, "totalCropSlots": 64 }, "result": { "sitePhase": "HARVESTING" } } },
-    { "after": 7, "view": "site", "id": "site:7-wheat-field", "expect": { "status": "ok", "phase": "HARVESTING" } }
+    { "after": 7, "view": "site", "id": "site:7-wheat-field", "expect": { "status": "ok", "phase": "HARVESTING" } },
+    { "after": 10, "view": "site", "id": "site:7-wheat-field", "expect": { "status": "ok", "phase": "GROWING", "growthEpoch": 2, "activeWork": "" } },
+    { "after": 12, "view": "process", "id": "job:site-harvest-7-wheat-field-2", "expect": { "status": "ok", "identity": { "worker": "resident:7-31" }, "claims": { "lease": { "status": "HOT", "members": 1 } }, "result": { "sitePhase": "HARVESTING" } } },
+    { "after": 14, "view": "site", "id": "site:7-wheat-field", "expect": { "status": "ok", "phase": "GROWING", "growthEpoch": 3, "activeWork": "" } }
   ]
 }

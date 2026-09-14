@@ -4,6 +4,8 @@ import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.domain.KnownRegionalFeature;
 import io.farfrontier.palemirror.internal.PaleMirrorRuntime;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Mob;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.fml.loading.FMLEnvironment;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -20,6 +22,8 @@ public final class PaleMirrorNetwork {
                 PaleMirrorNetwork::receiveSnapshot);
         registrar.playToClient(PlayerContextCardPayload.TYPE, PlayerContextCardPayload.STREAM_CODEC,
                 PaleMirrorNetwork::receiveContextCard);
+        registrar.playToClient(StationWorkGesturePayload.TYPE, StationWorkGesturePayload.STREAM_CODEC,
+                PaleMirrorNetwork::receiveStationWorkGesture);
         registrar.playToServer(AtlasRequestPayload.TYPE, AtlasRequestPayload.STREAM_CODEC,
                 PaleMirrorNetwork::requestSnapshot);
         registrar.playToServer(AtlasActionPayload.TYPE, AtlasActionPayload.STREAM_CODEC,
@@ -43,6 +47,28 @@ public final class PaleMirrorNetwork {
     public static void sendContextCard(ServerPlayer player, PlayerContextCardPayload payload) {
         if (net.neoforged.neoforge.network.registration.NetworkRegistry.hasChannel(player.connection, PlayerContextCardPayload.TYPE.id())) {
             PacketDistributor.sendToPlayer(player, payload);
+        }
+    }
+
+    /** Sends an already-declared station cue only to current PM clients in this loaded level. */
+    public static void sendStationWorkGesture(ServerLevel level, Mob actor, boolean active) {
+        sendStationDuty(level, actor, active, active ? "HARVESTING:PREPARED" : "");
+    }
+
+    /**
+     * Mirrors an already-owned station/travel phase to observers.  This is presentation only:
+     * it never selects a target, advances a cursor, or grants a lease.
+     */
+    public static void sendStationDutyCue(ServerLevel level, Mob actor, String dutyPhase) {
+        sendStationDuty(level, actor, false, dutyPhase);
+    }
+
+    private static void sendStationDuty(ServerLevel level, Mob actor, boolean active, String dutyPhase) {
+        StationWorkGesturePayload payload = new StationWorkGesturePayload(actor.getId(), active, dutyPhase);
+        for (ServerPlayer player : level.players()) {
+            if (net.neoforged.neoforge.network.registration.NetworkRegistry.hasChannel(player.connection, StationWorkGesturePayload.TYPE.id())) {
+                PacketDistributor.sendToPlayer(player, payload);
+            }
         }
     }
 
@@ -84,6 +110,12 @@ public final class PaleMirrorNetwork {
     private static void receiveContextCard(PlayerContextCardPayload payload, IPayloadContext context) {
         if (FMLEnvironment.dist == Dist.CLIENT) {
             io.farfrontier.palemirror.internal.client.PaleMirrorContextCardClient.receive(payload);
+        }
+    }
+
+    private static void receiveStationWorkGesture(StationWorkGesturePayload payload, IPayloadContext context) {
+        if (FMLEnvironment.dist == Dist.CLIENT) {
+            io.farfrontier.palemirror.internal.client.PaleMirrorStationWorkGestureClient.receive(payload);
         }
     }
 
