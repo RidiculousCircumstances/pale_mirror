@@ -35,7 +35,10 @@ export function assertF06r3LiveIntegrityCarrier({ declaration, manifest }) {
   const afterFour = exactly(diagnostics, 12, 'process', JOBS[1]);
   const restartSeven = exactly(diagnostics, 14, 'process', JOBS[0]);
   [beforeSeven, beforeFour, afterSeven, afterFour, restartSeven].forEach(assertHarvestCursor);
-  [afterSeven, afterFour].forEach(assertFirstHotLeaseIsNotCropZero);
+  // The first arrival at site 7 is the one bounded ordinary HOT admission in this carrier.
+  // Site 4 still proves a distinct unreset COLD arrival, but it must not be misreported as a
+  // HOT lease before the scheduler has actually admitted it.
+  assertFirstHotLeaseIsNotCropZero(afterSeven);
   if (!sameHarvest(beforeSeven, afterSeven) || !sameHarvest(beforeSeven, restartSeven) || !sameHarvest(beforeFour, afterFour)) {
     throw new Error('F0.6R3 representative first ingress or restart reset an exact COLD harvest identity/cursor');
   }
