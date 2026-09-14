@@ -21,4 +21,12 @@ class FrontierV3ActorProbeScheduleTest {
         assertEquals(List.of("actor:4", "actor:5", "actor:6", "actor:7"),
                 cursor.next(4, 2).stream().map(SubjectId::value).toList());
     }
+
+    @Test
+    void boundedWindowNeverRepeatsOneActorToFillItsProbeBudget() {
+        FrontierV3ActorProbeSchedule.Cursor cursor = new FrontierV3ActorProbeSchedule.Cursor(List.of(
+                new SubjectId("actor:0"), new SubjectId("actor:1")));
+
+        assertEquals(List.of("actor:0", "actor:1"), cursor.next(32, 16).stream().map(SubjectId::value).toList());
+    }
 }

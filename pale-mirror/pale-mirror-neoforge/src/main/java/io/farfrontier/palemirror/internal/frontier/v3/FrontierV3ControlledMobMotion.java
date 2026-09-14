@@ -47,6 +47,13 @@ final class FrontierV3ControlledMobMotion {
      * explicit stop supersedes it.
      */
     private static final Map<Mob, MotionIntent> CONTINUOUS = new IdentityHashMap<>();
+    /**
+     * HOT bodies deliberately retain NoAI, so their vertical travel cannot be delegated to the
+     * vanilla goal loop.  Registration is weak and has no canonical meaning: it merely keeps
+     * the same ordinary gravity/collision path alive at every entity-pre turn, including an
+     * intentionally stationary body after a player removes its support.
+     */
+    private static final Map<Mob, Boolean> ORDINARY_PHYSICS = new WeakHashMap<>();
     /** A crop-local tending pose is derived each server turn, never paced by a semantic callback. */
     private static final Map<Mob, TendingPose> TENDING = new IdentityHashMap<>();
     /** The entity boundary may be observed explicitly by a test after vanilla already ran it. */
@@ -212,6 +219,7 @@ final class FrontierV3ControlledMobMotion {
      * client-visible stop/start cadence seen after scheduler/lease integration.
      */
     static void advanceAtEntityBoundary(Mob actor) {
+        if (ORDINARY_PHYSICS.containsKey(actor)) advanceOrdinaryGravity(actor);
         advance(actor);
     }
 
@@ -224,6 +232,8 @@ final class FrontierV3ControlledMobMotion {
     static TrackerObservation trackerObservation(Mob actor) {
         return TRACKER_OBSERVATIONS.getOrDefault(actor, new TrackerObservation(0, 0));
     }
+
+    static boolean ordinaryPhysicsRegistered(Mob actor) { return ORDINARY_PHYSICS.containsKey(actor); }
 
     /** Compatibility hook for direct tests; production has one entity-pre movement authority. */
     static void advanceContinuously(ServerLevel level) {
@@ -280,11 +290,15 @@ final class FrontierV3ControlledMobMotion {
         if (moved) publishAcceptedMove(actor);
     }
 
-    /** Restores the ordinary vertical physics path without selecting a movement target. */
+    /**
+     * Restores the ordinary vertical physics path without selecting a movement target.  The
+     * actual fall turn is intentionally the next entity-pre boundary: invoking it from the
+     * server-post executor as well would double-integrate gravity for a frequently probed body.
+     */
     static void restoreOrdinaryPhysics(Mob actor) {
         if (actor == null) return;
         actor.setNoGravity(false);
-        advanceOrdinaryGravity(actor);
+        ORDINARY_PHYSICS.put(actor, Boolean.TRUE);
     }
 
     /**

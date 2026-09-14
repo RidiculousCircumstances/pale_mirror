@@ -92,7 +92,7 @@ final class FrontierV3AmbientActorExecutor {
     static final String ACTOR_KEY = "pale_mirror_frontier_v3_ambient_actor";
     static final String KIND_KEY = "pale_mirror_frontier_v3_ambient_kind";
     private static final int DRAIN_SAFE_RADIUS_BLOCKS = 64;
-    private static final long DRAIN_HYSTERESIS_TICKS = 200L;
+    static final long DRAIN_HYSTERESIS_TICKS = 200L;
     private static final int GRAYBOX_BIOFORM_FIRE_RESISTANCE_TICKS = Integer.MAX_VALUE;
     /** Bounded fair probe window; it exceeds admissions so demanded tail identities meet the HOT window. */
     private static final int MAX_ACTOR_PROBES_PER_TICK = 32;
@@ -126,7 +126,7 @@ final class FrontierV3AmbientActorExecutor {
         // Commands submitted below synchronously install a new immutable checkpoint.  Preserve
         // the deterministic actor order, but never let a later actor make another physical
         // decision from the predecessor's stale snapshot.
-        for (SubjectId actorId : FrontierV3ActorProbeSchedule.next(runtime, state, MAX_ACTOR_PROBES_PER_TICK,
+        for (SubjectId actorId : FrontierV3ActorProbeSchedule.next(runtime, state, level, MAX_ACTOR_PROBES_PER_TICK,
                 FrontierV3AmbientAdmissionPolicy.MAX_ACTORS_PER_TICK)) {
             if (admitted >= FrontierV3AmbientAdmissionPolicy.MAX_ACTORS_PER_TICK) return;
             state = runtime.decodedState().orElse(null);
@@ -258,7 +258,7 @@ final class FrontierV3AmbientActorExecutor {
             if (lease.status() == AmbientLeaseStatus.PREPARED) {
                 Result result = materialize(level, runtime, state, actorId, lease.handoffBody());
                 if (result == Result.APPLIED || result == Result.CURRENT || result == Result.PENDING) {
-                    if (result != Result.PENDING) submit(runtime, "ambient-hot", actorId.value(), new AmbientLeaseTransition(actorId, AmbientLeaseStatus.HOT));
+                    if (result != Result.PENDING) FrontierV3AmbientHotAdmission.confirmAndArm(level, runtime, actorId);
                     admitted++;
                 }
                 continue;

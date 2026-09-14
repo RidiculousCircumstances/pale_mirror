@@ -28,6 +28,7 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
@@ -71,8 +72,8 @@ public final class FrontierV3AmbientPhysicsGameTests {
         // travel half; neither test body receives an X/Z target or a coordinate reset.
         for (int tick = 3; tick < 30; tick++) {
             helper.runAtTickTime(tick, () -> {
-                FrontierV3ControlledMobMotion.restoreOrdinaryPhysics(resident);
-                FrontierV3ControlledMobMotion.restoreOrdinaryPhysics(bioform);
+                FrontierV3ControlledMobMotion.advanceAtEntityBoundary(resident);
+                FrontierV3ControlledMobMotion.advanceAtEntityBoundary(bioform);
             });
         }
         helper.runAtTickTime(30, () -> {
@@ -98,16 +99,20 @@ public final class FrontierV3AmbientPhysicsGameTests {
     @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 300)
     public static void demandedManagedResidentAndBioformFallThroughExecutorCadence(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        BlockPos residentSupport = helper.absolutePos(new BlockPos(2, 10, 2));
-        BlockPos bioformSupport = helper.absolutePos(new BlockPos(5, 10, 2));
-        prepareFallColumn(level, residentSupport); prepareFallColumn(level, bioformSupport);
+        // Keep the complete local fall surface inside this tiny template cell.  The admitted
+        // scout may pursue its retained local target before the player removes a support, so a
+        // single launch column would test the template floor rather than the actor's actual
+        // physical collision path.
+        BlockPos residentSupport = helper.absolutePos(new BlockPos(2, 4, 2));
+        BlockPos bioformSupport = helper.absolutePos(new BlockPos(5, 4, 2));
+        prepareFallArena(level, residentSupport); prepareFallArena(level, bioformSupport);
         Fixture fixture = fixture(residentSupport, bioformSupport);
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(fixture.state());
         ServerPlayer observer = helper.makeMockServerPlayerInLevel();
         observer.setPos(residentSupport.getX() + 6.5D, residentSupport.getY() + 1.0D, residentSupport.getZ() + 6.5D);
         double[] initialY = { Double.NaN, Double.NaN };
         boolean[] exactHotBodies = { false }, movingBeforeLoss = { false }, idleBeforeLoss = { false };
-        BodyPosition[] landed = new BodyPosition[2];
+        BodyPosition[] landed = new BodyPosition[2]; BlockPos[] supportsAtLoss = new BlockPos[2];
 
         for (int tick = 1; tick <= 285; tick++) {
             int turn = tick;
@@ -131,13 +136,22 @@ public final class FrontierV3AmbientPhysicsGameTests {
                     // case.  No fixture entity is substituted or manually repositioned.
                     FrontierV3ControlledMobMotion.stop(resident);
                     idleBeforeLoss[0] = resident.getDeltaMovement().horizontalDistanceSqr() == 0.0D;
-                    helper.assertTrue(idleBeforeLoss[0] && movingBeforeLoss[0],
+                    helper.assertTrue(idleBeforeLoss[0] && movingBeforeLoss[0]
+                                    && FrontierV3ControlledMobMotion.ordinaryPhysicsRegistered(resident)
+                                    && FrontierV3ControlledMobMotion.ordinaryPhysicsRegistered(bioform),
                             "support loss must cover both an idle managed resident and a moving managed bioform through the ordinary executor cadence");
                     // This is the ordinary player input boundary, not a fixture world edit:
                     // vanilla's server game mode performs both breaks while the executor owns
                     // the two retained HOT UUIDs.
-                    helper.assertTrue(observer.gameMode.destroyBlock(residentSupport) && observer.gameMode.destroyBlock(bioformSupport),
-                            "the ordinary observer must be able to remove each physical support");
+                    List<BlockPos> residentFootprint = supportingBlocks(resident);
+                    List<BlockPos> bioformFootprint = supportingBlocks(bioform);
+                    supportsAtLoss[0] = residentFootprint.getFirst(); supportsAtLoss[1] = bioformFootprint.getFirst();
+                    helper.assertTrue(residentFootprint.stream().allMatch(observer.gameMode::destroyBlock)
+                                    && bioformFootprint.stream().allMatch(observer.gameMode::destroyBlock),
+                            "the ordinary observer must be able to remove every physical support under each exact body footprint");
+                    helper.assertTrue(residentFootprint.stream().allMatch(position -> level.getBlockState(position).isAir())
+                                    && bioformFootprint.stream().allMatch(position -> level.getBlockState(position).isAir()),
+                            "the ordinary player break must clear each exact physical footprint before HOT physics continues");
                 }
                 if (turn == 65) {
                     helper.assertTrue(resident != null && bioform != null, "the exact HOT bodies must remain observable through their fall and landing");
@@ -145,9 +159,11 @@ public final class FrontierV3AmbientPhysicsGameTests {
                     landed[1] = FrontierV3AmbientActorExecutor.observedBody(bioform);
                     helper.assertTrue(!resident.isNoGravity() && !bioform.isNoGravity()
                                     && resident.getY() < initialY[0] - 2.0D && bioform.getY() < initialY[1] - 2.0D
-                                    && Math.abs(resident.getY() - (residentSupport.getY() - 2.0D)) < 1.0E-6D
-                                    && Math.abs(bioform.getY() - (bioformSupport.getY() - 2.0D)) < 1.0E-6D,
-                            "ordinary collision must land the moving managed bodies without hover, reset, teleport, or a second route");
+                            && Math.abs(resident.getY() - (supportsAtLoss[0].getY() - 2.0D)) < 1.0E-6D
+                            && Math.abs(bioform.getY() - (supportsAtLoss[1].getY() - 2.0D)) < 1.0E-6D,
+                            "ordinary collision must land the moving managed bodies without hover, reset, teleport, or a second route: resident="
+                                    + resident.position() + " support=" + supportsAtLoss[0] + " bioform=" + bioform.position()
+                                    + " support=" + supportsAtLoss[1]);
                     observer.connection.disconnect(Component.literal("ambient support-loss fixture complete"));
                 }
             });
@@ -166,18 +182,33 @@ public final class FrontierV3AmbientPhysicsGameTests {
         });
     }
 
-    private static void prepareFallColumn(ServerLevel level, BlockPos support) {
-        level.setBlock(support.below(3), Blocks.STONE.defaultBlockState(), 3);
-        level.setBlock(support, Blocks.STONE.defaultBlockState(), 3);
-        level.setBlock(support.above(), Blocks.AIR.defaultBlockState(), 3);
-        level.setBlock(support.above(2), Blocks.AIR.defaultBlockState(), 3);
+    private static void prepareFallArena(ServerLevel level, BlockPos support) {
+        for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
+            BlockPos column = support.offset(dx, 0, dz);
+            level.setBlock(column.below(3), Blocks.STONE.defaultBlockState(), 3);
+            level.setBlock(column.below(2), Blocks.AIR.defaultBlockState(), 3);
+            level.setBlock(column.below(), Blocks.AIR.defaultBlockState(), 3);
+            level.setBlock(column, Blocks.STONE.defaultBlockState(), 3);
+            level.setBlock(column.above(), Blocks.AIR.defaultBlockState(), 3);
+            level.setBlock(column.above(2), Blocks.AIR.defaultBlockState(), 3);
+        }
+    }
+
+    /** A body may straddle two cells; breaking only its feet column leaves a real collision ledge. */
+    private static List<BlockPos> supportingBlocks(Mob body) {
+        AABB box = body.getBoundingBox(); int supportY = (int) Math.floor(body.getY() - .01D);
+        List<BlockPos> positions = new java.util.ArrayList<>();
+        for (int x = (int) Math.floor(box.minX); x <= (int) Math.floor(box.maxX - 1.0E-8D); x++) {
+            for (int z = (int) Math.floor(box.minZ); z <= (int) Math.floor(box.maxZ - 1.0E-8D); z++) positions.add(new BlockPos(x, supportY, z));
+        }
+        return List.copyOf(positions);
     }
 
     private static void drive(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
         FrontierV3AmbientActorExecutor.tick(level, runtime);
         runtime.decodedState().orElseThrow().ambientLeases().keySet().stream()
                 .map(actor -> level.getEntity(FrontierV3AmbientActorExecutor.entityId(runtime.decodedState().orElseThrow(), actor)))
-                .filter(Mob.class::isInstance).map(Mob.class::cast).forEach(FrontierV3ControlledMobMotion::advance);
+                .filter(Mob.class::isInstance).map(Mob.class::cast).forEach(FrontierV3ControlledMobMotion::advanceAtEntityBoundary);
     }
 
     private static Mob managed(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SubjectId actor) {
