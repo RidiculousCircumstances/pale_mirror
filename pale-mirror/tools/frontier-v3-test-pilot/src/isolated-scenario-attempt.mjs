@@ -25,8 +25,9 @@ export function isolatedScenarioOuterAttemptEnvironment(runId) {
 }
 
 /** The ordinary persistent-restart path retains the same supervisor attempt in its final manifest metadata. */
-export function persistentRecoveryMetadata({ mode, world, splitAfterAction, runId, controlDirectory }) {
+export function persistentRecoveryMetadata({ mode, world, splitAfterAction, beforeRestartManifest, runId, controlDirectory }) {
   return Object.freeze({ mode, world, splitAfterAction,
+    ...(beforeRestartManifest === undefined ? {} : { beforeRestartManifest }),
     clientSession: Object.freeze({ ...persistentRecoveryClientSession(runId), controlDirectory }) });
 }
 

@@ -225,10 +225,8 @@ class ResourceSiteHarvestProcessTest {
                 FrontierWorldRuntimeDefinition.payloadCodecs().encode(checkpoint)), "the WAL checkpoint has one stable typed codec");
         CommandPlan.Accepted accepted = assertInstanceOf(CommandPlan.Accepted.class, hotCheckpointPlan(hot.state(), "accepted", checkpoint),
                 "command admission validates the complete exact HOT causal checkpoint before it persists an event");
-        ScheduleEffect.Rescheduled continued = assertInstanceOf(ScheduleEffect.Rescheduled.class, accepted.events().get(1).payload());
-        assertEquals(ResourceSiteHarvestProcess.coldProgress(before, 22_301L).id(), continued.scheduleId());
-        assertEquals(22_301L + hot.state().bootstrap().ruleset().cadence().resourceHarvestTraversalInterval(),
-                continued.replacement().dueAt().ticks(), "HOT uses the same bound traversal cadence, never observation time");
+        assertEquals(1, accepted.events().size(),
+                "a physical HOT checkpoint retains the engine-owned due action byte-for-byte; only semantic crop work consumes it");
 
         FrontierWorldState snapshot = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(hot.state()));
         FrontierEvent event = new FrontierEvent(1, new EventId("event:site-harvest-hot-checkpoint"),

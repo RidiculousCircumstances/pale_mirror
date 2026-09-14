@@ -49,6 +49,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.LinkedHashMap;
+import java.util.ArrayList;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -161,6 +162,30 @@ class FrontierV3DiagnosticJsonTest {
                 && value.contains("\"requestId\":4") && value.contains("\"targetInstant\":12") && value.contains("\"admittedCheckpointInstant\":11")
                 && value.contains("\"status\":\"REJECTED\""));
         assertTrue(value.length() < 8_192, "performance diagnostics retain the ordinary bounded operator response limit");
+    }
+
+    @Test
+    void retainsAUsefulPerformancePressureCutAtMaximumAttributionCardinality() {
+        List<FrontierExecutionMetrics.StageSample> stages = new ArrayList<>();
+        List<FrontierExecutionMetrics.QueueSample> queues = new ArrayList<>();
+        String padding = "x".repeat(100);
+        for (int index = 0; index < 256; index++) {
+            stages.add(new FrontierExecutionMetrics.StageSample(FrontierExecutionMetrics.Stage.PHYSICAL,
+                    "stage-" + index + '-' + padding, "owner-" + index + '-' + padding,
+                    1L, 2L, 2L, 2L, 2L, 2L));
+            queues.add(new FrontierExecutionMetrics.QueueSample("queue-" + index + '-' + padding,
+                    "owner-" + index + '-' + padding, 1L, 1, 1, 1L, 1L));
+        }
+        CheckpointImage checkpoint = new CheckpointImage(new WorldId("frontier:performance-cardinality"),
+                new io.farfrontier.palemirror.frontier.v3.api.Revision(3L), new SimInstant(12L), new byte[]{1}, List.of(), List.of());
+
+        String value = FrontierV3PerformanceDiagnostic.render(checkpoint,
+                new FrontierExecutionMetrics.Snapshot(stages, queues, 0L));
+
+        assertTrue(value.contains("\"status\":\"ok\""), "a bounded pressure cut must remain readable");
+        assertTrue(value.length() < 8_192, "maximum retained telemetry cannot turn into response_limit");
+        assertEquals(12, value.split("\\\"stage\\\":").length - 1);
+        assertEquals(8, value.split("\\\"currentDepth\\\":").length - 1);
     }
 
     @Test

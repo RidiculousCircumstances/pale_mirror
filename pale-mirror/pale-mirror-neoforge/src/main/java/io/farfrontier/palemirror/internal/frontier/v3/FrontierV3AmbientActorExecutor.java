@@ -94,6 +94,8 @@ final class FrontierV3AmbientActorExecutor {
     private static final int DRAIN_SAFE_RADIUS_BLOCKS = 64;
     private static final long DRAIN_HYSTERESIS_TICKS = 200L;
     private static final int GRAYBOX_BIOFORM_FIRE_RESISTANCE_TICKS = Integer.MAX_VALUE;
+    /** Bounded fair probe window; it exceeds admissions so demanded tail identities meet the HOT window. */
+    private static final int MAX_ACTOR_PROBES_PER_TICK = 32;
     /**
      * Loaded-world observation only: the durable lease remains the source of truth.  A body is
      * never allowed to fall out of a chunk and serialize after its lease has become COLD.
@@ -124,7 +126,7 @@ final class FrontierV3AmbientActorExecutor {
         // Commands submitted below synchronously install a new immutable checkpoint.  Preserve
         // the deterministic actor order, but never let a later actor make another physical
         // decision from the predecessor's stale snapshot.
-        for (SubjectId actorId : state.actorLocations().keySet().stream().sorted().toList()) {
+        for (SubjectId actorId : FrontierV3ActorProbeSchedule.next(runtime, state, MAX_ACTOR_PROBES_PER_TICK)) {
             if (admitted >= FrontierV3AmbientAdmissionPolicy.MAX_ACTORS_PER_TICK) return;
             state = runtime.decodedState().orElse(null);
             if (state == null) return;
@@ -410,13 +412,15 @@ final class FrontierV3AmbientActorExecutor {
             BlockPosition observedPosition = new BlockPosition(existing.getBlockX(), existing.getBlockY(), existing.getBlockZ());
             ObservedPosition observedExact = new ObservedPosition(existing.getX(), existing.getY(), existing.getZ());
             if (owned(existing, actorId, bioform(state, actorId))) {
-                return FrontierV3AmbientAdmissionDiagnostic.indexed(expectedId, FrontierV3AmbientPendingAdmissions.get(runtime, expectedId) != null, observedPosition, observedExact);
+                return FrontierV3AmbientAdmissionDiagnostic.indexed(expectedId, FrontierV3AmbientPendingAdmissions.get(runtime, expectedId) != null, observedPosition, observedExact,
+                        existing instanceof Mob mob ? FrontierV3MobMotionLifecycle.trackerObservation(mob) : new FrontierV3ControlledMobMotion.TrackerObservation(0, 0));
             }
             // A physical UUID belongs to the canonical actor rather than to a lease. During a
             // legal ambient-to-scene hand-off the same body has already exchanged its ambient
             // tags for an active scene lease, so this is not a duplicate or foreign body.
             if (FrontierV3SceneExecutor.recognizes(runtime, existing)) {
-                return FrontierV3AmbientAdmissionDiagnostic.sceneOwned(expectedId, observedPosition, observedExact);
+                return FrontierV3AmbientAdmissionDiagnostic.sceneOwned(expectedId, observedPosition, observedExact,
+                        existing instanceof Mob mob ? FrontierV3MobMotionLifecycle.trackerObservation(mob) : new FrontierV3ControlledMobMotion.TrackerObservation(0, 0));
             }
             return FrontierV3AmbientAdmissionDiagnostic.conflict(expectedId);
         }
@@ -790,6 +794,7 @@ final class FrontierV3AmbientActorExecutor {
     static void forget(FrontierV3ServerRuntime<?, ?> runtime) {
         FrontierV3AmbientPendingAdmissions.forget(runtime);
         COLD_DEMAND_SINCE.remove(runtime);
+        FrontierV3ActorProbeSchedule.forget(runtime);
         FrontierV3AmbientActorCaches.forget(runtime);
     }
 

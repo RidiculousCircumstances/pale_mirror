@@ -173,21 +173,15 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         if (job.hasNextTraversalStep()) {
             var target = job.nextTraversalSurface();
             if (!atTraversalSurface(worker, job.traversal().linearCorridorSurfaces().get(job.traversalCursor()))) {
-                // The physical edge can arrive one entity tick before the canonical command
-                // records its cursor. It is still only evidence for the shared due turn: an
-                // early arrival waits at that exact next node rather than gaining a HOT-only
-                // canonical step. A different body position remains a player/world conflict
-                // and is never direct-line repaired.
-                if (atTraversalSurface(worker, target)) {
-                    var binding = FrontierV3TraversalScheduleGate.dueBinding(runtime.checkpointImage().orElseThrow(), job.id());
-                    // The F0.V effect gate closes only the irreversible crop/output path.
-                    // A loaded arrival is still the observed form of the one retained
-                    // traversal action: consume its exact engine binding so HOT advances the
-                    // same cursor and continuation as COLD, while the intent remains PREPARED.
-                    if (binding.isPresent()) {
-                        submitBound(runtime, "resource-site-harvest-traversal-advanced", lease.id().value(),
-                                checkpoint(job, lease, worker), binding.orElseThrow());
-                    }
+                // An exact loaded arrival advances the retained traversal cursor immediately,
+                // but retains its one COLD continuation unchanged.  The worker must pursue its
+                // route at ordinary entity cadence; only crop mutation consumes due work.
+                    if (atTraversalSurface(worker, target)) {
+                        var binding = FrontierV3TraversalScheduleGate.binding(runtime.checkpointImage().orElseThrow(), job.id());
+                        if (binding.isPresent()) {
+                            submitBound(runtime, "resource-site-harvest-traversal-advanced", lease.id().value(),
+                                    checkpoint(job, lease, worker), binding.orElseThrow());
+                        } else keepTraversalPhysicallyActive(level, runtime, job, worker, target);
                 } else if (withinTraversalEdgeEnvelope(worker, job.traversal().linearCorridorSurfaces().get(job.traversalCursor()), target)) {
                     // Minecraft resolves a descending grid edge through an intermediate feet
                     // cell (the horizontal successor before gravity settles one block down).
@@ -198,10 +192,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 return;
             }
             if (atTraversalSurface(worker, target)) {
-                    // A loaded body may reach an edge before the retained COLD action is due.
-                    // It waits at that exact cell until the shared due edge is eligible; then
-                    // HOT consumes that one action and reschedules from its existing deadline.
-                    var binding = FrontierV3TraversalScheduleGate.dueBinding(runtime.checkpointImage().orElseThrow(), job.id());
+                    var binding = FrontierV3TraversalScheduleGate.binding(runtime.checkpointImage().orElseThrow(), job.id());
                 if (binding.isPresent()) {
                     submitBound(runtime, "resource-site-harvest-traversal-advanced", lease.id().value(),
                             checkpoint(job, lease, worker), binding.orElseThrow());
@@ -219,23 +210,28 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) {
             conflict(level, runtime, lease, "field-work-intent-unavailable"); return;
         }
-        // Persist the only irreversible boundary before the first crop is touched.  The
-        // command planner proves this same HOT lease still owns the exact job, so a loaded
-        // field cannot be consumed by the standalone receipt executor or by COLD.
-        if (intent.status() == PhysicalIntentStatus.PREPARED) {
-            submit(runtime, "resource-site-harvest-running", lease.id().value(),
-                    new io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition(job.intentId(), PhysicalIntentStatus.RUNNING, Optional.empty()));
+        // The semantic crop transition may deliberately span a few durable turns (intent
+        // prepare, observed crop postcondition, then receipt).  It is still one declared
+        // crop-work phase at the exact station, never permission for a scheduler-paced frozen
+        // body.  Keep the visible, station-bounded tending pose active through those turns as
+        // well as while the next continuation is not due.
+        tendCurrentCrop(level, worker, crop);
+        var dueBinding = FrontierV3TraversalScheduleGate.dueBinding(runtime.checkpointImage().orElseThrow(), job.id());
+        if (dueBinding.isEmpty()) {
+            if (job.progress().hasPendingCrop()) {
+                conflict(level, runtime, lease, "field-work-pending-crop-continuation-not-due"); return;
+            }
             return;
         }
-        if (intent.status() != PhysicalIntentStatus.RUNNING) {
-            conflict(level, runtime, lease, "field-work-intent-state-" + intent.status().name().toLowerCase(java.util.Locale.ROOT)); return;
-        }
         if (job.progress().hasPendingCrop()) {
+            if (intent.status() != PhysicalIntentStatus.RUNNING) {
+                conflict(level, runtime, lease, "field-work-pending-intent-state-" + intent.status().name().toLowerCase(java.util.Locale.ROOT)); return;
+            }
             if (!observePreparedCrop(level, state, job, crop)) {
                 conflict(level, runtime, lease, "pending-crop-postcondition"); return;
             }
-            var result = submit(runtime, "resource-site-harvest-progress", lease.id().value(),
-                    new ResourceSiteHarvestProgressed(job.id(), job.progress().completedCropSlots() + 1));
+            var result = submitBound(runtime, "resource-site-harvest-progress", lease.id().value(),
+                    new ResourceSiteHarvestProgressed(job.id(), job.progress().completedCropSlots() + 1), dueBinding.orElseThrow());
             if (result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted
                     && job.progress().completedCropSlots() + 1 == io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS) {
                 submit(runtime, "resource-site-harvest-scene-draining", lease.id().value(),
@@ -244,9 +240,22 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             return;
         }
         if (level.getGameTime() % 10L != 0L) return;
+        // RUNNING means a non-replayable crop effect may already have begun.  Reaching a
+        // station is still reversible retained travel: leaving demand there must release a
+        // PREPARED intent so COLD/restart can continue it normally.  Cross the durable effect
+        // boundary only on the exact turn that will prepare this crop, then observe/commit it
+        // on the next turn under RUNNING.
+        if (intent.status() == PhysicalIntentStatus.PREPARED) {
+            submit(runtime, "resource-site-harvest-running", lease.id().value(),
+                    new io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition(job.intentId(), PhysicalIntentStatus.RUNNING, Optional.empty()));
+            return;
+        }
+        if (intent.status() != PhysicalIntentStatus.RUNNING) {
+            conflict(level, runtime, lease, "field-work-intent-state-" + intent.status().name().toLowerCase(java.util.Locale.ROOT)); return;
+        }
         worker.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
-        submit(runtime, "resource-site-harvest-crop-prepared", lease.id().value(),
-                new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex()));
+        submitBound(runtime, "resource-site-harvest-crop-prepared", lease.id().value(),
+                new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex()), dueBinding.orElseThrow());
     }
 
     private static boolean atTraversalSurface(Mob worker, io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor surface) {
@@ -276,8 +285,29 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
     private static void keepTraversalPhysicallyActive(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                       io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob job,
                                                       Mob worker, io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor surface) {
-        FrontierV3ControlledMobMotion.pursueRetainedCheckpoint(level, worker,
-                new Vec3(surface.x() + 0.5D, surface.y() + 1.0D, surface.z() + 0.5D));
+        Vec3 checkpoint = new Vec3(surface.x() + 0.5D, surface.y() + 1.0D, surface.z() + 0.5D);
+        // An undued shared traversal action may keep its exact observed body cell, but cannot
+        // leave a player-facing frozen worker there. This is a cell-local physical hold, not a
+        // new route target or a cursor advance; the existing due binding remains the sole
+        // semantic authority for exposing the next retained surface.
+        if (atTraversalSurface(worker, surface)) FrontierV3ControlledMobMotion.holdRetainedCheckpoint(level, worker, checkpoint);
+        else FrontierV3ControlledMobMotion.pursueRetainedCheckpoint(level, worker, checkpoint);
+    }
+
+    /**
+     * A visible local crop-tending pose while the one canonical continuation remains in the
+     * future.  It stays strictly inside the current crop's body cell and is intentionally not a
+     * route, semantic action, or time source; the due-gated branches above remain the only
+     * authority that can prepare/progress a crop.
+     */
+    private static void tendCurrentCrop(ServerLevel level, Mob worker,
+                                        io.farfrontier.palemirror.frontier.v3.model.BlockPosition crop) {
+        // A crop slot itself is the non-solid feet cell above its farmland support. The
+        // retained crop position is therefore already the worker's Y datum. The actuator
+        // derives its next local pose every server turn, independent of semantic due cadence.
+        FrontierV3ControlledMobMotion.tendCurrentCrop(level, worker, crop);
+        long phaseTick = Math.floorMod(level.getGameTime(), 32L);
+        if (phaseTick % 4L == 0L) worker.swing(net.minecraft.world.InteractionHand.MAIN_HAND, true);
     }
 
     /** Emits the complete observed causal checkpoint; the reducer rejects any stale or foreign tuple. */

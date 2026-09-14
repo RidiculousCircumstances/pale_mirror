@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.WeakHashMap;
+import java.util.IdentityHashMap;
 
 /** Pure immutable source-site geometry derived from the stable fresh-world bootstrap. */
 public final class FrontierResourceSitePlan {
@@ -20,12 +20,14 @@ public final class FrontierResourceSitePlan {
      * Resource-site geometry is a pure function of an immutable fresh-world bootstrap.
      *
      * <p>Complete canonical validation may need that geometry on every accepted event. Keeping
-     * it in a weak, derived cache avoids reconstructing the same twelve 64-cell field plans,
-     * without making the cache a source of world state or retaining retired worlds. The returned
-     * value is immutable, so callers cannot alter a later validation through this cache.</p>
+     * it in an identity-scoped derived cache avoids reconstructing the same twelve 64-cell field
+     * plans without walking the full value graph on every HOT/COLD lookup. A recovered bootstrap
+     * is a distinct immutable source and therefore receives its own derived value; the cache is
+     * never canonical world state. The returned value is immutable, so callers cannot alter a
+     * later validation through this cache.</p>
      */
     private static final Map<FrontierBootstrap, Map<SubjectId, ResourceSite>> BY_BOOTSTRAP =
-            Collections.synchronizedMap(new WeakHashMap<>());
+            Collections.synchronizedMap(new IdentityHashMap<>());
 
     private FrontierResourceSitePlan() { }
 

@@ -116,6 +116,32 @@ class FrontierV3HiveFoundryAuditTest {
     }
 
     @Test
+    void hiveIngressCompilesWholePotentialOverlayFenceBeforePlayerTime() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:hive-overlay-fence"), 91L));
+        var plan = io.farfrontier.palemirror.frontier.v3.model.FrontierGrayboxPlan.compileStructuralBaseline(state);
+        var expectations = FrontierV3HiveFoundryAudit.expectations(state, plan);
+        var cells = FrontierV3GrayboxExecutor.Cursor.hiveVisibilityFence(expectations);
+        var chunks = FrontierV3GrayboxExecutor.Cursor.hiveVisibilityChunks(cells);
+
+        for (Map.Entry<ChunkPos, List<GrayboxCell>> entry : cells.entrySet()) {
+            LinkedHashSet<ChunkPos> expected = new LinkedHashSet<>();
+            for (GrayboxCell cell : entry.getValue()) {
+                expected.add(new ChunkPos(cell.position().x() >> 4, cell.position().z() >> 4));
+                var infection = io.farfrontier.palemirror.frontier.v3.model.InfectionCell.at(cell.position());
+                int originX = infection.x() * io.farfrontier.palemirror.frontier.v3.model.InfectionCell.BLOCKS;
+                int originZ = infection.z() * io.farfrontier.palemirror.frontier.v3.model.InfectionCell.BLOCKS;
+                int lastX = originX + io.farfrontier.palemirror.frontier.v3.model.InfectionCell.BLOCKS - 1;
+                int lastZ = originZ + io.farfrontier.palemirror.frontier.v3.model.InfectionCell.BLOCKS - 1;
+                for (int x = Math.floorDiv(originX, 16); x <= Math.floorDiv(lastX, 16); x++) {
+                    for (int z = Math.floorDiv(originZ, 16); z <= Math.floorDiv(lastZ, 16); z++) expected.add(new ChunkPos(x, z));
+                }
+            }
+            assertEquals(expected, new LinkedHashSet<>(chunks.get(entry.getKey())),
+                    "ingress " + entry.getKey() + " must queue the complete declared structural/overlay nest scope");
+        }
+    }
+
+    @Test
     void idleProjectionNeverScansEveryDeclaredChunkToFindOneNaturalChunk() {
         var cells = new ArrayList<GrayboxCell>();
         for (int chunk = 0; chunk < 2_160; chunk++) {

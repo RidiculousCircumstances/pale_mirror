@@ -6,18 +6,18 @@ import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import java.util.Optional;
 
-/** Pure server-thread admission gate for the shared HOT/COLD traversal cadence. */
+/** Pure server-thread admission gate for the one retained HOT/COLD continuation. */
 final class FrontierV3TraversalScheduleGate {
     private FrontierV3TraversalScheduleGate() { }
 
     /**
-     * An observed body may consume only the one retained continuation at its ordinary due
-     * turn.  A physical arrival may occur earlier, but it remains observation evidence until
-     * the same edge that could have admitted COLD; HOT therefore cannot gain canonical time
-     * merely because a player presented the field early.
+     * A physically observed traversal checkpoint is admissible whenever the job still has its
+     * one exact continuation.  It records the real HOT pose/cursor but does not consume or
+     * reschedule that continuation: semantic crop work remains due-gated below.  This keeps
+     * the scheduler out of the body's movement clock without creating a second route or timer.
      */
     static boolean traversalCheckpointBound(CheckpointImage checkpoint, SubjectId jobId) {
-        return dueBinding(checkpoint, jobId).isPresent();
+        return binding(checkpoint, jobId).isPresent();
     }
 
     /** A physically arrived exact next cell and its one engine binding are both necessary. */
@@ -31,7 +31,7 @@ final class FrontierV3TraversalScheduleGate {
         catch (IllegalArgumentException rejected) { return Optional.empty(); }
     }
 
-    /** The exact binding remains available for admission/release; only progress consumes due work. */
+    /** Irreversible crop mutation may consume the continuation only at its ordinary due turn. */
     static Optional<ScheduledAction> dueBinding(CheckpointImage checkpoint, SubjectId jobId) {
         return binding(checkpoint, jobId).filter(action -> checkpoint.instant().compareTo(action.dueAt()) >= 0);
     }

@@ -76,6 +76,11 @@ test('F0.2C ordinary wrapper input and supervisor recovery metadata retain the p
   assert.deepEqual(persistentRecoveryMetadata({ mode: 'graceful', world: 'world', splitAfterAction: 2, runId: outerAttempt, controlDirectory: '/session' }), {
     mode: 'graceful', world: 'world', splitAfterAction: 2, clientSession: { runId: outerAttempt, reusedJvm: true, controlDirectory: '/session' }
   });
+  assert.deepEqual(persistentRecoveryMetadata({ mode: 'graceful', world: 'world', splitAfterAction: 2,
+    beforeRestartManifest: '/manifest.before-restart.json', runId: outerAttempt, controlDirectory: '/session' }), {
+    mode: 'graceful', world: 'world', splitAfterAction: 2, beforeRestartManifest: '/manifest.before-restart.json',
+    clientSession: { runId: outerAttempt, reusedJvm: true, controlDirectory: '/session' }
+  });
   for (const malformed of ['', 'not-a-uuid', '0000000A-0000-0000-0000-000000000012']) {
     assert.throws(() => isolatedScenarioOuterAttemptEnvironment(malformed), /FRONTIER_V3_ISOLATED_OUTER_ATTEMPT/);
   }

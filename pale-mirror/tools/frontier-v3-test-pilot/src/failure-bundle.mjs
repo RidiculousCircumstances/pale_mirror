@@ -91,7 +91,7 @@ function boundedSemanticDiagnostics(snapshots) {
         result: pick(value.result, ['sitePhase', 'intentStatus', 'complete']) }); break;
       case 'scene': selected.push({ ...base, lease: pick(value, ['leaseId', 'leaseStatus', 'sceneKind', 'harvestJob', 'primaryActor', 'primaryEntityUuid']) }); break;
       case 'intent': selected.push({ ...base, intent: pick(value, ['intentKind', 'intentStatus', 'subjects', 'receiptId', 'failureReason']) }); break;
-      case 'actor': selected.push({ ...base, actor: pick(value, ['owner', 'role', 'life', 'assignment', 'assignmentOwner', 'sceneReserved']) }); break;
+      case 'actor': selected.push({ ...base, actor: pick(value, ['owner', 'role', 'life', 'assignment', 'assignmentOwner', 'dutyPhase']) }); break;
       case 'container': selected.push({ ...base, container: pick(value, ['owner', 'surface', 'position', 'occupiedCount', 'occupied']) }); break;
       default: selected.push(base);
     }

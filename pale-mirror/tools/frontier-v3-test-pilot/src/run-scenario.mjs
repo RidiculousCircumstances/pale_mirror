@@ -130,6 +130,8 @@ let fixtureStarted = false;
 let actionTimingName = null;
 let recoveryBarrierScheduled = false;
 let terminalSegmentBarrierScheduled = false;
+let beforeRestartSnapshot = Promise.resolve();
+let beforeRestartSnapshotScheduled = false;
 const buffers = new Map();
 const earlyDisplayFailure = createEarlyDisplayFailureDetector();
 const sessionActionOffset = () => sessionControlDirectory !== undefined && existsSync(join(sessionControlDirectory, 'resumed'))
@@ -164,8 +166,14 @@ for (const stream of [child.stdout, child.stderr]) stream.setEncoding('utf8').on
     }
     if (line.includes('PMV3_PILOT session_segment_complete') && sessionControlDirectory !== undefined) {
       const segment = 'before_restart';
-      lifecycleBarrier(LifecycleBarrier.SCENARIO_SEGMENT_COMPLETE, LifecycleSignal.SCENARIO_SEGMENT_COMPLETE, segment, { segment });
-      lifecycleBarrier(LifecycleBarrier.CLIENT_NORMALLY_DISCONNECTED, LifecycleSignal.CLIENT_NORMALLY_DISCONNECTED, segment, { segment });
+      // The persistent JVM remains alive across the server restart, so its final manifest is
+      // necessarily an after-restart record.  Seal the completed first segment before exposing
+      // its lifecycle barrier: the recovery carrier must bind actual HOT departure evidence,
+      // never reconstruct it from the final manifest or a control nonce.
+      capturePersistentBeforeRestart().then(() => {
+        lifecycleBarrier(LifecycleBarrier.SCENARIO_SEGMENT_COMPLETE, LifecycleSignal.SCENARIO_SEGMENT_COMPLETE, segment, { segment });
+        lifecycleBarrier(LifecycleBarrier.CLIENT_NORMALLY_DISCONNECTED, LifecycleSignal.CLIENT_NORMALLY_DISCONNECTED, segment, { segment });
+      }).catch((error) => { failure ??= `before-restart manifest capture failed: ${String(error?.message ?? error)}`; publishPilotState(); });
     }
     if (line.includes('PMV3_PILOT loaded scenario=') && sessionControlDirectory !== undefined
         && existsSync(join(sessionControlDirectory, 'resumed')) && !recoveryBarrierScheduled) {
@@ -264,6 +272,7 @@ try {
   // A lifecycle signal can be absent only because the scenario itself failed; retain the exact
   // journal for the parent failure bundle instead of turning cleanup into an unbounded wait.
   await lifecycleWrites.catch(() => undefined);
+  await beforeRestartSnapshot.catch(() => undefined);
   timing.begin('client.cleanup');
   child.kill('SIGINT');
   await rm(captureControlDirectory, { recursive: true, force: true });
@@ -274,6 +283,40 @@ try {
 }
 if (manifest.status !== 'ok') throw new Error(manifest.error);
 console.log(JSON.stringify({ status: 'ok', manifest: output, runId }));
+
+/** Immutable first-segment receipt for a one-client graceful restart. */
+function capturePersistentBeforeRestart() {
+  if (beforeRestartSnapshotScheduled) return beforeRestartSnapshot;
+  beforeRestartSnapshotScheduled = true;
+  const split = scenario.restart?.afterAction;
+  if (!Number.isInteger(split) || split < 1 || split >= (scenario.actions ?? []).length) {
+    return beforeRestartSnapshot = Promise.reject(new Error('persistent pilot restart split is invalid'));
+  }
+  const path = output.replace(/\.json$/i, '') + '.before-restart.json';
+  beforeRestartSnapshot = beforeRestartSnapshot.then(async () => {
+    const assertions = (scenario.assertions ?? []).filter(assertion => assertion.after <= split);
+    const asserted = assertions.map(assertion => {
+      const observed = diagnosticForAssertion(diagnostics, assertion);
+      if (!observed || !matches(observed.value, assertion.expect)) {
+        throw new Error(`first segment diagnostic assertion failed: ${assertion.view} ${assertion.id}`);
+      }
+      return { assertion, observed };
+    });
+    const snapshot = {
+      ...manifest,
+      status: 'ok',
+      finishedAt: new Date().toISOString(),
+      actions: (scenario.actions ?? []).slice(0, split).map((action, index) => ({ correlation: correlation(runId, index + 1), action })),
+      // Keep assertion-bound observations plus the raw phase/motion receipts.  Consumers choose
+      // the assertion-bound fact where available and cannot silently substitute later polls.
+      diagnostics: [...asserted, ...diagnostics.filter(entry => entry.actionStep == null || entry.actionStep <= split)],
+      frames: [],
+      timing: { runner: 'native-client', segment: 'before_restart', status: 'ok' }
+    };
+    await saveManifest(path, snapshot);
+  });
+  return beforeRestartSnapshot;
+}
 
 function launchViaGradle() {
   const pilotTask = packPilot

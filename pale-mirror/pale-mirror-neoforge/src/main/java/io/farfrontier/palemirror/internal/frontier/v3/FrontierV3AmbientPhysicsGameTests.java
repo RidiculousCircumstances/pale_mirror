@@ -177,7 +177,7 @@ public final class FrontierV3AmbientPhysicsGameTests {
         FrontierV3AmbientActorExecutor.tick(level, runtime);
         runtime.decodedState().orElseThrow().ambientLeases().keySet().stream()
                 .map(actor -> level.getEntity(FrontierV3AmbientActorExecutor.entityId(runtime.decodedState().orElseThrow(), actor)))
-                .filter(Mob.class::isInstance).map(Mob.class::cast).forEach(FrontierV3ServerLifecycle::advanceControlledMob);
+                .filter(Mob.class::isInstance).map(Mob.class::cast).forEach(FrontierV3ControlledMobMotion::advance);
     }
 
     private static Mob managed(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SubjectId actor) {

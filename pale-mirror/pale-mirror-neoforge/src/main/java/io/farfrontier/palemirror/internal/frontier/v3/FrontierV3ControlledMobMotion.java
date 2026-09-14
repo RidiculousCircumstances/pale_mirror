@@ -39,12 +39,26 @@ final class FrontierV3ControlledMobMotion {
     private static final int MAX_TRACE_SAMPLES = 96;
     /** Ephemeral one-tick physical intents; canonical goals/cursors remain in the domain. */
     private static final Map<Mob, MotionIntent> PENDING = new IdentityHashMap<>();
+    /**
+     * The latest presentation-only tending directive.  Unlike a retained checkpoint it has no
+     * progress authority, but it must survive consumption of its one entity-pre turn: otherwise
+     * a worker can visibly move for a tracker interpolation burst and then freeze until the
+     * next durable scene callback.  Any retained checkpoint submission, conflict/release, or
+     * explicit stop supersedes it.
+     */
+    private static final Map<Mob, MotionIntent> CONTINUOUS = new IdentityHashMap<>();
+    /** A crop-local tending pose is derived each server turn, never paced by a semantic callback. */
+    private static final Map<Mob, TendingPose> TENDING = new IdentityHashMap<>();
+    /** The entity boundary may be observed explicitly by a test after vanilla already ran it. */
+    private static final Map<Mob, AppliedIntent> LAST_ADVANCE = new IdentityHashMap<>();
     /** Ephemeral collision latitude, bounded to a retained local envelope and target. */
     private static final Map<Mob, Avoidance> AVOIDANCE = new IdentityHashMap<>();
     /** Bounded read-only evidence of actual accepted collision moves, not an alternate clock. */
     private static final Map<Mob, ArrayDeque<MotionSample>> TRACE = new WeakHashMap<>();
+    private static final Map<Mob, TrackerObservation> TRACKER_OBSERVATIONS = new WeakHashMap<>();
 
     record MotionSample(long gameTime, double x, double y, double z, double horizontalVelocity) { }
+    record TrackerObservation(int calls, int impulseCalls) { }
 
     private FrontierV3ControlledMobMotion() { }
 
@@ -72,7 +86,15 @@ final class FrontierV3ControlledMobMotion {
      * evidence for the owning process; this actuator cannot expose a later route node.
      */
     static void pursueRetainedCheckpoint(ServerLevel level, Mob actor, Vec3 next) {
-        moveToward(level, actor, next);
+        // Keep precisely this retained edge physically live between semantic scene turns. A
+        // one-shot queued intent made real body movement inherit the coarse scene cadence,
+        // producing the user-visible stop/start regression; this does not expose a new route
+        // node or advance the canonical cursor.
+        // Crop tending is an intentionally local presentation directive.  A newly retained
+        // route edge supersedes it: retaining the old pose here made the body circle its former
+        // crop while the canonical job already declared TRAVELLING toward the next one.
+        TENDING.remove(actor);
+        submit(level, actor, next, true, null, null, Double.MAX_VALUE);
     }
 
     /**
@@ -97,7 +119,22 @@ final class FrontierV3ControlledMobMotion {
      * choose a route, change a cursor, or create a second canonical movement authority.
      */
     static void followContinuously(ServerLevel level, Mob actor, Vec3 target) {
+        TENDING.remove(actor);
         submit(level, actor, target, true, null, null, Double.MAX_VALUE);
+    }
+
+    /** Retains only the current crop cell; time changes its local pose but never a job cursor. */
+    static void tendCurrentCrop(ServerLevel level, Mob actor, io.farfrontier.palemirror.frontier.v3.model.BlockPosition crop) {
+        TendingPose pose = new TendingPose(crop.x() + .5D, crop.y(), crop.z() + .5D);
+        TENDING.put(actor, pose);
+        submit(level, actor, pose.target(level.getGameTime()), true, null, null, Double.MAX_VALUE);
+    }
+
+    /** Holds an already observed retained checkpoint visibly active without exposing another edge. */
+    static void holdRetainedCheckpoint(ServerLevel level, Mob actor, Vec3 checkpoint) {
+        TendingPose pose = new TendingPose(checkpoint.x, checkpoint.y, checkpoint.z);
+        TENDING.put(actor, pose);
+        submit(level, actor, pose.target(level.getGameTime()), true, null, null, Double.MAX_VALUE);
     }
 
     private static void submit(ServerLevel level, Mob actor, Vec3 target, boolean continuous, LocalNavigationEnvelope envelope,
@@ -114,7 +151,13 @@ final class FrontierV3ControlledMobMotion {
         // that still use same-level local goals remain unaffected; a larger vertical gap is not
         // a licence to fly or to infer a route and is therefore left for the canonical planner.
         if (Math.abs(delta.y) > MAX_WALK_GRADE + ARRIVAL_DISTANCE) { stop(actor); return; }
+        if (!Double.isFinite(maximumStep) || maximumStep <= 0.0D) throw new IllegalArgumentException("motion maximum step");
         MotionIntent pending = PENDING.get(actor);
+        if (continuous && !CONTINUOUS.containsKey(actor) && CONTINUOUS.size() >= MAX_PENDING_INTENTS) return;
+        if (!continuous) TENDING.remove(actor);
+        MotionIntent replacement = new MotionIntent(level.getGameTime(), target, continuous, envelope, bounds, maximumStep);
+        if (continuous) CONTINUOUS.put(actor, replacement);
+        else CONTINUOUS.remove(actor);
         Avoidance avoidance = AVOIDANCE.get(actor);
         if (avoidance != null && !avoidance.target().equals(target)) AVOIDANCE.remove(actor);
         // The normal production order is canonical executor (post tick) → entity pre-tick on
@@ -124,30 +167,92 @@ final class FrontierV3ControlledMobMotion {
         if (pending != null && pending.applyAtGameTime() <= level.getGameTime() + 1L) {
             return;
         }
-        if (!Double.isFinite(maximumStep) || maximumStep <= 0.0D) throw new IllegalArgumentException("motion maximum step");
         if (PENDING.size() < MAX_PENDING_INTENTS || pending != null) {
             // This is eligible at the next entity-pre boundary, which is ordinarily the next
             // server tick because the canonical executor runs at post-tick. Using the current
             // canonical time also makes a GameTest's legitimate catch-up callbacks execute the
             // same retained one-tick actuator turns rather than stranding one future intent.
-            PENDING.put(actor, new MotionIntent(level.getGameTime(), target, continuous, envelope, bounds, maximumStep));
+            PENDING.put(actor, replacement);
         }
     }
 
     /** Runs from the normal server entity-tick boundary, before tracker replication. */
     static void advance(Mob actor) {
-        MotionIntent intent = PENDING.get(actor);
+        // Prefer the latest retained local target over a stale queued copy.
+        MotionIntent intent = CONTINUOUS.get(actor);
+        if (intent == null) intent = PENDING.get(actor);
         if (intent == null) return;
         if (!(actor.level() instanceof ServerLevel level) || actor.isRemoved() || !actor.isAlive()) {
-            PENDING.remove(actor); AVOIDANCE.remove(actor); return;
+            PENDING.remove(actor); CONTINUOUS.remove(actor); LAST_ADVANCE.remove(actor); AVOIDANCE.remove(actor); return;
         }
+        // A direct diagnostic/GameTest call can legitimately occur after the registered
+        // EntityTick.Pre callback. It is an observation aid, never a second movement authority;
+        // applying the same persistent tending directive twice would create a synthetic
+        // double-speed body. Identity, rather than game time, is deliberate: bounded tests may
+        // exercise several newly submitted physical turns at one fixed game-time value.
+        AppliedIntent previous = LAST_ADVANCE.get(actor);
+        if (previous != null && intent == previous.intent() && level.getGameTime() == previous.gameTime()) return;
         if (level.getGameTime() < intent.applyAtGameTime()) return;
+        // Derive the station-local pose at the ordinary entity turn.  It remains bounded by
+        // the immutable current crop/checkpoint and does not introduce a route or semantic
+        // clock, but it prevents the scheduler from becoming the body's cadence owner.
+        TendingPose tending = TENDING.get(actor);
+        if (tending != null) {
+            intent = new MotionIntent(level.getGameTime(), tending.target(level.getGameTime()), true, null, null, Double.MAX_VALUE);
+            CONTINUOUS.put(actor, intent);
+        }
         PENDING.remove(actor);
+        LAST_ADVANCE.put(actor, new AppliedIntent(intent, level.getGameTime()));
         apply(level, actor, intent.target(), intent.continuous(), intent.envelope(), intent.bounds(), intent.maximumStep());
+    }
+
+    /**
+     * The normal entity-pre boundary owns the physical turn, ahead of vanilla tracking.
+     * Driving this after ServerTick moved accepted bodies behind the tracker and produced the
+     * client-visible stop/start cadence seen after scheduler/lease integration.
+     */
+    static void advanceAtEntityBoundary(Mob actor) {
+        advance(actor);
+    }
+
+    static void observeVanillaTracker(Mob actor) {
+        if (!CONTINUOUS.containsKey(actor) && !PENDING.containsKey(actor)) return;
+        TrackerObservation prior = TRACKER_OBSERVATIONS.getOrDefault(actor, new TrackerObservation(0, 0));
+        TRACKER_OBSERVATIONS.put(actor, new TrackerObservation(prior.calls() + 1, prior.impulseCalls() + (actor.hasImpulse ? 1 : 0)));
+    }
+
+    static TrackerObservation trackerObservation(Mob actor) {
+        return TRACKER_OBSERVATIONS.getOrDefault(actor, new TrackerObservation(0, 0));
+    }
+
+    /** Compatibility hook for direct tests; production has one entity-pre movement authority. */
+    static void advanceContinuously(ServerLevel level) {
+        // PENDING and CONTINUOUS have independent, bounded admission. A snapshot makes a
+        // collision/release retirement local to this physical turn; no world scan or load is
+        // performed. A retained edge is driven at the same cadence as a local tending pose.
+        java.util.Set<Mob> actors = java.util.Collections.newSetFromMap(new IdentityHashMap<>());
+        actors.addAll(PENDING.keySet()); actors.addAll(CONTINUOUS.keySet());
+        for (Mob actor : actors) {
+            if (actor.level() != level) continue;
+            TendingPose pose = TENDING.get(actor);
+            if (pose == null) {
+                advance(actor);
+                continue;
+            }
+            MotionIntent turn = new MotionIntent(level.getGameTime(), pose.target(level.getGameTime()), true, null, null, Double.MAX_VALUE);
+            PENDING.remove(actor);
+            CONTINUOUS.put(actor, turn);
+            advance(actor);
+        }
     }
 
     static void stop(Mob actor) {
         PENDING.remove(actor);
+        CONTINUOUS.remove(actor);
+        TENDING.remove(actor);
+        LAST_ADVANCE.remove(actor);
+        // A stop retires target authority but never rewrites observed physical position or the
+        // canonical cursor.
         AVOIDANCE.remove(actor);
         // The prior authority may already have submitted a collision move or left an ordinary
         // Minecraft velocity on the body.  Cancelling only our queued intent lets that residual
@@ -172,7 +277,7 @@ final class FrontierV3ControlledMobMotion {
         actor.move(MoverType.SELF, new Vec3(0.0D, vertical, 0.0D));
         boolean moved = actor.position().y < before.y - 1.0E-8D;
         actor.setDeltaMovement(velocity.x, actor.onGround() ? 0.0D : vertical, velocity.z);
-        if (moved) actor.hasImpulse = true;
+        if (moved) publishAcceptedMove(actor);
     }
 
     /** Restores the ordinary vertical physics path without selecting a movement target. */
@@ -282,13 +387,13 @@ final class FrontierV3ControlledMobMotion {
             } else {
                 AVOIDANCE.remove(actor);
             }
-            // Entity.move updates the authoritative server position but, unlike vanilla AI
-            // travel, does not itself request an immediate tracker update.  A Zombie's normal
-            // tracker interval then coalesces several 20 Hz PM steps into one client-visible
-            // jump.  This is presentation replication only: the accepted collision result
-            // above remains the sole physical fact, while the normal tracker publishes it on
-            // this same tick to every observing player.
-            actor.hasImpulse = true;
+            // Entity.move is the authoritative collision result.  Do not publish that already
+            // applied displacement again as ordinary velocity: a NoAI body does not consume a
+            // navigation velocity like vanilla AI does, and the extra motion packet caused the
+            // remote body to decay between sparse tracker positions.  The normal tracker sees
+            // this real server position on the same tick through hasImpulse; no client-only
+            // interpolation or second movement calculation is involved.
+            publishAcceptedMove(actor);
             recordMove(level, actor, moved);
             return;
         }
@@ -327,7 +432,12 @@ final class FrontierV3ControlledMobMotion {
         if (verticalDelta >= -ARRIVAL_DISTANCE) return;
         Vec3 before = actor.position();
         actor.move(MoverType.SELF, new Vec3(0.0D, -Math.min(Math.abs(verticalDelta), VERTICAL_SPEED), 0.0D));
-        if (actor.position().y < before.y - 1.0E-8D) actor.hasImpulse = true;
+        if (actor.position().y < before.y - 1.0E-8D) publishAcceptedMove(actor);
+    }
+
+    /** Requests vanilla's normal position-delta publication after an accepted move. */
+    private static void publishAcceptedMove(Mob actor) {
+        actor.hasImpulse = true;
     }
 
     private static void recordMove(ServerLevel level, Mob actor, Vec3 moved) {
@@ -388,5 +498,12 @@ final class FrontierV3ControlledMobMotion {
 
     private record MotionIntent(long applyAtGameTime, Vec3 target, boolean continuous, LocalNavigationEnvelope envelope,
                                 WorldBounds bounds, double maximumStep) { }
+    private record AppliedIntent(MotionIntent intent, long gameTime) { }
+    private record TendingPose(double x, double y, double z) {
+        private Vec3 target(long gameTime) {
+            double angle = (Math.PI * 2.0D * Math.floorMod(gameTime, 32L)) / 32.0D;
+            return new Vec3(x + Math.cos(angle) * .16D, y, z + Math.sin(angle) * .16D);
+        }
+    }
     private record Avoidance(Vec3 step, Vec3 target, int remainingTurns) { }
 }

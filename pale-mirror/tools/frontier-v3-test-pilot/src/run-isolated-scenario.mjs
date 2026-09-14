@@ -282,8 +282,12 @@ try {
     await finishPersistentPilot(persistentPilot, clientSegments);
     if (naturalDemandStop) await awaitNormalDemandLoss(server, 'after_restart');
     console.log('PMV3_ISOLATED recovery=after-complete client=persistent');
+    // The persistent-client branch must retain the same immutable before-restart manifest as
+    // the one-client branch.  It is the only evidence-bearing record of the ordinary HOT
+    // departure, so omitting it made a later carrier silently unable to bind release to its
+    // recovered COLD result.
     recoveryMetadata = persistentRecoveryMetadata({ mode: recovery.mode, world, splitAfterAction: scenario.restart.afterAction,
-      runId, controlDirectory: sessionDirectory });
+      beforeRestartManifest, runId, controlDirectory: sessionDirectory });
   }
   if (jfr !== undefined) await awaitJfrEvidence(jfr);
   completed = true;

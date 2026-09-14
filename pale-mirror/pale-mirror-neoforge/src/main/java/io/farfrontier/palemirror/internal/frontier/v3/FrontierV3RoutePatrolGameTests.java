@@ -181,7 +181,7 @@ public final class FrontierV3RoutePatrolGameTests {
         FrontierWorldState current = runtime.decodedState().orElseThrow(); observation.observe(level, current, taskId);
         current.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isRoutePatrol)
                 .flatMap(lease -> lease.members().stream()).map(member -> level.getEntity(member.entityId())).filter(Mob.class::isInstance)
-                .map(Mob.class::cast).forEach(FrontierV3ServerLifecycle::advanceControlledMob);
+                .map(Mob.class::cast).forEach(FrontierV3ControlledMobMotion::advance);
     }
 
     private static Fixture fixture(GameTestHelper helper, String scenario) {

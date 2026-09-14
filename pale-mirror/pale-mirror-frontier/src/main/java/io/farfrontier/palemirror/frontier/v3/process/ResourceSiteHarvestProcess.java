@@ -91,7 +91,15 @@ public final class ResourceSiteHarvestProcess {
         }
     }
 
-    /** The HOT checkpoint uses the same retained due action and cadence transition as COLD. */
+    /** Only an already-due retained continuation may authorize irreversible crop work. */
+    public static void requireDueContinuationBinding(ResourceSiteHarvestJob job, ScheduledAction action, long instant) {
+        requireContinuationBinding(job, action);
+        if (instant < action.dueAt().ticks()) {
+            throw new IllegalArgumentException("resource-site crop work is before its retained continuation due turn");
+        }
+    }
+
+    /** Semantic crop completion uses the same retained cadence transition as COLD. */
     public static ProposedEvent advanceBoundContinuation(FrontierWorldState state, ResourceSiteHarvestJob job, ScheduledAction action) {
         Objects.requireNonNull(state, "resource-site harvest continuation state");
         requireContinuationBinding(job, action);

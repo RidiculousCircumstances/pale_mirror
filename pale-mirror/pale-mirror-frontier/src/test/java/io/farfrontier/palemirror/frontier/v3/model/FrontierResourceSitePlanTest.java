@@ -9,11 +9,23 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrontierResourceSitePlanTest {
+    @Test
+    void equalButIndependentlyRecoveredBootstrapsDoNotShareAnIdentityScopedDerivedPlan() {
+        FrontierBootstrap initial = FrontierBootstrapper.create(new WorldId("frontier:resource-sites-identity"), 91L);
+        FrontierBootstrap recovered = FrontierBootstrapper.create(new WorldId("frontier:resource-sites-identity"), 91L);
+
+        assertEquals(initial, recovered, "the recovery fixture must retain the same immutable geometry");
+        assertNotSame(initial, recovered, "the recovery fixture must not reuse the live canonical bootstrap object");
+        assertNotSame(FrontierResourceSitePlan.compile(initial), FrontierResourceSitePlan.compile(recovered),
+                "derived geometry is scoped to its exact immutable bootstrap owner, not value-equality cache work");
+    }
+
     @Test
     void bootstrapDerivesTwelveBoundedNonOverlappingWheatFieldsOutsideStructuresAndRoutes() {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:resource-sites"), 91L);

@@ -42,8 +42,12 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
                         .anyMatch(lease -> lease.status() == SceneLeaseStatus.HOT
                                 && FrontierSceneBehaviors.resourceSiteHarvest(lease).jobId().equals(job.id()));
                 if (!hot) return FrontierWorldCommandPlanner.rejected("resource-site harvest progress requires its HOT scene");
+                ScheduledAction binding = command.scheduleBinding().map(io.farfrontier.palemirror.frontier.v3.api.EngineScheduleBinding::action).orElseThrow(
+                        () -> new IllegalArgumentException("resource-site harvest progress has no engine schedule binding"));
+                ResourceSiteHarvestProcess.requireDueContinuationBinding(job, binding, command.submittedAt().ticks());
                 ResourceSiteHarvestProcess.reduceProgressed(state, job.siteId(), progressed);
-                return new CommandPlan.Accepted(java.util.List.of(new ProposedEvent(job.siteId(), progressed)));
+                return new CommandPlan.Accepted(java.util.List.of(new ProposedEvent(job.siteId(), progressed),
+                        ResourceSiteHarvestProcess.advanceBoundContinuation(state, job, binding)));
             } catch (IllegalArgumentException | IllegalStateException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
         if (command.payload() instanceof ResourceSiteHarvestCropPrepared prepared) {
@@ -58,6 +62,9 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
                                 && FrontierSceneBehaviors.resourceSiteHarvest(lease).jobId().equals(job.id()));
                 if (!hot) return FrontierWorldCommandPlanner.rejected("resource-site crop preparation requires its HOT scene");
                 if (!job.atCurrentCropStation()) return FrontierWorldCommandPlanner.rejected("resource-site crop preparation requires its retained workstation");
+                ScheduledAction binding = command.scheduleBinding().map(io.farfrontier.palemirror.frontier.v3.api.EngineScheduleBinding::action).orElseThrow(
+                        () -> new IllegalArgumentException("resource-site crop preparation has no engine schedule binding"));
+                ResourceSiteHarvestProcess.requireDueContinuationBinding(job, binding, command.submittedAt().ticks());
                 return new CommandPlan.Accepted(java.util.List.of(new ProposedEvent(job.siteId(), prepared)));
             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
@@ -73,8 +80,7 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
                 // Validate it before admitting an event so an executor cannot persist a
                 // partial checkpoint merely because another harvest lease happens to be HOT.
                 ResourceSiteHarvestProcess.reduceHotTraversalAdvanced(state, job.siteId(), advanced);
-                return new CommandPlan.Accepted(java.util.List.of(new ProposedEvent(job.siteId(), advanced),
-                        ResourceSiteHarvestProcess.advanceBoundContinuation(state, job, binding)));
+                return new CommandPlan.Accepted(java.util.List.of(new ProposedEvent(job.siteId(), advanced)));
             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
         if (command.payload() instanceof ResourceSiteConflictObserved conflict) {

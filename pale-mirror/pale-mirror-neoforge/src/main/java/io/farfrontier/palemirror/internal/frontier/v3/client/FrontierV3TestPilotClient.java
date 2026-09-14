@@ -73,7 +73,7 @@ public final class FrontierV3TestPilotClient {
     private static CaptureBarrier captureBarrier;
     /** Local-only focus retained while the asynchronous X11 frame handshake is in flight. */
     private static Vec3 captureFocus;
-    private static final Map<DiagnosticIdentity, ObservedDiagnostic> diagnostics = new HashMap<>();
+    static final Map<DiagnosticIdentity, ObservedDiagnostic> diagnostics = new HashMap<>();
     private FrontierV3TestPilotClient() { }
     @SubscribeEvent
     public static void login(ClientPlayerNetworkEvent.LoggingIn event) {
@@ -265,6 +265,7 @@ public final class FrontierV3TestPilotClient {
                 case "inspect" -> inspect(minecraft, action);
                 case "look" -> lookAtPosition(minecraft, action);
                 case "look_nearest_entity" -> lookNearestEntity(minecraft, action);
+                case "observe_entity_motion" -> { if (FrontierV3PilotMotionObserver.observe(minecraft, action, actionStartedTick, index + 1, currentCausalMilestone)) advance(type); }
                 case "look_operation" -> lookOperation(minecraft, action);
                 case "walk" -> walk(minecraft, position(action, "position"), action.has("radius") ? action.get("radius").getAsDouble() : 1.0D);
                 case "break" -> {
@@ -993,7 +994,7 @@ public final class FrontierV3TestPilotClient {
         entityInteractionAttempted = false; attackedEntityRuntimeId = -1; entityAttackAttempts = 0;
         lastEntityAttackTick = Long.MIN_VALUE; lastAttackedEntityPosition = null; diagnostics.clear(); inspectBaseline = null;
     }
-    private record DiagnosticIdentity(String view, String id) { }
-    private record ObservedDiagnostic(long tick, JsonObject value) { }
+    record DiagnosticIdentity(String view, String id) { }
+    record ObservedDiagnostic(long tick, JsonObject value) { }
     private record CaptureBarrier(int after, String name, String presentation, long readyAtTick, boolean announced) { }
 }

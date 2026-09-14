@@ -64,10 +64,10 @@ public final class FrontierV3LocalNavigationGameTests {
                 helper.assertTrue(FrontierV3ControlledMobMotion.insideEnvelope(helper.getLevel(), actor, checkpoint, envelope),
                         "HOT local navigation must stay inside its retained envelope: " + observed);
                 if (Math.abs(actor.getZ() - (origin.getZ() + .5D)) > .35D) detoured.set(true);
-                FrontierV3ServerLifecycle.advanceControlledMob(actor);
+                FrontierV3ControlledMobMotion.advance(actor);
                 FrontierV3ControlledMobMotion.moveWithinEnvelope(helper.getLevel(), actor, checkpoint, envelope);
             }
-            FrontierV3ServerLifecycle.advanceControlledMob(actor);
+            FrontierV3ControlledMobMotion.advance(actor);
             helper.assertTrue(actor.getBlockX() == origin.getX() + 5 && actor.getBlockY() == origin.getY() + 2 && actor.getBlockZ() == origin.getZ(),
                     "only the retained stair-top checkpoint may complete local travel; observed=" + actor.position()
                             + " motion=" + FrontierV3ControlledMobMotion.readiness(actor));
@@ -101,12 +101,12 @@ public final class FrontierV3LocalNavigationGameTests {
         // production process awaits the observed checkpoint command.
         for (int turn = 1; turn <= 24; turn++) {
             helper.runAtTickTime(turn, () -> {
-                FrontierV3ServerLifecycle.advanceControlledMob(worker);
+                FrontierV3ControlledMobMotion.advance(worker);
                 FrontierV3ControlledMobMotion.pursueRetainedCheckpoint(helper.getLevel(), worker, nextCanonicalCheckpoint);
             });
         }
         helper.runAtTickTime(25, () -> {
-            FrontierV3ServerLifecycle.advanceControlledMob(worker);
+            FrontierV3ControlledMobMotion.advance(worker);
             List<FrontierV3ControlledMobMotion.MotionSample> trace = FrontierV3ControlledMobMotion.trace(worker);
             long distinctSubBlockPositions = trace.stream().map(value -> Math.round(value.x() * 1_000.0D)).distinct().count();
             long timestampedTurns = trace.stream().map(FrontierV3ControlledMobMotion.MotionSample::gameTime).distinct().count();
@@ -120,6 +120,61 @@ public final class FrontierV3LocalNavigationGameTests {
                             + " normalCadenceTurns=" + normalCadenceTurns);
             helper.assertTrue(worker.getX() >= currentCanonicalCheckpoint.x - .35D && worker.getX() <= nextCanonicalCheckpoint.x + .35D,
                     "smooth local pose remains on the retained edge and does not create a canonical route cursor");
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
+    public static void continuousTendingSurvivesOneShotSceneSubmissionUntilRealHandoff(GameTestHelper helper) {
+        BlockPos origin = helper.absolutePos(new BlockPos(2, 0, 2));
+        for (int x = 0; x <= 5; x++) {
+            helper.getLevel().setBlock(origin.offset(x, 0, 0), Blocks.STONE.defaultBlockState(), 3);
+            helper.getLevel().setBlock(origin.offset(x, 1, 0), Blocks.AIR.defaultBlockState(), 3);
+            helper.getLevel().setBlock(origin.offset(x, 2, 0), Blocks.AIR.defaultBlockState(), 3);
+        }
+        Zombie worker = helper.spawnWithNoFreeWill(EntityType.ZOMBIE, new Vec3(2.5D, 1.0D, 2.5D));
+        Vec3 localTendingPose = new Vec3(origin.getX() + 4.5D, origin.getY() + 1.0D, origin.getZ() + .5D);
+        // One scene submission models the production interval between durable semantic turns.
+        // The actuator must not consume it as a three-frame tracker burst followed by a frozen
+        // worker; only a real retained checkpoint or stop may supersede this local pose.
+        helper.runAtTickTime(1, () -> FrontierV3ControlledMobMotion.followContinuously(helper.getLevel(), worker, localTendingPose));
+        for (int turn = 2; turn <= 7; turn++) {
+            helper.runAtTickTime(turn, () -> FrontierV3ControlledMobMotion.advanceAtEntityBoundary(worker));
+        }
+        helper.runAtTickTime(8, () -> {
+            List<FrontierV3ControlledMobMotion.MotionSample> trace = FrontierV3ControlledMobMotion.trace(worker);
+            long normalCadenceTurns = trace.stream().filter(value -> value.horizontalVelocity() >= .15D).count();
+            helper.assertTrue(normalCadenceTurns >= 5 && longestStall(trace.stream()
+                            .map(FrontierV3ControlledMobMotion.MotionSample::x).toList()) == 0,
+                    "a one-shot local tending directive must retain normal physical cadence until handoff: " + trace);
+            FrontierV3ControlledMobMotion.stop(worker);
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 100)
+    public static void retainedTravelSupersedesTheFormerCropTendingPose(GameTestHelper helper) {
+        BlockPos origin = helper.absolutePos(new BlockPos(2, 0, 2));
+        for (int x = 0; x <= 5; x++) {
+            helper.getLevel().setBlock(origin.offset(x, 0, 0), Blocks.STONE.defaultBlockState(), 3);
+            helper.getLevel().setBlock(origin.offset(x, 1, 0), Blocks.AIR.defaultBlockState(), 3);
+            helper.getLevel().setBlock(origin.offset(x, 2, 0), Blocks.AIR.defaultBlockState(), 3);
+        }
+        Zombie worker = helper.spawnWithNoFreeWill(EntityType.ZOMBIE, new Vec3(2.5D, 1.0D, 2.5D));
+        BlockPosition currentCrop = new BlockPosition(origin.getX(), origin.getY() + 1, origin.getZ());
+        Vec3 nextCheckpoint = new Vec3(origin.getX() + 4.5D, origin.getY() + 1.0D, origin.getZ() + .5D);
+        helper.runAtTickTime(1, () -> FrontierV3ControlledMobMotion.tendCurrentCrop(helper.getLevel(), worker, currentCrop));
+        helper.runAtTickTime(2, () -> FrontierV3ControlledMobMotion.advanceAtEntityBoundary(worker));
+        helper.runAtTickTime(3, () -> FrontierV3ControlledMobMotion.pursueRetainedCheckpoint(helper.getLevel(), worker, nextCheckpoint));
+        for (int turn = 4; turn <= 20; turn++) {
+            helper.runAtTickTime(turn, () -> FrontierV3ControlledMobMotion.advanceAtEntityBoundary(worker));
+        }
+        helper.runAtTickTime(21, () -> {
+            List<FrontierV3ControlledMobMotion.MotionSample> trace = FrontierV3ControlledMobMotion.trace(worker);
+            long forwardTurns = trace.stream().filter(value -> value.horizontalVelocity() >= .15D).count();
+            helper.assertTrue(worker.getX() >= origin.getX() + 4.1D && forwardTurns >= 3,
+                    "the next retained edge must displace a former crop worker instead of preserving its stale tending pose: " + trace);
+            FrontierV3ControlledMobMotion.stop(worker);
             helper.succeed();
         });
     }
@@ -142,7 +197,7 @@ public final class FrontierV3LocalNavigationGameTests {
             Vec3 current = new Vec3(origin.getX() + edge + .5D, origin.getY() + 1.0D, origin.getZ() + .5D);
             Vec3 next = new Vec3(origin.getX() + edge + 1.5D, origin.getY() + 1.0D, origin.getZ() + .5D);
             helper.runAtTickTime(turn, () -> {
-                FrontierV3ServerLifecycle.advanceControlledMob(worker);
+                FrontierV3ControlledMobMotion.advance(worker);
                 FrontierV3ControlledMobMotion.pursueRetainedCheckpoint(helper.getLevel(), worker, next);
             });
             if (withinEdge == 5 && edge < 4) {
@@ -152,7 +207,7 @@ public final class FrontierV3LocalNavigationGameTests {
             }
         }
         helper.runAtTickTime(31, () -> {
-            FrontierV3ServerLifecycle.advanceControlledMob(worker);
+            FrontierV3ControlledMobMotion.advance(worker);
             List<FrontierV3ControlledMobMotion.MotionSample> trace = FrontierV3ControlledMobMotion.trace(worker);
             long columns = trace.stream().map(value -> (int) Math.floor(value.x())).distinct().count();
             long normalCadenceTurns = trace.stream().filter(value -> value.horizontalVelocity() >= .15D).count();

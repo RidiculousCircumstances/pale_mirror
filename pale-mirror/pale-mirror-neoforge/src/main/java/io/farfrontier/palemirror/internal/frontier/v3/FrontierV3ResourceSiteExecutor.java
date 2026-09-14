@@ -327,7 +327,12 @@ final class FrontierV3ResourceSiteExecutor {
         FrontierV3ResourceSiteLedger.Claim claim = ledger.claim(site.id());
         if (claim == null) return new HarvestRestartClassification(baseline(level, site)
                 ? HarvestRestartPhysicalState.NEUTRAL_UNCLAIMED : HarvestRestartPhysicalState.FOREIGN_OR_DAMAGED, projection, fallback);
-        if (preparationIntent == null || !ownsRestartClaim(claim.intentId(), site, preparationIntent.id())) {
+        // A first natural projection of already-current COLD work owns the field through its
+        // durable projection claim.  The original preparation intent is legitimately absent
+        // in that history, so requiring it here turns an intact owned facility into a false
+        // conflict on restart.  Neutral/unclaimed remains separate below: a block pattern
+        // alone still never grants authority.
+        if (!ownsRestartClaim(claim.intentId(), site, preparationIntent == null ? null : preparationIntent.id())) {
             return new HarvestRestartClassification(HarvestRestartPhysicalState.FOREIGN_OR_DAMAGED, projection, fallback);
         }
         if (claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE || claim.stage() != ResourceSiteLifecycle.MATURE_STAGE
@@ -466,7 +471,8 @@ final class FrontierV3ResourceSiteExecutor {
      * for a field whose complete physical postcondition had survived intact.
      */
     static boolean ownsRestartClaim(PhysicalIntentId claimIntentId, ResourceSite site, PhysicalIntentId preparationIntentId) {
-        return claimIntentId.equals(preparationIntentId) || claimIntentId.equals(projectionClaim(site));
+        return claimIntentId.equals(projectionClaim(site))
+                || preparationIntentId != null && claimIntentId.equals(preparationIntentId);
     }
     private static BlockPos minecraft(BlockPosition position) { return new BlockPos(position.x(), position.y(), position.z()); }
     private static BlockPosition canonical(BlockPos position) { return new BlockPosition(position.getX(), position.getY(), position.getZ()); }

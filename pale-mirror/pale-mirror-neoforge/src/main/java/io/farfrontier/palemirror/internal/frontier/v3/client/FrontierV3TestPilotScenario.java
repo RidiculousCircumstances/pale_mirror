@@ -14,7 +14,7 @@ final class FrontierV3TestPilotScenario {
             "wait", "wait_until_block", "wait_until_diagnostic", "wait_until_harvest_result",
             "assert_complete_resource_site", "fast_forward", "fast_forward_to_instant",
             "release_fast_forward_hold", "command", "inspect", "look", "look_nearest_entity",
-            "walk", "break", "place", "assert_fixture", "visit", "assert_visible_block", "assert_visible_board", "open_container", "quick_move_from_inventory", "quick_move_from_container", "split_move_from_container",
+            "walk", "break", "place", "assert_fixture", "visit", "assert_visible_block", "assert_visible_board", "observe_entity_motion", "open_container", "quick_move_from_inventory", "quick_move_from_container", "split_move_from_container",
             "wait_until_container_item", "interact_board", "interact_nearest_entity", "attack_nearest_entity", "visit_operation", "look_operation", "assert_visible_entity");
     record Parsed(JsonArray setup, JsonArray actions, JsonArray frames) {
         int setupCount() { return setup.size(); }
@@ -72,6 +72,7 @@ final class FrontierV3TestPilotScenario {
                     (type.equals("assert_visible_block") && (!resolvablePosition(action, "position") || !timeout(action, 120_000L))) ||
                     (type.equals("assert_visible_board") && !validVisibleBoard(action)) ||
                     (type.equals("assert_visible_entity") && !validVisibleEntity(action)) ||
+                    (type.equals("observe_entity_motion") && !validMotionObservation(action)) ||
                     (type.equals("look_nearest_entity") && !validLookNearestEntity(action)) ||
                     (type.equals("interact_board") && !validBoardInteraction(action)) ||
                     (type.equals("interact_nearest_entity") && !validEntityInteraction(action)) ||
@@ -126,6 +127,20 @@ final class FrontierV3TestPilotScenario {
         if (!action.has("view") || !action.has("id") || !action.get("view").isJsonPrimitive() || !action.get("id").isJsonPrimitive()) return false;
         String view = action.get("view").getAsString(); String id = action.get("id").getAsString();
         return FrontierV3DiagnosticView.accepts(view, id);
+    }
+
+    /** Read-only client pose sampling for a retained, naturally rendered body. */
+    private static boolean validMotionObservation(JsonObject action) {
+        return action.has("id") && action.get("id").isJsonPrimitive() && !action.get("id").getAsString().isBlank()
+                && action.has("entityType") && action.get("entityType").isJsonPrimitive()
+                && action.get("entityType").getAsString().matches("[a-z0-9_.-]+:[a-z0-9_./-]+")
+                && wholeWithin(action, "durationTicks", 1, 12_000L)
+                && action.has("sampleEveryTicks") && action.get("sampleEveryTicks").isJsonPrimitive()
+                && action.get("sampleEveryTicks").getAsInt() >= 1 && action.get("sampleEveryTicks").getAsInt() <= 20
+                && timeout(action, 180_000L)
+                && (!action.has("maxDistance") || action.get("maxDistance").isJsonPrimitive()
+                    && action.get("maxDistance").getAsDouble() > 0.0D && action.get("maxDistance").getAsDouble() <= 128.0D)
+                && (!action.has("anchor") || position(action.getAsJsonObject("anchor")));
     }
 
     private static boolean validOptionalIncreasePath(JsonObject action) {

@@ -264,13 +264,19 @@ public final class FrontierV3ResourceSiteHarvestGameTests {
             helper.assertValueEqual(FrontierV3ResourceSiteExecutor.classifyHarvestRestart(level, ledger, site, preparation, 63).state(),
                     FrontierV3ResourceSiteExecutor.HarvestRestartPhysicalState.OWNED_BEHIND,
                     "one plan-identified owned partial field is eligible only for its canonical COLD catch-up");
-            helper.assertValueEqual(FrontierV3ResourceSiteExecutor.reconcileHarvestAfterRestart(level, ledger, site, preparation, 63),
+            // The durable projection claim is the only legitimate owner for a COLD-first
+            // field.  The preparation intent may no longer exist after that hand-off; restart
+            // must classify the same owned partial field rather than manufacture CONFLICT.
+            helper.assertValueEqual(FrontierV3ResourceSiteExecutor.classifyHarvestRestart(level, ledger, site, null, 63).state(),
+                    FrontierV3ResourceSiteExecutor.HarvestRestartPhysicalState.OWNED_BEHIND,
+                    "an active projection claim remains typed owned-behind without a stale preparation intent");
+            helper.assertValueEqual(FrontierV3ResourceSiteExecutor.reconcileHarvestAfterRestart(level, ledger, site, null, 63),
                     FrontierV3ResourceSiteExecutor.RestartReconciliation.RECREATED,
                     "restart extends a matching owned prefix to the durable COLD cursor instead of misclassifying it as foreign drift");
             helper.assertTrue(FrontierV3ResourceSiteExecutor.matchesHarvestProgress(level, site, 63)
                             && ledger.claim(site.id()).status() == FrontierV3ResourceSiteLedger.Status.ACTIVE,
                     "the repaired field keeps its water/support and all slots while advancing only the remaining owned COLD aftermath");
-            helper.assertValueEqual(FrontierV3ResourceSiteExecutor.classifyHarvestRestart(level, ledger, site, preparation, 63).state(),
+            helper.assertValueEqual(FrontierV3ResourceSiteExecutor.classifyHarvestRestart(level, ledger, site, null, 63).state(),
                     FrontierV3ResourceSiteExecutor.HarvestRestartPhysicalState.OWNED_EXACT,
                     "the canonical slot-plan projection distinguishes current ownership from a merely matching-looking facility");
             BlockPosition foreign = site.cropSlots().getFirst(); level.setBlock(new BlockPos(foreign.x(), foreign.y(), foreign.z()), Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);

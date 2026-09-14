@@ -7,6 +7,7 @@
     "FrontierV3DurableServerSaveMixin",
     "FrontierV3DurableCrashWindowMixin",
     "FrontierV3HarvestCrashWindowMixin",
+    "FrontierV3ServerEntityTrackerMixin",
     "FrontierV3FungiblePlayerCrashWindowMixin",
     "FrontierV3PilotChunkMapAccessor",
     "FrontierV3PilotDistanceManagerAccessor"

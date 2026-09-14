@@ -56,6 +56,8 @@ final class FrontierV3GrayboxExecutor {
     // Complete at most one bounded nest/facility envelope (sixteen chunks), never a scan of
     // resident world geometry, so boards cannot advertise a partly-current sibling organ.
     private static final int MAX_FIRST_VISIBILITY_CHUNKS_PER_TICK = 16;
+    /** A chunk is not a cost unit: one organ column can contain thousands of declared cells. */
+    private static final int MAX_FIRST_VISIBILITY_CELLS_PER_TICK = 64;
     private static final Map<FrontierV3ServerRuntime<?, ?>, Cursor> CURSORS = new IdentityHashMap<>();
     private static final Map<FrontierV3ServerRuntime<?, ?>, ProjectionWork> WORK = new IdentityHashMap<>();
     /**
@@ -66,6 +68,12 @@ final class FrontierV3GrayboxExecutor {
      * 64-cell batch after a player has already seen the chunk.
      */
     private static final Map<FrontierV3ServerRuntime<?, ?>, Map<ChunkPos, FirstVisibilityRecord>> FIRST_VISIBILITY = new IdentityHashMap<>();
+    /**
+     * A first-visible chunk remains pending until every one of its immutable cells has been
+     * reconciled.  This continuation is deliberately volatile: it is only a registered physical
+     * projection cursor, while the ledger and canonical state remain the durable authorities.
+     */
+    private static final Map<FrontierV3ServerRuntime<?, ?>, Map<ChunkPos, FirstVisibilityWork>> FIRST_VISIBILITY_WORK = new IdentityHashMap<>();
     /**
      * Static completion is already emitted one chunk at a time by the projection queue.  Keep
      * that exact delta for the EFFECT-stage handoff instead of rewalking every exposed record on
@@ -208,6 +216,7 @@ final class FrontierV3GrayboxExecutor {
     /** Releases only volatile exposure bookkeeping with the normal runtime cleanup. */
     static void forgetFirstVisibility(FrontierV3ServerRuntime<?, ?> runtime) {
         FIRST_VISIBILITY.remove(runtime); PLAYER_INGRESS.remove(runtime);
+        FIRST_VISIBILITY_WORK.remove(runtime);
         DYNAMIC_CATCH_UP.remove(runtime);
         PENDING_FIRST_VISIBILITY.remove(runtime); PRIORITY_FIRST_VISIBILITY.remove(runtime);
         PENDING_HIVE_FENCES.remove(runtime); PRIORITY_HIVE_FENCES.remove(runtime);
@@ -238,9 +247,18 @@ final class FrontierV3GrayboxExecutor {
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return;
         boolean newIngress = PLAYER_INGRESS.computeIfAbsent(runtime, ignored -> new java.util.LinkedHashSet<>()).add(chunk);
+        // `runObservedPhysicalTurn` observes the same vanilla-owned player every normal server
+        // tick.  An ingress is a one-time admission boundary, not a per-tick invitation to
+        // enumerate the complete declared sibling hive fence again.  Replaying that immutable
+        // fence for every resident player tick was the production watchdog/TPS path: it made a
+        // quiet player's ordinary presence proportional to the full visible nest even after
+        // its pending cells were already queued.  The first record stays pending/requeues in
+        // the bounded projector below, and a later ordinary chunk load has its own callback,
+        // so deduplicating this observation neither drops a facility nor creates a ticket.
+        if (!newIngress) return;
         retainFirstVisibility(runtime, chunk, true);
         retainSiblingHiveVisibility(runtime, chunk, true);
-        if (newIngress) retainResourceSiteVisibility(runtime, state, chunk);
+        retainResourceSiteVisibility(runtime, state, chunk);
     }
 
     /**
@@ -282,19 +300,19 @@ final class FrontierV3GrayboxExecutor {
      * neither asks the chunk manager for a sibling nor compiles either plan.
      */
     private static void retainSiblingHiveVisibility(FrontierV3ServerRuntime<?, ?> runtime, ChunkPos ingress, boolean priority) {
+        workFor(runtime).siblingHiveFenceRetentions++;
         Cursor cursor = CURSORS.get(runtime);
         if (cursor == null || cursor.hiveExpectations == null) {
             hiveFenceQueue(runtime, priority).add(ingress);
             return;
         }
-        List<GrayboxCell> siblings = cursor.hiveVisibilityCells(ingress);
-        if (siblings.isEmpty()) return;
-        siblings.forEach(cell -> retainFirstVisibility(runtime, new ChunkPos(cell.position().x() >> 4, cell.position().z() >> 4), priority));
-        java.util.Set<InfectionCell> infectionCells = siblings.stream()
-                .map(cell -> InfectionCell.at(cell.position())).collect(java.util.stream.Collectors.toSet());
-        FrontierV3InfectionOverlayExecutor.publishedOverlay(runtime).ifPresent(overlay -> infectionCells.stream()
-                .map(overlay::get).filter(Objects::nonNull).flatMap(cell -> cell.surfaceColumns().stream())
-                .forEach(column -> retainFirstVisibility(runtime, new ChunkPos(column.x() >> 4, column.z() >> 4), priority)));
+        // The visible infection footprint is a property of the immutable nest grammar, not a
+        // player-time query over the mutable overlay snapshot.  Deriving every 4x4 surface
+        // column here made a normal player ingress proportional to the whole visible nest and
+        // is the exact live watchdog path.  Cursor construction has already reduced the
+        // declared structural and possible overlay footprint to unique chunks; the normal
+        // bounded projector still decides which naturally-resident cells are current.
+        cursor.hiveVisibilityChunks(ingress).forEach(chunk -> retainFirstVisibility(runtime, chunk, priority));
     }
 
     private static void retainFirstVisibility(FrontierV3ServerRuntime<?, ?> runtime, ChunkPos chunk, boolean priority) {
@@ -319,38 +337,44 @@ final class FrontierV3GrayboxExecutor {
         // resident record here used to make a one-player ingress proportional to all loaded
         // chunks and was the watchdog path observed in production.
         drainHiveFences(runtime, cursor);
-        for (int processed = 0; processed < MAX_FIRST_VISIBILITY_CHUNKS_PER_TICK; processed++) {
+        int remainingCells = MAX_FIRST_VISIBILITY_CELLS_PER_TICK;
+        for (int processed = 0; processed < MAX_FIRST_VISIBILITY_CHUNKS_PER_TICK && remainingCells > 0; processed++) {
             ChunkPos chunk = pollFirstVisibility(runtime);
             if (chunk == null) return;
             FirstVisibilityRecord record = records.get(chunk);
             if (record == null || record.status() != FirstVisibility.PENDING) continue;
             if (!level.hasChunk(chunk.x, chunk.z)) continue;
-            FirstVisibility result = FirstVisibility.STATIC_CURRENT;
-            List<GrayboxCell> cells = cursor.cellsIn(chunk);
-            List<GrayboxCell> pending = cells;
-            // Dependencies are confined to one already-loaded chunk and sorted by height.
-            // Revisit only while an earlier support made a later cell eligible; no retry/polling
-            // is permitted outside this single registered projection turn.
-            while (!pending.isEmpty()) {
-                int progressed = 0;
-                List<GrayboxCell> deferred = new ArrayList<>();
-                for (GrayboxCell cell : pending) {
-                    ProjectionResult projection = projectFirstVisible(FrontierV3AftermathPhysicalWorld.firstVisibility(level), ledger, state, cell);
-                    if (projection == ProjectionResult.CONFLICT) { result = FirstVisibility.BLOCKED; break; }
-                    if (projection == ProjectionResult.DEFERRED) deferred.add(cell);
-                    else progressed++;
-                }
-                if (result == FirstVisibility.BLOCKED) break;
-                if (deferred.isEmpty()) break;
-                if (progressed == 0) { result = FirstVisibility.BLOCKED; break; }
-                pending = List.copyOf(deferred);
+            FirstVisibilityWork work = firstVisibilityWork(runtime, chunk, cursor.cellsIn(chunk));
+            FirstVisibility result = FirstVisibility.PENDING;
+            // A queued chunk used to be treated as one bounded unit, but a single hive chunk
+            // can contain the entire tall organ stack.  Consume physical cells, not chunks;
+            // requeue the exact incomplete boundary so a player ingress cannot monopolise a
+            // server tick or starve the ordinary COLD/release lane.
+            while (remainingCells > 0 && !work.complete()) {
+                ProjectionResult projection = projectFirstVisible(FrontierV3AftermathPhysicalWorld.firstVisibility(level), ledger, state, work.next());
+                remainingCells--;
+                if (projection == ProjectionResult.CONFLICT) { result = FirstVisibility.BLOCKED; break; }
+                work.observe(projection);
+                if (work.blocked()) { result = FirstVisibility.BLOCKED; break; }
             }
+            if (result == FirstVisibility.PENDING && work.complete()) result = FirstVisibility.STATIC_CURRENT;
+            if (result == FirstVisibility.PENDING) {
+                firstVisibilityQueue(runtime, true).add(chunk);
+                continue;
+            }
+            firstVisibilityWork(runtime).remove(chunk);
             long revision = runtime.checkpointImage().orElseThrow().revision().value();
-            if (records.replace(chunk, record, new FirstVisibilityRecord(result, revision, cells.size()))
-                    && result == FirstVisibility.STATIC_CURRENT) {
-                DYNAMIC_CATCH_UP.computeIfAbsent(runtime, ignored -> new java.util.LinkedHashSet<>()).add(chunk);
-            }
+            if (records.replace(chunk, record, new FirstVisibilityRecord(result, revision, work.cells()))
+                    && result == FirstVisibility.STATIC_CURRENT) DYNAMIC_CATCH_UP.computeIfAbsent(runtime, ignored -> new java.util.LinkedHashSet<>()).add(chunk);
         }
+    }
+
+    private static Map<ChunkPos, FirstVisibilityWork> firstVisibilityWork(FrontierV3ServerRuntime<?, ?> runtime) {
+        return FIRST_VISIBILITY_WORK.computeIfAbsent(runtime, ignored -> new LinkedHashMap<>());
+    }
+
+    private static FirstVisibilityWork firstVisibilityWork(FrontierV3ServerRuntime<?, ?> runtime, ChunkPos chunk, List<GrayboxCell> cells) {
+        return firstVisibilityWork(runtime).computeIfAbsent(chunk, ignored -> new FirstVisibilityWork(cells));
     }
 
     private static java.util.LinkedHashSet<ChunkPos> firstVisibilityQueue(FrontierV3ServerRuntime<?, ?> runtime, boolean priority) {
@@ -385,6 +409,41 @@ final class FrontierV3GrayboxExecutor {
         java.util.Iterator<ChunkPos> iterator = queue.iterator();
         ChunkPos next = iterator.next(); iterator.remove();
         return next;
+    }
+
+    /**
+     * One exact chunk-local dependency pass.  A deferred cell is retained for a later pass only
+     * after another cell progressed; a wholly unresolved pass is the same fail-closed physical
+     * conflict as the former synchronous loop, merely spread across bounded server turns.
+     */
+    private static final class FirstVisibilityWork {
+        private final java.util.ArrayDeque<GrayboxCell> pending;
+        private final int cells;
+        private int remainingInPass;
+        private boolean progressedInPass;
+        private boolean blocked;
+
+        FirstVisibilityWork(List<GrayboxCell> cells) {
+            this.pending = new java.util.ArrayDeque<>(cells);
+            this.cells = cells.size();
+            this.remainingInPass = cells.size();
+        }
+        GrayboxCell next() { return current = pending.removeFirst(); }
+        void observe(ProjectionResult result) {
+            if (result == ProjectionResult.DEFERRED) pending.addLast(current); else progressedInPass = true;
+            remainingInPass--;
+            if (remainingInPass == 0 && !pending.isEmpty()) {
+                if (!progressedInPass) blocked = true;
+                else { remainingInPass = pending.size(); progressedInPass = false; }
+            }
+            current = null;
+        }
+        // The current cell is retained only for a deferred result; keeping it here avoids
+        // allocating a list for every bounded projection turn.
+        private GrayboxCell current;
+        boolean complete() { return pending.isEmpty(); }
+        boolean blocked() { return blocked; }
+        int cells() { return cells; }
     }
 
     /**
@@ -690,6 +749,7 @@ final class FrontierV3GrayboxExecutor {
         private final Map<Long, Integer> structuralCeilings;
         private final FrontierV3HiveFoundryAudit.HiveExpectations hiveExpectations;
         private final Map<ChunkPos, List<GrayboxCell>> hiveVisibilityCells;
+        private final Map<ChunkPos, List<ChunkPos>> hiveVisibilityChunks;
         private final List<ChunkCells> chunks;
         private int nextChunkIndex;
 
@@ -701,6 +761,7 @@ final class FrontierV3GrayboxExecutor {
             this.structuralCeilings = structuralCeilings;
             this.hiveExpectations = hiveExpectations;
             this.hiveVisibilityCells = hiveVisibilityFence(hiveExpectations);
+            this.hiveVisibilityChunks = hiveVisibilityChunks(hiveVisibilityCells);
             this.chunks = chunks;
             this.nextChunkIndex = nextChunkIndex;
             this.activeWorksiteStaging = activeWorksiteStaging;
@@ -747,6 +808,8 @@ final class FrontierV3GrayboxExecutor {
         }
         /** Immutable ingress lookup; never scan all hive cells from a server tick. */
         List<GrayboxCell> hiveVisibilityCells(ChunkPos ingress) { return hiveVisibilityCells.getOrDefault(ingress, List.of()); }
+        /** Complete structural plus possible infection-surface chunk fence for one declared nest ingress. */
+        List<ChunkPos> hiveVisibilityChunks(ChunkPos ingress) { return hiveVisibilityChunks.getOrDefault(ingress, List.of()); }
         Optional<GrayboxCell> nextNaturallyLoaded(Predicate<GrayboxCell> loaded) {
             if (chunks.isEmpty()) return Optional.empty();
             // An ordinary post-ingress turn used to walk every declared plan chunk until it
@@ -780,6 +843,34 @@ final class FrontierV3GrayboxExecutor {
             });
             return byIngress.entrySet().stream().collect(java.util.stream.Collectors.toUnmodifiableMap(
                     Map.Entry::getKey, entry -> List.copyOf(entry.getValue())));
+        }
+        /**
+         * Compile the entire declared physical fence once.  An {@link InfectionCell} is a 4x4
+         * X/Z square, so translating it to chunk coverage is constant-bounded and does not
+         * discover terrain, inspect a chunk, or read the dynamic overlay.  Including a possible
+         * (currently inactive) patch chunk is safe: first visibility only queues natural chunks
+         * and the overlay owner independently decides whether it has a current desired cell.
+         */
+        static Map<ChunkPos, List<ChunkPos>> hiveVisibilityChunks(Map<ChunkPos, List<GrayboxCell>> cellsByIngress) {
+            Map<ChunkPos, List<ChunkPos>> result = new java.util.HashMap<>();
+            cellsByIngress.forEach((ingress, cells) -> {
+                java.util.LinkedHashSet<ChunkPos> chunks = new java.util.LinkedHashSet<>();
+                for (GrayboxCell cell : cells) {
+                    chunks.add(new ChunkPos(cell.position().x() >> 4, cell.position().z() >> 4));
+                    InfectionCell infection = InfectionCell.at(cell.position());
+                    int originX = Math.multiplyExact(infection.x(), InfectionCell.BLOCKS);
+                    int originZ = Math.multiplyExact(infection.z(), InfectionCell.BLOCKS);
+                    int lastX = Math.addExact(originX, InfectionCell.BLOCKS - 1);
+                    int lastZ = Math.addExact(originZ, InfectionCell.BLOCKS - 1);
+                    for (int chunkX = Math.floorDiv(originX, 16); chunkX <= Math.floorDiv(lastX, 16); chunkX++) {
+                        for (int chunkZ = Math.floorDiv(originZ, 16); chunkZ <= Math.floorDiv(lastZ, 16); chunkZ++) {
+                            chunks.add(new ChunkPos(chunkX, chunkZ));
+                        }
+                    }
+                }
+                result.put(ingress, List.copyOf(chunks));
+            });
+            return Map.copyOf(result);
         }
         private ChunkKey nextChunkKey() { return chunks.isEmpty() ? null : chunks.get(nextChunkIndex).key(); }
         private static int indexOf(List<ChunkCells> chunks, ChunkKey key) {
@@ -833,8 +924,9 @@ final class FrontierV3GrayboxExecutor {
     static void resetProjectionWork(FrontierV3ServerRuntime<?, ?> runtime) { WORK.put(runtime, new ProjectionWork()); }
     private static ProjectionWork workFor(FrontierV3ServerRuntime<?, ?> runtime) { return WORK.computeIfAbsent(runtime, ignored -> new ProjectionWork()); }
     static final class ProjectionWork {
-        private int compatibilityChecks, freshnessConstructions, planCompilations, providerAcquisitions, pointQueries;
-        ProjectionWorkSnapshot snapshot() { return new ProjectionWorkSnapshot(compatibilityChecks, freshnessConstructions, planCompilations, providerAcquisitions, pointQueries); }
+        private int compatibilityChecks, freshnessConstructions, planCompilations, providerAcquisitions, pointQueries, siblingHiveFenceRetentions;
+        ProjectionWorkSnapshot snapshot() { return new ProjectionWorkSnapshot(compatibilityChecks, freshnessConstructions, planCompilations, providerAcquisitions, pointQueries, siblingHiveFenceRetentions); }
     }
-    record ProjectionWorkSnapshot(int compatibilityChecks, int freshnessConstructions, int planCompilations, int providerAcquisitions, int pointQueries) { }
+    record ProjectionWorkSnapshot(int compatibilityChecks, int freshnessConstructions, int planCompilations, int providerAcquisitions,
+                                  int pointQueries, int siblingHiveFenceRetentions) { }
 }

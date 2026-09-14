@@ -111,7 +111,7 @@ public final class PaleMirrorEvents {
     public static void onEntityTickPre(EntityTickEvent.Pre event) {
         if (event.getEntity() instanceof net.minecraft.world.entity.Mob mob
                 && mob.level() instanceof net.minecraft.server.level.ServerLevel) {
-            io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.advanceControlledMob(mob);
+            io.farfrontier.palemirror.internal.frontier.v3.FrontierV3MobMotionLifecycle.advanceAtEntityBoundary(mob);
         }
     }
 

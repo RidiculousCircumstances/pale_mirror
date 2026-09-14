@@ -14,9 +14,10 @@ import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
 import io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryBinding;
 import io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryTombstone;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSitePlan;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneLabels;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSiteHarvestSceneSupport;
 import io.farfrontier.palemirror.frontier.v3.model.HumanAssignmentProjection;
+import io.farfrontier.palemirror.frontier.v3.model.HumanAssignment;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSettlementWorkDiagnostic;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierMarketOrderDiagnostic;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
@@ -253,6 +254,7 @@ final class FrontierV3DiagnosticJson {
                 + "\",\"status\":\"" + lease.status() + "\",\"revision\":" + lease.revision()
                 + ",\"members\":" + lease.members().size() + "}";
         String intentStatus = intent == null ? "MISSING" : intent.status().name();
+        String dutyPhase = (job.hasNextTraversalStep() ? "TRAVELLING:" : "HARVESTING:") + intentStatus;
         String intentKind = intent == null ? "MISSING" : intent.kind().name();
         String intentObservationId = intent == null || intent.postconditionObservationId().isEmpty() ? "null"
                 : "\"" + quote(intent.postconditionObservationId().orElseThrow().value()) + "\"";
@@ -262,6 +264,7 @@ final class FrontierV3DiagnosticJson {
         int cursorLength = job.traversal().linearCorridorSurfaces().size();
         return base("process", id, checkpoint) + ",\"status\":\"ok\",\"family\":\"frontier.resource-site-harvest\""
                 + ",\"identity\":{\"job\":\"" + quote(job.id().value()) + "\",\"worker\":\"" + quote(job.workerId().value())
+                + "\",\"workerPresentation\":\"" + quote(FrontierSceneLabels.actor(state, job.workerId(), false))
                 + "\",\"outputItem\":\"" + quote(job.outputItemId().value()) + "\"}"
                 + ",\"claims\":{\"task\":\"" + quote(job.taskId().value()) + "\",\"site\":\"" + quote(job.siteId().value())
                 + "\",\"worker\":\"" + quote(job.workerId().value()) + "\",\"intent\":\"" + quote(job.intentId().value())
@@ -278,7 +281,7 @@ final class FrontierV3DiagnosticJson {
                 + ",\"retainedBody\":" + position(job.traversal().linearCorridorSurfaces().get(job.traversalCursor()).standingBody())
                 + ",\"actorBody\":" + actorBody + "}"
                 + ",\"result\":{\"sitePhase\":\"" + lifecycle.phase() + "\",\"intentKind\":\"" + intentKind
-                + "\",\"intentStatus\":\"" + intentStatus + "\",\"intentObservationId\":" + intentObservationId
+                + "\",\"intentStatus\":\"" + intentStatus + "\",\"dutyPhase\":\"" + dutyPhase + "\",\"intentObservationId\":" + intentObservationId
                 + ",\"obstruction\":" + obstruction + ",\"complete\":" + job.progress().complete() + "}}";
     }
 
@@ -288,10 +291,15 @@ final class FrontierV3DiagnosticJson {
         ResourceSite site = subject == null ? null : FrontierResourceSitePlan.compile(state.bootstrap()).get(subject);
         if (lifecycle == null || site == null) return unavailable("site", id, checkpoint, "not_found");
         String work = lifecycle.activeWork().map(value -> value.id().value()).orElse("");
+        // A generic CONFLICT phase cannot tell an operator whether restart reconciliation,
+        // a player action, or a foreign/damaged facility caused the isolation.  Surface the
+        // durable typed disposition at the site boundary as well as on a process receipt.
+        String conflict = lifecycle.conflictDisposition().map(value -> "{\"position\":" + position(value.position())
+                + ",\"reason\":\"" + value.reason() + "\",\"policy\":\"" + value.policy() + "\"}").orElse("null");
         return base("site", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(site.settlementId().value())
                 + "\",\"facility\":\"" + quote(site.facilityId().value()) + "\",\"phase\":\"" + lifecycle.phase()
                 + "\",\"growthEpoch\":" + lifecycle.growthEpoch() + ",\"growthStage\":" + lifecycle.growthStage()
-                + ",\"activeWork\":\"" + quote(work) + "\",\"firstCrop\":" + position(site.cropSlots().getFirst())
+                + ",\"activeWork\":\"" + quote(work) + "\",\"conflictDisposition\":" + conflict + ",\"firstCrop\":" + position(site.cropSlots().getFirst())
                 + ",\"lastCrop\":" + position(site.cropSlots().getLast()) + "}";
     }
 
@@ -376,8 +384,7 @@ final class FrontierV3DiagnosticJson {
         String owner = resident != null ? resident.settlementId().value() : bioform != null ? bioform.hiveId().value() : "";
         String nutrition = resident == null ? "" : state.humanPopulation().nutrition(subject).status().name();
         var assignment = resident == null ? null : HumanAssignmentProjection.compile(state).assignment(subject);
-        boolean harvestSceneCandidate = resident != null && FrontierResourceSiteHarvestSceneSupport.candidates(state).stream()
-                .anyMatch(candidate -> candidate.workerId().equals(subject));
+        String dutyPhase = harvestDutyPhase(state, subject, assignment);
         var lifecycle = bioform == null ? null : state.hiveColony().bioformLifecycles().get(subject);
         String cocoonHome = lifecycle == null || lifecycle.homeSlot().isEmpty() ? "null" : "{\"hibernaculum\":\""
                 + quote(lifecycle.homeSlot().orElseThrow().hibernaculumId().value()) + "\",\"slot\":"
@@ -393,10 +400,25 @@ final class FrontierV3DiagnosticJson {
                 + "\",\"goalPosition\":" + goalPosition
                 + ",\"assignment\":\"" + (assignment == null ? "NONE" : assignment.kind().name())
                 + "\",\"assignmentOwner\":\"" + quote(assignment == null ? "" : assignment.ownerId().map(SubjectId::value).orElse(""))
-                + "\",\"harvestSceneCandidate\":" + harvestSceneCandidate
-                + ",\"sceneReserved\":" + FrontierSceneAdmission.reserved(state, subject)
+                + ",\"dutyPhase\":\"" + quote(dutyPhase) + "\""
                 + (lifecycle == null ? "" : ",\"lifecycle\":\"" + lifecycle.phase().name() + "\",\"cocoonHome\":" + cocoonHome)
                 + admission.map(FrontierV3DiagnosticJson::admission).orElse("") + "}";
+    }
+
+    /** One immutable assignment lookup gives the client a phase at its already-bounded actor cadence. */
+    private static String harvestDutyPhase(FrontierWorldState state, SubjectId actor, HumanAssignment assignment) {
+        if (assignment == null || assignment.ownerId().isEmpty()) return "UNOBSERVED";
+        SubjectId owner = assignment.ownerId().orElseThrow();
+        ResourceSiteHarvestJob job = state.resourceSites().sites().values().stream()
+                .flatMap(site -> site.activeWork().stream())
+                .filter(ResourceSiteHarvestJob.class::isInstance)
+                .map(ResourceSiteHarvestJob.class::cast)
+                .filter(candidate -> candidate.id().equals(owner) && candidate.workerId().equals(actor))
+                .findFirst().orElse(null);
+        if (job == null) return "UNOBSERVED";
+        PhysicalIntent intent = state.physicalIntents().get(job.intentId());
+        String status = intent == null ? "MISSING" : intent.status().name();
+        return (job.hasNextTraversalStep() ? "TRAVELLING:" : "HARVESTING:") + status;
     }
 
     /** One exact resident's durable movement corridor; diagnostics never choose, advance or unblock it. */
@@ -423,7 +445,8 @@ final class FrontierV3DiagnosticJson {
         String entityId = value.entityId() == null ? "" : value.entityId().toString();
         return ",\"physicalAdmission\":{\"status\":\"" + quote(value.status()) + "\",\"entityUuid\":\""
                 + quote(entityId) + "\",\"pending\":" + value.pending() + ",\"placement\":" + placement
-                + ",\"observedPosition\":" + observedPosition + ",\"observedExact\":" + observedExact + "}";
+                + ",\"observedPosition\":" + observedPosition + ",\"observedExact\":" + observedExact
+                + ",\"trackerCalls\":" + value.trackerCalls() + ",\"trackerImpulseCalls\":" + value.trackerImpulseCalls() + "}";
     }
 
     private static String item(String id, CheckpointImage checkpoint, FrontierWorldState state) {

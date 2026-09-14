@@ -108,6 +108,30 @@ public final class FrontierV3ProductionPhysicalTurnGameTests {
     }
 
     @GameTest(batch = "pm-frontier-v3-scene-aftermath", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
+    public static void repeatedOrdinaryPlayerPresenceDoesNotReplayTheHiveIngressFence(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(level);
+        try {
+            ChunkPos ingress = loadedChunk(helper);
+            FrontierV3GrayboxExecutor.observePlayerIngress(runtime, ingress);
+            int firstFence = FrontierV3GrayboxExecutor.projectionWork(runtime).siblingHiveFenceRetentions();
+            FrontierV3GrayboxExecutor.observePlayerIngress(runtime, ingress);
+            int repeatedFence = FrontierV3GrayboxExecutor.projectionWork(runtime).siblingHiveFenceRetentions();
+            helper.assertValueEqual(firstFence, 1,
+                    "one ordinary ingress must retain its declared sibling fence exactly once");
+            helper.assertValueEqual(repeatedFence, firstFence,
+                    "the normal per-tick observation of one stationary player must not replay the complete hive fence");
+            helper.assertValueEqual(FrontierV3GrayboxExecutor.firstVisibility(runtime, ingress.x + "," + ingress.z).status(), "PENDING",
+                    "deduplicating presence keeps the original first-visibility boundary pending for the registered turn");
+        } finally {
+            FrontierV3GrayboxExecutor.forgetFirstVisibility(runtime);
+            FrontierV3GrayboxExecutor.forget(runtime);
+            runtime.shutdown();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-aftermath", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
     public static void playerIngressFencesAnUnloadedDestinationWithoutCreatingAChunk(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(level);

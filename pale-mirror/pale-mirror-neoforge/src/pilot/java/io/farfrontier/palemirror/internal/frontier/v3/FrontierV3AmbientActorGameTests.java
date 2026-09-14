@@ -348,12 +348,11 @@ public final class FrontierV3AmbientActorGameTests {
         helper.runAfterDelay(1L, () -> {
             FrontierV3ControlledMobMotion.followContinuously(level, body,
                     new Vec3(floor.getX() + 1.5D, floor.getY(), floor.getZ() + 0.5D));
-            helper.runAfterDelay(1L, () -> {
-                // Invoke the registered actuator directly at its ordinary entity-tick boundary,
-                // before the tracker clears hasImpulse after publishing the position packet.
-                FrontierV3ControlledMobMotion.advance(body);
-                helper.assertTrue(body.getX() > floor.getX() + 0.5D && body.hasImpulse,
-                        "every accepted PM step must request same-tick client replication instead of tracker coalescing");
+        helper.runAfterDelay(1L, () -> {
+            // Continuous poses are advanced once by the registered server-turn driver.  A
+            // second direct call here would manufacture a test-only double-speed actor.
+            helper.assertTrue(body.getX() > floor.getX() + 0.5D,
+                    "every accepted PM step must advance the authoritative collision-checked body for ordinary tracker replication");
                 body.discard(); helper.succeed();
             });
         });
@@ -522,7 +521,6 @@ public final class FrontierV3AmbientActorGameTests {
         FrontierV3ControlledMobMotion.followContinuously(level, body,
                 new Vec3(floor.getX() + 1.5D + sample * 0.02D, floor.getY(), floor.getZ() + 0.5D));
         helper.runAfterDelay(1L, () -> {
-            FrontierV3ControlledMobMotion.advance(body);
             positions.add(body.getX());
             driveContinuousPatrolSamples(helper, level, body, floor, remaining - 1, positions, complete);
         });
@@ -547,12 +545,8 @@ public final class FrontierV3AmbientActorGameTests {
         FrontierV3ControlledMobMotion.followContinuously(level, scoutBody,
                 FrontierV3AmbientActorLocalTargets.localTargetAt(state, scout, scoutLease.handoffBody(), scoutLease, level.getGameTime()));
         helper.runAfterDelay(2L, () -> {
-            // GameTest callbacks are not ordered relative to EntityTickEvent.Pre.  Exercise
-            // the same actuator explicitly after its due tick when the normal boundary has
-            // not consumed the one-tick local intent yet, rather than accepting a
-            // fixture-order freeze.
-            FrontierV3ControlledMobMotion.advance(farmerBody);
-            FrontierV3ControlledMobMotion.advance(scoutBody);
+            // The server-turn driver is the sole continuous-pose authority. The callback
+            // observes its result rather than applying a second test-only body move.
             farmerDisplacements.add(farmerBody.distanceToSqr(farmerLease.handoffBody().x() + 0.5D, farmerBody.getY(),
                     farmerLease.handoffBody().z() + 0.5D));
             driveLocalGoals(helper, level, state, farmer, farmerBody, farmerLease,

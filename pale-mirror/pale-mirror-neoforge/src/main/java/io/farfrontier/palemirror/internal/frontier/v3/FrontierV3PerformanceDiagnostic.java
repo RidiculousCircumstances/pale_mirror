@@ -12,8 +12,10 @@ import java.util.Set;
 
 /** Read-only compact rendering of bounded v3 execution telemetry. */
 final class FrontierV3PerformanceDiagnostic {
-    private static final int MAX_STAGE_ROWS = 24;
-    private static final int MAX_QUEUE_ROWS = 16;
+    /* Keep a useful pressure cut inside the shared 8 KiB operator response envelope even when
+       every retained attribution uses its longest permitted identity. */
+    private static final int MAX_STAGE_ROWS = 12;
+    private static final int MAX_QUEUE_ROWS = 8;
 
     private FrontierV3PerformanceDiagnostic() { }
 

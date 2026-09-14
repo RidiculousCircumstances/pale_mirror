@@ -4,6 +4,7 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "FrontierV3GameTestSliceMixin",
+    "FrontierV3ServerEntityTrackerMixin",
     "FrontierV3CargoCarrierMinecartMixin",
     "FrontierV3VehicleEntityMixin",
     "FrontierV3PlayerActionMixin"

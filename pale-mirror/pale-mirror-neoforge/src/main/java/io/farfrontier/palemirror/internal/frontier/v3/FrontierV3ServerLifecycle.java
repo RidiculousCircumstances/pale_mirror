@@ -7,7 +7,6 @@ import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.ProjectionQuery;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
-import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 import io.farfrontier.palemirror.frontier.v3.model.CargoCarrierReleased;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
@@ -60,7 +59,6 @@ public final class FrontierV3ServerLifecycle {
     private static final Map<MinecraftServer, FastForwardTargetOutcome> FAST_FORWARD_OUTCOMES = new IdentityHashMap<>();
     /** Prevents bootstrap time from crossing an unobserved product boundary before the pilot's first operator request. */
     private static final Map<MinecraftServer, Boolean> INITIAL_CANONICAL_HOLDS = new IdentityHashMap<>();
-    private static final WorkBudget TICK_BUDGET = new WorkBudget(128, 512);
     public static final int MAX_FAST_FORWARD_TICKS = 24_000;
     private static final int FAST_FORWARD_SLICE_TICKS = 512;
     private FrontierV3ServerLifecycle() { }
@@ -428,7 +426,7 @@ public final class FrontierV3ServerLifecycle {
             } else if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
                 ServerLevel physicalWorld = FrontierV3PhysicalWorld.require(server);
                 runObservedPhysicalTurn(physicalWorld, runtime);
-                runtime.tick(TICK_BUDGET);
+                runtime.tick(FrontierV3RuntimeBudgets.ordinaryTick());
                 // A due action may itself fail closed.  Do not mask that primary quarantine by
                 // asking the now-unavailable runtime for a second fast-forward state image.
                 if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) advanceQueuedCanonicalTime(server, runtime);
@@ -545,7 +543,7 @@ public final class FrontierV3ServerLifecycle {
         int allowed = Math.min(remaining, FAST_FORWARD_SLICE_TICKS); int advanced = 0;
         while (advanced < allowed && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
                 && !FrontierV3FastForwardSafety.requiresPhysicalStep(physicalWorld, runtime.decodedState().orElseThrow())) {
-            if (runtime.advance(1, TICK_BUDGET).isEmpty()) break;
+            if (runtime.advance(1, FrontierV3RuntimeBudgets.fastForwardTick()).isEmpty()) break;
             advanced++;
         }
         int next = remaining - advanced;
@@ -983,9 +981,6 @@ public final class FrontierV3ServerLifecycle {
             runtime.quarantine(error);
         }
     }
-
-    /** Delegates only a previously registered v3 local movement intent at the normal entity tick. */
-    public static void advanceControlledMob(net.minecraft.world.entity.Mob mob) { FrontierV3ControlledMobMotion.advance(mob); }
 
     /** Result of the read-only ambient join bridge; only a duplicate may be safely cancelled. */
     public enum EntityJoinAdmission { NOT_MANAGED, RETAINED, DUPLICATE_UNINDEXED }
