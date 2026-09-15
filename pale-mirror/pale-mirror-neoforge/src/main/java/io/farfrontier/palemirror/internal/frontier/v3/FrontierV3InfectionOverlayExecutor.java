@@ -56,7 +56,7 @@ final class FrontierV3InfectionOverlayExecutor {
         FrontierV3InfectionOverlayLedger ledger = FrontierV3InfectionOverlayLedger.get(level);
         int budget = MAX_CELLS_PER_TICK;
         while (budget-- > 0 && cursor.hasRetraction()) reconcileRetraction(level, ledger, cursor.nextRetraction(), state);
-        while (budget-- > 0 && cursor.hasDesired()) project(level, ledger, cursor.nextDesired(), state, structuralBaseline, structuralCeilings);
+        while (budget-- > 0 && cursor.hasDesired()) project(level, runtime, ledger, cursor.nextDesired(), state, structuralBaseline, structuralCeilings);
     }
 
     static void forget(FrontierV3ServerRuntime<?, ?> runtime) { CURSORS.remove(runtime); WORK.remove(runtime); }
@@ -124,12 +124,18 @@ final class FrontierV3InfectionOverlayExecutor {
 
     static ProjectionResult project(ServerLevel level, FrontierV3InfectionOverlayLedger ledger, InfectionOverlayCell desired,
                                     FrontierWorldState state) {
-        return project(level, ledger, desired, state, null, Map.of());
+        return project(level, null, ledger, desired, state, null, Map.of());
     }
 
-    private static ProjectionResult project(ServerLevel level, FrontierV3InfectionOverlayLedger ledger, InfectionOverlayCell desired,
+    private static ProjectionResult project(ServerLevel level, FrontierV3ServerRuntime<?, ?> runtime, FrontierV3InfectionOverlayLedger ledger, InfectionOverlayCell desired,
                                             FrontierWorldState state, FrontierGrayboxPlan structuralBaseline,
                                             Map<Long, Integer> structuralCeilings) {
+        // A player ingress can retain the static organ shell and this dynamic 4x4 surface in
+        // one physical turn.  Do not claim a surface while that exact retained shell is still
+        // being written: a later normal static write would turn our own partial arrival into a
+        // permanent overlay conflict.  This reads at most the four chunks touched by one
+        // declared patch, creates no demand, and leaves unrelated ordinary chunks untouched.
+        if (!staticVisibilityComplete(runtime, desired)) return ProjectionResult.DEFERRED;
         FrontierV3InfectionOverlayLedger.Claim claim = ledger.claim(desired.cell());
         if (claim != null) return projectClaim(level, ledger, desired, state, claim);
         List<BlockPos> positions = discoveredPatch(level, desired, structuralBaseline, structuralCeilings);
@@ -144,6 +150,12 @@ final class FrontierV3InfectionOverlayExecutor {
         if (!replace(level, positions, expected)) return ProjectionResult.DEFERRED;
         ledger.activate(desired.cell());
         return ProjectionResult.APPLIED;
+    }
+
+    private static boolean staticVisibilityComplete(FrontierV3ServerRuntime<?, ?> runtime, InfectionOverlayCell desired) {
+        if (runtime == null) return true; // fixture projection has no player-ingress fence
+        return desired.surfaceColumns().stream().map(column -> new net.minecraft.world.level.ChunkPos(column.x() >> 4, column.z() >> 4))
+                .allMatch(chunk -> FrontierV3GrayboxExecutor.staticVisibilityComplete(runtime, chunk));
     }
 
     private static ProjectionResult projectClaim(ServerLevel level, FrontierV3InfectionOverlayLedger ledger, InfectionOverlayCell desired,

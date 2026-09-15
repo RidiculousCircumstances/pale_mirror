@@ -59,7 +59,6 @@ import java.util.Optional;
 final class FrontierV3DiagnosticJson {
     static final String PREFIX = "PMV3_DIAG ";
     private static final int MAX_BYTES = 8_192;
-
     private FrontierV3DiagnosticJson() { }
 
     static String render(String kind, String id, CheckpointImage checkpoint, FrontierWorldState state,
@@ -302,12 +301,12 @@ final class FrontierV3DiagnosticJson {
                 + ",\"activeWork\":\"" + quote(work) + "\",\"conflictDisposition\":" + conflict + ",\"firstCrop\":" + position(site.cropSlots().getFirst())
                 + ",\"lastCrop\":" + position(site.cropSlots().getLast()) + "}";
     }
-
     private static String settlement(String id, CheckpointImage checkpoint, FrontierWorldState state) {
         SubjectId subject = subject(id).orElse(null);
         FrontierSettlementWorkDiagnostic value = subject == null ? null
                 : FrontierSettlementWorkDiagnostic.inspect(checkpoint, state, subject).orElse(null);
-        if (value == null) return unavailable("settlement", id, checkpoint, "not_found");
+        FrontierV3SettlementIngressGeometry.Value geometry = FrontierV3SettlementIngressGeometry.find(state, subject).orElse(null);
+        if (value == null || geometry == null) return unavailable("settlement", id, checkpoint, "not_found");
         SettlementProvision provision = state.humanPopulation().provision(subject);
         int availableFood = state.inventory().items().values().stream().filter(item -> item.itemKind().equals("minecraft:bread"))
                 .filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot slot
@@ -333,9 +332,10 @@ final class FrontierV3DiagnosticJson {
                 + "\",\"available\":" + availableFood + ",\"reserve\":" + reserve + ",\"required\":" + provision.requiredRations()
                 + ",\"fulfilled\":" + provision.fulfilledRations() + ",\"nourished\":" + nourished + ",\"hungry\":" + hungry
                 + ",\"starving\":" + starving + ",\"intent\":\""
-                + quote(provision.activeIntentId().map(PhysicalIntentId::value).orElse("")) + "\"}}";
+                + quote(provision.activeIntentId().map(PhysicalIntentId::value).orElse("")) + "\"}"
+                + ",\"farmAnchor\":" + position(geometry.farmAnchor())
+                + ",\"routeSurface\":" + position(geometry.routeSurface()) + "}";
     }
-
     /** One named-polity diagnostic, bounded to aggregate counts plus the single next growth claim. */
     private static String hive(String id, CheckpointImage checkpoint, FrontierWorldState state) {
         SubjectId subject = subject(id).orElse(null);

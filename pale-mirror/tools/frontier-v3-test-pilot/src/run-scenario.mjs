@@ -350,7 +350,10 @@ async function launchPreparedClient() {
   }, ['--username', scenario.pilot.username, '--quickPlayMultiplayer', `${runtimeScenario.server.host}:${runtimeScenario.server.port}`]);
   await ensurePreparedLaunchWorkingDirectory(launch, { automatedSemanticClient: true });
   auditEnvironment.XDG_SESSION_TYPE = 'x11';
-  auditEnvironment.WAYLAND_DISPLAY = '__pale_mirror_pilot_xwayland_only__';
+  // An actual Xwayland session must not let the semantic client select Wayland directly.
+  // A task-private Xvfb has no Wayland compositor at all; inventing a nonempty socket name
+  // there makes GLFW select an unavailable platform before it can use the valid X display.
+  if (auditEnvironment.WAYLAND_DISPLAY) auditEnvironment.WAYLAND_DISPLAY = '__pale_mirror_pilot_xwayland_only__';
   return spawn(launch.command, launch.args, { cwd: launch.cwd, env: auditEnvironment, stdio: ['ignore', 'pipe', 'pipe'] });
 }
 

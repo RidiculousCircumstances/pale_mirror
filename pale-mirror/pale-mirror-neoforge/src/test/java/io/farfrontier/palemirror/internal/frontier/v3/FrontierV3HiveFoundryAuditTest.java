@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrontierV3HiveFoundryAuditTest {
@@ -139,6 +140,32 @@ class FrontierV3HiveFoundryAuditTest {
             assertEquals(expected, new LinkedHashSet<>(chunks.get(entry.getKey())),
                     "ingress " + entry.getKey() + " must queue the complete declared structural/overlay nest scope");
         }
+    }
+
+    @Test
+    void settlementIngressPrecompilesItsWholeLocalPackageWithoutAWorldScan() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:settlement-ingress-fence"), 91L));
+        var plan = io.farfrontier.palemirror.frontier.v3.model.FrontierGrayboxPlan.compileStructuralBaseline(state);
+        var cursor = FrontierV3GrayboxExecutor.Cursor.from(
+                io.farfrontier.palemirror.frontier.v3.model.FrontierGrayboxPlan.structuralInput(state), plan, null, state);
+        var settlement = state.bootstrap().settlements().getFirst();
+        var farmSite = io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSitePlan.compile(state.bootstrap()).values().stream()
+                .filter(site -> site.settlementId().equals(settlement.id())).findFirst().orElseThrow();
+        ChunkPos fieldChunk = new ChunkPos(farmSite.cropSlots().getFirst().x() >> 4, farmSite.cropSlots().getFirst().z() >> 4);
+        var packageChunks = cursor.settlementVisibilityChunks(fieldChunk);
+
+        assertFalse(packageChunks.isEmpty(), "an ordinary field-side arrival must retain its authored settlement package");
+        assertTrue(settlement.structures().stream().flatMap(structure -> plan.cells().values().stream()
+                        .filter(cell -> cell.ownerId().equals(structure.id())))
+                        .map(cell -> new ChunkPos(cell.position().x() >> 4, cell.position().z() >> 4))
+                        .allMatch(packageChunks::contains),
+                "the ingress package must include every local structure chunk, not merely the field chunk");
+        assertTrue(plan.cells().values().stream().filter(cell -> cell.ownerId().equals(io.farfrontier.palemirror.frontier.v3.model.FrontierRouteNetwork.OWNER))
+                        .map(cell -> new ChunkPos(cell.position().x() >> 4, cell.position().z() >> 4))
+                        .anyMatch(packageChunks::contains),
+                "the package must retain a locally reachable authored road chunk");
+        assertTrue(cursor.settlementVisibilityChunks(new ChunkPos(20_000, -20_000)).isEmpty(),
+                "remote generated chunks must not create a settlement ingress package");
     }
 
     @Test

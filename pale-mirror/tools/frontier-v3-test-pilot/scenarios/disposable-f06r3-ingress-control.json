@@ -3,18 +3,27 @@
   "id": "disposable_f06r3_ingress_control",
   "isolation": { "mode": "disposable_lite", "seed": 47 },
   "server": { "host": "127.0.0.1", "port": 25575, "profile": "world", "viewDistance": 6 },
-  "zeroPlayerPrelude": { "kind": "cold_duty_cycle", "advanceTicks": 21010, "timeoutMs": 180000 },
+  "zeroPlayerPrelude": { "kind": "cold_duty_cycle", "advanceTicks": 24000, "timeoutMs": 180000 },
   "pilot": { "username": "PMTestPilot" },
   "assertNoServerTickStallDuringIngress": true,
   "setup": [{ "type": "assert_fixture", "timeoutMs": 30000, "checks": [{ "view": "summary", "id": "", "expect": { "status": "ok", "settlements": 12, "sites": 12 } }] }],
   "actions": [
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 150, "y": 65, "z": -10 }, "settleMs": 0, "causalMilestone": "ordinary_ingress_without_motion_polling" },
+    { "type": "inspect", "view": "settlement", "id": "settlement:7", "causalMilestone": "site7_declared_local_package" },
+    { "type": "look", "at": { "diagnostic": { "view": "settlement", "id": "settlement:7", "field": "farmAnchor" } } },
+    { "type": "assert_visible_block", "position": { "diagnostic": { "view": "settlement", "id": "settlement:7", "field": "farmAnchor" } }, "timeoutMs": 5000, "causalMilestone": "site7_farm_visible_on_first_ingress" },
+    { "type": "look", "at": { "diagnostic": { "view": "settlement", "id": "settlement:7", "field": "routeSurface" } } },
+    { "type": "assert_visible_block", "position": { "diagnostic": { "view": "settlement", "id": "settlement:7", "field": "routeSurface" } }, "timeoutMs": 5000, "causalMilestone": "site7_road_visible_on_first_ingress" },
+    { "type": "assert_complete_resource_site", "siteId": "site:7-wheat-field", "completedCropSlots": 63, "timeoutMs": 5000, "causalMilestone": "complete_current_field_before_resident_interval" },
     { "type": "wait", "ms": 70000, "causalMilestone": "ordinary_resident_interval_without_diagnostic_polling" },
-    { "type": "inspect", "view": "process", "id": "job:site-harvest-7-wheat-field-1", "causalMilestone": "current_process_after_ordinary_ingress" },
     { "type": "inspect", "view": "performance", "id": "", "causalMilestone": "bounded_physical_executor_attribution" }
   ],
+  "frames": [
+    { "after": 4, "name": "site7-first-ingress-farm", "presentation": "player" },
+    { "after": 6, "name": "site7-first-ingress-road", "presentation": "player" }
+  ],
   "assertions": [
-    { "after": 3, "view": "process", "id": "job:site-harvest-7-wheat-field-1", "expect": { "status": "ok", "result": { "sitePhase": "HARVESTING" } } },
-    { "after": 4, "view": "performance", "id": "", "expect": { "status": "ok" } }
+    { "after": 2, "view": "settlement", "id": "settlement:7", "expect": { "status": "ok" } },
+    { "after": 8, "view": "performance", "id": "", "expect": { "status": "ok" } }
   ]
 }

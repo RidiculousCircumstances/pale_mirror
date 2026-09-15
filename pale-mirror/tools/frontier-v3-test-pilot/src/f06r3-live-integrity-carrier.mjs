@@ -9,8 +9,8 @@ const HIVE_ORGANS = Object.freeze(['west-ganglion', 'west-brood', 'west-store', 
 export function assertF06r3LiveIntegrityCarrier({ declaration, manifest }) {
   if (declaration?.id !== SCENARIO || declaration?.zeroPlayerPrelude?.advanceTicks !== 24_000 || declaration?.restart?.mode !== 'graceful'
       || declaration?.restart?.zeroPlayerAdvanceTicks !== 40 || declaration?.assertNoServerTickStallDuringIngress !== true
-      || declaration.restart.afterAction !== 15 || !Array.isArray(declaration.actions) || manifest?.status !== 'ok'
-      || manifest.scenarioId !== SCENARIO || manifest.recovery?.mode !== 'graceful' || manifest.recovery?.splitAfterAction !== 15
+      || declaration.restart.afterAction !== 20 || !Array.isArray(declaration.actions) || manifest?.status !== 'ok'
+      || manifest.scenarioId !== SCENARIO || manifest.recovery?.mode !== 'graceful' || manifest.recovery?.splitAfterAction !== 20
       || !Array.isArray(manifest.actions) || manifest.actions.length !== declaration.actions.length) {
     throw new Error('F0.6R3 live-integrity manifest lacks its declared zero-player/restart lifecycle or ordinary-ingress responsiveness boundary');
   }
@@ -18,6 +18,7 @@ export function assertF06r3LiveIntegrityCarrier({ declaration, manifest }) {
     if (!isDeepStrictEqual(manifest.actions[index]?.action, action)) throw new Error('F0.6R3 live-integrity manifest substituted an action');
   });
   assertCurrentFieldActions(declaration.actions);
+  assertSettlementPackageActions(declaration.actions);
   const terminalAssertionCount = assertDeclaredAssertions(declaration, manifest);
   const prelude = manifest.zeroPlayerPrelude;
   if (prelude?.status !== 'completed' || prelude.advanceTicks !== 24_000 || prelude.clientSegmentsBeforeCompletion !== 0) {
@@ -31,42 +32,55 @@ export function assertF06r3LiveIntegrityCarrier({ declaration, manifest }) {
   const diagnostics = observed(manifest);
   const coldInventory = exactly(diagnostics, 1, 'process_inventory', 'settlements');
   const projectionWork = exactly(diagnostics, 2, 'projection_work', '');
-  const postArrivalInventory = exactly(diagnostics, 14, 'process_inventory', 'settlements');
+  const postArrivalInventory = exactly(diagnostics, 19, 'process_inventory', 'settlements');
   assertAllSettlementHarvestes(coldInventory, 'zero-player', true);
   assertProjectionWork(projectionWork);
   assertNoIngressReset(postArrivalInventory, coldInventory);
   const beforeSeven = exactly(diagnostics, 3, 'process', JOBS[0]);
   const beforeFour = exactly(diagnostics, 4, 'process', JOBS[1]);
-  const afterSeven = exactly(diagnostics, 11, 'process', JOBS[0]);
-  const afterFour = exactly(diagnostics, 13, 'process', JOBS[1]);
-  const restartSeven = exactly(diagnostics, 15, 'process', JOBS[0]);
+  const afterSeven = exactly(diagnostics, 16, 'process', JOBS[0]);
+  const afterFour = exactly(diagnostics, 18, 'process', JOBS[1]);
+  const restartSeven = exactly(diagnostics, 20, 'process', JOBS[0]);
   [beforeSeven, beforeFour, afterSeven, afterFour, restartSeven].forEach(assertHarvestCursor);
   // The first arrival at site 7 is the one bounded ordinary HOT admission in this carrier.
   // Site 4 still proves a distinct unreset COLD arrival, but it must not be misreported as a
   // HOT lease before the scheduler has actually admitted it.
   assertFirstHotLeaseIsNotCropZero(afterSeven);
   assertCompleteCurrentFacility(diagnostics, 10);
-  assertCompleteCurrentFacility(diagnostics, 18);
+  assertCompleteCurrentFacility(diagnostics, 23);
   if (!sameHarvest(beforeSeven, afterSeven) || !sameHarvest(beforeSeven, restartSeven) || !sameHarvest(beforeFour, afterFour)) {
     throw new Error('F0.6R3 representative first ingress or restart reset an exact COLD harvest identity/cursor');
   }
   for (const organ of HIVE_ORGANS) {
-    const step = organ.startsWith('west-') ? 21 + HIVE_ORGANS.indexOf(organ) : 32 + HIVE_ORGANS.indexOf(organ) - 6;
+    const step = organ.startsWith('west-') ? 26 + HIVE_ORGANS.indexOf(organ) : 37 + HIVE_ORGANS.indexOf(organ) - 6;
     const foundry = exactly(diagnostics, step, 'hive_foundry', `settled@organ:${organ}`);
     if (foundry.phase !== 'SETTLED' || foundry.passed !== true || foundry.auditPassed !== true || foundry.runtimePending !== 0
         || foundry.runtimeMismatch !== 0 || foundry.runtimeUnverified !== 0 || foundry.blockers !== 0 || foundry.errors !== 0) {
       throw new Error(`F0.6R3 first-visible nest organ is not coherent: ${organ}`);
     }
   }
-  if (!Array.isArray(manifest.frames) || manifest.frames.length !== 2
+  if (!Array.isArray(manifest.frames) || manifest.frames.length !== 4
       || !manifest.frames.every(frame => frame.presentation === 'player' && typeof frame.path === 'string' && frame.path.endsWith('.png'))) {
-    throw new Error('F0.6R3 both seed nests lack their declared player-height first-visible frames');
+    throw new Error('F0.6R3 natural settlement package or both seed nests lack declared player-height first-visible frames');
   }
   return Object.freeze({ terminalAssertionCount, zeroPlayerAllSites: coldInventory.count, projectionWork: Object.freeze({
     structural: projectionWork.structural, infectionOverlay: projectionWork.infectionOverlay }),
     coldCursors: Object.freeze(Object.fromEntries(coldInventory.entries.map(entry => [entry.site, entry.cursor]))), currentFacility: Object.freeze({ cropSlots: 64, farmlandSlots: 64, waterSlots: 4, completedCropSlots: 63 }),
     coldCompletedCropSlots: Object.freeze(Object.fromEntries(coldInventory.entries.map(entry => [entry.site, entry.completedCropSlots]))), representativeFirstArrivals: JOBS,
-    restartContinuity: true, seedNestOrgans: HIVE_ORGANS.length, playerFrames: manifest.frames.map(frame => frame.path) });
+    restartContinuity: true, settlementPackage: Object.freeze({ farm: true, road: true }), seedNestOrgans: HIVE_ORGANS.length,
+    playerFrames: manifest.frames.map(frame => frame.path) });
+}
+
+function assertSettlementPackageActions(actions) {
+  const anchor = (action, field) => action?.position?.diagnostic?.view === 'settlement'
+    && action.position.diagnostic.id === 'settlement:7' && action.position.diagnostic.field === field;
+  if (actions[10]?.type !== 'inspect' || actions[10]?.view !== 'settlement' || actions[10]?.id !== 'settlement:7'
+      || actions[11]?.type !== 'look' || actions[11]?.at?.diagnostic?.field !== 'farmAnchor'
+      || actions[12]?.type !== 'assert_visible_block' || !anchor(actions[12], 'farmAnchor')
+      || actions[13]?.type !== 'look' || actions[13]?.at?.diagnostic?.field !== 'routeSurface'
+      || actions[14]?.type !== 'assert_visible_block' || !anchor(actions[14], 'routeSurface')) {
+    throw new Error('F0.6R3 carrier does not prove the named farm and road package on ordinary first ingress');
+  }
 }
 
 function assertCurrentFieldActions(actions) {
@@ -77,18 +91,18 @@ function assertCurrentFieldActions(actions) {
       || actions[6]?.type !== 'look' || actions[7]?.type !== 'assert_visible_block'
       || actions[8]?.type !== 'wait_until_block' || actions[8]?.block !== 'minecraft:air'
       || position(actions[8])?.view !== 'site' || position(actions[8])?.id !== site || position(actions[8])?.field !== 'firstCrop'
-      || !completeFacilityAction(actions[9]) || actions[15]?.type !== 'visit' || actions[15]?.dimension !== 'pale_mirror:frontier_graybox'
-      || actions[15]?.causalMilestone !== 'site7_restart_natural_rearrival'
-      || actions[16]?.type !== 'wait_until_block' || actions[16]?.block !== 'minecraft:wheat'
-      || position(actions[16])?.view !== 'site' || position(actions[16])?.id !== site || position(actions[16])?.field !== 'lastCrop'
-      || !completeFacilityAction(actions[17])) {
+      || !completeFacilityAction(actions[9]) || actions[20]?.type !== 'visit' || actions[20]?.dimension !== 'pale_mirror:frontier_graybox'
+      || actions[20]?.causalMilestone !== 'site7_restart_natural_rearrival'
+      || actions[21]?.type !== 'wait_until_block' || actions[21]?.block !== 'minecraft:wheat'
+      || position(actions[21])?.view !== 'site' || position(actions[21])?.id !== site || position(actions[21])?.field !== 'lastCrop'
+      || !completeFacilityAction(actions[22])) {
     throw new Error('F0.6R3 carrier does not prove the complete field and its exact COLD prefix through ordinary ingress and restart');
   }
 }
 
 function completeFacilityAction(action) {
   return action?.type === 'assert_complete_resource_site' && action.siteId === 'site:7-wheat-field'
-    && action.completedCropSlots === 63 && action.timeoutMs === 30_000;
+    && action.completedCropSlots === 63 && action.timeoutMs === 5_000;
 }
 
 function assertResponsiveOrdinaryIngress(segments) {

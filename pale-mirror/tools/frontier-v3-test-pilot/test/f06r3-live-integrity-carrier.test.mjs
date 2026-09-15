@@ -17,7 +17,7 @@ test('F0.6R3 live-integrity carrier rejects a declaration that omits the ordinar
 test('F0.6R3 live-integrity carrier rejects a receipt-only field even when its manifest action list is otherwise exact', async () => {
   const declaration = JSON.parse(await readFile(resolve(root, 'scenarios/disposable-f06r3-live-integrity.json'), 'utf8'));
   const receiptOnly = structuredClone(declaration);
-  receiptOnly.actions[5] = { type: 'inspect', view: 'process', id: 'job:site-harvest-7-wheat-field-1' };
+  receiptOnly.actions[9] = { type: 'inspect', view: 'process', id: 'job:site-harvest-7-wheat-field-1' };
   const manifest = {
     status: 'ok', scenarioId: receiptOnly.id,
     recovery: { mode: 'graceful', splitAfterAction: receiptOnly.restart.afterAction },
@@ -30,7 +30,7 @@ test('F0.6R3 live-integrity carrier rejects a receipt-only field even when its m
 test('F0.6R3 live-integrity carrier requires a natural post-restart return before inspecting the field', async () => {
   const declaration = JSON.parse(await readFile(resolve(root, 'scenarios/disposable-f06r3-live-integrity.json'), 'utf8'));
   const noReturn = structuredClone(declaration);
-  noReturn.actions[15] = { type: 'inspect', view: 'process', id: 'job:site-harvest-7-wheat-field-1' };
+  noReturn.actions[20] = { type: 'inspect', view: 'process', id: 'job:site-harvest-7-wheat-field-1' };
   const manifest = {
     status: 'ok', scenarioId: noReturn.id,
     recovery: { mode: 'graceful', splitAfterAction: noReturn.restart.afterAction },
@@ -51,4 +51,17 @@ test('F0.6R3 live-integrity carrier rejects a crop-only endpoint in place of the
   };
   assert.throws(() => assertF06r3LiveIntegrityCarrier({ declaration: cropOnly, manifest }),
     /complete field and its exact COLD prefix/);
+});
+
+test('F0.6R3 live-integrity carrier rejects a static receipt in place of either visible local package member', async () => {
+  const declaration = JSON.parse(await readFile(resolve(root, 'scenarios/disposable-f06r3-live-integrity.json'), 'utf8'));
+  const receiptOnly = structuredClone(declaration);
+  receiptOnly.actions[12] = { type: 'inspect', view: 'settlement', id: 'settlement:7' };
+  const manifest = {
+    status: 'ok', scenarioId: receiptOnly.id,
+    recovery: { mode: 'graceful', splitAfterAction: receiptOnly.restart.afterAction },
+    actions: receiptOnly.actions.map(action => ({ action })), diagnostics: []
+  };
+  assert.throws(() => assertF06r3LiveIntegrityCarrier({ declaration: receiptOnly, manifest }),
+    /named farm and road package/);
 });

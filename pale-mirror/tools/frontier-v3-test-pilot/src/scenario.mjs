@@ -477,6 +477,8 @@ function validResolvablePosition(value) {
     && reference && typeof reference === 'object' && Object.keys(reference).length === 3
     && ((reference.view === 'site' && requiredId(reference.id, 'site:') && ['firstCrop', 'lastCrop'].includes(reference.field))
       || (reference.view === 'container' && requiredId(reference.id, 'container:') && reference.field === 'position')
+      || (reference.view === 'settlement' && requiredId(reference.id, 'settlement:')
+        && ['farmAnchor', 'routeSurface'].includes(reference.field))
       || (reference.view === 'process' && requiredId(reference.id, 'job:') && reference.field === 'cursor.retainedBody')
       || (reference.view === 'scene' && requiredId(reference.id, 'job:')
         && ['productionCurrent', 'productionNext', 'productionNextBody', 'productionFutureBody'].includes(reference.field))

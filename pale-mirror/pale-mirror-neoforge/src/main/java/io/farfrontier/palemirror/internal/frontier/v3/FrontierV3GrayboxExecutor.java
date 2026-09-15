@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
 import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
 import io.farfrontier.palemirror.frontier.v3.api.CommandId;
 import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierGrayboxPlan;
@@ -57,6 +58,8 @@ final class FrontierV3GrayboxExecutor {
     // resident world geometry, so boards cannot advertise a partly-current sibling organ.
     private static final int MAX_FIRST_VISIBILITY_CHUNKS_PER_TICK = 16;
     /** A chunk is not a cost unit: one organ column can contain thousands of declared cells. */
+    // Package discovery is priority-indexed; keep the shared structural worker's existing
+    // 64-cell fairness bound so one settlement ingress cannot delay a hive overlay boundary.
     private static final int MAX_FIRST_VISIBILITY_CELLS_PER_TICK = 64;
     private static final Map<FrontierV3ServerRuntime<?, ?>, Cursor> CURSORS = new IdentityHashMap<>();
     private static final Map<FrontierV3ServerRuntime<?, ?>, ProjectionWork> WORK = new IdentityHashMap<>();
@@ -86,6 +89,9 @@ final class FrontierV3GrayboxExecutor {
     /** A load callback can precede cursor publication.  Defer only that exact fence, bounded. */
     private static final Map<FrontierV3ServerRuntime<?, ?>, java.util.LinkedHashSet<ChunkPos>> PENDING_HIVE_FENCES = new IdentityHashMap<>();
     private static final Map<FrontierV3ServerRuntime<?, ?>, java.util.LinkedHashSet<ChunkPos>> PRIORITY_HIVE_FENCES = new IdentityHashMap<>();
+    /** A player transfer can precede cursor publication; retain only its exact settlement fence. */
+    private static final Map<FrontierV3ServerRuntime<?, ?>, java.util.LinkedHashSet<ChunkPos>> PENDING_SETTLEMENT_FENCES = new IdentityHashMap<>();
+    private static final Map<FrontierV3ServerRuntime<?, ?>, java.util.LinkedHashSet<ChunkPos>> PRIORITY_SETTLEMENT_FENCES = new IdentityHashMap<>();
     /**
      * Chunk load is not player ingress.  The graybox dimension can keep generated chunks
      * resident for bootstrap/static ownership work, so a resource facility may only consume
@@ -220,6 +226,7 @@ final class FrontierV3GrayboxExecutor {
         DYNAMIC_CATCH_UP.remove(runtime);
         PENDING_FIRST_VISIBILITY.remove(runtime); PRIORITY_FIRST_VISIBILITY.remove(runtime);
         PENDING_HIVE_FENCES.remove(runtime); PRIORITY_HIVE_FENCES.remove(runtime);
+        PENDING_SETTLEMENT_FENCES.remove(runtime); PRIORITY_SETTLEMENT_FENCES.remove(runtime);
     }
 
     /**
@@ -256,9 +263,13 @@ final class FrontierV3GrayboxExecutor {
         // the bounded projector below, and a later ordinary chunk load has its own callback,
         // so deduplicating this observation neither drops a facility nor creates a ticket.
         if (!newIngress) return;
-        retainFirstVisibility(runtime, chunk, true);
-        retainSiblingHiveVisibility(runtime, chunk, true);
+        // The exact COLD field is an independent facility owner. Queue it before the larger
+        // settlement shell so an already-current harvest cursor cannot remain invisible while
+        // decorative/static package chunks consume the bounded structural turn.
         retainResourceSiteVisibility(runtime, state, chunk);
+        retainFirstVisibility(runtime, chunk, true);
+        retainSettlementVisibility(runtime, chunk);
+        retainSiblingHiveVisibility(runtime, chunk, true);
     }
 
     /**
@@ -273,6 +284,22 @@ final class FrontierV3GrayboxExecutor {
                 .flatMap(site -> site.managedSlots().stream())
                 .map(position -> new ChunkPos(position.x() >> 4, position.z() >> 4))
                 .forEach(chunk -> retainFirstVisibility(runtime, chunk, true));
+    }
+
+    /**
+     * A settlement arrival is a package boundary, not a collection of unrelated structure
+     * chunks.  The immutable cursor has already associated its facilities and the locally
+     * reachable route cells with each possible ingress chunk.  Retaining that finite package
+     * here neither scans the world nor asks vanilla to load a neighbour; unavailable chunks
+     * remain pending until ordinary streaming makes them natural.
+     */
+    private static void retainSettlementVisibility(FrontierV3ServerRuntime<?, ?> runtime, ChunkPos ingress) {
+        Cursor cursor = CURSORS.get(runtime);
+        if (cursor == null) {
+            settlementFenceQueue(runtime, true).add(ingress);
+            return;
+        }
+        cursor.settlementVisibilityChunks(ingress).forEach(chunk -> retainFirstVisibility(runtime, chunk, true));
     }
 
     /**
@@ -337,6 +364,7 @@ final class FrontierV3GrayboxExecutor {
         // resident record here used to make a one-player ingress proportional to all loaded
         // chunks and was the watchdog path observed in production.
         drainHiveFences(runtime, cursor);
+        drainSettlementFences(runtime, cursor);
         int remainingCells = MAX_FIRST_VISIBILITY_CELLS_PER_TICK;
         for (int processed = 0; processed < MAX_FIRST_VISIBILITY_CHUNKS_PER_TICK && remainingCells > 0; processed++) {
             ChunkPos chunk = pollFirstVisibility(runtime);
@@ -387,6 +415,11 @@ final class FrontierV3GrayboxExecutor {
                 .computeIfAbsent(runtime, ignored -> new java.util.LinkedHashSet<>());
     }
 
+    private static java.util.LinkedHashSet<ChunkPos> settlementFenceQueue(FrontierV3ServerRuntime<?, ?> runtime, boolean priority) {
+        return (priority ? PRIORITY_SETTLEMENT_FENCES : PENDING_SETTLEMENT_FENCES)
+                .computeIfAbsent(runtime, ignored -> new java.util.LinkedHashSet<>());
+    }
+
     private static ChunkPos pollFirstVisibility(FrontierV3ServerRuntime<?, ?> runtime) {
         ChunkPos priority = poll(PRIORITY_FIRST_VISIBILITY.get(runtime));
         return priority != null ? priority : poll(PENDING_FIRST_VISIBILITY.get(runtime));
@@ -401,6 +434,15 @@ final class FrontierV3GrayboxExecutor {
             // The cursor is now present.  This does bounded declared-neighbour bookkeeping;
             // it still never requests a chunk from vanilla.
             retainSiblingHiveVisibility(runtime, ingress, priority);
+        }
+    }
+
+    private static void drainSettlementFences(FrontierV3ServerRuntime<?, ?> runtime, Cursor cursor) {
+        for (int drained = 0; drained < MAX_FIRST_VISIBILITY_CHUNKS_PER_TICK; drained++) {
+            ChunkPos ingress = poll(PRIORITY_SETTLEMENT_FENCES.get(runtime));
+            if (ingress == null) ingress = poll(PENDING_SETTLEMENT_FENCES.get(runtime));
+            if (ingress == null) return;
+            cursor.settlementVisibilityChunks(ingress).forEach(chunk -> retainFirstVisibility(runtime, chunk, true));
         }
     }
 
@@ -470,6 +512,16 @@ final class FrontierV3GrayboxExecutor {
     static boolean sceneEligible(FrontierV3ServerRuntime<?, ?> runtime, BlockPosition position) {
         FirstVisibilityRecord visibility = FIRST_VISIBILITY.getOrDefault(runtime, Map.of()).get(new ChunkPos(position.x() >> 4, position.z() >> 4));
         return visibility == null || visibility.status() == FirstVisibility.READY;
+    }
+
+    /**
+     * A dynamic surface may use an ordinary chunk only after this owner's retained static
+     * first-visibility work for that same chunk is complete.  Unknown chunks remain eligible:
+     * this is an ingress-race fence, never a global loaded-chunk policy or a ticket request.
+     */
+    static boolean staticVisibilityComplete(FrontierV3ServerRuntime<?, ?> runtime, ChunkPos chunk) {
+        FirstVisibilityRecord visibility = FIRST_VISIBILITY.getOrDefault(runtime, Map.of()).get(chunk);
+        return visibility == null || visibility.status() == FirstVisibility.STATIC_CURRENT || visibility.status() == FirstVisibility.READY;
     }
 
     /** Read-only record of one natural exposure; unknown chunks have not yet been exposed. */
@@ -750,11 +802,12 @@ final class FrontierV3GrayboxExecutor {
         private final FrontierV3HiveFoundryAudit.HiveExpectations hiveExpectations;
         private final Map<ChunkPos, List<GrayboxCell>> hiveVisibilityCells;
         private final Map<ChunkPos, List<ChunkPos>> hiveVisibilityChunks;
+        private final Map<ChunkPos, List<ChunkPos>> settlementVisibilityChunks;
         private final List<ChunkCells> chunks;
         private int nextChunkIndex;
 
         private Cursor(FrontierGrayboxPlan.StructuralInput input, FrontierGrayboxPlan structuralBaseline, Map<Long, Integer> structuralCeilings,
-                       FrontierV3HiveFoundryAudit.HiveExpectations hiveExpectations, List<ChunkCells> chunks, int nextChunkIndex,
+                       FrontierV3HiveFoundryAudit.HiveExpectations hiveExpectations, FrontierWorldState state, List<ChunkCells> chunks, int nextChunkIndex,
                        java.util.Set<BlockPos> activeWorksiteStaging) {
             this.input = input;
             this.structuralBaseline = structuralBaseline;
@@ -762,6 +815,7 @@ final class FrontierV3GrayboxExecutor {
             this.hiveExpectations = hiveExpectations;
             this.hiveVisibilityCells = hiveVisibilityFence(hiveExpectations);
             this.hiveVisibilityChunks = hiveVisibilityChunks(hiveVisibilityCells);
+            this.settlementVisibilityChunks = FrontierV3SettlementVisibilityIndex.compile(state, structuralBaseline);
             this.chunks = chunks;
             this.nextChunkIndex = nextChunkIndex;
             this.activeWorksiteStaging = activeWorksiteStaging;
@@ -771,15 +825,15 @@ final class FrontierV3GrayboxExecutor {
             List<GrayboxCell> cells = plan.cells().values().stream().sorted(Comparator
                     .comparingInt((GrayboxCell cell) -> cell.position().y())
                     .thenComparingInt(cell -> cell.position().x()).thenComparingInt(cell -> cell.position().z())).toList();
-            return fromCells(input, plan, structuralCeilings(plan), FrontierV3HiveFoundryAudit.expectations(state, plan), cells, prior, plan.cells().values().stream()
+            return fromCells(input, plan, structuralCeilings(plan), FrontierV3HiveFoundryAudit.expectations(state, plan), state, cells, prior, plan.cells().values().stream()
                     .filter(cell -> cell.semanticPart() == GrayboxSemanticPart.WORKSITE_STAGING)
                     .map(FrontierV3GrayboxExecutor::toMinecraft).collect(java.util.stream.Collectors.toUnmodifiableSet()));
         }
         static Cursor fromCells(FrontierGrayboxPlan.StructuralInput input, List<GrayboxCell> cells, Cursor prior) {
-            return fromCells(input, null, Map.of(), null, cells, prior, java.util.Set.of());
+            return fromCells(input, null, Map.of(), null, null, cells, prior, java.util.Set.of());
         }
         private static Cursor fromCells(FrontierGrayboxPlan.StructuralInput input, FrontierGrayboxPlan structuralBaseline, Map<Long, Integer> structuralCeilings,
-                                        FrontierV3HiveFoundryAudit.HiveExpectations hiveExpectations,
+                                        FrontierV3HiveFoundryAudit.HiveExpectations hiveExpectations, FrontierWorldState state,
                                         List<GrayboxCell> cells, Cursor prior,
                                         java.util.Set<BlockPos> activeWorksiteStaging) {
             Map<ChunkKey, List<GrayboxCell>> grouped = new LinkedHashMap<>();
@@ -789,7 +843,7 @@ final class FrontierV3GrayboxExecutor {
                 return new ChunkCells(entry.getKey(), List.copyOf(entry.getValue()), before);
             }).toList();
             int next = prior == null || chunks.isEmpty() ? 0 : indexOf(chunks, prior.nextChunkKey());
-            return new Cursor(input, structuralBaseline, structuralCeilings, hiveExpectations, chunks, next, activeWorksiteStaging);
+            return new Cursor(input, structuralBaseline, structuralCeilings, hiveExpectations, state, chunks, next, activeWorksiteStaging);
         }
         /** Test-only cell ordering probe; production cursors always retain an exact structural input. */
         static Cursor fromCells(List<GrayboxCell> cells, Cursor prior) {
@@ -810,6 +864,9 @@ final class FrontierV3GrayboxExecutor {
         List<GrayboxCell> hiveVisibilityCells(ChunkPos ingress) { return hiveVisibilityCells.getOrDefault(ingress, List.of()); }
         /** Complete structural plus possible infection-surface chunk fence for one declared nest ingress. */
         List<ChunkPos> hiveVisibilityChunks(ChunkPos ingress) { return hiveVisibilityChunks.getOrDefault(ingress, List.of()); }
+        /** Complete local authored package for one already-known ordinary settlement ingress. */
+        List<ChunkPos> settlementVisibilityChunks(ChunkPos ingress) { return settlementVisibilityChunks.getOrDefault(ingress, List.of()); }
+
         Optional<GrayboxCell> nextNaturallyLoaded(Predicate<GrayboxCell> loaded) {
             if (chunks.isEmpty()) return Optional.empty();
             // An ordinary post-ingress turn used to walk every declared plan chunk until it
