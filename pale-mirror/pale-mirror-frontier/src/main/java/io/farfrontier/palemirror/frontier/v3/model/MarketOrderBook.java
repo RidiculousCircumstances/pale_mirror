@@ -95,7 +95,12 @@ public final class MarketOrderBook {
         return new MarketOrderBook(nextDemands, quotes, nextOrders);
     }
 
-    public MarketOrderBook complete(SubjectId orderId) { return terminal(orderId, MarketWorkOrderStatus.FULFILLED, MarketDemandStatus.FULFILLED); }
+    /**
+     * Completing a production order is deliberately receipt-bearing: its live
+     * duration job may be removed only in the same transition that preserves
+     * the compact terminal evidence.  Cancellation remains receipt-less
+     * because it is not semantic production completion.
+     */
     public MarketOrderBook complete(SubjectId orderId, ProductionJob completedJob) {
         MarketWorkOrder order = workOrders.get(Objects.requireNonNull(orderId, "market work order id"));
         if (order == null || order.status() != MarketWorkOrderStatus.ACCEPTED || !order.jobId().equals(completedJob.id())) {

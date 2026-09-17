@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -142,6 +143,33 @@ public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, l
         }
         return next(ResourceSitePhase.GROWING, Math.addExact(growthEpoch, 1L), 0, Optional.empty(),
                 Optional.of(ResourceSiteHarvestLineage.completed(completed, growthEpoch)));
+    }
+    /** Closes COLD semantic work while retaining one exact deferred physical output receipt. */
+    public ResourceSiteLifecycle harvestedDeferred() {
+        ResourceSiteHarvestJob completed = activeWork.filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
+                .filter(job -> job.progress().complete()).orElse(null);
+        if (phase != ResourceSitePhase.HARVESTING || completed == null) {
+            throw new IllegalStateException("resource site has no complete COLD harvest");
+        }
+        return next(ResourceSitePhase.GROWING, Math.addExact(growthEpoch, 1L), 0, Optional.empty(),
+                Optional.of(ResourceSiteHarvestLineage.completed(completed, growthEpoch, false)));
+    }
+    /** Plans the post-final-crop epoch before its crop events are reduced. */
+    public ResourceSiteLifecycle harvestedDeferred(ResourceSiteHarvestJob completed) {
+        ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
+                .orElseThrow(() -> new IllegalStateException("resource site has no active harvest"));
+        if (phase != ResourceSitePhase.HARVESTING || !active.id().equals(completed.id()) || !completed.progress().complete()
+                || completed.progress().completedCropSlots() != active.progress().completedCropSlots() + 1) {
+            throw new IllegalArgumentException("resource site has no exact next complete COLD harvest");
+        }
+        return new ResourceSiteLifecycle(siteId, ResourceSitePhase.GROWING, Math.addExact(growthEpoch, 1L), 0, Optional.empty(), Optional.empty(),
+                Optional.of(ResourceSiteHarvestLineage.completed(completed, growthEpoch, false)));
+    }
+    public ResourceSiteLifecycle confirmDeferredHarvestReceipt(PhysicalIntentId intentId) {
+        ResourceSiteHarvestLineage lineage = harvestLineage.filter(ResourceSiteHarvestLineage::receiptPending)
+                .filter(value -> value.predecessorIntentId().equals(intentId)).orElseThrow(
+                        () -> new IllegalArgumentException("resource-site deferred harvest receipt has no matching lineage"));
+        return next(phase, growthEpoch, growthStage, activeWork, Optional.of(lineage.confirmReceipt()));
     }
     public ResourceSiteLifecycle conflicted(ResourceSiteConflictDisposition disposition) {
         if (phase == ResourceSitePhase.DESTROYED) throw new IllegalStateException("destroyed resource site cannot become a conflict");

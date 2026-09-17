@@ -28,17 +28,15 @@ import java.util.OptionalInt;
  * crop station.  COLD commits the same bounded per-crop semantic receipt and retains its
  * deferred materialization in that cursor; natural loading later projects that exact current
  * partial field.  HOT owns visible pose, local collision, and the loaded physical continuation.
- * The one named output stack remains an observed depot postcondition, so COLD never writes an
- * unloaded chest or manufactures a second output receipt.</p>
+ * The one named output stack becomes canonical depot custody at the terminal COLD receipt.  A
+ * later loaded-world receipt only materializes and confirms that already-owned stack; it cannot
+ * choose the output, hold the successor, or manufacture another one.</p>
  */
 public final class ResourceSiteHarvestProcess {
     public static final String COLD_PROGRESS_KIND = "frontier.resource_site.harvest.cold_progress";
-    /** Keep one exact loaded crop/output boundary for the irreversible physical receipt. */
-    private static final int MAX_COLD_COMPLETED_CROPS = ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS - 1;
-
     private ResourceSiteHarvestProcess() { }
 
-    /** The final depot output remains a loaded physical postcondition. */
+    /** Physical materialization remains a loaded postcondition; exact output ownership does not. */
     public static boolean irreversibleCropEffectsAdmitted() { return true; }
 
     public static ScheduledAction start(StrategicTask task, long dueAt) {
@@ -196,12 +194,10 @@ public final class ResourceSiteHarvestProcess {
         // one across unload/restart intervals, so elapsed zero-player time had no truthful
         // continuation.  Each step below advances one retained pedestrian edge or one exact
         // crop receipt; it still never touches an unloaded block or manufactures final output.
-        if (job.progress().completedCropSlots() >= MAX_COLD_COMPLETED_CROPS) {
-            // The final crop is inseparable from the single physical output observation.  This
-            // is a stable, typed HOT boundary after substantial autonomous duty-cycle work, not
-            // the former accidental first-crop parking point.
-            return List.of(reschedule(action, coldProgress(job, nextDue)));
-        }
+        // The terminal receipt has crossed its durable COLD admission boundary and is now
+        // owned by the bounded loaded-world executor.  The recurring semantic driver is done;
+        // retaining it would make a later scheduler turn invent a second terminal transition.
+        if (job.progress().complete()) return List.of();
         if (!job.hasNextTraversalStep()) return coldCropReceipt(state, action, job);
         int nextCursor = job.traversalCursor() + 1;
         ProposedEvent traversal = new ProposedEvent(job.siteId(),
@@ -223,7 +219,27 @@ public final class ResourceSiteHarvestProcess {
         List<ProposedEvent> events = new java.util.ArrayList<>(List.of(prefix));
         events.add(new ProposedEvent(job.siteId(), new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex())));
         events.add(new ProposedEvent(job.siteId(), new ResourceSiteHarvestProgressed(job.id(), progressed.completedCropSlots())));
-        events.add(reschedule(action, coldProgress(replacement, Math.addExact(action.dueAt().ticks(), continuationInterval(state, replacement)))));
+        if (progressed.complete()) {
+            // COLD owns the last retained crop just as it owns every preceding crop.  The exact
+            // output is placed in canonical depot custody by the matching reducer, but no
+            // loaded-world effect has begun here.  Keep the exact intent PREPARED: RUNNING is
+            // reserved for the registered physical executor after it has admitted the actual
+            // effect.  The retained deferred lineage is the one bounded composition owner
+            // until either that effect is observed or the current successor makes the old
+            // wheat materialization inapplicable.
+            PhysicalIntent terminalIntent = state.physicalIntents().get(job.intentId());
+            if (terminalIntent == null || terminalIntent.status() != PhysicalIntentStatus.PREPARED) {
+                throw new IllegalArgumentException("resource-site COLD terminal output has no admissible physical receipt state");
+            }
+            StrategicTask task = task(state, job.taskId(), StrategicTaskStatus.ACTIVE);
+            ResourceSiteLifecycle terminal = state.resourceSites().site(job.siteId()).harvestedDeferred(replacement);
+            events.add(transition(task, StrategicTaskStatus.COMPLETED));
+            events.add(new ProposedEvent(job.siteId(), new ScheduleEffect.Cancelled(coldProgress(job, action.dueAt().ticks()).id())));
+            events.add(new ProposedEvent(job.siteId(), new ScheduleEffect.Created(ResourceSiteProcess.nextGrowth(terminal, Math.addExact(action.dueAt().ticks(),
+                    state.bootstrap().ruleset().cadence().resourceGrowthStageInterval())))));
+        } else {
+            events.add(reschedule(action, coldProgress(replacement, Math.addExact(action.dueAt().ticks(), continuationInterval(state, replacement)))));
+        }
         return List.copyOf(events);
     }
 
@@ -248,7 +264,24 @@ public final class ResourceSiteHarvestProcess {
         if (!subject.equals(lifecycle.siteId())) {
             throw new IllegalArgumentException("resource-site harvest progress has a foreign owner");
         }
-        return state.withResourceSites(state.resourceSites().replace(lifecycle.advanceHarvest(job, progressed.completedCropSlots())));
+        ResourceSiteLifecycle advanced = lifecycle.advanceHarvest(job, progressed.completedCropSlots());
+        ResourceSiteLifecycle next = progressed.completedCropSlots() == ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS
+                && !FrontierResourceSiteHarvestSceneSupport.hasNonClosedScene(state, job.id())
+                ? advanced.harvestedDeferred()
+                : advanced;
+        if (next.phase() != ResourceSitePhase.GROWING || progressed.completedCropSlots() != ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS) {
+            return state.withResourceSites(state.resourceSites().replace(next));
+        }
+        ExactItemStack output = new ExactItemStack(job.outputItemId(), site(state, job.siteId()).settlementId(),
+                "minecraft:wheat", 64, job.outputSlot());
+        PhysicalIntent intent = state.physicalIntents().get(job.intentId());
+        if (intent == null || intent.status() != PhysicalIntentStatus.PREPARED) {
+            throw new IllegalArgumentException("resource-site COLD completion lacks its exact unstarted physical intent");
+        }
+        return state.withChanges(FrontierWorldStateUpdate.begin()
+                .resourceSites(state.resourceSites().replace(next))
+                .inventory(state.inventory().store(output))
+                .fencedRecovery(FencedRecoveryPhysicalIntentSupport.composed(state.fencedRecovery(), intent)));
     }
 
     public static FrontierWorldState reduceCropPrepared(FrontierWorldState state, SubjectId subject, ResourceSiteHarvestCropPrepared prepared) {
@@ -354,14 +387,31 @@ public final class ResourceSiteHarvestProcess {
     }
 
     public static List<ProposedEvent> planTransition(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentTransition transition, long now) {
-        ResourceSiteLifecycle lifecycle = state.resourceSites().site(intent.causeSubjectId()); validateBinding(state, lifecycle, intent);
+        ResourceSiteLifecycle lifecycle = state.resourceSites().site(intent.causeSubjectId());
+        if (lifecycle.harvestLineage().filter(ResourceSiteHarvestLineage::receiptPending)
+                .filter(lineage -> lineage.predecessorIntentId().equals(intent.id())).isPresent()) {
+            if (transition.status() == PhysicalIntentStatus.RUNNING) {
+                FencedRecoveryPhysicalIntentSupport.requirePreparedExecutionAuthority(state.fencedRecovery(), intent);
+                validateRunningTransition(state, intent); return List.of(new ProposedEvent(lifecycle.siteId(), transition));
+            }
+            if (transition.status() == PhysicalIntentStatus.CONFIRMED && intent.status() == PhysicalIntentStatus.RUNNING) {
+                return List.of(new ProposedEvent(lifecycle.siteId(), transition));
+            }
+            if (transition.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
+                    && (intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING)) {
+                // COLD has already closed its task, output custody and exact-successor
+                // eligibility. A later missing or foreign physical receipt therefore resolves
+                // only this retained materialization owner into its typed local conflict.
+                return List.of(new ProposedEvent(lifecycle.siteId(), transition));
+            }
+            throw new IllegalArgumentException("resource-site deferred harvest receipt has an invalid transition");
+        }
+        validateBinding(state, lifecycle, intent);
         ResourceSiteHarvestJob job = harvest(lifecycle, intent.id()); StrategicTask task = task(state, job.taskId(), StrategicTaskStatus.ACTIVE);
         if (transition.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) {
             return List.of(new ProposedEvent(lifecycle.siteId(), transition), transition(task, StrategicTaskStatus.BLOCKED));
         }
-        if (transition.status() == PhysicalIntentStatus.RUNNING && !hotLeaseOwnsCropWork(state, job)) {
-            throw new IllegalArgumentException("resource-site harvest execution requires its exact HOT field scene");
-        }
+        if (transition.status() == PhysicalIntentStatus.RUNNING) validateRunningTransition(state, intent);
         if (transition.status() == PhysicalIntentStatus.CONFIRMED && intent.status() != PhysicalIntentStatus.RUNNING) {
             throw new IllegalArgumentException("resource-site harvest confirmation requires its durable running boundary");
         }
@@ -378,6 +428,34 @@ public final class ResourceSiteHarvestProcess {
         return state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isResourceSiteHarvest)
                 .anyMatch(lease -> lease.status() == SceneLeaseStatus.HOT
                         && FrontierSceneBehaviors.resourceSiteHarvest(lease).jobId().equals(job.id()));
+    }
+
+    /**
+     * A RUNNING harvest intent has exactly two lawful owners.  HOT may admit the next observed
+     * crop while it owns the farmer body; after COLD has durably completed that same retained
+     * 64-slot cursor, COLD may admit only the deferred physical receipt.  The latter never
+     * creates a body, route, output, or alternate worker.
+     */
+    public static void validateRunningTransition(FrontierWorldState state, PhysicalIntent intent) {
+        ResourceSiteLifecycle lifecycle = state.resourceSites().site(intent.causeSubjectId());
+        if (lifecycle.harvestLineage().filter(ResourceSiteHarvestLineage::receiptPending)
+                .filter(lineage -> lineage.predecessorIntentId().equals(intent.id())).isPresent()) {
+            ActorLocation actor = state.actorLocations().get(lifecycle.harvestLineage().orElseThrow().workerId());
+            if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE
+                    || !actor.body().equals(lifecycle.harvestLineage().orElseThrow().terminalBody())) {
+                throw new IllegalArgumentException("resource-site deferred terminal admission has no living exact farmer");
+            }
+            return;
+        }
+        validateBinding(state, lifecycle, intent);
+        ResourceSiteHarvestJob job = harvest(lifecycle, intent.id());
+        if (hotLeaseOwnsCropWork(state, job)) return;
+        ActorLocation actor = state.actorLocations().get(job.workerId());
+        BodyPosition terminal = job.traversal().linearCorridorSurfaces().get(job.traversalCursor()).standingBody();
+        if (!job.progress().complete() || FrontierResourceSiteHarvestSceneSupport.hasNonClosedScene(state, job.id())
+                || actor == null || !actor.body().equals(terminal)) {
+            throw new IllegalArgumentException("resource-site COLD terminal admission lacks its exact completed farmer cursor");
+        }
     }
 
     public static void validateIntent(FrontierWorldState state, ResourceSiteLifecycle lifecycle, PhysicalIntent intent) {

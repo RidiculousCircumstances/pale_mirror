@@ -132,6 +132,45 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
     }
 
     @Test
+    void releasedMaterializedProductionTransfersToColdAndCompletesBeforeIngress() {
+        MaterializedProduction prepared = activeMaterializedProduction();
+        ActorLocation worker = prepared.state().actorLocations().get(prepared.job().workerId());
+        SettlementStructure workshop = prepared.state().bootstrap().settlements().stream()
+                .filter(value -> value.id().equals(prepared.settlementId())).findFirst().orElseThrow().structures().stream()
+                .filter(value -> value.id().equals(prepared.job().facilityId())).findFirst().orElseThrow();
+        ProductionJob job = prepared.job().withWorkTraversal(ProductionWorkTraversal.compile(prepared.state().bootstrap(), workshop,
+                worker, prepared.job().id()), 0);
+        FrontierWorldState state = prepared.state().withChanges(FrontierWorldStateUpdate.begin().productionJobs(Map.of(job.id(), job)));
+        ScheduledAction[] action = { ProductionProcess.complete(job, 1_000L) };
+
+        boolean reachedOutputReady = false;
+        boolean transferredToCold = false;
+        while (state.productionJobs().containsKey(job.id())) {
+            List<ProposedEvent> planned = ProductionProcess.planCompletion(state, action[0]);
+            if (planned.getFirst().payload() instanceof ProductionColdWorkAdvanced advanced) {
+                state = ProductionProcess.reduceColdWorkAdvanced(state, prepared.settlementId(), advanced);
+                reachedOutputReady |= state.productionJobs().get(job.id()).workProgress().terminalEffectEligible();
+                transferredToCold |= state.productionJobs().get(job.id()).inputHold() instanceof ProductionInputHold.Cold;
+                action[0] = assertInstanceOf(ScheduleEffect.Rescheduled.class, planned.get(1).payload()).replacement();
+            } else {
+                ProductionCompleted completion = assertInstanceOf(ProductionCompleted.class, planned.getFirst().payload());
+                state = ProductionProcess.reduceCompleted(state, prepared.settlementId(), completion);
+            }
+        }
+        assertTrue(reachedOutputReady, "the retained COLD route reaches its output station before semantic completion");
+        assertTrue(transferredToCold, "release transfers the exact materialized input to COLD rather than retaining an observer lease");
+        assertEquals(job.workTraversal().linearCorridorSurfaces().getLast().standingBody(),
+                state.actorLocations().get(job.workerId()).body(), "first visibility retains the current workshop station, not the route origin");
+        assertTrue(state.sceneLeases().isEmpty(), "COLD owns the semantic route without a synthetic physical worker");
+        assertTrue(state.productionJobs().isEmpty(), "COLD terminal ownership may not wait for a physical transformation observation");
+        assertEquals("minecraft:bread", state.inventory().items().get(job.outputItemId()).itemKind());
+        assertFalse(state.inventory().items().containsKey(job.consumedItemId()), "the exact wheat is consumed once into the retained bread result");
+        FrontierWorldState recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+        assertEquals(state.inventory().items().get(job.outputItemId()), recovered.inventory().items().get(job.outputItemId()),
+                "restart retains the exact COLD terminal output without a physical transformation receipt");
+    }
+
+    @Test
     void coldProductionStillAdvancesWithoutMaterializingAnUnloadedContainer() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:production"), 91L));
         for (long tick = 100L; tick <= 2_200L; tick += 100L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
@@ -148,6 +187,14 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         assertEquals(MarketWorkOrderStatus.FULFILLED, terminalOrder.status());
         TerminalProductionReceipt receipt = terminalOrder.terminalReceipt().orElseThrow();
         FrontierWorldState recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(completed));
+        TerminalProductionReceipt recoveredReceipt = recovered.companies().market().workOrders().get(terminalOrder.id()).terminalReceipt().orElseThrow();
+        assertEquals(receipt.topologyId(), recoveredReceipt.topologyId());
+        assertEquals(receipt.topologyRevision(), recoveredReceipt.topologyRevision());
+        assertEquals(receipt.traversalCursor(), recoveredReceipt.traversalCursor());
+        assertEquals(receipt.terminalBody(), recoveredReceipt.terminalBody());
+        assertThrows(IllegalArgumentException.class, () -> new TerminalProductionReceipt(receipt.jobId(), receipt.workerId(),
+                receipt.inputId(), receipt.outputId(), receipt.inputRepresentation(), receipt.outputRepresentation(), receipt.outputKind(),
+                receipt.outputCount(), receipt.topologyId(), -1L, receipt.traversalCursor(), receipt.terminalBody()));
         FrontierDomainRelationships.View view = FrontierDomainRelationships.view(recovered, 99L);
         FrontierDomainRelationships.Endpoint terminalJob = new FrontierDomainRelationships.SubjectEndpoint(FrontierDomainRelationships.EntityKind.PRODUCTION_JOB, receipt.jobId());
         assertTrue(view.causalChain(terminalJob).stream().anyMatch(edge -> edge.kind() == FrontierDomainRelationships.Kind.JOB_WORKER && edge.target().stableKey().contains(receipt.workerId().value())));
@@ -166,6 +213,18 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         assertTrue(provisionView.causalChain(terminalJob).stream().anyMatch(edge -> edge.kind() == FrontierDomainRelationships.Kind.ALLOCATION_RECIPIENT),
                 "the retained terminal output reaches only the named provision recipients");
         assertTrue(completed.inventory().economics().reservations().isEmpty());
+    }
+
+    @Test
+    void terminalProductionReceiptRejectsThePriorSchemaBeforeItsExtendedWireLayoutCanBeRead() {
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:production-terminal-schema"), 91L));
+        for (long tick = 100L; tick <= 2_200L; tick += 100L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
+        FrontierWorldStateCodec codec = new FrontierWorldStateCodec();
+        byte[] current = codec.encode(new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState()));
+        byte[] prior = current.clone();
+        prior[4]--;
+        assertThrows(IllegalArgumentException.class, () -> codec.decode(prior),
+                "the pre-receipt schema must fail before an old terminal stream can be decoded as the extended receipt");
     }
 
     @Test
@@ -592,8 +651,35 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         assertEquals("minecraft:bread", completed.inventory().items().get(prepared.job().outputItemId()).itemKind());
         assertEquals(FixedScalar.ONE, completed.inventory().economics().require(prepared.job().workerId()).balance());
         assertEquals(FixedScalar.ONE, completed.inventory().economics().require(CompanyFoundationProcess.companyId(prepared.job().settlementId())).balance());
-        assertEquals(MarketWorkOrderStatus.FULFILLED, completed.companies().market().workOrders().values().stream()
-                .filter(order -> order.jobId().equals(prepared.job().id())).findFirst().orElseThrow().status());
+        MarketWorkOrder terminalOrder = completed.companies().market().workOrders().values().stream()
+                .filter(order -> order.jobId().equals(prepared.job().id())).findFirst().orElseThrow();
+        assertEquals(MarketWorkOrderStatus.FULFILLED, terminalOrder.status());
+        TerminalProductionReceipt terminalReceipt = terminalOrder.terminalReceipt().orElseThrow();
+        assertEquals(prepared.job().id(), terminalReceipt.jobId());
+        assertEquals(prepared.job().workerId(), terminalReceipt.workerId());
+        assertEquals(prepared.job().workTraversal().id(), terminalReceipt.topologyId());
+        assertEquals(prepared.job().workTraversal().revision(), terminalReceipt.topologyRevision());
+        assertEquals(prepared.job().traversalCursor(), terminalReceipt.traversalCursor());
+        assertEquals(prepared.job().workTraversal().linearCorridorSurfaces().get(prepared.job().traversalCursor()).standingBody(),
+                terminalReceipt.terminalBody());
+        FrontierWorldState recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(completed));
+        assertEquals(terminalReceipt, recovered.companies().market().workOrders().get(terminalOrder.id()).terminalReceipt().orElseThrow(),
+                "physical terminal receipt survives snapshot restart after its live job is removed");
+    }
+
+    @Test
+    void nonTerminalPhysicalProductionCannotCreateOrRetainATerminalReceipt() {
+        MaterializedProduction prepared = activeMaterializedProduction();
+        PhysicalIntent premature = new PhysicalIntent(new PhysicalIntentId("intent:production-transform-premature"),
+                PhysicalIntentKind.PRODUCTION_TRANSFORMATION, PhysicalIntentStatus.PREPARED, prepared.job().id(),
+                List.of(prepared.job().id(), prepared.job().consumedItemId(), prepared.job().outputItemId()),
+                new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0,
+                PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED);
+
+        assertThrows(IllegalArgumentException.class, () -> ProductionTransformationStateSupport.validateIntent(prepared.state(), premature));
+        assertTrue(prepared.state().productionJobs().containsKey(prepared.job().id()));
+        assertTrue(prepared.state().companies().market().workOrders().get(prepared.order().id()).terminalReceipt().isEmpty());
+        assertEquals(MarketWorkOrderStatus.ACCEPTED, prepared.state().companies().market().workOrders().get(prepared.order().id()).status());
     }
 
     @Test
@@ -641,13 +727,9 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
 
         FrontierWorldState closed = draining.releaseSceneLease(leaseId, released.members());
         List<ProposedEvent> effect = ProductionProcess.planCompletion(closed, scheduled.replacement());
-        PhysicalIntentPrepared physical = assertInstanceOf(PhysicalIntentPrepared.class, effect.getFirst().payload());
-        FrontierWorldState withIntent = closed.preparePhysicalIntent(physical.intent())
-                .transitionPhysicalIntent(physical.intent().id(), PhysicalIntentStatus.RUNNING, Optional.empty());
-        ExactItemStack input = withIntent.inventory().items().get(outputReady.consumedItemId());
-        ProductionTransformationObservation receipt = new ProductionTransformationObservation(new PhysicalObservationId("observation:production-after-release"),
-                physical.intent().id(), input.id(), outputReady.outputItemId(), input.count(), outputReady.outputCount());
-        FrontierWorldState completed = withIntent.transitionPhysicalIntent(physical.intent().id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
+        ProductionCompleted direct = assertInstanceOf(ProductionCompleted.class, effect.getFirst().payload(),
+                "after release with no current physical lease, the exact retained result belongs to COLD rather than a new observer gate");
+        FrontierWorldState completed = ProductionProcess.reduceCompleted(closed, prepared.settlementId(), direct);
         assertTrue(completed.productionJobs().isEmpty());
         assertEquals(SceneLeaseStatus.CLOSED, completed.sceneLeases().get(leaseId).status());
     }

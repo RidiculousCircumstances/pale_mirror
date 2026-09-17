@@ -27,7 +27,17 @@ final class ProductionWorkScenePayloadCodecs {
     private static final int MARKER = 0xfffc;
     private ProductionWorkScenePayloadCodecs() { }
     static PayloadCodecs codecs() { return new PayloadCodecs(List.of(new Prepared(), new Handoff())); }
-    static PayloadCodecs productionEvents() { return new PayloadCodecs(List.of(new Progressed(), new TraversalAdvanced(), new TraversalBlocked(), new Finalized(), new PreparationAborted())); }
+    static PayloadCodecs productionEvents() { return new PayloadCodecs(List.of(new Progressed(), new TraversalAdvanced(), new ColdWorkAdvanced(), new TraversalBlocked(), new Finalized(), new PreparationAborted())); }
+    private static final class ColdWorkAdvanced implements PayloadCodec {
+        @Override public String type() { return "frontier.production_cold_work_advanced"; }
+        @Override public byte[] encode(FrontierPayload payload) { ProductionColdWorkAdvanced advanced = (ProductionColdWorkAdvanced) payload;
+            return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+                FrontierWorldPayloadCodecs.writeSubject(output, advanced.jobId()); output.writeShort(advanced.nextCursor());
+                ProductionWorkProgressStateCodec.write(output, advanced.next());
+            }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input ->
+                new ProductionColdWorkAdvanced(FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedShort(), ProductionWorkProgressStateCodec.read(input))); }
+    }
     private static final class Progressed implements PayloadCodec {
         @Override public String type() { return "frontier.production_work_progressed"; }
         @Override public byte[] encode(FrontierPayload payload) { ProductionWorkProgressed progressed = (ProductionWorkProgressed) payload;

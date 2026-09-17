@@ -28,6 +28,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateUpdate;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDelta;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaKind;
+import io.farfrontier.palemirror.frontier.v3.model.ProductionJob;
 import io.farfrontier.palemirror.frontier.v3.model.ProductionWorkSceneCause;
 import io.farfrontier.palemirror.frontier.v3.model.RouteConstruction;
 import io.farfrontier.palemirror.frontier.v3.model.RouteConstructionStarted;
@@ -103,6 +104,27 @@ class FrontierV3DiagnosticJsonTest {
         assertTrue(selected.contains("\"selectedSubject\":{") && selected.contains("\"kind\":\"site\"")
                         && selected.contains("\"growthEpoch\":"),
                 "one selected status query must retain the field lifecycle rather than require a world scan or a second status authority");
+    }
+
+    @Test
+    void terminalMarketOrderDiagnosticRetainsItsExactInputOutputLineage() {
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:diagnostic-terminal-order"), 91L));
+        for (long tick = 100L; tick <= 2_200L; tick += 100L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
+        FrontierWorldState state = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec()
+                .decode(engine.checkpoint().canonicalState());
+        var order = state.companies().market().workOrders().values().stream()
+                .filter(value -> value.terminalReceipt().isPresent()).findFirst().orElseThrow();
+
+        var json = JsonParser.parseString(FrontierV3DiagnosticJson.render("market_order", order.id().value(), engine.checkpoint(), state,
+                Optional.empty()).substring(FrontierV3DiagnosticJson.PREFIX.length())).getAsJsonObject();
+        var receipt = json.getAsJsonObject("terminalReceipt");
+        assertEquals("FULFILLED", json.get("orderStatus").getAsString());
+        assertEquals(order.terminalReceipt().orElseThrow().inputId().value(), receipt.get("inputItem").getAsString());
+        assertEquals(order.terminalReceipt().orElseThrow().outputId().value(), receipt.get("outputItem").getAsString());
+        assertEquals(order.terminalReceipt().orElseThrow().outputCount(), receipt.get("outputCount").getAsInt());
+        assertEquals(Long.toString(order.terminalReceipt().orElseThrow().topologyRevision()),
+                receipt.getAsJsonObject("topology").get("revision").getAsString(),
+                "the read-only JSON receipt must preserve an exact signed-64 topology revision without JavaScript rounding");
     }
 
     @Test
@@ -854,6 +876,30 @@ class FrontierV3DiagnosticJsonTest {
     }
 
     @Test
+    void productionProcessDiagnosticKeepsTheColdCursorAndExactWorkerBodyReadableBeforeSceneAdmission(@TempDir Path directory) {
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
+                FrontierV3FixtureCatalog.productionWorkConfiguration(new WorldId("frontier:diagnostic-production-process-test"), 41L),
+                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
+        FrontierWorldState state = runtime.decodedState().orElseThrow();
+        ProductionJob job = state.productionJobs().get(new SubjectId("job:production-development-input-theft"));
+        assertTrue(job != null, "the production fixture must retain one exact active worker before scene admission");
+
+        String process = FrontierV3DiagnosticJson.render("process", job.id().value(), checkpoint, state, Optional.empty());
+
+        assertTrue(process.contains("\"status\":\"ok\"") && process.contains("\"family\":\"frontier.production-work\""));
+        assertTrue(process.contains("\"worker\":\"" + job.workerId().value() + "\"")
+                        && process.contains("\"facility\":\"" + job.facilityId().value() + "\"")
+                        && process.contains("\"inputItem\":\"" + job.consumedItemId().value() + "\""),
+                "the read-only receipt must retain the exact worker/facility/input ownership chain");
+        assertTrue(process.contains("\"retainedBody\":") && process.contains("\"actorBody\":")
+                        && process.contains("\"lease\":null") && process.contains("\"workStage\":\"APPROACH\""),
+                "COLD ingress evidence needs the retained current cursor rather than a synthetic HOT scene");
+        assertEquals(state, runtime.decodedState().orElseThrow(), "process rendering must not admit or advance the worker");
+        runtime.shutdown();
+    }
+
+    @Test
     void exposesOneExactMedicalOwnerAndItsTypedSceneWithoutTreatingItAsLogistics(@TempDir Path directory) {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
                 FrontierV3FixtureCatalog.medicalTreatmentConfiguration(new WorldId("frontier:diagnostic-medical-scene-test"), 41L),
@@ -904,7 +950,7 @@ class FrontierV3DiagnosticJsonTest {
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
         FrontierWorldState state = runtime.decodedState().orElseThrow();
         var readiness = new FrontierV3ResourceSiteHarvestExecutor.Readiness(true, false, "ACTIVE", false, true, false,
-                7, true, FrontierV3ResourceSiteHarvestExecutor.Precondition.READY);
+                7, true, FrontierV3ResourceSiteHarvestExecutor.Precondition.READY, false, false);
 
         String nonHarvest = FrontierV3DiagnosticJson.render("intent", "intent:missing", checkpoint, state, Optional.empty(),
                 Optional.empty(), Optional.of(readiness));

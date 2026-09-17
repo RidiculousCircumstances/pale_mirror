@@ -41,6 +41,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ResourceCustody;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceLot;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSite;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestLineage;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestProgress;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteLifecycle;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
@@ -151,7 +152,7 @@ final class FrontierV3DiagnosticJson {
             case "medical" -> medical(id, checkpoint, state);
             case "scene" -> FrontierV3SceneDiagnosticJson.render(id, checkpoint, state, sceneReadiness);
             case "intent" -> intent(id, checkpoint, state, harvestReadiness, equipmentIssueReadiness, equipmentReturnReadiness);
-            case "trace" -> trace(id, checkpoint, trace);
+            case "trace" -> FrontierV3DiagnosticExecutorJson.trace(id, checkpoint, trace);
             case "transit" -> transit(id, checkpoint, state);
             case "recovery" -> recovery(id, checkpoint, state);
             case "route_topology" -> routeTopology(id, checkpoint, state);
@@ -252,28 +253,26 @@ final class FrontierV3DiagnosticJson {
                 + "\",\"reason\":\"" + quote(tombstone.reason()) + "\"}";
     }
 
-    /**
-     * One bounded semantic projection of an active duration process.
-     *
-     * <p>This is deliberately a read-only diagnostic boundary, not a second process registry:
-     * the aggregate, lease and schedule remain owned by their production registries.  F0.V uses
-     * it to compare identity, claims, conservation, schedule and result after an ordinary pilot
-     * action without inferring any of those facts from a Minecraft entity or block.</p>
-     */
+    /** Bounded read-only duration-process projection; aggregate, lease and schedule remain authoritative. */
     private static String process(String id, CheckpointImage checkpoint, FrontierWorldState state) {
         SubjectId subject = subject(id).orElse(null);
         ResourceSiteHarvestJob job = subject == null ? null : state.resourceSites().sites().values().stream()
                 .map(ResourceSiteLifecycle::activeWork).flatMap(Optional::stream)
                 .filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
                 .filter(value -> value.id().equals(subject)).findFirst().orElse(null);
-        if (job == null) return unavailable("process", id, checkpoint, "not_found");
+        if (job != null) return harvestProcess(checkpoint, state, job);
+        ProductionJob production = subject == null ? null : state.productionJobs().get(subject);
+        return production == null ? unavailable("process", id, checkpoint, "not_found")
+                : FrontierV3ProductionProcessDiagnosticJson.render(checkpoint, state, production);
+    }
+    private static String harvestProcess(CheckpointImage checkpoint, FrontierWorldState state, ResourceSiteHarvestJob job) {
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId());
         PhysicalIntent intent = state.physicalIntents().get(job.intentId());
         ActorLocation actor = state.actorLocations().get(job.workerId());
         // A released harvest remains in the durable registry as a receipt.  It must not hide a
         // later PREPARED/HOT retry for the same job merely because its historical lease id sorts
         // first: F0.V's process view reports the current ownership fact, not an archive index.
-        SceneLease lease = currentLease(state, job.id());
+        SceneLease lease = FrontierV3DiagnosticExecutorJson.currentLease(state, job.id());
         var schedules = checkpoint.schedules().stream().filter(value -> value.subject().equals(job.id()))
                 .sorted().limit(4).toList();
         String scheduleEntries = schedules.stream().map(value -> "{\"id\":\"" + quote(value.id().value())
@@ -302,7 +301,7 @@ final class FrontierV3DiagnosticJson {
         String obstruction = lifecycle.conflictDisposition().map(FrontierV3DiagnosticJson::conflict).orElse("null");
         String actorBody = actor == null ? "null" : position(actor.body());
         int cursorLength = job.traversal().linearCorridorSurfaces().size();
-        return base("process", id, checkpoint) + ",\"status\":\"ok\",\"family\":\"frontier.resource-site-harvest\""
+        return base("process", job.id().value(), checkpoint) + ",\"status\":\"ok\",\"family\":\"frontier.resource-site-harvest\""
                 + ",\"identity\":{\"job\":\"" + quote(job.id().value()) + "\",\"worker\":\"" + quote(job.workerId().value())
                 + "\",\"workerPresentation\":\"" + quote(FrontierSceneLabels.actor(state, job.workerId(), false))
                 + "\",\"outputItem\":\"" + quote(job.outputItemId().value()) + "\"}"
@@ -324,7 +323,6 @@ final class FrontierV3DiagnosticJson {
                 + "\",\"intentStatus\":\"" + intentStatus + "\",\"dutyPhase\":\"" + dutyPhase + "\",\"intentObservationId\":" + intentObservationId
                 + ",\"obstruction\":" + obstruction + ",\"complete\":" + job.progress().complete() + "}}";
     }
-
     private static String site(String id, CheckpointImage checkpoint, FrontierWorldState state) {
         SubjectId subject = subject(id).orElse(null);
         ResourceSiteLifecycle lifecycle = subject == null ? null : state.resourceSites().sites().get(subject);
@@ -335,11 +333,39 @@ final class FrontierV3DiagnosticJson {
         // a player action, or a foreign/damaged facility caused the isolation.  Surface the
         // durable typed disposition at the site boundary as well as on a process receipt.
         String conflict = lifecycle.conflictDisposition().map(FrontierV3DiagnosticJson::conflict).orElse("null");
+        String terminal = lifecycle.harvestLineage().map(lineage -> {
+            var output = state.inventory().items().get(lineage.outputItemId());
+            var intent = state.physicalIntents().get(lineage.predecessorIntentId());
+            boolean owned = output != null && output.id().equals(lineage.outputItemId()) && output.custody().equals(lineage.outputSlot());
+            String successor = harvestSuccessor(state, lineage);
+            return "{\"job\":\"" + quote(lineage.predecessorJobId().value()) + "\",\"worker\":\"" + quote(lineage.workerId().value())
+                    + "\",\"outputItem\":\"" + quote(lineage.outputItemId().value()) + "\",\"outputSlot\":" + lineage.outputSlot().slot()
+                    // `outputOwned` deliberately means the original exact wheat still occupies its
+                    // depot slot.  A completed COLD conversion removes that stack once; the retained
+                    // successor receipt below, rather than a missing predecessor stack, is the
+                    // durable zero-sum ownership fact.
+                    + ",\"outputOwned\":" + owned + ",\"canonicalSuccessor\":" + lineage.composedIntoCanonicalSuccessor(state)
+                    + ",\"successor\":" + successor + ",\"physicalReceiptConfirmed\":" + lineage.outputReceiptConfirmed()
+                    + ",\"intentStatus\":\"" + (intent == null ? "MISSING" : intent.status().name()) + "\",\"terminalBody\":" + position(lineage.terminalBody()) + "}";
+        }).orElse("null");
         return base("site", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(site.settlementId().value())
                 + "\",\"facility\":\"" + quote(site.facilityId().value()) + "\",\"phase\":\"" + lifecycle.phase()
                 + "\",\"growthEpoch\":" + lifecycle.growthEpoch() + ",\"growthStage\":" + lifecycle.growthStage()
-                + ",\"activeWork\":\"" + quote(work) + "\",\"conflictDisposition\":" + conflict + ",\"firstCrop\":" + position(site.cropSlots().getFirst())
+                + ",\"activeWork\":\"" + quote(work) + "\",\"conflictDisposition\":" + conflict + ",\"terminalHarvest\":" + terminal + ",\"firstCrop\":" + position(site.cropSlots().getFirst())
                 + ",\"lastCrop\":" + position(site.cropSlots().getLast()) + "}";
+    }
+
+    /** Read-only terminal receipt link for an exact harvest input that is no longer a live stack. */
+    private static String harvestSuccessor(FrontierWorldState state, ResourceSiteHarvestLineage lineage) {
+        return state.companies().market().workOrders().values().stream().flatMap(order -> order.terminalReceipt().stream()
+                        .filter(receipt -> receipt.inputRepresentation() == io.farfrontier.palemirror.frontier.v3.model.TerminalProductionReceipt.ResourceRepresentation.EXACT_ITEM
+                                && receipt.outputRepresentation() == io.farfrontier.palemirror.frontier.v3.model.TerminalProductionReceipt.ResourceRepresentation.EXACT_ITEM
+                                && lineage.outputItemId().equals(receipt.inputId()))
+                        .map(receipt -> "{\"order\":\"" + quote(order.id().value()) + "\",\"job\":\"" + quote(receipt.jobId().value())
+                                + "\",\"worker\":\"" + quote(receipt.workerId().value()) + "\",\"inputItem\":\"" + quote(receipt.inputId().value())
+                                + "\",\"outputItem\":\"" + quote(receipt.outputId().value()) + "\",\"outputKind\":\"" + quote(receipt.outputKind())
+                                + "\",\"outputCount\":" + receipt.outputCount() + "}"))
+                .findFirst().orElse("null");
     }
 
     private static String conflict(io.farfrontier.palemirror.frontier.v3.model.ResourceSiteConflictDisposition value) {
@@ -731,10 +757,17 @@ final class FrontierV3DiagnosticJson {
         SubjectId subject = subject(id).orElse(null);
         FrontierMarketOrderDiagnostic order = subject == null ? null : FrontierMarketOrderDiagnostic.inspect(state, subject).orElse(null);
         if (order == null) return unavailable("market_order", id, checkpoint, "not_found");
+        String terminal = state.companies().market().workOrders().get(subject).terminalReceipt().map(receipt -> "{\"job\":\""
+                + quote(receipt.jobId().value()) + "\",\"worker\":\"" + quote(receipt.workerId().value()) + "\",\"inputItem\":\""
+                + quote(receipt.inputId().value()) + "\",\"outputItem\":\"" + quote(receipt.outputId().value()) + "\",\"inputRepresentation\":\""
+                + receipt.inputRepresentation() + "\",\"outputRepresentation\":\"" + receipt.outputRepresentation() + "\",\"outputKind\":\""
+                + quote(receipt.outputKind()) + "\",\"outputCount\":" + receipt.outputCount() + ",\"topology\":{\"id\":\""
+                + quote(receipt.topologyId().value()) + "\",\"revision\":\"" + receipt.topologyRevision() + "\",\"cursor\":" + receipt.traversalCursor()
+                + ",\"terminalBody\":" + position(receipt.terminalBody()) + "}}").orElse("null");
         return base("market_order", id, checkpoint) + ",\"status\":\"ok\",\"orderStatus\":\"" + quote(order.status())
                 + "\",\"job\":\"" + quote(order.jobId().value()) + "\",\"jobActive\":" + order.jobActive()
                 + ",\"reservation\":\"" + quote(order.reservationId().value()) + "\",\"reservationActive\":" + order.reservationActive()
-                + ",\"taskStatus\":\"" + quote(order.taskStatus()) + "\"}";
+                + ",\"taskStatus\":\"" + quote(order.taskStatus()) + "\",\"terminalReceipt\":" + terminal + "}";
     }
 
     private static String operation(String id, CheckpointImage checkpoint, FrontierWorldState state,
@@ -891,60 +924,11 @@ final class FrontierV3DiagnosticJson {
                 + "\",\"radius\":" + intent.radiusBlocks() + ",\"subjects\":[" + subjects + "]"
                 + ",\"receiptId\":\"" + quote(intent.postconditionObservationId().map(value -> value.value()).orElse("")) + "\""
                 + (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.RESOURCE_SITE_HARVEST
-                    ? harvestReadiness.map(FrontierV3DiagnosticJson::harvestReadiness).orElse("") : "")
+                    ? harvestReadiness.map(FrontierV3DiagnosticExecutorJson::harvestReadiness).orElse("") : "")
                 + (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_ISSUE
-                    ? equipmentIssueReadiness.map(FrontierV3DiagnosticJson::equipmentIssueReadiness).orElse("") : "")
+                    ? equipmentIssueReadiness.map(FrontierV3DiagnosticExecutorJson::equipmentIssueReadiness).orElse("") : "")
                 + (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_RETURN
-                    ? equipmentReturnReadiness.map(FrontierV3DiagnosticJson::equipmentReturnReadiness).orElse("") : "") + "}";
-    }
-
-    private static String equipmentIssueReadiness(FrontierV3EquipmentIssueExecutor.Readiness value) {
-        return ",\"physicalReadiness\":{\"selection\":\"" + quote(value.selection().name())
-                + "\",\"detail\":\"" + quote(value.detail()) + "\"}";
-    }
-
-    private static String equipmentReturnReadiness(FrontierV3EquipmentReturnExecutor.Readiness value) {
-        return ",\"physicalReadiness\":{\"selection\":\"" + quote(value.selection().name())
-                + "\",\"detail\":\"" + quote(value.detail()) + "\"}";
-    }
-
-    private static String harvestReadiness(FrontierV3ResourceSiteHarvestExecutor.Readiness value) {
-        return ",\"physicalReadiness\":{\"fieldLoaded\":" + value.fieldLoaded()
-                + ",\"depotLoaded\":" + value.depotLoaded()
-                + ",\"depotSurface\":\"" + quote(value.depotSurface())
-                + "\",\"ownedChestPresent\":" + value.ownedChestPresent()
-                + ",\"fieldMatchesMatureStage\":" + value.fieldMatchesMatureStage()
-                + ",\"outputSlotEmpty\":" + value.outputSlotEmpty()
-                + ",\"claimedFieldStage\":" + value.claimedFieldStage()
-                + ",\"fieldMatchesClaimedStage\":" + value.fieldMatchesClaimedStage()
-                + ",\"precondition\":\"" + value.precondition() + "\"}";
-    }
-
-    /** Selects a current lease for every diagnostic view without granting any lease authority. */
-    private static io.farfrontier.palemirror.frontier.v3.model.SceneLease currentLease(FrontierWorldState state, SubjectId sceneSubject) {
-        return state.sceneLeases().values().stream()
-                .filter(lease -> io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.owns(lease, sceneSubject))
-                .max(java.util.Comparator.comparingInt((io.farfrontier.palemirror.frontier.v3.model.SceneLease lease) ->
-                                lease.status() == io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.CLOSED ? 0 : 1)
-                        .thenComparing(io.farfrontier.palemirror.frontier.v3.model.SceneLease::handoffInstant)
-                        .thenComparingLong(io.farfrontier.palemirror.frontier.v3.model.SceneLease::revision)
-                        .thenComparing(io.farfrontier.palemirror.frontier.v3.model.SceneLease::id))
-                .orElse(null);
-    }
-
-    private static String trace(String id, CheckpointImage checkpoint, Optional<FrontierV3DiagnosticTrace.Entry> trace) {
-        if (trace.isEmpty()) return unavailable("trace", id, checkpoint, "not_found");
-        FrontierV3DiagnosticTrace.Entry entry = trace.orElseThrow();
-        return base("trace", id, checkpoint) + ",\"status\":\"ok\",\"correlation\":\"" + quote(entry.correlation())
-                + "\",\"eventKind\":\"" + quote(entry.kind()) + "\",\"subject\":\"" + quote(entry.subject())
-                + "\",\"command\":\"" + quote(entry.commandId()) + "\",\"transaction\":\"" + quote(entry.transactionId())
-                + "\",\"acceptedRevision\":" + entry.revision() + ",\"chain\":" + strings(entry.lineage()) + traceContext(entry.context()) + "}";
-    }
-
-    private static String traceContext(FrontierV3DiagnosticTrace.Context context) {
-        if (context.operationId().isEmpty() && context.leaseId().isEmpty() && context.cargoId().isEmpty() && context.actorIds().isEmpty()) return "";
-        return ",\"causal\":{\"operation\":\"" + quote(context.operationId()) + "\",\"lease\":\""
-                + quote(context.leaseId()) + "\",\"cargo\":\"" + quote(context.cargoId()) + "\",\"actors\":" + strings(context.actorIds()) + "}";
+                    ? equipmentReturnReadiness.map(FrontierV3DiagnosticExecutorJson::equipmentReturnReadiness).orElse("") : "") + "}";
     }
 
     static String unavailable(String kind, String id, CheckpointImage checkpoint, String status) {

@@ -30,11 +30,11 @@ class FrontierV3ResourceSiteHarvestExecutorTest {
     }
 
     @Test
-    void unloadedHeadDoesNotStarveALaterNaturallyRunnableHarvest() {
-        PhysicalIntent unloadedHead = intent("1"); PhysicalIntent loadedLater = intent("4");
+    void blockedHotHeadDoesNotStarveALaterNaturallyRunnableDeferredReceipt() {
+        PhysicalIntent blockedHotHead = intent("1"); PhysicalIntent loadedDeferredReceipt = intent("4");
 
-        assertEquals(loadedLater, FrontierV3ResourceSiteHarvestExecutor.firstRunnable(List.of(unloadedHead, loadedLater),
-                candidate -> candidate.equals(loadedLater)).orElseThrow());
+        assertEquals(loadedDeferredReceipt, FrontierV3ResourceSiteHarvestExecutor.firstRunnable(List.of(blockedHotHead, loadedDeferredReceipt),
+                candidate -> candidate.equals(loadedDeferredReceipt)).orElseThrow());
     }
 
     @Test

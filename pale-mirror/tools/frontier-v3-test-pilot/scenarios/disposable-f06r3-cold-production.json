@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "id": "disposable_f06r3_cold_production",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "production-work", "viewDistance": 6 },
+  "zeroPlayerPrelude": {
+    "kind": "cold_duty_cycle",
+    "advanceTicks": 140,
+    "timeoutMs": 60000,
+    "expectTerminalStatus": "COMPLETED"
+  },
+  "pilot": { "username": "PMTestPilot" },
+  "assertNoServerTickStallDuringIngress": true,
+  "setup": [{ "type": "assert_fixture", "timeoutMs": 30000, "checks": [{ "view": "summary", "id": "", "expect": { "status": "ok", "settlements": 12 } }] }],
+  "actions": [
+    { "type": "inspect", "view": "process", "id": "job:production-development-input-theft", "causalMilestone": "cold_active_industrial_cursor_before_ingress" },
+    { "type": "inspect", "view": "actor", "id": "resident:1-15", "causalMilestone": "cold_exact_industrial_actor_before_ingress" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -340, "y": 65, "z": -329 }, "settleMs": 0, "causalMilestone": "ordinary_first_industrial_visibility" },
+    { "type": "inspect", "view": "actor", "id": "resident:1-15", "causalMilestone": "first_industrial_body_matches_retained_cursor" },
+    { "type": "inspect", "view": "process", "id": "job:production-development-input-theft", "causalMilestone": "post_ingress_industrial_cursor_is_not_replayed" }
+  ],
+  "assertions": [
+    { "after": 1, "view": "process", "id": "job:production-development-input-theft", "expect": { "status": "ok", "family": "frontier.production-work" } },
+    { "after": 2, "view": "actor", "id": "resident:1-15", "expect": { "status": "ok" } },
+    { "after": 4, "view": "actor", "id": "resident:1-15", "expect": { "status": "ok" } },
+    { "after": 5, "view": "process", "id": "job:production-development-input-theft", "expect": { "status": "ok", "family": "frontier.production-work" } }
+  ],
+  "frames": []
+}

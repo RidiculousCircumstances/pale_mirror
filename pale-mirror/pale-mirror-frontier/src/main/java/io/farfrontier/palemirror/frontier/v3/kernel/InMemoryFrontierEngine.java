@@ -457,11 +457,10 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
     }
 
     private static String boundedFailure(RuntimeException error) {
-        String detail = error.getClass().getSimpleName() + ": " + Objects.toString(error.getMessage(), "no detail");
-        Throwable cause = error.getCause();
-        if (cause != null && cause != error) {
-            detail += " <- " + cause.getClass().getSimpleName() + ": " + Objects.toString(cause.getMessage(), "no detail");
-        }
+        Throwable root = error;
+        while (root.getCause() != null && root.getCause() != root) root = root.getCause();
+        String detail = root.getClass().getSimpleName() + ": " + Objects.toString(root.getMessage(), "no detail");
+        if (root != error) detail += " <- " + error.getClass().getSimpleName() + ": " + Objects.toString(error.getMessage(), "no detail");
         return detail.length() <= 240 ? detail : detail.substring(0, 240);
     }
 }

@@ -21,6 +21,8 @@ final class FrontierMarketRelationCodec {
         FrontierWorldStateCodec.writeString(output, receipt.outputRepresentation().name());
         FrontierWorldStateCodec.writeString(output, receipt.outputKind());
         output.writeInt(receipt.outputCount());
+        FrontierWorldStateCodec.writeString(output, receipt.topologyId().value()); output.writeLong(receipt.topologyRevision()); output.writeInt(receipt.traversalCursor());
+        output.writeInt(receipt.terminalBody().x()); output.writeInt(receipt.terminalBody().y()); output.writeInt(receipt.terminalBody().z());
     }
     static TerminalProductionReceipt readTerminalProductionReceipt(DataInputStream input) throws IOException {
         SubjectId job = new SubjectId(FrontierWorldStateCodec.readString(input));
@@ -29,8 +31,10 @@ final class FrontierMarketRelationCodec {
         SubjectId output = new SubjectId(FrontierWorldStateCodec.readString(input));
         var inputKind = TerminalProductionReceipt.ResourceRepresentation.valueOf(FrontierWorldStateCodec.readString(input));
         var outputKind = TerminalProductionReceipt.ResourceRepresentation.valueOf(FrontierWorldStateCodec.readString(input));
-        return new TerminalProductionReceipt(job, worker, source, output, inputKind, outputKind,
-                FrontierWorldStateCodec.readString(input), input.readInt());
+        String kind = FrontierWorldStateCodec.readString(input); int count = input.readInt();
+        var topology = new io.farfrontier.palemirror.frontier.v3.model.TraversalTopologyId(FrontierWorldStateCodec.readString(input)); long revision = input.readLong(); int cursor = input.readInt();
+        var body = new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(input.readInt(), input.readInt(), input.readInt());
+        return new TerminalProductionReceipt(job, worker, source, output, inputKind, outputKind, kind, count, topology, revision, cursor, body);
     }
     static void writeRelationshipIncident(DataOutputStream output, RelationshipIncident incident) throws IOException {
         FrontierWorldStateCodec.writeString(output, incident.kind().tag());

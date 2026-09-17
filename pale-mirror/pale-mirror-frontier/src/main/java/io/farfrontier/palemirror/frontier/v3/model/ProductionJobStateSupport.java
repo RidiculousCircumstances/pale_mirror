@@ -39,12 +39,32 @@ final class ProductionJobStateSupport {
         if (!job.outputItemId().equals(output.id()) || !job.outputItemKind().equals(output.itemKind()) || job.outputCount() != output.count()) {
             throw new IllegalArgumentException("production output does not match durable job result");
         }
-        if (!(job.inputHold() instanceof ProductionInputHold.Cold) || state.inventory().items().containsKey(job.consumedItemId())) {
-            throw new IllegalArgumentException("materialized production must confirm its physical transformation rather than emit a direct completion");
+        ExactInventory inventory = state.inventory();
+        if (job.inputHold() instanceof ProductionInputHold.Cold) {
+            if (inventory.items().containsKey(job.consumedItemId())) {
+                throw new IllegalArgumentException("cold production input is duplicated in exact inventory");
+            }
+        } else if (job.inputHold() instanceof ProductionInputHold.Materialized) {
+            SubjectId depot = FrontierWorldState.depotId(job.settlementId());
+            ExactItemStack input = inventory.items().get(job.consumedItemId());
+            if (ReferenceContainerCustody.hasLiveCustody(state, depot) || input == null || !(input.custody() instanceof InventoryCustody.ContainerSlot slot)
+                    || !slot.containerId().equals(depot) || input.count() != job.outputCount()) {
+                throw new IllegalArgumentException("released materialized production has no exact COLD input");
+            }
+            inventory = inventory.withoutItem(input.id());
+        } else {
+            throw new IllegalArgumentException("production completion has no exact COLD input hold");
         }
         Map<SubjectId, ProductionJob> next = new LinkedHashMap<>(state.productionJobs()); next.remove(jobId);
-        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory().store(output), next, state.contracts(),
-                state.operations(), state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony(), state.structureDamage(),
+        Map<PhysicalIntentId, PhysicalIntent> intents = new LinkedHashMap<>(state.physicalIntents());
+        for (PhysicalIntent intent : state.physicalIntents().values()) if (intent.causeSubjectId().equals(jobId)) {
+            if (intent.kind() != PhysicalIntentKind.PRODUCTION_TRANSFORMATION || intent.status() != PhysicalIntentStatus.PREPARED) {
+                throw new IllegalArgumentException("production completion cannot supersede a started physical transformation");
+            }
+            intents.remove(intent.id());
+        }
+        return state.next(state.actorLocations(), state.structureConditions(), state.infection(), inventory.store(output), next, state.contracts(),
+                state.operations(), intents, state.physicalObservations(), state.sceneLeases(), state.hiveColony(), state.structureDamage(),
                 state.physicalDeltas(), state.ambientLeases());
     }
 

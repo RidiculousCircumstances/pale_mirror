@@ -64,6 +64,7 @@ function boundedZeroPlayerInterval(interval) {
   const performance = interval.performance;
   return {
     ...pick(interval, ['status', 'targetInstant', 'advanceTicks', 'clientSegmentsBeforeCompletion', 'clientSegmentsBeforeAdmission', 'serverPid']),
+    terminalReceipt: pick(interval.terminalReceipt, ['requestId', 'kind', 'requestedTicks', 'targetInstant', 'admittedCheckpointInstant', 'reachedCheckpointInstant', 'status', 'reason']),
     boundedness: pick(interval.boundedness, ['status', 'noServerTickStall', 'stallCount', 'maxBehindMillis', 'maxBehindTicks']),
     performance: performance == null ? null : { ...pick(performance, ['kind', 'status', 'fastForwardRemaining', 'instant', 'fastForwardTargetStatus']),
       fastForwardSlice: pick(performance.fastForwardSlice, ['samples', 'advancedTicks', 'totalNanos', 'maxNanos', 'safetyNanos', 'maxSafetyNanos', 'advanceNanos', 'maxAdvanceNanos']),

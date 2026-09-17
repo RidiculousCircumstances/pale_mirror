@@ -346,6 +346,29 @@ class FrontierV3ServerRuntimeTest {
         assertEquals(0, new FrontierFileStore(directory, codecs()).recover(WORLD).walTail().size());
     }
 
+    /**
+     * Mirrors the operator's maximum COLD interval at the actual runtime checkpoint cadence.
+     * The bare kernel is intentionally allowed to exhaust its bounded transaction history when
+     * no persistence owner compacts it; the server runtime must never take that non-production
+     * path while advancing an admitted operator request.
+     */
+    @Test
+    void maximumColdOperatorIntervalCompactsBeforeTransactionRetentionCanQuarantine(@TempDir Path directory) {
+        WorldId world = new WorldId("frontier:runtime-maximum-cold-interval");
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
+                FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.configuration(world, 47L),
+                        new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 200);
+        WorkBudget budget = FrontierV3RuntimeBudgets.fastForwardTick();
+
+        for (int tick = 0; tick < FrontierV3ServerLifecycle.MAX_FAST_FORWARD_TICKS; tick++) {
+            runtime.advance(1, budget).orElseThrow();
+            assertEquals(FrontierV3RuntimeStatus.Kind.ACTIVE, runtime.status().kind(), "cold interval quarantined at tick " + (tick + 1));
+        }
+
+        assertEquals(new SimInstant(FrontierV3ServerLifecycle.MAX_FAST_FORWARD_TICKS), runtime.checkpointImage().orElseThrow().instant());
+        assertEquals(FrontierV3RuntimeStatus.Kind.ACTIVE, runtime.status().kind());
+    }
+
     @Test
     void decodedStateIsSharedUntilACommittedRevisionChangesIt(@TempDir Path directory) {
         FrontierV3ServerRuntime<Counter, CounterProjection> runtime = FrontierV3ServerRuntime.start(configuration(), new FrontierFileStore(directory, codecs()), 20);

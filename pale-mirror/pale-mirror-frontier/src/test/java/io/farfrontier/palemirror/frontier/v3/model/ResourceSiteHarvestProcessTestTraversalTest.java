@@ -92,7 +92,10 @@ class ResourceSiteHarvestTraversalTest extends ResourceSiteHarvestProcessTest {
                 ResidentProfession.AGRICULTURAL_WORKER).orElseThrow().id();
         ResourceSiteHarvestLineage lineage = new ResourceSiteHarvestLineage(new SubjectId("job:site-harvest-1-wheat-field-1"),
                 new SubjectId("task:settlement-1-settlement_harvest_resource_site-21002"), farmer,
-                new SubjectId("item:site-harvest-1-wheat-field-1-wheat"), 1L, Optional.empty(), Optional.empty());
+                new SubjectId("item:site-harvest-1-wheat-field-1-wheat"), 1L,
+                state.actorLocations().get(farmer).body(),
+                new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:site-harvest-1-wheat-field-1"),
+                new InventoryCustody.ContainerSlot(new SubjectId("container:1-depot"), 0), true, Optional.empty(), Optional.empty());
         state = state.withResourceSites(state.resourceSites().replace(new ResourceSiteLifecycle(site, ResourceSitePhase.READY, 2L,
                 ResourceSiteLifecycle.MATURE_STAGE, Optional.empty(), Optional.empty(), Optional.of(lineage))));
         FrontierWorldState tasked = harvestTask(state, site, 22_000L); StrategicTask task = onlyHarvestTask(tasked);
@@ -274,7 +277,8 @@ class ResourceSiteHarvestTraversalTest extends ResourceSiteHarvestProcessTest {
         PhysicalIntentTransition confirmed = new PhysicalIntentTransition(prepared.intent().id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
         assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestProcess.planTransition(completedTraversal, prepared.intent(), confirmed, 22_200L),
                 "a complete crop receipt cannot skip the durable RUNNING boundary");
-        assertFalse(harvesting.inventory().items().containsKey(output.id()));
+        assertEquals(output, harvesting.inventory().items().get(output.id()),
+                "a complete COLD cursor owns its one exact output before the loaded physical receipt");
         assertEquals(PhysicalIntentStatus.PREPARED, harvesting.physicalIntents().get(prepared.intent().id()).status());
     }
 
@@ -314,10 +318,8 @@ class ResourceSiteHarvestTraversalTest extends ResourceSiteHarvestProcessTest {
         FrontierWorldState state = cold.state();
         ScheduledAction action = ResourceSiteHarvestProcess.coldProgress(cold.job(), 22_101L);
 
-        for (int step = 0; step < 256; step++) {
+        for (int step = 0; step < 256 && state.resourceSites().site(cold.site()).phase() == ResourceSitePhase.HARVESTING; step++) {
             ResourceSiteHarvestJob before = (ResourceSiteHarvestJob) state.resourceSites().site(cold.site()).activeWork().orElseThrow();
-            if (before.progress().completedCropSlots() == ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS - 1
-                    && !before.hasNextTraversalStep()) break;
             List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planned = ResourceSiteHarvestProcess.planColdProgress(state, action);
             assertFalse(planned.isEmpty(), "the retained COLD action must make a durable disposition at step " + step);
             for (io.farfrontier.palemirror.frontier.v3.api.ProposedEvent event : planned) {
@@ -328,15 +330,23 @@ class ResourceSiteHarvestTraversalTest extends ResourceSiteHarvestProcessTest {
                             state = ResourceSiteHarvestProcess.reduceCropPrepared(state, cold.site(), prepared);
                     case ResourceSiteHarvestProgressed progressed ->
                             state = ResourceSiteHarvestProcess.reduceProgressed(state, cold.site(), progressed);
+                    case PhysicalIntentTransition transition ->
+                            state = state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+                    case StrategicTaskTransition transition ->
+                            state = StrategicObjectiveProcess.reduceTaskTransition(state, new SubjectId("settlement:1"), transition);
                     case ScheduleEffect.Rescheduled rescheduled -> action = rescheduled.replacement();
+                    case ScheduleEffect.Cancelled ignored -> { }
+                    case ScheduleEffect.Created ignored -> { }
                     default -> throw new AssertionError("unexpected COLD event: " + event.payload().type());
                 }
             }
         }
-        ResourceSiteHarvestJob after = (ResourceSiteHarvestJob) state.resourceSites().site(cold.site()).activeWork().orElseThrow();
-        assertEquals(ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS - 1, after.progress().completedCropSlots(),
-                "COLD must stop only at the one loaded final-output boundary");
-        assertEquals(PhysicalIntentStatus.RUNNING, state.physicalIntents().get(after.intentId()).status());
+        ResourceSiteHarvestLineage after = state.resourceSites().site(cold.site()).harvestLineage().orElseThrow();
+        assertEquals(ResourceSitePhase.GROWING, state.resourceSites().site(cold.site()).phase());
+        assertEquals(64, state.inventory().items().get(after.outputItemId()).count());
+        assertEquals(PhysicalIntentStatus.PREPARED, state.physicalIntents().get(after.predecessorIntentId()).status());
+        assertTrue(state.inventory().items().containsKey(after.outputItemId()),
+                "the final COLD cursor has one canonical output without a HOT-only boundary");
     }
 
     @Test
@@ -349,14 +359,8 @@ class ResourceSiteHarvestTraversalTest extends ResourceSiteHarvestProcessTest {
         PhysicalIntentTransition confirmed = new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.CONFIRMED,
                 Optional.of(receipt(intent, job, output)));
 
-        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> terminal =
-                ResourceSiteHarvestProcess.planTransition(completed, intent, confirmed, 22_200L);
-        assertTrue(terminal.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
-                        .anyMatch(new ScheduleEffect.Cancelled(ResourceSiteHarvestProcess.coldProgress(job, 0L).id())::equals),
-                "terminal receipt must retire the one recurrent COLD action by stable identity");
-
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> obsolete = ResourceSiteHarvestProcess.planColdProgress(
-                completed.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt(intent, job, output))),
+                completed,
                 ResourceSiteHarvestProcess.coldProgress(job, 22_201L));
         assertEquals(List.of(new ScheduleEffect.Consumed(ResourceSiteHarvestProcess.coldProgress(job, 0L).id())),
                 obsolete.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload).toList(),
@@ -586,7 +590,7 @@ class ResourceSiteHarvestTraversalTest extends ResourceSiteHarvestProcessTest {
                 state.actorLocations().get(worker).body());
         assertEquals(0, after.progress().completedCropSlots(), "neutral transition cannot begin or replay crop custody");
         assertFalse(state.inventory().items().containsKey(after.outputItemId()));
-        assertEquals(PhysicalIntentStatus.RUNNING, state.physicalIntents().get(after.intentId()).status());
+        assertEquals(PhysicalIntentStatus.PREPARED, state.physicalIntents().get(after.intentId()).status());
     }
 
 }

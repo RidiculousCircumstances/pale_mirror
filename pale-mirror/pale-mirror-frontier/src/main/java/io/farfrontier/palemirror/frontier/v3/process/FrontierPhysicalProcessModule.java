@@ -225,6 +225,9 @@ final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule 
         }
         if (intent.kind() == PhysicalIntentKind.RESOURCE_SITE_PREPARATION || intent.kind() == PhysicalIntentKind.RESOURCE_SITE_HARVEST) {
             if (!subject.equals(intent.causeSubjectId())) throw new IllegalArgumentException("resource-site transition lacks site ownership");
+            if (intent.kind() == PhysicalIntentKind.RESOURCE_SITE_HARVEST && transition.status() == PhysicalIntentStatus.RUNNING) {
+                ResourceSiteHarvestProcess.validateRunningTransition(state, intent);
+            }
             return fencedTransition(state, intent, transition);
         }
         if (intent.kind() == PhysicalIntentKind.PRODUCTION_TRANSFORMATION) {

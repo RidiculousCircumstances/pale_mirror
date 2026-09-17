@@ -127,7 +127,12 @@ export function validateScenario(scenario) {
           || scenario.zeroPlayerPrelude.advanceTicks > 240_000))
       || (scenario.zeroPlayerPrelude.targetInstant !== undefined && (!Number.isSafeInteger(scenario.zeroPlayerPrelude.targetInstant)
           || scenario.zeroPlayerPrelude.targetInstant < 1 || scenario.zeroPlayerPrelude.advanceTicks !== undefined
-          || scenario.zeroPlayerPrelude.holdAtTarget !== true)))) {
+          || scenario.zeroPlayerPrelude.holdAtTarget !== true))
+      || (scenario.zeroPlayerPrelude.expectTerminalStatus !== undefined
+          && !['COMPLETED', 'REJECTED'].includes(scenario.zeroPlayerPrelude.expectTerminalStatus))
+      || (scenario.zeroPlayerPrelude.expectReasonContains !== undefined
+          && (typeof scenario.zeroPlayerPrelude.expectReasonContains !== 'string' || !scenario.zeroPlayerPrelude.expectReasonContains
+              || scenario.zeroPlayerPrelude.expectTerminalStatus !== 'REJECTED')))) {
     throw new Error('zeroPlayerPrelude needs one bounded relative advance or one held absolute canonical target before any client is launched');
   }
   if (scenario.restart !== undefined && (!scenario.restart || !Number.isInteger(scenario.restart.afterAction)

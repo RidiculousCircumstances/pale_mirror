@@ -40,17 +40,24 @@ final class ResourceSitePhysicalIntentStateSupport {
     }
 
     static boolean ownsNonterminalSubject(ResourceSiteState sites, SubjectId subject) {
-        return sites.sites().values().stream().filter(lifecycle -> lifecycle.phase() == ResourceSitePhase.HARVESTING).anyMatch(lifecycle -> lifecycle.siteId().equals(subject)
+        return sites.sites().values().stream().anyMatch(lifecycle -> lifecycle.phase() == ResourceSitePhase.HARVESTING && (lifecycle.siteId().equals(subject)
                 || jobId(lifecycle.siteId()).equals(subject) || lifecycle.activeWork().map(ResourceSiteWork::id).filter(subject::equals).isPresent()
                 || lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
-                .map(ResourceSiteHarvestJob::outputItemId).filter(subject::equals).isPresent());
+                .map(ResourceSiteHarvestJob::outputItemId).filter(subject::equals).isPresent())
+                || lifecycle.harvestLineage().filter(ResourceSiteHarvestLineage::receiptPending).map(lineage ->
+                lifecycle.siteId().equals(subject) || lineage.predecessorJobId().equals(subject) || lineage.workerId().equals(subject)
+                        || lineage.outputItemId().equals(subject)).orElse(false));
     }
 
     /** The terminal field disposition retains exact causal ownership without a resumable intent. */
     static boolean ownsPreparedConflictIntent(ResourceSiteState sites, PhysicalIntent intent) {
-        if (intent.kind() != PhysicalIntentKind.RESOURCE_SITE_HARVEST || intent.status() != PhysicalIntentStatus.CONFLICTED) return false;
+        if (intent.kind() != PhysicalIntentKind.RESOURCE_SITE_HARVEST
+                || (intent.status() != PhysicalIntentStatus.CONFLICTED && intent.status() != PhysicalIntentStatus.UNKNOWN_AFTER_RESTART)) return false;
         ResourceSiteLifecycle lifecycle = sites.sites().get(intent.causeSubjectId());
         if (lifecycle == null || lifecycle.phase() != ResourceSitePhase.CONFLICT) return false;
+        ResourceSiteHarvestLineage deferred = lifecycle.harvestLineage().filter(ResourceSiteHarvestLineage::receiptPending)
+                .filter(lineage -> lineage.predecessorIntentId().equals(intent.id())).orElse(null);
+        if (deferred != null) return matchesDeferredHarvestBinding(lifecycle, intent, deferred);
         try {
             validateHarvestBinding(lifecycle, intent);
             return true;
@@ -72,7 +79,11 @@ final class ResourceSitePhysicalIntentStateSupport {
 
     static FrontierWorldState completeHarvest(FrontierWorldState state, PhysicalIntent intent, ResourceSiteHarvestObservation receipt,
                                               Map<PhysicalIntentId, PhysicalIntent> nextIntents) {
-        ResourceSiteLifecycle lifecycle = state.resourceSites().site(intent.causeSubjectId()); ResourceSiteHarvestJob job = harvest(lifecycle, intent.id());
+        ResourceSiteLifecycle lifecycle = state.resourceSites().site(intent.causeSubjectId());
+        ResourceSiteHarvestLineage deferred = lifecycle.harvestLineage().filter(ResourceSiteHarvestLineage::receiptPending)
+                .filter(lineage -> lineage.predecessorIntentId().equals(intent.id())).orElse(null);
+        if (deferred != null) return completeDeferredHarvest(state, intent, receipt, nextIntents, lifecycle, deferred);
+        ResourceSiteHarvestJob job = harvest(lifecycle, intent.id());
         if (!job.progress().complete()) throw new IllegalArgumentException("resource-site harvest receipt cannot precede every observed crop");
         validateHarvestReceipt(state.bootstrap(), intent, receipt); if (!receipt.siteId().equals(job.siteId()) || !receipt.workerId().equals(job.workerId())) {
             throw new IllegalArgumentException("resource-site harvest receipt has a foreign site or worker");
@@ -85,12 +96,46 @@ final class ResourceSitePhysicalIntentStateSupport {
         return replace(state, state.resourceSites().replace(lifecycle.harvested()), state.inventory().store(receipt.output()), nextIntents, observations);
     }
 
+    private static FrontierWorldState completeDeferredHarvest(FrontierWorldState state, PhysicalIntent intent, ResourceSiteHarvestObservation receipt,
+                                                              Map<PhysicalIntentId, PhysicalIntent> nextIntents, ResourceSiteLifecycle lifecycle,
+                                                              ResourceSiteHarvestLineage lineage) {
+        if (!receipt.siteId().equals(lifecycle.siteId()) || !receipt.workerId().equals(lineage.workerId())
+                || !receipt.output().id().equals(lineage.outputItemId()) || !receipt.output().custody().equals(lineage.outputSlot())
+                || receipt.output().count() != 64 || !receipt.output().itemKind().equals("minecraft:wheat")) {
+            throw new IllegalArgumentException("deferred resource-site harvest receipt has a foreign exact binding");
+        }
+        ExactItemStack owned = state.inventory().items().get(lineage.outputItemId());
+        // A true late observation of the historical wheat effect is still evidence, but once
+        // an exact COLD successor owns that wheat it must not require resurrecting the consumed
+        // stack.  The reference-container owner reconciles the actual chest to that current
+        // successor result after this receipt.
+        if (!receipt.output().equals(owned) && !lineage.composedIntoCanonicalSuccessor(state)) {
+            throw new IllegalArgumentException("deferred resource-site harvest receipt does not match its already-owned exact output");
+        }
+        nextIntents.put(intent.id(), intent.withStatus(PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(receipt.id())));
+        Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(state.physicalObservations()); observations.put(receipt.id(), receipt);
+        return replace(state, state.resourceSites().replace(lifecycle.confirmDeferredHarvestReceipt(intent.id())),
+                state.inventory(), nextIntents, observations);
+    }
+
     static FrontierWorldState conflict(FrontierWorldState state, PhysicalIntent intent, Map<PhysicalIntentId, PhysicalIntent> nextIntents) {
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(intent.causeSubjectId());
         if (lifecycle.phase() == ResourceSitePhase.DESTROYED) return replace(state, state.resourceSites(), nextIntents, state.physicalObservations());
         if (intent.kind() == PhysicalIntentKind.RESOURCE_SITE_PREPARATION) preparation(lifecycle, intent.id());
-        else if (intent.kind() == PhysicalIntentKind.RESOURCE_SITE_HARVEST) harvest(lifecycle, intent.id());
-        else throw new IllegalArgumentException("resource-site conflict has a foreign physical intent");
+        else if (intent.kind() == PhysicalIntentKind.RESOURCE_SITE_HARVEST) {
+            ResourceSiteHarvestLineage deferred = lifecycle.harvestLineage().filter(ResourceSiteHarvestLineage::receiptPending)
+                    .filter(lineage -> lineage.predecessorIntentId().equals(intent.id())).orElse(null);
+            if (deferred != null) {
+                // Semantic completion and its exact depot custody already happened in COLD.
+                // A missing/foreign later physical surface therefore belongs to this one
+                // materialization intent, not to the renewable field or its successor.
+                InventoryConflict receiptConflict = new InventoryConflict(
+                        new SubjectId("conflict:resource-site-deferred-" + intent.id().value().replace(':', '-')),
+                        deferred.outputItemId(), deferred.outputSlot().containerId(), deferred.outputSlot().slot(), InventoryConflictKind.MISSING);
+                return replace(state, state.resourceSites(), state.inventory().recordConflict(receiptConflict), nextIntents, state.physicalObservations());
+            }
+            harvest(lifecycle, intent.id());
+        } else throw new IllegalArgumentException("resource-site conflict has a foreign physical intent");
         ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).get(lifecycle.siteId());
         ResourceSiteConflictObserved conflict = new ResourceSiteConflictObserved(lifecycle.siteId(), site.cropSlots().getFirst(),
                 ResourceSiteConflictReason.RECOVERY_UNRESOLVED, ResourceSiteConflictSource.PHYSICAL_INTENT_RECOVERY);
@@ -126,6 +171,8 @@ final class ResourceSitePhysicalIntentStateSupport {
                 validateReceipt(intent, receipt);
             }
             if (lifecycle.phase() == ResourceSitePhase.HARVESTING) validateHarvestState(sites, intents, observations, lifecycle);
+            lifecycle.harvestLineage().filter(ResourceSiteHarvestLineage::receiptPending)
+                    .ifPresent(lineage -> validateDeferredHarvestState(intents, lifecycle, lineage));
         }
     }
 
@@ -158,6 +205,24 @@ final class ResourceSitePhysicalIntentStateSupport {
             PhysicalEffectObservation observation = observations.get(intent.postconditionObservationId().orElseThrow());
             if (!(observation instanceof ResourceSiteHarvestObservation)) throw new IllegalArgumentException("harvest intent has a foreign receipt");
         }
+    }
+
+    private static void validateDeferredHarvestState(Map<PhysicalIntentId, PhysicalIntent> intents, ResourceSiteLifecycle lifecycle,
+                                                     ResourceSiteHarvestLineage lineage) {
+        PhysicalIntent intent = intents.get(lineage.predecessorIntentId());
+        if (intent == null || !matchesDeferredHarvestBinding(lifecycle, intent, lineage)
+                || (lifecycle.phase() == ResourceSitePhase.CONFLICT ? intent.status() != PhysicalIntentStatus.CONFLICTED
+                && intent.status() != PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
+                : intent.status() != PhysicalIntentStatus.PREPARED && intent.status() != PhysicalIntentStatus.RUNNING
+                && intent.status() != PhysicalIntentStatus.UNKNOWN_AFTER_RESTART)) {
+            throw new IllegalArgumentException("resource-site deferred harvest receipt lacks its exact prepared or running intent");
+        }
+    }
+
+    private static boolean matchesDeferredHarvestBinding(ResourceSiteLifecycle lifecycle, PhysicalIntent intent, ResourceSiteHarvestLineage lineage) {
+        return intent.kind() == PhysicalIntentKind.RESOURCE_SITE_HARVEST && intent.causeSubjectId().equals(lifecycle.siteId())
+                && intent.subjectIds().equals(List.of(lifecycle.siteId(), lineage.predecessorJobId(), lineage.workerId(), lineage.outputItemId()))
+                && intent.postcondition() == PhysicalPostcondition.RESOURCE_SITE_HARVESTED_OBSERVED;
     }
 
     private static void validateHarvestBinding(ResourceSiteLifecycle lifecycle, PhysicalIntent intent) {

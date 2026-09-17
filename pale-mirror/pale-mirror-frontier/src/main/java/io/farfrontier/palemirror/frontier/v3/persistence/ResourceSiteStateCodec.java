@@ -66,6 +66,10 @@ final class ResourceSiteStateCodec {
         FrontierWorldStateCodec.writeString(output, lineage.workerId().value());
         FrontierWorldStateCodec.writeString(output, lineage.outputItemId().value());
         output.writeLong(lineage.completedGrowthEpoch());
+        output.writeInt(lineage.terminalBody().x()); output.writeInt(lineage.terminalBody().y()); output.writeInt(lineage.terminalBody().z());
+        FrontierWorldStateCodec.writeString(output, lineage.predecessorIntentId().value());
+        FrontierWorldStateCodec.writeCustody(output, lineage.outputSlot());
+        output.writeBoolean(lineage.outputReceiptConfirmed());
         output.writeBoolean(lineage.successorTaskId().isPresent());
         if (lineage.successorTaskId().isPresent()) {
             FrontierWorldStateCodec.writeString(output, lineage.successorTaskId().orElseThrow().value());
@@ -79,8 +83,11 @@ final class ResourceSiteStateCodec {
         SubjectId worker = new SubjectId(FrontierWorldStateCodec.readString(input));
         SubjectId output = new SubjectId(FrontierWorldStateCodec.readString(input));
         long epoch = input.readLong();
-        if (!input.readBoolean()) return new ResourceSiteHarvestLineage(predecessorJob, predecessorTask, worker, output, epoch, Optional.empty(), Optional.empty());
-        return new ResourceSiteHarvestLineage(predecessorJob, predecessorTask, worker, output, epoch,
+        BodyPosition terminal = new BodyPosition(input.readInt(), input.readInt(), input.readInt());
+        PhysicalIntentId intent = new PhysicalIntentId(FrontierWorldStateCodec.readString(input));
+        InventoryCustody.ContainerSlot slot = readOutputSlot(input); boolean confirmed = input.readBoolean();
+        if (!input.readBoolean()) return new ResourceSiteHarvestLineage(predecessorJob, predecessorTask, worker, output, epoch, terminal, intent, slot, confirmed, Optional.empty(), Optional.empty());
+        return new ResourceSiteHarvestLineage(predecessorJob, predecessorTask, worker, output, epoch, terminal, intent, slot, confirmed,
                 Optional.of(new SubjectId(FrontierWorldStateCodec.readString(input))), Optional.of(new SubjectId(FrontierWorldStateCodec.readString(input))));
     }
 

@@ -43,6 +43,12 @@ final class FrontierV3PilotVisitIngress {
 
     boolean targetDimensionSeen() { return targetDimensionSeen; }
     boolean targetChunkSeen() { return targetChunkSeen; }
+    static String timeoutDetail(String dimension, FrontierV3PilotVisitTarget target, FrontierV3PilotVisitIngress ingress) {
+        return "timed out visiting naturally loaded " + dimension + " at anchor=" + target.teleportAnchor()
+                + " expectedClientFeet=" + target.expectedClientFeet() + "; targetDimensionSeen=" + ingress.targetDimensionSeen()
+                + " targetChunkSeen=" + ingress.targetChunkSeen() + " finalClientDimension=" + ingress.finalClientDimension()
+                + " finalClientPosition=" + ingress.finalClientPosition();
+    }
     /** A loaded target chunk is not a player arrival; ordinary visit evidence needs both. */
     boolean arrivedAt(BlockPos target) {
         return targetDimensionSeen && targetChunkSeen && Objects.requireNonNull(target, "target").equals(finalClientPosition);

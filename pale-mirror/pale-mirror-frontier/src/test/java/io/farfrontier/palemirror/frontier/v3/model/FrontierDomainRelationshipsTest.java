@@ -47,7 +47,8 @@ class FrontierDomainRelationshipsTest {
     void successorLineageRejectsAReplacementFarmer() {
         ResourceSiteHarvestLineage lineage = new ResourceSiteHarvestLineage(new SubjectId("job:site-harvest-1-wheat-field-1"),
                 new SubjectId("task:site-harvest-1"), new SubjectId("resident:1-1"), new SubjectId("item:site-harvest-1-wheat-field-1"),
-                1L, Optional.empty(), Optional.empty());
+                1L, new BodyPosition(1, 65, 1), new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:site-harvest-1-wheat-field-1"),
+                new InventoryCustody.ContainerSlot(new SubjectId("container:settlement-1-depot"), 0), true, Optional.empty(), Optional.empty());
         ResourceSiteHarvestJob replacement = new ResourceSiteHarvestJob(new SubjectId("job:site-harvest-1-wheat-field-2"),
                 new SubjectId("task:site-harvest-2"), new SubjectId("site:1-wheat-field"), new SubjectId("resident:1-2"),
                 new SubjectId("item:site-harvest-1-wheat-field-2"), new InventoryCustody.ContainerSlot(new SubjectId("container:settlement-1-depot"), 0),

@@ -19,6 +19,7 @@ import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSite;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteConflictReason;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestLineage;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestProgress;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteLifecycle;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSitePhase;
@@ -220,15 +221,21 @@ final class FrontierV3ResourceSiteExecutor {
             } else {
                 boolean successorRegrowth = isExactSuccessorRegrowth(state, site, desiredStage, completedCropSlots, claim);
                 boolean terminalPredecessor = isExactTerminalPredecessor(level, state, site, desiredStage, completedCropSlots, claim);
+                boolean deferredTerminalReceipt = isExactDeferredHarvestReceipt(level, state, site, desiredStage, completedCropSlots, claim);
                 boolean confirmedHarvestRegrowth = isExactConfirmedHarvestRegrowth(level, state, site,
                         desiredStage, completedCropSlots, claim);
                 boolean interruptedStageZero = isExactInterruptedStageZeroProjection(level, state, site, desiredStage, completedCropSlots, claim);
                 boolean uncommittedCurrentHarvest = isExactUncommittedCurrentHarvest(level, state, site, desiredStage, completedCropSlots, claim);
                 if (claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE
-                        || (!successorRegrowth && !terminalPredecessor && !confirmedHarvestRegrowth
+                        || (!successorRegrowth && !terminalPredecessor && !deferredTerminalReceipt && !confirmedHarvestRegrowth
                         && !interruptedStageZero && !uncommittedCurrentHarvest
                         && !matchesClaim(level, site, claim))) return StageProjectionResult.CONFLICT;
                 if (claim.stage() == desiredStage && claim.harvestedCropSlots() == completedCropSlots) return StageProjectionResult.CURRENT;
+                // COLD has completed the semantic predecessor but a naturally loaded owner
+                // has not yet materialized its one exact output.  Keep the complete prior
+                // field as the physical receipt witness; do not let projection, player
+                // demand, or a restart turn turn that bounded lag into drift or regrowth.
+                if (deferredTerminalReceipt) return StageProjectionResult.DEFERRED;
                 boolean lawfulRegrowthReset = resetsTerminalHarvestClaim(claim, completedCropSlots,
                         successorRegrowth, confirmedHarvestRegrowth);
                 if (claim.stage() == ResourceSiteLifecycle.MATURE_STAGE && claim.harvestedCropSlots() > completedCropSlots && !lawfulRegrowthReset) {
@@ -422,6 +429,18 @@ final class FrontierV3ResourceSiteExecutor {
         return confirmedHarvestRegrowthAdmission(level, state, site, desiredStage, completedCropSlots, claim)
                 == ConfirmedHarvestRegrowthAdmission.ADMITTED;
     }
+    private static boolean isExactDeferredHarvestReceipt(ServerLevel level, FrontierWorldState state, ResourceSite site,
+                                                          int desiredStage, int completedCropSlots,
+                                                          FrontierV3ResourceSiteLedger.Claim claim) {
+        if (claim == null || claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE
+                || claim.stage() != ResourceSiteLifecycle.MATURE_STAGE
+                || claim.harvestedCropSlots() != ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS
+                || !matchesHarvestProgress(level, site, ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS)) return false;
+        ResourceSiteLifecycle lifecycle = state.resourceSites().site(site.id());
+        return lifecycle.phase() == ResourceSitePhase.GROWING && desiredStage == lifecycle.growthStage() && completedCropSlots == 0
+                && lifecycle.harvestLineage().filter(ResourceSiteHarvestLineage::receiptPending)
+                .filter(lineage -> !lineage.composedIntoCanonicalSuccessor(state)).isPresent();
+    }
     private static ConfirmedHarvestRegrowthAdmission confirmedHarvestRegrowthAdmission(ServerLevel level, FrontierWorldState state,
                                                                                          ResourceSite site, int desiredStage,
                                                                                          int completedCropSlots,
@@ -607,6 +626,9 @@ final class FrontierV3ResourceSiteExecutor {
             } else if (harvest != null && isExactSuccessorRegrowth(state, site, lifecycle.growthStage(), 0,
                     FrontierV3ResourceSiteLedger.get(level).claim(site.id()))) {
                 result = boundedRestartProjection(level, runtime, state, site, lifecycle.growthStage(), 0);
+            } else if (isExactDeferredHarvestReceipt(level, state, site, lifecycle.growthStage(), 0,
+                    FrontierV3ResourceSiteLedger.get(level).claim(site.id()))) {
+                result = RestartReconciliation.DEFERRED;
             } else if (isExactConfirmedHarvestRegrowth(level, state, site, lifecycle.growthStage(), 0,
                     FrontierV3ResourceSiteLedger.get(level).claim(site.id()))) {
                 result = boundedRestartProjection(level, runtime, state, site, lifecycle.growthStage(), 0);

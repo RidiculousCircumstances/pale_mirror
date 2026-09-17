@@ -60,7 +60,8 @@ public final class ProductionTransformationStateSupport {
         FrontierWorldState paidState = CompanyWorkPaymentStateSupport.settleCommittedPhysicalWork(state, job);
         java.util.Optional<MarketWorkOrder> order = paidState.companies().market().acceptedForJob(job.id());
         if (order.isPresent()) {
-            paidState = paidState.withCompanies(paidState.companies().withMarket(paidState.companies().market().complete(order.orElseThrow().id())));
+            paidState = paidState.withCompanies(paidState.companies().withMarket(
+                    paidState.companies().market().complete(order.orElseThrow().id(), job)));
         }
         InventoryCustody.ContainerSlot source = (InventoryCustody.ContainerSlot) input.custody();
         ExactItemStack output = new ExactItemStack(job.outputItemId(), job.settlementId(), job.outputItemKind(), job.outputCount(), source);

@@ -30,6 +30,22 @@ public final class FencedRecoveryPhysicalIntentSupport {
             case PREPARED -> throw new IllegalArgumentException("physical intent cannot transition back to prepared");
         };
     }
+    /** Retires a PREPARED effect only when the canonical reducer has composed its exact result. */
+    public static FencedRecoveryState composed(FencedRecoveryState recovery, PhysicalIntent intent) {
+        SubjectId id = bindingId(intent); FencedRecoveryBinding binding = recovery.current().get(id);
+        if (binding == null || binding.asset() != asset(intent) || !binding.ownerId().equals(intent.causeSubjectId())) {
+            throw new IllegalArgumentException("physical intent composition authority is absent or stale");
+        }
+        return recovery.compose(id, binding.authorityEpoch());
+    }
+    /** A physical executor may start only while its exact PREPARED authority still exists. */
+    public static void requirePreparedExecutionAuthority(FencedRecoveryState recovery, PhysicalIntent intent) {
+        SubjectId id = bindingId(intent); FencedRecoveryBinding binding = recovery.current().get(id);
+        if (binding == null || binding.asset() != asset(intent) || !binding.ownerId().equals(intent.causeSubjectId())) {
+            throw new IllegalArgumentException("physical intent execution authority is absent or stale");
+        }
+        binding.require(FencedRecoveryPhase.PREPARED);
+    }
     public static SubjectId bindingId(PhysicalIntent intent) {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(intent.id().value().getBytes(StandardCharsets.UTF_8));

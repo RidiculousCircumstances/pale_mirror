@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -15,12 +16,15 @@ import java.util.Optional;
  */
 public record ResourceSiteHarvestLineage(SubjectId predecessorJobId, SubjectId predecessorTaskId,
                                          SubjectId workerId, SubjectId outputItemId, long completedGrowthEpoch,
-                                         Optional<SubjectId> successorTaskId, Optional<SubjectId> successorJobId) {
+                                         BodyPosition terminalBody, PhysicalIntentId predecessorIntentId, InventoryCustody.ContainerSlot outputSlot,
+                                         boolean outputReceiptConfirmed, Optional<SubjectId> successorTaskId, Optional<SubjectId> successorJobId) {
     public ResourceSiteHarvestLineage {
         Objects.requireNonNull(predecessorJobId, "harvest lineage predecessor job");
         Objects.requireNonNull(predecessorTaskId, "harvest lineage predecessor task");
         Objects.requireNonNull(workerId, "harvest lineage worker");
         Objects.requireNonNull(outputItemId, "harvest lineage output");
+        Objects.requireNonNull(terminalBody, "harvest lineage terminal body");
+        Objects.requireNonNull(predecessorIntentId, "harvest lineage intent"); Objects.requireNonNull(outputSlot, "harvest lineage output slot");
         successorTaskId = Optional.ofNullable(successorTaskId).orElse(Optional.empty());
         successorJobId = Optional.ofNullable(successorJobId).orElse(Optional.empty());
         if (completedGrowthEpoch < 1L || !predecessorJobId.value().startsWith("job:site-harvest-")
@@ -34,8 +38,12 @@ public record ResourceSiteHarvestLineage(SubjectId predecessorJobId, SubjectId p
     }
 
     public static ResourceSiteHarvestLineage completed(ResourceSiteHarvestJob job, long growthEpoch) {
+        return completed(job, growthEpoch, true);
+    }
+
+    public static ResourceSiteHarvestLineage completed(ResourceSiteHarvestJob job, long growthEpoch, boolean outputReceiptConfirmed) {
         return new ResourceSiteHarvestLineage(job.id(), job.taskId(), job.workerId(), job.outputItemId(), growthEpoch,
-                Optional.empty(), Optional.empty());
+                job.traversal().linearCorridorSurfaces().getLast().standingBody(), job.intentId(), job.outputSlot(), outputReceiptConfirmed, Optional.empty(), Optional.empty());
     }
 
     public ResourceSiteHarvestLineage bindSuccessor(ResourceSiteHarvestJob job) {
@@ -44,6 +52,32 @@ public record ResourceSiteHarvestLineage(SubjectId predecessorJobId, SubjectId p
             throw new IllegalArgumentException("resource-site successor must retain its one completed farmer");
         }
         return new ResourceSiteHarvestLineage(predecessorJobId, predecessorTaskId, workerId, outputItemId, completedGrowthEpoch,
-                Optional.of(job.taskId()), Optional.of(job.id()));
+                terminalBody, predecessorIntentId, outputSlot, outputReceiptConfirmed, Optional.of(job.taskId()), Optional.of(job.id()));
+    }
+
+    public boolean receiptPending() { return !outputReceiptConfirmed; }
+
+    /**
+     * The old field write may remain RUNNING after its exact wheat has entered a later COLD
+     * custody step.  The successor is not inferred from a missing stack: it is the active
+     * COLD job or retained terminal receipt that names this exact input and its result.  That
+     * durable relationship lets a natural replica observation converge to the current depot
+     * contents instead of replaying wheat or inventing a conflict.
+     */
+    public boolean composedIntoCanonicalSuccessor(FrontierWorldState state) {
+        Objects.requireNonNull(state, "harvest successor state");
+        boolean activeCold = state.productionJobs().values().stream().anyMatch(job -> outputItemId.equals(job.consumedItemId())
+                && job.inputHold() instanceof ProductionInputHold.Cold);
+        boolean terminalExact = state.companies().market().workOrders().values().stream()
+                .flatMap(order -> order.terminalReceipt().stream())
+                .anyMatch(receipt -> receipt.inputRepresentation() == TerminalProductionReceipt.ResourceRepresentation.EXACT_ITEM
+                        && receipt.outputRepresentation() == TerminalProductionReceipt.ResourceRepresentation.EXACT_ITEM
+                        && outputItemId.equals(receipt.inputId()));
+        return activeCold || terminalExact;
+    }
+    public ResourceSiteHarvestLineage confirmReceipt() {
+        if (outputReceiptConfirmed) throw new IllegalStateException("resource-site harvest receipt is already confirmed");
+        return new ResourceSiteHarvestLineage(predecessorJobId, predecessorTaskId, workerId, outputItemId, completedGrowthEpoch,
+                terminalBody, predecessorIntentId, outputSlot, true, successorTaskId, successorJobId);
     }
 }

@@ -87,6 +87,16 @@ public record FencedRecoveryState(Map<SubjectId, FencedRecoveryBinding> current,
         FencedRecoveryBinding binding = requireCurrent(bindingId, epoch).confirmed();
         return retire(binding, FencedRecoveryDisposition.REJECT_STALE, "confirmed");
     }
+    /**
+     * Retires an unstarted effect because its exact canonical successor now owns the result.
+     * This is neither a physical observation nor an ambiguity: a late projection of the old
+     * effect is stale by construction and must not replay it.
+     */
+    public FencedRecoveryState compose(SubjectId bindingId, long epoch) {
+        FencedRecoveryBinding binding = requireCurrent(bindingId, epoch);
+        binding.require(FencedRecoveryPhase.PREPARED);
+        return retire(binding, FencedRecoveryDisposition.REJECT_STALE, "canonical-composition");
+    }
     /** Terminal local owner disposition; it never becomes restart ambiguity or a new claim. */
     public FencedRecoveryState conflict(SubjectId bindingId, long epoch, String reason) {
         Objects.requireNonNull(reason, "recovery conflict reason");

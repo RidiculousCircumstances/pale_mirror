@@ -638,6 +638,29 @@ class ProductionProcessTest {
         assertTrue(planned.stream().map(ProposedEvent::payload).noneMatch(MarketWorkOrderAccepted.class::isInstance));
     }
 
+    @Test
+    void delayedSchedulerCommitRetainsTheQuoteTickThatWasCurrentAtItsExactDueAction() {
+        FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:market-delayed-quote"), 91L));
+        SubjectId settlement = new SubjectId("settlement:1");
+        for (ProposedEvent event : CompanyFoundationProcess.plan(initial, CompanyFoundationProcess.review(settlement, 1, 4_000L))) {
+            if (event.payload() instanceof CompanyRegistered registered) initial = CompanyFoundationProcess.reduce(initial, settlement, registered);
+            if (event.payload() instanceof EmploymentContractOpened opened) initial = CompanyFoundationProcess.reduceEmployment(initial, settlement, opened);
+        }
+        FrontierWorldState state = productionTask(initial, StrategicTaskStatus.PENDING);
+        StrategicTask task = state.strategicPlans().tasks().values().iterator().next();
+        MarketDemand demand = MarketClearingProcess.foodDemand(state, task, 100L);
+        state = state.withCompanies(state.companies().withMarket(MarketOrderBook.empty().open(demand)));
+        SubjectId company = CompanyFoundationProcess.companyId(settlement);
+        CompanyQuote quote = new CompanyQuote(new SubjectId("quote:delayed-due"), demand.id(), company, demand.itemCount(),
+                demand.maximumTotalPrice(), 100L, demand.expiresAtTick());
+        FrontierWorldState open = state;
+
+        FrontierWorldState published = MarketClearingProcess.reduceQuote(state, company, demand.expiresAtTick() + 1L, new MarketQuotePublished(quote));
+
+        assertEquals(quote, published.companies().market().quotes().get(quote.id()));
+        assertThrows(IllegalArgumentException.class, () -> MarketClearingProcess.reduceQuote(open, company, 99L, new MarketQuotePublished(quote)));
+    }
+
     static FrontierWorldState productionTask(FrontierWorldState state, StrategicTaskStatus status) {
         SubjectId settlement = new SubjectId("settlement:1");
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:test-production"), settlement,
@@ -747,19 +770,16 @@ class ProductionProcessTest {
                         .map(StrategicTaskTransition.class::cast).findFirst().orElseThrow());
         harvesting = ResourceSiteHarvestProcess.reduceStarted(harvesting, siteId, firstStarted);
         harvesting = ResourceSiteHarvestProcess.reducePrepared(harvesting, siteId, firstPrepared.intent());
-        harvesting = harvesting.transitionPhysicalIntent(firstStarted.job().intentId(), PhysicalIntentStatus.RUNNING, Optional.empty());
         harvesting = completeHarvest(harvesting, siteId, firstStarted.job().id());
-        ResourceSiteHarvestJob completed = (ResourceSiteHarvestJob) harvesting.resourceSites().site(siteId).activeWork().orElseThrow();
-        ExactItemStack output = new ExactItemStack(completed.outputItemId(), new SubjectId("settlement:1"), "minecraft:wheat", 64, completed.outputSlot());
+        ResourceSiteHarvestLineage completed = harvesting.resourceSites().site(siteId).harvestLineage().orElseThrow();
+        ExactItemStack output = harvesting.inventory().items().get(completed.outputItemId());
+        harvesting = StrategicObjectiveProcess.reduceTaskTransition(harvesting, new SubjectId("settlement:1"),
+                new StrategicTaskTransition(completed.predecessorTaskId(), StrategicTaskStatus.COMPLETED));
         PhysicalIntentTransition confirmed = new PhysicalIntentTransition(firstPrepared.intent().id(), PhysicalIntentStatus.CONFIRMED,
                 Optional.of(new ResourceSiteHarvestObservation(new PhysicalObservationId("observation:relationship-harvest-first"), firstPrepared.intent().id(),
                         siteId, completed.workerId(), output, 64)));
-        List<ProposedEvent> terminalPlan = ResourceSiteHarvestProcess.planTransition(harvesting,
-                harvesting.physicalIntents().get(firstPrepared.intent().id()), confirmed, 22_300L);
-        FrontierWorldState grown = harvesting.transitionPhysicalIntent(firstPrepared.intent().id(), PhysicalIntentStatus.CONFIRMED, confirmed.observation());
-        grown = StrategicObjectiveProcess.reduceTaskTransition(grown, new SubjectId("settlement:1"),
-                terminalPlan.stream().map(ProposedEvent::payload).filter(StrategicTaskTransition.class::isInstance)
-                        .map(StrategicTaskTransition.class::cast).findFirst().orElseThrow());
+        FrontierWorldState running = harvesting.transitionPhysicalIntent(firstPrepared.intent().id(), PhysicalIntentStatus.RUNNING, Optional.empty());
+        FrontierWorldState grown = running.transitionPhysicalIntent(firstPrepared.intent().id(), PhysicalIntentStatus.CONFIRMED, confirmed.observation());
         for (int stage = 0; stage < ResourceSiteLifecycle.MATURE_STAGE; stage++) {
             ResourceSiteLifecycle lifecycle = grown.resourceSites().site(siteId);
             grown = ResourceSiteProcess.reduceGrowth(grown, siteId,

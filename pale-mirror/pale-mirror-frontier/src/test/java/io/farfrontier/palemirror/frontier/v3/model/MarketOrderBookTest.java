@@ -45,7 +45,12 @@ class MarketOrderBookTest {
         assertThrows(IllegalArgumentException.class, () -> accepted.accept(new MarketWorkOrder(new SubjectId("order:northwatch-bread-duplicate"),
                 demand.id(), expensive.id(), seller, demand.reasonId(), new SubjectId("job:northwatch-bread-duplicate"), new SubjectId("reservation:northwatch-bread-duplicate"), expensive.totalPrice(),
                 MarketWorkOrderStatus.ACCEPTED), 121L));
-        assertEquals(MarketDemandStatus.FULFILLED, accepted.complete(order.id()).demands().get(demand.id()).status());
+        ProductionJob completedJob = new ProductionJob(order.jobId(), buyer, new SubjectId("structure:northwatch-workshop"),
+                new SubjectId("resident:northwatch-baker"), new SubjectId("item:northwatch-wheat"),
+                new SubjectId("item:northwatch-bread"), "minecraft:bread", 64);
+        MarketOrderBook fulfilled = accepted.complete(order.id(), completedJob);
+        assertEquals(MarketDemandStatus.FULFILLED, fulfilled.demands().get(demand.id()).status());
+        assertEquals(TerminalProductionReceipt.of(completedJob), fulfilled.workOrders().get(order.id()).terminalReceipt().orElseThrow());
     }
 
     @Test

@@ -141,7 +141,7 @@ public final class FrontierDomainRelationships {
             surface(ProductionJob.class, "id", "settlementId", "facilityId", "workerId", "consumedItemId", "outputItemId"),
             surface(ResourceSiteLifecycle.class, "siteId"),
             surface(ResourceSiteHarvestJob.class, "id", "taskId", "siteId", "workerId", "outputItemId", "intentId"),
-            surface(ResourceSiteHarvestLineage.class, "predecessorJobId", "predecessorTaskId", "workerId", "outputItemId", "successorTaskId", "successorJobId"),
+            surface(ResourceSiteHarvestLineage.class, "predecessorJobId", "predecessorTaskId", "workerId", "outputItemId", "predecessorIntentId", "successorTaskId", "successorJobId"),
             surface(SettlementProvision.class, "settlementId", "recipientIds", "activeIntentId"),
             surface(SettlementRationAllocation.class, "itemId", "recipientIds"),
             surface(SceneLease.class, "id", "worldId", "memberPositions", "ambientHandoffActorIds"),

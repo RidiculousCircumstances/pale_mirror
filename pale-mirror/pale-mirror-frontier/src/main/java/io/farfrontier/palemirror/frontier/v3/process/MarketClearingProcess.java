@@ -97,9 +97,16 @@ public final class MarketClearingProcess {
     public static FrontierWorldState reduceQuote(FrontierWorldState state, SubjectId subject, long now, MarketQuotePublished published) {
         CompanyQuote quote = published.quote(); Company company = state.companies().companies().get(quote.sellerId());
         if (company == null || !subject.equals(company.id()) || company.status() != CompanyStatus.ACTIVE) {
-            throw new IllegalArgumentException("market quote must be published by its active company");
+            throw new IllegalArgumentException("market quote requires its active seller: quote=" + quote.id().value()
+                    + " seller=" + quote.sellerId().value() + " subject=" + subject.value()
+                    + " status=" + (company == null ? "MISSING" : company.status()));
         }
-        return state.withCompanies(state.companies().withMarket(state.companies().market().publish(quote, now)));
+        if (quote.quotedAtTick() > now) throw new IllegalArgumentException("market quote cannot be published before its declared due tick");
+        // Scheduler catch-up commits at the current durable instant, which may be later than
+        // the exact due action that made this quote current.  The quote's immutable tick is
+        // the commercial authority; using catch-up wall time here would falsely expire valid
+        // autonomous work and quarantine the whole runtime.
+        return state.withCompanies(state.companies().withMarket(state.companies().market().publish(quote, quote.quotedAtTick())));
     }
 
     public static FrontierWorldState reduceAccepted(FrontierWorldState state, SubjectId subject, long now, MarketWorkOrderAccepted accepted) {
@@ -107,7 +114,11 @@ public final class MarketClearingProcess {
         if (demand == null || !subject.equals(demand.buyerId()) || !order.taskId().equals(demand.reasonId())) {
             throw new IllegalArgumentException("market work order must be accepted by its exact buyer and task");
         }
-        return state.withCompanies(state.companies().withMarket(state.companies().market().accept(order, now)));
+        CompanyQuote quote = state.companies().market().quotes().get(order.quoteId());
+        if (quote == null || quote.quotedAtTick() > now) {
+            throw new IllegalArgumentException("market work order has no quote current at its declared due tick");
+        }
+        return state.withCompanies(state.companies().withMarket(state.companies().market().accept(order, quote.quotedAtTick())));
     }
 
     public static FrontierWorldState reduceWorkOrderCancelled(FrontierWorldState state, SubjectId subject, MarketWorkOrderCancelled cancelled) {

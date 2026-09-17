@@ -626,7 +626,6 @@ class ResourceSiteHarvestProcessTest {
                 (StrategicTaskTransition) planned.getFirst().payload());
         state = ResourceSiteHarvestProcess.reduceStarted(state, site, started);
         state = ResourceSiteHarvestProcess.reducePrepared(state, site, ((PhysicalIntentPrepared) planned.get(2).payload()).intent());
-        state = state.transitionPhysicalIntent(started.job().intentId(), PhysicalIntentStatus.RUNNING, Optional.empty());
         for (int index = 0; index < coldSteps; index++) {
             ResourceSiteHarvestJob current = (ResourceSiteHarvestJob) state.resourceSites().site(site).activeWork().orElseThrow();
             state = ResourceSiteHarvestProcess.reduceColdTraversalAdvanced(state, site,

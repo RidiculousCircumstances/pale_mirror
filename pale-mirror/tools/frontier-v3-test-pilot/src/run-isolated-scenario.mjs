@@ -26,6 +26,7 @@ import { persistentRecoveryMetadata, resolveIsolatedScenarioOuterAttempt } from 
 import { armNaturalDemandEpisode, awaitNaturalDemandEpisodeArmed, stopPilotNaturalDemandCarrier } from './natural-demand-episode.mjs';
 import { snapshotPlayerSave } from './player-save-snapshot.mjs';
 import { zeroPlayerBoundedness } from './zero-player-boundedness.mjs';
+import { zeroPlayerPerformance, zeroPlayerRejectedReceipt, zeroPlayerRequestReceipt } from './zero-player-receipt.mjs';
 
 const [scenarioPath, outputPath = `build/frontier-v3-scenarios/${basename(process.argv[2] ?? 'scenario.json', '.json')}-${Date.now()}.json`] = process.argv.slice(2);
 if (!scenarioPath) throw new Error('usage: npm run scenario:isolated -- <scenario.json> [manifest.json]');
@@ -320,6 +321,9 @@ try {
   if (jfr !== undefined) await awaitJfrEvidence(jfr);
   completed = true;
 } catch (error) {
+  // The runner's top-level body reaches this catch before later class declarations initialize.
+  // Preserve the typed evidence without making ordinary early failures hit that TDZ.
+  if (error?.name === 'ZeroPlayerPreludeTimeout') zeroPlayerPrelude = error.evidence;
   failure = error;
   throw error;
 } finally {
@@ -526,6 +530,7 @@ async function startServer(reset) {
 async function runZeroPlayerPrelude(server, declaration) {
   const absolute = Number.isSafeInteger(declaration.targetInstant);
   const command = absolute ? `pale_mirror v3 advance_to ${declaration.targetInstant}` : `pale_mirror v3 advance ${declaration.advanceTicks}`;
+  const expectedTerminalStatus = declaration.expectTerminalStatus ?? 'COMPLETED';
   // This receipt is specifically about this server-owned interval, not the number of client
   // segments that occurred earlier in the same multi-restart carrier.  Keeping the prior count
   // separately prevents a completed earlier ordinary visit from falsifying a genuine COLD window.
@@ -539,6 +544,7 @@ async function runZeroPlayerPrelude(server, declaration) {
     // output appended after this exact RCON admission can acknowledge it; a prior bootstrap
     // completion marker must not manufacture an elapsed no-player interval.
     if (server.output().slice(outputOffset).includes('Frontier v3 completed operator fast-forward')) {
+      if (expectedTerminalStatus !== 'COMPLETED') throw new Error('zero-player prelude completed when its declared terminal receipt required rejection');
       const clientSegmentsDuringInterval = clientSegments.length - clientSegmentsAtAdmission;
       if (clientSegmentsDuringInterval !== 0) {
         throw new Error('ordinary client segment started during zero-player canonical interval');
@@ -559,30 +565,42 @@ async function runZeroPlayerPrelude(server, declaration) {
     if (appended.includes('Frontier v3 rejected relative fast-forward because physical work became pending')
         || appended.includes('Frontier v3 rejected relative fast-forward at admission because physical work is pending')
         || appended.includes('Frontier v3 rejected absolute fast-forward target because physical work became pending')) {
-      throw new Error('zero-player prelude was rejected because physical work was pending at the canonical interval boundary');
+      if (expectedTerminalStatus !== 'REJECTED') {
+        throw new Error('zero-player prelude was rejected because physical work was pending at the canonical interval boundary');
+      }
+      const terminal = zeroPlayerRejectedReceipt(await requestRconQuery({ port: server.rconPort, password: server.rconPassword,
+        command: 'pale_mirror v3 inspect fast_forward' }));
+      if (terminal.status !== 'REJECTED' || (declaration.expectReasonContains !== undefined && !terminal.reason.includes(declaration.expectReasonContains))) {
+        throw new Error('zero-player prelude rejection lacks its declared causal terminal receipt');
+      }
+      return Object.freeze({ status: 'rejected', ...(absolute ? { targetInstant: declaration.targetInstant, holdAtTarget: true }
+        : { advanceTicks: declaration.advanceTicks }), command, clientSegmentsBeforeCompletion: clientSegments.length - clientSegmentsAtAdmission,
+        clientSegmentsBeforeAdmission: clientSegmentsAtAdmission, serverPid: server.serverPid, terminalReceipt: terminal,
+        boundedness: zeroPlayerBoundedness(appended), performance: zeroPlayerPerformance(await requestRconQuery({ port: server.rconPort,
+          password: server.rconPassword, command: 'pale_mirror v3 inspect performance' })) });
     }
     const remaining = deadline - Date.now();
     if (remaining <= 0) break;
     await awaitWithin(server.outputAfter(before), Math.min(remaining, 1_000), 'zero-player prelude server output').catch(() => undefined);
     before = server.outputRevision();
   }
-  throw new Error('zero-player prelude did not receive the server-owned canonical completion marker');
+  const [terminalResponse, performanceResponse] = await Promise.all([
+    requestRconQuery({ port: server.rconPort, password: server.rconPassword, command: 'pale_mirror v3 inspect fast_forward' }),
+    requestRconQuery({ port: server.rconPort, password: server.rconPassword, command: 'pale_mirror v3 inspect performance' })
+  ]);
+  const terminalReceipt = zeroPlayerRequestReceipt(terminalResponse);
+  const performance = zeroPlayerPerformance(performanceResponse);
+  throw new ZeroPlayerPreludeTimeout(Object.freeze({ status: 'timeout', ...(absolute ? { targetInstant: declaration.targetInstant, holdAtTarget: true }
+    : { advanceTicks: declaration.advanceTicks }), command, clientSegmentsBeforeCompletion: clientSegments.length - clientSegmentsAtAdmission,
+    clientSegmentsBeforeAdmission: clientSegmentsAtAdmission, serverPid: server.serverPid, terminalReceipt,
+    boundedness: zeroPlayerBoundedness(server.output().slice(outputOffset)), performance }));
 }
 
-function zeroPlayerPerformance(response) {
-  const marker = 'PMV3_DIAG ';
-  const offset = typeof response === 'string' ? response.indexOf(marker) : -1;
-  if (offset < 0) throw new Error('zero-player prelude performance query did not return a PMV3 diagnostic');
-  let value;
-  try { value = JSON.parse(response.slice(offset + marker.length)); }
-  catch { throw new Error('zero-player prelude performance query returned malformed PMV3 diagnostic'); }
-  const slice = value?.fastForwardSlice;
-  if (value?.kind !== 'performance' || value.status !== 'ok' || !Number.isInteger(slice?.samples) || slice.samples < 1
-      || !['advancedTicks', 'totalNanos', 'maxNanos', 'safetyNanos', 'maxSafetyNanos', 'advanceNanos', 'maxAdvanceNanos']
-        .every(field => Number.isInteger(slice[field]) && slice[field] >= 0)) {
-    throw new Error('zero-player prelude performance query lacks bounded fast-forward slice attribution');
+class ZeroPlayerPreludeTimeout extends Error {
+  constructor(evidence) {
+    super(`zero-player prelude timed out with request=${evidence.terminalReceipt.requestId} status=${evidence.terminalReceipt.status}`);
+    this.name = 'ZeroPlayerPreludeTimeout'; this.evidence = evidence;
   }
-  return Object.freeze(value);
 }
 
 /** Declared no-player wall interval lets vanilla retire the departed client's ordinary holders. */
