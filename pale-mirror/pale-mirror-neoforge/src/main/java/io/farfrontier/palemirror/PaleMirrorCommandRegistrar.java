@@ -43,7 +43,11 @@ final class PaleMirrorCommandRegistrar {
                 .requires(source -> source.hasPermission(2) && FrontierV3ServerLifecycle.ownsPhysicalWorld(source.getServer()));
         LiteralArgumentBuilder<CommandSourceStack> inspect = Commands.literal("inspect");
         for (FrontierV3DiagnosticView view : FrontierV3DiagnosticView.values()) {
-            if (view.requiresId()) inspect.then(diagnosticObject(view.token()));
+            if (view.token().equals("status")) inspect.then(Commands.literal(view.token())
+                    .executes(context -> v3Diagnostic(context, view.token(), ""))
+                    .then(Commands.argument("id", StringArgumentType.greedyString())
+                            .executes(context -> v3Diagnostic(context, view.token(), StringArgumentType.getString(context, "id")))));
+            else if (view.requiresId()) inspect.then(diagnosticObject(view.token()));
             else inspect.then(Commands.literal(view.token()).executes(context -> v3Diagnostic(context, view.token(), "")));
         }
         v3.then(inspect);
@@ -51,20 +55,28 @@ final class PaleMirrorCommandRegistrar {
                 .then(Commands.argument("ticks", IntegerArgumentType.integer(1, FrontierV3ServerLifecycle.MAX_FAST_FORWARD_TICKS)).executes(context -> {
                     int ticks = IntegerArgumentType.getInteger(context, "ticks");
                     if (!FrontierV3ServerLifecycle.requestFastForward(context.getSource().getServer(), ticks)) {
-                        context.getSource().sendFailure(Component.literal("Frontier v3 cannot fast-forward while physical work is pending or another request is active."));
+                        context.getSource().sendFailure(Component.literal("Frontier v3 fast-forward "
+                                + FrontierV3ServerLifecycle.latestFastForwardReceipt(context.getSource().getServer())
+                                + "; inspect performance for the bounded receipt history."));
                         return 0;
                     }
-                    context.getSource().sendSuccess(() -> Component.literal("Queued Frontier v3 fast-forward for " + ticks + " tick(s)."), true);
+                    context.getSource().sendSuccess(() -> Component.literal("Queued Frontier v3 fast-forward "
+                            + FrontierV3ServerLifecycle.latestFastForwardReceipt(context.getSource().getServer())
+                            + "; inspect performance for its terminal result."), true);
                     return ticks;
                 })));
         v3.then(Commands.literal("advance_to").requires(source -> source.hasPermission(4))
                 .then(Commands.argument("instant", LongArgumentType.longArg(1L)).executes(context -> {
                     long instant = LongArgumentType.getLong(context, "instant");
                     if (!FrontierV3ServerLifecycle.requestFastForwardTo(context.getSource().getServer(), instant)) {
-                        context.getSource().sendFailure(Component.literal("Frontier v3 rejected the absolute fast-forward target: it is crossed, unbounded, physically unsafe, or another request is active."));
+                        context.getSource().sendFailure(Component.literal("Frontier v3 fast-forward "
+                                + FrontierV3ServerLifecycle.latestFastForwardReceipt(context.getSource().getServer())
+                                + "; inspect performance for the bounded receipt history."));
                         return 0;
                     }
-                    context.getSource().sendSuccess(() -> Component.literal("Queued Frontier v3 fast-forward to canonical instant " + instant + "."), true);
+                    context.getSource().sendSuccess(() -> Component.literal("Queued Frontier v3 fast-forward "
+                            + FrontierV3ServerLifecycle.latestFastForwardReceipt(context.getSource().getServer())
+                            + "; inspect performance for its terminal result."), true);
                     return 1;
                 })));
         v3.then(Commands.literal("release_advance_hold").requires(source -> source.hasPermission(4)).executes(context -> {
@@ -72,7 +84,9 @@ final class PaleMirrorCommandRegistrar {
                 context.getSource().sendFailure(Component.literal("Frontier v3 has no held absolute fast-forward target to release."));
                 return 0;
             }
-            context.getSource().sendSuccess(() -> Component.literal("Released Frontier v3 absolute fast-forward hold."), true);
+            context.getSource().sendSuccess(() -> Component.literal("Released Frontier v3 absolute fast-forward hold "
+                    + FrontierV3ServerLifecycle.latestFastForwardReceipt(context.getSource().getServer())
+                    + "; inspect performance for the bounded receipt history."), true);
             return 1;
         }));
         // Attach the finished mutable v3 branch only after every child is present. Brigadier

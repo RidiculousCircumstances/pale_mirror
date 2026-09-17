@@ -8,7 +8,7 @@ import { createConnection } from 'node:net';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defaultPilotProfile, jfrCaptureRequest, loadScenario, pilotCrashBoundary, restartSegments } from './scenario.mjs';
-import { requestRconCommand, requestRconStop } from './rcon.mjs';
+import { requestRconCommand, requestRconQuery, requestRconStop } from './rcon.mjs';
 import { PhaseTiming } from './timing.mjs';
 import { writeFailureBundle } from './failure-bundle.mjs';
 import { boundedCleanupFailures, finalizeFailurePath } from './failure-finalization.mjs';
@@ -25,6 +25,7 @@ import { assertRecoveryCarrierManifest } from './f02b-native-semantic.mjs';
 import { persistentRecoveryMetadata, resolveIsolatedScenarioOuterAttempt } from './isolated-scenario-attempt.mjs';
 import { armNaturalDemandEpisode, awaitNaturalDemandEpisodeArmed, stopPilotNaturalDemandCarrier } from './natural-demand-episode.mjs';
 import { snapshotPlayerSave } from './player-save-snapshot.mjs';
+import { zeroPlayerBoundedness } from './zero-player-boundedness.mjs';
 
 const [scenarioPath, outputPath = `build/frontier-v3-scenarios/${basename(process.argv[2] ?? 'scenario.json', '.json')}-${Date.now()}.json`] = process.argv.slice(2);
 if (!scenarioPath) throw new Error('usage: npm run scenario:isolated -- <scenario.json> [manifest.json]');
@@ -371,7 +372,8 @@ try {
             server?.ownerObservation ?? lastServerAttempt?.ownerObservation ?? retainedOwnerObservation),
           cleanupFailures: boundedCleanupFailures(cleanupFailures) },
         termination: { portClosed: !await portOpen(port), abruptStopAttempted }, decodedWalTail, diagnosticSnapshots,
-        lifecycleDirectory: lifecycle.directory, serverLogText: lastServerAttempt?.output() });
+        lifecycleDirectory: lifecycle.directory, serverLogText: lastServerAttempt?.output(), zeroPlayerIntervals: {
+          prelude: zeroPlayerPrelude, restart: restartZeroPlayerInterlude, secondaryRestart: secondaryRestartZeroPlayerInterlude } });
       console.error(`PMV3_ISOLATED failure_bundle=${bundle}`);
       return bundle;
     }
@@ -522,7 +524,8 @@ async function startServer(reset) {
  * own completion log, rather than pretending a later client diagnostic observed COLD time.
  */
 async function runZeroPlayerPrelude(server, declaration) {
-  const command = `pale_mirror v3 advance ${declaration.advanceTicks}`;
+  const absolute = Number.isSafeInteger(declaration.targetInstant);
+  const command = absolute ? `pale_mirror v3 advance_to ${declaration.targetInstant}` : `pale_mirror v3 advance ${declaration.advanceTicks}`;
   // This receipt is specifically about this server-owned interval, not the number of client
   // segments that occurred earlier in the same multi-restart carrier.  Keeping the prior count
   // separately prevents a completed earlier ordinary visit from falsifying a genuine COLD window.
@@ -540,17 +543,23 @@ async function runZeroPlayerPrelude(server, declaration) {
       if (clientSegmentsDuringInterval !== 0) {
         throw new Error('ordinary client segment started during zero-player canonical interval');
       }
-      return Object.freeze({ status: 'completed', advanceTicks: declaration.advanceTicks, command,
+      const performance = zeroPlayerPerformance(await requestRconQuery({ port: server.rconPort, password: server.rconPassword,
+        command: 'pale_mirror v3 inspect performance' }));
+      return Object.freeze({ status: absolute ? 'held' : 'completed', ...(absolute ? { targetInstant: declaration.targetInstant, holdAtTarget: true }
+        : { advanceTicks: declaration.advanceTicks }), command,
         clientSegmentsBeforeCompletion: clientSegmentsDuringInterval,
-        clientSegmentsBeforeAdmission: clientSegmentsAtAdmission, serverPid: server.serverPid });
+        clientSegmentsBeforeAdmission: clientSegmentsAtAdmission, serverPid: server.serverPid,
+        boundedness: zeroPlayerBoundedness(server.output().slice(outputOffset)), performance });
     }
     // A physically pending operation is a truthful COLD boundary, never a reason to leave a
     // relative request silently queued until this carrier's wall-clock timeout.  Preserve the
     // server-owned reason in the failure bundle so the caller can distinguish a genuine
     // physical hand-off from a missing completion marker.
     const appended = server.output().slice(outputOffset);
-    if (appended.includes('Frontier v3 rejected relative fast-forward because physical work became pending')) {
-      throw new Error('zero-player prelude was rejected because physical work became pending during the canonical interval');
+    if (appended.includes('Frontier v3 rejected relative fast-forward because physical work became pending')
+        || appended.includes('Frontier v3 rejected relative fast-forward at admission because physical work is pending')
+        || appended.includes('Frontier v3 rejected absolute fast-forward target because physical work became pending')) {
+      throw new Error('zero-player prelude was rejected because physical work was pending at the canonical interval boundary');
     }
     const remaining = deadline - Date.now();
     if (remaining <= 0) break;
@@ -558,6 +567,22 @@ async function runZeroPlayerPrelude(server, declaration) {
     before = server.outputRevision();
   }
   throw new Error('zero-player prelude did not receive the server-owned canonical completion marker');
+}
+
+function zeroPlayerPerformance(response) {
+  const marker = 'PMV3_DIAG ';
+  const offset = typeof response === 'string' ? response.indexOf(marker) : -1;
+  if (offset < 0) throw new Error('zero-player prelude performance query did not return a PMV3 diagnostic');
+  let value;
+  try { value = JSON.parse(response.slice(offset + marker.length)); }
+  catch { throw new Error('zero-player prelude performance query returned malformed PMV3 diagnostic'); }
+  const slice = value?.fastForwardSlice;
+  if (value?.kind !== 'performance' || value.status !== 'ok' || !Number.isInteger(slice?.samples) || slice.samples < 1
+      || !['advancedTicks', 'totalNanos', 'maxNanos', 'safetyNanos', 'maxSafetyNanos', 'advanceNanos', 'maxAdvanceNanos']
+        .every(field => Number.isInteger(slice[field]) && slice[field] >= 0)) {
+    throw new Error('zero-player prelude performance query lacks bounded fast-forward slice attribution');
+  }
+  return Object.freeze(value);
 }
 
 /** Declared no-player wall interval lets vanilla retire the departed client's ordinary holders. */
@@ -635,6 +660,9 @@ async function runPilot(scenarioFile, manifest, server, clientSegments, segment,
       FRONTIER_V3_PREPARED_BUILD_IDENTITY: preparedIdentityPath,
       FRONTIER_V3_PILOT_LIFECYCLE_CONTROL_DIRECTORY: lifecycle.directory,
       FRONTIER_V3_PILOT_LIFECYCLE_SEGMENT: segment,
+      // Middle recovery segments still need an authenticated ordinary client departure;
+      // only the final segment is permitted to publish the terminal assertion barrier.
+      FRONTIER_V3_PILOT_LIFECYCLE_CLOSE: 'true',
       FRONTIER_V3_PILOT_LIFECYCLE_TERMINAL: ['before_restart', 'middle_restart'].includes(segment) ? 'false' : 'true' }, stdio: 'inherit'
   });
   const code = await exited(pilot);

@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
 import net.minecraft.core.BlockPos;
@@ -29,11 +30,23 @@ final class FrontierV3FastForwardSafety {
         return requiresPhysicalStep(state.physicalIntents().values(), state.sceneLeases().values(), intent -> affectedAreaLoaded(level, intent));
     }
 
+    /** Combines canonical physical work with an executor-owned in-flight physical cursor. */
+    static boolean requiresPhysicalStep(boolean canonicalPhysicalStep, boolean ownedProjectionPending) {
+        return canonicalPhysicalStep || ownedProjectionPending;
+    }
+
+    /** Preserves the canonical blocker while retaining the exact executor cursor when present. */
+    static String blockingDescription(String canonicalBlocker, String ownedProjectionBlocker) {
+        if (ownedProjectionBlocker == null || ownedProjectionBlocker.isBlank()) return canonicalBlocker;
+        if (canonicalBlocker == null || canonicalBlocker.isBlank() || canonicalBlocker.equals("none")) return ownedProjectionBlocker;
+        return canonicalBlocker + ";" + ownedProjectionBlocker;
+    }
+
     static boolean requiresPhysicalStep(Collection<PhysicalIntent> intents, Collection<SceneLease> sceneLeases,
                                         Predicate<PhysicalIntent> affectedAreaLoaded) {
         Objects.requireNonNull(intents, "physical intents"); Objects.requireNonNull(sceneLeases, "scene leases");
         Objects.requireNonNull(affectedAreaLoaded, "affected area loader");
-        return intents.stream().filter(FrontierV3FastForwardSafety::canExecutePhysicalEffect)
+        return intents.stream().filter(intent -> canExecutePhysicalEffect(intent, sceneLeases))
                         .anyMatch(affectedAreaLoaded)
                 || sceneLeases.stream().anyMatch(lease -> lease.status() == SceneLeaseStatus.PREPARED
                         || lease.status() == SceneLeaseStatus.HOT || lease.status() == SceneLeaseStatus.DRAINING);
@@ -53,7 +66,7 @@ final class FrontierV3FastForwardSafety {
                                       Predicate<PhysicalIntent> affectedAreaLoaded) {
         Objects.requireNonNull(intents, "physical intents"); Objects.requireNonNull(sceneLeases, "scene leases");
         Objects.requireNonNull(affectedAreaLoaded, "affected area loader");
-        String blockedIntents = intents.stream().filter(FrontierV3FastForwardSafety::canExecutePhysicalEffect)
+        String blockedIntents = intents.stream().filter(intent -> canExecutePhysicalEffect(intent, sceneLeases))
                 .filter(affectedAreaLoaded).sorted(Comparator.comparing(intent -> intent.id().value()))
                 .map(intent -> "intent=" + intent.id().value() + ":" + intent.kind() + ":" + intent.status()).collect(Collectors.joining(","));
         String blockedScenes = sceneLeases.stream().filter(lease -> lease.status() == SceneLeaseStatus.PREPARED
@@ -74,6 +87,21 @@ final class FrontierV3FastForwardSafety {
         Objects.requireNonNull(intent, "physical intent");
         return intent.status() == PhysicalIntentStatus.RUNNING
                 || intent.status() == PhysicalIntentStatus.PREPARED && intent.kind() != PhysicalIntentKind.RESOURCE_SITE_HARVEST;
+    }
+
+    /**
+     * A loaded chunk alone never owns a harvest.  A RUNNING harvest can require physical work
+     * only while its exact typed scene is still active; after that scene's fenced release the
+     * same intent is COLD-owned even during Minecraft's ordinary post-player chunk grace.
+     */
+    private static boolean canExecutePhysicalEffect(PhysicalIntent intent, Collection<SceneLease> sceneLeases) {
+        if (!canExecutePhysicalEffect(intent)) return false;
+        if (intent.kind() != PhysicalIntentKind.RESOURCE_SITE_HARVEST || intent.status() != PhysicalIntentStatus.RUNNING) return true;
+        return sceneLeases.stream().filter(lease -> lease.status() == SceneLeaseStatus.PREPARED
+                        || lease.status() == SceneLeaseStatus.HOT || lease.status() == SceneLeaseStatus.DRAINING)
+                .filter(FrontierSceneBehaviors::isResourceSiteHarvest)
+                .map(FrontierSceneBehaviors::resourceSiteHarvest)
+                .anyMatch(cause -> intent.subjectIds().contains(cause.jobId()));
     }
 
     private static boolean affectedAreaLoaded(ServerLevel level, PhysicalIntent intent) {

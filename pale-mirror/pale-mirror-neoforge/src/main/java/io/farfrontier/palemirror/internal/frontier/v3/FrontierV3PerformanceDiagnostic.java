@@ -34,7 +34,7 @@ final class FrontierV3PerformanceDiagnostic {
      */
     static String render(CheckpointImage checkpoint, FrontierExecutionMetrics.Snapshot metrics, int fastForwardRemaining, Long fastForwardTarget,
                          String fastForwardFailure, FrontierV3ServerLifecycle.FastForwardTargetOutcome outcome) {
-        return render(checkpoint, metrics, null, fastForwardRemaining, fastForwardTarget, fastForwardFailure, outcome);
+        return render(checkpoint, metrics, null, fastForwardRemaining, fastForwardTarget, fastForwardFailure, outcome, null);
     }
 
     /**
@@ -44,6 +44,21 @@ final class FrontierV3PerformanceDiagnostic {
     static String render(CheckpointImage checkpoint, FrontierExecutionMetrics.Snapshot metrics, FrontierWorldState state,
                          int fastForwardRemaining, Long fastForwardTarget, String fastForwardFailure,
                          FrontierV3ServerLifecycle.FastForwardTargetOutcome outcome) {
+        return render(checkpoint, metrics, state, fastForwardRemaining, fastForwardTarget, fastForwardFailure, outcome, null);
+    }
+
+    static String render(CheckpointImage checkpoint, FrontierExecutionMetrics.Snapshot metrics, FrontierWorldState state,
+                         int fastForwardRemaining, Long fastForwardTarget, String fastForwardFailure,
+                         FrontierV3ServerLifecycle.FastForwardTargetOutcome outcome,
+                         FrontierV3ServerLifecycle.FastForwardSliceTelemetry sliceTelemetry) {
+        return render(checkpoint, metrics, state, fastForwardRemaining, fastForwardTarget, fastForwardFailure, outcome, sliceTelemetry, List.of());
+    }
+
+    static String render(CheckpointImage checkpoint, FrontierExecutionMetrics.Snapshot metrics, FrontierWorldState state,
+                         int fastForwardRemaining, Long fastForwardTarget, String fastForwardFailure,
+                         FrontierV3ServerLifecycle.FastForwardTargetOutcome outcome,
+                         FrontierV3ServerLifecycle.FastForwardSliceTelemetry sliceTelemetry,
+                         List<FrontierV3ServerLifecycle.FastForwardRequestOutcome> requests) {
         if (fastForwardRemaining < 0 || fastForwardRemaining > FrontierV3ServerLifecycle.MAX_FAST_FORWARD_TICKS) {
             throw new IllegalArgumentException("bounded fast-forward remainder");
         }
@@ -57,6 +72,9 @@ final class FrontierV3PerformanceDiagnostic {
                 .append(",\"fastForwardTargetStatus\":\"").append(fastForwardFailure == null ? (fastForwardTarget == null ? "NONE" : (fastForwardRemaining == 0 ? "HELD" : "ADVANCING")) : "REJECTED")
                 .append("\",\"fastForwardFailure\":").append(fastForwardFailure == null ? "null" : "\"" + quote(fastForwardFailure) + "\"")
                 .append(",\"fastForwardTargetOutcome\":").append(outcome == null ? "null" : outcome(outcome))
+                .append(",\"fastForwardRequests\":").append(requests(requests))
+                .append(",\"fastForwardSlice\":").append(sliceTelemetry == null ? "null" : sliceTelemetry(sliceTelemetry))
+                .append(",\"worstSpan\":").append(worstSpan(metrics.stages()))
                 .append(",\"stages\":[");
         appendStages(value, metrics.stages()); value.append("],\"queues\":["); appendQueues(value, metrics.queues()); value.append(']');
         if (state != null) value.append(",\"frontier\":").append(frontier(state, checkpoint));
@@ -97,6 +115,38 @@ final class FrontierV3PerformanceDiagnostic {
                 + ",\"reachedCheckpointInstant\":" + (value.reachedCheckpointInstant() == null ? "null" : value.reachedCheckpointInstant())
                 + ",\"status\":\"" + value.status() + "\",\"failure\":"
                 + (value.failure() == null ? "null" : "\"" + quote(value.failure()) + "\"") + "}";
+    }
+
+    private static String requests(List<FrontierV3ServerLifecycle.FastForwardRequestOutcome> values) {
+        StringBuilder result = new StringBuilder("["); boolean first = true;
+        for (FrontierV3ServerLifecycle.FastForwardRequestOutcome value : values) {
+            if (!first) result.append(','); first = false;
+            result.append("{\"requestId\":").append(value.requestId()).append(",\"kind\":\"").append(value.kind())
+                    .append("\",\"requestedTicks\":").append(value.requestedTicks()).append(",\"targetInstant\":")
+                    .append(value.targetInstant() == null ? "null" : value.targetInstant()).append(",\"admittedCheckpointInstant\":")
+                    .append(value.admittedCheckpointInstant() == null ? "null" : value.admittedCheckpointInstant()).append(",\"reachedCheckpointInstant\":")
+                    .append(value.reachedCheckpointInstant() == null ? "null" : value.reachedCheckpointInstant()).append(",\"status\":\"")
+                    .append(value.status()).append("\",\"reason\":")
+                    .append(value.reason() == null ? "null" : "\"" + quote(value.reason()) + "\"").append('}');
+        }
+        return result.append(']').toString();
+    }
+
+    private static String sliceTelemetry(FrontierV3ServerLifecycle.FastForwardSliceTelemetry value) {
+        return "{\"samples\":" + value.samples() + ",\"advancedTicks\":" + value.advancedTicks()
+                + ",\"totalNanos\":" + value.totalNanos() + ",\"maxNanos\":" + value.maxNanos()
+                + ",\"safetyNanos\":" + value.safetyNanos() + ",\"maxSafetyNanos\":" + value.maxSafetyNanos()
+                + ",\"advanceNanos\":" + value.advanceNanos() + ",\"maxAdvanceNanos\":" + value.maxAdvanceNanos() + "}";
+    }
+
+    private static String worstSpan(List<FrontierExecutionMetrics.StageSample> samples) {
+        return samples.stream().max(Comparator.comparingLong(FrontierExecutionMetrics.StageSample::maxNanos)
+                        .thenComparingLong(FrontierExecutionMetrics.StageSample::totalNanos)
+                        .thenComparing(sample -> sample.stage().name()).thenComparing(FrontierExecutionMetrics.StageSample::kind)
+                        .thenComparing(FrontierExecutionMetrics.StageSample::owner))
+                .map(sample -> "{\"stage\":\"" + sample.stage() + "\",\"kind\":\"" + quote(sample.kind())
+                        + "\",\"owner\":\"" + quote(sample.owner()) + "\",\"maxNanos\":" + sample.maxNanos() + "}")
+                .orElse("null");
     }
 
     private static void appendStages(StringBuilder value, List<FrontierExecutionMetrics.StageSample> samples) {

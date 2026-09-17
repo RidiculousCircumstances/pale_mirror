@@ -14,7 +14,7 @@ import java.util.Optional;
  * deterministic recorder. Metrics are deliberately absent from snapshots and WAL.</p>
  */
 public interface FrontierExecutionMetrics {
-    enum Stage { COMMAND_PLAN, SCHEDULE_ALLOCATION, SCHEDULE_PLAN, REDUCTION, VALIDATION, TRANSACTION, PHYSICAL }
+    enum Stage { COMMAND_PLAN, SCHEDULE_ALLOCATION, SCHEDULE_PLAN, REDUCTION, VALIDATION, TRANSACTION, PERSISTENCE, PHYSICAL }
 
     interface Span extends AutoCloseable {
         @Override void close();

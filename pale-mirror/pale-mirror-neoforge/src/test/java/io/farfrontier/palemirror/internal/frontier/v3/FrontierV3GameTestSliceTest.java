@@ -32,6 +32,13 @@ class FrontierV3GameTestSliceTest {
     }
 
     @Test
+    void ambientPhysicsSliceContainsOnlyTheExactNativeCollisionBoundary() {
+        assertTrue(FrontierV3GameTestSlice.includes("ambient-physics", "pm-frontier-v3-ambient-physics"));
+        assertFalse(FrontierV3GameTestSlice.includes("ambient-physics", "pm-frontier-v3-ambient-local-brain"));
+        assertFalse(FrontierV3GameTestSlice.includes("ambient-physics", "pm-frontier-v3-scene-handoff"));
+    }
+
+    @Test
     void emptySliceCannotAccidentallyFilterTheFullGateAndUnknownSlicesFailClosed() {
         assertTrue(FrontierV3GameTestSlice.includes("", "core-integration"));
         assertThrows(IllegalArgumentException.class, () -> FrontierV3GameTestSlice.includes("all", "pm-frontier-v3-scene-handoff"));

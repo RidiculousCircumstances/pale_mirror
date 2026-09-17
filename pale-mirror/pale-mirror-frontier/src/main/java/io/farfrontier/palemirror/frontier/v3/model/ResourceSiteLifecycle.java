@@ -8,22 +8,29 @@ import java.util.Optional;
 /** Mutable canonical facts for one fixed resource site, excluding Minecraft blocks and item custody. */
 public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, long growthEpoch, int growthStage,
                                     Optional<ResourceSiteWork> activeWork,
-                                    Optional<ResourceSiteConflictDisposition> conflictDisposition) {
+                                    Optional<ResourceSiteConflictDisposition> conflictDisposition,
+                                    Optional<ResourceSiteHarvestLineage> harvestLineage) {
     public static final int MATURE_STAGE = 7;
 
     public ResourceSiteLifecycle {
         Objects.requireNonNull(siteId, "resource-site lifecycle id"); Objects.requireNonNull(phase, "resource-site phase");
         activeWork = Optional.ofNullable(activeWork).orElse(Optional.empty());
         conflictDisposition = Optional.ofNullable(conflictDisposition).orElse(Optional.empty());
+        harvestLineage = Optional.ofNullable(harvestLineage).orElse(Optional.empty());
         if (!siteId.value().startsWith("site:") || growthEpoch < 0L || growthStage < 0 || growthStage > MATURE_STAGE) {
             throw new IllegalArgumentException("resource-site lifecycle value is invalid");
         }
+        harvestLineage.ifPresent(lineage -> {
+            if (lineage.completedGrowthEpoch() + 1L != growthEpoch) {
+                throw new IllegalArgumentException("resource-site harvest lineage must bind the immediately preceding growth epoch");
+            }
+        });
         activeWork.ifPresent(work -> {
             if (!siteId.equals(work.siteId())) throw new IllegalArgumentException("resource-site work must belong to its lifecycle site");
         });
         switch (phase) {
             case UNPREPARED -> {
-                if (conflictDisposition.isPresent()) throw new IllegalArgumentException("unprepared resource site cannot retain a conflict disposition");
+                if (conflictDisposition.isPresent() || harvestLineage.isPresent()) throw new IllegalArgumentException("unprepared resource site cannot retain terminal harvest state");
                 if (growthEpoch != 0L || growthStage != 0 || activeWork.filter(ResourceSitePreparationJob.class::isInstance).isEmpty() && activeWork.isPresent()) {
                     throw new IllegalArgumentException("unprepared resource site may retain only its initial preparation work");
                 }
@@ -41,6 +48,13 @@ public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, l
                 if (growthEpoch == 0L || growthStage != MATURE_STAGE || activeWork.filter(ResourceSiteHarvestJob.class::isInstance).isEmpty()) {
                     throw new IllegalArgumentException("harvesting resource site must retain one mature harvest job");
                 }
+                ResourceSiteHarvestJob activeHarvest = activeWork.filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast).orElseThrow();
+                harvestLineage.ifPresent(lineage -> {
+                    if (lineage.successorJobId().isEmpty() || !lineage.successorJobId().orElseThrow().equals(activeHarvest.id())
+                            || !lineage.successorTaskId().orElseThrow().equals(activeHarvest.taskId()) || !lineage.workerId().equals(activeHarvest.workerId())) {
+                        throw new IllegalArgumentException("harvesting successor must retain its declared prior farmer");
+                    }
+                });
             }
             case CONFLICT -> {
                 // A failed harvest retains its exact job only as causal evidence for its
@@ -59,10 +73,15 @@ public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, l
 
     public ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, long growthEpoch, int growthStage,
                                  Optional<ResourceSiteWork> activeWork) {
-        this(siteId, phase, growthEpoch, growthStage, activeWork, Optional.empty());
+        this(siteId, phase, growthEpoch, growthStage, activeWork, Optional.empty(), Optional.empty());
     }
 
-    public static ResourceSiteLifecycle unprepared(SubjectId siteId) { return new ResourceSiteLifecycle(siteId, ResourceSitePhase.UNPREPARED, 0L, 0, Optional.empty(), Optional.empty()); }
+    public ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, long growthEpoch, int growthStage,
+                                 Optional<ResourceSiteWork> activeWork, Optional<ResourceSiteConflictDisposition> conflictDisposition) {
+        this(siteId, phase, growthEpoch, growthStage, activeWork, conflictDisposition, Optional.empty());
+    }
+
+    public static ResourceSiteLifecycle unprepared(SubjectId siteId) { return new ResourceSiteLifecycle(siteId, ResourceSitePhase.UNPREPARED, 0L, 0, Optional.empty(), Optional.empty(), Optional.empty()); }
     public ResourceSiteLifecycle preparing(ResourceSitePreparationJob job) {
         if (phase != ResourceSitePhase.UNPREPARED || activeWork.isPresent()) throw new IllegalStateException("resource site is not available for preparation");
         return next(phase, growthEpoch, growthStage, Optional.of(job));
@@ -78,7 +97,8 @@ public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, l
     }
     public ResourceSiteLifecycle harvesting(ResourceSiteHarvestJob job) {
         if (phase != ResourceSitePhase.READY) throw new IllegalStateException("resource site is not ready for harvest");
-        return next(ResourceSitePhase.HARVESTING, growthEpoch, growthStage, Optional.of(job));
+        Optional<ResourceSiteHarvestLineage> nextLineage = harvestLineage.map(lineage -> lineage.bindSuccessor(job));
+        return next(ResourceSitePhase.HARVESTING, growthEpoch, growthStage, Optional.of(job), nextLineage);
     }
     public ResourceSiteLifecycle advanceHarvest(ResourceSiteHarvestJob expected, int completedCropSlots) {
         ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
@@ -115,20 +135,26 @@ public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, l
         return next(phase, growthEpoch, growthStage, Optional.of(active.withProgress(active.progress().prepareNextCrop())));
     }
     public ResourceSiteLifecycle harvested() {
-        if (phase != ResourceSitePhase.HARVESTING || activeWork.filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
-                .map(ResourceSiteHarvestJob::progress).filter(ResourceSiteHarvestProgress::complete).isEmpty()) {
+        ResourceSiteHarvestJob completed = activeWork.filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
+                .filter(job -> job.progress().complete()).orElse(null);
+        if (phase != ResourceSitePhase.HARVESTING || completed == null) {
             throw new IllegalStateException("resource site has no fully observed harvest");
         }
-        return next(ResourceSitePhase.GROWING, Math.addExact(growthEpoch, 1L), 0, Optional.empty());
+        return next(ResourceSitePhase.GROWING, Math.addExact(growthEpoch, 1L), 0, Optional.empty(),
+                Optional.of(ResourceSiteHarvestLineage.completed(completed, growthEpoch)));
     }
     public ResourceSiteLifecycle conflicted(ResourceSiteConflictDisposition disposition) {
         if (phase == ResourceSitePhase.DESTROYED) throw new IllegalStateException("destroyed resource site cannot become a conflict");
         Optional<ResourceSiteWork> retainedHarvest = activeWork.filter(ResourceSiteHarvestJob.class::isInstance);
-        return new ResourceSiteLifecycle(siteId, ResourceSitePhase.CONFLICT, growthEpoch, growthStage, retainedHarvest, Optional.of(disposition));
+        return new ResourceSiteLifecycle(siteId, ResourceSitePhase.CONFLICT, growthEpoch, growthStage, retainedHarvest, Optional.of(disposition), harvestLineage);
     }
     public ResourceSiteLifecycle destroyed() { return next(ResourceSitePhase.DESTROYED, growthEpoch, growthStage, Optional.empty()); }
 
     private ResourceSiteLifecycle next(ResourceSitePhase nextPhase, long nextEpoch, int nextStage, Optional<ResourceSiteWork> nextWork) {
-        return new ResourceSiteLifecycle(siteId, nextPhase, nextEpoch, nextStage, nextWork, Optional.empty());
+        return next(nextPhase, nextEpoch, nextStage, nextWork, harvestLineage);
+    }
+    private ResourceSiteLifecycle next(ResourceSitePhase nextPhase, long nextEpoch, int nextStage, Optional<ResourceSiteWork> nextWork,
+                                       Optional<ResourceSiteHarvestLineage> nextLineage) {
+        return new ResourceSiteLifecycle(siteId, nextPhase, nextEpoch, nextStage, nextWork, Optional.empty(), nextLineage);
     }
 }

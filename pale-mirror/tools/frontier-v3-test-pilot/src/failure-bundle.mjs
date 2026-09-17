@@ -11,7 +11,8 @@ const MAX_TAIL_BYTES = 32 * 1024;
  */
 export async function writeFailureBundle({ project, output, scenarioPath, runId, timing, failure,
   serverLog, clientLog, serverLogText, clientLogText, tracePath, worldDirectory, process = {}, build = undefined,
-  crash = undefined, decodedWalTail = undefined, termination = undefined, diagnosticSnapshots = [], lifecycleDirectory = undefined }) {
+  crash = undefined, decodedWalTail = undefined, termination = undefined, diagnosticSnapshots = [], lifecycleDirectory = undefined,
+  zeroPlayerIntervals = undefined }) {
   const root = resolve(project, 'build');
   const target = resolve(project, output.replace(/\.json$/i, '') + '.failure');
   const rel = relative(root, target);
@@ -33,6 +34,7 @@ export async function writeFailureBundle({ project, output, scenarioPath, runId,
     // its canonical owner.  Raw diagnostics can contain presentation detail and must not turn a
     // bounded failure bundle into a world dump.
     semantic: boundedSemanticDiagnostics(diagnosticSnapshots),
+    zeroPlayerIntervals: boundedZeroPlayerIntervals(zeroPlayerIntervals),
     termination: termination ?? null,
     // A pre-launch classpath drift has no world yet, but it is still a native-run failure that
     // must leave one attributable bundle rather than disappear before the disposable server.
@@ -48,6 +50,26 @@ export async function writeFailureBundle({ project, output, scenarioPath, runId,
   await mkdir(target, { recursive: true });
   await writeFile(resolve(target, 'bundle.json'), `${JSON.stringify(bundle, null, 2)}\n`, 'utf8');
   return target;
+}
+
+function boundedZeroPlayerIntervals(intervals) {
+  if (intervals === undefined) return null;
+  if (!intervals || typeof intervals !== 'object' || Array.isArray(intervals)) throw new Error('failure zero-player intervals must be an object');
+  return Object.fromEntries(Object.entries(intervals).map(([name, interval]) => [name, boundedZeroPlayerInterval(interval)]));
+}
+
+function boundedZeroPlayerInterval(interval) {
+  if (interval == null) return null;
+  if (typeof interval !== 'object' || Array.isArray(interval)) throw new Error('failure zero-player interval must be an object');
+  const performance = interval.performance;
+  return {
+    ...pick(interval, ['status', 'targetInstant', 'advanceTicks', 'clientSegmentsBeforeCompletion', 'clientSegmentsBeforeAdmission', 'serverPid']),
+    boundedness: pick(interval.boundedness, ['status', 'noServerTickStall', 'stallCount', 'maxBehindMillis', 'maxBehindTicks']),
+    performance: performance == null ? null : { ...pick(performance, ['kind', 'status', 'fastForwardRemaining', 'instant', 'fastForwardTargetStatus']),
+      fastForwardSlice: pick(performance.fastForwardSlice, ['samples', 'advancedTicks', 'totalNanos', 'maxNanos', 'safetyNanos', 'maxSafetyNanos', 'advanceNanos', 'maxAdvanceNanos']),
+      stages: Array.isArray(performance.stages) ? performance.stages.slice(0, 12).map(stage =>
+        pick(stage, ['stage', 'kind', 'owner', 'samples', 'totalNanos', 'maxNanos', 'p50UpperNanos', 'p95UpperNanos', 'p99UpperNanos'])) : [] }
+  };
 }
 
 /** Keeps the bounded external barrier journal, never a mutable world or pilot state. */

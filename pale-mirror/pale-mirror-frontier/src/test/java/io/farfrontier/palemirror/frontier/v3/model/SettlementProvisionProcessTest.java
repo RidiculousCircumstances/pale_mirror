@@ -187,6 +187,9 @@ class SettlementProvisionProcessTest {
                 "a confirmed effect leaves an exact tombstone; a late projection may not replay the consumed ration");
         ExactItemStack remaining = settled.inventory().items().get(new SubjectId("item:provision-bread"));
         assertEquals(64 - expected, remaining.count()); assertEquals(settlement.id(), remaining.economicOwnerId());
+        assertTrue(engine.checkpoint().schedules().stream().anyMatch(action -> action.subject().equals(settlement.id())
+                        && action.kind().equals("frontier.objective.provision_reconsider")),
+                "a settled exact ration wakes only retained pending field work before the next periodic review");
     }
 
     @Test
@@ -258,6 +261,27 @@ class SettlementProvisionProcessTest {
         assertTrue(state.humanPopulation().residents().values().stream().filter(resident -> resident.settlementId().equals(settlement.id()))
                 .allMatch(resident -> state.humanPopulation().nutrition(resident.id()).status() == ResidentNutritionStatus.HUNGRY));
         assertEquals(ContainerSurfaceStatus.UNMATERIALIZED, state.inventory().surfaces().get(FrontierWorldState.depotId(settlement.id())).status());
+    }
+
+    @Test
+    void unresolvedProvisionDefersBirthPermitSoItsNextCycleRetainsTheExactBread() {
+        WorldId world = new WorldId("frontier:provision-defers-birth-custody");
+        FrontierWorldState state = withBread(base(world).initialState(), false);
+        Settlement settlement = state.bootstrap().settlements().getFirst();
+        SettlementProvision previousShortage = SettlementProvision.started(settlement.id(), 1, 25L, settlement.residents().size(),
+                settlement.residents().stream().map(Resident::id).toList(), List.of());
+        state = state.withHumanPopulation(state.humanPopulation().withProvision(previousShortage));
+        var birthEvents = PopulationBirthProcess.planReview(state, PopulationBirthProcess.review(settlement.id(), 1, 50L));
+        assertEquals(1, birthEvents.size(), "an unresolved ration cycle retains admission over discretionary population growth");
+        assertTrue(birthEvents.getFirst().payload() instanceof io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created);
+
+        var provisionEvents = SettlementProvisionProcess.planReview(state, SettlementProvisionProcess.review(settlement.id(), 1, 100L));
+        SettlementProvisionStarted provision = provisionEvents.stream().map(event -> event.payload()).filter(SettlementProvisionStarted.class::isInstance)
+                .map(SettlementProvisionStarted.class::cast).findFirst().orElseThrow();
+
+        assertEquals(SettlementProvisionStatus.IN_PROGRESS, provision.provision().status());
+        assertEquals(new SubjectId("item:provision-bread"), provision.provision().currentOrActiveAllocation().itemId(),
+                "the provision owner retains the exact stack instead of a discretionary birth intent");
     }
 
     @Test

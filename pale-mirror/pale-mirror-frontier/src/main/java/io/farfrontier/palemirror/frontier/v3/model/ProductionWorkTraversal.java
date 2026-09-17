@@ -4,8 +4,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -21,25 +21,86 @@ public final class ProductionWorkTraversal {
 
     public static TraversalTopology compile(FrontierBootstrap bootstrap, SettlementStructure workshop,
                                             ActorLocation worker, SubjectId jobId) {
+        return compile(bootstrap, workshop, worker, jobId, Set.of());
+    }
+
+    /**
+     * Compiles a new COLD production approach against the current canonical bodies as well as
+     * the immutable settlement shell.  A HOT actuator has no authority to push, overlap, or
+     * route around another living actor; therefore its retained corridor must not be admitted
+     * through a support already held by somebody other than this exact worker.
+     */
+    public static TraversalTopology compile(FrontierWorldState state, SettlementStructure workshop,
+                                            SubjectId workerId, ActorLocation worker, SubjectId jobId) {
+        Objects.requireNonNull(state, "production state");
+        Objects.requireNonNull(workerId, "production worker id");
+        Set<BlockPosition> occupiedBodies = new HashSet<>();
+        state.actorLocations().forEach((actorId, location) -> {
+            if (!actorId.equals(workerId) && location.condition().status() == ActorLifeStatus.ALIVE) {
+                occupiedBodies.add(location.supportingSurface().support());
+            }
+        });
+        return compile(state.bootstrap(), workshop, worker, jobId, occupiedBodies);
+    }
+
+    private static TraversalTopology compile(FrontierBootstrap bootstrap, SettlementStructure workshop,
+                                             ActorLocation worker, SubjectId jobId, Set<BlockPosition> occupiedBodies) {
         Objects.requireNonNull(bootstrap, "production bootstrap"); Objects.requireNonNull(workshop, "production workshop");
         Objects.requireNonNull(worker, "production worker"); Objects.requireNonNull(jobId, "production job");
         SettlementWorkshopServicePort port = SettlementWorkshopServicePort.forWorkshop(workshop);
         SurfaceAnchor start = worker.supportingSurface(); SurfaceAnchor exterior = port.exteriorApproach();
-        Set<BlockPosition> blocked = immutableBodyObstacles(bootstrap, port, start);
+        Set<BlockPosition> blocked = immutableBodyObstacles(bootstrap, port, start, occupiedBodies);
+        if (blocked.contains(start.support())) {
+            throw new IllegalArgumentException("production worker shares its retained support with another living actor");
+        }
+        Map<TerrainColumn, SurfaceAnchor> localSurfaces = localSurfaces(bootstrap, workshop.settlementId());
         List<SurfaceAnchor> corridor = new ArrayList<>(BoundedPedestrianApproach.compile(bootstrap, start, exterior, blocked,
-                (x, z) -> SurfaceAnchor.at(x, Math.addExact(bootstrap.terrain().supportYAt(x, z), 1), z), "production-work"));
+                // A local public circulation surface is a raised, plan-owned supporting block.
+                // The free approach must therefore retain that exact datum instead of treating
+                // its occupied block as the worker's body cell.  Everywhere else the immutable
+                // terrain survey names the physical support directly; no loaded-world query or
+                // alternate route is admitted here.
+                (x, z) -> localSurfaces.getOrDefault(new TerrainColumn(x, z),
+                        SurfaceAnchor.at(x, bootstrap.terrain().supportYAt(x, z), z)), "production-work"));
         List<SurfaceAnchor> ingress = port.topologyPort().ingressSurfaces();
+        if (ingress.stream().anyMatch(surface -> blocked.contains(surface.support()))) {
+            throw new IllegalArgumentException("production workshop ingress is occupied by another living actor");
+        }
         corridor.addAll(ingress.subList(1, ingress.size()));
         corridor.add(port.inputStation()); corridor.add(port.workStation());
-        if (new LinkedHashSet<>(corridor).size() != corridor.size()) {
-            throw new IllegalArgumentException("production-work corridor repeats a semantic surface");
-        }
+        // A just-finished exact worker is retained at its work station.  Its next admitted job
+        // may therefore traverse a bounded return through the same named workshop surfaces;
+        // TraversalTopology preserves each visit as a distinct node identity rather than
+        // relocating the worker or selecting another workshop entrance.
         return TraversalTopology.corridor(new TraversalTopologyId("topology:production-work-" + jobId.value().replace(':', '-')),
                 revision(corridor), workshop.id(), TraversalKind.PEDESTRIAN, Set.of(TraversalCapability.PEDESTRIAN), corridor);
     }
 
+    /**
+     * Returns the finite elevated public surfaces already owned by this settlement's immutable
+     * local topology.  A column may have one current pedestrian datum only; treating two
+     * differently elevated owners as interchangeable would be a hidden reroute.
+     */
+    private static Map<TerrainColumn, SurfaceAnchor> localSurfaces(FrontierBootstrap bootstrap, SubjectId settlementId) {
+        Settlement settlement = bootstrap.settlements().stream().filter(value -> value.id().equals(settlementId)).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("production workshop has no settlement"));
+        java.util.LinkedHashMap<TerrainColumn, SurfaceAnchor> surfaces = new java.util.LinkedHashMap<>();
+        SettlementLocalCirculation.surfaceCells(settlement).forEach(position -> addSurface(surfaces, new SurfaceAnchor(position)));
+        SettlementResidentIngressPlan.compile(bootstrap.bounds(), bootstrap.terrain(), settlement,
+                bootstrap.ruleset().facilityCapacity().intactHousingBeds()).ownedSurfaces().forEach(surface -> addSurface(surfaces, surface));
+        return Map.copyOf(surfaces);
+    }
+
+    private static void addSurface(Map<TerrainColumn, SurfaceAnchor> surfaces, SurfaceAnchor surface) {
+        TerrainColumn column = new TerrainColumn(surface.x(), surface.z());
+        SurfaceAnchor prior = surfaces.putIfAbsent(column, surface);
+        if (prior != null && !prior.equals(surface)) {
+            throw new IllegalArgumentException("production local topology has multiple support datums at " + column);
+        }
+    }
+
     private static Set<BlockPosition> immutableBodyObstacles(FrontierBootstrap bootstrap, SettlementWorkshopServicePort port,
-                                                               SurfaceAnchor start) {
+                                                               SurfaceAnchor start, Set<BlockPosition> occupiedBodies) {
         Set<BlockPosition> blocked = new HashSet<>();
         for (Settlement settlement : bootstrap.settlements()) {
             blocked.addAll(FrontierSettlementActorSlots.intactStructureOccupancy(bootstrap.terrain(), settlement.structures()));
@@ -49,6 +110,7 @@ public final class ProductionWorkTraversal {
         List<SurfaceAnchor> permitted = new ArrayList<>(port.topologyPort().ingressSurfaces());
         permitted.add(port.inputStation()); permitted.add(port.workStation());
         permitted.forEach(surface -> blocked.remove(surface.support()));
+        blocked.addAll(Objects.requireNonNull(occupiedBodies, "production body occupancy"));
         return blocked;
     }
 

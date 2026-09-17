@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.process;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
@@ -23,6 +24,21 @@ import java.util.Optional;
 
 /** Executes exact settlement production only as a durable strategic task. */
 public final class ProductionProcess {
+    public static List<ProposedEvent> planRelationshipConflict(FrontierWorldState state, FrontierCommand command, SceneLease lease, ProductionWorkTraversalBlocked blocked) {
+        SubjectId jobId = FrontierSceneBehaviors.productionWork(lease).jobId();
+        ProductionJob job = state.productionJobs().get(jobId);
+        if (job == null) throw new IllegalArgumentException("relationship conflict lease has no exact job");
+        MarketWorkOrder order = state.companies().market().acceptedForJob(jobId)
+                .orElseThrow(() -> new IllegalArgumentException("relationship conflict job has no exact order"));
+        StrategicTask task = task(state, order.taskId(), StrategicTaskStatus.ACTIVE);
+        RelationshipIncident incident = new RelationshipIncident(FrontierDomainRelationships.Kind.ORDER_JOB, order.id(), order.id(),
+                "lease-job=" + jobId.value(), "asserted-job=" + blocked.jobId().value(), FrontierDomainRelationships.IncidentReason.STALE_RELATION,
+                FrontierDomainRelationships.Disposition.FAIL_CLOSED_LOCAL, command.expectedRevision().next().value(), "command:" + command.id().value());
+        return List.of(new ProposedEvent(order.taskId(), new MarketRelationshipIncidentRecorded(order.id(), incident)),
+                new ProposedEvent(job.settlementId(), new ProductionBlocked(job.settlementId(), job.facilityId(), job.id(),
+                        ProductionBlockReason.RELATIONSHIP_CONFLICT)), transition(task, StrategicTaskStatus.BLOCKED),
+                new ProposedEvent(job.settlementId(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING)));
+    }
     private static final String WHEAT = "minecraft:wheat";
     private static final String BREAD = "minecraft:bread";
     private ProductionProcess() { }
@@ -52,7 +68,7 @@ public final class ProductionProcess {
         if (current == null || current.condition().status() != ActorLifeStatus.ALIVE) {
             throw new IllegalArgumentException("production-work hand-off has no living worker");
         }
-        TraversalTopology rebased = ProductionWorkTraversal.compile(state.bootstrap(), workshop,
+        TraversalTopology rebased = ProductionWorkTraversal.compile(state, workshop, job.workerId(),
                 new ActorLocation(capture.body(), current.condition()), job.id());
         return FrontierProductionWorkSceneSupport.replaceJob(state, job.rebaseUnstartedTraversal(rebased));
     }
@@ -92,7 +108,7 @@ public final class ProductionProcess {
         // A blocked scene retires its job durably before this one-shot action becomes due.
         // The consumed schedule must then be a harmless deterministic no-op, not a quarantine.
         if (job == null) return List.of();
-        Settlement settlement = settlement(state, job.settlementId()); StrategicTask task = activeTask(state, settlement.id()); SettlementStructure workshop = workshop(settlement);
+        Settlement settlement = settlement(state, job.settlementId()); StrategicTask task = activeTask(state, job); SettlementStructure workshop = workshop(settlement);
         if (state.structureConditions().get(workshop.id()) != StructureCondition.INTACT) return failActiveJob(state, task, settlement, workshop, job, ProductionBlockReason.FACILITY_UNAVAILABLE);
         if (ReferenceContainerCustody.blocksCanonicalUse(state, FrontierWorldState.depotId(settlement.id()))) {
             return failActiveJob(state, task, settlement, workshop, job, ProductionBlockReason.INPUT_UNAVAILABLE);
@@ -157,7 +173,7 @@ public final class ProductionProcess {
                                     && intent.status() == PhysicalIntentStatus.PREPARED);
                     if (!preEffect) return java.util.stream.Stream.empty();
                     Settlement settlement = settlement(state, job.settlementId());
-                    return failActiveJob(state, activeTask(state, settlement.id()), settlement, workshop(settlement), job,
+                    return failActiveJob(state, activeTask(state, job), settlement, workshop(settlement), job,
                             ProductionBlockReason.WORKER_UNAVAILABLE).stream();
                 }).toList();
     }
@@ -201,11 +217,11 @@ public final class ProductionProcess {
         if (physicalCustody != (job.inputHold() instanceof ProductionInputHold.Materialized)) {
             throw new IllegalArgumentException("production input hold does not match its admitted HOT/COLD boundary");
         }
-        TraversalTopology expectedTraversal = ProductionWorkTraversal.compile(state.bootstrap(), workshop, state.actorLocations().get(job.workerId()), job.id());
+        TraversalTopology expectedTraversal = ProductionWorkTraversal.compile(state, workshop, job.workerId(), state.actorLocations().get(job.workerId()), job.id());
         if (!job.workProgress().equals(ProductionWorkProgress.notStarted()) || job.traversalCursor() != 0 || !job.workTraversal().equals(expectedTraversal)) {
             throw new IllegalArgumentException("production start must retain its exact worker-to-workshop traversal");
         }
-        StrategicTask task = activeTask(state, settlement.id()); validateMarketOrder(state, task, job);
+        StrategicTask task = activeTask(state, job); validateMarketOrder(state, task, job);
         FrontierWorldState startedState = physicalCustody ? state.withProductionJob(job) : state.startProductionJob(job, started.inputItemId());
         return CompanyWorkPaymentProcess.reserve(startedState, job);
     }
@@ -226,10 +242,10 @@ public final class ProductionProcess {
         if (state.actorLocations().get(job.workerId()).condition().status() != ActorLifeStatus.ALIVE) {
             throw new IllegalArgumentException("cold production cannot complete after its worker has died");
         }
-        StrategicTask task = activeTask(state, settlement.id()); validateMarketOrder(state, task, job);
+        StrategicTask task = activeTask(state, job); validateMarketOrder(state, task, job);
         FrontierWorldState paid = CompanyWorkPaymentProcess.settle(state, job);
         java.util.Optional<MarketWorkOrder> order = paid.companies().market().acceptedForJob(job.id());
-        if (order.isPresent()) paid = paid.withCompanies(paid.companies().withMarket(paid.companies().market().complete(order.orElseThrow().id())));
+        if (order.isPresent()) paid = paid.withCompanies(paid.companies().withMarket(paid.companies().market().complete(order.orElseThrow().id(), job)));
         return paid.completeProductionJob(completed.jobId(), completed.output());
     }
 
@@ -250,10 +266,10 @@ public final class ProductionProcess {
                 || input.quantity() < job.outputCount() || claim.quantity() != job.outputCount() || !claim.claimantId().equals(job.id())) {
             throw new IllegalArgumentException("fungible production completion has no exact reserved wheat input");
         }
-        StrategicTask task = activeTask(state, settlement.id()); validateMarketOrder(state, task, job);
+        StrategicTask task = activeTask(state, job); validateMarketOrder(state, task, job);
         FrontierWorldState paid = CompanyWorkPaymentProcess.settle(state, job);
         java.util.Optional<MarketWorkOrder> order = paid.companies().market().acceptedForJob(job.id());
-        if (order.isPresent()) paid = paid.withCompanies(paid.companies().withMarket(paid.companies().market().complete(order.orElseThrow().id())));
+        if (order.isPresent()) paid = paid.withCompanies(paid.companies().withMarket(paid.companies().market().complete(order.orElseThrow().id(), job)));
         return paid.completeFungibleProductionJob(job.id(), completed.output());
     }
 
@@ -271,11 +287,11 @@ public final class ProductionProcess {
             throw new IllegalArgumentException("fungible production start does not retain one unreserved exact input portion");
         }
         Settlement settlement = settlement(state, job.settlementId()); SettlementStructure workshop = workshop(settlement);
-        TraversalTopology expected = ProductionWorkTraversal.compile(state.bootstrap(), workshop, state.actorLocations().get(job.workerId()), job.id());
+        TraversalTopology expected = ProductionWorkTraversal.compile(state, workshop, job.workerId(), state.actorLocations().get(job.workerId()), job.id());
         if (!job.workProgress().equals(ProductionWorkProgress.notStarted()) || job.traversalCursor() != 0 || !job.workTraversal().equals(expected)) {
             throw new IllegalArgumentException("fungible production start must retain its exact worker-to-workshop traversal");
         }
-        StrategicTask task = activeTask(state, settlement.id()); validateMarketOrder(state, task, job);
+        StrategicTask task = activeTask(state, job); validateMarketOrder(state, task, job);
         return CompanyWorkPaymentProcess.reserve(state.startFungibleProductionJob(job), job);
     }
 
@@ -339,7 +355,7 @@ public final class ProductionProcess {
                                                                  ProductionWorkTraversalBlocked blocked) {
         reduceWorkTraversalBlocked(state, subject, blocked);
         ProductionJob job = state.productionJobs().get(blocked.jobId());
-        Settlement settlement = settlement(state, job.settlementId()); StrategicTask task = activeTask(state, settlement.id());
+        Settlement settlement = settlement(state, job.settlementId()); StrategicTask task = activeTask(state, job);
         return List.of(new ProposedEvent(settlement.id(), blocked),
                 new ProposedEvent(settlement.id(), new ProductionBlocked(settlement.id(), job.facilityId(), job.id(), ProductionBlockReason.ROUTE_BLOCKED)),
                 transition(task, StrategicTaskStatus.BLOCKED), new ProposedEvent(settlement.id(), new SceneLeaseTransition(blocked.leaseId(), SceneLeaseStatus.DRAINING)));
@@ -348,6 +364,11 @@ public final class ProductionProcess {
     /** Validates immutable worker/cursor evidence.  State changes are represented by the following durable effects. */
     public static FrontierWorldState reduceWorkTraversalBlocked(FrontierWorldState state, SubjectId subject, ProductionWorkTraversalBlocked blocked) {
         ProductionJob job = state.productionJobs().get(blocked.jobId());
+        SceneLease assertedLease = state.sceneLeases().get(blocked.leaseId());
+        if (assertedLease != null && FrontierSceneBehaviors.isProductionWork(assertedLease)
+                && !FrontierSceneBehaviors.productionWork(assertedLease).jobId().equals(blocked.jobId())) {
+            throw new IllegalArgumentException("production traversal asserted job differs from exact lease cause");
+        }
         if (job == null || !subject.equals(job.settlementId()) || job.workProgress().terminalEffectEligible()
                 || blocked.blockedNextCursor() != job.traversalCursor() + 1
                 || blocked.blockedNextCursor() >= job.workTraversal().linearCorridorSurfaces().size()) {
@@ -381,7 +402,7 @@ public final class ProductionProcess {
                 state.strategicPlans().hiveSettlementKnowledge().entries().get(interrupted.sighting().settlementId()))) {
             throw new IllegalArgumentException("production interruption must retain one current active settlement assault cause");
         }
-        StrategicTask production = activeTask(state, job.settlementId());
+        StrategicTask production = activeTask(state, job);
         MarketWorkOrder order = state.companies().market().acceptedForJob(job.id()).orElseThrow(() ->
                 new IllegalArgumentException("interrupted production must retain one accepted market work order"));
         EmploymentContract contract = CompanyWorkPaymentProcess.contractFor(state, job).orElseThrow(() ->
@@ -482,6 +503,15 @@ public final class ProductionProcess {
                     throw new IllegalArgumentException("production route block lacks its retained active worker scene");
                 }
             }
+            case RELATIONSHIP_CONFLICT -> {
+                ProductionJob job = state.productionJobs().get(blocked.workId());
+                MarketWorkOrder order = job == null ? null : state.companies().market().workOrders().values().stream()
+                        .filter(value -> value.jobId().equals(job.id()) && value.status() == MarketWorkOrderStatus.CONFLICT).findFirst().orElse(null);
+                if (job == null || !job.settlementId().equals(settlement.id()) || order == null
+                        || order.relationshipIncident().isEmpty() || !order.relationshipIncident().orElseThrow().ownerId().equals(order.id())) {
+                    throw new IllegalArgumentException("production relationship conflict lacks its exact retained order incident");
+                }
+            }
         }
         ProductionJob job = state.productionJobs().get(blocked.workId());
         if (job == null || state.companies().market().acceptedForJob(job.id()).isPresent() || hasOpenWorkScene(state, job.id())) return state;
@@ -495,19 +525,33 @@ public final class ProductionProcess {
                 || !FrontierSceneBehaviors.productionWork(lease).jobId().equals(finalized.jobId()) || job == null || !subject.equals(job.settlementId())) {
             throw new IllegalArgumentException("production scene finalization lacks its closed exact job scene");
         }
-        StrategicTask task = task(state, state.strategicPlans().tasks().values().stream().filter(value -> value.ownerId().equals(job.settlementId())
-                && value.kind() == StrategicTaskKind.PRODUCE_BREAD && value.status() == StrategicTaskStatus.BLOCKED).map(StrategicTask::id)
-                .reduce((left, right) -> { throw new IllegalArgumentException("production scene finalization has ambiguous blocked task"); })
-                .orElseThrow(() -> new IllegalArgumentException("production scene finalization has no blocked task")), StrategicTaskStatus.BLOCKED);
         Optional<MarketWorkOrder> order = state.companies().market().acceptedForJob(job.id());
+        if (order.isEmpty()) order = state.companies().market().workOrders().values().stream()
+                .filter(value -> value.jobId().equals(job.id()) && value.status() == MarketWorkOrderStatus.CONFLICT && value.relationshipIncident().isPresent()).findFirst();
+        // An accepted order is the durable production-task binding.  A settlement can legitimately
+        // have more than one blocked bread task while an already-owned worker is closing its
+        // scene, so selecting by settlement/kind would let unrelated ordinary work poison this
+        // exact finalization.  Orderless legacy work retains the old fail-closed uniqueness rule.
+        if (order.isPresent()) {
+            task(state, order.orElseThrow().taskId(), StrategicTaskStatus.BLOCKED);
+        } else {
+            task(state, state.strategicPlans().tasks().values().stream().filter(value -> value.ownerId().equals(job.settlementId())
+                    && value.kind() == StrategicTaskKind.PRODUCE_BREAD && value.status() == StrategicTaskStatus.BLOCKED).map(StrategicTask::id)
+                    .reduce((left, right) -> { throw new IllegalArgumentException("production scene finalization has ambiguous blocked task"); })
+                    .orElseThrow(() -> new IllegalArgumentException("production scene finalization has no blocked task")), StrategicTaskStatus.BLOCKED);
+        }
         if (order.isEmpty()) return state.cancelProductionJob(job.id());
         FinancialReservation reservation = state.inventory().economics().reservations().get(order.orElseThrow().reservationId());
         if (reservation == null || !reservation.reasonId().equals(job.id()) || !reservation.payerId().equals(job.settlementId())) {
             throw new IllegalArgumentException("production scene finalization has no exact market reservation");
         }
         FrontierWorldState released = state.cancelProductionJob(job.id());
-        return released.withInventory(released.inventory().withEconomics(released.inventory().economics().release(reservation.id())))
-                .withCompanies(released.companies().withMarket(released.companies().market().cancel(order.orElseThrow().id(), MarketWorkOrderStatus.CANCELLED)));
+        FrontierWorldState reservationReleased = released.withInventory(released.inventory().withEconomics(released.inventory().economics().release(reservation.id())));
+        if (order.orElseThrow().status() == MarketWorkOrderStatus.CONFLICT) {
+            return reservationReleased;
+        }
+        return reservationReleased.withCompanies(reservationReleased.companies().withMarket(
+                reservationReleased.companies().market().cancel(order.orElseThrow().id(), MarketWorkOrderStatus.CANCELLED)));
     }
 
     private static List<ProposedEvent> blocked(StrategicTask task, Settlement settlement, SettlementStructure workshop, SubjectId work, ProductionBlockReason reason) {
@@ -538,7 +582,7 @@ public final class ProductionProcess {
         }
         MarketWorkOrder order = state.companies().market().acceptedForJob(job.id()).orElseThrow(() ->
                 new IllegalArgumentException("a materialized production input without an effect must retain its accepted market order"));
-        Settlement settlement = settlement(state, job.settlementId()); StrategicTask task = activeTask(state, settlement.id());
+        Settlement settlement = settlement(state, job.settlementId()); StrategicTask task = activeTask(state, job);
         SceneLease liveScene = state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isProductionWork)
                 .filter(lease -> lease.status() != SceneLeaseStatus.CLOSED && FrontierSceneBehaviors.productionWork(lease).jobId().equals(job.id()))
                 .reduce((left, right) -> { throw new IllegalArgumentException("materialized production input has multiple live worker scenes"); }).orElse(null);
@@ -625,7 +669,13 @@ public final class ProductionProcess {
         if (task == null || task.kind() != StrategicTaskKind.PRODUCE_BREAD || task.status() != status) throw new IllegalStateException("production schedule has no matching strategic task");
         return task;
     }
-    private static StrategicTask activeTask(FrontierWorldState state, SubjectId settlement) {
+    private static StrategicTask activeTask(FrontierWorldState state, ProductionJob job) {
+        Optional<MarketWorkOrder> order = state.companies().market().acceptedForJob(job.id());
+        if (order.isPresent()) return task(state, order.orElseThrow().taskId(), StrategicTaskStatus.ACTIVE);
+        return legacyActiveTask(state, job.settlementId());
+    }
+    /** Pre-relationship fixtures retain their historical explicit compatibility path. */
+    private static StrategicTask legacyActiveTask(FrontierWorldState state, SubjectId settlement) {
         return state.strategicPlans().tasks().values().stream().filter(task -> task.ownerId().equals(settlement)
                 && task.kind() == StrategicTaskKind.PRODUCE_BREAD && task.status() == StrategicTaskStatus.ACTIVE).reduce((left, right) -> {
                     throw new IllegalArgumentException("production task binding is ambiguous");
@@ -657,7 +707,7 @@ public final class ProductionProcess {
         ResidentProfile worker = crafter(state, settlement); String number = settlement.id().value().substring("settlement:".length());
         ProductionInputHold hold = cold ? new ProductionInputHold.Cold(input) : new ProductionInputHold.Materialized(input.id());
         SubjectId jobId = jobId(settlement, ordinal);
-        TraversalTopology traversal = ProductionWorkTraversal.compile(state.bootstrap(), workshop,
+        TraversalTopology traversal = ProductionWorkTraversal.compile(state, workshop, worker.id(),
                 state.actorLocations().get(worker.id()), jobId);
         return new ProductionJob(jobId, settlement.id(), workshop.id(), worker.id(), input.id(), hold,
                 new SubjectId("item:production-" + number + "-" + ordinal + "-bread"), BREAD, input.count(),
@@ -669,7 +719,7 @@ public final class ProductionProcess {
         SubjectId jobId = jobId(settlement, ordinal);
         ProductionInputHold hold = new ProductionInputHold.FungibleCold(input.lot().id(), input.accountId(),
                 new SubjectId("claim:production-" + number + "-" + ordinal));
-        TraversalTopology traversal = ProductionWorkTraversal.compile(state.bootstrap(), workshop, state.actorLocations().get(worker.id()), jobId);
+        TraversalTopology traversal = ProductionWorkTraversal.compile(state, workshop, worker.id(), state.actorLocations().get(worker.id()), jobId);
         return new ProductionJob(jobId, settlement.id(), workshop.id(), worker.id(), input.lot().id(), hold,
                 new SubjectId("lot:production-" + number + "-" + ordinal + "-bread"), BREAD, 64,
                 ProductionWorkProgress.notStarted(), traversal, 0);

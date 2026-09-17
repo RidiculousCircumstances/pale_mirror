@@ -2,7 +2,9 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
+import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
 import io.farfrontier.palemirror.frontier.v3.model.LocalNavigationEnvelope;
+import io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -120,6 +122,243 @@ public final class FrontierV3LocalNavigationGameTests {
                             + " normalCadenceTurns=" + normalCadenceTurns);
             helper.assertTrue(worker.getX() >= currentCanonicalCheckpoint.x - .35D && worker.getX() <= nextCanonicalCheckpoint.x + .35D,
                     "smooth local pose remains on the retained edge and does not create a canonical route cursor");
+            helper.succeed();
+        });
+    }
+
+    /**
+     * A production hand-off may begin immediately below its first retained grade-one edge.  It
+     * must use the same ordinary collision path as every other retained pedestrian edge: the
+     * physical actuator cannot strand the exact worker at cursor zero merely because the next
+     * named support is one block higher.
+     */
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 100)
+    public static void retainedGradeOneEdgeLeavesTheObservedHandoffSurface(GameTestHelper helper) {
+        BlockPos origin = helper.absolutePos(new BlockPos(4, 0, 4));
+        // Keep this complete two-column edge in the template interior.  The first support is
+        // deliberately one block below the next named support, matching the production route
+        // shape without supplying a synthetic position or alternate path.
+        helper.getLevel().setBlock(origin, Blocks.STONE.defaultBlockState(), 3);
+        helper.getLevel().setBlock(origin.above(), Blocks.AIR.defaultBlockState(), 3);
+        helper.getLevel().setBlock(origin.above(2), Blocks.AIR.defaultBlockState(), 3);
+        BlockPos nextSupport = origin.west().above();
+        helper.getLevel().setBlock(nextSupport, Blocks.STONE.defaultBlockState(), 3);
+        helper.getLevel().setBlock(nextSupport.above(), Blocks.AIR.defaultBlockState(), 3);
+        helper.getLevel().setBlock(nextSupport.above(2), Blocks.AIR.defaultBlockState(), 3);
+        Zombie worker = helper.spawnWithNoFreeWill(EntityType.ZOMBIE, new Vec3(4.5D, 1.0D, 4.5D));
+        // A production hand-off retains the ordinary ambient-physics registration.  The same
+        // exact body must still clear this one-grade retained edge instead of having gravity
+        // erase each bounded ascent increment.
+        FrontierV3ControlledMobMotion.restoreOrdinaryPhysics(worker);
+        Vec3 retainedNext = new Vec3(nextSupport.getX() + .5D, nextSupport.getY() + 1.0D, nextSupport.getZ() + .5D);
+        helper.runAfterDelay(1, () -> {
+            // GameTest can coalesce registered tick callbacks after a catch-up, so model the
+            // ordinary scene-post submission and following entity-pre turn directly here.  It
+            // still invokes the production actuator's real gravity/collision path and supplies
+            // no body position, target, route, or collision result from the fixture.
+            FrontierV3ControlledMobMotion.moveToward(helper.getLevel(), worker, retainedNext);
+            for (int turn = 0; turn < 24; turn++) {
+                FrontierV3ControlledMobMotion.advanceAtEntityBoundary(worker);
+                FrontierV3ControlledMobMotion.moveToward(helper.getLevel(), worker, retainedNext);
+            }
+            FrontierV3ControlledMobMotion.advanceAtEntityBoundary(worker);
+            helper.assertTrue(worker.getX() <= nextSupport.getX() + .85D && worker.getY() >= nextSupport.getY() + .65D,
+                    "a retained grade-one hand-off edge must physically advance without changing its cursor or route: actual="
+                            + worker.position() + " trace=" + FrontierV3ControlledMobMotion.trace(worker));
+            FrontierV3ControlledMobMotion.stop(worker);
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft", template = "bastion/mobs/empty")
+    public static void retainedProductionEdgeRequiresItsNamedPhysicalSupport(GameTestHelper helper) {
+        BlockPos origin = helper.absolutePos(new BlockPos(4, 0, 4));
+        helper.getLevel().setBlock(origin, Blocks.STONE.defaultBlockState(), 3);
+        Zombie worker = helper.spawnWithNoFreeWill(EntityType.ZOMBIE, new Vec3(4.5D, 1.0D, 4.5D));
+        SurfaceAnchor target = SurfaceAnchor.at(origin.getX() - 1, origin.getY() + 1, origin.getZ());
+
+        helper.assertFalse(FrontierV3ProductionWorkSceneExecutor.clearNextBody(helper.getLevel(), worker, target),
+                "an air cell below a retained target body is an owned blocked edge, not a valid upward movement target");
+        BlockPos support = new BlockPos(target.x(), target.y(), target.z());
+        helper.getLevel().setBlock(support, Blocks.STONE.defaultBlockState(), 3);
+        helper.getLevel().setBlock(support.above(), Blocks.AIR.defaultBlockState(), 3);
+        helper.getLevel().setBlock(support.above(2), Blocks.AIR.defaultBlockState(), 3);
+        helper.assertTrue(FrontierV3ProductionWorkSceneExecutor.clearNextBody(helper.getLevel(), worker, target),
+                "the same exact target becomes eligible only when its named support is physically current");
+        helper.succeed();
+    }
+
+    /**
+     * A second naturally loaded body can occupy a retained production column after COLD
+     * admission.  The exact worker may use only the fixed current/next neighborhood to pass
+     * it; no alternate route or cursor is supplied to the physical actuator.
+     */
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 160)
+    public static void productionTraversalYieldsAroundLiveBodyWithoutChangingRetainedCheckpoint(GameTestHelper helper) {
+        BlockPos currentSupport = helper.absolutePos(new BlockPos(3, 0, 3));
+        BlockPos nextSupport = currentSupport.east();
+        for (BlockPos support : List.of(currentSupport, currentSupport.north(), currentSupport.south(), nextSupport,
+                nextSupport.north(), nextSupport.south())) {
+            helper.getLevel().setBlock(support, Blocks.STONE.defaultBlockState(), 3);
+            helper.getLevel().setBlock(support.above(), Blocks.AIR.defaultBlockState(), 3);
+            helper.getLevel().setBlock(support.above(2), Blocks.AIR.defaultBlockState(), 3);
+        }
+        // GameTestHelper converts these body positions from template-relative coordinates;
+        // the retained supports above are deliberately absolute world observations.
+        Zombie worker = helper.spawnWithNoFreeWill(EntityType.ZOMBIE, new Vec3(3.5D, 1.0D, 3.5D));
+        Zombie blocker = helper.spawnWithNoFreeWill(EntityType.ZOMBIE, new Vec3(4.5D, 1.0D, 3.5D));
+        SurfaceAnchor current = SurfaceAnchor.at(currentSupport.getX(), currentSupport.getY(), currentSupport.getZ());
+        SurfaceAnchor next = SurfaceAnchor.at(nextSupport.getX(), nextSupport.getY(), nextSupport.getZ());
+        LocalNavigationEnvelope envelope = LocalNavigationEnvelope.around(current.standingBody(), next.standingBody());
+
+        helper.runAfterDelay(1, () -> {
+            try {
+                boolean yielded = false;
+                for (int turn = 0; turn < 32; turn++) {
+                    FrontierV3ControlledMobMotion.advance(worker);
+                    FrontierV3ProductionWorkSceneExecutor.pursueRetainedTraversalEdge(helper.getLevel(), worker, current, next);
+                    BlockPosition support = support(worker.position());
+                    helper.assertTrue(envelope.contains(support),
+                            "a production yield must remain inside the two-support HOT envelope: " + worker.position());
+                    yielded |= worker.getBlockZ() != currentSupport.getZ();
+                }
+                helper.assertTrue(yielded,
+                        "a live occupied direct body column must use bounded physical latitude rather than pin the exact worker: "
+                                + FrontierV3ControlledMobMotion.trace(worker));
+                blocker.discard();
+                for (int turn = 0; turn < 32; turn++) {
+                    FrontierV3ControlledMobMotion.advance(worker);
+                    FrontierV3ProductionWorkSceneExecutor.pursueRetainedTraversalEdge(helper.getLevel(), worker, current, next);
+                }
+                helper.assertTrue(FrontierV3SurfaceObservation.at(worker, next),
+                        "only the original retained production checkpoint may complete the yielded edge: " + worker.position());
+                FrontierV3ControlledMobMotion.stop(worker); worker.discard(); helper.succeed();
+            } catch (RuntimeException failure) {
+                FrontierV3ControlledMobMotion.stop(worker); worker.discard(); blocker.discard(); throw failure;
+            }
+        });
+    }
+
+    /**
+     * The retained workshop corridor descends diagonally immediately after its first level
+     * hand-off edge.  A no-AI body must physically walk off that lip and settle on the named
+     * lower support; retaining an envelope must not leave it hovering at the old datum.
+     */
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 120)
+    public static void productionTraversalSettlesADescendingDiagonalRetainedEdge(GameTestHelper helper) {
+        BlockPos currentSupport = helper.absolutePos(new BlockPos(4, 0, 4));
+        BlockPos nextSupport = currentSupport.south().below();
+        for (BlockPos support : List.of(currentSupport, nextSupport)) {
+            helper.getLevel().setBlock(support, Blocks.STONE.defaultBlockState(), 3);
+            helper.getLevel().setBlock(support.above(), Blocks.AIR.defaultBlockState(), 3);
+            helper.getLevel().setBlock(support.above(2), Blocks.AIR.defaultBlockState(), 3);
+        }
+        Zombie worker = helper.spawnWithNoFreeWill(EntityType.ZOMBIE, new Vec3(4.5D, 1.0D, 4.5D));
+        SurfaceAnchor current = SurfaceAnchor.at(currentSupport.getX(), currentSupport.getY(), currentSupport.getZ());
+        SurfaceAnchor next = SurfaceAnchor.at(nextSupport.getX(), nextSupport.getY(), nextSupport.getZ());
+
+        helper.runAfterDelay(1, () -> {
+            for (int turn = 0; turn < 32; turn++) {
+                FrontierV3ControlledMobMotion.advance(worker);
+                if (FrontierV3SurfaceObservation.at(worker, next)) break;
+                if (FrontierV3SurfaceObservation.at(worker, current)) {
+                    FrontierV3ProductionWorkSceneExecutor.pursueRetainedTraversalEdge(helper.getLevel(), worker, current, next);
+                } else {
+                    helper.assertTrue(FrontierV3ProductionWorkSceneExecutor.settleRetainedDescendingArrival(helper.getLevel(), worker, current, next),
+                            "a body that crossed the retained lower checkpoint horizontally must settle it instead of reacquiring current: "
+                                    + worker.position());
+                }
+            }
+            helper.assertTrue(FrontierV3SurfaceObservation.at(worker, next),
+                    "a descending retained production edge must reach its named lower support without changing cursor authority: "
+                            + worker.position() + " trace=" + FrontierV3ControlledMobMotion.trace(worker));
+            FrontierV3ControlledMobMotion.stop(worker); worker.discard(); helper.succeed();
+        });
+    }
+
+    /** A fractional in-flight body must not seed a production cursor from its rounded cell. */
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft", template = "bastion/mobs/empty")
+    public static void productionHandoffRequiresCurrentObservedSupport(GameTestHelper helper) {
+        BlockPos support = helper.absolutePos(new BlockPos(4, 0, 4));
+        helper.getLevel().setBlock(support, Blocks.STONE.defaultBlockState(), 3);
+        helper.getLevel().setBlock(support.above(), Blocks.AIR.defaultBlockState(), 3);
+        helper.getLevel().setBlock(support.above(2), Blocks.AIR.defaultBlockState(), 3);
+        Zombie worker = helper.spawnWithNoFreeWill(EntityType.ZOMBIE, new Vec3(4.5D, 1.0D, 4.5D));
+        BodyPosition observed = new BodyPosition(support.getX(), support.getY() + 1, support.getZ());
+
+        helper.assertTrue(FrontierV3ProductionWorkSceneExecutor.observedHandoffSurfaceIsCurrent(helper.getLevel(), worker, observed),
+                "a body standing at its inferred support may transfer its exact production custody");
+        worker.setPos(worker.getX(), worker.getY() + .90D, worker.getZ());
+        helper.assertFalse(FrontierV3ProductionWorkSceneExecutor.observedHandoffSurfaceIsCurrent(helper.getLevel(), worker, observed),
+                "the same rounded body cell while vertically in-flight must defer the transfer rather than invent a floor");
+        helper.succeed();
+    }
+
+    /** A settled accepted hand-off retires only historical fall evidence from the exact body. */
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft", template = "bastion/mobs/empty")
+    public static void acceptedProductionHandoffClearsOnlyGroundedHistoricalFallDistance(GameTestHelper helper) {
+        BlockPos support = helper.absolutePos(new BlockPos(4, 0, 4));
+        helper.getLevel().setBlock(support, Blocks.STONE.defaultBlockState(), 3);
+        helper.getLevel().setBlock(support.above(), Blocks.AIR.defaultBlockState(), 3);
+        helper.getLevel().setBlock(support.above(2), Blocks.AIR.defaultBlockState(), 3);
+        Zombie worker = helper.spawnWithNoFreeWill(EntityType.ZOMBIE, new Vec3(4.5D, 1.0D, 4.5D));
+        BodyPosition observed = new BodyPosition(support.getX(), support.getY() + 1, support.getZ());
+
+        worker.fallDistance = 64.0F;
+        helper.assertTrue(FrontierV3ProductionWorkSceneExecutor.clearHistoricalFallDistanceAtAcceptedHandoff(helper.getLevel(), worker, observed),
+                "an exact grounded production hand-off must retire its old vanilla fall counter");
+        helper.assertTrue(worker.fallDistance == 0.0F,
+                "clearing an accepted hand-off must preserve the same body and only retire historical fall evidence");
+        worker.setPos(worker.getX(), worker.getY() + .90D, worker.getZ());
+        worker.fallDistance = 6.0F;
+        helper.assertFalse(FrontierV3ProductionWorkSceneExecutor.clearHistoricalFallDistanceAtAcceptedHandoff(helper.getLevel(), worker, observed),
+                "an in-flight body must retain ordinary fall evidence instead of borrowing the old grounded hand-off");
+        helper.assertTrue(worker.fallDistance == 6.0F,
+                "an unsupported body must keep its own physical fall counter");
+        helper.succeed();
+    }
+
+    /** A reserved production worker must not retain an old ambient WORK actuator into hand-off. */
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft", template = "bastion/mobs/empty")
+    public static void productionPreLeaseReservationStopsOnlyTheAmbientLocalPose(GameTestHelper helper) {
+        BlockPos support = helper.absolutePos(new BlockPos(4, 0, 4));
+        helper.getLevel().setBlock(support, Blocks.STONE.defaultBlockState(), 3);
+        helper.getLevel().setBlock(support.above(), Blocks.AIR.defaultBlockState(), 3);
+        helper.getLevel().setBlock(support.above(2), Blocks.AIR.defaultBlockState(), 3);
+        Zombie worker = helper.spawnWithNoFreeWill(EntityType.ZOMBIE, new Vec3(support.getX() + .5D, support.getY() + 1.0D, support.getZ() + .5D));
+        helper.runAtTickTime(1, () -> FrontierV3ControlledMobMotion.followContinuously(helper.getLevel(), worker,
+                new Vec3(support.getX() + 4.5D, support.getY() + 1.0D, support.getZ() + .5D)));
+        helper.runAtTickTime(2, () -> {
+            FrontierV3ControlledMobMotion.advance(worker);
+            double observedX = worker.getX(), observedY = worker.getY(), observedZ = worker.getZ();
+            FrontierV3AmbientActorExecutor.holdForPreLeaseHandoff(worker);
+            FrontierV3ControlledMobMotion.advance(worker);
+            helper.assertTrue("IDLE".equals(FrontierV3ControlledMobMotion.readiness(worker))
+                            && Math.abs(worker.getX() - observedX) < 1.0E-8D
+                            && Math.abs(worker.getY() - observedY) < 1.0E-8D
+                            && Math.abs(worker.getZ() - observedZ) < 1.0E-8D,
+                    "a production pre-lease hold must retire only the old ambient actuator, without moving the exact body: " + worker.position());
+            helper.succeed();
+        });
+    }
+
+    /** A retained scene body on its named support must not manufacture fall velocity between hand-off turns. */
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    public static void groundedHandoffBodyDoesNotAccumulateSyntheticFallVelocity(GameTestHelper helper) {
+        BlockPos support = helper.absolutePos(new BlockPos(4, 0, 4));
+        helper.getLevel().setBlock(support, Blocks.STONE.defaultBlockState(), 3);
+        helper.getLevel().setBlock(support.above(), Blocks.AIR.defaultBlockState(), 3);
+        helper.getLevel().setBlock(support.above(2), Blocks.AIR.defaultBlockState(), 3);
+        Zombie worker = helper.spawnWithNoFreeWill(EntityType.ZOMBIE, new Vec3(4.5D, 1.0D, 4.5D));
+        FrontierV3ControlledMobMotion.restoreOrdinaryPhysics(worker);
+
+        helper.runAfterDelay(1, () -> {
+            for (int turn = 0; turn < 16; turn++) FrontierV3ControlledMobMotion.advanceAtEntityBoundary(worker);
+            helper.assertTrue(Math.abs(worker.getY() - support.getY() - 1.0D) <= 0.01D
+                            && Math.abs(worker.getDeltaMovement().y) <= 1.0E-8D,
+                    "a grounded retained body must keep its exact hand-off floor without synthetic fall momentum: position="
+                            + worker.position() + " velocity=" + worker.getDeltaMovement());
+            FrontierV3ControlledMobMotion.stop(worker);
             helper.succeed();
         });
     }

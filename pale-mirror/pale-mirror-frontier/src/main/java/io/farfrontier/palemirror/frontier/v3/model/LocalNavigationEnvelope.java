@@ -25,7 +25,13 @@ public record LocalNavigationEnvelope(Set<BlockPosition> permittedSupports) {
         return permittedSupports.contains(Objects.requireNonNull(observedSupport, "observed support"));
     }
 
-    static LocalNavigationEnvelope around(BodyPosition current, BodyPosition next) {
+    /**
+     * Derives the bounded HOT collision latitude for one already-retained edge.
+     *
+     * <p>The caller supplies the two canonical body positions; this factory deliberately
+     * exposes neither a route search nor a mutable set of future checkpoints.</p>
+     */
+    public static LocalNavigationEnvelope around(BodyPosition current, BodyPosition next) {
         LinkedHashSet<BlockPosition> supports = new LinkedHashSet<>();
         addNeighborhood(supports, current); addNeighborhood(supports, next);
         return new LocalNavigationEnvelope(supports);

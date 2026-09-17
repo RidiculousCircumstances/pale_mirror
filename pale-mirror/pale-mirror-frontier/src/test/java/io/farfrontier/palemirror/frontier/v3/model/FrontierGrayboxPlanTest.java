@@ -20,6 +20,9 @@ class FrontierGrayboxPlanTest {
         staging.forEach(position -> assertEquals(new GrayboxCell(position, project.id(), GrayboxMaterial.WORKSITE,
                 GrayboxSemanticPart.WORKSITE_STAGING), plan.cells().get(position),
                 "temporary support must remain distinct from both a route and a completed building"));
+        FrontierGrayboxPlan stable = FrontierGrayboxPlan.compileStableStructuralBaseline(state);
+        staging.forEach(position -> assertEquals(null, stable.cells().get(position),
+                "the high-frequency worksite overlay must not force a new world-wide structural baseline"));
 
         BlockPosition broken = staging.getFirst();
         FrontierWorldState conflicted = state.recordPhysicalDelta(new PhysicalDelta(broken, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
@@ -69,6 +72,27 @@ class FrontierGrayboxPlanTest {
                 "actor-only canonical revisions must retain the same structural projection");
         assertFalse(FrontierGrayboxPlan.structuralInput(state).equals(FrontierGrayboxPlan.structuralInput(damaged)),
                 "a visible structural condition change must rebuild the projection");
+    }
+
+    @Test
+    void grownHiveGeometryIsACompleteSmallOverlayOverTheRetainedWorldBaseline() {
+        FrontierWorldState baseline = initial();
+        HiveOrgan organ = new HiveOrgan(new io.farfrontier.palemirror.frontier.v3.api.SubjectId("organ:east-grown-overlay-1"),
+                baseline.bootstrap().hive().id(), new io.farfrontier.palemirror.frontier.v3.api.SubjectId("nest:seed-east"),
+                HiveOrganKind.RELAY, new BlockPosition(420, 64, 432), java.util.Optional.empty());
+        FrontierWorldState grown = baseline.addHiveOrgan(organ);
+
+        FrontierGrayboxPlan stableBefore = FrontierGrayboxPlan.compileStableStructuralBaseline(baseline);
+        FrontierGrayboxPlan stableAfter = FrontierGrayboxPlan.compileStableStructuralBaseline(grown);
+        FrontierGrayboxPlan recomposed = FrontierGrayboxPlan.withDynamicHiveOverlay(stableAfter,
+                FrontierGrayboxPlan.compileDynamicHiveOverlay(grown));
+
+        assertEquals(stableBefore.cells(), stableAfter.cells(),
+                "one grown organ must not invalidate the retained settlement/route baseline");
+        assertEquals(FrontierGrayboxPlan.compileStructuralBaseline(grown).cells(), recomposed.cells(),
+                "the bounded hive overlay must preserve every full-plan organ cell and precedence rule");
+        assertTrue(recomposed.cells().values().stream().anyMatch(cell -> cell.ownerId().equals(organ.id())),
+                "the recomposed projection retains the exact grown organ owner");
     }
 
     @Test

@@ -50,7 +50,7 @@ public final class FrontierV3ResourceSiteObservationGameTests {
         ledger.activate(siteId);
 
         String cause = "player:resource-observation-game-test";
-        helper.assertTrue(FrontierV3ResourceSiteExecutor.recordPlayerConflict(level, runtime, ledger, site, site.cropSlots().getLast(), cause),
+        helper.assertTrue(FrontierV3ResourceSiteConflictExecutor.recordPlayerConflict(level, runtime, ledger, site, site.cropSlots().getLast(), cause),
                 "an owned player break must first receive one durable canonical conflict receipt");
         helper.assertValueEqual(runtime.decodedState().orElseThrow().resourceSites().site(siteId).phase(), ResourceSitePhase.CONFLICT,
                 "the accepted observation must move only its owning site to CONFLICT before Minecraft mutates the cell");
@@ -62,9 +62,11 @@ public final class FrontierV3ResourceSiteObservationGameTests {
                 "a normal player action must retain terminal repair policy rather than restart recovery custody");
         helper.assertValueEqual(ledger.claim(siteId).status(), FrontierV3ResourceSiteLedger.Status.CONFLICT,
                 "the physical ownership ledger must carry the same local conflict boundary");
-        helper.assertTrue(FrontierV3DiagnosticTrace.latest(level.getServer(), cause)
-                        .filter(entry -> entry.kind().equals("resource_site_conflict") && entry.subject().equals(siteId.value())).isPresent(),
-                "the observer must expose the accepted receipt under the exact player correlation rather than a stale diagnostic epoch");
+        String incidentCorrelation = runtime.decodedState().orElseThrow().resourceSites().site(siteId).conflictDisposition().orElseThrow()
+                .incident().traceCorrelation();
+        helper.assertTrue(FrontierV3DiagnosticTrace.latest(level.getServer(), incidentCorrelation)
+                        .filter(entry -> entry.kind().equals("resource_site_conflict:player_world_observation") && entry.subject().equals(siteId.value())).isPresent(),
+                "the observer must expose the accepted incident under the same canonical-to-trace correlation rather than a stale player epoch");
         runtime.shutdown();
         helper.succeed();
     }

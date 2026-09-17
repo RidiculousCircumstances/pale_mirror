@@ -90,6 +90,20 @@ class FrontierV3ResourceSiteHarvestSceneExecutorTest {
                 SceneCauseKind.RESOURCE_SITE_HARVEST));
         assertEquals("AWAITING_EXACT_FLOOR", FrontierV3SceneBehaviorRegistry.standingUnavailableReason(
                 SceneCauseKind.ENGINEERING_WORKSITE));
+        assertTrue(FrontierV3SceneBehaviorRegistry.preLeaseStandingPositionProvider(SceneCauseKind.PRODUCTION_WORK) != null,
+                "a retained workshop worker must have the same typed pre-lease body placement after restart as before hand-off");
+    }
+
+    @Test
+    void idleFieldReleaseFencesThePresentWorkerBeforeGenericDrainGraceExpires() {
+        assertTrue(FrontierV3ResourceSiteHarvestSceneExecutor.immediateColdRelease(false, false, false),
+                "a no-demand field with no pending irreversible crop must hand off while its exact body remains naturally loaded");
+        assertFalse(FrontierV3ResourceSiteHarvestSceneExecutor.immediateColdRelease(false, true, false),
+                "a nearby player retains the visible worker and cannot trigger COLD release");
+        assertFalse(FrontierV3ResourceSiteHarvestSceneExecutor.immediateColdRelease(true, false, false),
+                "present local demand remains HOT authority");
+        assertFalse(FrontierV3ResourceSiteHarvestSceneExecutor.immediateColdRelease(false, false, true),
+                "a prepared crop retains its exact physical observation boundary");
     }
 
     private static CheckpointImage checkpoint(long instant, long dueAt) {

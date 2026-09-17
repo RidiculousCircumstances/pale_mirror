@@ -15,6 +15,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSite;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteLifecycle;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -44,7 +45,7 @@ public final class FrontierV3ResourceSiteHarvestGameTests {
     public static void exactMatureFieldBecomesOneTaggedDepotStackAndRecovers(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); ResourceSite site = field(fixtureOrigin(helper)); prepare(level, site);
         runWhenLit(helper, level, site, () -> {
-            FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level); PhysicalIntentId intent = new PhysicalIntentId("intent:site-harvest-game-test");
+            FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.fixture(); PhysicalIntentId intent = new PhysicalIntentId("intent:site-harvest-game-test");
             helper.assertTrue(FrontierV3ResourceSiteExecutor.baseline(level, site), "the harvest fixture must begin from its exact neutral baseline: " + baselineIssue(level, site));
             ledger.reserve(site.id(), intent); helper.assertTrue(FrontierV3ResourceSiteExecutor.placeWholeField(level, site),
                     "the harvest fixture must first materialize an exact active stage-zero field: " + fieldIssue(level, site));
@@ -73,15 +74,26 @@ public final class FrontierV3ResourceSiteHarvestGameTests {
                     FrontierV3ResourceSiteHarvestExecutor.Precondition.READY,
                     "the same exact field becomes harvestable only after its owner projects maturity");
             helper.assertTrue(chest != null && FrontierV3ResourceSiteHarvestExecutor.apply(level, ledger, site, chest, output),
-                    "one receipt atomically resets all owned crops and writes one exact tagged output stack");
-            helper.assertTrue(FrontierV3ResourceSiteExecutor.matches(level, site, 0) && FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(4), output),
-                    "the visible field and depot retain the only 64-wheat postcondition");
+                    "one receipt writes one exact tagged output stack without unbounded regrowth");
+            helper.assertTrue(FrontierV3ResourceSiteExecutor.matchesHarvestProgress(level, site, 64)
+                            && FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(4), output),
+                    "the terminal AIR cursor and depot retain the exact 64-wheat receipt until bounded regrowth");
+            FrontierV3ResourceSiteLedger.NativeGrowthFence nativeFence = new FrontierV3ResourceSiteLedger.NativeGrowthFence(
+                    "crop-grow-pre", site.cropSlots().getFirst(), 0, ResourceSiteLifecycle.MATURE_STAGE);
+            ledger.recordNativeGrowthFence(site.id(), nativeFence);
             CompoundTag saved = ledger.save(new CompoundTag(), level.registryAccess()); ledger = FrontierV3ResourceSiteLedger.load(saved, level.registryAccess());
+            helper.assertValueEqual(ledger.nativeGrowthFence(site.id()), nativeFence,
+                    "the first blocked native-growth edge survives restart separately from the stable field claim");
             helper.assertTrue(FrontierV3ResourceSiteHarvestExecutor.completePostcondition(level, site, ledger, chest, output),
                     "a restart confirms the already-observed receipt instead of replaying the harvest");
             chest.setItem(4, net.minecraft.world.item.ItemStack.EMPTY);
             helper.assertFalse(FrontierV3ResourceSiteHarvestExecutor.completePostcondition(level, site, ledger, chest, output),
                     "a missing output is conflict evidence and is never replaced by postcondition inspection");
+            helper.assertFalse(FrontierV3ResourceSiteHarvestExecutor.completeRunning(level, site, ledger, chest, output),
+                    "a fenced receipt removed before confirmation is visible conflict evidence, never a replacement mint");
+            ledger.restoreOne(site.id(), 63);
+            helper.assertFalse(ledger.hasHarvestReceipt(site.id(), output),
+                    "the first confirmed successor restore retires only the predecessor receipt fence");
             helper.succeed();
         });
     }
@@ -91,7 +103,7 @@ public final class FrontierV3ResourceSiteHarvestGameTests {
     public static void oneObservedCropPersistsAsPartialFieldWithoutCreatingTheDepotOutput(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); ResourceSite site = field(fixtureOrigin(helper), "site:resource-harvest-partial-progress"); prepare(level, site);
         runWhenLit(helper, level, site, () -> {
-            FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
+            FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.fixture();
             ledger.reserve(site.id(), new PhysicalIntentId("intent:site-harvest-partial-progress"));
             helper.assertTrue(FrontierV3ResourceSiteExecutor.baseline(level, site), "partial fixture must begin from its exact neutral baseline: " + baselineIssue(level, site));
             helper.assertTrue(FrontierV3ResourceSiteExecutor.placeWholeField(level, site),
@@ -127,7 +139,7 @@ public final class FrontierV3ResourceSiteHarvestGameTests {
     public static void coldCropReceiptMaterializesItsCurrentPartialFieldOnNaturalFirstLoad(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); ResourceSite site = field(fixtureOrigin(helper), "site:resource-harvest-cold-current"); prepare(level, site);
         runWhenLit(helper, level, site, () -> {
-            FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
+            FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.fixture();
             helper.assertValueEqual(FrontierV3ResourceSiteExecutor.projectHarvestProgress(level, ledger, site, 1),
                     FrontierV3ResourceSiteExecutor.StageProjectionResult.UPDATED,
                     "a naturally loaded COLD receipt must project its exact first completed crop rather than recreate crop-0");
@@ -146,7 +158,7 @@ public final class FrontierV3ResourceSiteHarvestGameTests {
     public static void completedHotCursorReceiptsOnceWhileRestartOnlyConfirms(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); ResourceSite site = field(fixtureOrigin(helper), "site:resource-harvest-running-completion"); prepare(level, site);
         runWhenLit(helper, level, site, () -> {
-            FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
+            FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.fixture();
             PhysicalIntentId intent = new PhysicalIntentId("intent:site-harvest-running-completion"); ledger.reserve(site.id(), intent);
             helper.assertTrue(FrontierV3ResourceSiteExecutor.baseline(level, site), "completion fixture must begin from its exact neutral baseline: " + baselineIssue(level, site));
             helper.assertTrue(FrontierV3ResourceSiteExecutor.placeWholeField(level, site),
@@ -164,11 +176,49 @@ public final class FrontierV3ResourceSiteHarvestGameTests {
                     new InventoryCustody.ContainerSlot(depot, 2));
             helper.assertTrue(FrontierV3ResourceSiteHarvestExecutor.completeRunning(level, site, ledger, chest, output),
                     "the final observed HOT cursor must perform its one exact depot receipt");
+            helper.assertTrue(FrontierV3ResourceSiteExecutor.matchesHarvestProgress(level, site, 64),
+                    "the terminal receipt must leave regrowth to the bounded lifecycle projector");
+            CompoundTag saved = ledger.save(new CompoundTag(), level.registryAccess());
+            ledger = FrontierV3ResourceSiteLedger.load(saved, level.registryAccess());
             helper.assertTrue(FrontierV3ResourceSiteHarvestExecutor.completeRunning(level, site, ledger, chest, output),
-                    "a restarted inspector confirms the existing receipt instead of replaying it");
+                    "a restarted inspector confirms the fenced receipt instead of replaying it");
             chest.setItem(2, net.minecraft.world.item.ItemStack.EMPTY);
             helper.assertFalse(FrontierV3ResourceSiteHarvestExecutor.completeRunning(level, site, ledger, chest, output),
                     "a missing restarted output is visible conflict evidence, never a duplicate receipt");
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "pm-frontier-v3-resource-recovery", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full",
+            timeoutTicks = 40)
+    public static void successorRegrowthKeepsOneRestartableReverseHarvestPrefix(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); ResourceSite site = field(fixtureOrigin(helper), "site:resource-harvest-successor-regrowth"); prepare(level, site);
+        runWhenLit(helper, level, site, () -> {
+            FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.fixture();
+            ledger.reserve(site.id(), new PhysicalIntentId("intent:site-harvest-successor-regrowth"));
+            helper.assertTrue(FrontierV3ResourceSiteExecutor.placeWholeField(level, site), "successor fixture must begin from its owned neutral field");
+            ledger.activate(site.id());
+            helper.assertValueEqual(FrontierV3ResourceSiteExecutor.projectStage(level, ledger, site, 7),
+                    FrontierV3ResourceSiteExecutor.StageProjectionResult.UPDATED, "successor fixture must begin mature");
+            for (int index = 0; index < site.cropSlots().size(); index++) {
+                BlockPosition crop = site.cropSlots().get(index); level.setBlock(new BlockPos(crop.x(), crop.y(), crop.z()), Blocks.AIR.defaultBlockState(), 3);
+                ledger.harvestOne(site.id(), index + 1);
+            }
+            // Restore the suffix in the only order represented by the claim: after restoring
+            // N-1, exactly [0,N) remains AIR.  A persisted middle cursor is therefore an
+            // exact restart witness, not an incomplete/foreign successor field.
+            for (int index = site.cropSlots().size() - 1; index >= site.cropSlots().size() - 8; index--) {
+                BlockPosition crop = site.cropSlots().get(index);
+                level.setBlock(new BlockPos(crop.x(), crop.y(), crop.z()), Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 7), 3);
+                ledger.restoreOne(site.id(), index);
+            }
+            CompoundTag saved = ledger.save(new CompoundTag(), level.registryAccess()); ledger = FrontierV3ResourceSiteLedger.load(saved, level.registryAccess());
+            helper.assertTrue(ledger.claim(site.id()).harvestedCropSlots() == 56
+                            && FrontierV3ResourceSiteExecutor.matchesHarvestProgress(level, site, 56),
+                    "a restarted successor must recognize its bounded reverse-regrowth prefix as the one owned current field");
+            BlockPosition foreign = site.cropSlots().get(55); level.setBlock(new BlockPos(foreign.x(), foreign.y(), foreign.z()), Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 7), 3);
+            helper.assertFalse(FrontierV3ResourceSiteExecutor.matchesHarvestProgress(level, site, 56),
+                    "a non-prefix regrowth remains foreign/damaged evidence and is never adopted as successor progress");
             helper.succeed();
         });
     }
@@ -182,7 +232,7 @@ public final class FrontierV3ResourceSiteHarvestGameTests {
         ServerLevel level = helper.getLevel(); ResourceSite site = field(fixtureOrigin(helper), "site:resource-harvest-cold-projection");
         prepare(level, site);
         runWhenLit(helper, level, site, () -> {
-            FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
+            FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.fixture();
             PhysicalIntentId projection = new PhysicalIntentId("intent:site-projection-resource-harvest-cold-projection");
             PhysicalIntentId preparation = new PhysicalIntentId("intent:site-prepare-resource-harvest-game-test");
             helper.assertTrue(FrontierV3ResourceSiteExecutor.baseline(level, site),
@@ -217,7 +267,7 @@ public final class FrontierV3ResourceSiteHarvestGameTests {
                     new FixedPosition(FixedScalar.whole(origin.x()), FixedScalar.whole(origin.y()), FixedScalar.whole(origin.z())), 0,
                     PhysicalPostcondition.RESOURCE_SITE_PREPARED_OBSERVED).withStatus(PhysicalIntentStatus.CONFIRMED,
                     Optional.of(new PhysicalObservationId("observation:site-prepare-resource-harvest-cold-prefix")));
-            FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
+            FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.fixture();
             helper.assertTrue(FrontierV3ResourceSiteExecutor.baseline(level, site),
                     "the unvisited restart fixture must begin as the complete neutral field, not a fabricated partial prefix");
             helper.assertValueEqual(FrontierV3ResourceSiteExecutor.reconcileHarvestAfterRestart(level, ledger, site, preparation, 63),
@@ -242,7 +292,7 @@ public final class FrontierV3ResourceSiteHarvestGameTests {
                     new FixedPosition(FixedScalar.whole(origin.x()), FixedScalar.whole(origin.y()), FixedScalar.whole(origin.z())), 0,
                     PhysicalPostcondition.RESOURCE_SITE_PREPARED_OBSERVED).withStatus(PhysicalIntentStatus.CONFIRMED,
                     Optional.of(new PhysicalObservationId("observation:site-prepare-resource-harvest-cold-owned-prefix")));
-            FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
+            FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.fixture();
             helper.assertValueEqual(FrontierV3ResourceSiteExecutor.classifyHarvestRestart(level, ledger, site, preparation, 63).state(),
                     FrontierV3ResourceSiteExecutor.HarvestRestartPhysicalState.NEUTRAL_UNCLAIMED,
                     "a complete neutral facility is typed separately from an owned partial field");

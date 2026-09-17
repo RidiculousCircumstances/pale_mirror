@@ -29,6 +29,23 @@ class AmbientActorProcessTest {
     }
 
     @Test
+    void idleNonFarmResidentKeepsALocalPresentationGoalRatherThanClaimingTheSharedWorkshop() {
+        var worldId = new WorldId("frontier:ambient-idle-local-goal");
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(worldId, 91L));
+        FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        SubjectId resident = state.humanPopulation().residents().values().stream()
+                .filter(profile -> profile.profession() != ResidentProfession.AGRICULTURAL_WORKER
+                        && profile.profession() != ResidentProfession.SECURITY_WORKER)
+                .map(ResidentProfile::id).findFirst().orElseThrow();
+
+        AmbientActorProcess.AmbientGoal goal = AmbientActorProcess.goalFor(state, resident);
+
+        assertEquals(HumanAssignmentKind.IDLE, HumanAssignmentProjection.compile(state).assignment(resident).kind());
+        assertEquals(AmbientGoalKind.PATROL, goal.kind());
+        assertEquals(state.actorLocations().get(resident).body().supportingSurface().support(), goal.position());
+    }
+
+    @Test
     void deathIsExactOwnedEvidenceAndRejectsDuplicate() {
         var worldId = new WorldId("frontier:ambient-death");
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(worldId, 91L));

@@ -63,6 +63,7 @@ import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.npc.Villager;
@@ -76,28 +77,17 @@ import java.util.Comparator;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
-/**
- * Materializes exact ordinary residents and hive bioforms through persisted per-actor HOT leases.
- *
- * <p>It owns no canonical mutation and never interprets an unloaded/missing body as death. A
- * deterministic UUID prevents a second body after ordinary unload/reload. A durable COLD hand-off
- * discards the body before its chunk can serialize it; an untagged body with that UUID is a visible
- * non-owning conflict and remains untouched.</p>
- */
 final class FrontierV3AmbientActorExecutor {
     static final String ACTOR_KEY = "pale_mirror_frontier_v3_ambient_actor";
     static final String KIND_KEY = "pale_mirror_frontier_v3_ambient_kind";
+    static final String CUSTODY_EPOCH_KEY = "pale_mirror_frontier_v3_ambient_epoch";
     private static final int DRAIN_SAFE_RADIUS_BLOCKS = 64;
     static final long DRAIN_HYSTERESIS_TICKS = 200L;
     private static final int GRAYBOX_BIOFORM_FIRE_RESISTANCE_TICKS = Integer.MAX_VALUE;
-    /** Bounded fair probe window; it exceeds admissions so demanded tail identities meet the HOT window. */
     private static final int MAX_ACTOR_PROBES_PER_TICK = 32;
-    /**
-     * Loaded-world observation only: the durable lease remains the source of truth.  A body is
-     * never allowed to fall out of a chunk and serialize after its lease has become COLD.
-     */
     private static final Map<FrontierV3ServerRuntime<?, ?>, Map<SubjectId, Long>> COLD_DEMAND_SINCE = new IdentityHashMap<>();
     private FrontierV3AmbientActorExecutor() { }
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
@@ -108,21 +98,12 @@ final class FrontierV3AmbientActorExecutor {
         state = runtime.decodedState().orElse(null);
         if (state == null) return;
         FrontierV3AmbientAdmissionPolicy.Session admissionPolicy = admissionPolicy(runtime, state);
-        // A successor scene cannot begin until the outgoing ambient authority has closed.  This
-        // is a correctness hand-off, not ordinary ambient work: it must not be starved behind
-        // a previously sorted resident pursuing a local goal.  Process every currently
-        // reserved exact identity first, then let the bounded ambient pass handle voluntary
-        // movement and new admissions.  Each transfer remains durable and independently
-        // validates its exact body before discard.
         FrontierWorldState handoffState = state;
         FrontierV3AmbientActorReservationHandoff.run(level, runtime, handoffState, admissionPolicy,
                 actorId -> FrontierV3AmbientPendingAdmissions.get(runtime, entityId(handoffState, actorId)) == null);
         state = runtime.decodedState().orElse(null);
         if (state == null) return;
-        int admitted = 0;
-        // Commands submitted below synchronously install a new immutable checkpoint.  Preserve
-        // the deterministic actor order, but never let a later actor make another physical
-        // decision from the predecessor's stale snapshot.
+        int admitted = resumeDemandedClosedSceneReturns(level, runtime, state);
         for (SubjectId actorId : FrontierV3ActorProbeSchedule.next(runtime, state, level, MAX_ACTOR_PROBES_PER_TICK,
                 FrontierV3AmbientAdmissionPolicy.MAX_ACTORS_PER_TICK)) {
             if (admitted >= FrontierV3AmbientAdmissionPolicy.MAX_ACTORS_PER_TICK) return;
@@ -134,28 +115,18 @@ final class FrontierV3AmbientActorExecutor {
                 FrontierV3AmbientActorCaches.forgetObserved(runtime, actorId);
                 continue;
             }
-            // A pre-projection exact body has one temporary authority only: its pending
-            // admission.  Until the projection-owned provider recognizes that same body,
-            // no ordinary UNKNOWN/PREPARED branch may reclaim it, materialize a replacement,
-            // or otherwise advance its lease.
             if (FrontierV3AmbientPendingAdmissions.get(runtime, entityId(state, actorId)) != null) {
                 forgetColdDemand(runtime, actorId);
                 FrontierV3AmbientActorCaches.forgetObserved(runtime, actorId);
                 continue;
             }
             if (!HivePhysiologySupport.permitsAmbientLease(state, actorId)) {
-                // Cocoon custody is materially represented by the owned block, never by a
-                // second dormant Zombie. A lifecycle transition must durably release the
-                // cocoon before this executor may admit a body again.
                 forgetColdDemand(runtime, actorId);
                 FrontierV3AmbientActorCaches.forgetObserved(runtime, actorId);
                 continue;
             }
             var lease = state.ambientLeases().get(actorId);
             boolean successorSceneOwnsActor = state.sceneLeases().values().stream()
-                    // A conflicted scene remains the exact physical claimant until its owner
-                    // records recovery.  Releasing its former ambient body here would permit a
-                    // second lease/body to appear after a visible conflict.
                     .filter(scene -> scene.status() != SceneLeaseStatus.CLOSED)
                     .anyMatch(scene -> scene.members().stream().anyMatch(member -> member.actorId().equals(actorId)));
             if (lease != null && lease.status() == AmbientLeaseStatus.CLOSED && !successorSceneOwnsActor) {
@@ -163,10 +134,6 @@ final class FrontierV3AmbientActorExecutor {
                 if (stale != null && owned(stale, actorId, bioform(state, actorId))) stale.discard();
                 FrontierV3AmbientActorCaches.forgetObserved(runtime, actorId);
             }
-            // An exact ambient-to-scene hand-off transfers the existing body under its same
-            // UUID.  While its successor scene is PREPARED, leave that body untouched for the
-            // scene executor to claim; discarding it here would turn a hand-off into a respawn
-            // at an old canonical floor.  All other closed ambient bodies remain stale.
             if (successorSceneOwnsActor) {
                 forgetColdDemand(runtime, actorId);
                 FrontierV3AmbientActorCaches.forgetObserved(runtime, actorId);
@@ -175,25 +142,13 @@ final class FrontierV3AmbientActorExecutor {
             FrontierV3AmbientAdmissionPolicy.Decision handoff = FrontierV3AmbientActorReservationHandoff.runOne(
                     level, runtime, state, actorId, admissionPolicy);
             if (handoff.reserved()) {
-                // Reservation alone is not a hand-off: the successor scene is forbidden to
-                // overlap this HOT authority.  Capture this exact observed body first, close
-                // the ambient lease durably, and only then let the next scene turn materialize
-                // the same canonical identity.  This is deliberately general rather than a
-                // harvest special case; every pre-lease candidate uses the same ownership law.
                 if (handoff.applied()) admitted++;
                 forgetColdDemand(runtime, actorId);
                 FrontierV3AmbientActorCaches.forgetObserved(runtime, actorId);
                 continue;
             }
-            // A future field-work scene owns the actor's next purpose but not yet its body.
-            // Keep a naturally loaded ambient body stationary for the typed scene hand-off;
-            // do not let a generic local goal move, drain or replace the named worker.
             FrontierSceneAdmission.GenericAmbientAdmission genericAdmission = genericAmbientAdmission(runtime, state);
             if (genericAdmission.reserves(actorId)) {
-                // A typed process may require one inert physical body purely to transfer its
-                // stable identity into a HOT lease.  The behavior registry supplies the
-                // standing rule; this generic ambient executor never branches on harvest (or
-                // any other process) semantics.
                 Optional<FrontierV3SceneBehaviorRegistry.StandingPositionProvider> preLeaseStanding = genericAdmission.preLeaseSceneCause(actorId)
                         .map(FrontierV3SceneBehaviorRegistry::preLeaseStandingPositionProvider);
                 if (FrontierV3PreLeaseDemandGate.holdsForTypedHandoff(preLeaseStanding.isPresent(),
@@ -210,10 +165,16 @@ final class FrontierV3AmbientActorExecutor {
                                     new AmbientLeaseTransition(actorId, AmbientLeaseStatus.HOT));
                             admitted++;
                         }
+                    } else if (lease.status() == AmbientLeaseStatus.HOT) {
+                        Entity body = level.getEntity(entityId(state, actorId));
+                        if (body instanceof Mob mob && owned(mob, actorId, bioform(state, actorId))) {
+                            holdForPreLeaseHandoff(mob);
+                        }
                     }
                 } else if (lease != null && lease.status() == AmbientLeaseStatus.HOT) {
                     Entity body = level.getEntity(entityId(state, actorId));
-                    if (body instanceof Mob mob && owned(mob, actorId, bioform(state, actorId)) && drain(runtime, mob)) admitted++;
+                    if (body instanceof Mob mob && owned(mob, actorId, bioform(state, actorId))
+                            && drainReservedColdContinuation(runtime, state, actorId, mob, lease)) admitted++;
                 } else if (lease != null && lease.status() == AmbientLeaseStatus.PREPARED
                         && abandonPreparedForReservation(level, runtime, state, actorId, lease).isPresent()) {
                     admitted++;
@@ -227,19 +188,9 @@ final class FrontierV3AmbientActorExecutor {
                 if (lease != null && lease.status() == AmbientLeaseStatus.HOT) {
                     Entity body = level.getEntity(entityId(state, actorId));
                     if (body instanceof Mob mob && owned(mob, actorId, bioform(state, actorId))) {
-                        // Demand hysteresis deliberately keeps this HOT body observable while
-                        // no player currently demands it.  It must still use ordinary vanilla
-                        // physics during that grace interval; otherwise a retained legacy
-                        // no-gravity flag can make the body hover until the next demand edge.
                         FrontierV3ControlledMobMotion.restoreOrdinaryPhysics(mob);
                         FrontierV3AmbientActorCaches.rememberObserved(runtime, actorId, mob, FrontierV3AmbientPendingAdmissions.MAX_ENTRIES);
                         if (FrontierV3AmbientActorLocalTargets.directedGoal(lease)) {
-                            // A retained local directive may continue through the bounded
-                            // hysteresis window, but it cannot consume the whole executor turn
-                            // or postpone its own demand-loss release forever. In particular a
-                            // collision-displaced scout can still have a pending route after the
-                            // observer leaves; return-after-pursuit used to retain that HOT
-                            // authority indefinitely and starve the other exact actors.
                             pursueLocalGoal(level, runtime, state, actorId, mob, lease);
                             if (observeDirectedArrival(level, runtime, state, actorId, mob, lease)) admitted++;
                         }
@@ -272,11 +223,6 @@ final class FrontierV3AmbientActorExecutor {
                     submit(runtime, "ambient-recovered", actorId.value(), new AmbientLeaseTransition(actorId, AmbientLeaseStatus.HOT));
                     admitted++;
                 } else if (body == null && restartAbsenceIsObserved(level, runtime, state, actorId, lease)) {
-                    // This is a loaded-world negative postcondition, not a desired-state
-                    // overwrite.  A normal player death is already observed before its body
-                    // disappears; after restart an absent exact body therefore closes only
-                    // the failed HOT hand-off, retaining the canonical living actor for the
-                    // ordinary next PREPARED -> HOT admission.
                     submit(runtime, "ambient-restart-absence", actorId.value(),
                             new AmbientLeaseRestartAbsenceObserved(actorId, lease.handoffBody()));
                     admitted++;
@@ -296,8 +242,39 @@ final class FrontierV3AmbientActorExecutor {
             }
         }
     }
+    private static int resumeDemandedClosedSceneReturns(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                                        FrontierWorldState state) {
+        int admitted = 0;
+        for (SubjectId actorId : FrontierV3SceneExecutor.retainedClosedActorsDemandedBy(level, state)) {
+            if (admitted >= FrontierV3AmbientAdmissionPolicy.MAX_ACTORS_PER_TICK) break;
+            state = runtime.decodedState().orElse(null);
+            if (state == null) return admitted;
+            if (FrontierV3AmbientPendingAdmissions.get(runtime, entityId(state, actorId)) != null) continue;
+            var location = state.actorLocations().get(actorId);
+            if (location == null || location.condition().status() != ActorLifeStatus.ALIVE
+                    || !HivePhysiologySupport.permitsAmbientLease(state, actorId)) continue;
+            var lease = state.ambientLeases().get(actorId);
+            if (lease == null || lease.status() == AmbientLeaseStatus.CLOSED) {
+                submit(runtime, "ambient-closed-scene-return-prepare", actorId.value(),
+                        new AmbientLeasePrepared(AmbientActorProcess.nextLease(state, actorId,
+                                runtime.canonicalState().orElseThrow().instant())));
+                admitted++;
+                continue;
+            }
+            if (lease.status() != AmbientLeaseStatus.PREPARED) continue;
+            Result result = materialize(level, runtime, state, actorId, lease.handoffBody());
+            if (result == Result.APPLIED || result == Result.CURRENT) {
+                FrontierV3AmbientHotAdmission.confirmAndArm(level, runtime, actorId);
+                admitted++;
+            }
+        }
+        return admitted;
+    }
     static Result materialize(ServerLevel level, FrontierWorldState state, SubjectId actorId, BodyPosition canonicalBody) {
         return materialize(level, state, actorId, canonicalBody, FrontierV3StandingPosition::aboveExactFloor);
+    }
+    static void holdForPreLeaseHandoff(Mob body) {
+        FrontierV3ControlledMobMotion.stop(Objects.requireNonNull(body, "pre-lease handoff body"));
     }
     private static Result materialize(ServerLevel level, FrontierWorldState state, SubjectId actorId, BodyPosition canonicalBody,
                                       FrontierV3SceneBehaviorRegistry.StandingPositionProvider standingPositionProvider) {
@@ -306,8 +283,6 @@ final class FrontierV3AmbientActorExecutor {
         if (existing != null) {
             if (!owned(existing, actorId, bioform)) return Result.CONFLICT;
             if (existing instanceof Zombie zombie) configureBioform(zombie, bioformProfile(state, actorId));
-            // A recovered PREPARED body has not yet crossed the canonical HOT boundary.
-            // Keep it inert until that durable transition is accepted.
             if (existing instanceof Mob body) {
                 body.getNavigation().stop();
                 body.setNoAi(true);
@@ -319,26 +294,21 @@ final class FrontierV3AmbientActorExecutor {
         Mob body = bioform ? EntityType.ZOMBIE.create(level) : EntityType.VILLAGER.create(level);
         if (body == null) throw new IllegalStateException("Minecraft could not create a Frontier v3 ambient actor");
         body.setUUID(entityId); body.setPos(position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D); body.setPersistenceRequired();
-        // The body exists before the durable PREPARED -> HOT acknowledgement. Do not let
-        // vanilla AI move it across that crash window.
+        body.getPersistentData().putLong(CUSTODY_EPOCH_KEY, 1L);
         body.setNoAi(true);
         if (body instanceof Zombie zombie) configureBioform(zombie, bioformProfile(state, actorId));
         hydrateExactHeldEquipment(body, state, actorId);
         FrontierV3ScenePresentation.applyAmbientActorPresentation(body, state, actorId, bioform);
         body.getPersistentData().putString(ACTOR_KEY, actorId.value()); body.getPersistentData().putString(KIND_KEY, bioform ? "BIOFORM" : "RESIDENT");
+        if (!level.noCollision(body, body.getBoundingBox()) || admissionColumnOccupied(level, body, body.getBoundingBox())) return Result.DEFERRED;
         return level.addFreshEntity(body) ? Result.APPLIED : Result.CONFLICT;
     }
-    /**
-     * A newly created exact body must reflect already canonical actor custody after ordinary
-     * COLD/restart materialization. Existing loaded bodies are never overwritten here: player
-     * changes on those bodies remain observation input, not desired-state repair.
-     */
+    private static boolean admissionColumnOccupied(ServerLevel level, Mob candidate, AABB body) {
+        return !level.getEntities(candidate, body.inflate(0.001D), entity -> entity instanceof LivingEntity living
+                && living.isAlive() && !living.isSpectator()).isEmpty();
+    }
     private static void hydrateExactHeldEquipment(Mob body, FrontierWorldState state, SubjectId actorId) {
         if (!body.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty()) return;
-        // The main hand is one exact physical projection.  A fresh COLD/restart body must
-        // re-materialize either supported current main-hand capability from canonical actor
-        // custody; otherwise an engineering pickaxe disappears between the issue and return
-        // operations even though the canonical item still has the same actor owner.
         state.inventory().actorItems(actorId).stream().filter(item -> HumanTacticalFunctionProjection.isGrayboxWeaponKind(item.itemKind())
                         || EngineeringToolCustody.isTool(item.itemKind()))
                 .sorted(Comparator.comparing(io.farfrontier.palemirror.frontier.v3.model.ExactItemStack::id)).findFirst()
@@ -353,31 +323,44 @@ final class FrontierV3AmbientActorExecutor {
                                       FrontierV3SceneBehaviorRegistry.StandingPositionProvider standingPositionProvider) {
         Entity pending = FrontierV3AmbientPendingAdmissions.get(runtime, entityId(state, actorId));
         if (pending != null && owned(pending, actorId, bioform(state, actorId))) return Result.PENDING;
-        // A chunk can expose blocks before PersistentEntitySectionManager has finished restoring
-        // saved entities. Creating our deterministic UUID in that interval races the ordinary
-        // saved-body join and can briefly surface a duplicate to players. This read-only proof
-        // neither loads a chunk nor interprets absence as death. Production callers must use this
-        // runtime overload; the state-only overload is retained for isolated GameTest fixtures.
+        AmbientActorLease ambient = state.ambientLeases().get(actorId);
+        if (ambient == null) return Result.CONFLICT;
+        FrontierV3AmbientCarrierLedger ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
+        FrontierV3AmbientCarrierLedger.Reconciliation carrier = ledger.reconciliation(actorId, entityId(state, actorId),
+                ambient.revision());
+        Entity existing = level.getEntity(entityId(state, actorId));
+        if (existing != null) {
+            if (carrier != FrontierV3AmbientCarrierLedger.Reconciliation.NO_FENCED_CARRIER) return Result.CONFLICT;
+            if (!owned(existing, actorId, bioform(state, actorId))
+                    && !FrontierV3SceneExecutor.adoptRetainedClosedBodyForAmbient(existing, state, actorId)) return Result.CONFLICT;
+            return materialize(level, state, actorId, canonicalBody, standingPositionProvider);
+        }
         BlockPos position = standingPositionProvider.resolve(level, minecraftFloor(canonicalBody.supportingSurface().support()));
         if (position == null || !position.equals(minecraftBody(canonicalBody))
                 || !mayCreateFreshBody(level.hasChunkAt(position), level.areEntitiesLoaded(ChunkPos.asLong(position)), true)) return Result.DEFERRED;
-        return materialize(level, state, actorId, canonicalBody, standingPositionProvider);
+        if (existing == null && carrier != FrontierV3AmbientCarrierLedger.Reconciliation.NO_FENCED_CARRIER
+                && carrier != FrontierV3AmbientCarrierLedger.Reconciliation.READY) return Result.CONFLICT;
+        if (existing == null && carrier == FrontierV3AmbientCarrierLedger.Reconciliation.NO_FENCED_CARRIER
+                && state.ambientLeases().get(actorId).revision() > 1L) return Result.CONFLICT;
+        Result result = materialize(level, state, actorId, canonicalBody, standingPositionProvider);
+        if (result != Result.APPLIED || carrier != FrontierV3AmbientCarrierLedger.Reconciliation.READY) return result;
+        Entity reconstructed = level.getEntity(entityId(state, actorId));
+        long reconstructionEpoch = ledger.reconstructionEpoch(actorId);
+        if (!(reconstructed instanceof Mob) || !ledger.adopt(actorId, reconstructed.getUUID(), ambient.revision())) {
+            if (reconstructed != null) reconstructed.discard();
+            return Result.CONFLICT;
+        }
+        reconstructed.getPersistentData().putLong(CUSTODY_EPOCH_KEY, reconstructionEpoch);
+        return result;
     }
     static UUID entityId(FrontierWorldState state, SubjectId actorId) { return io.farfrontier.palemirror.frontier.v3.model.SceneLease.deterministicEntityId(state.bootstrap().worldId(), actorId); }
-    /** Pure gate retained for the negative admission regression. */
     static boolean mayCreateFreshBody(boolean chunkLoaded, boolean entitiesLoaded, boolean exactHeadroom) {
         return chunkLoaded && entitiesLoaded && exactHeadroom;
     }
-    /**
-     * The only legal absence proof is the exact canonical hand-off column in a naturally
-     * loaded chunk.  An unloaded chunk stays UNKNOWN; a mismatched loaded entity stays a
-     * conflict path and is never replaced here.
-     */
     static boolean restartAbsenceIsObserved(ServerLevel level, FrontierV3ServerRuntime<?, ?> runtime, FrontierWorldState state,
                                             SubjectId actorId, AmbientActorLease lease) {
         return restartAbsenceIsObserved(level, state, actorId, lease) && FrontierV3AmbientPendingAdmissions.get(runtime, entityId(state, actorId)) == null;
     }
-    /** Package-visible pure loaded-world absence proof used by the isolated recovery fixture. */
     static boolean restartAbsenceIsObserved(ServerLevel level, FrontierWorldState state, SubjectId actorId, AmbientActorLease lease) {
         var location = state.actorLocations().get(actorId);
         return location != null && location.condition().status() == ActorLifeStatus.ALIVE
@@ -386,22 +369,28 @@ final class FrontierV3AmbientActorExecutor {
                 && level.hasChunkAt(minecraftBody(lease.handoffBody()))
                 && level.getEntity(entityId(state, actorId)) == null;
     }
-    /**
-     * Read-only loaded-world admission evidence for one canonical ambient actor.  This must not
-     * load a chunk or alter a lease: it exists so an operator can distinguish a legitimate
-     * unloaded/blocked deferral from a UUID ownership conflict while investigating a visible
-     * PREPARED lease.
-     */
     static FrontierV3AmbientAdmissionDiagnostic admissionDiagnostic(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                                      FrontierWorldState state, SubjectId actorId) {
         var location = state.actorLocations().get(actorId);
         if (location == null) return FrontierV3AmbientAdmissionDiagnostic.notCanonical();
         UUID expectedId = entityId(state, actorId);
-        // A dead canonical actor can still have a short-lived Minecraft death animation or
-        // removal callback carrying its historical UUID. That is terminal physical evidence,
-        // not an attempted ambient admission and never a foreign-body conflict.
         if (location.condition().status() != ActorLifeStatus.ALIVE) return FrontierV3AmbientAdmissionDiagnostic.terminal(expectedId);
         Entity existing = level.getEntity(expectedId);
+        AmbientActorLease lease = state.ambientLeases().get(actorId);
+        if (lease != null && lease.status() == AmbientLeaseStatus.PREPARED) {
+            FrontierV3AmbientCarrierLedger.Reconciliation carrier = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId())
+                    .reconciliation(actorId, expectedId, lease.revision());
+            if (existing != null && carrier != FrontierV3AmbientCarrierLedger.Reconciliation.NO_FENCED_CARRIER) {
+                return FrontierV3AmbientAdmissionDiagnostic.carrierAmbiguity(expectedId, "CONCURRENT_CUSTODY");
+            }
+            if (existing == null && (carrier == FrontierV3AmbientCarrierLedger.Reconciliation.UUID_MISMATCH
+                    || carrier == FrontierV3AmbientCarrierLedger.Reconciliation.STALE_REVISION)) {
+                return FrontierV3AmbientAdmissionDiagnostic.carrierAmbiguity(expectedId, carrier.name());
+            }
+            if (existing == null && carrier == FrontierV3AmbientCarrierLedger.Reconciliation.NO_FENCED_CARRIER && lease.revision() > 1L) {
+                return FrontierV3AmbientAdmissionDiagnostic.carrierAmbiguity(expectedId, "MISSING");
+            }
+        }
         if (existing != null) {
             BlockPosition observedPosition = new BlockPosition(existing.getBlockX(), existing.getBlockY(), existing.getBlockZ());
             ObservedPosition observedExact = new ObservedPosition(existing.getX(), existing.getY(), existing.getZ());
@@ -409,9 +398,6 @@ final class FrontierV3AmbientActorExecutor {
                 return FrontierV3AmbientAdmissionDiagnostic.indexed(expectedId, FrontierV3AmbientPendingAdmissions.get(runtime, expectedId) != null, observedPosition, observedExact,
                         existing instanceof Mob mob ? FrontierV3MobMotionLifecycle.trackerObservation(mob) : new FrontierV3ControlledMobMotion.TrackerObservation(0, 0));
             }
-            // A physical UUID belongs to the canonical actor rather than to a lease. During a
-            // legal ambient-to-scene hand-off the same body has already exchanged its ambient
-            // tags for an active scene lease, so this is not a duplicate or foreign body.
             if (FrontierV3SceneExecutor.recognizes(runtime, existing)) {
                 return FrontierV3AmbientAdmissionDiagnostic.sceneOwned(expectedId, observedPosition, observedExact,
                         existing instanceof Mob mob ? FrontierV3MobMotionLifecycle.trackerObservation(mob) : new FrontierV3ControlledMobMotion.TrackerObservation(0, 0));
@@ -429,7 +415,6 @@ final class FrontierV3AmbientActorExecutor {
         if (!FrontierV3StandingPosition.hasExactStandingColumn(level, location.supportingSurface().support())) return FrontierV3AmbientAdmissionDiagnostic.blocked(expectedId, location.supportingSurface().support());
         return FrontierV3AmbientAdmissionDiagnostic.ready(expectedId, new BlockPosition(location.body().x(), location.body().y(), location.body().z()));
     }
-    /** Retains only an exact expected body during the short join-to-index hand-off. */
     static JoinDisposition observeJoin(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity) {
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null || !FrontierV3AmbientCarrierRecognition.recognizesOwnership(state,
@@ -443,23 +428,16 @@ final class FrontierV3AmbientActorExecutor {
         FrontierV3AmbientPendingAdmissions.RetainResult retained = FrontierV3AmbientPendingAdmissions.retain(runtime, entity, actorId);
         if (retained == FrontierV3AmbientPendingAdmissions.RetainResult.LIMIT_REACHED) return JoinDisposition.NOT_MANAGED;
         if (retained == FrontierV3AmbientPendingAdmissions.RetainResult.DUPLICATE_UNINDEXED) return JoinDisposition.DUPLICATE_UNINDEXED;
-        // A persisted HOT body may still carry vanilla AI when the restart quarantines its
-        // lease. The short bootstrap bridge has no geometric authority, so hold it inert until
-        // projection-owned recognition has completed the durable reclaim.
         if (entity instanceof Mob body) {
             body.getNavigation().stop();
             body.setNoAi(true);
         }
-        // The first startup Entity join can precede projection.  Retain only this exact body
-        // until the actor stage sees a compatible provider; it must not turn UNKNOWN into HOT
-        // from an unverified pre-projection callback.
         if (FrontierV3AmbientCarrierRecognition.recognizes(runtime, entity)
                 && state.ambientLeases().get(actorId) != null && state.ambientLeases().get(actorId).status() == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART) {
             submit(runtime, "ambient-recovered", actorId.value(), new AmbientLeaseTransition(actorId, AmbientLeaseStatus.HOT));
         }
         return JoinDisposition.RETAINED;
     }
-    /** True only for the exact bounded bridge installed by {@link #observeJoin}. */
     static boolean retainsPendingJoin(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity) {
         Entity pending = FrontierV3AmbientPendingAdmissions.get(runtime, entity.getUUID());
         FrontierWorldState state = runtime.decodedState().orElse(null);
@@ -467,11 +445,9 @@ final class FrontierV3AmbientActorExecutor {
                 && FrontierV3AmbientCarrierRecognition.recognizesOwnership(state,
                 FrontierV3AmbientCarrierRecognition.ManagedCarrier.from(entity));
     }
-    /** Compatibility entrypoint; exact join recognition lives in its bounded companion. */
     static boolean recognizes(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity) {
         return FrontierV3AmbientCarrierRecognition.recognizes(runtime, entity);
     }
-    /** Accepts only a real loaded-world death for the exact HOT ambient body. */
     static boolean observeDeath(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity, Entity source) {
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return false;
@@ -489,10 +465,6 @@ final class FrontierV3AmbientActorExecutor {
                 new AmbientActorDied(actorId, observedBody(entity), cause));
         return true;
     }
-    /**
-     * A late entity-leave callback never changes a HOT lease. Minecraft may already have serialized
-     * the body, so closing here could admit a second deterministic UUID on the next player demand.
-     */
     static boolean observeLeave(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity, boolean serverStopping) {
         if (serverStopping) return false;
         FrontierWorldState state = runtime.decodedState().orElse(null);
@@ -505,18 +477,9 @@ final class FrontierV3AmbientActorExecutor {
         if (current == null || current.condition().status() != ActorLifeStatus.ALIVE || !entityId(state, actorId).equals(entity.getUUID())
                 || !owned(entity, actorId, bioform(state, actorId)) || body.getHealth() <= 0.0F
                 || state.ambientLeases().get(actorId) == null || state.ambientLeases().get(actorId).status() != AmbientLeaseStatus.HOT) return false;
-        // EntityLeaveLevelEvent can be emitted only after chunk serialization has begun.  A
-        // transition to CLOSED here would permit a fresh body on the next demand while the old
-        // UUID is still in chunk NBT.  The regular tick drains, durably closes and discards the
-        // body while it is unquestionably loaded.  An unexpected leave therefore fails closed
-        // as HOT and is reclaimed by the same UUID if Minecraft restores it later.
         return false;
     }
     private static boolean demand(ServerLevel level, BlockPosition position) {
-        // Ambient custody has one lease per exact actor, but observer presence still has the
-        // same one aggregate meaning as a work scene.  Keep player scans and radius policy in
-        // the shared read-only input rather than allowing this executor to drift into an
-        // independent admission rule.
         return FrontierV3SceneExecutor.demandExists(level, position);
     }
     static boolean bioform(FrontierWorldState state, SubjectId actorId) {
@@ -533,14 +496,10 @@ final class FrontierV3AmbientActorExecutor {
                 && (bioform ? entity instanceof Zombie : entity instanceof Villager)
                 && (bioform ? "BIOFORM" : "RESIDENT").equals(entity.getPersistentData().getString(KIND_KEY));
     }
-    /** The graybox Zombie is a hive creature, not a vanilla undead exposed to daylight. */
     static void configureBioform(Zombie body, Bioform bioform) {
         if (!body.hasEffect(MobEffects.FIRE_RESISTANCE)) {
             body.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE, GRAYBOX_BIOFORM_FIRE_RESISTANCE_TICKS, 0, true, false));
         }
-        // Fire resistance prevents daylight damage but vanilla Zombies still render as burning.
-        // The non-damageable role marker suppresses only vanilla sunlight ignition; real fire and
-        // explosion effects remain visible and flow through their normal physical observation path.
         body.setCanPickUpLoot(false);
         if (body.getItemBySlot(EquipmentSlot.HEAD).isEmpty()) {
             body.setItemSlot(EquipmentSlot.HEAD, new ItemStack(bioform.isExplosiveAssaulter() ? Items.RED_WOOL
@@ -548,15 +507,6 @@ final class FrontierV3AmbientActorExecutor {
             body.setDropChance(EquipmentSlot.HEAD, 0.0F);
         }
     }
-    /**
-     * Executes one bounded ambient local brain.  The durable lease owns the purpose and the
-     * individual hand-off slot is the spatial anchor; using a settlement/nest centroid would
-     * route a valid exterior body through owned structure geometry.
-     * exact actor identity supplies a stable phase.  Minecraft's vanilla goal AI intentionally
-     * remains disabled because ambient combat, target acquisition and inventory use would evade
-     * the v3 physical-intent ledger.
-     */
-    /** @return true when a canonical command was accepted and this tick must not use its old snapshot again. */
     static boolean pursueLocalGoal(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SubjectId actorId, Mob body, AmbientActorLease lease) {
         if (lease.goal() == AmbientGoalKind.TRANSIT) {
             ResidentMigrationJourney journey = state.humanPopulation().migration(actorId);
@@ -567,8 +517,6 @@ final class FrontierV3AmbientActorExecutor {
             }
         }
         if (lease.goal() == AmbientGoalKind.SCOUT_PATROL && !lease.goalBody().equals(state.actorLocations().get(actorId).body())) {
-            // The command reducer owns the cursor transition; movement may only approach the
-            // exact next lease target, never choose a local substitute after COLD hand-off.
             BlockPos physicalTarget = minecraftBody(lease.goalBody());
             if (!level.hasChunkAt(physicalTarget) || !FrontierV3StandingPosition.hasExactStandingColumn(level, lease.goalBody().supportingSurface().support())) {
                 body.getNavigation().stop();
@@ -620,17 +568,10 @@ final class FrontierV3AmbientActorExecutor {
             }
             RouteOperation operation = assemblingOperation(state, actorId);
             OperationAssembly assembly = operation.activeAssembly().orElseThrow();
-            // Assembly is one public operation, not two independent pedestrians.  A recorded
-            // block therefore holds every other member at its current exact cursor.  Only the
-            // named blocked actor may inspect the restored same target and clear the fact by a
-            // normal observed arrival; no command clears it speculatively.
             if (assembly.deferral().isPresent() && !assembly.deferral().orElseThrow().actorId().equals(actorId)) {
                 body.getNavigation().stop();
                 return false;
             }
-            // A physical follower must not walk into a retained colleague's current cell just
-            // because that colleague may move later. The same immediate occupancy rule owns
-            // COLD and HOT assembly; the actor waits for the leading observed cursor instead.
             if (!assembly.safeAdvances().contains(actorId)) {
                 body.getNavigation().stop();
                 return false;
@@ -665,9 +606,6 @@ final class FrontierV3AmbientActorExecutor {
                 return false;
             }
             EngineeringWorkAssembly assembly = engineeringProject(state, actorId).assembly().orElseThrow();
-            // This is the same retained queue that COLD advances.  A physical body waits for
-            // the exact leading cursor instead of walking around a colleague or inventing an
-            // alternate lane; arrival will atomically advance this one cursor in the domain.
             if (!assembly.safeAdvances().contains(actorId)) {
                 body.getNavigation().stop();
                 return false;
@@ -685,11 +623,69 @@ final class FrontierV3AmbientActorExecutor {
                 FrontierV3AmbientActorLocalTargets.localTarget(state, actorId, lease, level.getGameTime()));
         return false;
     }
-    /** Durably captures then removes a loaded HOT body; the return value proves no serialized duplicate remains. */
-    static boolean drain(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Mob body) {
-        return drainForAdmission(runtime, body).isPresent();
+    static boolean drain(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Mob body) {
+        FrontierWorldState before = runtime.decodedState().orElse(null);
+        if (before == null) return false;
+        SubjectId actorId;
+        try { actorId = new SubjectId(body.getPersistentData().getString(ACTOR_KEY)); } catch (IllegalArgumentException invalid) { return false; }
+        AmbientActorLease lease = before.ambientLeases().get(actorId);
+        if (lease == null) return false;
+        long epoch = Math.max(1L, body.getPersistentData().getLong(CUSTODY_EPOCH_KEY));
+        FrontierV3AmbientCarrierLedger ledger = FrontierV3AmbientCarrierLedger.get(level, before.bootstrap().worldId());
+        if (!ledger.canFence(actorId, body.getUUID(), lease.revision(), lease.revision(), epoch)) return false;
+        if (!ledger.fence(actorId, body.getUUID(), lease.revision(), lease.revision(), epoch)) return false;
+        Optional<FrontierV3AmbientAdmissionPolicy.EffectResult> released = release(runtime, body, false);
+        if (released.isEmpty()) return false;
+        body.discard();
+        return true;
     }
     static Optional<FrontierV3AmbientAdmissionPolicy.EffectResult> drainForAdmission(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Mob body) {
+        return release(runtime, body, true);
+    }
+    static boolean fenceClosedSceneBody(ServerLevel level, FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.model.SceneLease lease,
+                                        io.farfrontier.palemirror.frontier.v3.model.SceneMember member, Entity entity) {
+        if (!fenceSceneBody(level, state, lease, member, entity, true)) return false;
+        ((Mob) entity).discard();
+        return true;
+    }
+    static SceneCarrierFenceResult fenceDrainingSceneBody(ServerLevel level, FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.model.SceneLease lease,
+                                                           io.farfrontier.palemirror.frontier.v3.model.SceneMember member, Entity entity) {
+        return fenceSceneBodyResult(level, state, lease, member, entity, false);
+    }
+    private static boolean fenceSceneBody(ServerLevel level, FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.model.SceneLease lease,
+                                          io.farfrontier.palemirror.frontier.v3.model.SceneMember member, Entity entity, boolean closed) {
+        return fenceSceneBodyResult(level, state, lease, member, entity, closed) == SceneCarrierFenceResult.FENCED;
+    }
+    private static SceneCarrierFenceResult fenceSceneBodyResult(ServerLevel level, FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.model.SceneLease lease,
+                                                                 io.farfrontier.palemirror.frontier.v3.model.SceneMember member, Entity entity, boolean closed) {
+        boolean owned = closed ? FrontierV3SceneExecutor.ownedByClosedLease(entity, state, lease, member)
+                : FrontierV3SceneExecutor.owned(entity, state, lease, member);
+        if (!(entity instanceof Mob body)) return SceneCarrierFenceResult.ENTITY_UNAVAILABLE;
+        if (!body.isAlive()) return SceneCarrierFenceResult.ENTITY_DEAD;
+        if (!owned) return SceneCarrierFenceResult.SCENE_OWNERSHIP_MISMATCH;
+        if (!entityId(state, member.actorId()).equals(body.getUUID())) return SceneCarrierFenceResult.UUID_MISMATCH;
+        var actor = state.actorLocations().get(member.actorId());
+        if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE) return SceneCarrierFenceResult.ACTOR_UNAVAILABLE;
+        AmbientActorLease ambient = state.ambientLeases().get(member.actorId());
+        if (ambient != null && ambient.status() != AmbientLeaseStatus.CLOSED) return SceneCarrierFenceResult.AMBIENT_AUTHORITY_OPEN;
+        long priorAmbientRevision = ambient == null ? 0L : ambient.revision();
+        long physicalRevision = Math.max(1L, lease.revision());
+        long epoch = Math.max(1L, body.getPersistentData().getLong(CUSTODY_EPOCH_KEY));
+        FrontierV3AmbientCarrierLedger ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
+        if (ledger.matchesCarrier(member.actorId(), body.getUUID(), physicalRevision, priorAmbientRevision, epoch)) return SceneCarrierFenceResult.FENCED;
+        if (!ledger.canFence(member.actorId(), body.getUUID(), physicalRevision, priorAmbientRevision, epoch)
+                || !ledger.fence(member.actorId(), body.getUUID(), physicalRevision, priorAmbientRevision, epoch)) return SceneCarrierFenceResult.CARRIER_CONFLICT;
+        return SceneCarrierFenceResult.FENCED;
+    }
+    enum SceneCarrierFenceResult {
+        FENCED, ENTITY_UNAVAILABLE, ENTITY_DEAD, SCENE_OWNERSHIP_MISMATCH, UUID_MISMATCH,
+        ACTOR_UNAVAILABLE, AMBIENT_AUTHORITY_OPEN, CARRIER_CONFLICT
+    }
+    static boolean hasInactiveCarrier(ServerLevel level, FrontierWorldState state, SubjectId actorId) {
+        return FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId()).hasCarrier(actorId);
+    }
+    private static Optional<FrontierV3AmbientAdmissionPolicy.EffectResult> release(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Mob body,
+                                                                                      boolean discard) {
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return Optional.empty();
         String rawActorId = body.getPersistentData().getString(ACTOR_KEY);
@@ -732,12 +728,6 @@ final class FrontierV3AmbientActorExecutor {
             position = cursor;
         }
         if (state.ambientLeases().get(actorId).goal() == AmbientGoalKind.SCOUT_PATROL) {
-            // Patrol waypoint equality governs observed-arrival advancement, not release.
-            // A HOT scout can be displaced by ordinary collision (for example, a player breaks
-            // its support) before demand is lost. Requiring the old canonical waypoint here
-            // leaves that exact physical body permanently HOT and discards the collision fact.
-            // The observed loaded body is the authoritative hand-off position for this typed
-            // release, just as it is for every other non-transit ambient actor.
             position = observedBody(body);
         }
         FixedScalar health = new FixedScalar(Math.round((double) body.getHealth() * FixedScalar.SCALE));
@@ -751,15 +741,9 @@ final class FrontierV3AmbientActorExecutor {
         FrontierWorldState released = runtime.decodedState().orElse(null);
         if (released == null || released.ambientLeases().get(actorId) == null
                 || released.ambientLeases().get(actorId).status() != AmbientLeaseStatus.CLOSED) return Optional.empty();
-        body.discard();
+        if (discard) body.discard();
         return Optional.of(new FrontierV3AmbientAdmissionPolicy.EffectResult(drained, released));
     }
-    /**
-     * Cancels the pre-HOT half of an ambient admission for a durable successor reservation.
-     * No Minecraft decision has occurred yet: a PREPARED body is inert by contract.  Its
-     * canonical hand-off body and health are therefore the only admissible release evidence;
-     * a mismatched physical UUID/body remains a conflict and blocks the successor.
-     */
     static Optional<FrontierV3AmbientAdmissionPolicy.EffectResult> abandonPreparedForReservation(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                                                                     FrontierWorldState state, SubjectId actorId, AmbientActorLease lease) {
         Entity body = level.getEntity(entityId(state, actorId));
@@ -784,17 +768,34 @@ final class FrontierV3AmbientActorExecutor {
         if (body != null) body.discard();
         return Optional.of(new FrontierV3AmbientAdmissionPolicy.EffectResult(drained, resulting));
     }
+    private static boolean drainReservedColdContinuation(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                                          FrontierWorldState state, SubjectId actorId, Mob body,
+                                                          AmbientActorLease lease) {
+        if (!lease.equals(state.ambientLeases().get(actorId))
+                || !FrontierV3SurfaceObservation.at(body, lease.handoffBody().supportingSurface())) return false;
+        if (!(submit(runtime, "ambient-reserved-cold-draining", actorId.value(),
+                new AmbientLeaseTransition(actorId, AmbientLeaseStatus.DRAINING))
+                instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) return false;
+        FrontierWorldState draining = runtime.decodedState().orElse(null);
+        if (draining == null || draining.ambientLeases().get(actorId) == null
+                || draining.ambientLeases().get(actorId).status() != AmbientLeaseStatus.DRAINING) return false;
+        var condition = draining.actorLocations().get(actorId);
+        if (condition == null || condition.condition().status() != ActorLifeStatus.ALIVE) return false;
+        if (!(submit(runtime, "ambient-reserved-cold-release", actorId.value(),
+                new AmbientLeaseReleased(actorId, lease.handoffBody(), condition.condition().health()))
+                instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) return false;
+        FrontierWorldState released = runtime.decodedState().orElse(null);
+        if (released == null || released.ambientLeases().get(actorId) == null
+                || released.ambientLeases().get(actorId).status() != AmbientLeaseStatus.CLOSED) return false;
+        body.discard();
+        return true;
+    }
     static void forget(FrontierV3ServerRuntime<?, ?> runtime) {
         FrontierV3AmbientPendingAdmissions.forget(runtime);
         COLD_DEMAND_SINCE.remove(runtime);
         FrontierV3ActorProbeSchedule.forget(runtime);
         FrontierV3AmbientActorCaches.forget(runtime);
     }
-    /**
-     * Ambient admission may consume only the compatible provider retained by the earlier
-     * projection stage.  A missing or stale snapshot deliberately produces no assault
-     * candidates; it never compiles graybox geometry on the actor path.
-     */
     static FrontierV3AmbientAdmissionPolicy.Session admissionPolicy(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                                      FrontierWorldState state) {
         return FrontierV3AmbientAdmissionPolicy.begin(state, current -> FrontierSceneAdmission.reservationAdmission(current,
@@ -810,7 +811,7 @@ final class FrontierV3AmbientActorExecutor {
         if (absentSince.size() >= FrontierV3AmbientPendingAdmissions.MAX_ENTRIES && !absentSince.containsKey(actorId)) return false;
         long started = absentSince.computeIfAbsent(actorId, ignored -> level.getGameTime());
         if (level.getGameTime() - started < DRAIN_HYSTERESIS_TICKS || playerWithin(level, body.blockPosition(), DRAIN_SAFE_RADIUS_BLOCKS)) return false;
-        boolean drained = drain(runtime, body);
+        boolean drained = drain(level, runtime, body);
         if (drained) absentSince.remove(actorId);
         if (absentSince.isEmpty()) COLD_DEMAND_SINCE.remove(runtime);
         return drained;
@@ -823,19 +824,6 @@ final class FrontierV3AmbientActorExecutor {
         var observed = FrontierV3AmbientActorCaches.lastObserved(runtime, actorId);
         if (observed == null || level.getGameTime() - started < DRAIN_HYSTERESIS_TICKS
                 || playerWithin(level, minecraftBody(observed.body()), DRAIN_SAFE_RADIUS_BLOCKS)) return false;
-        // The state reducer independently proves cursor identity for Transit, operation and
-        // engineering movement. A stale cached body is therefore rejected rather than changing
-        // the canonical actor's position.
-        io.farfrontier.palemirror.frontier.v3.api.CommandResult draining = submit(runtime, "ambient-draining-unloaded", actorId.value(),
-                new AmbientLeaseTransition(actorId, AmbientLeaseStatus.DRAINING));
-        if (!(draining instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) return false;
-        io.farfrontier.palemirror.frontier.v3.api.CommandResult released = submit(runtime, "ambient-release-unloaded", actorId.value(),
-                new AmbientLeaseReleased(actorId, observed.body(), observed.health()));
-        if (released instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted) {
-            FrontierV3AmbientActorCaches.forgetObserved(runtime, actorId); absentSince.remove(actorId);
-            if (absentSince.isEmpty()) COLD_DEMAND_SINCE.remove(runtime);
-            return true;
-        }
         return false;
     }
     private static boolean observeDirectedArrival(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
@@ -845,6 +833,10 @@ final class FrontierV3AmbientActorExecutor {
         if (lease.goal() == AmbientGoalKind.HIVE_TASK_ASSEMBLY) return observeHiveAssemblyArrival(level, runtime, state, actorId, body, lease);
         if (lease.goal() == AmbientGoalKind.HIVE_TASK_RETURN) return FrontierV3HiveReturnMotion.observeArrival(level, runtime, state, actorId, body, lease);
         if (lease.goal() == AmbientGoalKind.SCOUT_PATROL) return observeScoutPatrolArrival(level, runtime, state, actorId, body, lease);
+        if (lease.goal() == AmbientGoalKind.WORK) {
+            return FrontierV3SurfaceObservation.at(body, lease.goalBody().supportingSurface())
+                    && drainAfterDemandHysteresis(level, runtime, actorId, body);
+        }
         if (lease.goal() != AmbientGoalKind.TRANSIT) return false;
         ResidentMigrationJourney journey = state.humanPopulation().migration(actorId);
         if (journey == null || journey.status() != ResidentMigrationStatus.EN_ROUTE || journey.arriving()
@@ -905,9 +897,6 @@ final class FrontierV3AmbientActorExecutor {
         if (!observedBody(body).equals(lease.goalBody())) return false;
         BlockPosition expected = HiveScoutPatrolProcess.nextPosition(state, actorId, current);
         if (!lease.goalBody().supportingSurface().support().equals(expected)) {
-            // A persisted pre-cursor lease may still name an old target.  The body has reached
-            // that exact owned target, so record the observed hand-off and establish the only
-            // following cursor; do not forge an ordinary advance to a non-next position.
             io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "ambient-scout-patrol-recover", actorId.value(),
                     new ScoutPatrolLeaseRecovered(actorId, current, lease.goalBody().supportingSurface().support(),
                             HiveScoutPatrolProcess.nextPosition(state, actorId, lease.goalBody().supportingSurface().support())));
@@ -924,7 +913,6 @@ final class FrontierV3AmbientActorExecutor {
                 .filter(operation -> operation.activeAssembly().map(assembly -> assembly.members().containsKey(actorId)).orElse(false))
                 .findFirst().orElse(null);
     }
-    /** Returns only one authored port floor that is presently unsafe, never an inferred nearby route. */
     private static BlockPosition assemblyObstruction(ServerLevel level, FrontierWorldState state, RouteOperation operation, BlockPosition target) {
         if (!FrontierV3StandingPosition.hasExactStandingColumn(level, target)) return target;
         Settlement settlement = state.bootstrap().settlements().stream().filter(value -> value.id().equals(operation.settlementId())).findFirst().orElse(null);

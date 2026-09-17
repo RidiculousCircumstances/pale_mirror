@@ -27,6 +27,8 @@ import net.minecraft.world.entity.vehicle.MinecartChest;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.level.storage.LevelResource;
 import java.util.IdentityHashMap;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -34,59 +36,52 @@ import java.util.OptionalInt;
 import java.util.UUID;
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
-/** Explicit development bridge; V3 has no production activation before the cutover gate. */
 public final class FrontierV3ServerLifecycle {
     private static final String ENABLED_PROPERTY = "pale_mirror.frontier_v3.enabled";
     private static final String PILOT_RUN_ID_PROPERTY = "pale_mirror.frontier_v3.pilot.run_id";
-    /** Disposable-pilot-only admission hold; production never sets this launch property. */
     private static final String PILOT_INITIAL_CANONICAL_HOLD_PROPERTY = "pale_mirror.frontier_v3.pilot.initial_canonical_hold";
     private static final Map<MinecraftServer, FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection>> RUNTIMES = new IdentityHashMap<>();
-    /** Servers whose world teardown has begun; their entity leaves are not gameplay observations. */
     private static final Map<MinecraftServer, Boolean> STOPPING = new IdentityHashMap<>();
-    /** One bounded operator request per server; canonical progress itself remains in the WAL. */
     private static final Map<MinecraftServer, Integer> FAST_FORWARD_REMAINING = new IdentityHashMap<>();
-    /** An absolute pilot target holds its exact terminal checkpoint for read-only evidence. */
     private static final Map<MinecraftServer, Long> FAST_FORWARD_TARGETS = new IdentityHashMap<>();
-    /** An in-flight absolute target can become physically unsafe after its admission checkpoint. */
     private static final Map<MinecraftServer, String> FAST_FORWARD_FAILURES = new IdentityHashMap<>();
-    /**
-     * The last absolute request is diagnostic-only pilot evidence.  It is deliberately separate
-     * from the canonical clock and WAL: it records whether one operator request was admitted,
-     * held at its exact checkpoint, or rejected.  A cleared mutable request is never a result.
-     */
     private static final Map<MinecraftServer, FastForwardTargetOutcome> FAST_FORWARD_OUTCOMES = new IdentityHashMap<>();
-    /** Prevents bootstrap time from crossing an unobserved product boundary before the pilot's first operator request. */
+    /** Bounded operator receipts are presentation evidence only; canonical time remains runtime-owned. */
+    private static final Map<MinecraftServer, List<FastForwardRequestOutcome>> FAST_FORWARD_REQUESTS = new IdentityHashMap<>();
+    private static final Map<MinecraftServer, FastForwardSliceTelemetry> FAST_FORWARD_SLICE_TELEMETRY = new IdentityHashMap<>();
     private static final Map<MinecraftServer, Boolean> INITIAL_CANONICAL_HOLDS = new IdentityHashMap<>();
     public static final int MAX_FAST_FORWARD_TICKS = 24_000;
-    private static final int FAST_FORWARD_SLICE_TICKS = 512;
+    private static final int FAST_FORWARD_SLICE_TICKS = 8;
+    private static final long MAX_FAST_FORWARD_SLICE_NANOS = 20_000_000L;
     private FrontierV3ServerLifecycle() { }
-    /**
-     * Reports the physical-world owner selected at server launch.
-     *
-     * <p>This is deliberately a launch-mode decision rather than a runtime-health decision.
-     * A quarantined v3 world must stay visibly quarantined; it must never permit the frozen v2
-     * source graybox to resume writing the same dimension as an implicit fallback.</p>
-     */
+    private static void clearFastForwardState(MinecraftServer server) {
+        STOPPING.remove(server);
+        FAST_FORWARD_REMAINING.remove(server);
+        FAST_FORWARD_TARGETS.remove(server);
+        FAST_FORWARD_FAILURES.remove(server);
+        FAST_FORWARD_OUTCOMES.remove(server);
+        FAST_FORWARD_REQUESTS.remove(server);
+        FAST_FORWARD_SLICE_TELEMETRY.remove(server);
+        INITIAL_CANONICAL_HOLDS.remove(server);
+    }
+    static int fastForwardSliceTicks() { return FAST_FORWARD_SLICE_TICKS; }
+    static List<FastForwardRequestOutcome> fastForwardRequests(MinecraftServer server) {
+        return FAST_FORWARD_REQUESTS.getOrDefault(server, List.of());
+    }
+    public static String latestFastForwardReceipt(MinecraftServer server) {
+        List<FastForwardRequestOutcome> requests = fastForwardRequests(server);
+        if (requests.isEmpty()) return "no fast-forward receipt is available";
+        FastForwardRequestOutcome value = requests.getLast();
+        return "request=" + value.requestId() + " " + value.kind() + " status=" + value.status()
+                + " requestedTicks=" + value.requestedTicks() + " target=" + value.targetInstant()
+                + (value.reason() == null ? "" : " reason=" + value.reason());
+    }
     public static boolean ownsPhysicalWorld(MinecraftServer server) {
         Objects.requireNonNull(server, "server");
         return v3LaunchOwnsPhysicalWorld();
     }
-    /** Package-visible so the launch-mode exclusion remains directly testable without a server fixture. */
     static boolean v3LaunchOwnsPhysicalWorld() { return enabled(); }
-    /**
-     * Whether broad server callbacks must leave the frozen source-parity runtime untouched.
-     *
-     * <p>This is a launch selection, not a health check: a quarantined v3 runtime still excludes
-     * v2 construction, SavedData hydration and projection.</p>
-     */
     public static boolean freezesLegacySourceRuntime() { return v3LaunchOwnsPhysicalWorld(); }
-    /**
-     * Returns an operator-facing summary of the v3 world selected for this server.
-     *
-     * <p>In particular, this never delegates to the frozen v2 runtime.  A missing or
-     * quarantined v3 runtime remains an explicit v3 failure, rather than becoming a plausible
-     * but false zero-valued v2 status report.</p>
-     */
     public static String status(MinecraftServer server) {
         Objects.requireNonNull(server, "server");
         if (!ownsPhysicalWorld(server)) return "Frontier v3 is not selected for this server.";
@@ -103,16 +98,8 @@ public final class FrontierV3ServerLifecycle {
                 .map(FrontierV3ServerLifecycle::formatStatus)
                 .orElse("Frontier v3 is ACTIVE, but its immutable status projection is unavailable.");
     }
-    /**
-     * Emits one bounded, immutable diagnostic document for an operator or external test pilot.
-     * This is deliberately a read boundary: no command, schedule, chunk load or WAL write occurs here.
-     */
     public static String diagnostic(MinecraftServer server, String view, String id) {
         Objects.requireNonNull(server, "server"); Objects.requireNonNull(view, "view"); Objects.requireNonNull(id, "id");
-        // `execution` is an internal server-only probe; every externally callable diagnostic
-        // must be admitted by the one closed production vocabulary consumed by both Brigadier
-        // and the ordinary pilot.  Reject before touching a runtime so an unknown view cannot
-        // acquire an accidental implementation through a future formatter default.
         if (!"execution".equals(view) && !FrontierV3DiagnosticView.accepts(view, id)) {
             return FrontierV3DiagnosticJson.unavailableRuntime(view, id);
         }
@@ -124,10 +111,28 @@ public final class FrontierV3ServerLifecycle {
         if ("execution".equals(view)) return FrontierV3PhysicalExecutionDiagnostic.render(checkpoint);
         if ("first_visibility".equals(view)) return FrontierV3DiagnosticJson.firstVisibility(id, checkpoint,
                 FrontierV3GrayboxExecutor.firstVisibility(runtime, id));
+        if ("status".equals(view)) return FrontierV3DiagnosticJson.operatorStatus(checkpoint, runtime.decodedState().orElseThrow(),
+                fastForwardRequests(server), id);
         FrontierWorldState state = runtime.decodedState().orElseThrow();
+        if ("settlement_population".equals(view)) {
+            try {
+                io.farfrontier.palemirror.frontier.v3.api.SubjectId settlementId = new io.farfrontier.palemirror.frontier.v3.api.SubjectId(id);
+                java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, FrontierV3AmbientAdmissionDiagnostic> admissions =
+                        new java.util.LinkedHashMap<>();
+                net.minecraft.server.level.ServerLevel level = FrontierV3PhysicalWorld.require(server);
+                state.humanPopulation().residents().values().stream()
+                        .filter(resident -> resident.settlementId().equals(settlementId))
+                        .sorted(java.util.Comparator.comparing(resident -> resident.id().value()))
+                        .forEach(resident -> admissions.put(resident.id(), FrontierV3AmbientActorExecutor.admissionDiagnostic(
+                                level, runtime, state, resident.id())));
+                return FrontierV3DiagnosticJson.settlementPopulation(checkpoint, state, id, admissions);
+            } catch (IllegalArgumentException ignored) {
+                return FrontierV3DiagnosticJson.settlementPopulation(checkpoint, state, id, java.util.Map.of());
+            }
+        }
         if ("performance".equals(view)) return FrontierV3PerformanceDiagnostic.render(checkpoint, runtime.executionMetrics().snapshot(), state,
                 FAST_FORWARD_REMAINING.getOrDefault(server, 0), FAST_FORWARD_TARGETS.get(server), FAST_FORWARD_FAILURES.get(server),
-                FAST_FORWARD_OUTCOMES.get(server));
+                FAST_FORWARD_OUTCOMES.get(server), FAST_FORWARD_SLICE_TELEMETRY.get(server), fastForwardRequests(server));
         if ("projection_work".equals(view)) return FrontierV3ProjectionWorkDiagnostic.render(checkpoint, runtime);
         if ("player_resource".equals(view)) return FrontierV3PlayerResourceDiagnostic.render(checkpoint, state, server, id);
         if ("traversal_foundry".equals(view)) return FrontierV3TraversalFoundryDiagnostic.render(checkpoint, state,
@@ -143,7 +148,6 @@ public final class FrontierV3ServerLifecycle {
                         FrontierV3PhysicalWorld.require(server), runtime, state,
                         new io.farfrontier.palemirror.frontier.v3.api.SubjectId(id)));
             } catch (IllegalArgumentException ignored) {
-                // The immutable canonical formatter remains the source of the not-found response.
             }
         }
         java.util.Optional<FrontierV3ResourceSiteHarvestExecutor.Readiness> harvestReadiness = java.util.Optional.empty();
@@ -153,7 +157,6 @@ public final class FrontierV3ServerLifecycle {
                         FrontierV3PhysicalWorld.require(server), state,
                         new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(id));
             } catch (IllegalArgumentException ignored) {
-                // The immutable canonical formatter remains the source of the not-found response.
             }
         }
         java.util.Optional<FrontierV3SceneReadiness.Value> sceneReadiness = java.util.Optional.empty();
@@ -162,7 +165,6 @@ public final class FrontierV3ServerLifecycle {
                 sceneReadiness = FrontierV3SceneReadiness.forSubject(FrontierV3PhysicalWorld.require(server), state,
                         new io.farfrontier.palemirror.frontier.v3.api.SubjectId(id));
             } catch (IllegalArgumentException ignored) {
-                // The immutable canonical formatter remains the source of the not-found response.
             }
         }
         java.util.Optional<FrontierV3OperationAssemblyDiagnostic.Readiness> assemblyReadiness = java.util.Optional.empty();
@@ -171,7 +173,6 @@ public final class FrontierV3ServerLifecycle {
                 assemblyReadiness = FrontierV3OperationAssemblyDiagnostic.readiness(FrontierV3PhysicalWorld.require(server), state,
                         new io.farfrontier.palemirror.frontier.v3.api.SubjectId(id));
             } catch (IllegalArgumentException ignored) {
-                // The immutable canonical formatter remains the source of the not-found response.
             }
         }
         java.util.Optional<FrontierV3ContainerSurfaceExecutor.Readiness> containerReadiness = java.util.Optional.empty();
@@ -180,7 +181,6 @@ public final class FrontierV3ServerLifecycle {
                 containerReadiness = java.util.Optional.of(FrontierV3ContainerSurfaceExecutor.readiness(
                         FrontierV3PhysicalWorld.require(server), state, new io.farfrontier.palemirror.frontier.v3.api.SubjectId(id)));
             } catch (IllegalArgumentException ignored) {
-                // The immutable canonical formatter remains the source of the not-found response.
             }
         }
         java.util.Optional<FrontierV3EquipmentIssueExecutor.Readiness> equipmentIssueReadiness = java.util.Optional.empty();
@@ -197,19 +197,12 @@ public final class FrontierV3ServerLifecycle {
                             FrontierV3PhysicalWorld.require(server), state, intent));
                 }
             } catch (IllegalArgumentException ignored) {
-                // The immutable canonical formatter remains the source of the not-found response.
             }
         }
         return FrontierV3DiagnosticJson.render(view, id, checkpoint, state,
                 "trace".equals(view) ? FrontierV3DiagnosticTrace.latest(server, id) : java.util.Optional.empty(), admission, harvestReadiness, sceneReadiness, assemblyReadiness,
                 containerReadiness, equipmentIssueReadiness, equipmentReturnReadiness);
     }
-    /**
-     * Narrow pilot-only read seam for one already-loaded scene anchor.  It deliberately exposes
-     * neither the runtime nor an admission operation: the pilot may record the existing cursor,
-     * candidate and natural-demand facts, but cannot use them to create a lease, load a chunk,
-     * enqueue work, or mutate canonical state.
-     */
     static FrontierV3PilotSceneDemandSnapshot pilotSceneDemandSnapshot(ServerLevel level, SubjectId assaultId) {
         Objects.requireNonNull(level, "pilot demand level");
         Objects.requireNonNull(assaultId, "pilot demand assault");
@@ -227,7 +220,6 @@ public final class FrontierV3ServerLifecycle {
                     anchor -> FrontierV3SceneDemand.observe(level, anchor));
         });
     }
-    /** Package-visible pure formatter, kept testable without a Minecraft server fixture. */
     static String formatStatus(FrontierWorldProjection projection) {
         Objects.requireNonNull(projection, "projection");
         return "Frontier v3 ACTIVE | world=" + projection.worldId().value()
@@ -243,28 +235,16 @@ public final class FrontierV3ServerLifecycle {
     }
     public static void start(MinecraftServer server) {
         Objects.requireNonNull(server, "server");
-        // The server lifecycle publishes both startup callbacks.  The later
-        // callback is observational only: clearing pilot admission state here
-        // would let an already-started disposable world advance while it waits
-        // for its declared execution gate.
         if (RUNTIMES.containsKey(server)) return;
-        STOPPING.remove(server); FAST_FORWARD_REMAINING.remove(server); FAST_FORWARD_TARGETS.remove(server); FAST_FORWARD_FAILURES.remove(server); FAST_FORWARD_OUTCOMES.remove(server); INITIAL_CANONICAL_HOLDS.remove(server);
+        clearFastForwardState(server);
         if (!enabled()) return;
         ServerLevel physicalWorld = FrontierV3PhysicalWorld.require(server);
         startConfigured(server, initialConfiguration(physicalWorld));
     }
-    /**
-     * Starts an explicit already-built configuration for a moddev-only source set.
-     *
-     * <p>The method intentionally accepts no profile/property and has package visibility: the
-     * test-only bootstrap must select its catalog entry before this lifecycle begins.  The
-     * packaged production mod has no caller in this package, while {@link #start(MinecraftServer)}
-     * always uses the normal world bootstrap.</p>
-     */
     static void startModDevFixture(MinecraftServer server,
                                    io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration) {
         Objects.requireNonNull(server, "server"); Objects.requireNonNull(configuration, "configuration");
-        STOPPING.remove(server); FAST_FORWARD_REMAINING.remove(server); FAST_FORWARD_TARGETS.remove(server); FAST_FORWARD_FAILURES.remove(server); FAST_FORWARD_OUTCOMES.remove(server); INITIAL_CANONICAL_HOLDS.remove(server);
+        clearFastForwardState(server);
         if (!enabled()) throw new IllegalStateException("Frontier v3 fixture bootstrap requires an enabled v3 launch");
         if (RUNTIMES.containsKey(server)) throw new IllegalStateException("Frontier v3 fixture bootstrap must run before the normal lifecycle");
         FrontierV3PhysicalWorld.require(server);
@@ -289,6 +269,7 @@ public final class FrontierV3ServerLifecycle {
             INITIAL_CANONICAL_HOLDS.put(server, Boolean.TRUE);
         }
         if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
+            FrontierV3GrayboxExecutor.primeStructuralBaseline(runtime);
             FrontierV3ResourceSiteExecutor.beginRecovery(runtime);
             FrontierV3PlayerCustodyRecovery.beginRecovery(runtime);
             try {
@@ -322,7 +303,6 @@ public final class FrontierV3ServerLifecycle {
             PaleMirrorMod.LOGGER.error("Frontier v3 development runtime quarantined at startup: {}", runtime.status().detail().orElse("unknown"));
         }
     }
-    /** Production bootstrap: profile properties never participate in this decision. */
     private static io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection>
     initialConfiguration(ServerLevel physicalWorld) {
         return initialConfiguration(FrontierV3PhysicalWorld.WORLD_ID, physicalWorld.getSeed());
@@ -331,60 +311,63 @@ public final class FrontierV3ServerLifecycle {
     initialConfiguration(io.farfrontier.palemirror.frontier.v3.api.WorldId worldId, long seed) {
         return FrontierWorldRuntimeDefinition.configuration(worldId, seed);
     }
-    /**
-     * Queues one bounded operator fast-forward. It advances the same canonical tick engine in
-     * regular server-tick slices and pauses before physical work or a HOT scene could be skipped.
-     */
     public static boolean requestFastForward(MinecraftServer server, int ticks) {
         Objects.requireNonNull(server, "server");
         if (ticks < 1 || ticks > MAX_FAST_FORWARD_TICKS || !ownsPhysicalWorld(server) || stopping(server)) return false;
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(server);
-        if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE || FAST_FORWARD_REMAINING.containsKey(server) || FAST_FORWARD_TARGETS.containsKey(server)) return false;
-        if (FrontierV3FastForwardSafety.requiresPhysicalStep(FrontierV3PhysicalWorld.require(server), runtime.decodedState().orElseThrow())) return false;
+        if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE || FAST_FORWARD_REMAINING.containsKey(server) || FAST_FORWARD_TARGETS.containsKey(server)) {
+            recordFastForwardRequest(server, "RELATIVE", ticks, null, null, null, "REJECTED", "another request is active or runtime is unavailable");
+            return false;
+        }
+        ServerLevel physicalWorld = FrontierV3PhysicalWorld.require(server);
+        if (requiresPhysicalStep(physicalWorld, runtime)) {
+            String blocker = physicalBlocker(physicalWorld, runtime);
+            recordFastForwardRequest(server, "RELATIVE", ticks, null, runtime.checkpointImage().orElseThrow().instant().ticks(), null,
+                    "REJECTED", "physical work is pending at admission: " + blocker);
+            PaleMirrorMod.LOGGER.warn("Frontier v3 rejected relative fast-forward at admission because physical work is pending: {}", blocker);
+            return false;
+        }
         INITIAL_CANONICAL_HOLDS.remove(server);
         FAST_FORWARD_REMAINING.put(server, ticks);
+        long admitted = runtime.checkpointImage().orElseThrow().instant().ticks();
+        recordFastForwardRequest(server, "RELATIVE", ticks, admitted + ticks, admitted, null, "QUEUED", null);
         PaleMirrorMod.LOGGER.info("Frontier v3 queued operator fast-forward ticks={}", ticks);
         return true;
     }
-    /**
-     * Admits one bounded absolute canonical target on the server thread.  The request derives
-     * its delta from the immutable checkpoint at command receipt, never from client delivery
-     * time.  Once reached, the disposable-pilot target holds that checkpoint for read-only
-     * terminal diagnostics; server shutdown clears the hold.
-     */
     public static boolean requestFastForwardTo(MinecraftServer server, long targetInstant) {
         Objects.requireNonNull(server, "server");
         if (!ownsPhysicalWorld(server) || stopping(server) || FAST_FORWARD_REMAINING.containsKey(server) || FAST_FORWARD_TARGETS.containsKey(server)) {
             rejectFastForwardTarget(server, targetInstant, "another request is active or runtime is unavailable");
+            recordFastForwardRequest(server, "ABSOLUTE", 0, targetInstant, null, null, "REJECTED", "another request is active or runtime is unavailable");
             return false;
         }
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(server);
         if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) {
             rejectFastForwardTarget(server, targetInstant, "runtime is not active");
+            recordFastForwardRequest(server, "ABSOLUTE", 0, targetInstant, null, null, "REJECTED", "runtime is not active");
             return false;
         }
-        if (FrontierV3FastForwardSafety.requiresPhysicalStep(FrontierV3PhysicalWorld.require(server), runtime.decodedState().orElseThrow())) {
+        if (requiresPhysicalStep(FrontierV3PhysicalWorld.require(server), runtime)) {
             rejectFastForwardTarget(server, targetInstant, "physical work is pending at admission");
+            recordFastForwardRequest(server, "ABSOLUTE", 0, targetInstant, runtime.checkpointImage().orElseThrow().instant().ticks(), null,
+                    "REJECTED", "physical work is pending at admission");
             return false;
         }
         long admittedCheckpoint = runtime.checkpointImage().orElseThrow().instant().ticks();
         OptionalInt delta = absoluteFastForwardDelta(admittedCheckpoint, targetInstant);
         if (delta.isEmpty()) {
             rejectFastForwardTarget(server, targetInstant, "target is crossed or unbounded");
+            recordFastForwardRequest(server, "ABSOLUTE", 0, targetInstant, admittedCheckpoint, null, "REJECTED", "target is crossed or unbounded");
             return false;
         }
         FAST_FORWARD_FAILURES.remove(server);
         INITIAL_CANONICAL_HOLDS.remove(server);
         FAST_FORWARD_REMAINING.put(server, delta.getAsInt()); FAST_FORWARD_TARGETS.put(server, targetInstant);
         recordFastForwardTarget(server, targetInstant, admittedCheckpoint, null, "ADVANCING", null);
+        recordFastForwardRequest(server, "ABSOLUTE", delta.getAsInt(), targetInstant, admittedCheckpoint, null, "QUEUED", null);
         PaleMirrorMod.LOGGER.info("Frontier v3 queued operator fast-forward target={}", targetInstant);
         return true;
     }
-    /**
-     * Releases one already-reached test-pilot checkpoint so ordinary physical
-     * observation may resume. It never advances canonical time, and cannot
-     * interrupt a queued target.
-     */
     public static boolean releaseFastForwardHold(MinecraftServer server) {
         Objects.requireNonNull(server, "server");
         if (!ownsPhysicalWorld(server) || stopping(server) || FAST_FORWARD_REMAINING.containsKey(server)) return false;
@@ -394,9 +377,11 @@ public final class FrontierV3ServerLifecycle {
         Long checkpoint = RUNTIMES.containsKey(server) ? RUNTIMES.get(server).checkpointImage().map(image -> image.instant().ticks()).orElse(null) : null;
         FAST_FORWARD_OUTCOMES.put(server, nextFastForwardTargetOutcome(prior, target,
                 prior == null ? checkpoint : prior.admittedCheckpointInstant(), checkpoint, "RELEASED", null));
+        // Releasing a completed hold is itself an operator action. Retain a distinct receipt
+        // instead of rewriting the target's completed/held outcome into a false new result.
+        recordFastForwardRequest(server, "ABSOLUTE", 0, target, checkpoint, checkpoint, "RELEASED", null);
         return true;
     }
-    /** Pure admission rule shared by the server-thread command and focused boundary tests. */
     static OptionalInt absoluteFastForwardDelta(long checkpointInstant, long targetInstant) {
         if (checkpointInstant < 0L || targetInstant <= checkpointInstant) return OptionalInt.empty();
         long delta;
@@ -404,24 +389,28 @@ public final class FrontierV3ServerLifecycle {
         catch (ArithmeticException ignored) { return OptionalInt.empty(); }
         return delta > MAX_FAST_FORWARD_TICKS ? OptionalInt.empty() : OptionalInt.of((int) delta);
     }
+    static boolean runsObservedPhysicalTurnWhileCanonicalProgressIsHeld(boolean initialHold,
+                                                                          boolean absoluteTargetPresent,
+                                                                          boolean fastForwardRemaining) {
+        return initialHold || (absoluteTargetPresent && !fastForwardRemaining);
+    }
     public static void tick(MinecraftServer server) {
         if (stopping(server)) return;
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(server);
         if (runtime == null) return;
         try {
-            if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE && INITIAL_CANONICAL_HOLDS.containsKey(server)) {
-                // The disposable-pilot fence excludes only canonical progression.
-                // Real loaded-world observation, custody acquire/checkpoint/release,
-                // and their fail-closed physical checks remain ordinary server work.
+            boolean active = runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE;
+            boolean initialHold = INITIAL_CANONICAL_HOLDS.containsKey(server);
+            boolean absoluteTargetPresent = FAST_FORWARD_TARGETS.containsKey(server);
+            boolean fastForwardRemaining = FAST_FORWARD_REMAINING.containsKey(server);
+            if (active && runsObservedPhysicalTurnWhileCanonicalProgressIsHeld(initialHold, absoluteTargetPresent, fastForwardRemaining)) {
                 runObservedPhysicalTurn(FrontierV3PhysicalWorld.require(server), runtime);
-            } else if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE && FAST_FORWARD_TARGETS.containsKey(server)) {
+            } else if (active && absoluteTargetPresent) {
                 advanceQueuedCanonicalTime(server, runtime);
-            } else if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
+            } else if (active) {
                 ServerLevel physicalWorld = FrontierV3PhysicalWorld.require(server);
                 runObservedPhysicalTurn(physicalWorld, runtime);
                 runtime.tick(FrontierV3RuntimeBudgets.ordinaryTick());
-                // A due action may itself fail closed.  Do not mask that primary quarantine by
-                // asking the now-unavailable runtime for a second fast-forward state image.
                 if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) advanceQueuedCanonicalTime(server, runtime);
             }
         } catch (RuntimeException error) {
@@ -433,7 +422,6 @@ public final class FrontierV3ServerLifecycle {
             releaseRuntime(server, runtime);
         }
     }
-    /** Production ChunkEvent.Load handoff for static first visibility in the selected v3 world. */
     public static void observeNaturalChunkLoad(ServerLevel level, net.minecraft.world.level.ChunkPos chunk) {
         Objects.requireNonNull(level, "first visibility level"); Objects.requireNonNull(chunk, "first visibility chunk");
         if (!ownsPhysicalWorld(level.getServer()) || !FrontierV3PhysicalWorld.isPhysical(level)) return;
@@ -441,7 +429,6 @@ public final class FrontierV3ServerLifecycle {
         if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return;
         FrontierV3GrayboxExecutor.observeNaturalChunkLoad(level, runtime, chunk);
     }
-    /** Player-transfer exposure can precede the destination chunk holder's normal load callback. */
     public static void observePlayerIngress(ServerLevel level, net.minecraft.world.level.ChunkPos chunk) {
         Objects.requireNonNull(level, "first visibility level"); Objects.requireNonNull(chunk, "first visibility chunk");
         if (!ownsPhysicalWorld(level.getServer()) || !FrontierV3PhysicalWorld.isPhysical(level)) return;
@@ -449,28 +436,14 @@ public final class FrontierV3ServerLifecycle {
         if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return;
         FrontierV3GrayboxExecutor.observePlayerIngress(runtime, chunk);
     }
-    /** Read-only first-visibility admission fence shared by every scene demand path. */
     static boolean sceneEligible(ServerLevel level, io.farfrontier.palemirror.frontier.v3.model.BlockPosition position) {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
         return runtime == null || !FrontierV3PhysicalWorld.isPhysical(level) || FrontierV3GrayboxExecutor.sceneEligible(runtime, position);
     }
-    /**
-     * Executes the one closed physical turn used by the server lifecycle.
-     *
-     * <p>This intentionally exposes no selected executor or aftermath shortcut: callers either
-     * execute the complete registered plan against a real loaded level, or do not exercise the
-     * production physical composition at all.</p>
-     */
     static void runPhysicalTurn(ServerLevel physicalWorld, FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
         FrontierV3PhysicalExecutors.registry().tick(Objects.requireNonNull(physicalWorld, "physical world"),
                 Objects.requireNonNull(runtime, "runtime"));
     }
-    /**
-     * The ordinary tick is the durable fallback for a destination added before its holder sends
-     * ChunkEvent.Load.  It observes only players already owned by vanilla in this physical
-     * level, then executes the same registered physical turn; no player can create demand,
-     * tickets, or a projection outside that turn.
-     */
     static void runObservedPhysicalTurn(ServerLevel physicalWorld,
                                         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
         for (ServerPlayer player : physicalWorld.players()) {
@@ -485,18 +458,16 @@ public final class FrontierV3ServerLifecycle {
             if (runtime != null) releaseRuntime(server, runtime);
         } finally {
             FrontierV3DiagnosticTrace.forget(server);
-            STOPPING.remove(server); FAST_FORWARD_REMAINING.remove(server); FAST_FORWARD_TARGETS.remove(server); FAST_FORWARD_FAILURES.remove(server); FAST_FORWARD_OUTCOMES.remove(server); INITIAL_CANONICAL_HOLDS.remove(server);
+            clearFastForwardState(server);
         }
     }
-    /** One lifecycle-owned release path for orderly stop and fail-closed quarantine. */
     private static void releaseRuntime(MinecraftServer server,
                                        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
         RUNTIMES.remove(server, runtime);
         releaseRuntime(runtime);
         FAST_FORWARD_REMAINING.remove(server); FAST_FORWARD_TARGETS.remove(server); FAST_FORWARD_FAILURES.remove(server);
-        FAST_FORWARD_OUTCOMES.remove(server); INITIAL_CANONICAL_HOLDS.remove(server);
+        FAST_FORWARD_OUTCOMES.remove(server); FAST_FORWARD_SLICE_TELEMETRY.remove(server); INITIAL_CANONICAL_HOLDS.remove(server);
     }
-    /** Package seam for focused cleanup proof; all runtime-held Entity/cache state is released here. */
     static void releaseRuntime(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         Objects.requireNonNull(runtime, "runtime");
         FrontierV3GrayboxExecutor.forgetFirstVisibility(runtime);
@@ -511,41 +482,103 @@ public final class FrontierV3ServerLifecycle {
         runtime.shutdown();
     }
     private static void advanceQueuedCanonicalTime(MinecraftServer server, FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
+        long sliceStarted = System.nanoTime();
+        long safetyNanos = 0L;
+        long advanceNanos = 0L;
         Integer remaining = FAST_FORWARD_REMAINING.get(server);
         ServerLevel physicalWorld = FrontierV3PhysicalWorld.require(server);
         if (remaining == null) return;
-        if (FrontierV3FastForwardSafety.requiresPhysicalStep(physicalWorld, runtime.decodedState().orElseThrow())) {
-            String physicalBlocker = FrontierV3FastForwardSafety.blockingDescription(physicalWorld, runtime.decodedState().orElseThrow());
+        long safetyStarted = System.nanoTime();
+        boolean physicalStepRequired = requiresPhysicalStep(physicalWorld, runtime);
+        safetyNanos += elapsedNanos(safetyStarted);
+        if (physicalStepRequired) {
+            safetyStarted = System.nanoTime();
+            String physicalBlocker = physicalBlocker(physicalWorld, runtime);
+            safetyNanos += elapsedNanos(safetyStarted);
             Long target = FAST_FORWARD_TARGETS.remove(server);
             if (target != null) {
                 FAST_FORWARD_REMAINING.remove(server);
                 FAST_FORWARD_FAILURES.put(server, "physical work became pending before the absolute target: " + physicalBlocker);
                 recordFastForwardTarget(server, target, null, null, "REJECTED", FAST_FORWARD_FAILURES.get(server));
+                updateFastForwardRequest(server, "ABSOLUTE", target, runtime.checkpointImage().orElseThrow().instant().ticks(), "REJECTED", FAST_FORWARD_FAILURES.get(server));
                 PaleMirrorMod.LOGGER.warn("Frontier v3 rejected absolute fast-forward target because physical work became pending: {}", physicalBlocker);
             } else {
-                // A relative request has no held-target receipt, but it must still retire as
-                // soon as a canonical advance creates a loaded physical boundary.  Leaving
-                // it queued here made every later server tick return before progress while
-                // giving the operator neither completion nor a locatable blocking reason.
                 FAST_FORWARD_REMAINING.remove(server);
                 FAST_FORWARD_FAILURES.put(server, "physical work became pending during the relative interval: " + physicalBlocker);
                 PaleMirrorMod.LOGGER.warn("Frontier v3 rejected relative fast-forward because physical work became pending: {}", physicalBlocker);
+                updateFastForwardRequest(server, "RELATIVE", null, runtime.checkpointImage().orElseThrow().instant().ticks(), "REJECTED", FAST_FORWARD_FAILURES.get(server));
             }
+            recordFastForwardSlice(server, sliceStarted, safetyNanos, advanceNanos, 0);
             return;
         }
         int allowed = Math.min(remaining, FAST_FORWARD_SLICE_TICKS); int advanced = 0;
-        while (advanced < allowed && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
-                && !FrontierV3FastForwardSafety.requiresPhysicalStep(physicalWorld, runtime.decodedState().orElseThrow())) {
-            if (runtime.advance(1, FrontierV3RuntimeBudgets.fastForwardTick()).isEmpty()) break;
+        while (advanced < allowed && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
+            safetyStarted = System.nanoTime();
+            physicalStepRequired = requiresPhysicalStep(physicalWorld, runtime);
+            safetyNanos += elapsedNanos(safetyStarted);
+            if (physicalStepRequired) break;
+            long advanceStarted = System.nanoTime();
+            boolean advancedOne = runtime.advance(1, FrontierV3RuntimeBudgets.fastForwardTick()).isPresent();
+            advanceNanos += elapsedNanos(advanceStarted);
+            if (!advancedOne) break;
             advanced++;
+            if (!fastForwardSliceTimeRemaining(elapsedNanos(sliceStarted))) break;
         }
         int next = remaining - advanced;
         if (next <= 0) {
             FAST_FORWARD_REMAINING.remove(server);
             Long target = FAST_FORWARD_TARGETS.get(server);
             if (target != null) recordFastForwardTarget(server, target, null, runtime.checkpointImage().orElseThrow().instant().ticks(), "HELD", null);
+            long reached = runtime.checkpointImage().orElseThrow().instant().ticks();
+            updateFastForwardRequest(server, target == null ? "RELATIVE" : "ABSOLUTE", target, reached,
+                    target == null ? "COMPLETED" : "HELD", null);
             PaleMirrorMod.LOGGER.info("Frontier v3 completed operator fast-forward{}", FAST_FORWARD_TARGETS.containsKey(server) ? " at held absolute target" : "");
         } else FAST_FORWARD_REMAINING.put(server, next);
+        recordFastForwardSlice(server, sliceStarted, safetyNanos, advanceNanos, advanced);
+    }
+    private static boolean requiresPhysicalStep(ServerLevel physicalWorld,
+                                                FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
+        return FrontierV3FastForwardSafety.requiresPhysicalStep(
+                FrontierV3FastForwardSafety.requiresPhysicalStep(physicalWorld, runtime.decodedState().orElseThrow()),
+                FrontierV3ResourceSiteExecutor.hasProjectionInFlight(runtime));
+    }
+    private static String physicalBlocker(ServerLevel physicalWorld,
+                                          FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
+        String canonical = FrontierV3FastForwardSafety.blockingDescription(physicalWorld, runtime.decodedState().orElseThrow());
+        String projection = FrontierV3ResourceSiteExecutor.hasProjectionInFlight(runtime)
+                ? FrontierV3ResourceSiteExecutor.projectionBlockingDescription(runtime) : "";
+        return FrontierV3FastForwardSafety.blockingDescription(canonical, projection);
+    }
+    static boolean fastForwardSliceTimeRemaining(long elapsedNanos) {
+        if (elapsedNanos < 0L) throw new IllegalArgumentException("fast-forward elapsed time");
+        return elapsedNanos < MAX_FAST_FORWARD_SLICE_NANOS;
+    }
+    private static long elapsedNanos(long started) { return Math.max(0L, System.nanoTime() - started); }
+    private static void recordFastForwardSlice(MinecraftServer server, long sliceStarted, long safetyNanos, long advanceNanos, int advancedTicks) {
+        FAST_FORWARD_SLICE_TELEMETRY.put(server, nextFastForwardSliceTelemetry(FAST_FORWARD_SLICE_TELEMETRY.get(server),
+                elapsedNanos(sliceStarted), safetyNanos, advanceNanos, advancedTicks));
+    }
+    static FastForwardSliceTelemetry nextFastForwardSliceTelemetry(FastForwardSliceTelemetry prior, long totalNanos,
+                                                                     long safetyNanos, long advanceNanos, int advancedTicks) {
+        if (totalNanos < 0L || safetyNanos < 0L || advanceNanos < 0L || advancedTicks < 0) {
+            throw new IllegalArgumentException("invalid fast-forward slice telemetry");
+        }
+        if (prior == null) return new FastForwardSliceTelemetry(1L, totalNanos, totalNanos, safetyNanos, safetyNanos,
+                advanceNanos, advanceNanos, advancedTicks);
+        return new FastForwardSliceTelemetry(Math.addExact(prior.samples(), 1L), Math.addExact(prior.totalNanos(), totalNanos),
+                Math.max(prior.maxNanos(), totalNanos), Math.addExact(prior.safetyNanos(), safetyNanos),
+                Math.max(prior.maxSafetyNanos(), safetyNanos), Math.addExact(prior.advanceNanos(), advanceNanos),
+                Math.max(prior.maxAdvanceNanos(), advanceNanos), Math.addExact(prior.advancedTicks(), advancedTicks));
+    }
+    record FastForwardSliceTelemetry(long samples, long totalNanos, long maxNanos, long safetyNanos, long maxSafetyNanos,
+                                     long advanceNanos, long maxAdvanceNanos, long advancedTicks) {
+        FastForwardSliceTelemetry {
+            if (samples < 1L || totalNanos < 0L || maxNanos < 0L || safetyNanos < 0L || maxSafetyNanos < 0L
+                    || advanceNanos < 0L || maxAdvanceNanos < 0L || advancedTicks < 0L
+                    || maxNanos > totalNanos || maxSafetyNanos > safetyNanos || maxAdvanceNanos > advanceNanos) {
+                throw new IllegalArgumentException("invalid fast-forward slice telemetry");
+            }
+        }
     }
     static FastForwardTargetOutcome nextFastForwardTargetOutcome(FastForwardTargetOutcome prior, long target, Long admittedCheckpoint, Long reachedCheckpoint,
                                                                  String status, String failure) {
@@ -566,6 +599,48 @@ public final class FrontierV3ServerLifecycle {
         }
         FAST_FORWARD_OUTCOMES.put(server, nextFastForwardTargetOutcome(prior, target, admittedCheckpoint, reachedCheckpoint, status, failure));
     }
+
+    private static void recordFastForwardRequest(MinecraftServer server, String kind, int requestedTicks, Long target,
+                                                 Long admittedCheckpoint, Long reachedCheckpoint, String status, String reason) {
+        List<FastForwardRequestOutcome> prior = new ArrayList<>(fastForwardRequests(server));
+        long requestId = prior.isEmpty() ? 1L : Math.addExact(prior.getLast().requestId(), 1L);
+        prior.add(new FastForwardRequestOutcome(requestId, kind, requestedTicks, target, admittedCheckpoint, reachedCheckpoint, status, reason));
+        if (prior.size() > 8) prior.removeFirst();
+        FAST_FORWARD_REQUESTS.put(server, List.copyOf(prior));
+    }
+
+    private static void updateFastForwardRequest(MinecraftServer server, String kind, Long target, long reachedCheckpoint,
+                                                 String status, String reason) {
+        List<FastForwardRequestOutcome> prior = new ArrayList<>(fastForwardRequests(server));
+        for (int index = prior.size() - 1; index >= 0; index--) {
+            FastForwardRequestOutcome current = prior.get(index);
+            if (current.kind().equals(kind) && current.status().equals("QUEUED") && Objects.equals(current.targetInstant(), target)) {
+                prior.set(index, new FastForwardRequestOutcome(current.requestId(), current.kind(), current.requestedTicks(),
+                        current.targetInstant(), current.admittedCheckpointInstant(), reachedCheckpoint, status, reason));
+                FAST_FORWARD_REQUESTS.put(server, List.copyOf(prior));
+                return;
+            }
+        }
+        throw new IllegalStateException("fast-forward terminal receipt has no queued request");
+    }
+
+    /** Bounded in-game receipt; the runtime remains the sole owner of canonical time. */
+    record FastForwardRequestOutcome(long requestId, String kind, int requestedTicks, Long targetInstant,
+                                     Long admittedCheckpointInstant, Long reachedCheckpointInstant,
+                                     String status, String reason) {
+        FastForwardRequestOutcome {
+            if (requestId < 1L || !java.util.Set.of("RELATIVE", "ABSOLUTE").contains(kind) || requestedTicks < 0
+                    || !java.util.Set.of("QUEUED", "COMPLETED", "HELD", "REJECTED", "RELEASED").contains(status)
+                    || ("RELATIVE".equals(kind) && (targetInstant == null || requestedTicks < 1))
+                    || ("ABSOLUTE".equals(kind) && (targetInstant == null || targetInstant < 1L))
+                    || (("QUEUED".equals(status) || "COMPLETED".equals(status) || "HELD".equals(status) || "RELEASED".equals(status))
+                    && admittedCheckpointInstant == null)
+                    || (("COMPLETED".equals(status) || "HELD".equals(status) || "RELEASED".equals(status)) && reachedCheckpointInstant == null)
+                    || ("REJECTED".equals(status) != (reason != null))) {
+                throw new IllegalArgumentException("invalid fast-forward request receipt");
+            }
+        }
+    }
     record FastForwardTargetOutcome(long requestId, long targetInstant, Long admittedCheckpointInstant, Long reachedCheckpointInstant,
                                     String status, String failure) {
         FastForwardTargetOutcome {
@@ -578,12 +653,10 @@ public final class FrontierV3ServerLifecycle {
             }
         }
     }
-    /** Marks the beginning of orderly shutdown before Minecraft emits entity-unload events. */
     public static void beginStopping(MinecraftServer server) {
         Objects.requireNonNull(server, "server");
         STOPPING.put(server, Boolean.TRUE);
     }
-    /** Retains an exact restored ambient body until ServerLevel publishes its UUID index. */
     public static EntityJoinAdmission observeEntityJoin(ServerLevel level, Entity entity) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
@@ -592,7 +665,6 @@ public final class FrontierV3ServerLifecycle {
         }
         return observeEntityJoin(runtime, entity);
     }
-    /** Exact runtime delegate used by the production Entity callback and real-Entity recovery tests. */
     static EntityJoinAdmission observeEntityJoin(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity) {
         Objects.requireNonNull(runtime, "runtime"); Objects.requireNonNull(entity, "entity");
         return switch (FrontierV3AmbientActorExecutor.observeJoin(runtime, entity)) {
@@ -601,11 +673,6 @@ public final class FrontierV3ServerLifecycle {
             case DUPLICATE_UNINDEXED -> EntityJoinAdmission.DUPLICATE_UNINDEXED;
         };
     }
-    /**
-     * The one ordinary Entity-join composition consumed by the event callback and source
-     * firewall.  The retained lifecycle result and strict provider proof stay coupled so a
-     * restored body cannot fall through to a default-provider path between those two gates.
-     */
     public static JoinFirewallProof observeSourceJoin(ServerLevel level, Entity entity) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
@@ -614,7 +681,6 @@ public final class FrontierV3ServerLifecycle {
         }
         return observeSourceJoin(runtime, entity);
     }
-    /** Exact Entity delegate of the production source-join composition for recovery tests. */
     static JoinFirewallProof observeSourceJoin(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity) {
         Objects.requireNonNull(runtime, "runtime"); Objects.requireNonNull(entity, "entity");
         return composeSourceJoin(() -> observeEntityJoin(runtime, entity),
@@ -622,7 +688,6 @@ public final class FrontierV3ServerLifecycle {
                         || recognizesManagedAmbientCarrier(runtime, FrontierV3AmbientCarrierRecognition.ManagedCarrier.from(entity))
                         || FrontierV3SceneExecutor.recognizes(runtime, entity));
     }
-    /** Exact carrier delegate of {@link #observeSourceJoin(ServerLevel, Entity)} for focused runtime tests. */
     static JoinFirewallProof observeSourceJoin(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                FrontierV3AmbientCarrierRecognition.ManagedCarrier carrier,
                                                EntityJoinAdmission lifecycleAdmission) {
@@ -630,11 +695,6 @@ public final class FrontierV3ServerLifecycle {
         Objects.requireNonNull(lifecycleAdmission, "lifecycle admission");
         return composeSourceJoin(() -> lifecycleAdmission, () -> recognizesManagedAmbientCarrier(runtime, carrier));
     }
-    /**
-     * Outer join boundary shared by the real Entity callback and focused fault controls. Any
-     * attempted global structural derivation is converted to the same fail-closed proof that
-     * the source firewall cancels; it never escapes as an event-callback exception.
-     */
     static JoinFirewallProof composeSourceJoin(Supplier<EntityJoinAdmission> lifecycle,
                                                BooleanSupplier recognition) {
         Objects.requireNonNull(lifecycle, "lifecycle action"); Objects.requireNonNull(recognition, "recognition action");
@@ -645,11 +705,6 @@ public final class FrontierV3ServerLifecycle {
             return new JoinFirewallProof(EntityJoinAdmission.NOT_MANAGED, false);
         }
     }
-    /**
-     * Lets the shared Graybox admission boundary admit only an exact active V3
-     * ambient or scene carrier. This is a predicate only; EntityJoin observation
-     * remains the sole lifecycle mutation path.
-     */
     public static boolean recognizesManagedCarrier(ServerLevel level, Entity entity) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
@@ -657,16 +712,10 @@ public final class FrontierV3ServerLifecycle {
                 && (recognizesManagedAmbientCarrier(runtime, FrontierV3AmbientCarrierRecognition.ManagedCarrier.from(entity))
                 || FrontierV3SceneExecutor.recognizes(runtime, entity));
     }
-    /**
-     * The ambient half of {@link #recognizesManagedCarrier(ServerLevel, Entity)} after its exact
-     * Entity adapter.  It keeps the runtime provider, join recognition, and source firewall on
-     * one production decision without requiring a synthetic Minecraft entity in focused tests.
-     */
     static boolean recognizesManagedAmbientCarrier(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                    FrontierV3AmbientCarrierRecognition.ManagedCarrier carrier) {
         return FrontierV3AmbientCarrierRecognition.recognizes(runtime, carrier);
     }
-    /** Returns true only when this v3 runtime durably accepted the managed HOT death. */
     public static boolean observeLivingDeath(ServerLevel level, Entity entity, Entity source) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
@@ -678,7 +727,6 @@ public final class FrontierV3ServerLifecycle {
         return sceneBody ? FrontierV3SceneExecutor.observeDeath(runtime, entity, source)
                 : FrontierV3AmbientActorExecutor.observeDeath(runtime, entity, source);
     }
-    /** Captures an ambient body on normal world departure; false means it is not v3-owned. */
     public static boolean observeEntityLeave(ServerLevel level, Entity entity) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
@@ -688,49 +736,29 @@ public final class FrontierV3ServerLifecycle {
     private static boolean stopping(MinecraftServer server) {
         return STOPPING.containsKey(server);
     }
-    /** Keeps an exact owned field on the canonical growth clock rather than Vanilla random ticks. */
     public static boolean blocksNativeCropGrowth(ServerLevel level, BlockPos position) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(position, "position");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
-        return FrontierV3PhysicalWorld.isPhysical(level) && runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
+        return FrontierV3PhysicalWorld.isPhysical(level) && runtime != null
                 && FrontierV3ResourceSiteExecutor.blocksNativeCropGrowth(runtime, level, position);
     }
-    /**
-     * Read-only pilot receipt predicate.  It deliberately observes only the normal executor
-     * result after the last ordinary player has departed: neither the receipt nor its caller can
-     * advance a cursor, force a chunk, or manufacture a release.
-     */
     static boolean normalDemandLossReleased(MinecraftServer server) {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(server);
         if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return false;
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return false;
-        // The isolated F0.V receipt owns the resource-site-harvest physical boundary, not the
-        // whole world's independently demanded work.  Requiring unrelated service, route, or
-        // ambient leases to drain would turn their ordinary continuing demand into a fabricated
-        // failure of this already released harvest scene.  Conversely, every harvest scene is
-        // in scope: a second retained harvest body cannot be hidden behind the target's release.
         return state.sceneLeases().values().stream()
                 .filter(io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors::isResourceSiteHarvest)
                 .noneMatch(lease -> lease.status() == io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.PREPARED
                         || lease.status() == io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.HOT
                         || lease.status() == io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.DRAINING);
     }
-    /**
-     * Durably releases an exact HOT shipment before vanilla opens its chest-minecart UI. The cart
-     * remains in the world and each later player/drop/hopper move is observed from its stable
-     * world-carrier identity; a rejected release must keep the interaction closed.
-     */
     public static CargoCarrierInteraction releaseCargoCarrier(ServerLevel level, ServerPlayer player, Entity entity) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(player, "player"); Objects.requireNonNull(entity, "entity");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
         if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return CargoCarrierInteraction.NOT_MANAGED;
         return releaseCargoCarrier(level, runtime, entity, java.util.Optional.of(player.getUUID()));
     }
-    /**
-     * Shows the current immutable v3 explanation for one exact owned board.  This is a read-only
-     * presentation boundary: it does not create a command, retain an event or alter the board.
-     */
     public static boolean presentObjectBoard(ServerLevel level, ServerPlayer player, Entity entity) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(player, "player"); Objects.requireNonNull(entity, "entity");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
@@ -744,7 +772,6 @@ public final class FrontierV3ServerLifecycle {
         PaleMirrorPlayerPresentation.inspect(player, "frontier-v3:board:" + owner, FrontierV3ObjectBoardCard.fromBoard(board));
         return true;
     }
-    /** Makes a carrier physically accountable before a real world effect may destroy it. */
     private static CargoCarrierInteraction releaseCargoCarrier(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                                 Entity entity, java.util.Optional<java.util.UUID> observerPlayerId) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity"); Objects.requireNonNull(observerPlayerId, "observer player id");
@@ -765,11 +792,6 @@ public final class FrontierV3ServerLifecycle {
         return result instanceof CommandResult.Accepted ? CargoCarrierInteraction.RELEASED : CargoCarrierInteraction.REJECTED;
     }
     public enum CargoCarrierInteraction { NOT_MANAGED, RELEASED, REJECTED }
-    /**
-     * Captures a fatal non-explosion vehicle hit before vanilla discards its chest inventory.
-     * Explosion detonation has a separate pre-effect bridge and must not create duplicate impact
-     * evidence through this general vehicle hook.
-     */
     public static void observeTerminalVehicleDamage(ServerLevel level, Entity entity, DamageSource source) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity"); Objects.requireNonNull(source, "damage source");
         if (source.is(DamageTypeTags.IS_EXPLOSION)) return;
@@ -777,17 +799,11 @@ public final class FrontierV3ServerLifecycle {
         if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return;
         observeTerminalVehicleDamage(level, runtime, entity, source);
     }
-    /**
-     * Identifies the narrow physical transport representation whose movement is owned by the
-     * scene executor. This is a read-only tag check for the Minecart mixin; canonical ownership
-     * is still validated separately before any cargo observation or mutation.
-     */
     public static boolean isLeasedRoadCargoCarrier(Entity entity) {
         return entity instanceof MinecartChest
                 && entity.getPersistentData().contains(FrontierV3CargoCarrierExecutor.LEASE_KEY)
                 && entity.getPersistentData().contains(FrontierV3CargoCarrierExecutor.CARGO_KEY);
     }
-    /** Package-visible so the materialized consequence test uses the same pre-destruction path. */
     static void observeTerminalVehicleDamage(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                              Entity entity, DamageSource source) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(runtime, "runtime"); Objects.requireNonNull(entity, "entity"); Objects.requireNonNull(source, "damage source");
@@ -799,7 +815,6 @@ public final class FrontierV3ServerLifecycle {
         }
         captureCargoCarrierImpact(level, runtime, entity, "terminal vehicle damage");
     }
-    /** Admits one real world-drop pickup only after its exact custody receipt is durable. */
     public static ExactCustodyObservation observeExactItemPickup(ServerLevel level, ServerPlayer player, ItemEntity itemEntity) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(player, "player"); Objects.requireNonNull(itemEntity, "item entity");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
@@ -816,7 +831,6 @@ public final class FrontierV3ServerLifecycle {
                 new io.farfrontier.palemirror.frontier.v3.model.ExactItemCustodyChanged(item.orElseThrow().id(), source,
                         new io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.Player(player.getUUID())));
     }
-    /** Captures a player toss as a new exact physical carrier before Minecraft releases the item entity. */
     public static ExactCustodyObservation observeExactItemToss(ServerLevel level, ServerPlayer player, ItemEntity itemEntity) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(player, "player"); Objects.requireNonNull(itemEntity, "item entity");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
@@ -853,7 +867,6 @@ public final class FrontierV3ServerLifecycle {
         return result instanceof CommandResult.Accepted ? ExactCustodyObservation.ACCEPTED : ExactCustodyObservation.REJECTED;
     }
     public enum ExactCustodyObservation { NOT_MANAGED, ACCEPTED, REJECTED }
-    /** The only server-side disposition for one ordinary player block-action receipt. */
     public enum PlayerBreakDisposition { UNMANAGED, ACCEPTED, REJECTED }
     public static PlayerBreakDisposition observePlayerBreakPacket(ServerLevel level, BlockPos position, ServerPlayer player) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(position, "position"); Objects.requireNonNull(player, "player");
@@ -877,11 +890,9 @@ public final class FrontierV3ServerLifecycle {
         }
         return PlayerBreakDisposition.UNMANAGED;
     }
-    /** True means the v3-owned break was not durably accepted and Minecraft must not apply it. */
     public static boolean rejectBlockBreak(ServerLevel level, BlockPos position, ServerPlayer player) {
         return observePlayerBreakPacket(level, position, player) == PlayerBreakDisposition.REJECTED;
     }
-    /** The vanilla event is physical execution only; an already accepted packet has no second owner. */
     public static boolean acceptedPlayerBreak(ServerLevel level, BlockPos position, ServerPlayer player) {
         return FrontierV3PlayerBreakDisposition.accepted(level.getServer(), player.getUUID(), position);
     }
@@ -891,7 +902,6 @@ public final class FrontierV3ServerLifecycle {
     public static void clearPlayerBreakDispositions(net.minecraft.server.MinecraftServer server) {
         FrontierV3PlayerBreakDisposition.clear(server);
     }
-    /** Routes a real blast either to its active v3 intent or to the ordinary external-effect observer. */
     public static boolean observeExplosion(ServerLevel level, net.minecraft.world.level.Explosion explosion,
                                            java.util.List<BlockPos> affected, java.util.List<Entity> entities) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(affected, "affected blocks");
@@ -899,7 +909,6 @@ public final class FrontierV3ServerLifecycle {
         if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return false;
         return observeExplosion(level, runtime, explosion, affected, entities);
     }
-    /** One shared server-thread bridge for the production host and real-world integration proofs. */
     static boolean observeExplosion(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                     net.minecraft.world.level.Explosion explosion, java.util.List<BlockPos> affected, java.util.List<Entity> entities) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(runtime, "runtime"); Objects.requireNonNull(affected, "affected blocks");
@@ -921,7 +930,6 @@ public final class FrontierV3ServerLifecycle {
                 .orElseGet(() -> FrontierV3PhysicalObservationExecutor.captureExternalExplosion(level, runtime, affected));
         return resourceSite || ordinary;
     }
-    /** Retains a released chest cart even if its HOT lease was released by an earlier player interaction. */
     private static void captureCargoCarrierImpact(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                   Entity entity, String cause) {
         if (!(entity instanceof MinecartChest)) return;
@@ -936,9 +944,7 @@ public final class FrontierV3ServerLifecycle {
             runtime.quarantine(error);
         }
     }
-    /** Result of the read-only ambient join bridge; only a duplicate may be safely cancelled. */
     public enum EntityJoinAdmission { NOT_MANAGED, RETAINED, DUPLICATE_UNINDEXED }
-    /** Immutable result passed once from the lifecycle join gate to the source firewall. */
     public record JoinFirewallProof(EntityJoinAdmission lifecycleAdmission, boolean verifiedV3Carrier) {
         public JoinFirewallProof {
             Objects.requireNonNull(lifecycleAdmission, "lifecycle admission");

@@ -34,7 +34,7 @@ final class FrontierV3EngineeringWorkSceneExecutor {
                 .filter(lease -> lease.status() != SceneLeaseStatus.CLOSED && lease.status() != SceneLeaseStatus.CONFLICT)
                 .sorted(Comparator.comparing(SceneLease::id)).findFirst();
         if (active.isPresent()) { execute(level, runtime, state, active.orElseThrow()); return true; }
-        Optional<EngineeringWorkSceneCandidate> candidate = FrontierV3SceneExecutor.firstDemandedCandidate(
+        Optional<EngineeringWorkSceneCandidate> candidate = FrontierV3SceneDemand.firstDemandedCandidate(
                 level, FrontierEngineeringWorkSceneSupport.candidates(state), EngineeringWorkSceneCandidate::workCell);
         if (candidate.isEmpty()) return false;
         EngineeringWorkSceneCandidate work = candidate.orElseThrow();

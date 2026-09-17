@@ -39,6 +39,11 @@ public final class PopulationBirthProcess {
         List<ProposedEvent> events = new java.util.ArrayList<>();
         events.add(schedule(review(settlement.id(), nextOrdinal(action), action.dueAt().ticks() + state.bootstrap().ruleset().cadence().populationBirthReviewInterval())));
         if (hasActiveJob(state, settlement.id()) || !hasHousing(state, settlement.id())) return List.copyOf(events);
+        // A new resident is discretionary while the settlement's exact ration
+        // owner still has an unresolved cycle.  In particular, do not let a
+        // birth permit retain the only COLD bread stack between a visible
+        // shortage and its next ordinary provision review.
+        if (!SettlementProvisionProcess.allowsPopulationGrowth(state, settlement.id())) return List.copyOf(events);
         // A retained replica is evidence, not a spending authority.  The one
         // exceptional boundary is an actually live physical custodian: do not
         // create a second exact-item consumer while that owner is responsible
@@ -89,7 +94,9 @@ public final class PopulationBirthProcess {
 
     public static FrontierWorldState reduceStarted(FrontierWorldState state, SubjectId subject, ResidentBirthStarted started) {
         ResidentBirthJob job = started.job();
-        if (!subject.equals(job.settlementId()) || !hasHousing(state, job.settlementId()) || !food(state, job.settlementId()).map(item -> item.id().equals(job.foodItemId())).orElse(false)) {
+        if (!subject.equals(job.settlementId()) || !hasHousing(state, job.settlementId())
+                || !SettlementProvisionProcess.allowsPopulationGrowth(state, job.settlementId())
+                || !food(state, job.settlementId()).map(item -> item.id().equals(job.foodItemId())).orElse(false)) {
             throw new IllegalArgumentException("resident birth start lacks owned active food and housing");
         }
         return state.startResidentBirth(job);

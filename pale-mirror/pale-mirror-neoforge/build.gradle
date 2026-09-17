@@ -220,7 +220,8 @@ neoForge {
             gameDirectory = frontierV3SceneGameTestDirectory
             systemProperty 'neoforge.enabledGameTestNamespaces',
                     rootProject.providers.gradleProperty('mod_id').get() + ',minecraft,pale_mirror_visuals'
-            systemProperty 'pale_mirror.frontier_v3.game_test_slice', 'scene'
+            systemProperty 'pale_mirror.frontier_v3.game_test_slice',
+                    providers.gradleProperty('frontierV3GameTestSlice').getOrElse('scene')
         }
         frontierV3EconomyGameTestServer {
             type = 'gameTestServer'
@@ -343,7 +344,9 @@ neoForge {
             systemProperty 'pale_mirror.frontier_v3.test_pilot.lifecycle_segment', frontierV3PilotLifecycleSegment
             systemProperty 'pale_mirror.frontier_v3.test_pilot.server',
                     providers.gradleProperty('frontierV3PilotServer').orElse('127.0.0.1:25575').get()
-            programArgument '--fullscreen'
+            // Do not force an XWayland monitor takeover.  The ordinary pilot still owns one
+            // visible Minecraft window, but a forced fullscreen transition can fail before
+            // the first client tick and block forever in Minecraft's native crash dialog.
             programArgument '--username'
             programArgument providers.gradleProperty('frontierV3PilotUsername').orElse('PMTestPilot').get()
             programArgument '--quickPlayMultiplayer'
@@ -1054,8 +1057,8 @@ tasks.named('prepareFrontierV3PilotClientRun') {
         // NeoForge's early loading screen is not game-facing evidence and is
         // known to fail intermittently in the disposable XWayland profile
         // before Minecraft creates its real client window.  Disable only that
-        // pre-game screen for the pilot; the actual fullscreen Minecraft
-        // window, renderer and ordinary connection remain unchanged.
+        // pre-game screen for the pilot; the actual ordinary Minecraft
+        // window, renderer and connection remain unchanged.
         def fmlConfig = new File(frontierV3PilotClientDirectory.get().asFile, 'config/fml.toml')
         fmlConfig.parentFile.mkdirs()
         fmlConfig.text = 'earlyWindowControl = false\n' +

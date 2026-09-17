@@ -31,7 +31,10 @@ final class ResourceSiteStateCodec {
                 ResourceSiteConflictDisposition disposition = lifecycle.conflictDisposition().orElseThrow();
                 output.writeInt(disposition.position().x()); output.writeInt(disposition.position().y()); output.writeInt(disposition.position().z());
                 output.writeByte(disposition.reason().wireTag()); output.writeByte(disposition.policy().wireTag());
+                writeIncident(output, disposition.incident());
             }
+            output.writeBoolean(lifecycle.harvestLineage().isPresent());
+            if (lifecycle.harvestLineage().isPresent()) writeHarvestLineage(output, lifecycle.harvestLineage().orElseThrow());
         }
     }
 
@@ -46,14 +49,57 @@ final class ResourceSiteStateCodec {
             Optional<ResourceSiteConflictDisposition> disposition = Optional.empty();
             if (input.readBoolean()) {
                 BlockPosition position = new BlockPosition(input.readInt(), input.readInt(), input.readInt());
-                disposition = Optional.of(new ResourceSiteConflictDisposition(position,
-                        FrontierWireTags.require(ResourceSiteConflictReason.class, input.readUnsignedByte()),
-                        FrontierWireTags.require(ResourceSiteConflictPolicy.class, input.readUnsignedByte())));
+                ResourceSiteConflictReason reason = FrontierWireTags.require(ResourceSiteConflictReason.class, input.readUnsignedByte());
+                ResourceSiteConflictPolicy policy = FrontierWireTags.require(ResourceSiteConflictPolicy.class, input.readUnsignedByte());
+                disposition = Optional.of(new ResourceSiteConflictDisposition(position, reason, policy, readIncident(input)));
             }
-            ResourceSiteLifecycle lifecycle = new ResourceSiteLifecycle(siteId, FrontierWireTags.require(ResourceSitePhase.class, phase), epoch, stage, work, disposition);
+            Optional<ResourceSiteHarvestLineage> lineage = input.readBoolean() ? Optional.of(readHarvestLineage(input)) : Optional.empty();
+            ResourceSiteLifecycle lifecycle = new ResourceSiteLifecycle(siteId, FrontierWireTags.require(ResourceSitePhase.class, phase), epoch, stage, work, disposition, lineage);
             if (sites.put(siteId, lifecycle) != null) throw new IllegalArgumentException("duplicate resource-site lifecycle");
         }
         return new ResourceSiteState(sites);
+    }
+
+    private static void writeHarvestLineage(DataOutputStream output, ResourceSiteHarvestLineage lineage) throws IOException {
+        FrontierWorldStateCodec.writeString(output, lineage.predecessorJobId().value());
+        FrontierWorldStateCodec.writeString(output, lineage.predecessorTaskId().value());
+        FrontierWorldStateCodec.writeString(output, lineage.workerId().value());
+        FrontierWorldStateCodec.writeString(output, lineage.outputItemId().value());
+        output.writeLong(lineage.completedGrowthEpoch());
+        output.writeBoolean(lineage.successorTaskId().isPresent());
+        if (lineage.successorTaskId().isPresent()) {
+            FrontierWorldStateCodec.writeString(output, lineage.successorTaskId().orElseThrow().value());
+            FrontierWorldStateCodec.writeString(output, lineage.successorJobId().orElseThrow().value());
+        }
+    }
+
+    private static ResourceSiteHarvestLineage readHarvestLineage(DataInputStream input) throws IOException {
+        SubjectId predecessorJob = new SubjectId(FrontierWorldStateCodec.readString(input));
+        SubjectId predecessorTask = new SubjectId(FrontierWorldStateCodec.readString(input));
+        SubjectId worker = new SubjectId(FrontierWorldStateCodec.readString(input));
+        SubjectId output = new SubjectId(FrontierWorldStateCodec.readString(input));
+        long epoch = input.readLong();
+        if (!input.readBoolean()) return new ResourceSiteHarvestLineage(predecessorJob, predecessorTask, worker, output, epoch, Optional.empty(), Optional.empty());
+        return new ResourceSiteHarvestLineage(predecessorJob, predecessorTask, worker, output, epoch,
+                Optional.of(new SubjectId(FrontierWorldStateCodec.readString(input))), Optional.of(new SubjectId(FrontierWorldStateCodec.readString(input))));
+    }
+
+    private static void writeIncident(DataOutputStream output, ConflictIncident incident) throws IOException {
+        FrontierWorldStateCodec.writeString(output, incident.id()); output.writeByte(incident.category().wireTag());
+        FrontierWorldStateCodec.writeString(output, incident.reason()); FrontierWorldStateCodec.writeString(output, incident.ownerId().value());
+        FrontierWorldStateCodec.writeString(output, incident.subjectId().value()); FrontierWorldStateCodec.writeString(output, incident.source());
+        FrontierWorldStateCodec.writeString(output, incident.expectedFact()); FrontierWorldStateCodec.writeString(output, incident.observedFact());
+        FrontierWorldStateCodec.writeString(output, incident.preCanonicalFact()); FrontierWorldStateCodec.writeString(output, incident.postCanonicalFact());
+        FrontierWorldStateCodec.writeString(output, incident.disposition()); FrontierWorldStateCodec.writeString(output, incident.traceCorrelation());
+    }
+
+    private static ConflictIncident readIncident(DataInputStream input) throws IOException {
+        return new ConflictIncident(FrontierWorldStateCodec.readString(input),
+                FrontierWireTags.require(ConflictIncidentCategory.class, input.readUnsignedByte()), FrontierWorldStateCodec.readString(input),
+                new SubjectId(FrontierWorldStateCodec.readString(input)), new SubjectId(FrontierWorldStateCodec.readString(input)),
+                FrontierWorldStateCodec.readString(input), FrontierWorldStateCodec.readString(input), FrontierWorldStateCodec.readString(input),
+                FrontierWorldStateCodec.readString(input), FrontierWorldStateCodec.readString(input), FrontierWorldStateCodec.readString(input),
+                FrontierWorldStateCodec.readString(input));
     }
 
     private static void writeWork(DataOutputStream output, ResourceSiteWork work) throws IOException {

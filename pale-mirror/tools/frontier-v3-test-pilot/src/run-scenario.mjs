@@ -2,17 +2,18 @@ import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { execFile } from 'node:child_process';
-import { appendFile, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { correlation, diagnosticForAssertion, diagnosticFromPilotLine, hasDiagnosticResponses, loadScenario, newManifest, pilotDiagnosticActionStep, saveManifest, scenarioDeadlineMs, selectMutterXauthority, traceRecord } from './scenario.mjs';
+import { correlation, diagnosticForAssertion, diagnosticFromPilotLine, hasDiagnosticResponses, loadScenario, newManifest, pilotDiagnosticActionStep, saveManifest, scenarioDeadlineMs, traceRecord } from './scenario.mjs';
 import { PhaseTiming } from './timing.mjs';
 import { requirePreparedF0vBuild } from './prepared-build.mjs';
 import { ensurePreparedLaunchWorkingDirectory, preparedLaunch } from './prepared-launch.mjs';
-import { LifecycleBarrier, LifecycleSignal, awaitLifecycleSignal, openLifecycleBarrierSession, publishLifecycleBarrier } from './lifecycle-barrier.mjs';
-import { deadlineWatchdog } from './deadline-watchdog.mjs';
+import { LifecycleBarrier, LifecycleSignal, awaitLifecycleBarrier, awaitLifecycleSignal, openLifecycleBarrierSession, publishLifecycleBarrier } from './lifecycle-barrier.mjs';
+import { awaitChildExit, deadlineWatchdog } from './deadline-watchdog.mjs';
 import { createEarlyDisplayFailureDetector } from './native-client-fatal-state.mjs';
+import { verifiedPrivateDisplayEnvironment, verifiedVisibleDisplayEnvironment } from './visible-display.mjs';
 
 const [scenarioPath, outputPath = `build/frontier-v3-scenarios/${basename(process.argv[2] ?? 'scenario.json', '.json')}-${Date.now()}.json`] = process.argv.slice(2);
 if (!scenarioPath) throw new Error('usage: npm run scenario -- <scenario.json> [manifest.json]');
@@ -45,6 +46,7 @@ if (sessionControlDirectory !== undefined && scenario.restart === undefined) {
 const lifecycle = lifecycleControlDirectory === undefined ? undefined : await openLifecycleBarrierSession(lifecycleControlDirectory,
   JSON.parse(await readFile(join(lifecycleControlDirectory, 'identity.json'), 'utf8')));
 const lifecycleTerminalAssertion = process.env.FRONTIER_V3_PILOT_LIFECYCLE_TERMINAL !== 'false';
+const lifecycleClose = lifecycleTerminalAssertion || process.env.FRONTIER_V3_PILOT_LIFECYCLE_CLOSE === 'true';
 const runId = randomUUID();
 const manifest = newManifest({ scenario, sha256, runId });
 const timing = new PhaseTiming();
@@ -98,11 +100,17 @@ const preparedIdentityPath = process.env.FRONTIER_V3_PREPARED_BUILD_IDENTITY;
 const preparedIdentity = preparedIdentityPath === undefined || preparedIdentityPath === '' ? undefined
   : JSON.parse(await readFile(resolve(project, preparedIdentityPath), 'utf8'));
 if (packPilot && preparedIdentity !== undefined) throw new Error('F0.V prepared launch supports only the disposable lite client');
-// The native pilot and its capture helper must authenticate to the same
-// user-owned XWayland display.  The helper discovers the short-lived Mutter
-// cookie without serializing it; pass that private child environment to
-// Gradle as well, otherwise an explicitly XWayland pilot cannot start.
-const auditEnvironment = await x11AuditEnvironment(process.env);
+// A local pilot uses the authenticated user Xwayland display; the repository-owned private
+// Xvfb wrapper instead proves a task-private numeric display before it invokes this runner.
+// Keep those admissions explicit so a private carrier never silently borrows :0 or its cookie.
+const privateDisplay = process.env.FRONTIER_V3_PILOT_PRIVATE_DISPLAY === 'true';
+const auditEnvironment = { ...(privateDisplay
+  ? await verifiedPrivateDisplayEnvironment(process.env)
+  : await verifiedVisibleDisplayEnvironment(process.env)) };
+// The semantic pilot is one ordinary GLFW client on its admitted X11 display. Do not let an
+// inherited Wayland session make GLFW wait on an unrelated compositor path before multiplayer.
+auditEnvironment.XDG_SESSION_TYPE = 'x11';
+auditEnvironment.WAYLAND_DISPLAY = '__pale_mirror_pilot_xwayland_only__';
 auditEnvironment.PALE_MIRROR_CLIENT_SCREENSHOTS = resolve(project,
   `pale-mirror-neoforge/build/runs/${packPilot ? 'frontier-v3-pilot-pack-client' : 'frontier-v3-pilot-client'}/screenshots`);
 timing.end('client.launch_preparation');
@@ -245,12 +253,25 @@ try {
     manifest.diagnostics.push({ assertion, observed });
   }
   timing.end('terminal_assertions');
-  await lifecycleWrites;
+  // The stream queue may still contain unrelated late stdout work after the client has
+  // durably published this segment.  Terminal authority is the nonce-bound journal, not an
+  // incidental promise chain: wait for the exact published completion barrier before granting
+  // the close token.  This keeps a completed client from being parked behind a stale stream
+  // waiter while retaining the same monotonic action→segment→terminal ordering.
+  if (lifecycle !== undefined) {
+    const segment = lifecycleSegment();
+    await awaitLifecycleSignal(lifecycle, LifecycleSignal.SCENARIO_SEGMENT_COMPLETE, segment, 300_000);
+    await awaitLifecycleBarrier(lifecycle, LifecycleBarrier.SCENARIO_SEGMENT_COMPLETE, 300_000,
+      entry => entry.detail.segment === segment);
+  } else await lifecycleWrites;
   if (lifecycleTerminalAssertion) {
     lifecycleBarrier(LifecycleBarrier.TERMINAL_ASSERTION_COMPLETE, undefined, undefined, { assertionCount: (scenario.assertions ?? []).length });
-    await lifecycleWrites;
+    if (lifecycle !== undefined) {
+      await awaitLifecycleBarrier(lifecycle, LifecycleBarrier.TERMINAL_ASSERTION_COMPLETE, 300_000,
+        entry => entry.detail.assertionCount === (scenario.assertions ?? []).length);
+    } else await lifecycleWrites;
   }
-  if (lifecycle !== undefined && lifecycleTerminalAssertion) {
+  if (lifecycle !== undefined && lifecycleClose) {
     const segment = lifecycleSegment();
     const close = join(lifecycle.directory, `close-client-${segment}.token`);
     await writeFile(close, `${lifecycle.identity.runId}:${segment}\n`, { encoding: 'utf8', flag: 'wx' });
@@ -274,7 +295,7 @@ try {
   await lifecycleWrites.catch(() => undefined);
   await beforeRestartSnapshot.catch(() => undefined);
   timing.begin('client.cleanup');
-  child.kill('SIGINT');
+  await stopOwnedClient(child);
   await rm(captureControlDirectory, { recursive: true, force: true });
   timing.end('client.cleanup');
   timing.abortOpen({ status: manifest.status });
@@ -283,6 +304,32 @@ try {
 }
 if (manifest.status !== 'ok') throw new Error(manifest.error);
 console.log(JSON.stringify({ status: 'ok', manifest: output, runId }));
+
+/**
+ * A direct prepared JVM is an exact task-owned client, not a detached display process.
+ * A scenario timeout used to send one best-effort SIGINT and let a blocked GLFW/JVM remain
+ * orphaned after its Node parent had published failure evidence.  Preserve the first failure,
+ * but close that one client with bounded graceful and escalation windows before declaring the
+ * disposable segment cleaned up.
+ */
+async function stopOwnedClient(client) {
+  if (client.exitCode !== null || client.signalCode !== null) return;
+  const attempts = [
+    { signal: 'SIGINT', timeoutMs: 15_000 },
+    { signal: 'SIGTERM', timeoutMs: 10_000 },
+    { signal: 'SIGKILL', timeoutMs: 5_000 }
+  ];
+  for (const attempt of attempts) {
+    if (client.exitCode !== null || client.signalCode !== null) return;
+    client.kill(attempt.signal);
+    try {
+      await awaitChildExit(client, attempt.timeoutMs, `task-owned native client did not exit after ${attempt.signal}`);
+      return;
+    } catch (error) {
+      if (attempt.signal === 'SIGKILL') throw error;
+    }
+  }
+}
 
 /** Immutable first-segment receipt for a one-client graceful restart. */
 function capturePersistentBeforeRestart() {
@@ -346,6 +393,7 @@ async function launchPreparedClient() {
     'pale_mirror.frontier_v3.test_pilot.session_control_directory': sessionControlDirectory ?? '',
     'pale_mirror.frontier_v3.test_pilot.lifecycle_control_directory': lifecycleControlDirectory ?? '',
     'pale_mirror.frontier_v3.test_pilot.lifecycle_segment': lifecycleSegment(),
+    'pale_mirror.frontier_v3.test_pilot.lifecycle_close': lifecycleClose ? 'true' : 'false',
     'pale_mirror.frontier_v3.test_pilot.lifecycle_terminal': lifecycleTerminalAssertion ? 'true' : 'false'
   }, ['--username', scenario.pilot.username, '--quickPlayMultiplayer', `${runtimeScenario.server.host}:${runtimeScenario.server.port}`]);
   await ensurePreparedLaunchWorkingDirectory(launch, { automatedSemanticClient: true });
@@ -408,16 +456,4 @@ function waitForPilot(child, predicate, startedAt, startupTimeoutMs, scenarioTim
 function matches(actual, expected) {
   return Object.entries(expected).every(([key, value]) => value && typeof value === 'object' && !Array.isArray(value)
     ? actual[key] && matches(actual[key], value) : actual[key] === value);
-}
-
-async function x11AuditEnvironment(environment) {
-  const resolved = { ...environment };
-  if (!resolved.DISPLAY || resolved.XAUTHORITY || !resolved.XDG_RUNTIME_DIR) return resolved;
-  try {
-    const authority = selectMutterXauthority(await readdir(resolved.XDG_RUNTIME_DIR));
-    if (authority) resolved.XAUTHORITY = join(resolved.XDG_RUNTIME_DIR, authority);
-  } catch {
-    // The capture command emits the attributable failure if the session directory cannot be inspected.
-  }
-  return resolved;
 }

@@ -16,8 +16,12 @@ import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSitePlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateUpdate;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteConflictObserved;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteConflictReason;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteConflictSource;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalCustodyLease;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalCustodyLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyPayloads.CustodyReleased;
@@ -47,6 +51,12 @@ class FrontierFileStoreTest {
     private static final SubjectId SUBJECT = new SubjectId("settlement:file-store");
 
     @Test
+    void boundsBatchableWalDurabilityToOneCanonicalServerTurn() {
+        assertEquals(1, FrontierFileStore.maxBatchableWalRecords(),
+                "separate WAL files must never accumulate their force cost onto a later server turn");
+    }
+
+    @Test
     void appendsRecoversSnapshotsAndCompactsOnlyCoveredWal(@TempDir Path directory) {
         FrontierFileStore store = new FrontierFileStore(directory, KernelPayloadCodecs.scheduleEffects());
         TransactionRecord transaction = transaction(1L);
@@ -58,8 +68,11 @@ class FrontierFileStoreTest {
                 new byte[] {3}, List.of(action), List.of()), 1L);
         store.installSnapshot(snapshot);
         assertEquals(0L, store.compact(WORLD, new Revision(1L)).retainedTransactionCount());
-        assertEquals(snapshot, store.recover(WORLD).checkpoint().orElseThrow());
-        assertTrue(store.recover(WORLD).walTail().isEmpty());
+        TransactionRecord afterCompaction = transaction(2L);
+        assertEquals(2L, store.append(afterCompaction, Durability.DURABLE_BEFORE_EFFECT).walSequence());
+        var recovered = store.recover(WORLD);
+        assertEquals(snapshot, recovered.checkpoint().orElseThrow());
+        assertEquals(List.of(afterCompaction), recovered.walTail());
     }
 
     @Test
@@ -145,6 +158,37 @@ class FrontierFileStoreTest {
         assertEquals(advancedTime, store.recover(WORLD).checkpoint().orElseThrow());
     }
 
+    @Test
+    void resourceSiteConflictIncidentSurvivesWalReplayThenSnapshotRestart(@TempDir Path directory) {
+        WorldId world = new WorldId("frontier:resource-site-conflict-restart");
+        SubjectId site = new SubjectId("site:1-wheat-field");
+        FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(world, 77L));
+        var crop = FrontierResourceSitePlan.compile(initial.bootstrap()).get(site).cropSlots().getFirst();
+        ResourceSiteConflictObserved observed = new ResourceSiteConflictObserved(site, crop,
+                ResourceSiteConflictReason.PLAYER_REMOVED_MANAGED_CELL, ResourceSiteConflictSource.PLAYER_WORLD_OBSERVATION);
+        FrontierFileStore store = new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs());
+        store.installSnapshot(new SnapshotRecord(new CheckpointImage(world, Revision.ZERO, SimInstant.ZERO,
+                new FrontierWorldStateCodec().encode(initial), List.of(), List.of()), 0L));
+        TransactionRecord conflict = resourceSiteConflictTransaction(world, site, observed);
+        store.append(conflict, Durability.DURABLE_BEFORE_EFFECT);
+
+        FrontierFileStore afterWalRestart = new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs());
+        var recovered = afterWalRestart.recover(world);
+        FrontierWorldState replayed = new FrontierWorldStateCodec().decode(recovered.checkpoint().orElseThrow().checkpoint().canonicalState());
+        replayed = FrontierWorldProcessCatalog.reduce("resource-sites", replayed, recovered.walTail().getFirst().events().getFirst());
+        var incident = replayed.resourceSites().site(site).conflictDisposition().orElseThrow().incident();
+        assertEquals("incident:resource-site:1-wheat-field", incident.id());
+        assertEquals(ResourceSiteConflictSource.PLAYER_WORLD_OBSERVATION.name(), incident.source());
+        assertEquals("conflict:incident:resource-site:1-wheat-field", incident.traceCorrelation());
+
+        store.installSnapshot(new SnapshotRecord(new CheckpointImage(world, new Revision(1L), new SimInstant(1L),
+                new FrontierWorldStateCodec().encode(replayed), List.of(), List.of()), 1L));
+        FrontierWorldState afterSnapshotRestart = new FrontierWorldStateCodec().decode(new FrontierFileStore(directory,
+                FrontierWorldRuntimeDefinition.payloadCodecs()).recover(world).checkpoint().orElseThrow().checkpoint().canonicalState());
+        assertEquals(incident, afterSnapshotRestart.resourceSites().site(site).conflictDisposition().orElseThrow().incident(),
+                "the canonical trace join survives both the accepted WAL edge and later compacted snapshot");
+    }
+
     private static TransactionRecord transaction(long revision) {
         CommandId command = new CommandId("command:file-store-" + revision);
         TransactionId transaction = new TransactionId("transaction:file-store-" + revision);
@@ -154,10 +198,18 @@ class FrontierFileStoreTest {
                 new Revision(revision), new SimInstant(revision), SUBJECT, CauseChain.root(command), new ScheduleEffect.Created(action));
         return new TransactionRecord(transaction, WORLD, new Revision(revision), new SimInstant(revision), List.of(event));
     }
+
     private static TransactionRecord replicaTransaction(WorldId world, long revision, SubjectId subject, io.farfrontier.palemirror.frontier.v3.api.FrontierPayload payload) {
         TransactionId transaction = new TransactionId("transaction:replica-cycle-" + revision); CommandId command = new CommandId("command:replica-cycle-" + revision);
         FrontierEvent event = new FrontierEvent(1, new EventId("event:replica-cycle-" + revision), transaction, world, new Revision(revision),
                 new SimInstant(revision), subject, CauseChain.root(command), payload);
         return new TransactionRecord(transaction, world, new Revision(revision), new SimInstant(revision), List.of(event));
+    }
+    private static TransactionRecord resourceSiteConflictTransaction(WorldId world, SubjectId site, ResourceSiteConflictObserved observed) {
+        CommandId command = new CommandId("command:resource-site-conflict-restart");
+        TransactionId transaction = new TransactionId("transaction:resource-site-conflict-restart");
+        FrontierEvent event = new FrontierEvent(1, new EventId("event:resource-site-conflict-restart"), transaction, world,
+                new Revision(1L), new SimInstant(1L), site, CauseChain.root(command), observed);
+        return new TransactionRecord(transaction, world, new Revision(1L), new SimInstant(1L), List.of(event));
     }
 }

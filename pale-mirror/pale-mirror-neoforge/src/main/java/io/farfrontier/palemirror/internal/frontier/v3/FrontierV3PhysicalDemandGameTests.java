@@ -36,7 +36,7 @@ public final class FrontierV3PhysicalDemandGameTests {
         helper.assertFalse(helper.getLevel().hasChunkAt(unloaded), "the earlier candidate must remain naturally unloaded; this test may not force-load it");
         var observer = helper.makeMockServerPlayerInLevel();
         observer.setPos(nearby.getX() + 0.5D, nearby.getY(), nearby.getZ() + 0.5D);
-        var selected = FrontierV3SceneExecutor.firstDemandedCandidate(helper.getLevel(),
+        var selected = FrontierV3SceneDemand.firstDemandedCandidate(helper.getLevel(),
                 java.util.List.of(new DemandCandidate("unloaded-first", new BlockPosition(unloaded.getX(), unloaded.getY(), unloaded.getZ())),
                         new DemandCandidate("nearby-second", new BlockPosition(nearby.getX(), nearby.getY(), nearby.getZ()))),
                 DemandCandidate::anchor);

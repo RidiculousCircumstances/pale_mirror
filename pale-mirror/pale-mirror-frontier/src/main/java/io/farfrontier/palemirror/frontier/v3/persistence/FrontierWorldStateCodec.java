@@ -9,7 +9,7 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 154; private static final int MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 159; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -94,6 +94,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, inventory, jobs, serviceWorks, contracts, operations, history,
                     intents, observations, scenes, colony, structureDamage, physicalDeltas, ambient, constructions, maintenances, topology, plans, population, companies, sites, replicaCustody, deferredAftermath, fencedRecovery);
             if (input.available() != 0) throw new IllegalArgumentException("trailing Frontier v3 state bytes");
+            FrontierDomainRelationships.validate(state);
             FrontierDurationProcessDriverRegistry.requireRetainedSceneLeases(state.sceneLeases().values());
             return state;
         } catch (IOException error) { throw new IllegalArgumentException("truncated Frontier v3 state", error); }
@@ -474,7 +475,9 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         for (MarketWorkOrder order : market.workOrders().values().stream().sorted(Comparator.comparing(MarketWorkOrder::id)).toList()) {
             writeString(output, order.id().value()); writeString(output, order.demandId().value()); writeString(output, order.quoteId().value());
             writeString(output, order.sellerId().value()); writeString(output, order.taskId().value()); writeString(output, order.jobId().value()); writeString(output, order.reservationId().value());
-            output.writeLong(order.acceptedTotalPrice().raw()); output.writeByte(order.status().wireTag());
+            output.writeLong(order.acceptedTotalPrice().raw()); output.writeByte(order.status().wireTag()); output.writeBoolean(order.terminalReceipt().isPresent());
+            if (order.terminalReceipt().isPresent()) FrontierMarketRelationCodec.writeTerminalProductionReceipt(output, order.terminalReceipt().orElseThrow());
+            output.writeBoolean(order.relationshipIncident().isPresent()); if (order.relationshipIncident().isPresent()) FrontierMarketRelationCodec.writeRelationshipIncident(output, order.relationshipIncident().orElseThrow());
         }
     }
     private static MarketOrderBook readMarketOrderBook(DataInputStream input, boolean hasMarketOrderJob) throws IOException {
@@ -499,8 +502,10 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             SubjectId id = new SubjectId(readString(input)); SubjectId demand = new SubjectId(readString(input)); SubjectId quote = new SubjectId(readString(input));
             SubjectId seller = new SubjectId(readString(input)); SubjectId task = new SubjectId(readString(input)); SubjectId job = new SubjectId(readString(input)); SubjectId reservation = new SubjectId(readString(input));
             FixedScalar total = new FixedScalar(input.readLong()); int status = input.readUnsignedByte();
+            java.util.Optional<TerminalProductionReceipt> receipt = input.readBoolean() ? java.util.Optional.of(FrontierMarketRelationCodec.readTerminalProductionReceipt(input)) : java.util.Optional.empty();
+            java.util.Optional<RelationshipIncident> incident = input.readBoolean() ? java.util.Optional.of(FrontierMarketRelationCodec.readRelationshipIncident(input)) : java.util.Optional.empty();
             if (status >= MarketWorkOrderStatus.values().length || orders.put(id, new MarketWorkOrder(id, demand, quote, seller, task, job, reservation,
-                    total, FrontierWireTags.require(MarketWorkOrderStatus.class, status))) != null) throw new IllegalArgumentException("invalid or duplicate market work order");
+                    total, FrontierWireTags.require(MarketWorkOrderStatus.class, status), receipt, incident)) != null) throw new IllegalArgumentException("invalid or duplicate market work order");
         }
         return new MarketOrderBook(demands, quotes, orders);
     }

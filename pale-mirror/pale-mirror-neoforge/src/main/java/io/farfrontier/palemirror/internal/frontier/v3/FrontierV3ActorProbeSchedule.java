@@ -4,7 +4,6 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.ChunkPos;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -28,19 +27,14 @@ final class FrontierV3ActorProbeSchedule {
 
     static final class Cursor {
         private final List<SubjectId> actors;
-        private final Map<Long, List<SubjectId>> actorsByChunk;
         private final Map<SubjectId, Long> retainedDemand = new LinkedHashMap<>();
         private int next;
         private int nextDemanded;
 
-        Cursor(List<SubjectId> actors) { this(actors, Map.of()); }
+        Cursor(List<SubjectId> actors) { this.actors = List.copyOf(actors); }
 
         Cursor(FrontierWorldState state) {
-            this(state.actorLocations().keySet().stream().sorted().toList(), index(state));
-        }
-
-        private Cursor(List<SubjectId> actors, Map<Long, List<SubjectId>> actorsByChunk) {
-            this.actors = List.copyOf(actors); this.actorsByChunk = Map.copyOf(actorsByChunk);
+            this(state.actorLocations().keySet().stream().sorted().toList());
         }
 
         List<SubjectId> next(int maximum, int advance) {
@@ -70,19 +64,18 @@ final class FrontierV3ActorProbeSchedule {
         }
 
         private List<SubjectId> demanded(FrontierWorldState state, ServerLevel level) {
-            if (actorsByChunk.isEmpty()) return List.of();
             LinkedHashSet<SubjectId> result = new LinkedHashSet<>();
             for (var player : level.players().stream().filter(value -> !value.isSpectator())
                     .sorted(Comparator.comparing(value -> value.getUUID().toString())).limit(256).toList()) {
                 BlockPos observer = player.blockPosition(); int radius = (FrontierV3SceneDemand.RADIUS_BLOCKS + 15) / 16;
-                for (int chunkX = (observer.getX() >> 4) - radius; chunkX <= (observer.getX() >> 4) + radius; chunkX++) {
-                    for (int chunkZ = (observer.getZ() >> 4) - radius; chunkZ <= (observer.getZ() >> 4) + radius; chunkZ++) {
-                        for (SubjectId actor : actorsByChunk.getOrDefault(ChunkPos.asLong(chunkX, chunkZ), List.of())) {
-                            var location = state.actorLocations().get(actor);
-                            if (location != null && observer.closerThan(new BlockPos(location.body().x(), location.body().y(), location.body().z()),
-                                    FrontierV3SceneDemand.RADIUS_BLOCKS)) result.add(actor);
-                        }
-                    }
+                // COLD legitimately advances exact canonical positions.  The old one-time
+                // bootstrap chunk index therefore made a returned actor invisible to the HOT
+                // scheduler after a lawful COLD interval.  This remains bounded by the fixed
+                // canonical actor inventory, and is deliberately not a loaded-entity scan.
+                for (SubjectId actor : actors) {
+                    var location = state.actorLocations().get(actor);
+                    if (location != null && observer.closerThan(new BlockPos(location.body().x(), location.body().y(), location.body().z()),
+                            FrontierV3SceneDemand.RADIUS_BLOCKS)) result.add(actor);
                 }
             }
             return List.copyOf(result);
@@ -103,16 +96,6 @@ final class FrontierV3ActorProbeSchedule {
                     || state.ambientLeases().get(entry.getKey()).status() == io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus.CLOSED);
             LinkedHashSet<SubjectId> result = new LinkedHashSet<>(demanded); result.addAll(retainedDemand.keySet());
             return List.copyOf(result);
-        }
-
-        private static Map<Long, List<SubjectId>> index(FrontierWorldState state) {
-            Map<Long, List<SubjectId>> index = new LinkedHashMap<>();
-            state.actorLocations().keySet().stream().sorted().forEach(actor -> {
-                var body = state.actorLocations().get(actor).body();
-                index.computeIfAbsent(ChunkPos.asLong(body.x() >> 4, body.z() >> 4), ignored -> new ArrayList<>()).add(actor);
-            });
-            index.replaceAll((ignored, actors) -> List.copyOf(actors));
-            return index;
         }
     }
 }

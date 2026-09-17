@@ -46,7 +46,7 @@ final class FrontierV3SceneBehaviorRegistry {
                     Optional.of(FrontierV3ResourceSiteHarvestSceneExecutor::harvestStandingPosition), "HARVEST_STATION_OBSTRUCTED"),
             new Behavior(SceneCauseKind.PRODUCTION_WORK, FrontierV3ProductionWorkSceneExecutor::tick,
                     (state, lease, attacker, epoch) -> null, false, FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
-                    Optional.empty(), "AWAITING_EXACT_FLOOR"),
+                    Optional.of(FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition), "AWAITING_EXACT_FLOOR"),
             new Behavior(SceneCauseKind.SERVICE_WORK, FrontierV3SettlementServiceWorkSceneExecutor::tick,
                     (state, lease, attacker, epoch) -> null, false, FrontierV3SceneBehaviorRegistry::ordinaryStandingPosition,
                     Optional.empty(), "AWAITING_EXACT_FLOOR"),

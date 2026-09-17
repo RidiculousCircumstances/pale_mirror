@@ -62,20 +62,23 @@ public record PatrolAssembly(Map<SubjectId, Member> members) {
         return new PatrolAssembly(next);
     }
     /**
-     * Advances the retained ingress column as one operation boundary.  A
-     * resident already at its formation cell stays there while every other
-     * resident advances its own immutable pedestrian edge.  The resulting
-     * bodies must remain distinct: no caller can turn an ingress step into a
-     * leader-only teleport.
+     * Advances one deterministic safe retained ingress edge.  Assembly is not
+     * the later inspection column: residents start at independently retained
+     * homes and can share apron cells only after a prior exact body has left.
+     * A one-edge reducer preserves that custody ordering for every approach,
+     * including homes selected from opposite sides of the public apron.
      */
     public PatrolAssembly advanceFormation() {
         if (complete()) throw new IllegalArgumentException("completed patrol assembly cannot advance");
-        Map<SubjectId, Member> next = new LinkedHashMap<>();
-        members.forEach((actor, member) -> next.put(actor, member.arrived() ? member : member.advanceOne()));
-        if (next.values().stream().map(Member::currentBody).distinct().count() != next.size()) {
-            throw new IllegalArgumentException("patrol assembly formation edge overlaps a retained body");
-        }
-        return new PatrolAssembly(next);
+        List<SubjectId> safe = safeAdvances();
+        if (safe.isEmpty()) throw new IllegalArgumentException("patrol assembly formation has no safe retained edge");
+        // The leader's retained destination is beyond the shared Hall port; the scout's is the
+        // port itself.  Letting lexical subject-id order choose the scout first can park it at
+        // that shared terminal and falsely make an otherwise legal ingress look blocked.  Prefer
+        // a safe member whose terminal body is not another member's remaining corridor, falling
+        // back to the stable subject order only when the two paths are independent.
+        SubjectId selected = safe.stream().filter(this::clearsAnotherMembersCorridor).findFirst().orElse(safe.getFirst());
+        return advanceOne(selected);
     }
     public PatrolAssembly advanceCold() {
         PatrolAssembly current = this;
@@ -85,6 +88,13 @@ public record PatrolAssembly(Map<SubjectId, Member> members) {
             current = current.advanceOne(safe.getFirst());
         }
         return current;
+    }
+
+    private boolean clearsAnotherMembersCorridor(SubjectId actor) {
+        Member member = members.get(actor);
+        return members.entrySet().stream().filter(entry -> !entry.getKey().equals(actor))
+                .noneMatch(entry -> entry.getValue().corridor().stream()
+                        .map(BodyPosition::above).anyMatch(member.destinationBody()::equals));
     }
 
     /** One resident's immutable ingress topology and cursor. */

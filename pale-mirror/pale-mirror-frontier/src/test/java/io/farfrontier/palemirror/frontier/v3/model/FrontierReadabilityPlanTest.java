@@ -63,6 +63,30 @@ class FrontierReadabilityPlanTest {
     }
 
     @Test
+    void addedHiveOrganUsesOnlyTheBoundedBoardOverlayAndRetainsTheStaticBoardBaseline() {
+        FrontierWorldState baseline = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:board-dynamic-hive"), 91L));
+        HiveOrgan organ = new HiveOrgan(new SubjectId("organ:board-dynamic-relay"), baseline.bootstrap().hive().id(),
+                new SubjectId("nest:seed-east"), HiveOrganKind.RELAY, new BlockPosition(420, 64, 432), java.util.Optional.empty());
+        FrontierWorldState grown = baseline.addHiveOrgan(organ);
+
+        FrontierReadabilityPlan stableBefore = FrontierReadabilityPlan.compileStableBaseline(baseline);
+        FrontierReadabilityPlan stableAfter = FrontierReadabilityPlan.compileStableBaseline(grown);
+        FrontierReadabilityPlan dynamic = FrontierReadabilityPlan.compileDynamicHiveOverlay(grown, 256 - stableAfter.boards().size());
+        java.util.Map<SubjectId, FrontierObjectBoard> recomposed = new java.util.LinkedHashMap<>(stableAfter.boards());
+        recomposed.putAll(dynamic.boards());
+
+        assertEquals(stableBefore.boards(), stableAfter.boards(),
+                "one grown organ must retain every settlement, route, and bootstrap-hive board");
+        assertEquals(FrontierReadabilityPlan.compile(grown).boards(), java.util.Map.copyOf(recomposed),
+                "the bounded overlay must retain the exact full-plan board grammar");
+        assertTrue(dynamic.boards().containsKey(organ.id()), "the grown organ receives its own current local board");
+        assertTrue(FrontierReadabilityPlan.input(baseline).matchesStableBaseline(FrontierReadabilityPlan.input(grown)),
+                "the board cursor must retain its static baseline across the added-organ transition");
+        assertTrue(!FrontierReadabilityPlan.input(baseline).matchesDynamicHiveOverlay(FrontierReadabilityPlan.input(grown)),
+                "only the bounded dynamic-hive board overlay is invalidated");
+    }
+
+    @Test
     void reportsDamagedAndDisabledObjectsWithoutOpaqueIdentifiers() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:board-condition"), 91L));
         SettlementStructure structure = state.bootstrap().settlements().getFirst().structures().getFirst();
@@ -89,8 +113,12 @@ class FrontierReadabilityPlanTest {
     void makesAConflictedFieldLocallyVisibleAsARepairableWarning() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:field-board-conflict"), 91L));
         ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).values().iterator().next();
-        FrontierWorldState conflicted = state.withResourceSites(state.resourceSites().replace(state.resourceSites().site(site.id()).conflicted(
-                ResourceSiteConflictDisposition.terminal(site.cropSlots().getFirst(), ResourceSiteConflictReason.OBSERVED_MANAGED_CELL_MISMATCH))));
+        ResourceSiteLifecycle lifecycle = state.resourceSites().site(site.id());
+        ResourceSiteConflictObserved conflict = new ResourceSiteConflictObserved(site.id(), site.cropSlots().getFirst(),
+                ResourceSiteConflictReason.OBSERVED_MANAGED_CELL_MISMATCH, ResourceSiteConflictSource.LIFECYCLE_RECONCILIATION);
+        FrontierWorldState conflicted = state.withResourceSites(state.resourceSites().replace(lifecycle.conflicted(
+                ResourceSiteConflictDisposition.terminal(site.cropSlots().getFirst(), ResourceSiteConflictReason.OBSERVED_MANAGED_CELL_MISMATCH,
+                        ResourceSiteConflictIncidents.first(lifecycle, conflict)))));
         FrontierObjectBoard board = FrontierReadabilityPlan.compile(conflicted).boards().get(site.id());
         assertEquals(FrontierObjectBoard.Tone.WARNING, board.tone());
         assertTrue(board.text().endsWith("DAMAGED · REPAIR NEEDED"));

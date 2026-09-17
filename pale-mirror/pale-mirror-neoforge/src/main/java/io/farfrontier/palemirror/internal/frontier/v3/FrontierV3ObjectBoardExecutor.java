@@ -40,14 +40,25 @@ final class FrontierV3ObjectBoardExecutor {
     private FrontierV3ObjectBoardExecutor() { }
 
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
+        // Text displays are player-facing explanation only.  In an empty COLD dimension they
+        // have no observer and no authority over canonical progress, actor custody, or physical
+        // geometry.  Deferring their derived-plan refresh until this exact level has a player
+        // prevents a long COLD fast-forward from repeatedly JIT-compiling presentation work;
+        // the current canonical board is still materialized in place on the first observation.
+        if (level.players().isEmpty()) return;
         io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = runtime.canonicalState().orElse(null);
         if (checkpoint == null) return;
         FrontierWorldState state = runtime.decodedState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         FrontierReadabilityPlan.ReadabilityInput input = FrontierReadabilityPlan.input(state);
         Cursor cursor = CURSORS.get(runtime);
-        if (cursor == null || !cursor.input().equals(input)) {
-            FrontierReadabilityPlan plan = FrontierReadabilityPlan.compile(state);
-            cursor = Cursor.from(input, plan.boards().values().stream().sorted(Comparator.comparing(value -> value.ownerId().value())).toList(), cursor);
+        if (cursor == null || !cursor.input().matchesStableBaseline(input)) {
+            FrontierReadabilityPlan baseline = FrontierReadabilityPlan.compileStableBaseline(state);
+            FrontierReadabilityPlan dynamicHive = FrontierReadabilityPlan.compileDynamicHiveOverlay(state, 256 - baseline.boards().size());
+            cursor = Cursor.from(input, sorted(baseline), sorted(dynamicHive), cursor);
+            CURSORS.put(runtime, cursor);
+        } else if (!cursor.input().matchesDynamicHiveOverlay(input)) {
+            FrontierReadabilityPlan dynamicHive = FrontierReadabilityPlan.compileDynamicHiveOverlay(state, cursor.dynamicHiveCapacity());
+            cursor = cursor.withDynamicHiveOverlay(input, sorted(dynamicHive));
             CURSORS.put(runtime, cursor);
         }
         FrontierV3ObjectBoardLedger ledger = FrontierV3ObjectBoardLedger.get(level);
@@ -55,6 +66,10 @@ final class FrontierV3ObjectBoardExecutor {
     }
 
     static void forget(FrontierV3ServerRuntime<?, ?> runtime) { CURSORS.remove(runtime); }
+
+    private static List<FrontierObjectBoard> sorted(FrontierReadabilityPlan plan) {
+        return plan.boards().values().stream().sorted(Comparator.comparing(value -> value.ownerId().value())).toList();
+    }
 
     static ProjectionResult project(ServerLevel level, FrontierV3ObjectBoardLedger ledger, FrontierObjectBoard board) {
         BlockPos position = position(board);
@@ -169,20 +184,55 @@ final class FrontierV3ObjectBoardExecutor {
      */
     static final class Cursor {
         private final FrontierReadabilityPlan.ReadabilityInput input;
-        private final List<FrontierObjectBoard> boards;
-        private int index;
-        Cursor(FrontierReadabilityPlan.ReadabilityInput input, List<FrontierObjectBoard> boards, int index) { this.input = input; this.boards = boards; this.index = index; }
+        private final List<FrontierObjectBoard> baselineBoards;
+        private final List<FrontierObjectBoard> dynamicHiveBoards;
+        private int baselineIndex;
+        private int dynamicHiveIndex;
+        private boolean baselineNext;
+
+        Cursor(FrontierReadabilityPlan.ReadabilityInput input, List<FrontierObjectBoard> baselineBoards, List<FrontierObjectBoard> dynamicHiveBoards,
+               int baselineIndex, int dynamicHiveIndex, boolean baselineNext) {
+            this.input = input; this.baselineBoards = baselineBoards; this.dynamicHiveBoards = dynamicHiveBoards;
+            this.baselineIndex = baselineIndex; this.dynamicHiveIndex = dynamicHiveIndex; this.baselineNext = baselineNext;
+        }
         static Cursor from(FrontierReadabilityPlan.ReadabilityInput input, List<FrontierObjectBoard> boards, Cursor prior) {
-            int next = prior != null && sameSlots(prior.boards, boards) ? prior.index % Math.max(1, boards.size()) : 0;
-            return new Cursor(input, boards, next);
+            return from(input, boards, List.of(), prior);
+        }
+        static Cursor from(FrontierReadabilityPlan.ReadabilityInput input, List<FrontierObjectBoard> baselineBoards,
+                           List<FrontierObjectBoard> dynamicHiveBoards, Cursor prior) {
+            int baselineIndex = prior != null && sameSlots(prior.baselineBoards, baselineBoards)
+                    ? prior.baselineIndex % Math.max(1, baselineBoards.size()) : 0;
+            int dynamicHiveIndex = prior != null && sameSlots(prior.dynamicHiveBoards, dynamicHiveBoards)
+                    ? prior.dynamicHiveIndex % Math.max(1, dynamicHiveBoards.size()) : 0;
+            return new Cursor(input, baselineBoards, dynamicHiveBoards, baselineIndex, dynamicHiveIndex,
+                    prior == null || prior.baselineNext);
+        }
+        Cursor withDynamicHiveOverlay(FrontierReadabilityPlan.ReadabilityInput input, List<FrontierObjectBoard> dynamicHiveBoards) {
+            int next = sameSlots(this.dynamicHiveBoards, dynamicHiveBoards) ? dynamicHiveIndex % Math.max(1, dynamicHiveBoards.size()) : 0;
+            return new Cursor(input, baselineBoards, dynamicHiveBoards, baselineIndex, next, baselineNext);
         }
         /** Test-only slot-order probe; production cursors always retain an exact readability input. */
         static Cursor from(Revision ignored, List<FrontierObjectBoard> boards, Cursor prior) {
             return from((FrontierReadabilityPlan.ReadabilityInput) null, boards, prior);
         }
         FrontierReadabilityPlan.ReadabilityInput input() { return input; }
-        boolean hasNext() { return !boards.isEmpty(); }
-        FrontierObjectBoard next() { FrontierObjectBoard value = boards.get(index); index = (index + 1) % boards.size(); return value; }
+        int dynamicHiveCapacity() { return 256 - baselineBoards.size(); }
+        boolean hasNext() { return !baselineBoards.isEmpty() || !dynamicHiveBoards.isEmpty(); }
+        FrontierObjectBoard next() {
+            if (baselineBoards.isEmpty()) return nextDynamicHive();
+            if (dynamicHiveBoards.isEmpty()) return nextBaseline();
+            return baselineNext ? nextBaseline() : nextDynamicHive();
+        }
+        private FrontierObjectBoard nextBaseline() {
+            FrontierObjectBoard value = baselineBoards.get(baselineIndex);
+            baselineIndex = (baselineIndex + 1) % baselineBoards.size(); baselineNext = false;
+            return value;
+        }
+        private FrontierObjectBoard nextDynamicHive() {
+            FrontierObjectBoard value = dynamicHiveBoards.get(dynamicHiveIndex);
+            dynamicHiveIndex = (dynamicHiveIndex + 1) % dynamicHiveBoards.size(); baselineNext = true;
+            return value;
+        }
         private static boolean sameSlots(List<FrontierObjectBoard> prior, List<FrontierObjectBoard> next) {
             if (prior.size() != next.size()) return false;
             for (int index = 0; index < prior.size(); index++) {

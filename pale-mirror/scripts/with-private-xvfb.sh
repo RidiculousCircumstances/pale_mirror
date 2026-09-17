@@ -65,7 +65,10 @@ set +e
       printf "private Xvfb GLX admission was rejected\\n" >&2
       exit 1
     fi
-    DISPLAY="$display" LIBGL_ALWAYS_SOFTWARE=1 "$@"
+    # This is an explicit capability bit, not the display value: downstream
+    # runners use it to select the private-Xvfb admission path instead of
+    # attempting to authenticate to the user-visible :0 session.
+    DISPLAY="$display" LIBGL_ALWAYS_SOFTWARE=1 FRONTIER_V3_PILOT_PRIVATE_DISPLAY=true "$@"
   ' bash "$runtime_dir" "$display" "$xvfb_bin" "$python_bin" "$probe" "$@"
 status=$?
 set -e

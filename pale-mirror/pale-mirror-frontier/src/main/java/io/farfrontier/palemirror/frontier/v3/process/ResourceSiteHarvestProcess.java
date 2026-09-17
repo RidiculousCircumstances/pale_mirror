@@ -59,8 +59,18 @@ public final class ResourceSiteHarvestProcess {
             throw new IllegalArgumentException("resource-site harvest task has a foreign field owner");
         }
         if (state.structureConditions().get(site.facilityId()) != StructureCondition.INTACT) return blocked(task);
-        ResidentProfile farmer = FrontierWorldStateSupport.availableFieldResident(state, settlement.id(), ResidentProfession.AGRICULTURAL_WORKER).orElse(null);
+        ResidentProfile farmer = successorFarmer(state, lifecycle, settlement.id());
         if (farmer == null) return blocked(task);
+        // Selecting an idle strategic worker is not enough to take its physical body.  In
+        // particular, an ordinary ambient lease can still be carrying its prior post-work
+        // return goal through restart recovery.  Starting a field cursor from that body would
+        // give COLD and HOT different owners of the same actor.  Keep this durable task pending
+        // and retry its stable start action only after that hand-off is conclusively closed.
+        if (!FrontierSceneAdmission.available(state, List.of(farmer.id()))
+                && !retainsExactSuccessorAmbientHandoff(state, lifecycle, farmer)) {
+            long retryAt = Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval());
+            return List.of(reschedule(action, start(task, retryAt)));
+        }
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
         OptionalInt slot = state.firstFreeContainerSlot(depot); if (slot.isEmpty()) return blocked(task);
         ResourceSiteHarvestJob job = job(state, lifecycle, task, farmer, new InventoryCustody.ContainerSlot(depot, slot.getAsInt()));
@@ -68,6 +78,49 @@ public final class ResourceSiteHarvestProcess {
         long firstColdStep = Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().resourceHarvestTraversalInterval());
         return List.of(transition(task, StrategicTaskStatus.ACTIVE), new ProposedEvent(lifecycle.siteId(), new ResourceSiteHarvestStarted(job)),
                 new ProposedEvent(lifecycle.siteId(), new PhysicalIntentPrepared(intent)), schedule(coldProgress(job, firstColdStep)));
+    }
+
+    /**
+     * Policy chooses a farmer only for the first epoch.  A completed epoch has
+     * already admitted its successor identity in the resource-site lifecycle;
+     * loss of that exact resident is a local blocked task, never permission to
+     * select another currently eligible farmer.
+     */
+    private static ResidentProfile successorFarmer(FrontierWorldState state, ResourceSiteLifecycle lifecycle, SubjectId settlementId) {
+        if (lifecycle.harvestLineage().isEmpty()) {
+            return FrontierWorldStateSupport.availableFieldResident(state, settlementId, ResidentProfession.AGRICULTURAL_WORKER).orElse(null);
+        }
+        SubjectId workerId = lifecycle.harvestLineage().orElseThrow().workerId();
+        ResidentProfile farmer = state.humanPopulation().resident(workerId);
+        if (farmer == null || !farmer.settlementId().equals(settlementId) || farmer.profession() != ResidentProfession.AGRICULTURAL_WORKER
+                || !FrontierWorldStateSupport.workCapable(state, farmer)
+                || !HumanAssignmentProjection.compile(state).idle(workerId)) {
+            return null;
+        }
+        return farmer;
+    }
+
+    /**
+     * A completed field epoch has already retained its one successor worker.  If that exact
+     * worker is visibly HOT at its own terminal return body, the successor job may be declared
+     * so the registered scene can atomically capture that body.  Waiting for CLOSED here would
+     * be circular: the scene candidate does not exist until this job does, while the ambient
+     * actor must remain visible to transfer rather than be discarded and replaced.
+     *
+     * <p>This is not first-epoch policy or generic HOT admission.  It accepts only the
+     * lifecycle-owned successor identity, its exact current hand-off/goal body, and no existing
+     * non-closed scene claim.  COLD still cannot advance until the ordinary scene hand-off has
+     * completed.</p>
+     */
+    private static boolean retainsExactSuccessorAmbientHandoff(FrontierWorldState state, ResourceSiteLifecycle lifecycle,
+                                                               ResidentProfile farmer) {
+        if (lifecycle.harvestLineage().filter(lineage -> lineage.workerId().equals(farmer.id())).isEmpty()) return false;
+        AmbientActorLease lease = state.ambientLeases().get(farmer.id());
+        var location = state.actorLocations().get(farmer.id());
+        if (lease == null || location == null || lease.status() != AmbientLeaseStatus.HOT || lease.goal() != AmbientGoalKind.WORK
+                || !location.body().equals(lease.handoffBody()) || !location.body().equals(lease.goalBody())) return false;
+        return state.sceneLeases().values().stream().noneMatch(scene -> scene.status() != SceneLeaseStatus.CLOSED
+                && scene.members().stream().anyMatch(member -> member.actorId().equals(farmer.id())));
     }
 
     /**
@@ -114,7 +167,12 @@ public final class ResourceSiteHarvestProcess {
      */
     public static List<ProposedEvent> planColdProgress(FrontierWorldState state, ScheduledAction action) {
         ResourceSiteHarvestJob job = activeJob(state, action.subject());
-        if (job == null || !action.id().equals(coldProgress(job, action.dueAt().ticks()).id())) return List.of();
+        // A terminal HOT receipt retires its recurrent continuation by stable schedule identity.
+        // Older/recovered tails can still carry that now-obsolete action, though; consume it as
+        // a bounded no-op rather than treating a completed job as an engine-wide invariant
+        // failure.  A foreign action still has no authority to change this aggregate.
+        if (job == null) return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Consumed(action.id())));
+        if (!action.id().equals(coldProgress(job, action.dueAt().ticks()).id())) return List.of();
         // A player-admitted conflict retains this job only as terminal causal evidence.  Its
         // already-durable COLD action must be consumed without a successor; otherwise a stale
         // scheduler turn could recreate field-work after the sole player disposition.
@@ -310,8 +368,9 @@ public final class ResourceSiteHarvestProcess {
         if (transition.status() != PhysicalIntentStatus.CONFIRMED) return List.of(new ProposedEvent(lifecycle.siteId(), transition));
         if (!job.progress().complete()) throw new IllegalArgumentException("resource-site harvest output cannot complete before every crop is observed");
         ResourceSiteLifecycle next = lifecycle.harvested();
-        return List.of(new ProposedEvent(lifecycle.siteId(), transition), transition(task, StrategicTaskStatus.COMPLETED), new ProposedEvent(lifecycle.siteId(),
-                new ScheduleEffect.Created(ResourceSiteProcess.nextGrowth(next, Math.addExact(now,
+        return List.of(new ProposedEvent(lifecycle.siteId(), transition), transition(task, StrategicTaskStatus.COMPLETED),
+                new ProposedEvent(lifecycle.siteId(), new ScheduleEffect.Cancelled(coldProgress(job, now).id())),
+                new ProposedEvent(lifecycle.siteId(), new ScheduleEffect.Created(ResourceSiteProcess.nextGrowth(next, Math.addExact(now,
                         state.bootstrap().ruleset().cadence().resourceGrowthStageInterval())))));
     }
 

@@ -24,6 +24,9 @@ record FrontierV3AmbientAdmissionDiagnostic(String status, UUID entityId, boolea
         return new FrontierV3AmbientAdmissionDiagnostic("SCENE_OWNED", entityId, false, null, observedPosition, observedExact, tracker.calls(), tracker.impulseCalls());
     }
     static FrontierV3AmbientAdmissionDiagnostic conflict(UUID entityId) { return new FrontierV3AmbientAdmissionDiagnostic("UUID_CONFLICT", entityId, false, null, null, null, 0, 0); }
+    static FrontierV3AmbientAdmissionDiagnostic carrierAmbiguity(UUID entityId, String reason) {
+        return new FrontierV3AmbientAdmissionDiagnostic("CARRIER_" + reason, entityId, false, null, null, null, 0, 0);
+    }
     static FrontierV3AmbientAdmissionDiagnostic pendingUnindexed(UUID entityId, BlockPosition observedPosition, FrontierV3AmbientActorExecutor.ObservedPosition observedExact) {
         return new FrontierV3AmbientAdmissionDiagnostic("PENDING_UNINDEXED", entityId, true, null, observedPosition, observedExact, 0, 0);
     }

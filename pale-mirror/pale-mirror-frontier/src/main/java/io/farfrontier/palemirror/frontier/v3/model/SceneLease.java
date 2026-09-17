@@ -89,6 +89,16 @@ public record SceneLease(SceneLeaseId id, WorldId worldId, SceneCause cause, Blo
         return new SceneLease(id, worldId, cause, handoffPosition, handoffInstant, revision, status, members, positions, ambientHandoffActorIds, recoveryEvidence);
     }
     /**
+     * Before an ambient hand-off is accepted, an unstarted process may compile its first
+     * retained surface from the exact observed body.  Keep the pre-acceptance lease anchor in
+     * lockstep with that durable start; this does not alter an admitted scene's identity,
+     * instant, members, or progress.
+     */
+    public SceneLease withHandoffPosition(BlockPosition position) {
+        return new SceneLease(id, worldId, cause, Objects.requireNonNull(position, "scene lease handoff position"), handoffInstant, revision,
+                status, members, memberPositions, ambientHandoffActorIds, recoveryEvidence);
+    }
+    /**
      * Advances a non-combat HOT logistics scene at the same durable grid checkpoint as its
      * operation.  The lease keeps its identity and body UUIDs; only its current recovery anchor
      * moves, so a return/restart never seeks the caravan at a stale segment origin.

@@ -88,7 +88,7 @@ test('a terminal assertion binds after each composed HOT/COLD lane rather than t
 test('managed player-break receipt has one server-side disposition before physical mutation', async () => {
   const mixin = await readFile(new URL('../../../pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/frontier/v3/mixin/FrontierV3PlayerActionMixin.java', import.meta.url), 'utf8');
   const lifecycle = await readFile(new URL('../../../pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/frontier/v3/FrontierV3ServerLifecycle.java', import.meta.url), 'utf8');
-  const resource = await readFile(new URL('../../../pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/frontier/v3/FrontierV3ResourceSiteExecutor.java', import.meta.url), 'utf8');
+  const resourceConflict = await readFile(new URL('../../../pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/frontier/v3/FrontierV3ResourceSiteConflictExecutor.java', import.meta.url), 'utf8');
   const events = await readFile(new URL('../../../pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/PaleMirrorEvents.java', import.meta.url), 'utf8');
   assert.match(mixin, /@Mixin\(ServerPlayerGameMode\.class\)[\s\S]*@Inject\(method\s*=\s*"handleBlockBreakAction",\s*at\s*=\s*@At\("HEAD"\)[\s\S]*START_DESTROY_BLOCK/,
     'the disposition must run in Minecraft\'s authoritative game-mode boundary, not on Netty');
@@ -98,7 +98,7 @@ test('managed player-break receipt has one server-side disposition before physic
     'the native preflight must distinguish receipt at the game-mode boundary from a missing packet');
   assert.match(events, /PMV3_PLAYER_BREAK boundary=server-left-click disposition=\{\}/,
     'the native preflight must distinguish fallback-event receipt from a missing owner disposition');
-  assert.match(resource, /PMV3_PLAYER_BREAK resource-disposition=\{\} detail=\{\}/,
+  assert.match(resourceConflict, /PMV3_PLAYER_BREAK resource-disposition=\{\} detail=\{\}/,
     'a rejected resource owner must retain the canonical rejection category rather than silently losing a physical action');
   assert.match(mixin, /observePlayerBreakPacket\([\s\S]*PlayerBreakDisposition\.REJECTED[\s\S]*ClientboundBlockUpdatePacket[\s\S]*callback\.cancel\(\)/,
     'a rejected managed receipt must resynchronize and stop vanilla mutation');

@@ -114,6 +114,13 @@ public final class MarketClearingProcess {
         MarketWorkOrder order = state.companies().market().workOrders().get(cancelled.orderId());
         ProductionJob job = state.productionJobs().get(cancelled.jobId());
         if (order == null || job == null || order.status() != MarketWorkOrderStatus.ACCEPTED || !order.jobId().equals(job.id())) {
+            if (order != null && order.status() == MarketWorkOrderStatus.ACCEPTED) {
+                RelationshipIncident incident = new RelationshipIncident(FrontierDomainRelationships.Kind.ORDER_JOB, order.id(), order.id(),
+                        "accepted order -> active job=" + order.jobId().value(), "cancelled job=" + cancelled.jobId().value(),
+                        FrontierDomainRelationships.IncidentReason.STALE_RELATION, FrontierDomainRelationships.Disposition.FAIL_CLOSED_LOCAL,
+                        0L, "trace:market-cancel:" + order.id().value());
+                throw new IllegalArgumentException("relationship incident requires typed event: " + incident.traceCorrelation());
+            }
             throw new IllegalArgumentException("market cancellation must name one accepted active work order");
         }
         MarketDemand demand = state.companies().market().demands().get(order.demandId());
@@ -148,6 +155,11 @@ public final class MarketClearingProcess {
         StrategicPlanState plans = restored.strategicPlans().transitionTask(task.id(), StrategicTaskStatus.BLOCKED);
         return restored.withInventory(inventory).withCompanies(restored.companies().withMarket(restored.companies().market().cancel(order.id(), MarketWorkOrderStatus.CANCELLED)))
                 .withStrategicPlans(plans);
+    }
+    public static FrontierWorldState reduceRelationshipIncident(FrontierWorldState state, SubjectId subject, MarketRelationshipIncidentRecorded recorded) {
+        MarketWorkOrder order = state.companies().market().workOrders().get(recorded.orderId());
+        if (order == null || !subject.equals(order.taskId()) && !subject.equals(order.demandId())) throw new IllegalArgumentException("relationship incident subject is not its order authority");
+        return state.withCompanies(state.companies().withMarket(state.companies().market().relationshipConflict(recorded.orderId(), recorded.incident())));
     }
 
     public static FrontierWorldState reduceExpired(FrontierWorldState state, SubjectId subject, long now, MarketDemandExpired expired) {

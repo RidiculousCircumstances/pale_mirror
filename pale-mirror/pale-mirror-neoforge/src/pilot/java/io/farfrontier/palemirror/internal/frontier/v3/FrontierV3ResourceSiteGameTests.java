@@ -68,7 +68,7 @@ public final class FrontierV3ResourceSiteGameTests {
         ServerLevel level = helper.getLevel(); ResourceSite site = field(fixtureOrigin(helper));
         prepareGrayboxBaseline(level, site);
         helper.runAfterDelay(10, () -> {
-            FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
+            FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.fixture();
             PhysicalIntentId intent = new PhysicalIntentId("intent:site-prepare-resource-site-game-test");
             helper.assertValueEqual(FrontierV3ResourceSiteExecutor.reconcileAfterRestart(level, ledger, site, intent, 3),
                     FrontierV3ResourceSiteExecutor.RestartReconciliation.CONFLICT,
@@ -102,8 +102,8 @@ public final class FrontierV3ResourceSiteGameTests {
                     "a foreign crop change is conflict evidence, never authority to advance or repair the field");
             helper.assertTrue(level.getBlockState(changed).is(Blocks.DIAMOND_BLOCK) && ledger.claim(site.id()).stage() == 3,
                     "a conflict leaves both the player/world block and the last confirmed field stage intact for reconciliation");
-            helper.assertFalse(FrontierV3ResourceSiteExecutor.blocksNativeCropGrowth(level, ledger, site, changed),
-                    "a foreign replacement is not captured by the canonical crop-growth guard");
+            helper.assertTrue(FrontierV3ResourceSiteExecutor.blocksNativeCropGrowth(level, ledger, site, changed),
+                    "an active claim preserves a foreign replacement as local conflict evidence rather than allowing further native mutation");
             helper.succeed();
         });
     }
@@ -113,7 +113,7 @@ public final class FrontierV3ResourceSiteGameTests {
         ServerLevel level = helper.getLevel(); ResourceSite site = field(fixtureOrigin(helper), "site:resource-site-cold-game-test");
         prepareGrayboxBaseline(level, site);
         helper.runAfterDelay(10, () -> {
-            FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
+            FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.fixture();
             helper.assertValueEqual(FrontierV3ResourceSiteExecutor.projectStage(level, ledger, site, 5), FrontierV3ResourceSiteExecutor.StageProjectionResult.UPDATED,
                     "a COLD-completed field may materialize its canonical stage from one neutral unloaded-world baseline");
             helper.assertTrue(FrontierV3ResourceSiteExecutor.matches(level, site, 5) && ledger.claim(site.id()).status() == FrontierV3ResourceSiteLedger.Status.ACTIVE,
@@ -144,7 +144,7 @@ public final class FrontierV3ResourceSiteGameTests {
         ServerLevel level = helper.getLevel(); ResourceSite site = field(fixtureOrigin(helper), "site:resource-site-irrigation-game-test");
         prepareBaseline(level, site);
         helper.runAfterDelay(10, () -> {
-            FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
+            FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.fixture();
             ledger.reserve(site.id(), new PhysicalIntentId("intent:site-irrigation-game-test"));
             helper.assertTrue(FrontierV3ResourceSiteExecutor.placeWholeField(level, site), "the fixture must create the complete irrigated field");
             ledger.activate(site.id()); BlockPos water = minecraft(site.irrigationSlots().getFirst());
@@ -160,7 +160,7 @@ public final class FrontierV3ResourceSiteGameTests {
     public static void externalBlastRetainsOneFieldWitnessAcrossSavedDataReload(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); ResourceSite site = field(fixtureOrigin(helper), "site:resource-site-explosion-game-test"); prepareBaseline(level, site);
         helper.runAfterDelay(10, () -> {
-            FrontierV3ResourceSiteLedger claims = FrontierV3ResourceSiteLedger.get(level);
+            FrontierV3ResourceSiteLedger claims = FrontierV3ResourceSiteLedger.fixture();
             claims.reserve(site.id(), new PhysicalIntentId("intent:site-explosion-game-test"));
             helper.assertTrue(FrontierV3ResourceSiteExecutor.baseline(level, site), "the blast fixture must retain its neutral baseline: " + firstBaselineMismatch(level, site));
             helper.assertTrue(FrontierV3ResourceSiteExecutor.placeWholeField(level, site),

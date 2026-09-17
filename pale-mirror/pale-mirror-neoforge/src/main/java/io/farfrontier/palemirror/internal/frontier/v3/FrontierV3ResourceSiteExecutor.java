@@ -1,6 +1,4 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
-
-import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
 import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
 import io.farfrontier.palemirror.frontier.v3.api.CommandId;
@@ -20,8 +18,8 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSite;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteConflictReason;
-import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteConflictObserved;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestProgress;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteLifecycle;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSitePhase;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSitePreparationObservation;
@@ -30,30 +28,30 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CropBlock;
 import net.minecraft.world.level.block.state.BlockState;
-
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-
-/** Loaded-chunk projection of canonical fields; it never adopts or rewrites a foreign cell. */
 final class FrontierV3ResourceSiteExecutor {
+    private static final int MAX_SITE_PROJECTION_WRITES_PER_TICK = 8;
     private static final Map<FrontierV3ServerRuntime<?, ?>, Integer> STAGE_CURSORS = new IdentityHashMap<>();
-    // Only a process restart may revalidate a previously confirmed field whose
-    // Minecraft chunk did not make it to disk before the canonical receipt.
-    // Normal live drift remains a conflict, never a desired-state repair.
     private static final Map<FrontierV3ServerRuntime<?, ?>, Set<SubjectId>> RECOVERY_SITES = new IdentityHashMap<>();
+    private static final Map<FrontierV3ServerRuntime<?, ?>, Map<SubjectId, FieldProjectionWork>> PROJECTION_WORK = new IdentityHashMap<>();
     enum BlockBreakObservation { UNMANAGED, ACCEPTED, REJECTED }
     enum StageProjectionResult { CURRENT, UPDATED, CONFLICT, DEFERRED }
     enum RestartReconciliation { CURRENT, RECREATED, CONFLICT, DEFERRED }
-    /**
-     * Closed restart ownership classification for one immutable field-slot order.  Do not infer
-     * restart authority from a null claim plus a convenient block pattern: COLD's numeric cursor
-     * and SavedData ownership must agree before a physical prefix can be extended.
-     */
+    enum ConfirmedHarvestRegrowthAdmission {
+        ADMITTED,
+        MISSING_ACTIVE_TERMINAL_CLAIM,
+        LIFECYCLE_NOT_INITIAL_GROWTH,
+        PHYSICAL_RECEIPT_MISMATCH,
+        MISSING_CONFIRMED_RECEIPT
+    }
+    enum LifecycleConflictOrigin { ORDINARY_GROWTH, RESTART_RECONCILIATION }
     enum HarvestRestartPhysicalState {
         UNOBSERVED,
         NEUTRAL_UNCLAIMED,
@@ -62,13 +60,6 @@ final class FrontierV3ResourceSiteExecutor {
         FOREIGN_OR_DAMAGED,
         UNKNOWN
     }
-    /**
-     * The current single-worker wheat plan deliberately projects one stable ordered slot list.
-     * Its scalar completion is interpreted only against that immutable plan identity; it is not
-     * a universal facility model or a promise that a later spatial/multi-worker plan is linear.
-     * A later plan supplies its own typed projection at this boundary instead of reinterpreting
-     * a positional count against changed geometry.
-     */
     record ManagedFacilityProgressProjection(SubjectId facilityId, List<BlockPosition> slotPlan, int completedSlots) {
         ManagedFacilityProgressProjection {
             facilityId = java.util.Objects.requireNonNull(facilityId, "facility id");
@@ -82,11 +73,23 @@ final class FrontierV3ResourceSiteExecutor {
     }
     record HarvestRestartClassification(HarvestRestartPhysicalState state, ManagedFacilityProgressProjection projection,
                                         BlockPosition witness) { }
-
+    private record FieldWrite(BlockPosition position, BlockState state) { }
+    private record FieldProjectionWork(int desiredStage, int completedCropSlots, List<FieldWrite> writes,
+                                       int nextWrite, boolean activatesReservedClaim, boolean restoresHarvestCursor) {
+        FieldProjectionWork {
+            if (desiredStage < 0 || desiredStage > ResourceSiteLifecycle.MATURE_STAGE || completedCropSlots < 0
+                    || nextWrite < 0 || nextWrite > writes.size()) throw new IllegalArgumentException("invalid bounded resource projection work");
+            writes = List.copyOf(writes);
+        }
+        boolean complete() { return nextWrite == writes.size(); }
+        FieldProjectionWork advanced(int count) { return new FieldProjectionWork(desiredStage, completedCropSlots, writes, nextWrite + count,
+                activatesReservedClaim, restoresHarvestCursor); }
+    }
     private FrontierV3ResourceSiteExecutor() { }
-
-    static void forget(FrontierV3ServerRuntime<?, ?> runtime) { STAGE_CURSORS.remove(runtime); RECOVERY_SITES.remove(runtime); }
-
+    static int projectionWriteBudget() { return MAX_SITE_PROJECTION_WRITES_PER_TICK; }
+    static void forget(FrontierV3ServerRuntime<?, ?> runtime) {
+        STAGE_CURSORS.remove(runtime); RECOVERY_SITES.remove(runtime); PROJECTION_WORK.remove(runtime);
+    }
     static void beginRecovery(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         FrontierWorldState state = runtime.decodedState().orElse(null); if (state == null) return;
         Set<SubjectId> pending = state.resourceSites().sites().values().stream()
@@ -94,16 +97,14 @@ final class FrontierV3ResourceSiteExecutor {
                 .collect(java.util.stream.Collectors.toCollection(HashSet::new));
         if (!pending.isEmpty()) RECOVERY_SITES.put(runtime, pending);
     }
-
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return;
         FrontierV3ResourceSitePreparationSelection.nextLoaded(state,
-                site -> loaded(level, site) && FrontierV3GrayboxExecutor.resourceSitePlayerIngressed(runtime, site)).ifPresent(intent -> execute(level, runtime, state, intent));
+                site -> loaded(level, site) && FrontierV3GrayboxExecutor.resourceSiteProjectionDemanded(runtime, level, site)).ifPresent(intent -> execute(level, runtime, state, intent));
         reconcileOneAfterRestart(level, runtime, state);
         projectOneGrowthStage(level, runtime, runtime.decodedState().orElse(state));
     }
-
     static BlockBreakObservation observeBlockBreak(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, ServerLevel level,
                                                    BlockPos position, String cause) {
         FrontierWorldState state = runtime.decodedState().orElse(null);
@@ -117,26 +118,35 @@ final class FrontierV3ResourceSiteExecutor {
         if (claim == null || claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE || !matchesClaim(level, target.site(), claim)) {
             BlockPosition observed = claim == null ? canonical(position)
                     : firstMismatchClaim(level, target.site(), claim).orElse(canonical(position));
-            return recordPlayerConflict(level, runtime, ledger, target.site(), observed, cause)
+            return FrontierV3ResourceSiteConflictExecutor.recordPlayerConflict(level, runtime, ledger, target.site(), observed, cause)
                     ? BlockBreakObservation.ACCEPTED : BlockBreakObservation.REJECTED;
         }
-        return recordPlayerConflict(level, runtime, ledger, target.site(), canonical(position), cause)
+        return FrontierV3ResourceSiteConflictExecutor.recordPlayerConflict(level, runtime, ledger, target.site(), canonical(position), cause)
                 ? BlockBreakObservation.ACCEPTED : BlockBreakObservation.REJECTED;
     }
-
     static boolean blocksNativeCropGrowth(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, ServerLevel level, BlockPos position) {
         FrontierWorldState state = runtime.decodedState().orElse(null); if (state == null) return false;
         Target target = target(state, position); if (target == null || !target.site().cropSlots().contains(canonical(position))) return false;
-        return blocksNativeCropGrowth(level, FrontierV3ResourceSiteLedger.get(level), target.site(), position);
+        FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
+        FrontierV3ResourceSiteLedger.Claim claim = ledger.claim(target.site().id());
+        boolean blocked = blocksNativeCropGrowth(claim, projectionInFlight(runtime, target.site().id()),
+                level.getBlockState(position).equals(crop(claim == null ? 0 : claim.stage())));
+        if (blocked && claim != null && claim.status() == FrontierV3ResourceSiteLedger.Status.ACTIVE
+                && level.getBlockState(position).is(Blocks.WHEAT)) {
+            ledger.recordNativeGrowthFence(target.site().id(), new FrontierV3ResourceSiteLedger.NativeGrowthFence(
+                    "crop-grow-pre", canonical(position), level.getBlockState(position).getValue(CropBlock.AGE), claim.stage()));
+        }
+        return blocked;
     }
-
     static boolean blocksNativeCropGrowth(ServerLevel level, FrontierV3ResourceSiteLedger ledger, ResourceSite site, BlockPos position) {
         FrontierV3ResourceSiteLedger.Claim claim = ledger.claim(site.id());
-        return claim != null && claim.status() == FrontierV3ResourceSiteLedger.Status.ACTIVE && site.cropSlots().contains(canonical(position))
-                && level.getBlockState(position).equals(crop(claim.stage()));
+        return site.cropSlots().contains(canonical(position)) && blocksNativeCropGrowth(claim, false,
+                level.getBlockState(position).equals(crop(claim == null ? 0 : claim.stage())));
     }
-
-    /** Exact partial field state after a retained harvest cursor, never a cosmetic interpolation. */
+    static boolean blocksNativeCropGrowth(FrontierV3ResourceSiteLedger.Claim claim, boolean projectionInFlight,
+                                          boolean matchesRecordedClaimStage) {
+        return projectionInFlight || (claim != null && claim.status() == FrontierV3ResourceSiteLedger.Status.ACTIVE);
+    }
     static boolean matchesHarvestProgress(ServerLevel level, ResourceSite site, int completedCropSlots) {
         ManagedFacilityProgressProjection projection;
         try { projection = harvestProjection(site, completedCropSlots); }
@@ -147,13 +157,11 @@ final class FrontierV3ResourceSiteExecutor {
         }
         return true;
     }
-
     static boolean matchesClaim(ServerLevel level, ResourceSite site, FrontierV3ResourceSiteLedger.Claim claim) {
         return claim.stage() == ResourceSiteLifecycle.MATURE_STAGE && claim.harvestedCropSlots() > 0
                 ? matchesHarvestProgress(level, site, claim.harvestedCropSlots()) : matches(level, site, claim.stage());
     }
-
-    private static Optional<BlockPosition> firstMismatchClaim(ServerLevel level, ResourceSite site, FrontierV3ResourceSiteLedger.Claim claim) {
+    static Optional<BlockPosition> firstMismatchClaim(ServerLevel level, ResourceSite site, FrontierV3ResourceSiteLedger.Claim claim) {
         if (claim.stage() != ResourceSiteLifecycle.MATURE_STAGE || claim.harvestedCropSlots() == 0) return firstMismatch(level, site, claim.stage());
         Optional<BlockPosition> infrastructure = firstInfrastructureMismatch(level, site);
         if (infrastructure.isPresent()) return infrastructure;
@@ -164,66 +172,356 @@ final class FrontierV3ResourceSiteExecutor {
         }
         return Optional.empty();
     }
-
     private static void projectOneGrowthStage(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state) {
         Set<SubjectId> pendingRecovery = RECOVERY_SITES.getOrDefault(runtime, Set.of());
-        List<ResourceSiteLifecycle> candidates = state.resourceSites().sites().values().stream().filter(FrontierV3ResourceSiteExecutor::projectsGrowthStage)
+        Set<SubjectId> inFlight = PROJECTION_WORK.getOrDefault(runtime, Map.of()).keySet();
+        List<ResourceSiteLifecycle> allCandidates = state.resourceSites().sites().values().stream().filter(FrontierV3ResourceSiteExecutor::projectsGrowthStage)
                 .filter(lifecycle -> !pendingRecovery.contains(lifecycle.siteId()))
-                .filter(lifecycle -> FrontierV3GrayboxExecutor.resourceSitePlayerIngressed(runtime,
+                .filter(lifecycle -> FrontierV3GrayboxExecutor.resourceSiteProjectionDemanded(runtime, level,
                         FrontierResourceSitePlan.compile(state.bootstrap()).get(lifecycle.siteId())))
                 .sorted(Comparator.comparing(ResourceSiteLifecycle::siteId)).toList();
+        List<ResourceSiteLifecycle> candidates = inFlight.isEmpty() ? allCandidates
+                : allCandidates.stream().filter(lifecycle -> inFlight.contains(lifecycle.siteId())).toList();
         if (candidates.isEmpty()) return;
         int index = Math.floorMod(STAGE_CURSORS.getOrDefault(runtime, 0), candidates.size());
         STAGE_CURSORS.put(runtime, (index + 1) % candidates.size()); ResourceSiteLifecycle lifecycle = candidates.get(index);
-        ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).get(lifecycle.siteId()); FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
-        FrontierV3ResourceSiteLedger.Claim claim = ledger.claim(site.id());
+        ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).get(lifecycle.siteId());
         ResourceSiteHarvestJob harvest = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
                 .map(ResourceSiteHarvestJob.class::cast).orElse(null);
-        if (harvest != null && harvest.progress().completedCropSlots() > 0 && claim != null
-                && claim.stage() == ResourceSiteLifecycle.MATURE_STAGE
-                && claim.harvestedCropSlots() == harvest.progress().completedCropSlots()) return;
-        StageProjectionResult result = harvest != null && harvest.progress().completedCropSlots() > 0
-                ? projectHarvestProgress(level, ledger, site, harvest.progress().completedCropSlots())
-                : projectStage(level, ledger, site, lifecycle.growthStage());
+        int completed = harvest == null ? 0 : harvest.progress().completedCropSlots();
+        int desiredStage = completed > 0 ? ResourceSiteLifecycle.MATURE_STAGE : lifecycle.growthStage();
+        StageProjectionResult result = projectLifecycleBounded(level, runtime, state, site, desiredStage, completed);
         if (result == StageProjectionResult.CONFLICT) {
+            FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
             FrontierV3ResourceSiteLedger.Claim observedClaim = ledger.claim(site.id()); int observedStage = observedClaim == null ? lifecycle.growthStage() : observedClaim.stage();
-            recordConflict(runtime, ledger, site, firstMismatch(level, site, observedStage).orElse(site.cropSlots().getFirst()),
-                    ResourceSiteConflictReason.OBSERVED_MANAGED_CELL_MISMATCH);
+            FrontierV3ResourceSiteConflictExecutor.recordLifecycleConflict(level, runtime, ledger, site,
+                    firstMismatch(level, site, observedStage).orElse(site.cropSlots().getFirst()),
+                    ResourceSiteConflictReason.OBSERVED_MANAGED_CELL_MISMATCH, LifecycleConflictOrigin.ORDINARY_GROWTH,
+                    confirmedHarvestRegrowthAdmission(level, state, site, desiredStage, completed, observedClaim).name());
         }
     }
-
+    private static StageProjectionResult projectLifecycleBounded(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                                                  FrontierWorldState state, ResourceSite site, int desiredStage, int completedCropSlots) {
+        if (!loaded(level, site)) return StageProjectionResult.DEFERRED;
+        FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
+        Map<SubjectId, FieldProjectionWork> workBySite = PROJECTION_WORK.computeIfAbsent(runtime, ignored -> new HashMap<>());
+        FieldProjectionWork work = workBySite.get(site.id());
+        FrontierV3ResourceSiteLedger.Claim claim = ledger.claim(site.id());
+        if (work == null) {
+            if (claim != null && claim.projection() != null) {
+                work = restoreProjectionWork(site, claim);
+                if (work == null || !matchesProjectionPrefix(level, site, claim, work)) return StageProjectionResult.CONFLICT;
+            } else if (claim == null) {
+                Optional<ResourceSiteHarvestJob> unmaterialized = exactUnmaterializedColdHarvest(level, state, site,
+                        desiredStage, completedCropSlots);
+                if (unmaterialized.isEmpty() && !baseline(level, site)) return StageProjectionResult.CONFLICT;
+                ledger.reserve(site.id(), unmaterialized.map(ResourceSiteHarvestJob::intentId).orElseGet(() -> projectionClaim(site)));
+                work = new FieldProjectionWork(desiredStage, completedCropSlots, initialWrites(site, desiredStage, completedCropSlots), 0, true, false);
+            } else {
+                boolean successorRegrowth = isExactSuccessorRegrowth(state, site, desiredStage, completedCropSlots, claim);
+                boolean terminalPredecessor = isExactTerminalPredecessor(level, state, site, desiredStage, completedCropSlots, claim);
+                boolean confirmedHarvestRegrowth = isExactConfirmedHarvestRegrowth(level, state, site,
+                        desiredStage, completedCropSlots, claim);
+                boolean interruptedStageZero = isExactInterruptedStageZeroProjection(level, state, site, desiredStage, completedCropSlots, claim);
+                boolean uncommittedCurrentHarvest = isExactUncommittedCurrentHarvest(level, state, site, desiredStage, completedCropSlots, claim);
+                if (claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE
+                        || (!successorRegrowth && !terminalPredecessor && !confirmedHarvestRegrowth
+                        && !interruptedStageZero && !uncommittedCurrentHarvest
+                        && !matchesClaim(level, site, claim))) return StageProjectionResult.CONFLICT;
+                if (claim.stage() == desiredStage && claim.harvestedCropSlots() == completedCropSlots) return StageProjectionResult.CURRENT;
+                boolean lawfulRegrowthReset = resetsTerminalHarvestClaim(claim, completedCropSlots,
+                        successorRegrowth, confirmedHarvestRegrowth);
+                if (claim.stage() == ResourceSiteLifecycle.MATURE_STAGE && claim.harvestedCropSlots() > completedCropSlots && !lawfulRegrowthReset) {
+                    if (!successorRegrowth) return StageProjectionResult.CONFLICT;
+                }
+                work = new FieldProjectionWork(desiredStage, completedCropSlots,
+                        transitionWrites(site, claim, desiredStage, completedCropSlots, successorRegrowth), 0, false, successorRegrowth);
+            }
+            if (claim == null || claim.projection() == null) beginProjection(ledger, state, site, work);
+            workBySite.put(site.id(), work);
+        } else if (work.desiredStage() != desiredStage || work.completedCropSlots() != completedCropSlots) {
+        }
+        int written = 0;
+        while (written < MAX_SITE_PROJECTION_WRITES_PER_TICK && !work.complete()) {
+            FieldWrite write = work.writes().get(work.nextWrite());
+            BlockPos position = minecraft(write.position());
+            if (!level.getBlockState(position).equals(write.state()) && !level.setBlock(position, write.state(), 2)) {
+                workBySite.remove(site.id()); return StageProjectionResult.CONFLICT;
+            }
+            if (work.restoresHarvestCursor()) {
+                ledger.restoreOne(site.id(), ledger.claim(site.id()).harvestedCropSlots() - 1);
+            }
+            work = work.advanced(1); ledger.advanceProjection(site.id(), work.nextWrite()); written++;
+        }
+        if (!work.complete()) { workBySite.put(site.id(), work); return StageProjectionResult.DEFERRED; }
+        if (work.activatesReservedClaim()) ledger.activate(site.id());
+        claim = ledger.claim(site.id());
+        if (claim == null || claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE) { workBySite.remove(site.id()); return StageProjectionResult.CONFLICT; }
+        ledger.updateStage(site.id(), work.desiredStage());
+        for (int cursor = ledger.claim(site.id()).harvestedCropSlots(); cursor < work.completedCropSlots(); cursor++) ledger.harvestOne(site.id(), cursor + 1);
+        boolean exact = work.desiredStage() == ResourceSiteLifecycle.MATURE_STAGE
+                ? matchesHarvestProgress(level, site, work.completedCropSlots()) : matches(level, site, work.desiredStage());
+        if (exact) ledger.completeProjection(site.id());
+        workBySite.remove(site.id());
+        return exact ? StageProjectionResult.UPDATED : StageProjectionResult.CONFLICT;
+    }
+    private static List<FieldWrite> initialWrites(ResourceSite site, int desiredStage, int completedCropSlots) {
+        List<FieldWrite> writes = new java.util.ArrayList<>();
+        site.irrigationSlots().forEach(position -> writes.add(new FieldWrite(position, Blocks.WATER.defaultBlockState())));
+        site.soilSlots().forEach(position -> writes.add(new FieldWrite(position, Blocks.FARMLAND.defaultBlockState())));
+        for (int index = 0; index < site.cropSlots().size(); index++) writes.add(new FieldWrite(site.cropSlots().get(index),
+                desiredStage == ResourceSiteLifecycle.MATURE_STAGE && index < completedCropSlots ? Blocks.AIR.defaultBlockState() : crop(desiredStage)));
+        return List.copyOf(writes);
+    }
+    private static void beginProjection(FrontierV3ResourceSiteLedger ledger, FrontierWorldState state, ResourceSite site,
+                                        FieldProjectionWork work) {
+        FrontierV3ResourceSiteLedger.Claim claim = ledger.claim(site.id());
+        if (claim == null) throw new IllegalStateException("v3 resource site projection has no reservation");
+        FrontierV3ResourceSiteLedger.ProjectionMode mode = work.activatesReservedClaim()
+                ? FrontierV3ResourceSiteLedger.ProjectionMode.INITIAL
+                : work.restoresHarvestCursor() ? FrontierV3ResourceSiteLedger.ProjectionMode.SUCCESSOR_RESTORE
+                : FrontierV3ResourceSiteLedger.ProjectionMode.ADVANCE;
+        ledger.beginProjection(site.id(), new FrontierV3ResourceSiteLedger.ProjectionTransition(
+                projectionSource(state, site), claim.stage(), claim.harvestedCropSlots(), work.desiredStage(),
+                work.completedCropSlots(), work.nextWrite(), work.writes().size(), mode));
+    }
+    private static FieldProjectionWork restoreProjectionWork(ResourceSite site, FrontierV3ResourceSiteLedger.Claim claim) {
+        FrontierV3ResourceSiteLedger.ProjectionTransition projection = claim.projection();
+        FrontierV3ResourceSiteLedger.Claim origin = new FrontierV3ResourceSiteLedger.Claim(claim.intentId(), claim.status(),
+                projection.fromStage(), projection.fromHarvestedCropSlots());
+        List<FieldWrite> writes = switch (projection.mode()) {
+            case INITIAL -> initialWrites(site, projection.targetStage(), projection.targetHarvestedCropSlots());
+            case ADVANCE -> transitionWrites(site, origin, projection.targetStage(), projection.targetHarvestedCropSlots(), false);
+            case SUCCESSOR_RESTORE -> transitionWrites(site, origin, projection.targetStage(), projection.targetHarvestedCropSlots(), true);
+        };
+        if (writes.size() != projection.writeCount()) return null;
+        return new FieldProjectionWork(projection.targetStage(), projection.targetHarvestedCropSlots(), writes,
+                projection.nextWrite(), projection.mode() == FrontierV3ResourceSiteLedger.ProjectionMode.INITIAL,
+                projection.mode() == FrontierV3ResourceSiteLedger.ProjectionMode.SUCCESSOR_RESTORE);
+    }
+    private static boolean matchesProjectionPrefix(ServerLevel level, ResourceSite site, FrontierV3ResourceSiteLedger.Claim claim,
+                                                   FieldProjectionWork work) {
+        Map<BlockPosition, BlockState> committed = new HashMap<>();
+        for (int index = 0; index < work.nextWrite(); index++) {
+            FieldWrite write = work.writes().get(index); committed.put(write.position(), write.state());
+        }
+        for (BlockPosition slot : site.managedSlots()) {
+            BlockState expected = committed.get(slot);
+            if (expected == null) {
+                if (work.activatesReservedClaim()) expected = Blocks.AIR.defaultBlockState();
+                else expected = expectedClaimBlock(site, claim.projection(), slot);
+            }
+            if (!level.getBlockState(minecraft(slot)).equals(expected)) return false;
+        }
+        return true;
+    }
+    private static BlockState expectedClaimBlock(ResourceSite site, FrontierV3ResourceSiteLedger.ProjectionTransition projection,
+                                                 BlockPosition slot) {
+        if (site.irrigationSlots().contains(slot)) return Blocks.WATER.defaultBlockState();
+        if (site.soilSlots().contains(slot)) return Blocks.FARMLAND.defaultBlockState();
+        int index = site.cropSlots().indexOf(slot);
+        if (index < 0) throw new IllegalArgumentException("unmanaged projection slot");
+        return projection.fromStage() == ResourceSiteLifecycle.MATURE_STAGE && index < projection.fromHarvestedCropSlots()
+                ? Blocks.AIR.defaultBlockState() : crop(projection.fromStage());
+    }
+    private static String projectionSource(FrontierWorldState state, ResourceSite site) {
+        ResourceSiteLifecycle lifecycle = state.resourceSites().site(site.id());
+        return lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
+                .map(job -> job.id().value()).orElse("growth:" + site.id().value() + ":e" + lifecycle.growthEpoch());
+    }
+    private static List<FieldWrite> transitionWrites(ResourceSite site, FrontierV3ResourceSiteLedger.Claim claim,
+                                                     int desiredStage, int completedCropSlots, boolean successorRegrowth) {
+        List<FieldWrite> writes = new java.util.ArrayList<>();
+        if (claim.stage() != desiredStage) {
+            for (int index = 0; index < site.cropSlots().size(); index++) writes.add(new FieldWrite(site.cropSlots().get(index),
+                    desiredStage == ResourceSiteLifecycle.MATURE_STAGE && index < completedCropSlots ? Blocks.AIR.defaultBlockState() : crop(desiredStage)));
+        } else if (desiredStage == ResourceSiteLifecycle.MATURE_STAGE) {
+            if (successorRegrowth) {
+                int restore = successorRegrowthRestoreSlots(claim.harvestedCropSlots(), completedCropSlots);
+                for (int index = claim.harvestedCropSlots() - 1; index >= claim.harvestedCropSlots() - restore; index--) {
+                    writes.add(new FieldWrite(site.cropSlots().get(index), crop(ResourceSiteLifecycle.MATURE_STAGE)));
+                }
+            } else for (int index = claim.harvestedCropSlots(); index < completedCropSlots; index++)
+                writes.add(new FieldWrite(site.cropSlots().get(index), Blocks.AIR.defaultBlockState()));
+        }
+        return List.copyOf(writes);
+    }
+    static int successorRegrowthRestoreSlots(int predecessorHarvestedCropSlots, int successorCompletedCropSlots) {
+        if (predecessorHarvestedCropSlots < 0 || predecessorHarvestedCropSlots > ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS
+                || successorCompletedCropSlots < 0 || successorCompletedCropSlots > predecessorHarvestedCropSlots) {
+            throw new IllegalArgumentException("successor regrowth cursor is invalid");
+        }
+        return predecessorHarvestedCropSlots - successorCompletedCropSlots;
+    }
+    static boolean resetsTerminalHarvestClaim(FrontierV3ResourceSiteLedger.Claim claim, int completedCropSlots,
+                                              boolean successorRegrowth, boolean confirmedHarvestRegrowth) {
+        return claim.stage() == ResourceSiteLifecycle.MATURE_STAGE
+                && claim.harvestedCropSlots() == ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS
+                && claim.harvestedCropSlots() > completedCropSlots
+                && (successorRegrowth || confirmedHarvestRegrowth);
+    }
+    static boolean allowsOwnedStageCatchUp(FrontierV3ResourceSiteLedger.Claim claim, int desiredStage,
+                                           int completedCropSlots) {
+        return claim != null && claim.status() == FrontierV3ResourceSiteLedger.Status.ACTIVE
+                && claim.harvestedCropSlots() == 0 && completedCropSlots == 0
+                && claim.stage() >= 0 && claim.stage() < desiredStage
+                && desiredStage <= ResourceSiteLifecycle.MATURE_STAGE;
+    }
+    private static String claimPhysicalState(ServerLevel level, FrontierV3ResourceSiteLedger ledger, ResourceSite site, FrontierV3ResourceSiteLedger.Claim claim) {
+        String physical;
+        if (claim == null) physical = "MISSING_CLAIM";
+        else if (matchesClaim(level, site, claim)) physical = "EXACT_CLAIM";
+        else if (baseline(level, site)) physical = "NEUTRAL_BASELINE";
+        else if (matchesHarvestProgress(level, site, ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS)) physical = "TERMINAL_HARVEST_RECEIPT";
+        else {
+            physical = null;
+            for (int stage = 0; stage <= ResourceSiteLifecycle.MATURE_STAGE; stage++) {
+                if (matches(level, site, stage)) { physical = "COMPLETE_STAGE_" + stage; break; }
+            }
+            if (physical == null) physical = "FOREIGN_OR_DAMAGED_" + cropSurface(level, site);
+        }
+        FrontierV3ResourceSiteLedger.NativeGrowthFence fence = ledger.nativeGrowthFence(site.id());
+        return physical + "_NATIVE_FENCE_" + (fence == null ? "NOT_OBSERVED" : fence.source() + "_A" + fence.observedAge()
+                + "_S" + fence.claimStage() + "_P" + fence.position().x() + "_" + fence.position().y() + "_" + fence.position().z());
+    }
+    private static String cropSurface(ServerLevel level, ResourceSite site) {
+        if (!matchesInfrastructure(level, site)) return "INFRASTRUCTURE_MISMATCH";
+        int[] ages = new int[ResourceSiteLifecycle.MATURE_STAGE + 1]; int air = 0; int other = 0;
+        for (BlockPosition slot : site.cropSlots()) {
+            BlockState observed = level.getBlockState(minecraft(slot));
+            if (observed.isAir()) air++;
+            else if (observed.is(Blocks.WHEAT)) ages[observed.getValue(CropBlock.AGE)]++;
+            else other++;
+        }
+        StringBuilder surface = new StringBuilder("CROPS");
+        for (int age = 0; age < ages.length; age++) surface.append("_A").append(age).append('_').append(ages[age]);
+        return surface.append("_AIR_").append(air).append("_OTHER_").append(other).toString();
+    }
+    private static boolean isExactSuccessorRegrowth(FrontierWorldState state, ResourceSite site, int desiredStage,
+                                                    int completedCropSlots, FrontierV3ResourceSiteLedger.Claim claim) {
+        if (claim == null || desiredStage != ResourceSiteLifecycle.MATURE_STAGE
+                || claim.stage() != ResourceSiteLifecycle.MATURE_STAGE
+                || claim.harvestedCropSlots() <= completedCropSlots) return false;
+        ResourceSiteLifecycle lifecycle = state.resourceSites().site(site.id());
+        return lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
+                .map(ResourceSiteHarvestJob.class::cast)
+                .map(job -> job.progress().completedCropSlots() == completedCropSlots).orElse(false);
+    }
+    private static boolean isExactTerminalPredecessor(ServerLevel level, FrontierWorldState state, ResourceSite site,
+                                                      int desiredStage, int completedCropSlots, FrontierV3ResourceSiteLedger.Claim claim) {
+        if (claim == null || claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE
+                || desiredStage != ResourceSiteLifecycle.MATURE_STAGE || completedCropSlots <= 0
+                || !matchesHarvestProgress(level, site, ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS)) return false;
+        return state.resourceSites().site(site.id()).activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
+                .map(ResourceSiteHarvestJob.class::cast)
+                .map(job -> job.progress().completedCropSlots() == completedCropSlots).orElse(false);
+    }
+    private static boolean isExactConfirmedHarvestRegrowth(ServerLevel level, FrontierWorldState state, ResourceSite site,
+                                                           int desiredStage, int completedCropSlots,
+                                                           FrontierV3ResourceSiteLedger.Claim claim) {
+        return confirmedHarvestRegrowthAdmission(level, state, site, desiredStage, completedCropSlots, claim)
+                == ConfirmedHarvestRegrowthAdmission.ADMITTED;
+    }
+    private static ConfirmedHarvestRegrowthAdmission confirmedHarvestRegrowthAdmission(ServerLevel level, FrontierWorldState state,
+                                                                                         ResourceSite site, int desiredStage,
+                                                                                         int completedCropSlots,
+                                                                                         FrontierV3ResourceSiteLedger.Claim claim) {
+        ResourceSiteLifecycle lifecycle = state.resourceSites().site(site.id());
+        boolean confirmedReceipt = hasConfirmedHarvestReceipt(state, site.id());
+        return classifyConfirmedHarvestRegrowth(claim, lifecycle, desiredStage, completedCropSlots,
+                matchesHarvestProgress(level, site, ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS), confirmedReceipt);
+    }
+    private static boolean hasConfirmedHarvestReceipt(FrontierWorldState state, SubjectId siteId) {
+        return state.physicalIntents().values().stream().anyMatch(intent -> intent.kind() == PhysicalIntentKind.RESOURCE_SITE_HARVEST
+                && intent.status() == PhysicalIntentStatus.CONFIRMED && intent.causeSubjectId().equals(siteId));
+    }
+    static ConfirmedHarvestRegrowthAdmission classifyConfirmedHarvestRegrowth(FrontierV3ResourceSiteLedger.Claim claim,
+                                                                                ResourceSiteLifecycle lifecycle,
+                                                                                int desiredStage, int completedCropSlots,
+                                                                                boolean exactTerminalPhysicalReceipt,
+                                                                                boolean confirmedHarvestReceipt) {
+        if (claim == null || claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE
+                || claim.stage() != ResourceSiteLifecycle.MATURE_STAGE
+                || claim.harvestedCropSlots() != ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS) {
+            return ConfirmedHarvestRegrowthAdmission.MISSING_ACTIVE_TERMINAL_CLAIM;
+        }
+        if (lifecycle.phase() != ResourceSitePhase.GROWING || desiredStage != lifecycle.growthStage() || completedCropSlots != 0) {
+            return ConfirmedHarvestRegrowthAdmission.LIFECYCLE_NOT_INITIAL_GROWTH;
+        }
+        if (!exactTerminalPhysicalReceipt) return ConfirmedHarvestRegrowthAdmission.PHYSICAL_RECEIPT_MISMATCH;
+        return confirmedHarvestReceipt ? ConfirmedHarvestRegrowthAdmission.ADMITTED
+                : ConfirmedHarvestRegrowthAdmission.MISSING_CONFIRMED_RECEIPT;
+    }
+    private static boolean isExactInterruptedStageZeroProjection(ServerLevel level, FrontierWorldState state, ResourceSite site,
+                                                                 int desiredStage, int completedCropSlots,
+                                                                 FrontierV3ResourceSiteLedger.Claim claim) {
+        if (claim == null || claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE || claim.stage() != 0
+                || desiredStage != ResourceSiteLifecycle.MATURE_STAGE || completedCropSlots <= 0
+                || !matchesInfrastructure(level, site)) return false;
+        boolean reachedAirSuffix = false;
+        for (BlockPosition crop : site.cropSlots()) {
+            BlockState observed = level.getBlockState(minecraft(crop));
+            if (observed.equals(crop(0))) {
+                if (reachedAirSuffix) return false;
+            } else if (observed.isAir()) reachedAirSuffix = true;
+            else return false;
+        }
+        return state.resourceSites().site(site.id()).activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
+                .map(ResourceSiteHarvestJob.class::cast)
+                .map(job -> job.progress().completedCropSlots() == completedCropSlots).orElse(false);
+    }
+    private static boolean isExactUncommittedCurrentHarvest(ServerLevel level, FrontierWorldState state, ResourceSite site,
+                                                            int desiredStage, int completedCropSlots,
+                                                            FrontierV3ResourceSiteLedger.Claim claim) {
+        if (claim == null || claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE
+                ) return false;
+        return exactCurrentHarvestJob(level, state, site, desiredStage, completedCropSlots).isPresent();
+    }
+    private static Optional<ResourceSiteHarvestJob> exactCurrentHarvestJob(ServerLevel level, FrontierWorldState state, ResourceSite site,
+                                                                             int desiredStage, int completedCropSlots) {
+        if (desiredStage != ResourceSiteLifecycle.MATURE_STAGE || completedCropSlots <= 0
+                || !matchesHarvestProgress(level, site, completedCropSlots)) return Optional.empty();
+        return namedCurrentHarvestJob(state, site, desiredStage, completedCropSlots);
+    }
+    private static Optional<ResourceSiteHarvestJob> namedCurrentHarvestJob(FrontierWorldState state, ResourceSite site,
+                                                                            int desiredStage, int completedCropSlots) {
+        if (desiredStage != ResourceSiteLifecycle.MATURE_STAGE || completedCropSlots <= 0) return Optional.empty();
+        return state.resourceSites().site(site.id()).activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
+                .map(ResourceSiteHarvestJob.class::cast)
+                .filter(job -> job.progress().completedCropSlots() == completedCropSlots);
+    }
+    private static Optional<ResourceSiteHarvestJob> exactUnmaterializedColdHarvest(ServerLevel level, FrontierWorldState state,
+                                                                                     ResourceSite site, int desiredStage,
+                                                                                     int completedCropSlots) {
+        if (!blankManagedSurface(level, site)) return Optional.empty();
+        return namedCurrentHarvestJob(state, site, desiredStage, completedCropSlots).filter(job -> {
+            PhysicalIntent intent = state.physicalIntents().get(job.intentId());
+            return intent != null && intent.kind() == PhysicalIntentKind.RESOURCE_SITE_HARVEST
+                    && intent.status() == PhysicalIntentStatus.PREPARED && intent.causeSubjectId().equals(site.id())
+                    && intent.subjectIds().equals(List.of(site.id(), job.id(), job.workerId(), job.outputItemId()));
+        });
+    }
+    private static boolean blankManagedSurface(ServerLevel level, ResourceSite site) {
+        return loaded(level, site) && site.managedSlots().stream().allMatch(slot -> level.getBlockState(minecraft(slot)).isAir());
+    }
     static StageProjectionResult projectStage(ServerLevel level, FrontierV3ResourceSiteLedger ledger, ResourceSite site, int desiredStage) {
         if (desiredStage < 0 || desiredStage > 7) throw new IllegalArgumentException("resource-site crop stage is invalid");
         if (!loaded(level, site)) return StageProjectionResult.DEFERRED;
         FrontierV3ResourceSiteLedger.Claim claim = ledger.claim(site.id());
         boolean wroteNeutralBaseline = false;
         if (claim == null) {
-            // A COLD-completed field has a durable canonical stage but no historical Minecraft
-            // effect to inspect.  A neutral footprint is the only safe admission proof: claim
-            // and project it once; any player/world content remains a visible conflict.
             if (!baseline(level, site)) return StageProjectionResult.CONFLICT;
             ledger.reserve(site.id(), projectionClaim(site));
-            if (!placeWholeField(level, site)) { ledger.conflict(site.id()); return StageProjectionResult.CONFLICT; }
+            if (!placeWholeField(level, site)) return StageProjectionResult.CONFLICT;
             ledger.activate(site.id()); claim = ledger.claim(site.id()); wroteNeutralBaseline = true;
         }
         if (claim == null || claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE) return StageProjectionResult.CONFLICT;
-        // `placeWholeField` has just checked the complete neutral projection in this same
-        // server turn. Re-interpreting that owned write as foreign drift creates a false
-        // conflict without an intervening world observation. Established claims still must
-        // match their exact physical stage/cursor before any later desired-state write.
         if (!wroteNeutralBaseline && !matchesClaim(level, site, claim)) return StageProjectionResult.CONFLICT;
         if (claim.stage() == desiredStage) return StageProjectionResult.CURRENT;
         for (BlockPosition crop : site.cropSlots()) level.setBlock(minecraft(crop), crop(desiredStage), 3);
         if (!matches(level, site, desiredStage)) return StageProjectionResult.CONFLICT;
         ledger.updateStage(site.id(), desiredStage); return StageProjectionResult.UPDATED;
     }
-
-    /**
-     * Materializes the already-durable COLD harvest cursor only after its field is naturally
-     * loaded.  The COLD driver never touches this level; this single physical owner first proves
-     * its existing claim/baseline, then applies only the exact missing prefix.  A later arrival
-     * therefore sees the current next crop rather than a freshly recreated crop-0 field.
-     */
     static StageProjectionResult projectHarvestProgress(ServerLevel level, FrontierV3ResourceSiteLedger ledger, ResourceSite site, int completedCropSlots) {
         ManagedFacilityProgressProjection projection = harvestProjection(site, completedCropSlots);
         if (!loaded(level, site)) return StageProjectionResult.DEFERRED;
@@ -242,20 +540,10 @@ final class FrontierV3ResourceSiteExecutor {
         }
         return StageProjectionResult.UPDATED;
     }
-
-    /**
-     * Reconciles only one confirmed field after a server restart.  A complete
-     * neutral baseline proves that no physical field survived, so recreating
-     * the exact owned field is safe.  Any partial or foreign state remains
-     * untouched and becomes an explicit canonical conflict.
-     */
     static RestartReconciliation reconcileAfterRestart(ServerLevel level, FrontierV3ResourceSiteLedger ledger, ResourceSite site,
                                                         PhysicalIntentId intentId, int desiredStage) {
         if (!loaded(level, site)) return RestartReconciliation.DEFERRED;
         FrontierV3ResourceSiteLedger.Claim claim = ledger.claim(site.id());
-        // A neutral footprint alone proves only that it is currently safe to
-        // inspect.  Recreating it needs the separate durable proof that this
-        // exact intent had already confirmed ownership before the crash.
         if (claim == null || !ownsRestartClaim(claim.intentId(), site, intentId) || claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE) {
             return RestartReconciliation.CONFLICT;
         }
@@ -270,55 +558,106 @@ final class FrontierV3ResourceSiteExecutor {
         return projected == StageProjectionResult.CURRENT || projected == StageProjectionResult.UPDATED
                 ? RestartReconciliation.RECREATED : RestartReconciliation.CONFLICT;
     }
-
     private static void reconcileOneAfterRestart(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state) {
         Set<SubjectId> pending = RECOVERY_SITES.get(runtime); if (pending == null || pending.isEmpty()) return;
         for (SubjectId siteId : pending.stream().sorted().toList()) {
             ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).get(siteId);
             ResourceSiteLifecycle lifecycle = state.resourceSites().site(siteId);
-            if (site == null || !loaded(level, site) || !FrontierV3GrayboxExecutor.resourceSitePlayerIngressed(runtime, site)) continue;
+            if (site == null || !loaded(level, site) || !FrontierV3GrayboxExecutor.resourceSiteProjectionDemanded(runtime, level, site)) continue;
             PhysicalIntent intent = state.physicalIntents().values().stream().filter(candidate -> candidate.kind() == PhysicalIntentKind.RESOURCE_SITE_PREPARATION
                     && candidate.status() == PhysicalIntentStatus.CONFIRMED && candidate.causeSubjectId().equals(siteId)).findFirst().orElse(null);
             RestartReconciliation result;
             ResourceSiteHarvestJob harvest = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
                     .map(ResourceSiteHarvestJob.class::cast).orElse(null);
             if (harvest != null && harvest.progress().completedCropSlots() > 0) {
-                result = reconcileHarvestAfterRestart(level, FrontierV3ResourceSiteLedger.get(level), site, intent, harvest.progress().completedCropSlots());
+                FrontierV3ResourceSiteLedger.Claim claim = FrontierV3ResourceSiteLedger.get(level).claim(site.id());
+                Optional<ResourceSiteHarvestJob> unmaterialized = exactUnmaterializedColdHarvest(level, state, site,
+                        ResourceSiteLifecycle.MATURE_STAGE, harvest.progress().completedCropSlots());
+                if (claim != null && claim.projection() != null) {
+                    result = boundedRestartProjection(level, runtime, state, site,
+                            ResourceSiteLifecycle.MATURE_STAGE, harvest.progress().completedCropSlots());
+                } else if (isExactSuccessorRegrowth(state, site, ResourceSiteLifecycle.MATURE_STAGE,
+                        harvest.progress().completedCropSlots(), claim)
+                        || isExactTerminalPredecessor(level, state, site, ResourceSiteLifecycle.MATURE_STAGE,
+                                harvest.progress().completedCropSlots(), claim)
+                        || isExactInterruptedStageZeroProjection(level, state, site, ResourceSiteLifecycle.MATURE_STAGE,
+                                harvest.progress().completedCropSlots(), claim)
+                        || isExactUncommittedCurrentHarvest(level, state, site, ResourceSiteLifecycle.MATURE_STAGE,
+                                harvest.progress().completedCropSlots(), claim)
+                        || unmaterialized.isPresent()) {
+                    result = boundedRestartProjection(level, runtime, state, site,
+                            ResourceSiteLifecycle.MATURE_STAGE, harvest.progress().completedCropSlots());
+                } else if (projectionInFlight(runtime, site.id())) {
+                    result = boundedRestartProjection(level, runtime, state, site,
+                            ResourceSiteLifecycle.MATURE_STAGE, harvest.progress().completedCropSlots());
+                } else {
+                    HarvestRestartClassification classification = classifyHarvestRestart(level, FrontierV3ResourceSiteLedger.get(level), site, intent,
+                            harvest.progress().completedCropSlots());
+                    result = switch (classification.state()) {
+                        case UNOBSERVED -> RestartReconciliation.DEFERRED;
+                        case OWNED_EXACT -> RestartReconciliation.CURRENT;
+                        case OWNED_BEHIND -> boundedRestartProjection(level, runtime, state, site,
+                                ResourceSiteLifecycle.MATURE_STAGE, harvest.progress().completedCropSlots());
+                        case NEUTRAL_UNCLAIMED -> intent == null ? RestartReconciliation.CONFLICT
+                                : boundedRestartProjection(level, runtime, state, site,
+                                        ResourceSiteLifecycle.MATURE_STAGE, harvest.progress().completedCropSlots());
+                        case FOREIGN_OR_DAMAGED, UNKNOWN -> RestartReconciliation.CONFLICT;
+                    };
+                }
+            } else if (harvest != null && isExactSuccessorRegrowth(state, site, lifecycle.growthStage(), 0,
+                    FrontierV3ResourceSiteLedger.get(level).claim(site.id()))) {
+                result = boundedRestartProjection(level, runtime, state, site, lifecycle.growthStage(), 0);
+            } else if (isExactConfirmedHarvestRegrowth(level, state, site, lifecycle.growthStage(), 0,
+                    FrontierV3ResourceSiteLedger.get(level).claim(site.id()))) {
+                result = boundedRestartProjection(level, runtime, state, site, lifecycle.growthStage(), 0);
+            } else if (allowsOwnedStageCatchUp(FrontierV3ResourceSiteLedger.get(level).claim(site.id()),
+                    lifecycle.growthStage(), 0)
+                    && matchesClaim(level, site, FrontierV3ResourceSiteLedger.get(level).claim(site.id()))) {
+                result = boundedRestartProjection(level, runtime, state, site, lifecycle.growthStage(), 0);
             } else if (intent == null) {
-                StageProjectionResult projection = projectStage(level, FrontierV3ResourceSiteLedger.get(level), site, lifecycle.growthStage());
-                result = projection == StageProjectionResult.CONFLICT ? RestartReconciliation.CONFLICT
-                        : projection == StageProjectionResult.DEFERRED ? RestartReconciliation.DEFERRED : RestartReconciliation.CURRENT;
+                result = boundedRestartProjection(level, runtime, state, site, lifecycle.growthStage(), 0);
             } else result = reconcileAfterRestart(level, FrontierV3ResourceSiteLedger.get(level), site, intent.id(), lifecycle.growthStage());
-            pending.remove(siteId);
+            if (result != RestartReconciliation.DEFERRED) pending.remove(siteId);
             if (result == RestartReconciliation.CONFLICT) {
-                FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level); ledger.conflict(siteId);
-                recordConflict(runtime, ledger, site, firstMismatch(level, site, lifecycle.growthStage()).orElse(site.cropSlots().getFirst()),
-                        ResourceSiteConflictReason.OBSERVED_MANAGED_CELL_MISMATCH);
+                FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
+                FrontierV3ResourceSiteLedger.Claim claim = ledger.claim(site.id());
+                FrontierV3ResourceSiteConflictExecutor.recordLifecycleConflict(level, runtime, ledger, site,
+                        firstMismatch(level, site, lifecycle.growthStage()).orElse(site.cropSlots().getFirst()),
+                        ResourceSiteConflictReason.OBSERVED_MANAGED_CELL_MISMATCH, LifecycleConflictOrigin.RESTART_RECONCILIATION,
+                        "NOT_EVALUATED", claimPhysicalState(level, ledger, site, claim));
             }
             if (pending.isEmpty()) RECOVERY_SITES.remove(runtime);
             return;
         }
     }
-
+    private static RestartReconciliation boundedRestartProjection(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                                                   FrontierWorldState state, ResourceSite site, int desiredStage, int completedCropSlots) {
+        StageProjectionResult projection = projectLifecycleBounded(level, runtime, state, site, desiredStage, completedCropSlots);
+        return projection == StageProjectionResult.CONFLICT ? RestartReconciliation.CONFLICT
+                : projection == StageProjectionResult.DEFERRED ? RestartReconciliation.DEFERRED : RestartReconciliation.CURRENT;
+    }
+    private static boolean projectionInFlight(FrontierV3ServerRuntime<?, ?> runtime, SubjectId siteId) {
+        return PROJECTION_WORK.getOrDefault(runtime, Map.of()).containsKey(siteId);
+    }
+    static boolean hasProjectionInFlight(FrontierV3ServerRuntime<?, ?> runtime) {
+        return !PROJECTION_WORK.getOrDefault(runtime, Map.of()).isEmpty();
+    }
+    static String projectionBlockingDescription(FrontierV3ServerRuntime<?, ?> runtime) {
+        return PROJECTION_WORK.getOrDefault(runtime, Map.of()).keySet().stream().sorted()
+                .map(SubjectId::value).collect(java.util.stream.Collectors.joining(",", "resource-site-projection:", ""));
+    }
     static RestartReconciliation reconcileHarvestAfterRestart(ServerLevel level, FrontierV3ResourceSiteLedger ledger, ResourceSite site,
                                                               PhysicalIntent preparationIntent, int completedCropSlots) {
         HarvestRestartClassification classification = classifyHarvestRestart(level, ledger, site, preparationIntent, completedCropSlots);
         return switch (classification.state()) {
             case UNOBSERVED -> RestartReconciliation.DEFERRED;
             case OWNED_EXACT -> RestartReconciliation.CURRENT;
-            // A prior natural visit may have projected an exact owned prefix before the player
-            // left. COLD may advance the canonical cursor while it is unloaded; extend only
-            // that same proven prefix, never a look-alike/foreign field.
             case OWNED_BEHIND -> projectHarvestReconciliation(level, ledger, site, completedCropSlots);
-            // The persisted COLD cursor can legitimately precede the first physical visit, but
-            // only a complete neutral facility plus its confirmed preparation authority may
-            // become the durable projection claim.
             case NEUTRAL_UNCLAIMED -> preparationIntent == null ? RestartReconciliation.CONFLICT
                     : recreateNeutralHarvestField(level, ledger, site, completedCropSlots);
             case FOREIGN_OR_DAMAGED, UNKNOWN -> RestartReconciliation.CONFLICT;
         };
     }
-
     static HarvestRestartClassification classifyHarvestRestart(ServerLevel level, FrontierV3ResourceSiteLedger ledger, ResourceSite site,
                                                                 PhysicalIntent preparationIntent, int completedCropSlots) {
         ManagedFacilityProgressProjection projection = harvestProjection(site, completedCropSlots);
@@ -327,33 +666,36 @@ final class FrontierV3ResourceSiteExecutor {
         FrontierV3ResourceSiteLedger.Claim claim = ledger.claim(site.id());
         if (claim == null) return new HarvestRestartClassification(baseline(level, site)
                 ? HarvestRestartPhysicalState.NEUTRAL_UNCLAIMED : HarvestRestartPhysicalState.FOREIGN_OR_DAMAGED, projection, fallback);
-        // A first natural projection of already-current COLD work owns the field through its
-        // durable projection claim.  The original preparation intent is legitimately absent
-        // in that history, so requiring it here turns an intact owned facility into a false
-        // conflict on restart.  Neutral/unclaimed remains separate below: a block pattern
-        // alone still never grants authority.
+        if (claim.status() == FrontierV3ResourceSiteLedger.Status.PENDING) {
+            return new HarvestRestartClassification(HarvestRestartPhysicalState.UNKNOWN, projection, fallback);
+        }
         if (!ownsRestartClaim(claim.intentId(), site, preparationIntent == null ? null : preparationIntent.id())) {
             return new HarvestRestartClassification(HarvestRestartPhysicalState.FOREIGN_OR_DAMAGED, projection, fallback);
         }
-        if (claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE || claim.stage() != ResourceSiteLifecycle.MATURE_STAGE
-                || claim.harvestedCropSlots() > completedCropSlots) {
-            return new HarvestRestartClassification(HarvestRestartPhysicalState.UNKNOWN, projection, fallback);
+        boolean exactPhysical = claim.stage() == ResourceSiteLifecycle.MATURE_STAGE
+                ? matchesHarvestProgress(level, site, claim.harvestedCropSlots()) : matches(level, site, claim.stage());
+        HarvestRestartPhysicalState classification = classifyOwnedHarvestClaim(claim, completedCropSlots, exactPhysical);
+        if (classification == HarvestRestartPhysicalState.FOREIGN_OR_DAMAGED) {
+            return new HarvestRestartClassification(classification, projection, firstMismatchClaim(level, site, claim).orElse(fallback));
         }
-        if (!matchesHarvestProgress(level, site, claim.harvestedCropSlots())) {
-            return new HarvestRestartClassification(HarvestRestartPhysicalState.FOREIGN_OR_DAMAGED,
-                    projection, firstMismatchClaim(level, site, claim).orElse(fallback));
-        }
-        return new HarvestRestartClassification(claim.harvestedCropSlots() == completedCropSlots
-                ? HarvestRestartPhysicalState.OWNED_EXACT : HarvestRestartPhysicalState.OWNED_BEHIND, projection, fallback);
+        return new HarvestRestartClassification(classification, projection, fallback);
     }
-
+    static HarvestRestartPhysicalState classifyOwnedHarvestClaim(FrontierV3ResourceSiteLedger.Claim claim,
+                                                                   int completedCropSlots, boolean exactPhysical) {
+        if (claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE || !exactPhysical) {
+            return exactPhysical ? HarvestRestartPhysicalState.UNKNOWN : HarvestRestartPhysicalState.FOREIGN_OR_DAMAGED;
+        }
+        if (claim.stage() != ResourceSiteLifecycle.MATURE_STAGE) return HarvestRestartPhysicalState.OWNED_BEHIND;
+        if (claim.harvestedCropSlots() > completedCropSlots) return HarvestRestartPhysicalState.UNKNOWN;
+        return claim.harvestedCropSlots() == completedCropSlots
+                ? HarvestRestartPhysicalState.OWNED_EXACT : HarvestRestartPhysicalState.OWNED_BEHIND;
+    }
     private static RestartReconciliation projectHarvestReconciliation(ServerLevel level, FrontierV3ResourceSiteLedger ledger, ResourceSite site,
                                                                         int completedCropSlots) {
         StageProjectionResult projected = projectHarvestProgress(level, ledger, site, completedCropSlots);
         return projected == StageProjectionResult.CURRENT || projected == StageProjectionResult.UPDATED
                 ? RestartReconciliation.RECREATED : RestartReconciliation.CONFLICT;
     }
-
     private static RestartReconciliation recreateNeutralHarvestField(ServerLevel level, FrontierV3ResourceSiteLedger ledger, ResourceSite site,
                                                                        int completedCropSlots) {
         ledger.reserve(site.id(), projectionClaim(site));
@@ -361,7 +703,6 @@ final class FrontierV3ResourceSiteExecutor {
         ledger.activate(site.id());
         return projectHarvestReconciliation(level, ledger, site, completedCropSlots);
     }
-
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, PhysicalIntent intent) {
         Target target = target(state, intent);
         if (target == null) { if (intent.status() == PhysicalIntentStatus.RUNNING) unknown(runtime, intent.id(), "target-conflict"); return; }
@@ -373,20 +714,17 @@ final class FrontierV3ResourceSiteExecutor {
         if (!baseline(level, target.site())) { unknown(runtime, intent.id(), "foreign-baseline"); return; }
         ledger.reserve(target.site().id(), intent.id());
         if (!transition(runtime, intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty(), "running")) return;
-        if (!placeWholeField(level, target.site())) { ledger.conflict(target.site().id()); unknown(runtime, intent.id(), "partial-write"); return; }
+        if (!placeWholeField(level, target.site())) { unknown(runtime, intent.id(), "partial-write"); return; }
         ledger.activate(target.site().id()); confirm(runtime, intent, target.site());
     }
-
     private static void inspectRunning(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                        FrontierV3ResourceSiteLedger ledger, Target target, FrontierV3ResourceSiteLedger.Claim claim) {
         if (claim != null && claim.intentId().equals(target.intent().id()) && claim.status() == FrontierV3ResourceSiteLedger.Status.ACTIVE
                 && matches(level, target.site(), 0)) {
             confirm(runtime, target.intent(), target.site()); return;
         }
-        if (claim != null) ledger.conflict(target.site().id());
         unknown(runtime, target.intent().id(), "restart-postcondition-conflict");
     }
-
     static boolean placeWholeField(ServerLevel level, ResourceSite site) {
         if (!baseline(level, site)) return false;
         for (BlockPosition irrigation : site.irrigationSlots()) level.setBlock(minecraft(irrigation), Blocks.WATER.defaultBlockState(), 3);
@@ -396,7 +734,6 @@ final class FrontierV3ResourceSiteExecutor {
         }
         return matches(level, site, 0);
     }
-
     private static void confirm(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent, ResourceSite site) {
         ResourceSitePreparationObservation receipt = new ResourceSitePreparationObservation(
                 new PhysicalObservationId("observation:" + intent.id().value().replace(':', '-')), intent.id(), site.id(), 64, 64);
@@ -404,7 +741,6 @@ final class FrontierV3ResourceSiteExecutor {
             throw new IllegalStateException("resource-site preparation confirmation was rejected");
         }
     }
-
     private static Target target(FrontierWorldState state, PhysicalIntent intent) {
         if (intent.kind() != PhysicalIntentKind.RESOURCE_SITE_PREPARATION || intent.postcondition() != PhysicalPostcondition.RESOURCE_SITE_PREPARED_OBSERVED) return null;
         ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).get(intent.causeSubjectId());
@@ -449,10 +785,6 @@ final class FrontierV3ResourceSiteExecutor {
                 site.cropSlots().stream().filter(crop -> !level.getBlockState(minecraft(crop)).equals(crop(stage)))).findFirst();
     }
     private static boolean projectsGrowthStage(ResourceSiteLifecycle lifecycle) {
-        // Growth owns complete-stage projection until the field has physically reached its
-        // initial mature frontier. After that one catch-up, a named harvest job owns every
-        // partial crop change. Player/world deltas remain observable through the separate
-        // physical-delta boundary rather than a competing desired-state writer.
         return lifecycle.phase() == ResourceSitePhase.GROWING || lifecycle.phase() == ResourceSitePhase.READY
                 || lifecycle.phase() == ResourceSitePhase.HARVESTING;
     }
@@ -463,20 +795,12 @@ final class FrontierV3ResourceSiteExecutor {
     private static PhysicalIntentId projectionClaim(ResourceSite site) {
         return new PhysicalIntentId("intent:site-projection-" + site.id().value().substring("site:".length()));
     }
-    /**
-     * A field can first gain physical ownership through its original confirmed
-     * preparation intent or, after a COLD-complete unvisited lifecycle, through
-     * the durable neutral-baseline projection claim. Both are exact ownership
-     * proofs. Treating the latter as foreign on restart manufactured a conflict
-     * for a field whose complete physical postcondition had survived intact.
-     */
     static boolean ownsRestartClaim(PhysicalIntentId claimIntentId, ResourceSite site, PhysicalIntentId preparationIntentId) {
         return claimIntentId.equals(projectionClaim(site))
                 || preparationIntentId != null && claimIntentId.equals(preparationIntentId);
     }
     private static BlockPos minecraft(BlockPosition position) { return new BlockPos(position.x(), position.y(), position.z()); }
     private static BlockPosition canonical(BlockPos position) { return new BlockPosition(position.getX(), position.getY(), position.getZ()); }
-
     private static void unknown(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntentId id, String phase) {
         transition(runtime, id, PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty(), phase);
     }
@@ -489,40 +813,5 @@ final class FrontierV3ResourceSiteExecutor {
                 .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         return result instanceof CommandResult.Accepted;
     }
-    static void recordConflict(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierV3ResourceSiteLedger ledger,
-                                       ResourceSite site, BlockPosition position, ResourceSiteConflictReason reason) {
-        io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = runtime.canonicalState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
-        CommandId id = new CommandId("executor:resource-site-conflict-r" + checkpoint.revision().value() + "-p" + minecraft(position).asLong());
-        recordConflict(runtime, ledger, site, position, reason, id);
-    }
-    static boolean recordConflict(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierV3ResourceSiteLedger ledger,
-                                  ResourceSite site, BlockPosition position, ResourceSiteConflictReason reason, CommandId id) {
-        io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = runtime.canonicalState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
-        CommandResult result = runtime.submit(new FrontierCommand(1, id, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
-                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id), new ResourceSiteConflictObserved(site.id(), position, reason)))
-                .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
-        if (!(result instanceof CommandResult.Accepted)) return false;
-        ledger.conflict(site.id()); return true;
-    }
-
-    /** A player-caused mismatch needs the same trace evidence as the already-missing direct-break branch. */
-    static boolean recordPlayerConflict(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                        FrontierV3ResourceSiteLedger ledger, ResourceSite site, BlockPosition position, String cause) {
-        io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = runtime.canonicalState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
-        CommandId id = new CommandId("executor:resource-site-conflict-r" + checkpoint.revision().value() + "-p" + minecraft(position).asLong());
-        CommandResult result = runtime.submit(new FrontierCommand(1, id, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
-                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id), new ResourceSiteConflictObserved(site.id(), position,
-                        ResourceSiteConflictReason.PLAYER_REMOVED_MANAGED_CELL)))
-                .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
-        if (result instanceof CommandResult.Accepted) {
-            ledger.conflict(site.id());
-            FrontierV3DiagnosticTrace.record(level.getServer(), cause, "resource_site_conflict", site.id(), result);
-        } else if (result instanceof CommandResult.Rejected rejected) {
-            PaleMirrorMod.LOGGER.info("PMV3_PLAYER_BREAK resource-disposition={} detail={}",
-                    rejected.rejection().code(), rejected.rejection().detail());
-        }
-        return result instanceof CommandResult.Accepted;
-    }
-
     record Target(ResourceSite site, PhysicalIntent intent) { }
 }

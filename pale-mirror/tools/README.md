@@ -4,7 +4,9 @@
 a build-output or evidence destination. Each first-level directory owns one
 family:
 
-- `engineering/` — architecture, ledger and deterministic guardrail validators.
+- `engineering/` — architecture, ledger and deterministic guardrail validators;
+  `engineering/agent_assist/` owns bounded runtime-evidence navigation,
+  change-to-tests selection and the safe async-profiler launcher.
 - `frontier-v3-test-pilot/` — the external Node harness, scenarios and
   receipts for ordinary NeoForge lifecycle tests.
 - `frontier/` — reference-model trace generators and validators.

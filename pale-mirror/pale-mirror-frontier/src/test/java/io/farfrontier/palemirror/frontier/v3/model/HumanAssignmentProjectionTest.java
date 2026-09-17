@@ -12,6 +12,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class HumanAssignmentProjectionTest {
@@ -41,5 +42,12 @@ class HumanAssignmentProjectionTest {
         assertThrows(IllegalArgumentException.class, () -> new HumanAssignment(new SubjectId("resident:assignment-negative"),
                 HumanAssignmentKind.IDLE, Optional.of(new SubjectId("job:foreign"))));
         assertFalse(HumanAssignment.idle(new SubjectId("resident:assignment-idle")).active());
+    }
+
+    @Test
+    void sameDecodedStateReusesItsImmutableAssignmentProjection() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:assignment-cache"), 91L));
+        assertSame(HumanAssignmentProjection.compile(state), HumanAssignmentProjection.compile(state),
+                "a physical tick may reuse only the exact immutable state projection, never a stale later state");
     }
 }

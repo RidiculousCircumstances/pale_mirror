@@ -148,9 +148,20 @@ public final class SettlementResidentIngressPlan {
     }
 
     private static List<BlockPosition> homeSlots(List<SurfaceAnchor> apron, int housingBeds) {
+        List<SurfaceAnchor> candidates = new ArrayList<>();
+        for (int index = 0; index < apron.size(); index += 2) candidates.add(apron.get(index));
+        if (candidates.size() < housingBeds) throw new IllegalArgumentException("resident apron cannot hold requested housing beds");
+
+        // The immutable apron is a public residential surface, not a spawn queue.  Taking its
+        // first N cells made every bootstrap resident canonically start on the same boundary
+        // edge and then depart together as soon as work was admitted.  Select the same bounded,
+        // collision-safe candidates across the complete ring so a partial initial population is
+        // already distributed at its retained canonical homes.
         List<BlockPosition> homes = new ArrayList<>(housingBeds);
-        for (int index = 0; index < apron.size() && homes.size() < housingBeds; index += 2) homes.add(apron.get(index).support());
-        if (homes.size() != housingBeds) throw new IllegalArgumentException("resident apron cannot hold requested housing beds");
+        for (int ordinal = 0; ordinal < housingBeds; ordinal++) {
+            homes.add(candidates.get(Math.floorDiv(ordinal * candidates.size(), housingBeds)).support());
+        }
+
         return List.copyOf(homes);
     }
 

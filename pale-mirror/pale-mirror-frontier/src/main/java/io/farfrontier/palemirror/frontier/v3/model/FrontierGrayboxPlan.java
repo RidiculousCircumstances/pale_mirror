@@ -48,16 +48,61 @@ public final class FrontierGrayboxPlan {
         return compile(state, false);
     }
 
+    /**
+     * Immutable world-wide baseline used by the physical projector.  Active engineering
+     * staging is deliberately excluded: it is a small current overlay whose progress changes
+     * far more often than settlement, hive, or route topology.  Recompiling this complete map
+     * for each one-cell worksite transition made ordinary COLD work able to monopolize a server
+     * turn.  The projector owns the corresponding bounded overlay refresh.
+     */
+    public static FrontierGrayboxPlan compileStableStructuralBaseline(FrontierWorldState state) {
+        requireStructuralDerivationAllowed();
+        return compile(state, false, false, false);
+    }
+
+    /**
+     * The growing hive is an exact, small overlay over the immutable bootstrap silhouette.
+     * A newly committed organ must become materializable immediately, but it must not force the
+     * projector to rebuild and sort the whole settlement/route world on one server turn.
+     */
+    public static FrontierGrayboxPlan compileDynamicHiveOverlay(FrontierWorldState state) {
+        requireStructuralDerivationAllowed();
+        Objects.requireNonNull(state, "dynamic hive overlay state");
+        Map<BlockPosition, GrayboxCell> cells = new LinkedHashMap<>();
+        state.hiveColony().addedOrgans().values().forEach(organ -> addOrgan(cells, state.bootstrap().terrain(), organ));
+        addOccupiedCocoons(cells, state.bootstrap(), state.hiveColony());
+        return new FrontierGrayboxPlan(cells, Map.of());
+    }
+
+    /** Recombines the retained baseline and one current dynamic hive overlay without deriving either. */
+    public static FrontierGrayboxPlan withDynamicHiveOverlay(FrontierGrayboxPlan baseline, FrontierGrayboxPlan overlay) {
+        Objects.requireNonNull(baseline, "structural baseline"); Objects.requireNonNull(overlay, "dynamic hive overlay");
+        Map<BlockPosition, GrayboxCell> cells = new LinkedHashMap<>(baseline.cells);
+        cells.putAll(overlay.cells);
+        return new FrontierGrayboxPlan(cells, baseline.infection);
+    }
+
     private static FrontierGrayboxPlan compile(FrontierWorldState state, boolean applyPhysicalLossMask) {
+        return compile(state, applyPhysicalLossMask, true, true);
+    }
+
+    private static FrontierGrayboxPlan compile(FrontierWorldState state, boolean applyPhysicalLossMask, boolean includeWorksiteStaging) {
+        return compile(state, applyPhysicalLossMask, includeWorksiteStaging, true);
+    }
+
+    private static FrontierGrayboxPlan compile(FrontierWorldState state, boolean applyPhysicalLossMask, boolean includeWorksiteStaging,
+                                               boolean includeDynamicHive) {
         Objects.requireNonNull(state, "state");
         Map<BlockPosition, GrayboxCell> cells = new LinkedHashMap<>();
         state.bootstrap().settlements().forEach(settlement -> settlement.structures().forEach(structure ->
                 addStructure(cells, state.bootstrap().terrain(), structure, state.structureConditions().get(structure.id()))));
         state.bootstrap().hive().organs().forEach(organ -> addOrgan(cells, state.bootstrap().terrain(), organ));
-        state.hiveColony().addedOrgans().values().forEach(organ -> addOrgan(cells, state.bootstrap().terrain(), organ));
-        addOccupiedCocoons(cells, state.bootstrap(), state.hiveColony());
+        if (includeDynamicHive) {
+            state.hiveColony().addedOrgans().values().forEach(organ -> addOrgan(cells, state.bootstrap().terrain(), organ));
+            addOccupiedCocoons(cells, state.bootstrap(), state.hiveColony());
+        }
         addRoutes(cells, state.bootstrap(), state.routeTopology());
-        addActiveWorksiteStaging(cells, state);
+        if (includeWorksiteStaging) addActiveWorksiteStaging(cells, state);
         // Physical deltas are canonical aftermath, not executor-local provenance.  Once an
         // observed cell is gone, desired-state projection must not ask a later loaded chunk to
         // recreate it, including after the SavedData ledger has been compacted or lost.
@@ -168,6 +213,42 @@ public final class FrontierGrayboxPlan {
                     && routeConstructions == state.routeConstructions();
         }
 
+        /**
+         * True when the retained settlement/route/hive-bootstrap baseline remains valid.
+         * Dynamic organs and cocoons have their own projection overlay and must not force the
+         * complete world cursor through its structural compiler.
+         */
+        public boolean matchesStableBaseline(StructuralInput other) {
+            Objects.requireNonNull(other, "structural input");
+            return bootstrap.equals(other.bootstrap) && structureConditions.equals(other.structureConditions)
+                    && routeTopology.equals(other.routeTopology);
+        }
+
+        /** True when the separately materialized hive overlay can be retained. */
+        public boolean matchesDynamicHiveOverlay(StructuralInput other) {
+            Objects.requireNonNull(other, "structural input");
+            return addedOrgans.equals(other.addedOrgans) && retainedCocoonLifecycles.equals(other.retainedCocoonLifecycles);
+        }
+
+        /**
+         * A bounded diagnostic classification for the exceptional baseline replacement path.
+         * It deliberately compares only the five contributors that can alter the retained
+         * baseline; the high-frequency worksite overlay has its own replacement path.  This is
+         * not an admission predicate and must not become another structural derivation.
+         */
+        public String stableBaselineDifference(StructuralInput other) {
+            Objects.requireNonNull(other, "structural input");
+            if (!bootstrap.equals(other.bootstrap)) return "BOOTSTRAP";
+            if (!structureConditions.equals(other.structureConditions)) return "STRUCTURE_CONDITION";
+            if (!addedOrgans.equals(other.addedOrgans)) return "ADDED_ORGAN";
+            if (!retainedCocoonLifecycles.equals(other.retainedCocoonLifecycles)) return "RETAINED_COCOON_LIFECYCLE";
+            if (!routeTopology.equals(other.routeTopology)) return "ROUTE_TOPOLOGY";
+            return "NONE";
+        }
+
+        /** Exact owned worksite cells; this is a small overlay, not a global plan input. */
+        public Map<SubjectId, java.util.List<BlockPosition>> activeWorksiteStaging() { return activeWorksiteStaging; }
+
         @Override public boolean equals(Object other) {
             if (this == other) return true;
             if (!(other instanceof StructuralInput input)) return false;
@@ -220,6 +301,38 @@ public final class FrontierGrayboxPlan {
         state.bootstrap().hive().organs().forEach(organ -> addOrgan(cells, state.bootstrap().terrain(), organ));
         state.hiveColony().addedOrgans().values().forEach(organ -> addOrgan(cells, state.bootstrap().terrain(), organ));
         state.physicalDeltas().keySet().forEach(cells::remove);
+        Map<SubjectId, Set<BlockPosition>> byOwner = new LinkedHashMap<>();
+        cells.values().forEach(cell -> byOwner.computeIfAbsent(cell.ownerId(), ignored -> new LinkedHashSet<>()).add(cell.position()));
+        Map<SubjectId, Set<BlockPosition>> immutable = new LinkedHashMap<>();
+        byOwner.forEach((owner, positions) -> immutable.put(owner, Set.copyOf(positions)));
+        return Map.copyOf(immutable);
+    }
+
+    /** Stable settlement and bootstrap-hive object cells, excluding the expandable hive overlay. */
+    static Map<SubjectId, Set<BlockPosition>> currentStableObjectCellsByOwner(FrontierWorldState state) {
+        Objects.requireNonNull(state, "state");
+        Map<BlockPosition, GrayboxCell> cells = new LinkedHashMap<>();
+        state.bootstrap().settlements().forEach(settlement -> settlement.structures().forEach(structure ->
+                addStructure(cells, state.bootstrap().terrain(), structure, state.structureConditions().get(structure.id()))));
+        state.bootstrap().hive().organs().forEach(organ -> addOrgan(cells, state.bootstrap().terrain(), organ));
+        state.physicalDeltas().keySet().forEach(cells::remove);
+        return objectCellsByOwner(cells);
+    }
+
+    /**
+     * The expandable hive's object cells are a bounded overlay.  Local presentation may use
+     * this exact grammar when an added organ changes without rebuilding the settlement and
+     * bootstrap-hive object index merely to answer its contamination readout.
+     */
+    static Map<SubjectId, Set<BlockPosition>> currentDynamicHiveObjectCellsByOwner(FrontierWorldState state) {
+        Objects.requireNonNull(state, "state");
+        Map<BlockPosition, GrayboxCell> cells = new LinkedHashMap<>();
+        state.hiveColony().addedOrgans().values().forEach(organ -> addOrgan(cells, state.bootstrap().terrain(), organ));
+        state.physicalDeltas().keySet().forEach(cells::remove);
+        return objectCellsByOwner(cells);
+    }
+
+    private static Map<SubjectId, Set<BlockPosition>> objectCellsByOwner(Map<BlockPosition, GrayboxCell> cells) {
         Map<SubjectId, Set<BlockPosition>> byOwner = new LinkedHashMap<>();
         cells.values().forEach(cell -> byOwner.computeIfAbsent(cell.ownerId(), ignored -> new LinkedHashSet<>()).add(cell.position()));
         Map<SubjectId, Set<BlockPosition>> immutable = new LinkedHashMap<>();

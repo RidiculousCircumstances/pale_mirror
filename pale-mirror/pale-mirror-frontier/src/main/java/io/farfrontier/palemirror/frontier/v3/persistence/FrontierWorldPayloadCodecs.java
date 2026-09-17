@@ -33,7 +33,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     static PayloadCodecs economyCodecs() { return PayloadCodecs.merge(new PayloadCodecs(List.of(
             new ProductionStartedCodec(), new ProductionCompletedCodec(), FungibleResourcePayloadCodecs.productionCompleted(), new ProductionBlockedCodec(), ProductionInterruptionPayloadCodec.interrupted(),
             new CompanyRegisteredCodec(), new EmploymentContractOpenedCodec(), new EmploymentContractTerminatedCodec(), MarketPayloadCodecs.opened(),
-            MarketPayloadCodecs.quote(), MarketPayloadCodecs.accepted(), MarketPayloadCodecs.workOrderCancelled(), MarketPayloadCodecs.expired(),
+            MarketPayloadCodecs.quote(), MarketPayloadCodecs.accepted(), MarketPayloadCodecs.relationshipIncident(), MarketPayloadCodecs.workOrderCancelled(), MarketPayloadCodecs.expired(),
             MarketPayloadCodecs.cancelled())), ProductionWorkScenePayloadCodecs.codecs(), ProductionWorkScenePayloadCodecs.productionEvents()); }
     static PayloadCodecs resourceSiteCodecs() { return PayloadCodecs.merge(new PayloadCodecs(List.of(ResourceSitePayloadCodecs.growthAdvanced(),
             ResourceSitePayloadCodecs.preparationStarted(), ResourceSitePayloadCodecs.prepared(), ResourceSitePayloadCodecs.harvestStarted(),

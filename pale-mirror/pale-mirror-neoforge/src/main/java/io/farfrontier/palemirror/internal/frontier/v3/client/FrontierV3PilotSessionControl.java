@@ -27,6 +27,7 @@ final class FrontierV3PilotSessionControl {
     private static final String MODE_PROPERTY = "pale_mirror.frontier_v3.test_pilot.session_mode";
     private static final String LIFECYCLE_CONTROL_PROPERTY = "pale_mirror.frontier_v3.test_pilot.lifecycle_control_directory";
     private static final String LIFECYCLE_SEGMENT_PROPERTY = "pale_mirror.frontier_v3.test_pilot.lifecycle_segment";
+    private static final String LIFECYCLE_CLOSE_PROPERTY = "pale_mirror.frontier_v3.test_pilot.lifecycle_close";
     private static final String LIFECYCLE_TERMINAL_PROPERTY = "pale_mirror.frontier_v3.test_pilot.lifecycle_terminal";
     private static final int SCHEMA = 1;
 
@@ -270,14 +271,15 @@ final class FrontierV3PilotSessionControl {
     }
 
     /**
-     * A one-shot isolated pilot has no restart-session descriptor, but its terminal result is
-     * still not permission for the wrapper to kill the client.  The supervisor first freezes
-     * the read-only terminal evidence, then writes this nonce-bound close token so Minecraft
-     * itself performs the ordinary disconnect that the server must observe.
+     * A one-shot isolated pilot has no restart-session descriptor. Its result—terminal or a
+     * recovery middle segment—is still not permission for the wrapper to kill the client. The
+     * supervisor first freezes the read-only segment evidence, then writes this nonce-bound
+     * close token so Minecraft itself performs the ordinary disconnect that the server observes.
      */
     static boolean shouldAwaitLifecycleFinalClose() {
         return !matrix() && lifecycleDirectory() != null
-                && "true".equals(System.getProperty(LIFECYCLE_TERMINAL_PROPERTY, "false"))
+                && ("true".equals(System.getProperty(LIFECYCLE_TERMINAL_PROPERTY, "false"))
+                    || "true".equals(System.getProperty(LIFECYCLE_CLOSE_PROPERTY, "false")))
                 && !awaitingFinalClose && !finalCloseRequested;
     }
 

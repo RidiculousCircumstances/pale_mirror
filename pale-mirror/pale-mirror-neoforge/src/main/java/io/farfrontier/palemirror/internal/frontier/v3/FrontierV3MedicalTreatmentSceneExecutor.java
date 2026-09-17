@@ -37,7 +37,7 @@ final class FrontierV3MedicalTreatmentSceneExecutor {
                 .filter(lease -> lease.status() != SceneLeaseStatus.CLOSED && lease.status() != SceneLeaseStatus.CONFLICT)
                 .min(Comparator.comparing(SceneLease::id));
         if (active.isPresent()) { execute(level, runtime, state, active.orElseThrow()); return true; }
-        Optional<FrontierMedicalTreatmentSceneSupport.Candidate> candidate = FrontierV3SceneExecutor.firstDemandedCandidate(
+        Optional<FrontierMedicalTreatmentSceneSupport.Candidate> candidate = FrontierV3SceneDemand.firstDemandedCandidate(
                 level, FrontierMedicalTreatmentSceneSupport.candidates(state), FrontierMedicalTreatmentSceneSupport.Candidate::infirmaryAnchor);
         if (candidate.isEmpty()) return false;
         FrontierMedicalTreatmentSceneSupport.Candidate treatment = candidate.orElseThrow();

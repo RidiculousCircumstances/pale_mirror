@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.process;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.*;
@@ -22,7 +23,7 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
         }
         if (command.payload() instanceof ProductionWorkProgressed progressed) return planHotProgress(state, progressed);
         if (command.payload() instanceof ProductionWorkTraversalAdvanced advanced) return planHotTraversal(state, advanced);
-        if (command.payload() instanceof ProductionWorkTraversalBlocked blocked) return planHotTraversalBlocked(state, blocked);
+        if (command.payload() instanceof ProductionWorkTraversalBlocked blocked) return planHotTraversalBlocked(state, command, blocked);
         return FrontierWorldCommandPlanner.rejected("economy process does not admit command: " + command.payload().type());
     }
     @Override public FrontierWorldState reduce(FrontierWorldState state, FrontierEvent event) {
@@ -34,6 +35,7 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
             case MarketQuotePublished published -> MarketClearingProcess.reduceQuote(state, event.subject(), event.instant().ticks(), published);
             case MarketWorkOrderAccepted accepted -> MarketClearingProcess.reduceAccepted(state, event.subject(), event.instant().ticks(), accepted);
             case MarketWorkOrderCancelled cancelled -> MarketClearingProcess.reduceWorkOrderCancelled(state, event.subject(), cancelled);
+            case MarketRelationshipIncidentRecorded recorded -> MarketClearingProcess.reduceRelationshipIncident(state, event.subject(), recorded);
             case MarketDemandExpired expired -> MarketClearingProcess.reduceExpired(state, event.subject(), event.instant().ticks(), expired);
             case MarketDemandCancelled cancelled -> MarketClearingProcess.reduceCancelled(state, event.subject(), cancelled);
             case ProductionStarted started -> ProductionProcess.reduceStarted(state, event.subject(), started);
@@ -68,8 +70,13 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
             return new CommandPlan.Accepted(java.util.List.of(new ProposedEvent(job.settlementId(), advanced)));
         } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
     }
-    private static CommandPlan planHotTraversalBlocked(FrontierWorldState state, ProductionWorkTraversalBlocked blocked) {
+    private static CommandPlan planHotTraversalBlocked(FrontierWorldState state, FrontierCommand command, ProductionWorkTraversalBlocked blocked) {
         try {
+            SceneLease lease = state.sceneLeases().get(blocked.leaseId());
+            if (lease != null && FrontierSceneBehaviors.isProductionWork(lease)) {
+                SubjectId expected = FrontierSceneBehaviors.productionWork(lease).jobId();
+                if (!expected.equals(blocked.jobId())) return new CommandPlan.Accepted(ProductionProcess.planRelationshipConflict(state, command, lease, blocked));
+            }
             ProductionJob job = FrontierProductionWorkSceneSupport.require(state, new ProductionWorkSceneCause(blocked.jobId()));
             if (!hot(state, job.id())) return FrontierWorldCommandPlanner.rejected("production work traversal block requires its HOT scene");
             return new CommandPlan.Accepted(ProductionProcess.planWorkTraversalBlocked(state, job.settlementId(), blocked));

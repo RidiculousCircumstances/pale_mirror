@@ -347,6 +347,10 @@ final class FrontierV3SceneExecutor {
             Entity existing = level.getEntity(member.entityId());
             if (existing != null) {
                 if (!(existing instanceof Mob body) || body.getHealth() <= 0.0F) return BodyMaterialization.CONFLICT;
+                // A fenced inactive carrier and any indexed body would be concurrent custody.
+                // In particular, a crash after fencing a closed resource body must not let a
+                // successor scene silently reclaim that old Java object.
+                if (FrontierV3AmbientActorExecutor.hasInactiveCarrier(level, state, member.actorId())) return BodyMaterialization.CONFLICT;
                 if (owned(existing, state, lease, member)) {
                     if (body instanceof Zombie zombie) FrontierV3AmbientActorExecutor.configureBioform(zombie,
                             FrontierV3AmbientActorExecutor.bioformProfile(state, member.actorId()));
@@ -376,6 +380,15 @@ final class FrontierV3SceneExecutor {
                 continue;
             }
             if (lease.ambientHandoffActorIds().contains(member.actorId())) return BodyMaterialization.DEFERRED;
+            // A direct PREPARED scene may be the first natural return after its predecessor
+            // fenced and released the exact body.  Reconstruct it here only from that same
+            // inactive UUID carrier at a newer physical revision.  This shared scene boundary
+            // consumes the carrier after admission, so it cannot leave concurrent custody or
+            // fall back to a newly selected worker.
+            FrontierV3AmbientCarrierLedger ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
+            FrontierV3AmbientCarrierLedger.Reconciliation carrier = ledger.sceneReconciliation(member.actorId(), member.entityId(), lease.revision());
+            if (carrier != FrontierV3AmbientCarrierLedger.Reconciliation.NO_FENCED_CARRIER
+                    && carrier != FrontierV3AmbientCarrierLedger.Reconciliation.READY) return BodyMaterialization.CONFLICT;
             BodyPosition canonical = lease.memberPosition(member.actorId());
             BlockPos candidate = new BlockPos(canonical.x(), canonical.y() - 1, canonical.z());
             if (!level.hasChunkAt(candidate)) return BodyMaterialization.DEFERRED;
@@ -392,6 +405,8 @@ final class FrontierV3SceneExecutor {
             if (position.getY() != canonical.y()) return BodyMaterialization.CONFLICT;
             body.setPos(canonical.x() + 0.5D, canonical.y(), canonical.z() + 0.5D);
             body.setPersistenceRequired();
+            long custodyEpoch = carrier == FrontierV3AmbientCarrierLedger.Reconciliation.READY ? ledger.reconstructionEpoch(member.actorId()) : 1L;
+            body.getPersistentData().putLong(FrontierV3AmbientActorExecutor.CUSTODY_EPOCH_KEY, custodyEpoch);
             body.setNoAi(true);
             if (body instanceof Zombie zombie) FrontierV3AmbientActorExecutor.configureBioform(zombie,
                     FrontierV3AmbientActorExecutor.bioformProfile(state, member.actorId()));
@@ -401,6 +416,11 @@ final class FrontierV3SceneExecutor {
             if (!level.addFreshEntity(body)) {
                 PaleMirrorMod.LOGGER.warn("Frontier v3 scene body admission failed lease={} actor={} uuid={} body={}",
                         lease.id().value(), member.actorId().value(), member.entityId(), canonical);
+                return BodyMaterialization.CONFLICT;
+            }
+            if (carrier == FrontierV3AmbientCarrierLedger.Reconciliation.READY
+                    && !ledger.adoptScene(member.actorId(), member.entityId(), lease.revision())) {
+                body.discard();
                 return BodyMaterialization.CONFLICT;
             }
         }
@@ -713,8 +733,19 @@ final class FrontierV3SceneExecutor {
             // actor ID and expected body type are the complete safe identity; relaxing the
             // revision check is confined to deletion of that stale projection and never to
             // admission or mutation.
-            if (ownedByClosedLease(entity, state, lease, member) && !FrontierV3ResourceSiteHarvestSceneExecutor.retainsClosedBody(entity, state, lease, member)
-                    && FrontierV3ClosedProjectionFence.bodyIsStale(state, lease, member)) entity.discard();
+            if (!ownedByClosedLease(entity, state, lease, member)) return;
+            if (FrontierV3ResourceSiteHarvestSceneExecutor.retainsClosedBody(entity, state, lease, member)) {
+                // A player-visible terminal/successor hand-off retains its body while demand
+                // remains.  Once no natural interaction eligibility exists, fence exactly one
+                // same-ID/same-UUID inactive carrier and remove this live physical custodian so
+                // COLD can lawfully advance.  A failed fence is deliberately left visible and
+                // blocks re-admission as local ambiguity.
+                if (!demandExists(level, lease.handoffPosition()) && !playerWithinSafeRadius(level, lease)) {
+                    FrontierV3AmbientActorExecutor.fenceClosedSceneBody(level, state, lease, member, entity);
+                }
+                return;
+            }
+            if (FrontierV3ClosedProjectionFence.bodyIsStale(state, lease, member)) entity.discard();
         }));
         // Only logistics scenes have a cargo carrier.  A typed assault is deliberately
         // cargo-free; asking its typed cause for a legacy cargo ID would turn normal cleanup
@@ -723,26 +754,51 @@ final class FrontierV3SceneExecutor {
                 .filter(FrontierV3SceneBehaviorRegistry::hasCargoCarrier)
                 .forEach(lease -> FrontierV3CargoCarrierExecutor.discardClosed(level, state, lease));
     }
+
+    /**
+     * Transfers the one retained closed resource body into a newly PREPARED ambient lease.
+     * This is a live-body hand-off, not carrier reconstruction: the exact UUID remains loaded
+     * and there is no inactive carrier.  Any other closed projection stays historical/stale and
+     * is deliberately not eligible for this conversion.
+     */
+    static boolean adoptRetainedClosedBodyForAmbient(Entity entity, FrontierWorldState state, SubjectId actorId) {
+        if (!(entity instanceof Mob body) || entity.isRemoved()
+                || !FrontierV3AmbientActorExecutor.entityId(state, actorId).equals(entity.getUUID())) return false;
+        List<SceneLease> matches = state.sceneLeases().values().stream().filter(lease -> lease.status() == SceneLeaseStatus.CLOSED)
+                .filter(FrontierSceneBehaviors::isResourceSiteHarvest)
+                .filter(lease -> lease.members().stream().anyMatch(member -> member.actorId().equals(actorId)
+                        && FrontierV3ResourceSiteHarvestSceneExecutor.retainsClosedBody(entity, state, lease, member)))
+                .toList();
+        if (matches.size() != 1) return false;
+        FrontierV3ControlledMobMotion.stop(body);
+        entity.getPersistentData().remove(LEASE_KEY);
+        entity.getPersistentData().remove(REVISION_KEY);
+        entity.getPersistentData().putString(FrontierV3AmbientActorExecutor.ACTOR_KEY, actorId.value());
+        entity.getPersistentData().putString(FrontierV3AmbientActorExecutor.KIND_KEY,
+                FrontierV3AmbientActorExecutor.bioform(state, actorId) ? "BIOFORM" : "RESIDENT");
+        return true;
+    }
+
+    /**
+     * Exact closed bodies waiting for their next shared ambient custody epoch.  This is a
+     * registry query, rather than a resource-site scheduler: the typed behavior supplies the
+     * retention predicate while the common ambient owner decides the return.  It is bounded by
+     * the live closed-lease inventory and considers only naturally demanded hand-off anchors.
+     */
+    static List<SubjectId> retainedClosedActorsDemandedBy(ServerLevel level, FrontierWorldState state) {
+        return state.sceneLeases().values().stream().filter(lease -> lease.status() == SceneLeaseStatus.CLOSED)
+                // The exact loaded closed body retains its shared ambient return attempt;
+                // this registry neither loads a chunk nor creates a replacement body.
+                .flatMap(lease -> lease.members().stream().filter(member -> {
+                    Entity entity = level.getEntity(member.entityId());
+                    return FrontierV3ResourceSiteHarvestSceneExecutor.retainsClosedBody(entity, state, lease, member);
+                }).map(SceneMember::actorId)).distinct().sorted().toList();
+    }
     static FrontierV3SceneDemand.Snapshot demandSnapshot(ServerLevel level, BlockPosition anchor) {
         return FrontierV3SceneDemand.observe(level, anchor);
     }
     static boolean demandExists(ServerLevel level, BlockPosition anchor) {
         return FrontierV3ServerLifecycle.sceneEligible(level, anchor) && demandSnapshot(level, anchor).active();
-    }
-    /**
-     * Selects the first physically demanded member of a complete, deterministically ordered
-     * canonical candidate inventory.  The canonical model never sees player demand; it is
-     * therefore invalid for a family executor to ask its model support for one global first
-     * candidate and then discard it because that unrelated location is unloaded.
-     */
-    static <Candidate> Optional<Candidate> firstDemandedCandidate(ServerLevel level, List<Candidate> candidates,
-                                                                    Function<Candidate, BlockPosition> demandAnchor) {
-        Objects.requireNonNull(level, "scene demand level");
-        Objects.requireNonNull(candidates, "scene candidates");
-        Objects.requireNonNull(demandAnchor, "scene demand anchor");
-        return candidates.stream()
-                .filter(candidate -> demandExists(level, Objects.requireNonNull(demandAnchor.apply(candidate), "candidate demand anchor")))
-                .findFirst();
     }
     private static boolean loaded(ServerLevel level, SceneLease lease) {
         BlockPosition anchor = lease.handoffPosition();

@@ -60,6 +60,19 @@ public final class FrontierV3AmbientActorGameTests {
                 "a one-cell collision displacement may walk only back to the existing cursor");
         helper.assertFalse(FrontierV3SurfaceObservation.mayReacquire(centre.add(1.51D, 0.0D, 0.0D), surface),
                 "a farther displacement is not a hidden route repair or cursor rebasing");
+        helper.assertFalse(FrontierV3SurfaceObservation.at(centre.add(0.0D, .36D, 0.0D), surface),
+                "a fractional elevated body is not an observed semantic arrival");
+        helper.assertTrue(FrontierV3SurfaceObservation.mayReacquire(centre.add(0.0D, .391D, 0.0D), surface),
+                "the same bounded collision pose may settle only to its existing cursor");
+        helper.assertTrue(FrontierV3SurfaceObservation.mayReacquire(centre.add(0.0D, .50D, 0.0D), surface),
+                "the bounded retained collision lip remains recoverable without cursor authority");
+        helper.assertFalse(FrontierV3SurfaceObservation.mayReacquire(centre.add(0.0D, .501D, 0.0D), surface),
+                "reacquisition must remain bounded below the next support datum");
+        SurfaceAnchor upper = SurfaceAnchor.at(0, 9, 1);
+        helper.assertTrue(FrontierV3SurfaceObservation.withinAscendingEdgeLip(centre.add(0.0D, 1.349D, 0.0D), surface, upper),
+                "a collision-lifted body in the current column may continue only its declared ascending edge");
+        helper.assertFalse(FrontierV3SurfaceObservation.withinAscendingEdgeLip(centre.add(0.0D, 1.351D, 0.0D), surface, upper),
+                "a body above the bounded current-to-next observation interval cannot be treated as an ascending-edge lip");
         helper.succeed();
     }
 
@@ -241,7 +254,7 @@ public final class FrontierV3AmbientActorGameTests {
         SubjectId farmer = new SubjectId("resident:1-1"), scout = new SubjectId("bioform:west-1");
         BodyPosition anchor = bodyAt(origin);
         AmbientActorLease farmerLease = new AmbientActorLease(farmer, anchor, io.farfrontier.palemirror.frontier.v3.api.SimInstant.ZERO, 1L,
-                AmbientLeaseStatus.HOT, AmbientGoalKind.WORK, new BodyPosition(anchor.x() + 12, anchor.y(), anchor.z()));
+                AmbientLeaseStatus.HOT, AmbientGoalKind.PATROL, new BodyPosition(anchor.x() + 12, anchor.y(), anchor.z()));
         AmbientActorLease scoutLease = new AmbientActorLease(scout, new BodyPosition(anchor.x() + 2, anchor.y(), anchor.z()),
                 io.farfrontier.palemirror.frontier.v3.api.SimInstant.ZERO, 1L, AmbientLeaseStatus.HOT, AmbientGoalKind.PATROL, anchor);
         helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state, farmer, anchor), FrontierV3AmbientActorExecutor.Result.APPLIED,
@@ -303,6 +316,32 @@ public final class FrontierV3AmbientActorGameTests {
         helper.assertTrue(level.addFreshEntity(body), "the continuous-patrol fixture must enter the loaded world");
         helper.runAfterDelay(1L, () -> driveContinuousPatrolSamples(helper, level, body, floor, 18, new ArrayList<>(), () -> {
             body.discard(); helper.succeed();
+        }));
+    }
+
+    @GameTest(batch = "pm-frontier-v3-ambient-local-brain", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 70)
+    public static void postHarvestWorkLeaseMovesTheSameFarmerAwayFromTheFinalFieldStation(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos finalStation = helper.absolutePos(new BlockPos(0, 8, 0));
+        prepareSquareFloor(level, finalStation, 6);
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
+                FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:ambient-post-harvest-return"), 91L), new EphemeralStore(), 10_000);
+        FrontierWorldState state = state(runtime); SubjectId farmer = new SubjectId("resident:1-1");
+        BodyPosition handoff = bodyAt(finalStation);
+        // This fixture is the physical half of ResourceSiteHarvestTraversal.workReturnSurface:
+        // one same-level, four-cell declared field-edge departure, not a synthetic relocation
+        // into a farm centre or a vanilla-AI wander goal.
+        AmbientActorLease lease = new AmbientActorLease(farmer, handoff, io.farfrontier.palemirror.frontier.v3.api.SimInstant.ZERO, 1L,
+                AmbientLeaseStatus.HOT, AmbientGoalKind.WORK, handoff.offset(4, 0, 0));
+        Villager body = net.minecraft.world.entity.EntityType.VILLAGER.create(level);
+        if (body == null) throw new IllegalStateException("game test could not create terminal farmer");
+        body.setPos(finalStation.getX() + 0.5D, finalStation.getY(), finalStation.getZ() + 0.5D);
+        body.setNoAi(true); body.setPersistenceRequired();
+        helper.assertTrue(level.addFreshEntity(body), "the exact terminal farmer must enter the naturally loaded fixture once");
+        helper.runAfterDelay(1L, () -> drivePursuit(helper, level, runtime, state, farmer, body, lease, 40, () -> {
+            helper.assertTrue(body.isNoAi() && body.getX() > finalStation.getX() + 3.25D,
+                    "the same terminal farmer must visibly leave the crop station along its retained WORK goal instead of colliding idle at crop 63");
+            helper.assertFalse(body.swinging, "post-harvest travel must not retain the crop-work gesture");
+            body.discard(); FrontierV3AmbientActorExecutor.forget(runtime); helper.succeed();
         }));
     }
 

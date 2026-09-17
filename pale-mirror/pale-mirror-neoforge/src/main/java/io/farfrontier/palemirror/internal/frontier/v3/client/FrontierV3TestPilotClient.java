@@ -62,6 +62,7 @@ public final class FrontierV3TestPilotClient {
     private static ObservedDiagnostic inspectBaseline;
     private static boolean fastForwardSent;
     private static ObservedDiagnostic fastForwardBaseline;
+    private static ObservedDiagnostic releaseProjectionBaseline;
     private static ObservedDiagnostic diagnosticWaitBaseline; private static long diagnosticWaitRequestNanos;
     /**
      * A reconnect may deliver a current server receipt before its local world time catches up
@@ -87,10 +88,6 @@ public final class FrontierV3TestPilotClient {
         if (configured.isBlank()) return;
         try {
             FrontierV3PilotSessionControl.onLogin(Path.of(configured));
-            // Matrix preparation is itself lifecycle evidence and therefore needs the
-            // authenticated epoch/segment from the immutable descriptor first.  Publishing
-            // it before onLogin leaves the first real connection without a segment and turns
-            // a valid prepared runtime into a false lifecycle failure.
             FrontierV3PilotSessionControl.publishClientPrepared();
             FrontierV3PilotSessionControl.bindActiveConnection(event.getConnection());
             FrontierV3TestPilotScenario.Parsed scenario = FrontierV3TestPilotScenario.parse(Files.readString(Path.of(configured)));
@@ -98,12 +95,12 @@ public final class FrontierV3TestPilotClient {
             runningSetup = !setup.isEmpty(); index = 0; actionStartedTick = -1L;
             breaking = false; placementAttempted = false; visitSent = false; visitChunkReadyTick = -1L; visitIngress = null; visitHandshakeArmed = false; visitHandshakeBaseline = null;
             containerOpenAttempted = false; quickMoveAttempted = false;
-            inspectSent = false; inspectBaseline = null; fastForwardSent = false; fastForwardBaseline = null;
+            inspectSent = false; inspectBaseline = null; fastForwardSent = false; fastForwardBaseline = null; releaseProjectionBaseline = null;
             diagnosticWaitBaseline = null; diagnosticWaitRequestNanos = 0L; currentCausalMilestone = null;
             boardInteractionAttempted = false;
             entityInteractionAttempted = false;
             attackedEntityRuntimeId = -1; entityAttackAttempts = 0; lastEntityAttackTick = Long.MIN_VALUE; lastAttackedEntityPosition = null;
-            captureBarrier = null; captureFocus = null; diagnostics.clear();
+            captureBarrier = null; captureFocus = null; diagnostics.clear(); FrontierV3PilotMotionObserver.reset(); FrontierV3PilotSettlementPopulationObserver.reset();
             FrontierV3TestPilotPresentation.clear(Minecraft.getInstance());
             if (FrontierV3PilotSessionControl.resumed()) {
                 FrontierV3PilotSessionControl.publishLifecycleSignal("same_client_reconnected_state_cleared", FrontierV3PilotSessionControl.lifecycleSegment(), new JsonObject());
@@ -273,6 +270,7 @@ public final class FrontierV3TestPilotClient {
                 case "look" -> lookAtPosition(minecraft, action);
                 case "look_nearest_entity" -> lookNearestEntity(minecraft, action);
                 case "observe_entity_motion" -> { if (FrontierV3PilotMotionObserver.observe(minecraft, action, actionStartedTick, index + 1, currentCausalMilestone)) advance(type); }
+                case "observe_settlement_population" -> { if (FrontierV3PilotSettlementPopulationObserver.observe(minecraft, action, actionStartedTick, index + 1, currentCausalMilestone)) advance(type); }
                 case "look_operation" -> lookOperation(minecraft, action);
                 case "walk" -> walk(minecraft, position(action, "position"), action.has("radius") ? action.get("radius").getAsDouble() : 1.0D);
                 case "break" -> {
@@ -672,7 +670,12 @@ public final class FrontierV3TestPilotClient {
         minecraft.player.setYRot((float) (Mth.atan2(-dx, dz) * Mth.RAD_TO_DEG)); minecraft.options.keyUp.setDown(true);
         return true;
     }
-    /** Polls the existing read-only diagnostic command at most once per second until a fresh exact predicate arrives. */
+    /**
+     * Polls the existing read-only diagnostic command until a fresh exact predicate arrives.
+     * A declared sub-second cadence is reserved for a bounded visible HOT hand-off whose
+     * physical ownership can legitimately last fewer than twenty client ticks; it neither
+     * changes canonical time nor creates an actor or a scene.
+     */
     private static void waitUntilDiagnostic(Minecraft minecraft, JsonObject action) {
         String view = action.get("view").getAsString(); String id = action.get("id").getAsString(); long tick = minecraft.level.getGameTime();
         ObservedDiagnostic observed = diagnostics.get(new DiagnosticIdentity(view, id));
@@ -680,7 +683,8 @@ public final class FrontierV3TestPilotClient {
         boolean freshReceipt = observed != null && (diagnosticWaitBaseline == null
                 || observed.receiptSequence() > diagnosticWaitBaseline.receiptSequence());
         if (freshReceipt && matches(observed.value(), action.getAsJsonObject("expect")) && increased) { advance("wait_until_diagnostic"); return; }
-        if (System.nanoTime() - diagnosticWaitRequestNanos >= 1_000_000_000L) { minecraft.player.connection.sendCommand("pale_mirror v3 inspect " + view + (id.isBlank() ? "" : " " + id)); diagnosticWaitRequestNanos = System.nanoTime(); }
+        long pollNanos = action.has("pollIntervalMs") ? action.get("pollIntervalMs").getAsLong() * 1_000_000L : 1_000_000_000L;
+        if (System.nanoTime() - diagnosticWaitRequestNanos >= pollNanos) { minecraft.player.connection.sendCommand("pale_mirror v3 inspect " + view + (id.isBlank() ? "" : " " + id)); diagnosticWaitRequestNanos = System.nanoTime(); }
         long timeoutMs = action.get("timeoutMs").getAsLong();
         if ((tick - actionStartedTick) * 50L >= timeoutMs) throw new IllegalStateException("timed out waiting for diagnostic " + view + " " + id + " predicate=" + action.get("expect"));
     }
@@ -748,22 +752,32 @@ public final class FrontierV3TestPilotClient {
     private static void releaseAbsoluteFastForwardHold(Minecraft minecraft) {
         if (!fastForwardSent) {
             fastForwardBaseline = diagnostics.get(new DiagnosticIdentity("performance", ""));
+            releaseProjectionBaseline = diagnostics.get(new DiagnosticIdentity("projection_work", ""));
             minecraft.player.connection.sendCommand("pale_mirror v3 release_advance_hold");
+            // The held-COLD release is the precise physical turn whose cost must be accounted
+            // for.  Pair its normal acknowledgement with the read-only projection snapshot so
+            // a later INPUT_REFRESH cannot erase the compile trigger that caused the turn.
+            minecraft.player.connection.sendCommand("pale_mirror v3 inspect projection_work");
             fastForwardSent = true;
         }
         ObservedDiagnostic observed = diagnostics.get(new DiagnosticIdentity("performance", ""));
+        ObservedDiagnostic projection = diagnostics.get(new DiagnosticIdentity("projection_work", ""));
         if (fresh(observed) && observed.value().has("fastForwardTargetOutcome")
                 && !observed.value().get("fastForwardTargetOutcome").isJsonNull()) {
             JsonObject outcome = observed.value().getAsJsonObject("fastForwardTargetOutcome");
             long baselineRequestId = fastForwardBaseline == null || !fastForwardBaseline.value().has("fastForwardTargetOutcome")
                     || fastForwardBaseline.value().get("fastForwardTargetOutcome").isJsonNull() ? 0L
                     : fastForwardBaseline.value().getAsJsonObject("fastForwardTargetOutcome").get("requestId").getAsLong();
-            if (outcome.get("requestId").getAsLong() > baselineRequestId && "RELEASED".equals(outcome.get("status").getAsString())) {
+            if (outcome.get("requestId").getAsLong() > baselineRequestId && "RELEASED".equals(outcome.get("status").getAsString())
+                    && projection != null && projection != releaseProjectionBaseline) {
                 advance("release_fast_forward_hold"); return;
             }
         }
         long tick = minecraft.level.getGameTime();
-        if ((tick - actionStartedTick) % 20L == 0L) minecraft.player.connection.sendCommand("pale_mirror v3 inspect performance");
+        if ((tick - actionStartedTick) % 20L == 0L) {
+            minecraft.player.connection.sendCommand("pale_mirror v3 inspect performance");
+            minecraft.player.connection.sendCommand("pale_mirror v3 inspect projection_work");
+        }
         if ((tick - actionStartedTick) * 50L >= 30_000L) throw new IllegalStateException("timed out releasing absolute canonical checkpoint");
     }
     /**
@@ -896,7 +910,7 @@ public final class FrontierV3TestPilotClient {
         JsonObject reachedFrame = runningSetup ? null : frameAfter(completedAction);
         index++; actionStartedTick = -1L; currentCausalMilestone = null; breaking = false; placementAttempted = false;
         visitSent = false; visitChunkReadyTick = -1L; visitIngress = null; visitHandshakeArmed = false; visitHandshakeBaseline = null; containerOpenAttempted = false; quickMoveAttempted = false; inspectSent = false; inspectBaseline = null;
-        fastForwardSent = false; fastForwardBaseline = null;
+        fastForwardSent = false; fastForwardBaseline = null; releaseProjectionBaseline = null;
         diagnosticWaitBaseline = null; diagnosticWaitRequestNanos = 0L;
         boardInteractionAttempted = false; entityInteractionAttempted = false;
         attackedEntityRuntimeId = -1; entityAttackAttempts = 0; lastEntityAttackTick = Long.MIN_VALUE; lastAttackedEntityPosition = null;
@@ -934,10 +948,8 @@ public final class FrontierV3TestPilotClient {
     private static JsonObject frameAfter(int completedAction) {
         if (frames == null) return null;
         for (JsonElement element : frames) {
-            JsonObject frame = element.getAsJsonObject();
-            if (frame.get("after").getAsInt() == completedAction) return frame;
-        }
-        return null;
+            JsonObject frame = element.getAsJsonObject(); if (frame.get("after").getAsInt() == completedAction) return frame;
+        } return null;
     }
     /** A filesystem handshake prevents the next chat/command action racing the X11 capture. */
     private static void advanceCaptureBarrier(Minecraft minecraft) {
@@ -966,35 +978,22 @@ public final class FrontierV3TestPilotClient {
             throw new IllegalStateException("visual frame handshake failed for " + barrier.name(), failure);
         }
     }
-    private static Path captureControlDirectory() {
-        String configured = System.getProperty(CAPTURE_CONTROL_PROPERTY, "");
-        return configured.isBlank() ? null : Path.of(configured);
-    }
+    private static Path captureControlDirectory() { String configured = System.getProperty(CAPTURE_CONTROL_PROPERTY, ""); return configured.isBlank() ? null : Path.of(configured); }
     private static void reset() {
-        Minecraft minecraft = Minecraft.getInstance(); minecraft.options.keyUp.setDown(false);
-        FrontierV3TestPilotPresentation.reset(minecraft);
-        actions = null; setup = null; frames = null; captureBarrier = null; captureFocus = null;
-        runningSetup = false; index = 0; actionStartedTick = -1L; breaking = false;
-        visitSent = false; visitChunkReadyTick = -1L; visitIngress = null; visitHandshakeArmed = false; visitHandshakeBaseline = null;
-        containerOpenAttempted = false; quickMoveAttempted = false; inspectSent = false; inspectBaseline = null;
-        boardInteractionAttempted = false; entityInteractionAttempted = false;
-        attackedEntityRuntimeId = -1; entityAttackAttempts = 0; lastEntityAttackTick = Long.MIN_VALUE;
-        diagnostics.clear(); FrontierV3PilotSessionControl.reset(); fastForwardSent = false; fastForwardBaseline = null; currentCausalMilestone = null;
-        diagnosticWaitBaseline = null; diagnosticWaitRequestNanos = 0L;
+        Minecraft minecraft = Minecraft.getInstance(); minecraft.options.keyUp.setDown(false); FrontierV3TestPilotPresentation.reset(minecraft);
+        actions = null; setup = null; frames = null; captureBarrier = null; captureFocus = null; runningSetup = false; index = 0; actionStartedTick = -1L; breaking = false;
+        visitSent = false; visitChunkReadyTick = -1L; visitIngress = null; visitHandshakeArmed = false; visitHandshakeBaseline = null; containerOpenAttempted = false; quickMoveAttempted = false; inspectSent = false; inspectBaseline = null;
+        boardInteractionAttempted = false; entityInteractionAttempted = false; attackedEntityRuntimeId = -1; entityAttackAttempts = 0; lastEntityAttackTick = Long.MIN_VALUE;
+        diagnostics.clear(); FrontierV3PilotMotionObserver.reset(); FrontierV3PilotSettlementPopulationObserver.reset(); FrontierV3PilotSessionControl.reset(); fastForwardSent = false; fastForwardBaseline = null; releaseProjectionBaseline = null; currentCausalMilestone = null; diagnosticWaitBaseline = null; diagnosticWaitRequestNanos = 0L;
     }
     private static void clearExpectedLossTransientState() {
-        Minecraft minecraft = Minecraft.getInstance();
-        minecraft.options.keyUp.setDown(false);
-        actions = null; setup = null; frames = null; captureBarrier = null; captureFocus = null;
-        runningSetup = false; index = 0; actionStartedTick = -1L; breaking = false;
-        placementAttempted = false; visitSent = false; visitChunkReadyTick = -1L; visitIngress = null; visitHandshakeArmed = false; visitHandshakeBaseline = null;
-        containerOpenAttempted = false; quickMoveAttempted = false; inspectSent = false; inspectBaseline = null;
-        fastForwardSent = false; fastForwardBaseline = null; boardInteractionAttempted = false;
-        diagnosticWaitBaseline = null; diagnosticWaitRequestNanos = 0L;
-        entityInteractionAttempted = false; attackedEntityRuntimeId = -1; entityAttackAttempts = 0;
-        lastEntityAttackTick = Long.MIN_VALUE; lastAttackedEntityPosition = null; diagnostics.clear(); inspectBaseline = null;
+        Minecraft.getInstance().options.keyUp.setDown(false);
+        actions = null; setup = null; frames = null; captureBarrier = null; captureFocus = null; runningSetup = false; index = 0; actionStartedTick = -1L; breaking = false;
+        placementAttempted = false; visitSent = false; visitChunkReadyTick = -1L; visitIngress = null;
+        visitHandshakeArmed = false; visitHandshakeBaseline = null; containerOpenAttempted = false;
+        quickMoveAttempted = false; inspectSent = false; inspectBaseline = null;
+        fastForwardSent = false; fastForwardBaseline = null; releaseProjectionBaseline = null; boardInteractionAttempted = false; diagnosticWaitBaseline = null; diagnosticWaitRequestNanos = 0L;
+        entityInteractionAttempted = false; attackedEntityRuntimeId = -1; entityAttackAttempts = 0; lastEntityAttackTick = Long.MIN_VALUE; lastAttackedEntityPosition = null; diagnostics.clear(); FrontierV3PilotMotionObserver.reset(); FrontierV3PilotSettlementPopulationObserver.reset(); inspectBaseline = null;
     }
-    record DiagnosticIdentity(String view, String id) { }
-    record ObservedDiagnostic(long tick, long receiptSequence, JsonObject value) { }
-    private record CaptureBarrier(int after, String name, String presentation, long readyAtTick, boolean announced) { }
-}
+    record DiagnosticIdentity(String view, String id) { } record ObservedDiagnostic(long tick, long receiptSequence, JsonObject value) { }
+    private record CaptureBarrier(int after, String name, String presentation, long readyAtTick, boolean announced) { } }

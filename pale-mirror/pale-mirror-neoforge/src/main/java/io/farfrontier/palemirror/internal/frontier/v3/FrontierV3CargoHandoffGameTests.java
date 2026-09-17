@@ -216,7 +216,7 @@ public final class FrontierV3CargoHandoffGameTests {
         GrayboxCell cell = grayboxCell(target, "route:frontier-network", GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level); ledger.applied(target, cell.ownerId().value(), cell.material().name(), cell.semanticPart().name()); ledger.conflict(target);
         helper.assertTrue(FrontierV3StructuralRepairExecutor.applyOne(level, ledger, target, cell, chest, 0, concrete), "an empty owned loss consumes exactly one matching concrete item");
-        helper.assertTrue(level.getBlockState(target).is(Blocks.GRAY_CARPET) && chest.getItem(0).getCount() == 1 && !ledger.claim(target).conflicted(),
+        helper.assertTrue(level.getBlockState(target).is(Blocks.GRAY_CONCRETE) && chest.getItem(0).getCount() == 1 && !ledger.claim(target).conflicted(),
                 "the live block, exact stack and provenance claim converge together");
         level.setBlock(target, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
         helper.assertFalse(FrontierV3StructuralRepairExecutor.applyOne(level, ledger, target, cell, chest, 0, concrete), "foreign post-loss geometry is never overwritten by repair");
@@ -233,7 +233,7 @@ public final class FrontierV3CargoHandoffGameTests {
 
         helper.assertTrue(FrontierV3RouteMaintenanceExecutor.repairOne(level, ledger, target, cell),
                 "maintenance restores its exact empty conflicted route claim rather than treating it as fresh construction");
-        helper.assertTrue(level.getBlockState(target).is(Blocks.GRAY_CARPET) && !ledger.claim(target).conflicted(),
+        helper.assertTrue(level.getBlockState(target).is(Blocks.GRAY_CONCRETE) && !ledger.claim(target).conflicted(),
                 "one restored route cell clears only its own durable conflict claim");
 
         ledger.conflict(target); level.setBlock(target, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
@@ -265,7 +265,7 @@ public final class FrontierV3CargoHandoffGameTests {
         ledger = restored;
         helper.assertTrue(FrontierV3RouteMaintenanceExecutor.repairOne(level, ledger, target, cell),
                 "the later exact maintenance receipt may restore only the retained canonical scar");
-        helper.assertTrue(level.getBlockState(target).is(Blocks.GRAY_CARPET) && !ledger.claim(target).conflicted(),
+        helper.assertTrue(level.getBlockState(target).is(Blocks.GRAY_CONCRETE) && !ledger.claim(target).conflicted(),
                 "repair alone clears the tombstone and restores the matching claimed route cell");
 
         BlockPos foreign = target.east(); level.setBlock(foreign, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
@@ -287,7 +287,7 @@ public final class FrontierV3CargoHandoffGameTests {
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
         helper.assertTrue(FrontierV3RouteConstructionExecutor.applyOne(level, ledger, target, cell),
                 "one fresh inactive corridor cell accepts the separately-confirmed COLD cargo work");
-        helper.assertTrue(level.getBlockState(target).is(Blocks.GRAY_CARPET) && ledger.claim(target) != null,
+        helper.assertTrue(level.getBlockState(target).is(Blocks.GRAY_CONCRETE) && ledger.claim(target) != null,
                 "the exact live block and newly claimed route provenance must converge without a remote chest");
         BlockPos foreign = target.south(); level.setBlock(foreign, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
         helper.assertFalse(FrontierV3RouteConstructionExecutor.applyOne(level, ledger, foreign, grayboxCell(foreign, "route:frontier-network",

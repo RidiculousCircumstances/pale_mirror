@@ -122,7 +122,11 @@ public final class ResourceSiteProcess {
         }
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(conflict.siteId());
         if (lifecycle.phase() == ResourceSitePhase.DESTROYED || lifecycle.phase() == ResourceSitePhase.CONFLICT) return state;
-        ResourceSiteLifecycle conflicted = lifecycle.conflicted(ResourceSiteConflictDisposition.terminal(conflict.position(), conflict.reason()));
+        ConflictIncident incident = ResourceSiteConflictIncidents.first(lifecycle, conflict);
+        ResourceSiteConflictDisposition disposition = ResourceSiteConflictDisposition.requiresRecoveryInspection(conflict.reason())
+                ? ResourceSiteConflictDisposition.recovery(conflict.position(), conflict.reason(), incident)
+                : ResourceSiteConflictDisposition.terminal(conflict.position(), conflict.reason(), incident);
+        ResourceSiteLifecycle conflicted = lifecycle.conflicted(disposition);
         if (lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance).isEmpty()) {
             return state.withResourceSites(state.resourceSites().replace(conflicted));
         }
@@ -174,4 +178,5 @@ public final class ResourceSiteProcess {
                 : List.of(new ProposedEvent(conflict.siteId(), conflict), new ProposedEvent(conflict.siteId(),
                         new ScheduleEffect.Cancelled(ResourceSiteHarvestProcess.coldProgress(job, 0L).id())));
     }
+
 }

@@ -530,10 +530,13 @@ public final class FrontierSceneBehaviors {
             // A CLOSED lease is retained evidence.  Its matching harvest job is deliberately
             // consumed by the immediately subsequent exact depot receipt, so requiring that
             // transient active record here would make the valid close -> receipt sequence
-            // impossible.  The lease itself retains the exact historical worker identity;
-            // nonterminal field-work scenes still require their live job.
+            // impossible.  DRAINING is the one in-flight body-exit receipt; the lease itself
+            // retains the exact historical worker identity.  Every other nonterminal
+            // field-work scene still requires its live job.
             if (job == null) {
-                if (lease.status() != SceneLeaseStatus.CLOSED) {
+                if (lease.status() != SceneLeaseStatus.CLOSED
+                        && !(lease.status() == SceneLeaseStatus.DRAINING
+                        && FrontierResourceSiteHarvestSceneSupport.isTerminalReceiptRelease(bootstrap, resourceSites, cause(lease)))) {
                     throw new IllegalArgumentException("resource-site scene has no exact active harvest");
                 }
                 return lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toUnmodifiableSet());
@@ -543,7 +546,18 @@ public final class FrontierSceneBehaviors {
         @Override public StrategicPlanState transitionPlans(FrontierWorldState state, SceneLease lease, SceneLeaseStatus nextStatus) { return state.strategicPlans(); }
         @Override public StrategicPlanState releasePlans(FrontierWorldState state, SceneLease lease) { return state.strategicPlans(); }
         @Override public BodyPosition releasedBody(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed) {
-            ResourceSiteHarvestJob job = FrontierResourceSiteHarvestSceneSupport.require(state, cause(lease));
+            ResourceSiteHarvestJob job = null;
+            try { job = FrontierResourceSiteHarvestSceneSupport.require(state, cause(lease)); }
+            catch (IllegalArgumentException missing) {
+                if (!FrontierResourceSiteHarvestSceneSupport.isTerminalReceiptRelease(state, cause(lease))) throw missing;
+                if (lease.members().size() != 1 || !lease.members().getFirst().actorId().equals(actorId)) {
+                    throw new IllegalArgumentException("terminal resource-site scene release has a foreign worker");
+                }
+                // The completed job has no retained next cursor. Preserve the one observed
+                // body position so its following ambient/successor lifecycle starts from the
+                // same exact actor rather than reusing the last crop station as a fake cursor.
+                return observed;
+            }
             if (!job.workerId().equals(actorId)) throw new IllegalArgumentException("resource-site scene release has a foreign worker");
             // Minecraft may unload while the Villager is between two retained surfaces.  The
             // field-job cursor, not that transient sub-cell body, is the sole COLD/HOT hand-off
@@ -552,7 +566,12 @@ public final class FrontierSceneBehaviors {
             return job.traversal().linearCorridorSurfaces().get(job.traversalCursor()).standingBody();
         }
         @Override public SceneReleasePlan releasePlan(FrontierWorldState state, SceneLease lease, long submittedAt, SceneLeaseReleased released) {
-            ResourceSiteHarvestJob job = FrontierResourceSiteHarvestSceneSupport.require(state, cause(lease));
+            ResourceSiteHarvestJob job = null;
+            try { job = FrontierResourceSiteHarvestSceneSupport.require(state, cause(lease)); }
+            catch (IllegalArgumentException missing) {
+                if (!FrontierResourceSiteHarvestSceneSupport.isTerminalReceiptRelease(state, cause(lease))) throw missing;
+                return new SceneReleasePlan(owner(state, lease), released, new SceneContinuation.None());
+            }
             if (state.resourceSites().site(job.siteId()).phase() != ResourceSitePhase.HARVESTING) {
                 return new SceneReleasePlan(owner(state, lease), released, new SceneContinuation.None());
             }
@@ -567,8 +586,11 @@ public final class FrontierSceneBehaviors {
             if (!job.workerId().equals(actorId)) return SceneDeathOutcome.unchanged(state);
             ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId());
             ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).get(job.siteId());
+            ResourceSiteConflictObserved conflict = new ResourceSiteConflictObserved(job.siteId(), site.cropSlots().getFirst(),
+                    ResourceSiteConflictReason.WORKER_DIED, ResourceSiteConflictSource.WORKER_DEATH);
             ResourceSiteState sites = state.resourceSites().replace(lifecycle.conflicted(
-                    ResourceSiteConflictDisposition.terminal(site.cropSlots().getFirst(), ResourceSiteConflictReason.WORKER_DIED)));
+                    ResourceSiteConflictDisposition.terminal(site.cropSlots().getFirst(), ResourceSiteConflictReason.WORKER_DIED,
+                            ResourceSiteConflictIncidents.first(lifecycle, conflict))));
             StrategicPlanState plans = state.strategicPlans().transitionTask(job.taskId(), StrategicTaskStatus.BLOCKED);
             io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent = state.physicalIntents().get(job.intentId());
             if (intent == null) throw new IllegalArgumentException("dead harvest worker has no exact physical intent");
@@ -605,8 +627,10 @@ public final class FrontierSceneBehaviors {
         }
         @Override public SceneReleasePlan releasePlan(FrontierWorldState state, SceneLease lease, long submittedAt, SceneLeaseReleased released) {
             ProductionJob job = FrontierProductionWorkSceneSupport.require(state, cause(lease));
-            boolean blocked = state.strategicPlans().tasks().values().stream().anyMatch(task -> task.ownerId().equals(job.settlementId())
-                    && task.kind() == StrategicTaskKind.PRODUCE_BREAD && task.status() == StrategicTaskStatus.BLOCKED);
+            java.util.Optional<MarketWorkOrder> order = state.companies().market().workOrders().values().stream()
+                    .filter(value -> value.jobId().equals(job.id())).findFirst();
+            boolean blocked = order.map(value -> state.strategicPlans().tasks().get(value.taskId()))
+                    .map(task -> task.status() == StrategicTaskStatus.BLOCKED).orElse(false);
             SceneContinuation continuation = blocked ? new SceneContinuation.FinalizeProductionWork(lease.id(), job.id())
                     : job.workProgress().terminalEffectEligible()
                     ? new SceneContinuation.ResumeProductionCompletion(job.id(), Math.addExact(submittedAt, 1L))

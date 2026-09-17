@@ -92,7 +92,10 @@ final class ResourceSitePhysicalIntentStateSupport {
         else if (intent.kind() == PhysicalIntentKind.RESOURCE_SITE_HARVEST) harvest(lifecycle, intent.id());
         else throw new IllegalArgumentException("resource-site conflict has a foreign physical intent");
         ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).get(lifecycle.siteId());
-        return replace(state, state.resourceSites().replace(lifecycle.conflicted(ResourceSiteConflictDisposition.recovery(site.cropSlots().getFirst()))),
+        ResourceSiteConflictObserved conflict = new ResourceSiteConflictObserved(lifecycle.siteId(), site.cropSlots().getFirst(),
+                ResourceSiteConflictReason.RECOVERY_UNRESOLVED, ResourceSiteConflictSource.PHYSICAL_INTENT_RECOVERY);
+        return replace(state, state.resourceSites().replace(lifecycle.conflicted(ResourceSiteConflictDisposition.recovery(site.cropSlots().getFirst(),
+                ResourceSiteConflictIncidents.first(lifecycle, conflict)))),
                 nextIntents, state.physicalObservations());
     }
 

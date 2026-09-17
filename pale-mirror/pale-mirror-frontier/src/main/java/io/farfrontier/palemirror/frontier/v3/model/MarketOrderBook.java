@@ -96,11 +96,30 @@ public final class MarketOrderBook {
     }
 
     public MarketOrderBook complete(SubjectId orderId) { return terminal(orderId, MarketWorkOrderStatus.FULFILLED, MarketDemandStatus.FULFILLED); }
+    public MarketOrderBook complete(SubjectId orderId, ProductionJob completedJob) {
+        MarketWorkOrder order = workOrders.get(Objects.requireNonNull(orderId, "market work order id"));
+        if (order == null || order.status() != MarketWorkOrderStatus.ACCEPTED || !order.jobId().equals(completedJob.id())) {
+            throw new IllegalArgumentException("only this accepted work order may retain its completed job");
+        }
+        MarketDemand demand = demands.get(order.demandId());
+        Map<SubjectId, MarketDemand> nextDemands = new LinkedHashMap<>(demands); nextDemands.put(demand.id(), demand.withStatus(MarketDemandStatus.FULFILLED));
+        Map<SubjectId, MarketWorkOrder> nextOrders = new LinkedHashMap<>(workOrders); nextOrders.put(order.id(), order.fulfilled(TerminalProductionReceipt.of(completedJob)));
+        return new MarketOrderBook(nextDemands, quotes, nextOrders);
+    }
     public MarketOrderBook cancel(SubjectId orderId, MarketWorkOrderStatus outcome) {
         if (outcome != MarketWorkOrderStatus.CANCELLED && outcome != MarketWorkOrderStatus.CONFLICT) {
             throw new IllegalArgumentException("market cancellation needs a cancellation outcome");
         }
         return terminal(orderId, outcome, MarketDemandStatus.CANCELLED);
+    }
+    public MarketOrderBook relationshipConflict(SubjectId orderId, RelationshipIncident incident) {
+        MarketWorkOrder order = workOrders.get(Objects.requireNonNull(orderId, "market work order id"));
+        if (order == null || order.status() != MarketWorkOrderStatus.ACCEPTED || order.relationshipIncident().isPresent()) {
+            throw new IllegalArgumentException("only one first relationship incident may terminalize an accepted order");
+        }
+        Map<SubjectId, MarketDemand> nextDemands = new LinkedHashMap<>(demands); nextDemands.put(order.demandId(), demands.get(order.demandId()).withStatus(MarketDemandStatus.CANCELLED));
+        Map<SubjectId, MarketWorkOrder> nextOrders = new LinkedHashMap<>(workOrders); nextOrders.put(order.id(), order.conflict(incident));
+        return new MarketOrderBook(nextDemands, quotes, nextOrders);
     }
 
     public MarketOrderBook expireOpen(long now) {
@@ -189,6 +208,10 @@ public final class MarketOrderBook {
         if (order.status() == MarketWorkOrderStatus.FULFILLED && demand.status() != MarketDemandStatus.FULFILLED) {
             throw new IllegalArgumentException("fulfilled market work order requires fulfilled demand");
         }
+        if (order.terminalReceipt().isPresent() && !order.terminalReceipt().orElseThrow().jobId().equals(order.jobId())) {
+            throw new IllegalArgumentException("market terminal receipt must retain its exact order job");
+        }
+        if (order.relationshipIncident().isPresent() && order.status() != MarketWorkOrderStatus.CONFLICT) throw new IllegalArgumentException("relationship incident requires conflict order");
         if ((order.status() == MarketWorkOrderStatus.CANCELLED || order.status() == MarketWorkOrderStatus.CONFLICT)
                 && demand.status() != MarketDemandStatus.CANCELLED) {
             throw new IllegalArgumentException("cancelled market work order requires cancelled demand");

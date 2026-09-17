@@ -257,7 +257,10 @@ class RouteConstructionTaskProcessTest {
         SubjectId member = project.team().orElseThrow().memberIds().getFirst();
 
         AmbientActorLease ordinary = AmbientActorProcess.nextLease(state, member, new SimInstant(0L));
-        assertEquals(AmbientGoalKind.WORK, ordinary.goal(), "the predecessor is an ordinary ambient lease before an engineering assembly exists");
+        assertEquals(AmbientGoalKind.PATROL, ordinary.goal(),
+                "before the retained engineering assembly exists, profession alone may not invent a visible work route");
+        assertEquals(state.actorLocations().get(member).body().supportingSurface().support(), ordinary.goalBody().supportingSurface().support(),
+                "the ordinary predecessor must retain the exact canonical station until the engineering owner admits its assembly");
         state = AmbientLeaseStateProcess.transition(AmbientLeaseStateProcess.prepare(state, ordinary), member, AmbientLeaseStatus.HOT);
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> blockedAdmission = RouteConstructionProcess.plan(state,
                 RouteConstructionProcess.scan(1, 200L));

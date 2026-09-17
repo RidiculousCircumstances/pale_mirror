@@ -69,7 +69,15 @@ final class FrontierV3AmbientActorLocalTargets {
     }
 
     static boolean directedGoal(AmbientActorLease lease) {
-        return lease.goal() == AmbientGoalKind.TRANSIT || lease.goal() == AmbientGoalKind.OPERATION_ASSEMBLY
+        // WORK is a retained canonical destination, just like the typed assembly goals.  In
+        // particular, a resource-site scene releases its farmer at the final crop station and
+        // the subsequent ambient lease deliberately names the farm work anchor.  Treating that
+        // declared return as presentation-only idling re-anchored the body on the last crop
+        // forever: the scene and harvest receipt were complete, but the physical worker never
+        // left their completed station.  The lease target, rather than the old hand-off body,
+        // owns this post-work movement.
+        return lease.goal() == AmbientGoalKind.TRANSIT || lease.goal() == AmbientGoalKind.WORK
+                || lease.goal() == AmbientGoalKind.OPERATION_ASSEMBLY
                 || lease.goal() == AmbientGoalKind.ENGINEERING_ASSEMBLY || lease.goal() == AmbientGoalKind.HIVE_TASK_ASSEMBLY
                 || lease.goal() == AmbientGoalKind.SCOUT_PATROL;
     }

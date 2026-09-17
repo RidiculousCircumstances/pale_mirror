@@ -49,9 +49,13 @@ public final class FrontierProductionWorkSceneSupport {
     public static SubjectId owner(FrontierWorldState state, ProductionWorkSceneCause cause) { return require(state, cause).settlementId(); }
     /** A blocked worker scene keeps the exact job until its body-release receipt is durable. */
     static boolean awaitingBlockedRelease(Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> leases,
-                                          StrategicPlanState plans, ProductionJob job) {
-        boolean blocked = plans.tasks().values().stream().anyMatch(task -> task.ownerId().equals(job.settlementId())
-                && task.kind() == StrategicTaskKind.PRODUCE_BREAD && task.status() == StrategicTaskStatus.BLOCKED);
+                                          StrategicPlanState plans, CompanyRegistry companies, ProductionJob job) {
+        // A missing materialized input is lawful only while this exact job's retained task is
+        // blocked and its same worker is closing.  Another bread task's failure cannot make a
+        // live job's missing input valid or authorize its custody hand-off.
+        boolean blocked = companies.market().workOrders().values().stream().filter(order -> order.jobId().equals(job.id()))
+                .map(order -> plans.tasks().get(order.taskId())).filter(java.util.Objects::nonNull)
+                .anyMatch(task -> task.status() == StrategicTaskStatus.BLOCKED);
         return blocked && leases.values().stream().anyMatch(lease -> (lease.status() == SceneLeaseStatus.DRAINING || lease.status() == SceneLeaseStatus.CLOSED)
                 && FrontierSceneBehaviors.isProductionWork(lease) && FrontierSceneBehaviors.productionWork(lease).jobId().equals(job.id()));
     }

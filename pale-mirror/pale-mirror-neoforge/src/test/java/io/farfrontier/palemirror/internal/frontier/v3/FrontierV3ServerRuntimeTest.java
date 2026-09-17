@@ -115,6 +115,32 @@ class FrontierV3ServerRuntimeTest {
     }
 
     @Test
+    void resourceSiteConflictRuntimeRestartRetainsTheFirstCanonicalIncident(@TempDir Path directory) {
+        WorldId world = new WorldId("frontier:resource-site-conflict-runtime-restart");
+        FrontierStore store = new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs());
+        var configuration = FrontierWorldRuntimeDefinition.configuration(world, 91L);
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
+                FrontierV3ServerRuntime.start(configuration, store, 10_000);
+        FrontierWorldState initial = worldState(runtime);
+        SubjectId site = new SubjectId("site:1-wheat-field");
+        BlockPosition crop = io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSitePlan.compile(initial.bootstrap())
+                .get(site).cropSlots().getFirst();
+        submitWorld(runtime, "resource-site-conflict-first", new io.farfrontier.palemirror.frontier.v3.model.ResourceSiteConflictObserved(site, crop,
+                io.farfrontier.palemirror.frontier.v3.model.ResourceSiteConflictReason.PLAYER_REMOVED_MANAGED_CELL,
+                io.farfrontier.palemirror.frontier.v3.model.ResourceSiteConflictSource.PLAYER_WORLD_OBSERVATION));
+        var first = worldState(runtime).resourceSites().site(site).conflictDisposition().orElseThrow().incident();
+        assertEquals("incident:resource-site:1-wheat-field", first.id());
+        assertEquals("PLAYER_WORLD_OBSERVATION", first.source());
+        runtime.shutdown();
+
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> recovered =
+                FrontierV3ServerRuntime.start(configuration, store, 10_000);
+        assertEquals(first, worldState(recovered).resourceSites().site(site).conflictDisposition().orElseThrow().incident(),
+                "the runtime WAL recovery retains the first accepted canonical source and trace join");
+        recovered.shutdown();
+    }
+
+    @Test
     void sceneAdmissionDefersWhenAnExactParticipantAlreadyHasAnAmbientLease(@TempDir Path directory) {
         WorldId world = new WorldId("frontier:scene-ambient-handoff");
         var runtime = FrontierV3ServerRuntime.start(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(world, 91L),
@@ -237,12 +263,19 @@ class FrontierV3ServerRuntimeTest {
     @Test
     void boundedAdvanceUsesTheSameWalBackedTickEngineAndRecovers(@TempDir Path directory) {
         FrontierStore store = new FrontierFileStore(directory, codecs());
-        FrontierV3ServerRuntime<Counter, CounterProjection> runtime = FrontierV3ServerRuntime.start(configuration(), store, 2);
+        FrontierV3PerformanceMetrics metrics = new FrontierV3PerformanceMetrics();
+        FrontierV3ServerRuntime<Counter, CounterProjection> runtime = FrontierV3ServerRuntime.start(configuration().withExecutionMetrics(metrics), store, 2);
         assertInstanceOf(CommandResult.Accepted.class,
                 runtime.submit(command("command:advance", Revision.ZERO, SimInstant.ZERO, 7)).orElseThrow());
 
         assertEquals(new SimInstant(3L), runtime.advance(3, new WorkBudget(4, 8)).orElseThrow().instant());
         assertEquals(new Revision(1L), runtime.checkpointImage().orElseThrow().revision());
+        assertTrue(metrics.snapshot().stages().stream().anyMatch(sample -> sample.stage() == io.farfrontier.palemirror.frontier.v3.kernel.FrontierExecutionMetrics.Stage.TRANSACTION
+                && sample.kind().equals("runtime.checkpoint") && sample.owner().equals(WORLD.value()) && sample.samples() == 1L),
+                "periodic WAL/snapshot/compaction work must remain attributable outside the canonical planner spans");
+        assertTrue(metrics.snapshot().stages().stream().anyMatch(sample -> sample.stage() == io.farfrontier.palemirror.frontier.v3.kernel.FrontierExecutionMetrics.Stage.PERSISTENCE
+                && sample.kind().equals("write-ahead") && sample.owner().equals(WORLD.value()) && sample.samples() >= 1L),
+                "each accepted canonical transaction must expose its write-ahead boundary separately from planning and reduction");
         runtime.shutdown();
 
         FrontierV3ServerRuntime<Counter, CounterProjection> recovered = FrontierV3ServerRuntime.start(configuration(), store, 2);

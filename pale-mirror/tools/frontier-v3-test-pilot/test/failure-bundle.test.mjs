@@ -26,7 +26,12 @@ test('failure bundle retains bounded causal evidence and names the preserved wor
       termination: { portClosed: true }, diagnosticSnapshots: [{ value: { kind: 'process', id: 'job:test', revision: 9, status: 'ok',
         family: 'frontier.test', identity: { job: 'job:test', worker: 'resident:test' }, claims: { intent: 'intent:test', lease: { id: 'lease:test' } },
         conservation: { outputItem: 'item:test', completedCropSlots: 3 }, schedule: { count: 1 }, cursor: { index: 3 },
-        result: { sitePhase: 'HARVESTING', intentStatus: 'PREPARED' } } }], lifecycleDirectory: join(project, 'lifecycle') });
+        result: { sitePhase: 'HARVESTING', intentStatus: 'PREPARED' } } }], lifecycleDirectory: join(project, 'lifecycle'),
+      zeroPlayerIntervals: { prelude: { status: 'held', targetInstant: 12, clientSegmentsBeforeCompletion: 0,
+        boundedness: { status: 'STALL', noServerTickStall: false, stallCount: 1, maxBehindMillis: 2245, maxBehindTicks: 44 },
+        performance: { kind: 'performance', status: 'ok', fastForwardSlice: { samples: 13, advancedTicks: 96,
+          totalNanos: 31, maxNanos: 7, safetyNanos: 11, maxSafetyNanos: 3, advanceNanos: 17, maxAdvanceNanos: 5 },
+        stages: [{ stage: 'PHYSICAL', kind: 'graybox-projection', owner: 'settlement:7', samples: 1, totalNanos: 19, maxNanos: 19 }] } } } });
     const bundle = JSON.parse(await readFile(join(directory, 'bundle.json'), 'utf8'));
     assert.equal(bundle.kind, 'frontier-v3-failure-bundle');
     assert.equal(bundle.retainedWorld, 'world');
@@ -41,6 +46,9 @@ test('failure bundle retains bounded causal evidence and names the preserved wor
     assert.equal(bundle.semantic.snapshots[0].claims.lease.id, 'lease:test');
     assert.equal(bundle.semantic.snapshots[0].conservation.completedCropSlots, 3);
     assert.equal(bundle.artifacts.lifecycle.events[0].value.barrier, 'server_run_ready');
+    assert.equal(bundle.zeroPlayerIntervals.prelude.performance.fastForwardSlice.safetyNanos, 11);
+    assert.equal(bundle.zeroPlayerIntervals.prelude.performance.stages[0].kind, 'graybox-projection');
+    assert.equal(bundle.zeroPlayerIntervals.prelude.boundedness.maxBehindTicks, 44);
 
     const inlineDirectory = await writeFailureBundle({ project, output: 'build/profiles/inline-run.json', scenarioPath: join(project, 'scenario.json'),
       runId: '00000000-0000-0000-0000-000000000002', timing: { totalMillis: 1 }, failure: new Error('inline expected'),

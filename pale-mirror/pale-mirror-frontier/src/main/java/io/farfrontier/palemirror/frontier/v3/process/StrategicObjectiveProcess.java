@@ -23,6 +23,20 @@ public final class StrategicObjectiveProcess {
                 new SimInstant(dueAt), 0, owner, "frontier.objective.review", 1);
     }
 
+    /** A settled ration wakes only the retained pending field work of that settlement. */
+    public static ScheduledAction provisionReconsideration(SettlementProvision provision, long dueAt) {
+        String owner = provision.settlementId().value().replace(':', '-');
+        return new ScheduledAction(new ScheduleId("schedule:objective-provision-secure-" + owner + "-" + provision.cycleOrdinal()),
+                new SimInstant(dueAt), 0, provision.settlementId(), "frontier.objective.provision_reconsider", 1);
+    }
+
+    public static List<ProposedEvent> planProvisionReconsideration(FrontierWorldState state, ScheduledAction action) {
+        SettlementProvision provision = state.humanPopulation().provision(action.subject());
+        if (provision.status() != SettlementProvisionStatus.SECURE || !action.kind().equals("frontier.objective.provision_reconsider")
+                || !action.id().equals(provisionReconsideration(provision, action.dueAt().ticks()).id())) return List.of();
+        return pendingHarvestStarts(state, action.subject(), action.dueAt().ticks());
+    }
+
     /**
      * A physical route fact must wake only the settlements whose actual supply corridor it
      * invalidates.  This is deliberately a one-shot reconsideration: it cannot multiply the
@@ -141,8 +155,13 @@ public final class StrategicObjectiveProcess {
         Candidate candidate = new Candidate(StrategicObjectiveKind.SETTLEMENT_HARVEST_RESOURCE_SITE, Optional.empty(), Optional.of(lifecycle.siteId()), FixedScalar.SCALE);
         DecisionPolicyRegistry.require(state.strategicPlans().requireDecisionAuthority(owner));
         StrategicObjective objective = objective(state, owner, candidate, ordinal); StrategicTask task = task(state, objective);
+        // The ready-field opportunity has already passed its durable planner boundary.  The
+        // bounded start offset reserves the planner's ordinary owner-handoff turn without
+        // consuming the entire pre-ingress COLD window.  A full hundred ticks used to be harmless
+        // while farmers were implicitly placed close to their work, but now steals the beginning
+        // of their retained home-to-field traversal.
         return List.of(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
-                new ProposedEvent(task.id(), new ScheduleEffect.Created(ResourceSiteHarvestProcess.start(task, Math.addExact(action.dueAt().ticks(), 100L)))));
+                new ProposedEvent(task.id(), new ScheduleEffect.Created(ResourceSiteHarvestProcess.start(task, Math.addExact(action.dueAt().ticks(), 85L)))));
     }
 
     private static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, boolean recurring,
@@ -225,6 +244,11 @@ public final class StrategicObjectiveProcess {
                     new ProposedEvent(owner, new MarketDemandOpened(demand)),
                     new ProposedEvent(demand.id(), new ScheduleEffect.Created(MarketClearingProcess.clear(demand, 1, action.dueAt().ticks() + 100L))));
         }
+        if (task.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE) {
+            return withPreemption(preempted, concatenate(observedAndHealth, next), new ProposedEvent(owner, new StrategicObjectiveSelected(objective)),
+                    new ProposedEvent(owner, new StrategicTaskPlanned(task)), new ProposedEvent(task.id(),
+                            new ScheduleEffect.Created(ResourceSiteHarvestProcess.start(task, action.dueAt().ticks() + 1L))));
+        }
         if (task.kind() == StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE) {
             return withPreemption(preempted, concatenate(observedAndHealth, next), new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
                     new ProposedEvent(owner, new ScheduleEffect.Created(RoutePatrolProcess.start(task, action.dueAt().ticks() + 100L))));
@@ -278,6 +302,19 @@ public final class StrategicObjectiveProcess {
         List<ProposedEvent> result = new java.util.ArrayList<>(preempted);
         result.addAll(List.of(events)); result.addAll(next);
         return List.copyOf(result);
+    }
+
+    private static List<ProposedEvent> pendingHarvestStarts(FrontierWorldState state, SubjectId settlementId, long dueAt) {
+        return state.strategicPlans().tasks().values().stream().filter(task -> task.ownerId().equals(settlementId))
+                .filter(task -> task.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE && task.status() == StrategicTaskStatus.PENDING)
+                .filter(task -> task.resourceSiteTarget().map(state.resourceSites()::site).map(site -> site.phase() == ResourceSitePhase.READY).orElse(false))
+                .sorted(Comparator.comparing(StrategicTask::id)).map(task -> {
+                    ScheduledAction replacement = ResourceSiteHarvestProcess.start(task, Math.addExact(dueAt, 1L));
+                    // Resource-site opportunity admission owns this one stable start action.  A
+                    // secured ration advances that retained action; creating a second action
+                    // with the same task identity quarantines the whole canonical interval.
+                    return new ProposedEvent(task.id(), new ScheduleEffect.Rescheduled(replacement.id(), replacement));
+                }).toList();
     }
     private static List<ProposedEvent> concatenate(List<ProposedEvent> first, List<ProposedEvent> second) {
         List<ProposedEvent> result = new java.util.ArrayList<>(first); result.addAll(second); return List.copyOf(result);

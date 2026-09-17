@@ -45,6 +45,138 @@ import java.util.Optional;
 public final class FrontierV3AmbientPhysicsGameTests {
     private FrontierV3AmbientPhysicsGameTests() { }
 
+    /**
+     * A canonical actor has one exact body column.  A live occupant is a local physical
+     * obstruction, not permission to place a second body, select an apron cell, or change the
+     * actor's durable location.  Clearing that observed occupant permits the same exact body.
+     */
+    @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/mobs/empty")
+    public static void freshAmbientAdmissionDefersForOccupiedExactBodyColumn(GameTestHelper helper) {
+        BlockPos support = helper.absolutePos(new BlockPos(2, 4, 2));
+        BlockPos otherSupport = helper.absolutePos(new BlockPos(5, 4, 2));
+        prepareFallArena(helper.getLevel(), support);
+        prepareFallArena(helper.getLevel(), otherSupport);
+        Fixture fixture = fixture(support, otherSupport);
+        BodyPosition expected = fixture.state().actorLocations().get(fixture.resident()).body();
+        Villager occupant = EntityType.VILLAGER.create(helper.getLevel());
+        if (occupant == null) throw new IllegalStateException("test body column occupant could not be created");
+        occupant.setNoAi(true);
+        occupant.setPos(support.getX() + .5D, support.getY() + 1.0D, support.getZ() + .5D);
+        helper.getLevel().addFreshEntity(occupant);
+
+        // GameTest registers spawned fixtures on the next server turn, which is the same
+        // physical observation point at which ordinary ambient admission runs.
+        helper.runAfterDelay(1, () -> {
+            helper.assertTrue(occupant.isAlive() && helper.getLevel().getEntity(occupant.getUUID()) == occupant,
+                    "the ordinary physical occupant must be visible before admission is evaluated");
+            helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(helper.getLevel(), fixture.state(), fixture.resident(), expected),
+                    FrontierV3AmbientActorExecutor.Result.DEFERRED,
+                    "a live body occupying the canonical column must defer exact admission rather than create an overlapping managed actor");
+            helper.assertTrue(helper.getLevel().getEntity(FrontierV3AmbientActorExecutor.entityId(fixture.state(), fixture.resident())) == null,
+                    "a deferred exact admission must leave no replacement or duplicate UUID body");
+            occupant.discard();
+            helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(helper.getLevel(), fixture.state(), fixture.resident(), expected),
+                    FrontierV3AmbientActorExecutor.Result.APPLIED,
+                    "the unchanged canonical body must materialize once the observed local obstruction clears");
+            Mob admitted = (Mob) helper.getLevel().getEntity(FrontierV3AmbientActorExecutor.entityId(fixture.state(), fixture.resident()));
+            helper.assertTrue(admitted != null && admitted.blockPosition().equals(support.above()),
+                    "the admitted body must retain its exact canonical column rather than an alternate physical placement");
+            admitted.discard();
+            helper.succeed();
+        });
+    }
+
+    /**
+     * A retained physical edge may wait behind a live body, but must never manufacture an
+     * overlap and leave vanilla's push-out/fall mechanics to arbitrate two exact owners.
+     */
+    @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
+    public static void retainedMotionDefersAtOccupiedLivingBodyWithoutSideStep(GameTestHelper helper) {
+        BlockPos firstSupport = helper.absolutePos(new BlockPos(2, 4, 2));
+        BlockPos occupiedSupport = helper.absolutePos(new BlockPos(3, 4, 2));
+        prepareFallArena(helper.getLevel(), firstSupport);
+        prepareFallArena(helper.getLevel(), occupiedSupport);
+        Villager moving = EntityType.VILLAGER.create(helper.getLevel());
+        Villager occupant = EntityType.VILLAGER.create(helper.getLevel());
+        if (moving == null || occupant == null) throw new IllegalStateException("test retained bodies could not be created");
+        moving.setNoAi(true);
+        occupant.setNoAi(true);
+        moving.setPos(firstSupport.getX() + .5D, firstSupport.getY() + 1.0D, firstSupport.getZ() + .5D);
+        occupant.setPos(occupiedSupport.getX() + .5D, occupiedSupport.getY() + 1.0D, occupiedSupport.getZ() + .5D);
+        helper.getLevel().addFreshEntity(moving);
+        helper.getLevel().addFreshEntity(occupant);
+        double initialX = moving.getX();
+        Vec3 retainedTarget = new Vec3(occupiedSupport.getX() + 1.5D, occupiedSupport.getY() + 1.0D, occupiedSupport.getZ() + .5D);
+
+        for (int tick = 1; tick <= 16; tick++) {
+            helper.runAtTickTime(tick, () -> {
+                FrontierV3ControlledMobMotion.moveToward(helper.getLevel(), moving, retainedTarget);
+                FrontierV3ControlledMobMotion.advanceAtEntityBoundary(moving);
+            });
+        }
+        helper.runAtTickTime(17, () -> {
+            helper.assertTrue(moving.getX() > initialX && moving.getX() < occupiedSupport.getX() - .10D,
+                    "the exact retained edge may approach but must stop before its living-body obstruction: moving=" + moving.position());
+            helper.assertTrue(Math.abs(occupant.getX() - (occupiedSupport.getX() + .5D)) < 1.0E-6D,
+                    "the waiting body must not push or relocate the unrelated living occupant");
+            occupant.discard();
+        });
+        for (int tick = 18; tick <= 23; tick++) {
+            helper.runAtTickTime(tick, () -> {
+                FrontierV3ControlledMobMotion.moveToward(helper.getLevel(), moving, retainedTarget);
+                FrontierV3ControlledMobMotion.advanceAtEntityBoundary(moving);
+            });
+        }
+        helper.runAtTickTime(24, () -> {
+            helper.assertTrue(moving.getX() > occupiedSupport.getX() + .10D,
+                    "clearing the observed obstruction must resume the same retained edge without a side-step or coordinate reset: moving=" + moving.position());
+            moving.discard();
+            helper.succeed();
+        });
+    }
+
+    /** A recovered grounded body must not turn a serialized historical fall counter into a new death. */
+    @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/mobs/empty")
+    public static void groundedRecoveredBodyClearsHistoricalFallDistanceBeforePhysics(GameTestHelper helper) {
+        BlockPos support = helper.absolutePos(new BlockPos(2, 4, 2));
+        prepareFallArena(helper.getLevel(), support);
+        Villager recovered = EntityType.VILLAGER.create(helper.getLevel());
+        if (recovered == null) throw new IllegalStateException("test recovered body could not be created");
+        recovered.setNoAi(true);
+        recovered.setPos(support.getX() + .5D, support.getY() + 1.0D, support.getZ() + .5D);
+        recovered.fallDistance = 64.0F;
+        helper.getLevel().addFreshEntity(recovered);
+        helper.runAfterDelay(1, () -> {
+            FrontierV3ControlledMobMotion.restoreOrdinaryPhysics(recovered);
+            FrontierV3ControlledMobMotion.advanceAtEntityBoundary(recovered);
+            helper.assertTrue(recovered.isAlive() && recovered.getHealth() == recovered.getMaxHealth() && recovered.fallDistance == 0.0F,
+                    "a grounded recovered body must clear historical fall state before ordinary physics can apply a new fall: health="
+                            + recovered.getHealth() + " fallDistance=" + recovered.fallDistance + " position=" + recovered.position());
+            recovered.discard();
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/mobs/empty")
+    public static void airborneRecoveredBodyRetainsOrdinaryFallEvidence(GameTestHelper helper) {
+        BlockPos support = helper.absolutePos(new BlockPos(2, 4, 2));
+        prepareFallArena(helper.getLevel(), support);
+        Villager recovered = EntityType.VILLAGER.create(helper.getLevel());
+        if (recovered == null) throw new IllegalStateException("test recovered body could not be created");
+        recovered.setNoAi(true);
+        recovered.setNoGravity(true);
+        recovered.setPos(support.getX() + .5D, support.getY() + 4.0D, support.getZ() + .5D);
+        recovered.fallDistance = 6.0F;
+        helper.getLevel().addFreshEntity(recovered);
+        helper.runAfterDelay(1, () -> {
+            FrontierV3ControlledMobMotion.restoreOrdinaryPhysics(recovered);
+            helper.assertTrue(recovered.fallDistance == 6.0F,
+                    "an unsupported recovered body must retain real fall evidence rather than masking an in-flight physical outcome");
+            recovered.discard();
+            helper.succeed();
+        });
+    }
+
     @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
     public static void retainedResidentAndBioformFallAfterSupportRemovalWithoutCoordinateReset(GameTestHelper helper) {
         // Raise the temporary supports above the bastion template's own floor.  The lower owned
@@ -87,6 +219,9 @@ public final class FrontierV3AmbientPhysicsGameTests {
                             && Math.abs(bioform.getY() - (bioformSupport.getY() - 2.0D)) < 1.0E-6D,
                     "ordinary collision must retain both managed bodies exactly on the declared lower support: resident="
                             + resident.position() + " bioform=" + bioform.position());
+            helper.assertTrue(resident.fallDistance == 0.0F && bioform.fallDistance == 0.0F,
+                    "a completed managed landing must not retain fall distance into a later HOT/restart turn: resident="
+                            + resident.fallDistance + " bioform=" + bioform.fallDistance);
             helper.succeed();
         });
     }
@@ -106,8 +241,13 @@ public final class FrontierV3AmbientPhysicsGameTests {
         // physical collision path.
         BlockPos residentSupport = helper.absolutePos(new BlockPos(2, 4, 2));
         BlockPos bioformSupport = helper.absolutePos(new BlockPos(5, 4, 2));
-        prepareFallArena(level, residentSupport); prepareFallArena(level, bioformSupport);
         Fixture fixture = fixture(residentSupport, bioformSupport);
+        // The exact agricultural resident begins at its final field station and follows the
+        // plan-owned return surface.  Give that declared, four-cell local departure its real
+        // collision floor; a three-by-three square at the old generic-home fixture is not a
+        // physical test of the corrected post-harvest body.
+        prepareFallCorridor(level, residentSupport, fixture.residentWorkTarget());
+        prepareFallArena(level, bioformSupport);
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(fixture.state());
         ServerPlayer observer = helper.makeMockServerPlayerInLevel();
         observer.setPos(residentSupport.getX() + 6.5D, residentSupport.getY() + 1.0D, residentSupport.getZ() + 6.5D);
@@ -215,6 +355,20 @@ public final class FrontierV3AmbientPhysicsGameTests {
         }
     }
 
+    private static void prepareFallCorridor(ServerLevel level, BlockPos start, BlockPosition target) {
+        int minX = Math.min(start.getX(), target.x()) - 1, maxX = Math.max(start.getX(), target.x()) + 1;
+        int minZ = Math.min(start.getZ(), target.z()) - 1, maxZ = Math.max(start.getZ(), target.z()) + 1;
+        for (int x = minX; x <= maxX; x++) for (int z = minZ; z <= maxZ; z++) {
+            BlockPos column = new BlockPos(x, start.getY(), z);
+            level.setBlock(column.below(3), Blocks.STONE.defaultBlockState(), 3);
+            level.setBlock(column.below(2), Blocks.AIR.defaultBlockState(), 3);
+            level.setBlock(column.below(), Blocks.AIR.defaultBlockState(), 3);
+            level.setBlock(column, Blocks.STONE.defaultBlockState(), 3);
+            level.setBlock(column.above(), Blocks.AIR.defaultBlockState(), 3);
+            level.setBlock(column.above(2), Blocks.AIR.defaultBlockState(), 3);
+        }
+    }
+
     /** A body may straddle two cells; breaking only its feet column leaves a real collision ledge. */
     private static List<BlockPos> supportingBlocks(Mob body) {
         AABB box = body.getBoundingBox(); int supportY = (int) Math.floor(body.getY() - .01D);
@@ -242,7 +396,15 @@ public final class FrontierV3AmbientPhysicsGameTests {
                 FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:ambient-executor-support-loss"), 97L);
         FrontierWorldState source = base.initialState();
         SubjectId sourceResident = source.humanPopulation().residents().keySet().stream().sorted().findFirst().orElseThrow();
-        BlockPosition sourceFloor = source.actorLocations().get(sourceResident).supportingSurface().support();
+        SubjectId sourceSettlement = source.humanPopulation().resident(sourceResident).settlementId();
+        ResourceSite sourceSite = FrontierResourceSitePlan.compile(source.bootstrap()).values().stream()
+                .filter(site -> site.settlementId().equals(sourceSettlement)).reduce((left, right) -> {
+                    throw new IllegalStateException("fixture farmer has ambiguous resource sites");
+                }).orElseThrow();
+        // Translate the complete immutable world from the same terminal station that the
+        // farmer actually owns.  This keeps the live body, the post-harvest WORK target and
+        // the prepared ordinary collision corridor in one coordinate frame.
+        BlockPosition sourceFloor = sourceSite.cropSlots().getLast().offset(0, -1, 0);
         FrontierWorldState initial = FrontierWorldState.initial(translatedBootstrap(source.bootstrap(),
                 residentSupport.getX() - sourceFloor.x(), residentSupport.getY() - sourceFloor.y(), residentSupport.getZ() - sourceFloor.z()));
         SubjectId resident = initial.humanPopulation().residents().keySet().stream().sorted().findFirst().orElseThrow();
@@ -253,8 +415,13 @@ public final class FrontierV3AmbientPhysicsGameTests {
         Map<SubjectId, BioformLifecycle> lifecycles = new LinkedHashMap<>(initial.hiveColony().bioformLifecycles());
         BioformLifecycle original = lifecycles.get(bioform);
         lifecycles.put(bioform, original == null ? BioformLifecycle.activeWithoutHome() : BioformLifecycle.active(original.homeSlot().orElseThrow()));
-        return new Fixture(initial.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors)
-                .hiveColony(initial.hiveColony().withBioformLifecycles(lifecycles))), resident, bioform);
+        FrontierWorldState fixture = initial.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors)
+                .hiveColony(initial.hiveColony().withBioformLifecycles(lifecycles)));
+        ResourceSite translatedSite = FrontierResourceSitePlan.compile(fixture.bootstrap()).values().stream()
+                .filter(site -> site.settlementId().equals(fixture.humanPopulation().resident(resident).settlementId()))
+                .reduce((left, right) -> { throw new IllegalStateException("fixture farmer has ambiguous translated resource sites"); })
+                .orElseThrow();
+        return new Fixture(fixture, resident, bioform, ResourceSiteHarvestTraversal.workReturnSurface(fixture.bootstrap(), translatedSite).support());
     }
 
     private static BlockPosition block(BlockPos position) { return new BlockPosition(position.getX(), position.getY(), position.getZ()); }
@@ -287,7 +454,7 @@ public final class FrontierV3AmbientPhysicsGameTests {
                 new TerrainSurfacePlan(source.terrain().baselineSupportY() + dy, surveyed));
     }
 
-    private record Fixture(FrontierWorldState state, SubjectId resident, SubjectId bioform) { }
+    private record Fixture(FrontierWorldState state, SubjectId resident, SubjectId bioform, BlockPosition residentWorkTarget) { }
 
     private static final class EphemeralStore implements FrontierStore {
         @Override public RecoveryImage recover(WorldId worldId) { return new RecoveryImage(worldId, Optional.empty(), List.of()); }

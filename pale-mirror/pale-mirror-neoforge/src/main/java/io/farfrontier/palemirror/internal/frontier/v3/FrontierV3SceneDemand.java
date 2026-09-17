@@ -5,6 +5,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 
 import java.util.Comparator;
+import java.util.function.Function;
 import java.util.List;
 import java.util.LinkedHashSet;
 import java.util.Objects;
@@ -49,6 +50,18 @@ final class FrontierV3SceneDemand {
         if (radiusBlocks < 1 || retainedPositions.isEmpty()) return false;
         return level.players().stream().filter(player -> !player.isSpectator())
                 .anyMatch(player -> retainedPositions.stream().anyMatch(position -> player.blockPosition().closerThan(position, radiusBlocks)));
+    }
+
+    /** Selects the first physically demanded member from a deterministic canonical inventory. */
+    static <Candidate> java.util.Optional<Candidate> firstDemandedCandidate(ServerLevel level, List<Candidate> candidates,
+                                                                              Function<Candidate, BlockPosition> demandAnchor) {
+        Objects.requireNonNull(level, "scene demand level");
+        Objects.requireNonNull(candidates, "scene candidates");
+        Objects.requireNonNull(demandAnchor, "scene demand anchor");
+        return candidates.stream().filter(candidate -> {
+            BlockPosition anchor = Objects.requireNonNull(demandAnchor.apply(candidate), "candidate demand anchor");
+            return FrontierV3ServerLifecycle.sceneEligible(level, anchor) && observe(level, anchor).active();
+        }).findFirst();
     }
 
     /** Immutable bounded input to HOT admission and drain policy; it grants no ownership. */

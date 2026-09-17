@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.MedicalTreatmentSceneCause;
+import io.farfrontier.palemirror.frontier.v3.model.ProductionJob;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCause;
 import net.minecraft.server.MinecraftServer;
@@ -23,6 +24,7 @@ import java.util.Optional;
 final class FrontierV3DiagnosticTrace {
     private static final int MAX_ENTRIES = 256;
     private static final Map<MinecraftServer, Deque<Entry>> ENTRIES = new IdentityHashMap<>();
+    private static final Map<MinecraftServer, Map<String, String>> ALIASES = new IdentityHashMap<>();
 
     private FrontierV3DiagnosticTrace() { }
 
@@ -70,6 +72,26 @@ final class FrontierV3DiagnosticTrace {
     static void recordScene(MinecraftServer server, String kind, SceneLease lease, CommandResult result) {
         SceneTrace scene = sceneTrace(lease);
         record(server, scene.correlation(), kind, scene.subject(), result, scene.context());
+    }
+
+    /**
+     * Binds a production trace to its exact conserved input rather than a schedule-dependent
+     * job ordinal. The alias is evidence-only and resolves to the same single job correlation;
+     * it never selects another job by settlement, recipe, or output kind.
+     */
+    static void recordProductionScene(MinecraftServer server, String kind, SceneLease lease, ProductionJob job, CommandResult result) {
+        Objects.requireNonNull(job, "production trace job");
+        SceneTrace scene = sceneTrace(lease);
+        if (!scene.subject().equals(job.id())) throw new IllegalArgumentException("production trace lease does not own its job");
+        ALIASES.computeIfAbsent(Objects.requireNonNull(server, "server"), unused -> new java.util.HashMap<>())
+                .put(productionInputCorrelation(job.consumedItemId()), scene.correlation());
+        record(server, scene.correlation(), kind, scene.subject(), result, scene.context());
+    }
+
+    /** One exact harvested/custodied input has at most one production-work diagnostic alias. */
+    static String productionInputCorrelation(SubjectId inputItemId) {
+        Objects.requireNonNull(inputItemId, "production trace input item");
+        return "production-input:" + inputItemId.value();
     }
 
     /**
@@ -144,7 +166,10 @@ final class FrontierV3DiagnosticTrace {
         Objects.requireNonNull(kind, "kind"); Objects.requireNonNull(subject, "subject"); Objects.requireNonNull(result, "result"); Objects.requireNonNull(context, "context");
         if (!(result instanceof CommandResult.Accepted accepted)) return;
         Deque<Entry> entries = ENTRIES.computeIfAbsent(server, unused -> new ArrayDeque<>());
-        Entry entry = new Entry(correlation, kind, subject.value(), accepted.commandId().value(), accepted.transactionId().value(), accepted.revision().value(), context);
+        List<String> previous = entries.stream().filter(candidate -> candidate.correlation().equals(correlation)).map(Entry::kind).toList();
+        List<String> lineage = java.util.stream.Stream.concat(previous.subList(Math.max(0, previous.size() - 7), previous.size()).stream(),
+                java.util.stream.Stream.of(kind)).toList();
+        Entry entry = new Entry(correlation, kind, subject.value(), accepted.commandId().value(), accepted.transactionId().value(), accepted.revision().value(), context, lineage);
         entries.removeIf(candidate -> candidate.commandId().equals(entry.commandId()));
         entries.addLast(entry);
         while (entries.size() > MAX_ENTRIES) entries.removeFirst();
@@ -157,14 +182,18 @@ final class FrontierV3DiagnosticTrace {
         Objects.requireNonNull(server, "server"); Objects.requireNonNull(correlation, "correlation");
         Deque<Entry> entries = ENTRIES.get(server);
         if (entries == null) return Optional.empty();
+        String resolved = ALIASES.getOrDefault(server, Map.of()).getOrDefault(correlation, correlation);
         for (Iterator<Entry> iterator = entries.descendingIterator(); iterator.hasNext();) {
             Entry entry = iterator.next();
-            if (entry.correlation().equals(correlation) || entry.commandId().equals(correlation)) return Optional.of(entry);
+            if (entry.correlation().equals(resolved) || entry.commandId().equals(resolved)) return Optional.of(entry);
         }
         return Optional.empty();
     }
 
-    static void forget(MinecraftServer server) { ENTRIES.remove(Objects.requireNonNull(server, "server")); }
+    static void forget(MinecraftServer server) {
+        MinecraftServer exact = Objects.requireNonNull(server, "server");
+        ENTRIES.remove(exact); ALIASES.remove(exact);
+    }
 
     record SceneTrace(String correlation, SubjectId subject, Context context) {
         SceneTrace {
@@ -175,15 +204,20 @@ final class FrontierV3DiagnosticTrace {
         }
     }
 
-    record Entry(String correlation, String kind, String subject, String commandId, String transactionId, long revision, Context context) {
+    record Entry(String correlation, String kind, String subject, String commandId, String transactionId, long revision, Context context, List<String> lineage) {
         Entry(String correlation, String kind, String subject, String commandId, String transactionId, long revision) {
-            this(correlation, kind, subject, commandId, transactionId, revision, Context.empty());
+            this(correlation, kind, subject, commandId, transactionId, revision, Context.empty(), List.of(kind));
+        }
+        Entry(String correlation, String kind, String subject, String commandId, String transactionId, long revision, Context context) {
+            this(correlation, kind, subject, commandId, transactionId, revision, context, List.of(kind));
         }
         Entry {
             if (correlation.isBlank() || kind.isBlank() || subject.isBlank() || commandId.isBlank() || transactionId.isBlank()) {
                 throw new IllegalArgumentException("diagnostic trace entry is invalid");
             }
             context = Objects.requireNonNull(context, "diagnostic trace context");
+            lineage = List.copyOf(Objects.requireNonNull(lineage, "diagnostic trace lineage"));
+            if (lineage.isEmpty() || lineage.size() > 8 || lineage.stream().anyMatch(String::isBlank)) throw new IllegalArgumentException("diagnostic trace lineage is invalid");
         }
     }
 

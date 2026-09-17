@@ -60,6 +60,12 @@ class FrontierV3TestPilotScenarioTest {
         assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"wait_until_diagnostic","view":"site","id":"site:1-wheat-field",
                 "expect":{"growthStage":7},"requireIncreaseAt":"growth epoch","timeoutMs":180000}]}"""));
+        assertEquals(1, FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"wait_until_diagnostic","view":"actor","id":"resident:1-1",
+                "expect":{"status":"ok"},"pollIntervalMs":50,"timeoutMs":30000}]}""").actionCount());
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"wait_until_diagnostic","view":"actor","id":"resident:1-1",
+                "expect":{"status":"ok"},"pollIntervalMs":49,"timeoutMs":30000}]}"""));
     }
 
     @Test

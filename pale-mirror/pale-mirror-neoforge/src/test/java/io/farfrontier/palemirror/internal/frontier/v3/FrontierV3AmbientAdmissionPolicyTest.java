@@ -79,6 +79,95 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrontierV3AmbientAdmissionPolicyTest {
     @Test
+    void startupPrimingCompilesOnlyTheImmutableBaselineBeforeAnyPhysicalTurn() {
+        FrontierWorldState state = io.farfrontier.palemirror.frontier.v3.model.FrontierV3FixtureCatalog.engineeringWorksiteConfiguration(
+                new WorldId("frontier:startup-structural-prime"), 47L).initialState();
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(state);
+        try {
+            assertTrue(FrontierV3GrayboxExecutor.publishedStructuralBaseline(runtime).isEmpty(),
+                    "a fresh runtime has not yet published a structural baseline");
+
+            FrontierV3GrayboxExecutor.primeStructuralBaseline(runtime);
+
+            assertTrue(FrontierV3GrayboxExecutor.publishedStructuralBaseline(runtime).isPresent(),
+                    "startup must publish the immutable read index before a player-facing turn");
+            FrontierV3GrayboxExecutor.ProjectionWorkSnapshot work = FrontierV3GrayboxExecutor.projectionWork(runtime);
+            assertEquals(1, work.freshnessConstructions(), "priming constructs one immutable cursor");
+            assertEquals(1, work.planCompilations(), "priming compiles one stable baseline");
+            assertEquals(0, work.compatibilityChecks(), "priming is not an ordinary projection turn");
+            assertEquals(0, work.providerAcquisitions(), "priming cannot acquire a physical admission provider");
+            assertEquals(0, work.pointQueries(), "priming cannot inspect a physical surface");
+        } finally { FrontierV3GrayboxExecutor.forget(runtime); runtime.shutdown(); }
+    }
+
+    @Test
+    void activeWorksiteOverlayRefreshDoesNotRecompileTheWorldWideBaseline() {
+        FrontierWorldState state = io.farfrontier.palemirror.frontier.v3.model.FrontierV3FixtureCatalog.engineeringWorksiteConfiguration(
+                new WorldId("frontier:projection-worksite-overlay"), 41L).initialState();
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(state);
+        try {
+            FrontierV3GrayboxExecutor.tick(new FullyLoadedPhysicalWorld(), runtime);
+            var retainedBaseline = FrontierV3GrayboxExecutor.publishedStructuralBaseline(runtime).orElseThrow();
+            var project = state.routeConstructions().values().iterator().next();
+            var projects = new LinkedHashMap<>(state.routeConstructions());
+            projects.put(project.id(), new io.farfrontier.palemirror.frontier.v3.model.RouteConstruction(project.id(), project.settlementId(),
+                    project.waypoints(), project.workCells(), project.confirmedCells(), project.status(), project.cargoId(),
+                    project.team(), project.assembly()));
+            FrontierWorldState advanced = state.withChanges(FrontierWorldStateUpdate.begin().routeConstructions(projects));
+            FrontierV3GrayboxExecutor.resetProjectionWork(runtime);
+            FrontierV3GrayboxExecutor.refresh(new FullyLoadedPhysicalWorld(), runtime, advanced);
+            FrontierV3GrayboxExecutor.ProjectionWorkSnapshot work = FrontierV3GrayboxExecutor.projectionWork(runtime);
+            assertEquals(1, work.freshnessConstructions(), "one construction edge refreshes its bounded overlay once");
+            assertEquals(0, work.planCompilations(), "worksite progress must not rebuild the complete global graybox plan");
+            assertEquals(1, work.cursorPath().calls(), "the reusable adapter must account for its one refresh path");
+            assertEquals(1, work.deferredProjectionPath().calls(), "the reusable adapter must account for its bounded deferred pass");
+            assertEquals(0, work.firstVisibilityPath().calls(), "a non-Minecraft adapter cannot manufacture player-ingress work");
+            assertTrue(work.cursorPath().maxNanos() >= 0 && work.deferredProjectionPath().maxNanos() >= 0,
+                    "the read-only high-water account must tolerate any monotonic clock result");
+            assertTrue(FrontierV3GrayboxExecutor.publishedStructuralBaseline(runtime).isPresent(),
+                    "the original stable baseline remains available to later bounded admissions");
+            assertTrue(retainedBaseline == FrontierV3GrayboxExecutor.publishedStructuralBaseline(runtime).orElseThrow(),
+                    "a worksite refresh must retain the immutable baseline instead of reconstructing the world-wide cursor");
+        } finally { FrontierV3GrayboxExecutor.forget(runtime); runtime.shutdown(); }
+    }
+
+    @Test
+    void addedHiveOrganRefreshRetainsTheStaticCursorAndUsesOnlyTheDynamicPointView() {
+        FrontierWorldState state = io.farfrontier.palemirror.frontier.v3.model.FrontierV3FixtureCatalog.engineeringWorksiteConfiguration(
+                new WorldId("frontier:projection-dynamic-hive-overlay"), 41L).initialState();
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(state);
+        try {
+            FrontierV3GrayboxExecutor.tick(new FullyLoadedPhysicalWorld(), runtime);
+            FrontierGrayboxPlan retainedBaseline = FrontierV3GrayboxExecutor.publishedStructuralBaseline(runtime).orElseThrow();
+            io.farfrontier.palemirror.frontier.v3.model.HiveOrgan organ = new io.farfrontier.palemirror.frontier.v3.model.HiveOrgan(
+                    new SubjectId("organ:projection-overlay-relay"), state.bootstrap().hive().id(), new SubjectId("nest:seed-east"),
+                    io.farfrontier.palemirror.frontier.v3.model.HiveOrganKind.RELAY,
+                    new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(420, 64, 432), Optional.empty());
+            FrontierWorldState advanced = state.addHiveOrgan(organ);
+            FrontierGrayboxPlan overlay = FrontierGrayboxPlan.compileDynamicHiveOverlay(advanced);
+            GrayboxCell dynamicCell = overlay.cells().values().iterator().next();
+            assertFalse(retainedBaseline.cells().containsKey(dynamicCell.position()),
+                    "the new organ is absent from the immutable static baseline before its overlay refresh");
+
+            FrontierV3GrayboxExecutor.resetProjectionWork(runtime);
+            FrontierV3GrayboxExecutor.refresh(new FullyLoadedPhysicalWorld(), runtime, advanced);
+
+            FrontierV3GrayboxExecutor.ProjectionWorkSnapshot work = FrontierV3GrayboxExecutor.projectionWork(runtime);
+            assertEquals(1, work.freshnessConstructions(), "one growth edge refreshes its bounded hive overlay once");
+            assertEquals(0, work.planCompilations(), "a new organ must not recompile the settlement and route baseline");
+            assertEquals("DYNAMIC_HIVE_OVERLAY", work.lastDisposition());
+            assertTrue(retainedBaseline == FrontierV3GrayboxExecutor.publishedStructuralBaseline(runtime).orElseThrow(),
+                    "the static cursor/index remains the same object on a dynamic organ edge");
+            assertEquals(dynamicCell, FrontierV3GrayboxExecutor.admissionProvider(runtime, advanced).orElseThrow()
+                    .cellAt(dynamicCell.position()).orElseThrow(),
+                    "named admission queries compose the current dynamic organ without a world-wide merged plan");
+            assertTrue(FrontierV3GrayboxExecutor.publishedStructuralCeilings(runtime).orElseThrow()
+                    .get(FrontierV3GrayboxExecutor.columnKey(dynamicCell.position().x(), dynamicCell.position().z())) >= dynamicCell.position().y(),
+                    "the sparse overlay retains its declared column ceiling before loaded projection catches up");
+        } finally { FrontierV3GrayboxExecutor.forget(runtime); runtime.shutdown(); }
+    }
+
+    @Test
     void registeredAssaultAdmissionUsesOneProjectionProviderThroughPreparedReducer() {
         FrontierWorldState state = twoEligibleAssaults();
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(state);

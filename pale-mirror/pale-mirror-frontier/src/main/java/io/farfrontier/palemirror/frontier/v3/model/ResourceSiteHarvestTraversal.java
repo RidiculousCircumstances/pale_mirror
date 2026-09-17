@@ -18,6 +18,7 @@ import java.util.Set;
  * after an obstruction.  A HOT scene may only move toward the next retained surface.</p>
  */
 public final class ResourceSiteHarvestTraversal {
+    private static final int WORK_RETURN_DISTANCE = 4;
     private ResourceSiteHarvestTraversal() { }
 
     public static TraversalTopology compile(FrontierBootstrap bootstrap, ResourceSite site, ActorLocation worker, SubjectId jobId) {
@@ -38,6 +39,41 @@ public final class ResourceSiteHarvestTraversal {
         // the body merely to satisfy a linear-coordinate shortcut.
         return TraversalTopology.corridor(new TraversalTopologyId("topology:field-work-" + jobId.value().replace(':', '-')),
                 revision(corridor), site.id(), TraversalKind.PEDESTRIAN, Set.of(TraversalCapability.PEDESTRIAN), corridor);
+    }
+
+    /**
+     * Compiles the immutable, collision-clear field-edge departure station after the final
+     * harvested crop.  It is deliberately not another process route or cursor: the harvest
+     * cursor has already closed.  It is the local physical destination for the same released
+     * body while the canonical site passes through output, growth and successor admission.
+     *
+     * <p>The former FARM-centre target was a raw structure coordinate. A no-AI local actuator
+     * attempted to cross its wall, remained on crop 63 indefinitely, then could disappear at a
+     * later release. This compiler chooses only a four-cell cardinal ray whose every support is
+     * surveyed, in bounds, outside field ownership and outside every immutable structure/organ
+     * body. It never probes Minecraft, reuses a runtime path, or grants the actor a second
+     * canonical movement authority.</p>
+     */
+    public static SurfaceAnchor workReturnSurface(FrontierBootstrap bootstrap, ResourceSite site) {
+        Objects.requireNonNull(bootstrap, "harvest return bootstrap"); Objects.requireNonNull(site, "harvest return site");
+        if (site.kind() != ResourceSiteKind.WHEAT_FIELD) throw new IllegalArgumentException("resource-site return only supports wheat fields");
+        SurfaceAnchor terminal = new SurfaceAnchor(site.cropSlots().getLast().offset(0, -1, 0));
+        Set<BlockPosition> blocked = immutableBodyObstacles(bootstrap, site, null);
+        for (int[] direction : List.of(new int[] {1, 0}, new int[] {0, -1}, new int[] {-1, 0}, new int[] {0, 1})) {
+            List<SurfaceAnchor> corridor = new ArrayList<>(WORK_RETURN_DISTANCE);
+            boolean clear = true;
+            for (int step = 1; step <= WORK_RETURN_DISTANCE; step++) {
+                int x = terminal.x() + direction[0] * step, z = terminal.z() + direction[1] * step;
+                SurfaceAnchor surface = SurfaceAnchor.at(x, bootstrap.terrain().supportYAt(x, z), z);
+                if (!bootstrap.bounds().contains(surface.support()) || surface.y() != terminal.y()
+                        || site.managedSlots().contains(surface.support()) || blocked.contains(surface.support())) {
+                    clear = false; break;
+                }
+                corridor.add(surface);
+            }
+            if (clear) return corridor.getLast();
+        }
+        throw new IllegalArgumentException("resource-site final crop has no declared clear work return station: " + site.id().value());
     }
 
     /**
@@ -72,7 +108,7 @@ public final class ResourceSiteHarvestTraversal {
         // station is the declared endpoint and is therefore intentionally left available.
         for (BlockPosition crop : site.cropSlots()) {
             BlockPosition support = crop.offset(0, -1, 0);
-            if (!support.equals(firstWorkstation)) blocked.add(support);
+            if (firstWorkstation == null || !support.equals(firstWorkstation)) blocked.add(support);
         }
         return blocked;
     }

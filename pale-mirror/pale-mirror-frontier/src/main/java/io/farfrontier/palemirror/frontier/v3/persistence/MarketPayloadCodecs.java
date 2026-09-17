@@ -31,6 +31,27 @@ final class MarketPayloadCodecs {
         @Override public byte[] encode(FrontierPayload payload) { return write(output -> writeOrder(output, ((MarketWorkOrderAccepted) payload).order())); }
         @Override public FrontierPayload decode(byte[] bytes) { return new MarketWorkOrderAccepted(read(bytes, MarketPayloadCodecs::readOrder)); }
     }; }
+    static PayloadCodec relationshipIncident() { return new PayloadCodec() {
+        @Override public String type() { return "frontier.market_relationship_incident_recorded"; }
+        @Override public byte[] encode(FrontierPayload payload) { return write(output -> writeRelationshipIncident(output, (MarketRelationshipIncidentRecorded) payload)); }
+        @Override public FrontierPayload decode(byte[] bytes) { return read(bytes, MarketPayloadCodecs::readRelationshipIncident); }
+    }; }
+
+    private static void writeRelationshipIncident(DataOutputStream output, MarketRelationshipIncidentRecorded value) throws IOException {
+        subject(output, value.orderId()); RelationshipIncident incident = value.incident();
+        output.writeUTF(incident.kind().tag()); subject(output, incident.ownerId()); subject(output, incident.sourceId());
+        output.writeUTF(incident.expected()); output.writeUTF(incident.observed()); output.writeUTF(incident.reason().name());
+        output.writeUTF(incident.disposition().name()); output.writeLong(incident.canonicalRevision()); output.writeUTF(incident.traceCorrelation());
+    }
+    private static MarketRelationshipIncidentRecorded readRelationshipIncident(DataInputStream input) throws IOException {
+        SubjectId order = subject(input); String tag = input.readUTF();
+        FrontierDomainRelationships.Kind kind = java.util.Arrays.stream(FrontierDomainRelationships.Kind.values())
+                .filter(value -> value.tag().equals(tag)).findFirst().orElseThrow();
+        RelationshipIncident incident = new RelationshipIncident(kind, subject(input), subject(input), input.readUTF(), input.readUTF(),
+                FrontierDomainRelationships.IncidentReason.valueOf(input.readUTF()), FrontierDomainRelationships.Disposition.valueOf(input.readUTF()),
+                input.readLong(), input.readUTF());
+        return new MarketRelationshipIncidentRecorded(order, incident);
+    }
     static PayloadCodec workOrderCancelled() { return new PayloadCodec() {
         @Override public String type() { return "frontier.market_work_order_cancelled"; }
         @Override public byte[] encode(FrontierPayload payload) { return write(output -> {

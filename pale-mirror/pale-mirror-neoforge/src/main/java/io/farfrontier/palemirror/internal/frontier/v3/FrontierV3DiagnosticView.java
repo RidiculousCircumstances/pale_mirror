@@ -12,6 +12,8 @@ import java.util.Arrays;
  */
 public enum FrontierV3DiagnosticView {
     SUMMARY("summary", false),
+    /** One permission-gated operator status cut with the recoverable command receipt history. */
+    STATUS("status", false),
     PERFORMANCE("performance", false),
     /** One read-only whole-path counter snapshot for retained structural and infection projection work. */
     PROJECTION_WORK("projection_work", false),
@@ -21,6 +23,8 @@ public enum FrontierV3DiagnosticView {
     PROCESS_INVENTORY("process_inventory", true),
     SITE("site", true),
     SETTLEMENT("settlement", true),
+    /** One bounded settlement resident set for a first-visibility audit; read-only and permission-gated. */
+    SETTLEMENT_POPULATION("settlement_population", true),
     HIVE("hive", true),
     HIVE_TRANSFER("hive_transfer", true),
     HIVE_MOBILIZATION("hive_mobilization", true),

@@ -20,8 +20,22 @@ public final class FrontierReadabilityPlan {
 
     public static FrontierReadabilityPlan compile(FrontierWorldState state) {
         Objects.requireNonNull(state, "state");
+        FrontierReadabilityPlan baseline = compileStableBaseline(state);
+        FrontierReadabilityPlan dynamicHive = compileDynamicHiveOverlay(state, MAX_BOARDS - baseline.boards().size());
+        Map<SubjectId, FrontierObjectBoard> values = new LinkedHashMap<>(baseline.boards());
+        dynamicHive.boards().values().forEach(board -> add(values, board, MAX_BOARDS));
+        return new FrontierReadabilityPlan(values);
+    }
+
+    /**
+     * The settlement, route, and bootstrap-hive boards are the stable presentation baseline.
+     * Added organs are intentionally absent: their bounded overlay has its own exact compiler
+     * so a growth completion cannot derive all world object geometry on one server turn.
+     */
+    public static FrontierReadabilityPlan compileStableBaseline(FrontierWorldState state) {
+        Objects.requireNonNull(state, "state");
         Map<SubjectId, FrontierObjectBoard> values = new LinkedHashMap<>();
-        Map<SubjectId, InfectionOverlayStage> contamination = contamination(state);
+        Map<SubjectId, InfectionOverlayStage> contamination = contamination(state, FrontierGrayboxPlan.currentStableObjectCellsByOwner(state));
         state.bootstrap().settlements().forEach(settlement -> settlement.structures().forEach(structure -> {
             StructureCondition condition = state.structureConditions().get(structure.id());
             InfectionOverlayStage stage = contamination.get(structure.id());
@@ -31,9 +45,21 @@ public final class FrontierReadabilityPlan {
                     settlement.displayName() + "\n" + structureName(structure.kind()) + "\n" + withContamination(facilityText(state, settlement, structure, condition), stage)));
         }));
         state.bootstrap().hive().organs().forEach(organ -> addOrgan(values, state, organ, contamination.get(organ.id())));
-        state.hiveColony().addedOrgans().values().forEach(organ -> addOrgan(values, state, organ, contamination.get(organ.id())));
         FrontierResourceSitePlan.compile(state.bootstrap()).values().forEach(site -> addResourceSite(values, state, site));
         addRouteNetwork(values, state);
+        return new FrontierReadabilityPlan(values);
+    }
+
+    /**
+     * Exact current boards for bounded added-hive organs only.  {@code capacity} preserves the
+     * whole-plan board ceiling when this overlay is recombined with its stable baseline.
+     */
+    public static FrontierReadabilityPlan compileDynamicHiveOverlay(FrontierWorldState state, int capacity) {
+        Objects.requireNonNull(state, "state");
+        if (capacity < 0 || capacity > MAX_BOARDS) throw new IllegalArgumentException("invalid dynamic board capacity");
+        Map<SubjectId, FrontierObjectBoard> values = new LinkedHashMap<>();
+        Map<SubjectId, InfectionOverlayStage> contamination = contamination(state, FrontierGrayboxPlan.currentDynamicHiveObjectCellsByOwner(state));
+        state.hiveColony().addedOrgans().values().forEach(organ -> addOrgan(values, state, organ, contamination.get(organ.id()), capacity));
         return new FrontierReadabilityPlan(values);
     }
 
@@ -75,6 +101,27 @@ public final class FrontierReadabilityPlan {
             Objects.requireNonNull(routeTopology, "route topology"); Objects.requireNonNull(humanPopulation, "human population");
             Objects.requireNonNull(companies, "companies"); Objects.requireNonNull(mobilizations, "hive mobilizations"); Objects.requireNonNull(actorConditions, "actor conditions");
         }
+
+        /**
+         * Fast retained-baseline check for the physical board cursor.  Canonical transitions
+         * retain untouched immutable indexes by identity; actor coordinates are deliberately
+         * compared through their condition-only view.  Added organs are excluded because they
+         * have a bounded presentation overlay.
+         */
+        public boolean matchesStableBaseline(ReadabilityInput other) {
+            Objects.requireNonNull(other, "readability input");
+            return bootstrap == other.bootstrap && structureConditions == other.structureConditions && infection == other.infection
+                    && inventory == other.inventory && productionJobs == other.productionJobs && physicalDeltas == other.physicalDeltas
+                    && resourceSites == other.resourceSites && routeTopology == other.routeTopology && humanPopulation == other.humanPopulation
+                    && companies == other.companies && mobilizations == other.mobilizations && actorConditions.equals(other.actorConditions)
+                    && routeDamaged == other.routeDamaged && sceneConflict == other.sceneConflict && caravan == other.caravan
+                    && construction == other.construction;
+        }
+
+        /** Exact bounded overlay dependency; callers use this only after the stable check. */
+        public boolean matchesDynamicHiveOverlay(ReadabilityInput other) {
+            return addedOrgans == Objects.requireNonNull(other, "readability input").addedOrgans;
+        }
     }
 
     /**
@@ -111,13 +158,17 @@ public final class FrontierReadabilityPlan {
     }
 
     private static void addOrgan(Map<SubjectId, FrontierObjectBoard> values, FrontierWorldState state, HiveOrgan organ, InfectionOverlayStage stage) {
+        addOrgan(values, state, organ, stage, MAX_BOARDS);
+    }
+
+    private static void addOrgan(Map<SubjectId, FrontierObjectBoard> values, FrontierWorldState state, HiveOrgan organ, InfectionOverlayStage stage, int capacity) {
         boolean operational = state.isHiveOrganOperational(organ.id());
         MobilizationReadout mobilization = mobilizationReadout(state, organ);
         FrontierObjectBoard.Tone tone = stage == null && operational && mobilization.tone() == FrontierObjectBoard.Tone.HIVE
                 ? FrontierObjectBoard.Tone.HIVE : FrontierObjectBoard.Tone.WARNING;
         add(values, new FrontierObjectBoard(organ.id(), organ.anchor().offset(0, 2, -3), tone,
                 organ.kind() == HiveOrganKind.GANGLION ? FrontierObjectBoard.Scope.LANDMARK : FrontierObjectBoard.Scope.LOCAL,
-                "HIVE\n" + organName(organ.kind()) + "\n" + withContamination(operational ? mobilization.text() : "DISABLED · REPAIR NEEDED", stage)));
+                "HIVE\n" + organName(organ.kind()) + "\n" + withContamination(operational ? mobilization.text() : "DISABLED · REPAIR NEEDED", stage)), capacity);
     }
 
     private static MobilizationReadout mobilizationReadout(FrontierWorldState state, HiveOrgan organ) {
@@ -255,8 +306,12 @@ public final class FrontierReadabilityPlan {
 
     /** Pure semantic contact: a live infection column intersects one current object cell. */
     private static Map<SubjectId, InfectionOverlayStage> contamination(FrontierWorldState state) {
+        return contamination(state, FrontierGrayboxPlan.currentObjectCellsByOwner(state));
+    }
+
+    private static Map<SubjectId, InfectionOverlayStage> contamination(FrontierWorldState state, Map<SubjectId, java.util.Set<BlockPosition>> objectCellsByOwner) {
         Map<SubjectId, InfectionOverlayStage> values = new LinkedHashMap<>();
-        FrontierGrayboxPlan.currentObjectCellsByOwner(state).forEach((owner, positions) -> positions.forEach(position -> {
+        objectCellsByOwner.forEach((owner, positions) -> positions.forEach(position -> {
             var intensity = state.infection().get(InfectionCell.at(position));
             if (intensity != null && intensity.value().raw() > 0L) values.merge(owner, InfectionOverlayStage.fromRaw(intensity.value().raw()),
                     (left, right) -> left.ordinal() >= right.ordinal() ? left : right);
@@ -322,11 +377,11 @@ public final class FrontierReadabilityPlan {
      */
     private static String workshopText(FrontierWorldState state, Settlement settlement, StructureCondition condition) {
         if (condition != StructureCondition.INTACT) return conditionText(condition);
-        MarketWorkOrder order = state.companies().market().workOrders().values().stream()
-                .filter(candidate -> candidate.status() == MarketWorkOrderStatus.ACCEPTED)
-                .filter(candidate -> state.productionJobs().containsKey(candidate.jobId()))
-                .filter(candidate -> state.productionJobs().get(candidate.jobId()).facilityId().equals(workshopId(settlement)))
-                .sorted(Comparator.comparing(MarketWorkOrder::id)).findFirst().orElse(null);
+        ProductionJob job = state.productionJobs().values().stream()
+                .filter(candidate -> candidate.facilityId().equals(workshopId(settlement)))
+                .reduce((left, right) -> { throw new IllegalStateException("workshop has multiple retained production jobs"); })
+                .orElse(null);
+        MarketWorkOrder order = job == null ? null : state.companies().market().acceptedForJob(job.id()).orElse(null);
         if (order == null) return "OPERATIONAL";
         MarketDemand demand = state.companies().market().demands().get(order.demandId());
         if (demand == null) throw new IllegalStateException("accepted workshop order has no buyer demand");
@@ -360,7 +415,11 @@ public final class FrontierReadabilityPlan {
     }
 
     private static void add(Map<SubjectId, FrontierObjectBoard> values, FrontierObjectBoard board) {
+        add(values, board, MAX_BOARDS);
+    }
+
+    private static void add(Map<SubjectId, FrontierObjectBoard> values, FrontierObjectBoard board, int capacity) {
         if (values.putIfAbsent(board.ownerId(), board) != null) throw new IllegalArgumentException("duplicate object board: " + board.ownerId().value());
-        if (values.size() > MAX_BOARDS) throw new IllegalArgumentException("object board limit exceeded");
+        if (values.size() > capacity) throw new IllegalArgumentException("object board limit exceeded");
     }
 }

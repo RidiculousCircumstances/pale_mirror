@@ -112,6 +112,18 @@ public final class AmbientLeaseStateProcess {
                 throw new IllegalArgumentException("HOT hive return may return to COLD only at its exact retained cursor");
             }
         }
+        ResourceSiteHarvestJob harvest = state.resourceSites().sites().values().stream()
+                .map(ResourceSiteLifecycle::activeWork).flatMap(java.util.Optional::stream)
+                .filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
+                .filter(job -> job.workerId().equals(release.actorId()))
+                .reduce((left, right) -> { throw new IllegalArgumentException("ambient farmer belongs to more than one active field job"); })
+                .orElse(null);
+        if (harvest != null) {
+            BodyPosition cursor = harvest.traversal().linearCorridorSurfaces().get(harvest.traversalCursor()).standingBody();
+            if (!release.body().equals(cursor)) {
+                throw new IllegalArgumentException("HOT field worker may return to COLD only at its exact retained cursor");
+            }
+        }
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
         actors.put(release.actorId(), new ActorLocation(release.body(), actor.condition().withHealth(release.health())));
         Map<SubjectId, AmbientActorLease> leases = new LinkedHashMap<>(state.ambientLeases()); leases.put(release.actorId(), current.withStatus(AmbientLeaseStatus.CLOSED));

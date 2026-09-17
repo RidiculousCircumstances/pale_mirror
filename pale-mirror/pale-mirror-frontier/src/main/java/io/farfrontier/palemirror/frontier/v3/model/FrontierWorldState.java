@@ -82,7 +82,26 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         Objects.requireNonNull(companies, "company registry"); Objects.requireNonNull(resourceSites, "resource sites");
         Objects.requireNonNull(replicaCustody, "replica custody"); Objects.requireNonNull(deferredAftermath, "deferred aftermath");
         Objects.requireNonNull(fencedRecovery, "fenced recovery");
-        if (!fullValidationDeferred()) {
+        if (!fullValidationDeferred()) validateFullState(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs,
+                serviceWorks, contracts, operations, logisticsHistory, physicalIntents, physicalObservations, sceneLeases, hiveColony,
+                structureDamage, physicalDeltas, ambientLeases, routeConstructions, routeMaintenances, routeTopology, strategicPlans,
+                humanPopulation, companies, resourceSites);
+    }
+    /** Keeps the high-frequency immutable-state constructor below the JIT's large-method threshold. */
+    private static void validateFullState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocation> actorLocations,
+                                          Map<SubjectId, StructureCondition> structureConditions, Map<InfectionCell, FixedRatio> infection,
+                                          ExactInventory inventory, Map<SubjectId, ProductionJob> productionJobs,
+                                          Map<SubjectId, SettlementServiceWork> serviceWorks, Map<SubjectId, SupplyContract> contracts,
+                                          Map<SubjectId, RouteOperation> operations, LogisticsHistory logisticsHistory,
+                                          Map<PhysicalIntentId, PhysicalIntent> physicalIntents,
+                                          Map<PhysicalObservationId, PhysicalEffectObservation> physicalObservations,
+                                          Map<SceneLeaseId, SceneLease> sceneLeases, HiveColony hiveColony,
+                                          Map<SubjectId, StructureDamage> structureDamage, Map<BlockPosition, PhysicalDelta> physicalDeltas,
+                                          Map<SubjectId, AmbientActorLease> ambientLeases,
+                                          Map<SubjectId, RouteConstruction> routeConstructions,
+                                          Map<SubjectId, RouteMaintenance> routeMaintenances, RouteTopology routeTopology,
+                                          StrategicPlanState strategicPlans, HumanPopulation humanPopulation,
+                                          CompanyRegistry companies, ResourceSiteState resourceSites) {
             resourceSites.validate(bootstrap); strategicPlans.validate(bootstrap, routeTopology, humanPopulation); strategicPlans.hiveOperationKnowledge().validate(bootstrap, hiveColony, actorLocations);
             strategicPlans.hiveSettlementKnowledge().validate(bootstrap, hiveColony, actorLocations);
             strategicPlans.hiveTerritoryKnowledge().validate(bootstrap, hiveColony, actorLocations, structureConditions);
@@ -233,13 +252,13 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                             && intent.status() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED);
                     boolean exactInputMissingOrAltered = input == null || input.count() != job.outputCount();
                     if ((exactInputMissingOrAltered || !inOwnedDepot) && !awaitingPhysicalReconciliation
-                            && !FrontierProductionWorkSceneSupport.awaitingBlockedRelease(sceneLeases, strategicPlans, job)) {
+                            && !FrontierProductionWorkSceneSupport.awaitingBlockedRelease(sceneLeases, strategicPlans, companies, job)) {
                         throw new IllegalArgumentException("materialized production job input must remain in its exact settlement depot slot");
                     }
                 }
-                case ProductionInputHold.FungibleCold held -> validateFungibleProductionHold(job, settlement, inventory.fungibleResources(), held.accountId(),
+                case ProductionInputHold.FungibleCold held -> FrontierProductionInputHoldValidation.validateFungibleProductionHold(job, settlement, inventory.fungibleResources(), held.accountId(),
                         held.claimId(), false, 0L);
-                case ProductionInputHold.FungibleBound held -> validateFungibleProductionHold(job, settlement, inventory.fungibleResources(), held.accountId(),
+                case ProductionInputHold.FungibleBound held -> FrontierProductionInputHoldValidation.validateFungibleProductionHold(job, settlement, inventory.fungibleResources(), held.accountId(),
                         held.claimId(), true, held.authorityEpoch());
             }
         }
@@ -370,7 +389,6 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         if (sceneLeases.size() > MAX_SCENE_LEASES) throw new IllegalArgumentException("scene lease retention limit exceeded");
         FrontierSceneLeaseValidationSupport.validate(bootstrap, humanPopulation, actorLocations, structureConditions, operations, routeConstructions,
                 routeMaintenances, strategicPlans, resourceSites, productionJobs, sceneLeases, serviceWorks, activelyAmbientLeased);
-        }
         }
     public static FrontierWorldState initial(FrontierBootstrap bootstrap) { return FrontierWorldInitialState.create(bootstrap); }
     /** Reducer construction defers complete validation until the enclosing transaction reaches WAL durability. */
@@ -931,25 +949,6 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
     public FrontierWorldState startFungibleHiveGrowth(HiveGrowthJob job) { return HiveGrowthStateSupport.startFungible(this, job); }
     public FrontierWorldState consumeFungibleHiveGrowthBiomass(SubjectId jobId) { return HiveGrowthStateSupport.consumeFungible(this, jobId); }
     public FrontierWorldState cancelHiveGrowth(SubjectId jobId) { return HiveGrowthStateSupport.cancel(this, jobId); }
-    private static void validateFungibleProductionHold(ProductionJob job, Settlement settlement, FungibleResourceLedger resources,
-                                                       SubjectId accountId, SubjectId claimId, boolean bound, long epoch) {
-        CustodyAccount account = resources.accounts().get(accountId); ResourceLot lot = resources.lots().get(job.consumedItemId());
-        ClaimAllocation claim = resources.claims().get(claimId);
-        if (account == null || lot == null || claim == null || !(account.custody() instanceof ResourceCustody.Container container)
-                || !container.containerId().equals(depotId(settlement.id())) || !lot.economicOwnerId().equals(settlement.id())
-                || !"minecraft:wheat".equals(lot.itemKind()) || account.lotQuantities().getOrDefault(lot.id(), 0) < job.outputCount()
-                || !claim.claimantId().equals(job.id()) || !claim.economicOwnerId().equals(settlement.id())
-                || !"minecraft:wheat".equals(claim.itemKind()) || claim.quantity() != job.outputCount()
-                || account.claimQuantities().getOrDefault(claim.id(), 0) != claim.quantity()) {
-            throw new IllegalArgumentException("fungible production job must retain one exact depot lot allocation");
-        }
-        java.util.List<PhysicalStackBinding> bindings = resources.bindings().values().stream()
-                .filter(binding -> binding.accountId().equals(accountId)).toList();
-        boolean hasEpoch = !bindings.isEmpty() && bindings.stream().allMatch(binding -> binding.authorityEpoch() == epoch);
-        if (bound && !hasEpoch) {
-            throw new IllegalArgumentException("fungible production job does not match its current physical custody epoch");
-        }
-    }
     public boolean isHiveStore(SubjectId containerId) { return HiveStorageSupport.isOperationalStore(this, containerId); }
     public static SubjectId depotId(SubjectId settlementId) {
         Objects.requireNonNull(settlementId, "settlement id"); if (!settlementId.value().startsWith("settlement:")) throw new IllegalArgumentException("settlement id must use settlement: namespace");

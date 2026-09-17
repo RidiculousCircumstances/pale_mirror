@@ -6,6 +6,8 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 
 /**
  * Canonical read model for exclusive current human work.  It introduces no
@@ -13,6 +15,9 @@ import java.util.Objects;
  * operation, patrol or Transit journey.
  */
 public record HumanAssignmentProjection(Map<SubjectId, HumanAssignment> assignments) {
+    private static final int MAX_CACHED_REVISIONS = 128;
+    private static final Map<FrontierWorldState, HumanAssignmentProjection> CACHE =
+            Collections.synchronizedMap(new IdentityHashMap<>());
     public HumanAssignmentProjection {
         assignments = Map.copyOf(Objects.requireNonNull(assignments, "human assignments"));
         assignments.forEach((resident, assignment) -> {
@@ -22,6 +27,17 @@ public record HumanAssignmentProjection(Map<SubjectId, HumanAssignment> assignme
 
     public static HumanAssignmentProjection compile(FrontierWorldState state) {
         Objects.requireNonNull(state, "assignment state");
+        synchronized (CACHE) {
+            HumanAssignmentProjection cached = CACHE.get(state);
+            if (cached != null) return cached;
+            if (CACHE.size() >= MAX_CACHED_REVISIONS) CACHE.clear();
+            HumanAssignmentProjection compiled = compileFresh(state);
+            CACHE.put(state, compiled);
+            return compiled;
+        }
+    }
+
+    private static HumanAssignmentProjection compileFresh(FrontierWorldState state) {
         Map<SubjectId, HumanAssignment> values = new LinkedHashMap<>();
         state.humanPopulation().residentIds().stream().sorted().forEach(id -> values.put(id, HumanAssignment.idle(id)));
         state.productionJobs().values().stream().sorted(Comparator.comparing(ProductionJob::id))

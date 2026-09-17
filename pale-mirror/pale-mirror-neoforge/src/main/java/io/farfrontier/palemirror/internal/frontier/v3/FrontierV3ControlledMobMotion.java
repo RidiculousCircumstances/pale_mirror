@@ -5,10 +5,13 @@ import io.farfrontier.palemirror.frontier.v3.model.LocalNavigationEnvelope;
 import io.farfrontier.palemirror.frontier.v3.model.WorldBounds;
 import io.farfrontier.palemirror.internal.network.PaleMirrorNetwork;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MoverType;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.monster.Zombie;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
@@ -65,6 +68,12 @@ final class FrontierV3ControlledMobMotion {
      * intentionally stationary body after a player removes its support.
      */
     private static final Map<Mob, Boolean> ORDINARY_PHYSICS = new WeakHashMap<>();
+    /**
+     * An exact retained ascent may span several entity turns.  Its source support is physical
+     * evidence only: it lets the actuator distinguish a still-supported grade climb from a
+     * player having removed that exact support midway through the same retained edge.
+     */
+    private static final Map<Mob, RetainedAscent> ASCENTS = new WeakHashMap<>();
     /** A crop-local tending pose is retained at one exact station, never paced by a semantic callback. */
     private static final Map<Mob, TendingPose> TENDING = new IdentityHashMap<>();
     /** The entity boundary may be observed explicitly by a test after vanilla already ran it. */
@@ -241,6 +250,8 @@ final class FrontierV3ControlledMobMotion {
         if (continuous && !CONTINUOUS.containsKey(actor) && CONTINUOUS.size() >= MAX_PENDING_INTENTS) return;
         if (!continuous) TENDING.remove(actor);
         MotionIntent replacement = new MotionIntent(level.getGameTime(), target, continuous, envelope, bounds, maximumStep);
+        RetainedAscent ascent = ASCENTS.get(actor);
+        if (ascent != null && !ascent.target().equals(target)) ASCENTS.remove(actor);
         if (continuous) CONTINUOUS.put(actor, replacement);
         else CONTINUOUS.remove(actor);
         Avoidance avoidance = AVOIDANCE.get(actor);
@@ -268,7 +279,7 @@ final class FrontierV3ControlledMobMotion {
         if (intent == null) intent = PENDING.get(actor);
         if (intent == null) return;
         if (!(actor.level() instanceof ServerLevel level) || actor.isRemoved() || !actor.isAlive()) {
-            PENDING.remove(actor); CONTINUOUS.remove(actor); LAST_ADVANCE.remove(actor); AVOIDANCE.remove(actor); return;
+            PENDING.remove(actor); CONTINUOUS.remove(actor); LAST_ADVANCE.remove(actor); AVOIDANCE.remove(actor); ASCENTS.remove(actor); return;
         }
         // A direct diagnostic/GameTest call can legitimately occur after the registered
         // EntityTick.Pre callback. It is an observation aid, never a second movement authority;
@@ -342,6 +353,7 @@ final class FrontierV3ControlledMobMotion {
         DUTY_CUES.remove(actor);
         STATION_SETTLING.remove(actor);
         LAST_ADVANCE.remove(actor);
+        ASCENTS.remove(actor);
         // A stop retires target authority but never rewrites observed physical position or the
         // canonical cursor.
         AVOIDANCE.remove(actor);
@@ -367,7 +379,13 @@ final class FrontierV3ControlledMobMotion {
         double vertical = Math.max(-0.98D, (velocity.y - 0.08D) * 0.98D);
         actor.move(MoverType.SELF, new Vec3(0.0D, vertical, 0.0D));
         boolean moved = actor.position().y < before.y - 1.0E-8D;
-        actor.setDeltaMovement(velocity.x, actor.onGround() ? 0.0D : vertical, velocity.z);
+        // Calling Entity.move directly at this narrow NoAI boundary does not reliably refresh
+        // the vanilla onGround flag before the next tracker turn.  Collision itself is the
+        // authoritative fact: a downward intent that made no vertical progress struck the
+        // retained floor and must not accumulate a synthetic fall velocity.  Conversely an
+        // unsupported body still moves downward and retains ordinary gravity/fall behavior.
+        boolean downwardCollision = vertical < 0.0D && !moved;
+        actor.setDeltaMovement(velocity.x, actor.onGround() || downwardCollision ? 0.0D : vertical, velocity.z);
         if (moved) publishAcceptedMove(actor);
     }
 
@@ -379,7 +397,18 @@ final class FrontierV3ControlledMobMotion {
     static void restoreOrdinaryPhysics(Mob actor) {
         if (actor == null) return;
         actor.setNoGravity(false);
+        // Minecraft persists fall distance with the exact body, while our no-AI bridge is
+        // re-registered only after a JVM restart.  A body observed already resting on a real
+        // support has no in-flight fall to continue; letting its historical counter reach the
+        // first bridge move turns an old physical observation into a new, uncaused death.
+        // Conversely an airborne body keeps its counter and ordinary fall outcome intact.
+        if (!ORDINARY_PHYSICS.containsKey(actor) && actor.level() instanceof ServerLevel level
+                && standingOnPhysicalSupport(level, actor)) actor.fallDistance = 0.0F;
         ORDINARY_PHYSICS.put(actor, Boolean.TRUE);
+    }
+
+    private static boolean standingOnPhysicalSupport(ServerLevel level, Mob actor) {
+        return !level.noCollision(actor, actor.getBoundingBox().move(0.0D, -0.01D, 0.0D));
     }
 
     /**
@@ -409,7 +438,7 @@ final class FrontierV3ControlledMobMotion {
         // vertical half in the current clear column first, then walk the already-retained X/Z
         // edge.  This neither changes the target nor creates a stair/side-route search.
         if (delta.y > ARRIVAL_DISTANCE) {
-            settleExactAscent(actor, delta.y);
+            settleExactAscent(level, actor, target, delta.y);
             return;
         }
         if (horizontalDistance <= 1.0E-8D) {
@@ -459,6 +488,12 @@ final class FrontierV3ControlledMobMotion {
             // bypass or alternate destination.
             if ((envelope != null && !insideEnvelope(actor.position().add(step), envelope) && !localAscent)
                     || bounds != null && !insideWorldBounds(actor.position().add(step), bounds)) continue;
+            // `Entity.move` resolves terrain but permits living bodies to overlap and lets
+            // vanilla's later push-out turn decide their fate.  A retained Frontier edge has
+            // no authority to create that collision: the exact checkpoint remains owned by
+            // the caller, so a body waits locally until the observed column clears instead of
+            // selecting a side-step, pushing another retained actor, or rewriting position.
+            if (livingBodyOccupies(level, actor, actor.getBoundingBox().move(step))) continue;
             Vec3 before = actor.position();
             actor.move(MoverType.SELF, step);
             Vec3 moved = actor.position().subtract(before);
@@ -477,7 +512,8 @@ final class FrontierV3ControlledMobMotion {
                 Vec3 lifted = step.add(0.0D, THIN_SURFACE_STEP, 0.0D);
                 if ((envelope != null && !insideEnvelope(actor.position().add(lifted), envelope) && !localAscent)
                         || bounds != null && !insideWorldBounds(actor.position().add(lifted), bounds)
-                        || !level.noCollision(actor, actor.getBoundingBox().move(lifted))) continue;
+                        || !level.noCollision(actor, actor.getBoundingBox().move(lifted))
+                        || livingBodyOccupies(level, actor, actor.getBoundingBox().move(lifted))) continue;
                 before = actor.position(); actor.move(MoverType.SELF, lifted); moved = actor.position().subtract(before);
                 if (moved.x * moved.x + moved.z * moved.z <= 1.0E-8D) continue;
             }
@@ -501,6 +537,11 @@ final class FrontierV3ControlledMobMotion {
             recordMove(level, actor, moved);
             return;
         }
+    }
+
+    private static boolean livingBodyOccupies(ServerLevel level, Mob actor, AABB candidate) {
+        return !level.getEntities(actor, candidate.inflate(0.001D), entity -> entity instanceof LivingEntity living
+                && living.isAlive() && !living.isSpectator()).isEmpty();
     }
 
     /**
@@ -540,10 +581,33 @@ final class FrontierV3ControlledMobMotion {
     }
 
     /** Moves only upward through the current exact clear body column before one retained step. */
-    private static void settleExactAscent(Mob actor, double verticalDelta) {
+    private static void settleExactAscent(ServerLevel level, Mob actor, Vec3 target, double verticalDelta) {
         Vec3 before = actor.position();
+        RetainedAscent prior = ASCENTS.get(actor);
+        BlockPos sourceSupport = prior == null ? belowFeet(before) : prior.sourceSupport();
+        // A controlled lift is a grade move from one real physical support, never a flight
+        // response to an absent or player-destroyed floor.  This keeps a retained climb live
+        // across ordinary gravity while immediately returning the body to vanilla falling when
+        // that exact support disappears.
+        if (!level.getBlockState(sourceSupport).isFaceSturdy(level, sourceSupport, Direction.UP)) {
+            ASCENTS.remove(actor);
+            return;
+        }
         actor.move(MoverType.SELF, new Vec3(0.0D, Math.min(verticalDelta, VERTICAL_SPEED), 0.0D));
-        if (actor.position().y > before.y + 1.0E-8D) publishAcceptedMove(actor);
+        if (actor.position().y > before.y + 1.0E-8D) {
+            // The ordinary gravity half has already run at this entity boundary.  Retaining
+            // its downward velocity would make it accumulate across the next bounded lift,
+            // so a real grade-one walker can never clear an otherwise open named support.
+            // Clearing only that consumed vertical impulse preserves normal gravity on every
+            // later turn without a retained ascent, including an observed support loss.
+            actor.setDeltaMovement(actor.getDeltaMovement().x, 0.0D, actor.getDeltaMovement().z);
+            ASCENTS.put(actor, new RetainedAscent(target, sourceSupport));
+            publishAcceptedMove(actor);
+        }
+    }
+
+    private static BlockPos belowFeet(Vec3 feet) {
+        return new BlockPos((int) Math.floor(feet.x), (int) Math.floor(feet.y) - 1, (int) Math.floor(feet.z));
     }
 
     /** Requests vanilla's normal position-delta publication after an accepted move. */
@@ -610,6 +674,7 @@ final class FrontierV3ControlledMobMotion {
     private record MotionIntent(long applyAtGameTime, Vec3 target, boolean continuous, LocalNavigationEnvelope envelope,
                                 WorldBounds bounds, double maximumStep) { }
     private record AppliedIntent(MotionIntent intent, long gameTime) { }
+    private record RetainedAscent(Vec3 target, BlockPos sourceSupport) { }
     private record TendingPose(double x, double y, double z) {
         private Vec3 target(long gameTime) {
             return new Vec3(x, y, z);

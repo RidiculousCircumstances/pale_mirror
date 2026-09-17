@@ -50,9 +50,13 @@ public final class RoutePatrolProcess {
         StrategicTask task = task(state, patrol.taskId(), StrategicTaskStatus.ACTIVE);
         RoutePatrol current = patrol;
         List<ProposedEvent> events = new ArrayList<>();
-        // A scheduled COLD turn is one operation boundary, never a hidden batch of resident
-        // teleports.  HOT supplies the same edge through observed arrival.
-        for (int advance = 0; advance < 1; advance++) {
+        // A COLD turn records a bounded sequence of the same one-cell formation receipts that
+        // HOT supplies through observed arrivals.  This is not a formation teleport: every
+        // reducer validates and persists its predecessor body before moving one named resident.
+        // Batching only prevents a distributed, already-canonical home layout from turning an
+        // ordinary route inspection into hours of scheduler latency before it can inspect a
+        // known loss.
+        for (int advance = 0; advance < PatrolAssembly.MAX_COLD_ADVANCES; advance++) {
             if (current.memberIds().stream().anyMatch(member -> state.actorLocations().get(member).condition().status() != ActorLifeStatus.ALIVE)) {
                 events.add(new ProposedEvent(current.settlementId(), new RoutePatrolFailed(current.taskId())));
                 events.add(transition(task, StrategicTaskStatus.BLOCKED));
@@ -81,7 +85,6 @@ public final class RoutePatrolProcess {
                 events.add(new ProposedEvent(current.settlementId(), new RoutePatrolFormationAdvanced(current.taskId())));
                 current = next;
                 if (current.status() == RoutePatrolStatus.ROUTE_CLEAR) { events.add(transition(task, StrategicTaskStatus.COMPLETED)); return List.copyOf(events); }
-                break;
             }
         }
         events.add(schedule(progress(current, Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().routePatrolStepInterval()))));

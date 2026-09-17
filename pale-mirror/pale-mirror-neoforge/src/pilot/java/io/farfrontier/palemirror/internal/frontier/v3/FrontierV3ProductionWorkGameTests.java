@@ -6,6 +6,9 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord;
 import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
+import io.farfrontier.palemirror.frontier.v3.model.AmbientLeasePrepared;
+import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
+import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseTransition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierProductionWorkSceneSupport;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierV3FixtureCatalog;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
@@ -14,6 +17,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ProductionJob;
 import io.farfrontier.palemirror.frontier.v3.model.ProductionWorkProgress;
 import io.farfrontier.palemirror.frontier.v3.model.ProductionWorkProgressed;
 import io.farfrontier.palemirror.frontier.v3.model.ProductionWorkSceneCause;
+import io.farfrontier.palemirror.frontier.v3.model.ProductionWorkSceneLeaseHandoff;
 import io.farfrontier.palemirror.frontier.v3.model.ProductionWorkSceneLeasePrepared;
 import io.farfrontier.palemirror.frontier.v3.model.ProductionWorkTraversalAdvanced;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
@@ -21,6 +25,7 @@ import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseReleased;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseTransition;
 import io.farfrontier.palemirror.frontier.v3.model.SceneMember;
+import io.farfrontier.palemirror.frontier.v3.model.SceneMemberPosition;
 import io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor;
 import io.farfrontier.palemirror.frontier.v3.persistence.AppendReceipt;
 import io.farfrontier.palemirror.frontier.v3.persistence.CompactionReceipt;
@@ -29,6 +34,7 @@ import io.farfrontier.palemirror.frontier.v3.persistence.FrontierStore;
 import io.farfrontier.palemirror.frontier.v3.persistence.RecoveryImage;
 import io.farfrontier.palemirror.frontier.v3.persistence.SnapshotReceipt;
 import io.farfrontier.palemirror.frontier.v3.persistence.SnapshotRecord;
+import io.farfrontier.palemirror.frontier.v3.process.AmbientActorProcess;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -153,6 +159,80 @@ public final class FrontierV3ProductionWorkGameTests {
         helper.assertTrue(!FrontierV3ProductionWorkSceneExecutor.clearNextBody(level, worker, next),
                 "a player/world full block at the retained next body must become a typed route-block observation, never a detour");
         worker.discard(); helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-production-work", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void fencedProductionReleaseClosesBeforeSameWorkerProjectionCleanup(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos bodyPosition = helper.absolutePos(new BlockPos(2, 8, 2));
+        String suffix = bodyPosition.getX() + "-" + bodyPosition.getZ();
+        WorldId world = new WorldId("frontier:production-release-fence-" + suffix);
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
+                FrontierV3FixtureCatalog.productionWorkConfiguration(world, 41L), new EphemeralStore(), 20_000);
+        try {
+            FrontierWorldState initial = state(runtime);
+            ProductionJob job = initial.productionJobs().get(new SubjectId("job:production-development-input-theft"));
+            helper.assertTrue(job != null, "the fixture must retain one exact production job");
+            SceneLeaseId leaseId = new SceneLeaseId("lease:production-release-fence-" + suffix);
+            SceneMember member = new SceneMember(job.workerId(), SceneLease.deterministicEntityId(world, job.workerId()));
+            BodyPosition observed = initial.actorLocations().get(job.workerId()).body();
+            FrontierV3CommandSubmission.submit(runtime, "production-release-fence-ambient-prepare", suffix,
+                    new AmbientLeasePrepared(AmbientActorProcess.nextLease(initial, job.workerId(),
+                            runtime.canonicalState().orElseThrow().instant())));
+            FrontierV3CommandSubmission.submit(runtime, "production-release-fence-ambient-hot", suffix,
+                    new AmbientLeaseTransition(job.workerId(), AmbientLeaseStatus.HOT));
+            SceneLease lease = SceneLease.forCause(leaseId, world, new ProductionWorkSceneCause(job.id()), observed.supportingSurface().support(),
+                    runtime.canonicalState().orElseThrow().instant(), runtime.canonicalState().orElseThrow().revision().value(), SceneLeaseStatus.PREPARED,
+                    List.of(member), java.util.Map.of(job.workerId(), observed), java.util.Set.of(job.workerId()), Optional.empty());
+            FrontierV3CommandSubmission.submit(runtime, "production-release-fence-handoff", suffix,
+                    new ProductionWorkSceneLeaseHandoff(lease, List.of(new SceneMemberPosition(job.workerId(), observed,
+                            initial.actorLocations().get(job.workerId()).condition().health()))));
+            FrontierV3CommandSubmission.submit(runtime, "production-release-fence-hot", suffix, new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
+            FrontierV3CommandSubmission.submit(runtime, "production-release-fence-draining", suffix, new SceneLeaseTransition(leaseId, SceneLeaseStatus.DRAINING));
+
+            level.setBlock(bodyPosition.below(), Blocks.STONE.defaultBlockState(), 3);
+            Villager body = EntityType.VILLAGER.create(level);
+            helper.assertTrue(body != null, "the exact production worker body must be constructible");
+            body.setUUID(member.entityId()); body.setNoAi(true); body.setPos(bodyPosition.getX() + 0.5D, bodyPosition.getY(), bodyPosition.getZ() + 0.5D);
+            body.getPersistentData().putString(FrontierV3SceneExecutor.LEASE_KEY, leaseId.value());
+            body.getPersistentData().putString(FrontierV3SceneExecutor.ACTOR_KEY, job.workerId().value());
+            body.getPersistentData().putLong(FrontierV3SceneExecutor.REVISION_KEY, lease.revision());
+            helper.assertTrue(level.addFreshEntity(body), "the exact worker body must enter the loaded GameTest cell");
+            helper.runAfterDelay(2L, () -> {
+                try {
+                    FrontierWorldState draining = state(runtime);
+                    helper.assertValueEqual(draining.ambientLeases().get(job.workerId()).status(), AmbientLeaseStatus.CLOSED,
+                            "the production hand-off must close ambient authority before the scene can fence its exact body");
+                    // GameTest templates sit outside the bounded Frontier map. The physical
+                    // release observer records a canonical body coordinate, so present the
+                    // already-owned body at its retained canonical hand-off without loading or
+                    // mutating the remote world.
+                    BodyPosition canonical = draining.sceneLeases().get(leaseId).memberPosition(job.workerId());
+                    body.setPos(canonical.x() + 0.5D, canonical.y(), canonical.z() + 0.5D);
+                    helper.assertValueEqual(FrontierV3AmbientActorExecutor.fenceDrainingSceneBody(level, draining, draining.sceneLeases().get(leaseId), member, body),
+                            FrontierV3AmbientActorExecutor.SceneCarrierFenceResult.FENCED,
+                            "the same drained production body must produce one exact inactive carrier");
+                    var releasedCommand = FrontierV3CommandSubmission.submit(runtime, "production-release-fence-release", suffix,
+                            new SceneLeaseReleased(leaseId, List.of(new SceneMemberPosition(job.workerId(),
+                                    new BodyPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ()),
+                                    draining.actorLocations().get(job.workerId()).condition().health()))));
+                    helper.assertTrue(releasedCommand instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted,
+                            "the fenced same-worker release must be accepted before its old projection can be discarded: " + releasedCommand);
+                    body.discard();
+                    FrontierWorldState released = state(runtime);
+                    helper.assertValueEqual(released.sceneLeases().get(leaseId).status(), SceneLeaseStatus.CLOSED,
+                            "the production release receipt must close only after the worker fence is durable");
+                    helper.assertTrue(FrontierV3AmbientCarrierLedger.get(level, world).hasCarrier(job.workerId()),
+                            "closed-scene cleanup must leave one same-worker inactive carrier for later ambient return");
+                    helper.assertTrue(body.isRemoved(),
+                            "the old scene projection may disappear only after the durable exact-carrier fence");
+                    runtime.shutdown(); helper.succeed();
+                } catch (RuntimeException failure) {
+                    body.discard(); runtime.shutdown(); throw failure;
+                }
+            });
+        } catch (RuntimeException failure) {
+            runtime.shutdown(); throw failure;
+        }
     }
 
     private static FrontierWorldState state(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {

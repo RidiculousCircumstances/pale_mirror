@@ -41,20 +41,27 @@ export function requestRconStop({ port, password, timeoutMs = 10_000 }) {
   return requestRconCommand({ port, password, command: 'stop', timeoutMs });
 }
 
+/** Reads the complete bounded command reply from the exact disposable server, never a lifecycle acknowledgement. */
+export function requestRconQuery({ port, password, command, timeoutMs = 10_000 }) {
+  return requestRconCommand({ port, password, command, timeoutMs, awaitResponse: true });
+}
+
 /** Authenticated transport handoff for one exact server command, never a lifecycle acknowledgement. */
-export function requestRconCommand({ port, password, command, timeoutMs = 10_000 }) {
+export function requestRconCommand({ port, password, command, timeoutMs = 10_000, awaitResponse = false }) {
   if (!Number.isInteger(port) || port < 1024 || port > 65535 || typeof password !== 'string' || !password
-      || typeof command !== 'string' || !/^[a-z0-9_ -]{1,160}$/.test(command)) {
+      || typeof command !== 'string' || !/^[a-z0-9_ -]{1,160}$/.test(command) || typeof awaitResponse !== 'boolean') {
     return Promise.reject(new Error('invalid disposable RCON endpoint'));
   }
   return new Promise((resolveStop, rejectStop) => {
-    let accepted = false; let settled = false; let received = Buffer.alloc(0);
+    let accepted = false; let settled = false; let received = Buffer.alloc(0); const responseFrames = [];
     const socket = createConnection({ host: '127.0.0.1', port });
-    const timer = setTimeout(() => finish(new Error('disposable RCON did not authenticate before timeout')), timeoutMs);
-    function finish(error) {
+    const timer = setTimeout(() => finish(new Error(accepted
+      ? 'disposable RCON did not complete its bounded diagnostic response before timeout'
+      : 'disposable RCON did not authenticate before timeout')), timeoutMs);
+    function finish(error, response = undefined) {
       if (settled) return;
       settled = true; clearTimeout(timer); socket.destroy();
-      if (error) rejectStop(error); else resolveStop();
+      if (error) rejectStop(error); else resolveStop(response);
     }
     socket.once('connect', () => socket.write(encodeRconFrame(AUTH_ID, 3, password)));
     socket.on('data', (chunk) => {
@@ -65,18 +72,40 @@ export function requestRconCommand({ port, password, command, timeoutMs = 10_000
           if (!accepted && frame.id === -1) return finish(new Error('disposable RCON rejected its one-time credential'));
           if (!accepted && frame.id === AUTH_ID) {
             accepted = true;
-            socket.write(encodeRconFrame(COMMAND_ID, 2, command), (error) => {
+            const request = encodeRconFrame(COMMAND_ID, 2, command);
+            socket.write(request, (error) => {
               // This is transport handoff only, not an assertion that Minecraft has
               // persisted or completed shutdown.  Vanilla RCON does not reliably
               // respond to `stop`; the lifecycle owner must obtain the separately
               // typed durable-save and game-port-closed barriers before continuing.
-              finish(error);
+              if (error || !awaitResponse) finish(error);
             });
           }
+          // Vanilla RCON splits a long command result into multiple same-id frames but does
+          // not delimit them or close the connection. This runner has exactly one query
+          // family: bounded PMV3 JSON. Its complete parse is the semantic frame fence.
+          if (accepted && awaitResponse && frame.id === COMMAND_ID) responseFrames.push(frame.payload);
+          if (accepted && awaitResponse && completeDiagnosticResponse(responseFrames.join(''))) finish(null, responseFrames.join(''));
         }
       } catch (error) { finish(error); }
     });
     socket.once('error', (error) => finish(error));
-    socket.once('close', () => { if (!settled) finish(new Error('disposable RCON closed before accepting stop')); });
+    socket.once('close', () => {
+      if (settled) return;
+      if (awaitResponse && accepted && responseFrames.length > 0) finish(null, responseFrames.join(''));
+      else finish(new Error('disposable RCON closed before accepting command'));
+    });
   });
+}
+
+function completeDiagnosticResponse(response) {
+  const marker = 'PMV3_DIAG ';
+  const offset = response.indexOf(marker);
+  if (offset < 0) return false;
+  try {
+    JSON.parse(response.slice(offset + marker.length));
+    return true;
+  } catch {
+    return false;
+  }
 }

@@ -1,0 +1,115 @@
+{
+  "schema_version": 1,
+  "families": {
+    "docs": {
+      "tier": "T0",
+      "cwd": ".",
+      "command": "./gradlew guardrails",
+      "purpose": "Validate governed documentation and continuity contracts."
+    },
+    "architecture": {
+      "tier": "T0",
+      "cwd": ".",
+      "command": "./gradlew verifyArchitecture :pale-mirror-frontier:test --tests '*FrontierArchitectureTest'",
+      "purpose": "Validate declared and bytecode-level architecture boundaries."
+    },
+    "engineering-python": {
+      "tier": "T0",
+      "cwd": ".",
+      "command": "python3 -m unittest discover -s tools/engineering -p 'test_*.py'",
+      "purpose": "Run fast engineering-tool contract tests."
+    },
+    "frontier-unit": {
+      "tier": "T1",
+      "cwd": ".",
+      "command": "./gradlew :pale-mirror-frontier:test",
+      "purpose": "Exercise the pure Java Frontier v3 module."
+    },
+    "neoforge-compile": {
+      "tier": "T1",
+      "cwd": ".",
+      "command": "./gradlew :pale-mirror-neoforge:compileJava",
+      "purpose": "Compile the Minecraft adapter boundary without launching Minecraft."
+    },
+    "visuals-compile": {
+      "tier": "T1",
+      "cwd": ".",
+      "command": "./gradlew :pale-mirror-visuals:compileJava",
+      "purpose": "Compile the required visuals provider."
+    },
+    "api-unit": {
+      "tier": "T1",
+      "cwd": ".",
+      "command": "./gradlew :pale-mirror-api:test",
+      "purpose": "Exercise the public adapter API."
+    },
+    "domain-unit": {
+      "tier": "T1",
+      "cwd": ".",
+      "command": "./gradlew :pale-mirror-domain:test",
+      "purpose": "Exercise the legacy domain module when it is deliberately changed."
+    },
+    "pilot-node": {
+      "tier": "T0",
+      "cwd": "tools/frontier-v3-test-pilot",
+      "command": "npm test",
+      "purpose": "Validate scenario, carrier and evidence-harness semantics without Minecraft."
+    },
+    "scene-gametest": {
+      "tier": "T2",
+      "cwd": ".",
+      "command": "./gradlew :pale-mirror-neoforge:runFrontierV3SceneGameTestServer",
+      "purpose": "Exercise HOT/COLD scene materialization in the smallest named GameTest family."
+    },
+    "economy-gametest": {
+      "tier": "T2",
+      "cwd": ".",
+      "command": "./gradlew :pale-mirror-neoforge:runFrontierV3EconomyGameTestServer",
+      "purpose": "Exercise exact items, production transforms and owned boards."
+    },
+    "critical-gate": {
+      "tier": "T3",
+      "cwd": ".",
+      "command": "./gradlew guardrails check :pale-mirror-neoforge:runGameTestServer :pale-mirror-neoforge:build :pale-mirror-neoforge:verifyPackagedJar",
+      "purpose": "Run the complete critical-code local gate once for a coherent milestone candidate.",
+      "milestone_only": true
+    },
+    "native-causal": {
+      "tier": "T4",
+      "cwd": "tools/frontier-v3-test-pilot",
+      "command": "npm run scenario:isolated -- --scenario <selected-scenario.json>",
+      "purpose": "Run one explicitly selected player-visible or restart carrier; never inferred automatically.",
+      "manual_selection": true,
+      "milestone_only": true
+    }
+  },
+  "path_rules": [
+    {"pattern": "docs/**", "families": ["docs"]},
+    {"pattern": "AGENTS.md", "families": ["docs"]},
+    {"pattern": "CONTINUITY.md", "families": ["docs"]},
+    {"pattern": "architecture.yml", "families": ["architecture", "docs"]},
+    {"pattern": "build.gradle", "families": ["architecture"]},
+    {"pattern": "settings.gradle", "families": ["architecture"]},
+    {"pattern": "pale-mirror-frontier/build.gradle", "families": ["architecture", "frontier-unit", "critical-gate"]},
+    {"pattern": "pale-mirror-frontier/src/**", "families": ["frontier-unit", "architecture", "critical-gate"]},
+    {"pattern": "pale-mirror-neoforge/src/**/frontier/v3/**", "families": ["neoforge-compile", "scene-gametest", "native-causal", "critical-gate"]},
+    {"pattern": "pale-mirror-neoforge/src/**", "families": ["neoforge-compile", "critical-gate"]},
+    {"pattern": "pale-mirror-visuals/src/**", "families": ["visuals-compile", "critical-gate"]},
+    {"pattern": "pale-mirror-api/src/**", "families": ["api-unit", "architecture"]},
+    {"pattern": "pale-mirror-domain/src/**", "families": ["domain-unit", "architecture"]},
+    {"pattern": "tools/frontier-v3-test-pilot/scenarios/**", "families": ["pilot-node", "native-causal", "critical-gate"]},
+    {"pattern": "tools/frontier-v3-test-pilot/**", "families": ["pilot-node", "critical-gate"]},
+    {"pattern": "tools/engineering/agent_assist/**", "families": ["engineering-python"]},
+    {"pattern": "tools/engineering/**", "families": ["engineering-python"]},
+    {"pattern": ".github/workflows/**", "families": ["docs"]}
+  ],
+  "escalation_rules": [
+    {
+      "keywords": ["economy", "production", "inventory", "custody", "resource"],
+      "family": "economy-gametest",
+      "requires_matching_path_family": "scene-gametest"
+    }
+  ],
+  "milestone_families": ["critical-gate"],
+  "manual_families": ["native-causal"]
+}

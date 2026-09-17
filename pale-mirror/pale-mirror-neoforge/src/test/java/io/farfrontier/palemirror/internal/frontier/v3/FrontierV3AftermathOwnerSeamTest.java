@@ -63,15 +63,20 @@ class FrontierV3AftermathOwnerSeamTest {
             TestPhysicalWorld world = new TestPhysicalWorld(cold, target.position());
             assertNull(world.claim(target.position()), "the physical ledger starts untouched");
             FrontierV3AftermathOwnerComposition.tick(world, runtime);
-            assertEquals(DeferredAftermathCellStatus.PENDING, cell(runtime, aftermath).status(),
-                    "AIR remains pending while the real bounded projector has not reached this exact target");
-            assertNull(world.claim(target.position()), "aftermath cannot manufacture the projector's tombstone");
+            assertTrue(FrontierV3GrayboxExecutor.publishedStructuralBaseline(runtime).orElseThrow().cells().containsKey(target.position()),
+                    "the physical loss must retain a cell in the projector's stable structural baseline");
+            assertEquals(DeferredAftermathCellStatus.RUNNING, cell(runtime, aftermath).status(),
+                    "the exact known loss receives one bounded projector slot before aftermath observes its tombstone");
+            assertTrue(world.claim(target.position()).conflicted(), "only the projector may retain the exact loss tombstone");
             FrontierWorldState restartState = new FrontierWorldStateCodec().decode(runtime.checkpointImage().orElseThrow().canonicalState());
             FrontierV3GrayboxExecutor.forget(runtime); runtime.shutdown();
             runtime = FrontierV3ServerRuntime.start(rebased(base, restartState, dueAt), new EphemeralStore(), 10_000);
-            assertEquals(DeferredAftermathCellStatus.PENDING, cell(runtime, aftermath).status(),
-                    "codec restart before projector classification retains absence as pending rather than a foreign conflict");
-
+            assertEquals(DeferredAftermathCellStatus.RUNNING, cell(runtime, aftermath).status(),
+                    "codec restart retains the durable projector-before-aftermath boundary");
+            assertTrue(runtime.decodedState().orElseThrow().physicalDeltas().containsKey(target.position()),
+                    "codec restart must retain the exact canonical loss mask for projector priority");
+            assertTrue(FrontierV3GrayboxExecutor.matchesKnownLoss(runtime.decodedState().orElseThrow().physicalDeltas().get(target.position()), baselineTarget),
+                    "codec restart must retain the exact loss provenance for projector priority");
             // The normal projector probes at most two natural chunks per turn rather than
             // scanning every declared chunk. Known natural chunks are retained in a bounded
             // fair queue, so this exact deferred owner cannot wait for a world-plan lap.

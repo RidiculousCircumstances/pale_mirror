@@ -38,7 +38,7 @@ final class FrontierV3RoutePatrolSceneExecutor {
                 .filter(lease -> lease.status() != SceneLeaseStatus.CLOSED && lease.status() != SceneLeaseStatus.CONFLICT)
                 .min(Comparator.comparing(SceneLease::id));
         if (active.isPresent()) { execute(level, runtime, state, active.orElseThrow()); return true; }
-        Optional<FrontierRoutePatrolSceneSupport.Candidate> candidate = FrontierV3SceneExecutor.firstDemandedCandidate(
+        Optional<FrontierRoutePatrolSceneSupport.Candidate> candidate = FrontierV3SceneDemand.firstDemandedCandidate(
                 level, FrontierRoutePatrolSceneSupport.candidates(state), FrontierRoutePatrolSceneSupport.Candidate::handoffPosition);
         if (candidate.isEmpty()) return false;
         FrontierRoutePatrolSceneSupport.Candidate patrol = candidate.orElseThrow();
@@ -145,6 +145,14 @@ final class FrontierV3RoutePatrolSceneExecutor {
         if (obstruction.isPresent()) {
             submit(runtime, "route-patrol-obstruction", lease.id().value(), new RoutePatrolObstructionConfirmed(retained.taskId(), obstruction.orElseThrow()));
             return;
+        }
+        // Body custody is checked before proposing the next canonical formation.  A missing
+        // HOT resident is its own fail-closed condition; it must not be disguised as a route
+        // topology failure merely because the remaining retained column cannot advance alone.
+        for (SceneMember candidate : lease.members()) {
+            if (!(level.getEntity(candidate.entityId()) instanceof Mob)) {
+                block(level, runtime, lease, retained, RoutePatrolBlockReason.MISSING_OWNED_BODY); return;
+            }
         }
         RoutePatrol formation;
         try {

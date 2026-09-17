@@ -14,7 +14,7 @@ final class FrontierV3TestPilotScenario {
             "wait", "wait_until_block", "wait_until_diagnostic", "wait_until_harvest_result",
             "assert_complete_resource_site", "fast_forward", "fast_forward_to_instant",
             "release_fast_forward_hold", "command", "inspect", "look", "look_nearest_entity",
-            "walk", "break", "place", "assert_fixture", "visit", "assert_visible_block", "assert_visible_board", "observe_entity_motion", "open_container", "quick_move_from_inventory", "quick_move_from_container", "split_move_from_container",
+            "walk", "break", "place", "assert_fixture", "visit", "assert_visible_block", "assert_visible_board", "observe_entity_motion", "observe_settlement_population", "open_container", "quick_move_from_inventory", "quick_move_from_container", "split_move_from_container",
             "wait_until_container_item", "interact_board", "interact_nearest_entity", "attack_nearest_entity", "visit_operation", "look_operation", "assert_visible_entity");
     record Parsed(JsonArray setup, JsonArray actions, JsonArray frames) {
         int setupCount() { return setup.size(); }
@@ -64,7 +64,8 @@ final class FrontierV3TestPilotScenario {
                     (type.equals("look_operation") && !validOperationLook(action)) ||
                     (type.equals("inspect") && !validDiagnosticIdentity(action)) ||
                     (type.equals("wait_until_diagnostic") && (!validDiagnosticIdentity(action) || !action.has("expect")
-                            || !action.get("expect").isJsonObject() || !timeout(action, 300_000L) || !validOptionalIncreasePath(action))) ||
+                            || !action.get("expect").isJsonObject() || !timeout(action, 300_000L) || !validOptionalIncreasePath(action)
+                            || !validOptionalDiagnosticPollInterval(action))) ||
                     (type.equals("wait_until_container_item") && !validContainerItem(action)) ||
                     (type.equals("wait_until_harvest_result") && !validHarvestResult(action)) ||
                     (type.equals("assert_complete_resource_site") && !validCompleteResourceSite(action)) ||
@@ -73,6 +74,7 @@ final class FrontierV3TestPilotScenario {
                     (type.equals("assert_visible_board") && !validVisibleBoard(action)) ||
                     (type.equals("assert_visible_entity") && !validVisibleEntity(action)) ||
                     (type.equals("observe_entity_motion") && !validMotionObservation(action)) ||
+                    (type.equals("observe_settlement_population") && !validPopulationObservation(action)) ||
                     (type.equals("look_nearest_entity") && !validLookNearestEntity(action)) ||
                     (type.equals("interact_board") && !validBoardInteraction(action)) ||
                     (type.equals("interact_nearest_entity") && !validEntityInteraction(action)) ||
@@ -143,10 +145,21 @@ final class FrontierV3TestPilotScenario {
                 && (!action.has("anchor") || position(action.getAsJsonObject("anchor")));
     }
 
+    private static boolean validPopulationObservation(JsonObject action) {
+        return requiredId(action, "settlementId", "settlement:") && wholeWithin(action, "durationTicks", 1, 200L)
+                && timeout(action, 60_000L) && (!action.has("maxDistance") || action.get("maxDistance").isJsonPrimitive()
+                && action.get("maxDistance").getAsDouble() >= 1.0D && action.get("maxDistance").getAsDouble() <= 128.0D);
+    }
+
     private static boolean validOptionalIncreasePath(JsonObject action) {
         if (!action.has("requireIncreaseAt")) return true;
         return action.get("requireIncreaseAt").isJsonPrimitive()
                 && action.get("requireIncreaseAt").getAsString().matches("[A-Za-z][A-Za-z0-9]*(?:\\.[A-Za-z][A-Za-z0-9]*){0,7}");
+    }
+
+    /** A sub-second cadence is bounded to one visible-client tick and remains read-only. */
+    private static boolean validOptionalDiagnosticPollInterval(JsonObject action) {
+        return !action.has("pollIntervalMs") || wholeWithin(action, "pollIntervalMs", 50L, 1_000L);
     }
 
     private static boolean validCompleteResourceSite(JsonObject action) {

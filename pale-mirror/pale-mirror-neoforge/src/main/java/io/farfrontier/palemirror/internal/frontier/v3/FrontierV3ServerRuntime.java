@@ -180,7 +180,12 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
                 status = new FrontierV3RuntimeStatus(FrontierV3RuntimeStatus.Kind.QUARANTINED, result.status().failureDetail());
                 return Optional.of(result);
             }
-            if (checkpointWhenDue && ticksSinceCheckpoint >= checkpointIntervalTicks) checkpoint();
+            if (checkpointWhenDue && ticksSinceCheckpoint >= checkpointIntervalTicks) {
+                try (FrontierExecutionMetrics.Span ignored = FrontierExecutionMetrics.safelyBegin(configuration.executionMetrics(),
+                        FrontierExecutionMetrics.Stage.TRANSACTION, "runtime.checkpoint", configuration.worldId().value())) {
+                    checkpoint();
+                }
+            }
             return Optional.of(result);
         } catch (RuntimeException error) {
             quarantine(error);
@@ -192,7 +197,8 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
         if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return Optional.empty();
         try {
             CheckpointImage checkpoint = checkpointImage().orElseThrow();
-            RecoveryImage durable = store.recover(configuration.worldId());
+            RecoveryImage durable = store instanceof FrontierFileStore fileStore
+                    ? fileStore.recoverOwned(configuration.worldId()) : store.recover(configuration.worldId());
             Revision persistedRevision = durable.walTail().isEmpty()
                     ? durable.checkpoint().map(value -> value.checkpoint().revision()).orElse(Revision.ZERO)
                     : durable.walTail().getLast().revision();

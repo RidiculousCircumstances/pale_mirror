@@ -156,6 +156,41 @@ final class FrontierV3HiveFoundryAudit {
     }
 
     /**
+     * Extends an already-published immutable hive expectation index with the current small
+     * growth overlay.  A newly added organ must be visible to the same nest-coherence gate,
+     * but that does not justify grouping the complete settlement/route baseline again on the
+     * server thread.
+     */
+    static HiveExpectations withDynamicOverlay(FrontierWorldState state, HiveExpectations baseline,
+                                               FrontierGrayboxPlan dynamicOverlay) {
+        Objects.requireNonNull(state, "hive expectation state");
+        Objects.requireNonNull(baseline, "hive expectation baseline");
+        Objects.requireNonNull(dynamicOverlay, "dynamic hive overlay");
+        if (dynamicOverlay.cells().isEmpty()) return baseline;
+        Map<SubjectId, List<GrayboxCell>> cells = new java.util.LinkedHashMap<>(baseline.cells());
+        dynamicOverlay.cells().values().stream().collect(java.util.stream.Collectors.groupingBy(GrayboxCell::ownerId,
+                java.util.LinkedHashMap::new, java.util.stream.Collectors.toUnmodifiableList())).forEach((owner, overlayCells) -> {
+            List<GrayboxCell> retained = cells.get(owner);
+            if (retained == null) {
+                cells.put(owner, overlayCells);
+                return;
+            }
+            List<GrayboxCell> combined = new ArrayList<>(retained.size() + overlayCells.size());
+            combined.addAll(retained); combined.addAll(overlayCells);
+            cells.put(owner, List.copyOf(combined));
+        });
+        Map<SubjectId, List<SubjectId>> nestMembers = new java.util.LinkedHashMap<>(baseline.nestMembers());
+        state.hiveColony().addedOrgans().values().stream().map(HiveOrgan::nestId).collect(java.util.stream.Collectors.toSet())
+                .forEach(nestId -> {
+                    List<SubjectId> members = java.util.stream.Stream.concat(state.bootstrap().hive().organs().stream(),
+                                    state.hiveColony().addedOrgans().values().stream())
+                            .filter(organ -> organ.nestId().equals(nestId)).map(HiveOrgan::id).sorted().toList();
+                    members.forEach(member -> nestMembers.put(member, members));
+                });
+        return new HiveExpectations(Map.copyOf(cells), Map.copyOf(nestMembers));
+    }
+
+    /**
      * Bounded first-visible nest check from immutable snapshots published by the two owning
      * projectors.  It deliberately does no world-plan compilation and no owner enumeration.
      */

@@ -7,10 +7,12 @@ import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
+import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSitePlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierV3FixtureCatalog;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxSemanticPart;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilization;
@@ -58,6 +60,73 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class FrontierV3DiagnosticJsonTest {
+    @Test
+    void settlementPopulationReceiptIsBoundedCompleteAndReadOnlyBeforeAClientVisit() {
+        var configuration = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:diagnostic-first-ingress"), 47L);
+        FrontierWorldState state = configuration.initialState();
+        SubjectId settlement = new SubjectId("settlement:7");
+        var residents = state.humanPopulation().residents().values().stream()
+                .filter(resident -> resident.settlementId().equals(settlement)).toList();
+        var admissions = new java.util.LinkedHashMap<SubjectId, FrontierV3AmbientAdmissionDiagnostic>();
+        residents.forEach(resident -> admissions.put(resident.id(), FrontierV3AmbientAdmissionDiagnostic.unloaded(
+                FrontierV3AmbientActorExecutor.entityId(state, resident.id()))));
+        CheckpointImage checkpoint = new CheckpointImage(configuration.worldId(), new io.farfrontier.palemirror.frontier.v3.api.Revision(3L),
+                new SimInstant(120L), new byte[] {1}, List.of(), List.of());
+
+        var population = JsonParser.parseString(FrontierV3DiagnosticJson.settlementPopulation(checkpoint, state, settlement.value(), admissions)
+                .substring(FrontierV3DiagnosticJson.PREFIX.length())).getAsJsonObject();
+        assertEquals(residents.size(), population.get("residentCount").getAsInt());
+        assertTrue(population.get("residentCount").getAsInt() >= 20 && population.get("residentCount").getAsInt() <= 40);
+        assertEquals(residents.size(), population.getAsJsonArray("residents").size());
+        assertTrue(population.getAsJsonArray("residents").asList().stream().allMatch(value -> value.getAsJsonObject()
+                .get("entityUuid").getAsString().matches("[0-9a-f-]{36}")));
+        assertEquals(configuration.initialState(), state, "the pre-visit population census is a rendering-only receipt");
+    }
+
+    @Test
+    void operatorStatusKeepsTheLatestFastForwardReceiptRecoverableWithoutMutatingCanonicalState() {
+        var configuration = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:operator-status"), 91L);
+        FrontierWorldState state = configuration.initialState();
+        CheckpointImage checkpoint = new CheckpointImage(configuration.worldId(), new io.farfrontier.palemirror.frontier.v3.api.Revision(3L),
+                new SimInstant(120L), new byte[] {1}, List.of(), List.of());
+        var receipt = new FrontierV3ServerLifecycle.FastForwardRequestOutcome(7L, "RELATIVE", 1_000, 1_120L,
+                120L, 120L, "REJECTED", "physical work became pending during the relative interval: resource-site-projection:site:1-wheat-field");
+
+        String value = FrontierV3DiagnosticJson.operatorStatus(checkpoint, state, List.of(receipt));
+
+        assertTrue(value.contains("\"kind\":\"status\"") && value.contains("\"requestId\":7")
+                        && value.contains("\"status\":\"REJECTED\"") && value.contains("resource-site-projection:site:1-wheat-field"),
+                "one permission-gated status read must recover the causal terminal receipt instead of treating queue acknowledgement as elapsed time");
+        assertEquals(state, configuration.initialState(), "status rendering may not become a second mutable clock or process owner");
+
+        String selected = FrontierV3DiagnosticJson.operatorStatus(checkpoint, state, List.of(receipt), "site:1-wheat-field");
+        assertTrue(selected.contains("\"selectedSubject\":{") && selected.contains("\"kind\":\"site\"")
+                        && selected.contains("\"growthEpoch\":"),
+                "one selected status query must retain the field lifecycle rather than require a world scan or a second status authority");
+    }
+
+    @Test
+    void siteDiagnosticExposesTheDurableFirstConflictIncidentRatherThanGenericConflict() {
+        var configuration = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:diagnostic-site-incident"), 91L);
+        FrontierWorldState initial = configuration.initialState();
+        SubjectId siteId = initial.resourceSites().sites().keySet().stream().sorted().findFirst().orElseThrow();
+        var site = FrontierResourceSitePlan.compile(initial.bootstrap()).get(siteId);
+        var conflict = new io.farfrontier.palemirror.frontier.v3.model.ResourceSiteConflictObserved(siteId, site.cropSlots().getFirst(),
+                io.farfrontier.palemirror.frontier.v3.model.ResourceSiteConflictReason.OBSERVED_MANAGED_CELL_MISMATCH,
+                io.farfrontier.palemirror.frontier.v3.model.ResourceSiteConflictSource.LIFECYCLE_RECONCILIATION);
+        FrontierWorldState conflicted = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteProcess.reduceConflict(initial, siteId, conflict);
+        CheckpointImage checkpoint = new CheckpointImage(configuration.worldId(), new io.farfrontier.palemirror.frontier.v3.api.Revision(4L),
+                new SimInstant(9L), new byte[] {1}, List.of(), List.of());
+
+        var json = JsonParser.parseString(FrontierV3DiagnosticJson.render("site", siteId.value(), checkpoint, conflicted, Optional.empty())
+                .substring(FrontierV3DiagnosticJson.PREFIX.length())).getAsJsonObject();
+        var incident = json.getAsJsonObject("conflictDisposition").getAsJsonObject("incident");
+        assertEquals("incident:resource-site:" + siteId.value().substring("site:".length()), incident.get("id").getAsString());
+        assertEquals("INVARIANT_FAILURE", incident.get("category").getAsString());
+        assertEquals(siteId.value(), incident.get("owner").getAsString());
+        assertTrue(incident.get("traceCorrelation").getAsString().startsWith("conflict:incident:resource-site:"));
+    }
+
     @Test
     void recoveryDiagnosticReadsOneExactCurrentOrRetiredFenceWithoutChangingCanonicalState() {
         var configuration = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:diagnostic-recovery"), 41L);
@@ -152,15 +221,18 @@ class FrontierV3DiagnosticJsonTest {
         CheckpointImage checkpoint = new CheckpointImage(new WorldId("frontier:performance-diagnostic"),
                 new io.farfrontier.palemirror.frontier.v3.api.Revision(3L), new SimInstant(12L), new byte[]{1}, List.of(), List.of());
 
-        String value = FrontierV3PerformanceDiagnostic.render(checkpoint, metrics.snapshot(), 17, null, null,
-                new FrontierV3ServerLifecycle.FastForwardTargetOutcome(4L, 12L, 11L, null, "REJECTED", "physical work is pending at admission"));
+        String value = FrontierV3PerformanceDiagnostic.render(checkpoint, metrics.snapshot(), null, 17, null, null,
+                new FrontierV3ServerLifecycle.FastForwardTargetOutcome(4L, 12L, 11L, null, "REJECTED", "physical work is pending at admission"),
+                new FrontierV3ServerLifecycle.FastForwardSliceTelemetry(2L, 40L, 23L, 12L, 7L, 20L, 11L, 7L));
 
         assertTrue(value.startsWith(FrontierV3DiagnosticJson.PREFIX + "{\"schema\":1,\"kind\":\"performance\""));
         assertTrue(value.contains("\"stage\":\"PHYSICAL\"") && value.contains("\"maxLagTicks\":8")
                 && value.contains("\"fastForwardRemaining\":17") && value.contains("\"instant\":12")
                 && value.contains("\"world\":\"frontier:performance-diagnostic\"")
                 && value.contains("\"requestId\":4") && value.contains("\"targetInstant\":12") && value.contains("\"admittedCheckpointInstant\":11")
-                && value.contains("\"status\":\"REJECTED\""));
+                && value.contains("\"status\":\"REJECTED\"") && value.contains("\"fastForwardSlice\":{\"samples\":2,\"advancedTicks\":7")
+                && value.contains("\"safetyNanos\":12") && value.contains("\"advanceNanos\":20")
+                && value.contains("\"worstSpan\":{\"stage\":\"PHYSICAL\",\"kind\":\"scenes\",\"owner\":\"scene\""));
         assertTrue(value.length() < 8_192, "performance diagnostics retain the ordinary bounded operator response limit");
     }
 
@@ -184,7 +256,8 @@ class FrontierV3DiagnosticJsonTest {
 
         assertTrue(value.contains("\"status\":\"ok\""), "a bounded pressure cut must remain readable");
         assertTrue(value.length() < 8_192, "maximum retained telemetry cannot turn into response_limit");
-        assertEquals(12, value.split("\\\"stage\\\":").length - 1);
+        assertEquals(13, value.split("\\\"stage\\\":").length - 1,
+                "the pressure cut retains twelve cumulative spans plus one independent worst-span caller");
         assertEquals(8, value.split("\\\"currentDepth\\\":").length - 1);
     }
 
@@ -242,6 +315,9 @@ class FrontierV3DiagnosticJsonTest {
         assertTrue(siteJson.contains("\"firstCrop\":{"));
         assertTrue(actorJson.contains("\"position\":{"));
         assertTrue(actorJson.contains("\"nutrition\":\"NOURISHED\""));
+        assertTrue(JsonParser.parseString(actorJson.substring(FrontierV3DiagnosticJson.PREFIX.length()))
+                        .getAsJsonObject().has("assignmentOwner"),
+                "the ordinary actor query must remain parseable when it carries assignment ownership");
         assertTrue(dormantBioformJson.contains("\"actorKind\":\"BIOFORM\"") && dormantBioformJson.contains("\"lifecycle\":\"DORMANT\""),
                 "an operator and test-pilot must be able to distinguish an occupied cocoon from an ambient bioform");
         assertTrue(dormantBioformJson.contains("\"cocoonHome\":{\"hibernaculum\":\"organ:"),
@@ -285,6 +361,30 @@ class FrontierV3DiagnosticJsonTest {
         String json = FrontierV3DiagnosticJson.render("item", itemId.value(), checkpoint, state.withInventory(inventory), Optional.empty());
 
         assertTrue(json.contains("\"custody\":{\"kind\":\"ACTOR\",\"actor\":\"" + actorId.value() + "\"}"));
+    }
+
+    @Test
+    void rendersAmbientWorkAsOwnedPostHarvestDutyRatherThanUnobserved(@TempDir Path directory) {
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
+                FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:diagnostic-ambient-return"), 91L),
+                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
+        FrontierWorldState state = runtime.decodedState().orElseThrow();
+        SubjectId actor = state.humanPopulation().residentIds().stream().sorted().findFirst().orElseThrow();
+        var leases = new LinkedHashMap<>(state.ambientLeases());
+        BodyPosition body = state.actorLocations().get(actor).body();
+        leases.put(actor, new io.farfrontier.palemirror.frontier.v3.model.AmbientActorLease(actor, body,
+                io.farfrontier.palemirror.frontier.v3.api.SimInstant.ZERO, 1L,
+                io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus.HOT,
+                io.farfrontier.palemirror.frontier.v3.model.AmbientGoalKind.WORK, body));
+
+        String json = FrontierV3DiagnosticJson.render("actor", actor.value(), checkpoint,
+                state.withChanges(FrontierWorldStateUpdate.begin().ambientLeases(leases)), Optional.empty());
+
+        assertTrue(json.contains("\"dutyPhase\":\"AMBIENT:WORK:HOT\""),
+                "the exact actor query must retain a typed shared-custody phase between harvest receipt and successor assignment");
+        assertFalse(json.contains("\"dutyPhase\":\"UNOBSERVED\""));
+        runtime.shutdown();
     }
 
     @Test
@@ -459,6 +559,7 @@ class FrontierV3DiagnosticJsonTest {
 
         assertTrue(known.contains("\"correlation\":\"player:test\""));
         assertTrue(known.contains("\"acceptedRevision\":7"));
+        assertTrue(known.contains("\"chain\":[\"resource_site_conflict\"]"));
         assertTrue(missing.contains("\"status\":\"not_found\""));
     }
 
@@ -479,6 +580,24 @@ class FrontierV3DiagnosticJsonTest {
         assertTrue(rendered.contains("\"lease\":\"lease:supply-1-2-r7\"") && rendered.contains("\"cargo\":\"cargo:supply-1-2\""));
         assertTrue(rendered.contains("\"actors\":[\"resident:1-16\",\"resident:1-30\"]"));
         assertTrue(!rendered.contains("position") && !rendered.contains("uuid"), "trace context must not become a player/physical-state dump");
+    }
+
+    @Test
+    void exposesExactProductionLeaseAndActorWithoutAnOperation(@TempDir Path directory) {
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
+                FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:diagnostic-production-trace-context"), 92L),
+                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
+        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
+        FrontierWorldState state = runtime.decodedState().orElseThrow();
+        FrontierV3DiagnosticTrace.Entry trace = new FrontierV3DiagnosticTrace.Entry("production-work:job:production-1-1", "scene_released",
+                "job:production-1-1", "executor:scene-release", "transaction:scene-release", 8L,
+                new FrontierV3DiagnosticTrace.Context("", "lease:production-work-1-1-r7", "", List.of("resident:1-15")));
+
+        String rendered = FrontierV3DiagnosticJson.render("trace", trace.correlation(), checkpoint, state, Optional.of(trace));
+
+        assertTrue(rendered.contains("\"causal\":{\"operation\":\"\",\"lease\":\"lease:production-work-1-1-r7\""));
+        assertTrue(rendered.contains("\"actors\":[\"resident:1-15\"]"));
+        assertTrue(!rendered.contains("position") && !rendered.contains("uuid"), "trace context must remain bounded evidence only");
     }
 
     @Test

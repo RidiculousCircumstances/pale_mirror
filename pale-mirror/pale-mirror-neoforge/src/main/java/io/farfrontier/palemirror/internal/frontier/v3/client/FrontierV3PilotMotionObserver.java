@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 /** Bounded read-only local pose series for a named client-rendered retained body. */
 final class FrontierV3PilotMotionObserver {
@@ -34,6 +35,7 @@ final class FrontierV3PilotMotionObserver {
         // legitimately retire the process diagnostic. Keep observing that same runtime body so
         // the carrier can prove that completion/release did not silently despawn and recreate
         // the worker between two diagnostic polls.
+        String worker = workerId(action);
         String expectedName = entityRuntimeId < 0 ? expectedName(action) : "";
         if (expectedName == null) {
             if (clientTick * 50L >= action.get("timeoutMs").getAsLong()) {
@@ -43,12 +45,29 @@ final class FrontierV3PilotMotionObserver {
         }
         double maximum = action.has("maxDistance") ? action.get("maxDistance").getAsDouble() : 64.0D;
         Vec3 anchor = action.has("anchor") ? position(action.getAsJsonObject("anchor")) : null;
+        UUID expectedUuid = expectedEntityUuid(worker);
+        // A terminal receipt legitimately retires its process diagnostic, but it does not
+        // retire the actor identity.  Bind to the actor's read-only UUID admission before
+        // choosing a visible body, so an adjacent similarly named farmer cannot satisfy a
+        // post-closure continuity trace.
+        if (entityRuntimeId < 0 && worker != null && expectedUuid == null) {
+            // This is the same bounded read-only diagnostic cadence used after selection.  An
+            // earlier retry-on-every-client-turn loop saturated normal command feedback before
+            // the first actor receipt could arrive, then misreported that self-inflicted loss
+            // as a missing exact UUID.  It neither creates demand nor changes custody.
+            if (clientTick % 20L == 0L) minecraft.player.connection.sendCommand("pale_mirror v3 inspect actor " + worker);
+            if (clientTick * 50L >= action.get("timeoutMs").getAsLong()) {
+                throw new IllegalStateException("motion observation lacks exact actor UUID admission: " + worker);
+            }
+            return false;
+        }
         Entity body = entityRuntimeId < 0
-                ? (anchor != null ? nearest(minecraft, expectedType, anchor, maximum)
+                ? (expectedUuid != null ? exactVisibleEntity(minecraft, expectedType, expectedName, expectedUuid, maximum)
+                : anchor != null ? nearest(minecraft, expectedType, anchor, maximum)
                 : expectedName.isBlank() ? nearest(minecraft, expectedType, minecraft.player.position(), maximum)
                 : FrontierV3TestPilotPresentation.nearestVisibleNamedEntity(minecraft, expectedType, expectedName, maximum))
                 : minecraft.level.getEntity(entityRuntimeId);
-        if (!matches(body, expectedType, expectedName)) {
+        if (!matches(body, expectedType, expectedName, expectedUuid)) {
             if (clientTick * 50L >= action.get("timeoutMs").getAsLong()) {
                 throw new IllegalStateException("local named motion body was unavailable: " + expectedType + " " + expectedName);
             }
@@ -70,7 +89,6 @@ final class FrontierV3PilotMotionObserver {
             // The actor receipt pairs a read-only authoritative position with the rendered one.
             // It shares the process receipt's bounded cadence: a motion carrier must not turn
             // diagnostic polling itself into a high-frequency scene-admission workload.
-            String worker = workerId(action);
             if (worker != null && clientTick % 20L == 0L) minecraft.player.connection.sendCommand("pale_mirror v3 inspect actor " + worker);
             // The received swing event starts before the interpolated attack amount becomes
             // positive on some client turns.  Both fields are ordinary client-rendered state;
@@ -116,10 +134,10 @@ final class FrontierV3PilotMotionObserver {
         String activeCue = io.farfrontier.palemirror.internal.client.PaleMirrorStationWorkGestureClient.observedDutyPhase(bodyRuntimeId);
         if (activeCue != null) return activeCue;
         JsonObject process = receivedDiagnostic("process", action.get("id").getAsString());
-        if (process == null || !process.has("result") || !process.get("result").isJsonObject()) return "UNOBSERVED";
+        if (process == null || !process.has("result") || !process.get("result").isJsonObject()) return actorDutyPhase(action);
         JsonObject result = process.getAsJsonObject("result");
         if (result.has("dutyPhase") && result.get("dutyPhase").isJsonPrimitive()) return result.get("dutyPhase").getAsString();
-        if (!result.has("sitePhase") || !result.has("intentStatus")) return "UNOBSERVED";
+        if (!result.has("sitePhase") || !result.has("intentStatus")) return actorDutyPhase(action);
         if (process.has("cursor") && process.get("cursor").isJsonObject()) {
             JsonObject cursor = process.getAsJsonObject("cursor");
             if (cursor.has("index") && cursor.has("length") && cursor.get("index").getAsInt() < cursor.get("length").getAsInt() - 1) {
@@ -128,7 +146,18 @@ final class FrontierV3PilotMotionObserver {
         }
         return "HARVESTING:" + result.get("intentStatus").getAsString();
     }
+
+    /** A retired harvest process may no longer answer, while its exact actor is lawfully HOT under shared custody. */
+    private static String actorDutyPhase(JsonObject action) {
+        String worker = workerId(action);
+        JsonObject actor = worker == null ? null : receivedDiagnostic("actor", worker);
+        if (actor != null && actor.has("dutyPhase") && actor.get("dutyPhase").isJsonPrimitive()) {
+            return actor.get("dutyPhase").getAsString();
+        }
+        return "UNOBSERVED";
+    }
     private static String workerId(JsonObject action) {
+        if (action.has("workerId")) return action.get("workerId").getAsString();
         JsonObject process = receivedDiagnostic("process", action.get("id").getAsString());
         if (process == null || !process.has("identity") || !process.get("identity").isJsonObject()) return null;
         JsonObject identity = process.getAsJsonObject("identity");
@@ -145,9 +174,23 @@ final class FrontierV3PilotMotionObserver {
                 ? new Vec3(observed.get("x").getAsDouble(), observed.get("y").getAsDouble(), observed.get("z").getAsDouble()) : null;
     }
 
-    private static boolean matches(Entity body, ResourceLocation expectedType, String expectedName) {
+    private static UUID expectedEntityUuid(String worker) {
+        JsonObject actor = worker == null ? null : receivedDiagnostic("actor", worker);
+        if (actor == null || !actor.has("physicalAdmission") || !actor.get("physicalAdmission").isJsonObject()) return null;
+        JsonObject admission = actor.getAsJsonObject("physicalAdmission");
+        if (!admission.has("entityUuid") || !admission.get("entityUuid").isJsonPrimitive()) return null;
+        try { return UUID.fromString(admission.get("entityUuid").getAsString()); }
+        catch (IllegalArgumentException invalid) { return null; }
+    }
+    private static boolean matches(Entity body, ResourceLocation expectedType, String expectedName, UUID expectedUuid) {
         return body != null && !body.isRemoved() && BuiltInRegistries.ENTITY_TYPE.getKey(body.getType()).equals(expectedType)
-                && (expectedName.isBlank() || body.getCustomName() != null && body.getCustomName().getString().contains(expectedName));
+                && (expectedUuid == null || expectedUuid.equals(body.getUUID()))
+                && (expectedName.isBlank() || body.isCustomNameVisible() && body.getCustomName() != null && body.getCustomName().getString().contains(expectedName));
+    }
+    private static Entity exactVisibleEntity(Minecraft minecraft, ResourceLocation expectedType, String expectedName, UUID expectedUuid, double maximum) {
+        return minecraft.level.getEntitiesOfClass(Entity.class, minecraft.player.getBoundingBox().inflate(maximum), entity ->
+                        matches(entity, expectedType, expectedName, expectedUuid) && minecraft.player.hasLineOfSight(entity))
+                .stream().findFirst().orElse(null);
     }
     private static Entity nearest(Minecraft minecraft, ResourceLocation expectedType, Vec3 anchor, double maximum) {
         return minecraft.level.getEntitiesOfClass(Entity.class, new net.minecraft.world.phys.AABB(anchor, anchor).inflate(maximum), entity ->

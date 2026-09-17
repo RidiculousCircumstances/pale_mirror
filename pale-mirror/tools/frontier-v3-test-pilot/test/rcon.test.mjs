@@ -43,7 +43,7 @@ test('RCON rejects a remote close before the authenticated stop handoff', async 
   });
   await listen(server);
   const { port } = server.address();
-  await assert.rejects(requestRconStop({ port, password: 'one-time-secret', timeoutMs: 1_000 }), /closed before accepting stop/);
+  await assert.rejects(requestRconStop({ port, password: 'one-time-secret', timeoutMs: 1_000 }), /closed before accepting command/);
   await close(server);
 });
 

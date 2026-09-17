@@ -49,7 +49,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         // The canonical job may have crossed several COLD traversal edges before the first
         // natural arrival.  Its field is still non-interactable until the projection owner has
         // made that exact mature/partial crop state current in the loaded world.
-        Optional<FrontierResourceSiteHarvestSceneSupport.Candidate> candidate = FrontierV3SceneExecutor.firstDemandedCandidate(
+        Optional<FrontierResourceSiteHarvestSceneSupport.Candidate> candidate = FrontierV3SceneDemand.firstDemandedCandidate(
                 level, FrontierResourceSiteHarvestSceneSupport.candidates(state).stream()
                         .filter(value -> fieldPresentationCurrent(level, state, value)).toList(),
                 FrontierResourceSiteHarvestSceneSupport.Candidate::cropSlot);
@@ -111,7 +111,28 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                     Entity entity = level.getEntity(member.entityId());
                     if (entity instanceof Mob worker) FrontierV3ControlledMobMotion.clearStationWorkGesture(level, worker);
                 }
+                boolean coldRelease = !FrontierV3SceneExecutor.demandExists(level, lease.handoffPosition())
+                        && !FrontierV3SceneExecutor.playerWithinSafeRadius(level, lease);
+                Entity retained = lease.members().size() == 1 ? level.getEntity(lease.members().getFirst().entityId()) : null;
+                FrontierV3AmbientActorExecutor.SceneCarrierFenceResult fence = coldRelease
+                        ? FrontierV3AmbientActorExecutor.fenceDrainingSceneBody(level, state, lease, lease.members().getFirst(), retained)
+                        : FrontierV3AmbientActorExecutor.SceneCarrierFenceResult.FENCED;
+                if (fence != FrontierV3AmbientActorExecutor.SceneCarrierFenceResult.FENCED) {
+                    // No carrier means no lawful disappearance.  Preserve the body and mark
+                    // only this owning field as ambiguous rather than letting COLD invent a
+                    // farmer.  This first accepted incident also owns the scene disposition.
+                    carrierFenceConflict(level, runtime, state, lease, fence);
+                    return;
+                }
                 FrontierV3SceneExecutor.release(level, runtime, lease, releaseBinding(runtime, state, lease));
+                if (coldRelease && runtime.decodedState().map(current -> current.sceneLeases().get(lease.id()))
+                        .filter(current -> current.status() == SceneLeaseStatus.CLOSED).isPresent() && retained instanceof Mob body
+                        && FrontierV3AmbientActorExecutor.hasInactiveCarrier(level, state, lease.members().getFirst().actorId())) {
+                    // The canonical release accepted the pre-fenced checkpoint.  Removing the
+                    // sole naturally loaded custodian now permits COLD without a serialized
+                    // duplicate, while return remains bound to this same UUID carrier.
+                    body.discard();
+                }
             }
             case UNKNOWN_AFTER_RESTART -> FrontierV3SceneExecutor.reclaim(level, runtime, state, lease);
             case CONFLICT, CLOSED -> { }
@@ -173,12 +194,19 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         }
         io.farfrontier.palemirror.frontier.v3.model.BlockPosition crop = site.cropSlots().get(job.progress().nextCropSlotIndex());
         FrontierV3SceneDemand.Snapshot demand = FrontierV3SceneExecutor.demandSnapshot(level, crop);
-        if (FrontierV3SceneExecutor.drainAfterDemandHysteresis(runtime, lease.id(), level.getGameTime(), demand,
-                FrontierV3SceneExecutor.playerWithinSafeRadius(level, lease))) {
-            submit(runtime, "resource-site-harvest-scene-draining", lease.id().value(), new io.farfrontier.palemirror.frontier.v3.model.SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
+        boolean playerWithinSafeRadius = FrontierV3SceneExecutor.playerWithinSafeRadius(level, lease);
+        // Before an irreversible crop has been prepared, ordinary no-demand behavior remains
+        // a release/idle boundary.  A pending crop below is deliberately the one exception.
+        // This exact field worker must enter DRAINING while it is still naturally loaded: the
+        // shared 200-tick scene grace outlives ordinary client chunk retention and used to make
+        // the later carrier fence observe an absent body.  This is not force loading or a new
+        // demand authority; it is the same present body's bounded hand-off on demand loss.
+        if (!demand.active() && !job.progress().hasPendingCrop()) {
+            if (immediateColdRelease(demand.active(), playerWithinSafeRadius, job.progress().hasPendingCrop())) {
+                beginImmediateColdRelease(level, runtime, state, lease);
+            }
             return;
         }
-        if (!demand.active()) return;
         Entity entity = level.getEntity(lease.members().getFirst().entityId());
         if (!(entity instanceof Mob worker) || !worker.isAlive() || !FrontierV3SceneExecutor.recognizes(runtime, worker)) {
             conflict(level, runtime, lease, "hot-worker-unavailable"); return;
@@ -256,6 +284,10 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             }
             return;
         }
+        // CropPrepared is a durable non-replayable boundary.  The earlier no-demand branch
+        // releases only an unprepared cursor; a pending crop reaches its observed receipt here
+        // before any later COLD hand-off can be considered.
+        if (!demand.active()) return;
         if (level.getGameTime() % 10L != 0L) return;
         // RUNNING means a non-replayable crop effect may already have begun.  Reaching a
         // station is still reversible retained travel: leaving demand there must release a
@@ -349,6 +381,43 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
     }
 
     /**
+     * A missing or foreign body at the one lawful release edge is neither a player break nor a
+     * terminal adapter failure.  First persist the resource-site incident; only an accepted
+     * canonical disposition may then stop the paired scene.
+     */
+    private static void carrierFenceConflict(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                             FrontierWorldState state, SceneLease lease,
+                                             FrontierV3AmbientActorExecutor.SceneCarrierFenceResult fence) {
+        ResourceSiteHarvestSceneCause cause = FrontierSceneBehaviors.resourceSiteHarvest(lease);
+        var job = FrontierResourceSiteHarvestSceneSupport.require(state, cause);
+        var site = FrontierResourceSitePlan.compile(state.bootstrap()).get(job.siteId());
+        if (site == null) throw new IllegalStateException("resource-site harvest scene has no immutable field");
+        boolean accepted = FrontierV3ResourceSiteConflictExecutor.recordConflict(level, runtime, FrontierV3ResourceSiteLedger.get(level), site,
+                site.cropSlots().get(job.progress().nextCropSlotIndex()),
+                io.farfrontier.palemirror.frontier.v3.model.ResourceSiteConflictReason.CARRIER_FENCE_UNRESOLVED,
+                io.farfrontier.palemirror.frontier.v3.model.ResourceSiteConflictSource.SCENE_CARRIER_FENCE,
+                new io.farfrontier.palemirror.frontier.v3.api.CommandId("executor:resource-site-carrier-fence-"
+                        + fence.name().toLowerCase(java.util.Locale.ROOT) + "-r" + lease.revision()));
+        if (accepted) conflict(level, runtime, lease, "cold-carrier-" + fence.name().toLowerCase(java.util.Locale.ROOT));
+    }
+
+    /** Transitions and fences in the same server turn, before normal chunk expiry can hide the exact body. */
+    private static void beginImmediateColdRelease(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                                  FrontierWorldState state, SceneLease lease) {
+        io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "resource-site-harvest-scene-draining",
+                lease.id().value(), new io.farfrontier.palemirror.frontier.v3.model.SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
+        if (!(result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) return;
+        SceneLease draining = runtime.decodedState().map(current -> current.sceneLeases().get(lease.id()))
+                .filter(current -> current.status() == SceneLeaseStatus.DRAINING).orElse(null);
+        if (draining != null) execute(level, runtime, state, draining);
+    }
+
+    /** Package-visible pure release policy regression seam. */
+    static boolean immediateColdRelease(boolean demandActive, boolean playerWithinSafeRadius, boolean pendingCrop) {
+        return !demandActive && !playerWithinSafeRadius && !pendingCrop;
+    }
+
+    /**
      * Registered behavior policy for the whole retained field-work topology.
      *
      * <p>The approach corridor still consists mostly of ordinary floor columns.  At its field
@@ -420,6 +489,12 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
     static Optional<ScheduledAction> releaseBinding(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                     FrontierWorldState state, SceneLease lease) {
         ResourceSiteHarvestSceneCause cause = FrontierSceneBehaviors.resourceSiteHarvest(lease);
+        if (FrontierResourceSiteHarvestSceneSupport.isTerminalReceiptRelease(state, cause)) {
+            // The terminal output receipt already consumed its sole continuation and created
+            // the next growth action.  Rebinding this body-exit receipt to the retired job
+            // would strand the exact worker in DRAINING at the final crop cell.
+            return Optional.empty();
+        }
         var job = FrontierResourceSiteHarvestSceneSupport.require(state, cause);
         return releaseBinding(runtime.checkpointImage().orElseThrow(), job.id(),
                 state.resourceSites().site(job.siteId()).phase());
@@ -438,8 +513,16 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 || !FrontierV3SceneExecutor.ownedByClosedLease(entity, state, lease, member)) return false;
         var actor = state.actorLocations().get(member.actorId());
         if (actor == null || actor.condition().status() != io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.ALIVE) return false;
-        var exact = new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(entity.getBlockX(), entity.getBlockY(), entity.getBlockZ());
-        return exact.equals(actor.body()) && exact.equals(lease.memberPosition(member.actorId()));
+        // A CLOSED lease is historical ownership evidence.  Its member position is the
+        // original scene admission anchor, while release records the last observed station in
+        // actor custody.  Neither is a second live-body authority: a Minecraft body can cross
+        // an exact standing-column boundary between the observation and the durable close.
+        // The immutable closed-lease tag, deterministic UUID, expected body type and living
+        // canonical actor are therefore the complete same-actor proof.  In particular, using
+        // either position as an additional deletion predicate made the lawful last-cell body
+        // disappear in that close window.  Foreign/stale/mismatched bodies still fail at
+        // ownedByClosedLease before this point and never become a replacement candidate.
+        return true;
     }
 
     static boolean adoptableClosedBody(Entity entity, FrontierWorldState state, SceneLease successor, SceneMember member) {

@@ -145,6 +145,20 @@ public final class FrontierSceneAdmission {
                 throw new IllegalStateException("multiple generic ambient pre-lease claims for " + worker.value());
             }
         });
+        // A durable workshop job retains both its exact materialized input and worker.  After a
+        // restart its former ambient body may no longer be present, so reservation alone would
+        // deadlock the job: the scene cannot admit while the ambient lease is HOT, and the
+        // ambient executor has no authority to reconstruct a generic body.  This is the same
+        // identity-preserving pre-lease hand-off as harvest, not new-work admission; the
+        // production candidate has already established the retained job/input/facility facts.
+        FrontierProductionWorkSceneSupport.candidates(state).forEach(candidate -> {
+            SubjectId worker = candidate.workerId();
+            reserved.add(worker);
+            SceneCauseKind previous = preLeaseCauses.putIfAbsent(worker, SceneCauseKind.PRODUCTION_WORK);
+            if (previous != null) {
+                throw new IllegalStateException("multiple generic ambient pre-lease claims for " + worker.value());
+            }
+        });
         // An active class-D patrol is a retained operation, not a generic GUARD goal. A
         // pre-existing ambient body stays still until the patrol scene can atomically adopt it.
         state.strategicPlans().routePatrols().values().stream().filter(RoutePatrol::active)

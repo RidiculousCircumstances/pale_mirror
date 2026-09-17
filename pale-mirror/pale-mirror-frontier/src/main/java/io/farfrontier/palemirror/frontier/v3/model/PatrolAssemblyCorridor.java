@@ -6,6 +6,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -56,12 +57,19 @@ public final class PatrolAssemblyCorridor {
         SubjectId leader = unit.leaderId();
         SubjectId scout = unit.memberIds().stream().filter(member -> !member.equals(leader)).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("patrol unit has no scout"));
-        Map<SubjectId, PatrolAssembly.Member> members = new LinkedHashMap<>();
-        members.put(leader, member(state, patrolId, residentIngress.topology(), leader, routePort, route.get(1),
-                supply.edgeAfterCursor(0).availability()));
-        members.put(scout, member(state, patrolId, residentIngress.topology(), scout, routePort, null, TraversalAvailability.OPEN));
-        PatrolAssembly assembly = new PatrolAssembly(members);
-        return assembly;
+        for (List<SurfaceAnchor> leaderApproach : pathCandidates(residentIngress.topology(), state.actorLocations().get(leader), routePort)) {
+            for (List<SurfaceAnchor> scoutApproach : pathCandidates(residentIngress.topology(), state.actorLocations().get(scout), routePort)) {
+                Map<SubjectId, PatrolAssembly.Member> capacity = new LinkedHashMap<>();
+                capacity.put(leader, member(patrolId, leader, leaderApproach, route.get(1), TraversalAvailability.OPEN));
+                capacity.put(scout, member(patrolId, scout, scoutApproach, null, TraversalAvailability.OPEN));
+                if (canReachFormation(new PatrolAssembly(capacity))) {
+                    Map<SubjectId, PatrolAssembly.Member> retained = new LinkedHashMap<>(capacity);
+                    retained.put(leader, member(patrolId, leader, leaderApproach, route.get(1), supply.edgeAfterCursor(0).availability()));
+                    return new PatrolAssembly(retained);
+                }
+            }
+        }
+        throw new IllegalArgumentException("patrol assembly pair has no non-overlapping retained ingress");
     }
 
     /**
@@ -79,24 +87,18 @@ public final class PatrolAssemblyCorridor {
         Objects.requireNonNull(unit, "patrol assembly admission unit");
         Objects.requireNonNull(supply, "patrol assembly admission route");
         if (unit.kind() != RouteUnitKind.PATROL || unit.memberIds().size() != 2 || supply.linearCorridorSurfaces().size() < 3) return false;
-        SettlementResidentIngressPlan.Plan ingress = SettlementResidentIngressPlan.compile(state.bootstrap().bounds(), state.bootstrap().terrain(), settlement,
-                state.bootstrap().ruleset().facilityCapacity().intactHousingBeds());
-        if (!ingress.topology().nodes().containsValue(supply.linearCorridorSurfaces().getFirst())) return false;
-        return unit.memberIds().stream().allMatch(actorId -> {
-            ActorLocation actor = state.actorLocations().get(actorId);
-            return actor != null && actor.condition().status() == ActorLifeStatus.ALIVE
-                    && ingress.topology().nodes().containsValue(actor.supportingSurface());
-        });
+        try {
+            compile(state, unit.ownerId(), settlement, unit, supply);
+            return true;
+        } catch (IllegalArgumentException unavailable) {
+            return false;
+        }
     }
 
-    private static PatrolAssembly.Member member(FrontierWorldState state, SubjectId patrolId, TraversalTopology ingress,
-                                                SubjectId actorId, SurfaceAnchor routePort, SurfaceAnchor firstInspectionSurface,
+    private static PatrolAssembly.Member member(SubjectId patrolId, SubjectId actorId, List<SurfaceAnchor> approach,
+                                                SurfaceAnchor firstInspectionSurface,
                                                 TraversalAvailability finalAvailability) {
-        ActorLocation actor = state.actorLocations().get(actorId);
-        if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE) {
-            throw new IllegalArgumentException("patrol assembly actor is absent or not alive");
-        }
-        List<SurfaceAnchor> surfaces = new ArrayList<>(path(ingress, actor.supportingSurface(), routePort));
+        List<SurfaceAnchor> surfaces = new ArrayList<>(approach);
         if (firstInspectionSurface != null) surfaces.add(firstInspectionSurface);
         if (surfaces.size() < 2 || surfaces.size() > TraversalTopology.MAX_NODES) {
             throw new IllegalArgumentException("patrol assembly corridor is outside bounded profile");
@@ -110,8 +112,52 @@ public final class PatrolAssemblyCorridor {
         return new PatrolAssembly.Member(topology, 0);
     }
 
+    private static List<List<SurfaceAnchor>> pathCandidates(TraversalTopology topology, ActorLocation actor, SurfaceAnchor destination) {
+        if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE) {
+            throw new IllegalArgumentException("patrol assembly actor is absent or not alive");
+        }
+        LinkedHashSet<List<SurfaceAnchor>> candidates = new LinkedHashSet<>();
+        for (Comparator<String> order : List.<Comparator<String>>of(Comparator.naturalOrder(), Comparator.reverseOrder())) {
+            List<SurfaceAnchor> primary = path(topology, actor.supportingSurface(), destination, order);
+            candidates.add(primary);
+            // A perimeter has two legitimate directions.  Breadth-first order alone only varies
+            // equal-length forks, so it can still return one shared approach for both guards and
+            // falsely reject a pair whose leader can clear the Hall port by taking the other
+            // retained first edge.  Ban only that first hop and compile the alternate path on the
+            // same declared topology; no runtime navigation or new entrance is introduced.
+            if (primary.size() > 1) {
+                try {
+                    candidates.add(path(topology, actor.supportingSurface(), destination, order,
+                            Set.of(nodeFor(topology.nodes(), primary.get(1)))));
+                } catch (IllegalArgumentException unavailable) {
+                    // Some bounded ingress graphs have only one departure; the primary remains
+                    // the complete legal candidate set in that case.
+                }
+            }
+        }
+        return List.copyOf(candidates);
+    }
+
+    private static boolean canReachFormation(PatrolAssembly assembly) {
+        PatrolAssembly current = assembly;
+        int maximumTransitions = current.members().values().stream().mapToInt(member -> member.corridor().size() - 1).sum();
+        for (int transition = 0; transition <= maximumTransitions; transition++) {
+            if (current.complete()) return true;
+            List<SubjectId> safe = current.safeAdvances();
+            if (safe.isEmpty()) return false;
+            current = current.advanceOne(safe.getFirst());
+        }
+        throw new IllegalStateException("bounded patrol ingress exceeded its retained transition count");
+    }
+
     /** Returns one deterministic directed path on an already compiled semantic topology. */
-    private static List<SurfaceAnchor> path(TraversalTopology topology, SurfaceAnchor start, SurfaceAnchor destination) {
+    private static List<SurfaceAnchor> path(TraversalTopology topology, SurfaceAnchor start, SurfaceAnchor destination,
+                                            Comparator<String> nodeOrder) {
+        return path(topology, start, destination, nodeOrder, Set.of());
+    }
+
+    private static List<SurfaceAnchor> path(TraversalTopology topology, SurfaceAnchor start, SurfaceAnchor destination,
+                                            Comparator<String> nodeOrder, Set<TraversalNodeId> prohibited) {
         if (!topology.nodes().containsValue(start) || !topology.nodes().containsValue(destination)) {
             throw new IllegalArgumentException("patrol ingress endpoint is not a declared resident surface");
         }
@@ -122,7 +168,7 @@ public final class PatrolAssemblyCorridor {
             if (edge.kind() != TraversalKind.PEDESTRIAN || !edge.traversableBy(TraversalCapability.PEDESTRIAN)) continue;
             outgoing.computeIfAbsent(edge.from(), ignored -> new ArrayList<>()).add(edge);
         }
-        outgoing.values().forEach(edges -> edges.sort(Comparator.comparing(edge -> edge.to().value())));
+        outgoing.values().forEach(edges -> edges.sort(Comparator.comparing(edge -> edge.to().value(), nodeOrder)));
         Map<TraversalNodeId, TraversalNodeId> previous = new HashMap<>();
         ArrayDeque<TraversalNodeId> frontier = new ArrayDeque<>();
         frontier.add(startNode); previous.put(startNode, startNode);
@@ -130,7 +176,7 @@ public final class PatrolAssemblyCorridor {
             TraversalNodeId current = frontier.removeFirst();
             if (current.equals(destinationNode)) return materialize(nodes, previous, startNode, destinationNode);
             for (TraversalTopology.Edge edge : outgoing.getOrDefault(current, List.of())) {
-                if (previous.putIfAbsent(edge.to(), current) == null) frontier.addLast(edge.to());
+                if (!prohibited.contains(edge.to()) && previous.putIfAbsent(edge.to(), current) == null) frontier.addLast(edge.to());
             }
         }
         throw new IllegalArgumentException("resident ingress has no retained pedestrian path to the Hall route port");

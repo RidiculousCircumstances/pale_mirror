@@ -39,6 +39,33 @@ class ResourceSitePreparationProcessTest {
         assertEquals(12, engine.checkpoint().schedules().stream().filter(action -> action.kind().equals("frontier.resource_site.growth")).count());
     }
 
+    /**
+     * The recovered-duty player carrier intentionally arrives after the ordinary harvest job has
+     * become eligible, but before COLD can consume the whole field.  Keep that precondition at
+     * the canonical schedule boundary so a changed pilot prelude cannot silently turn its HOT
+     * observation into the already-completed crop-63 history that rejected r35.
+     */
+    @Test
+    void ordinaryColdCadenceCreatesSiteSevenHarvestBeforeItsFullPrefixCanBeConsumed() {
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(
+                new WorldId("frontier:resource-site-partial-duty"), 47L));
+        // The live driver takes bounded slices.  Repeating the same absolute target drains
+        // only due work and is therefore the pure equivalent of those small COLD turns.
+        for (int turn = 0; turn < 1_024; turn++) {
+            engine.advanceTo(new SimInstant(21_140L), new WorkBudget(256, 2_048));
+        }
+
+        FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        ResourceSiteLifecycle lifecycle = state.resourceSites().site(new SubjectId("site:7-wheat-field"));
+        ResourceSiteHarvestJob job = (ResourceSiteHarvestJob) lifecycle.activeWork().orElseThrow(() ->
+                new AssertionError("site seven has no partial harvest at 21140: " + lifecycle));
+        assertEquals("job:site-harvest-7-wheat-field-1", job.id().value());
+        assertTrue(job.progress().completedCropSlots() > 0,
+                "the natural ingress discriminator must retain actual COLD work before arrival");
+        assertTrue(job.progress().completedCropSlots() < ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS - 1,
+                "the natural ingress discriminator must not pre-complete the farmer's whole field");
+    }
+
     @Test
     void canonicalPreparationPayloadRoundTripsAndCannotCompleteTheWrongJob() {
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:resource-site-command"), 77L));
@@ -76,6 +103,30 @@ class ResourceSitePreparationProcessTest {
         assertEquals(loss, FrontierWorldRuntimeDefinition.payloadCodecs().decode(loss.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(loss)));
         assertThrows(IllegalArgumentException.class, () -> ResourceSiteProcess.reduceConflict(growing, loss.siteId(),
                 new ResourceSiteConflictObserved(loss.siteId(), new BlockPosition(crop.x() - 1, crop.y(), crop.z()), ResourceSiteConflictReason.PLAYER_REMOVED_MANAGED_CELL)));
+    }
+
+    @Test
+    void firstAcceptedConflictRetainsItsImmutableIncidentAcrossSnapshotAndEquivalentRepeats() {
+        FrontierWorldState growing = prepared(); SubjectId siteId = new SubjectId("site:1-wheat-field");
+        BlockPosition crop = FrontierResourceSitePlan.compile(growing.bootstrap()).get(siteId).cropSlots().getFirst();
+        ResourceSiteConflictObserved first = new ResourceSiteConflictObserved(siteId, crop,
+                ResourceSiteConflictReason.PLAYER_REMOVED_MANAGED_CELL, ResourceSiteConflictSource.PLAYER_WORLD_OBSERVATION);
+        FrontierWorldState accepted = ResourceSiteProcess.reduceConflict(growing, siteId, first);
+        ConflictIncident incident = accepted.resourceSites().site(siteId).conflictDisposition().orElseThrow().incident();
+
+        assertEquals("incident:resource-site:1-wheat-field", incident.id());
+        assertEquals(ConflictIncidentCategory.PLAYER_WORLD_DISRUPTION, incident.category());
+        assertEquals(siteId, incident.ownerId()); assertEquals(siteId, incident.subjectId());
+        assertEquals("conflict:incident:resource-site:1-wheat-field", incident.traceCorrelation());
+        assertTrue(incident.expectedFact().contains("phase=GROWING"));
+        assertTrue(incident.observedFact().contains("PLAYER_REMOVED_MANAGED_CELL"));
+        assertEquals(accepted, ResourceSiteProcess.reduceConflict(accepted, siteId,
+                new ResourceSiteConflictObserved(siteId, crop, ResourceSiteConflictReason.EXPLOSION_DAMAGED_MANAGED_CELL,
+                        ResourceSiteConflictSource.EXPLOSION_WITNESS)), "an equivalent later observation cannot overwrite the first source");
+        FrontierWorldState reloaded = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(accepted));
+        assertEquals(incident, reloaded.resourceSites().site(siteId).conflictDisposition().orElseThrow().incident(),
+                "snapshot/WAL state retains the canonical incident-to-trace link");
+        assertEquals(first, FrontierWorldRuntimeDefinition.payloadCodecs().decode(first.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(first)));
     }
 
     private static FrontierWorldState prepared() {

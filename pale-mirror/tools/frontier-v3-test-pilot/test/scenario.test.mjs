@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readdir, readFile } from 'node:fs/promises';
+import { createServer } from 'node:net';
 import { correlation, diagnosticForAssertion, diagnosticFromPilotLine, hasDiagnosticResponses, jfrCaptureRequest, logOffsetAfterMarker, newManifest, pilotCrashBoundary, pilotDiagnosticActionStep, pilotFailureFromLine, pilotServerPid, pilotServerQuarantineFailure, pilotServerReady, restartSegments, scenarioDeadlineMs, selectMutterXauthority, traceRecord, validateScenario } from '../src/scenario.mjs';
-import { decodeRconFrames, encodeRconFrame } from '../src/rcon.mjs';
+import { decodeRconFrames, encodeRconFrame, requestRconQuery } from '../src/rcon.mjs';
 
 const scenario = {
   schema: 1,
@@ -36,6 +37,34 @@ test('disposable RCON uses bounded little-endian authenticated frames and retain
   assert.throws(() => decodeRconFrames(Buffer.from([1, 0, 0, 0, 0])), /invalid RCON frame length/);
 });
 
+test('disposable RCON query retains all split command response frames through bounded PMV3 JSON', async () => {
+  const server = createServer(socket => {
+    let bytes = Buffer.alloc(0);
+    socket.on('data', chunk => {
+      bytes = Buffer.concat([bytes, chunk]);
+      const decoded = decodeRconFrames(bytes); bytes = decoded.tail;
+      for (const frame of decoded.frames) {
+        if (frame.id === 71_001) socket.write(encodeRconFrame(71_001, 2, ''));
+        if (frame.id === 71_002) {
+          assert.equal(frame.payload, 'pale_mirror v3 inspect performance');
+          socket.write(Buffer.concat([
+            encodeRconFrame(71_002, 0, 'PMV3_DIAG {"kind":'),
+            encodeRconFrame(71_002, 0, '"performance"}')
+          ]));
+        }
+      }
+    });
+  });
+  await new Promise((resolve, reject) => server.listen(0, '127.0.0.1', error => error ? reject(error) : resolve()));
+  try {
+    const response = await requestRconQuery({ port: server.address().port, password: 'one-time-secret',
+      command: 'pale_mirror v3 inspect performance' });
+    assert.equal(response, 'PMV3_DIAG {"kind":"performance"}');
+  } finally {
+    await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
+});
+
 test('summary diagnostics need no object identity while object diagnostics do', () => {
   const inspection = { ...scenario, actions: [{ type: 'inspect', view: 'summary', id: '' }], assertions: [], frames: [] };
   assert.doesNotThrow(() => validateScenario(inspection));
@@ -56,6 +85,8 @@ test('native pilot may await a bounded fresh read-only diagnostic predicate', ()
   assert.throws(() => validateScenario({ ...diagnosticWait, actions: [{ ...diagnosticWait.actions[0], timeoutMs: 300_001 }] }), /wait_until_diagnostic/);
   assert.doesNotThrow(() => validateScenario({ ...diagnosticWait, actions: [{ ...diagnosticWait.actions[0], requireIncreaseAt: 'cursor.index' }] }));
   assert.throws(() => validateScenario({ ...diagnosticWait, actions: [{ ...diagnosticWait.actions[0], requireIncreaseAt: 'cursor index' }] }), /wait_until_diagnostic/);
+  assert.doesNotThrow(() => validateScenario({ ...diagnosticWait, actions: [{ ...diagnosticWait.actions[0], pollIntervalMs: 50 }] }));
+  assert.throws(() => validateScenario({ ...diagnosticWait, actions: [{ ...diagnosticWait.actions[0], pollIntervalMs: 49 }] }), /wait_until_diagnostic/);
 });
 
 test('native pilot recognizes the distinct read-only route construction and maintenance views', () => {

@@ -60,11 +60,22 @@ public final class SettlementProvisionProcess {
         return Math.addExact(Math.multiplyExact(living, 2), pending);
     }
 
+    /**
+     * Population growth may only reserve exact food after this settlement's
+     * current ration outcome is settled.  The provision aggregate remains the
+     * sole authority for that determination and for the food itself.
+     */
+    public static boolean allowsPopulationGrowth(FrontierWorldState state, SubjectId settlementId) {
+        SettlementProvisionStatus status = state.humanPopulation().provision(settlementId).status();
+        return status == SettlementProvisionStatus.IDLE || status == SettlementProvisionStatus.SECURE;
+    }
+
     public static int availableFood(FrontierWorldState state, SubjectId settlementId) {
         SubjectId depot = FrontierWorldState.depotId(settlementId);
         if (ReferenceContainerCustody.blocksCanonicalUse(state, depot)) return 0;
         int exact = state.inventory().items().values().stream().filter(item -> BREAD.equals(item.itemKind()))
                 .filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot))
+                .filter(item -> !hasUnconfirmedPhysicalCustody(state, item.id()))
                 .mapToInt(ExactItemStack::count).reduce(0, Math::addExact);
         int fungible = state.inventory().fungibleResources().accounts().values().stream()
                 .filter(account -> account.custody() instanceof ResourceCustody.Container container && container.containerId().equals(depot))
@@ -79,6 +90,7 @@ public final class SettlementProvisionProcess {
         int reserve = reserveRequirement(state, settlementId); int available = availableFood(state, settlementId); SubjectId depot = FrontierWorldState.depotId(settlementId);
         return state.inventory().items().values().stream().sorted(Comparator.comparing(ExactItemStack::id)).filter(item -> BREAD.equals(item.itemKind()))
                 .filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot))
+                .filter(item -> !hasUnconfirmedPhysicalCustody(state, item.id()))
                 .filter(item -> item.count() == 64 && available - item.count() >= reserve).findFirst();
     }
 
@@ -124,6 +136,8 @@ public final class SettlementProvisionProcess {
             events.add(new ProposedEvent(provision.settlementId(), new SettlementProvisionConsumed(provision.settlementId(), item.id(), allocation.count())));
             if (provision.nextAllocation() + 1 < provision.allocations().size()) {
                 events.add(schedule(progressAfter(provision, action.dueAt().ticks() + 1L)));
+            } else {
+                events.add(schedule(StrategicObjectiveProcess.provisionReconsideration(provision, action.dueAt().ticks() + 1L)));
             }
             return List.copyOf(events);
         }
@@ -139,6 +153,9 @@ public final class SettlementProvisionProcess {
         List<ProposedEvent> events = new ArrayList<>(); events.add(new ProposedEvent(provision.settlementId(), transition));
         if (transition.status() == PhysicalIntentStatus.CONFIRMED && provision.nextAllocation() + 1 < provision.allocations().size()) {
             events.add(schedule(progressAfter(provision, now + 1L)));
+        }
+        if (transition.status() == PhysicalIntentStatus.CONFIRMED && provision.nextAllocation() + 1 == provision.allocations().size()) {
+            events.add(schedule(StrategicObjectiveProcess.provisionReconsideration(provision, now + 1L)));
         }
         if (transition.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) {
             events.add(new ProposedEvent(provision.settlementId(), new SettlementProvisionResolved(provision.settlementId(), SettlementProvisionStatus.CONFLICT)));
@@ -269,6 +286,12 @@ public final class SettlementProvisionProcess {
         for (ExactItemStack item : state.inventory().items().values().stream().sorted(Comparator.comparing(ExactItemStack::id)).toList()) {
             if (nextRecipient == recipients.size()) break;
             if (!BREAD.equals(item.itemKind()) || !(item.custody() instanceof InventoryCustody.ContainerSlot slot) || !slot.containerId().equals(depot)) continue;
+            // An exact item named by a PREPARED/RUNNING/UNKNOWN physical intent remains in
+            // that intent's custody until its typed receipt resolves it.  Provisioning may use
+            // another current stack or report its own shortage, but it may not consume the
+            // subject underneath an unrelated birth/operation intent and leave global state
+            // structurally invalid on the next COLD schedule turn.
+            if (hasUnconfirmedPhysicalCustody(state, item.id())) continue;
             int count = Math.min(recipients.size() - nextRecipient, item.count());
             allocations.add(new SettlementRationAllocation(item.id(), recipients.subList(nextRecipient, nextRecipient + count))); nextRecipient += count;
         }
@@ -294,6 +317,11 @@ public final class SettlementProvisionProcess {
         return List.copyOf(allocations);
     }
 
+    private static boolean hasUnconfirmedPhysicalCustody(FrontierWorldState state, SubjectId itemId) {
+        return state.physicalIntents().values().stream()
+                .anyMatch(intent -> intent.status() != PhysicalIntentStatus.CONFIRMED && intent.subjectIds().contains(itemId));
+    }
+
     private static List<ProposedEvent> planFungibleProgress(FrontierWorldState state, ScheduledAction action, SettlementProvision provision,
                                                              SettlementRationAllocation allocation, SubjectId depot) {
         SettlementRationAllocation.FungibleSource source = allocation.fungibleSource().orElseThrow();
@@ -308,7 +336,11 @@ public final class SettlementProvisionProcess {
         }
         List<ProposedEvent> events = new ArrayList<>();
         events.add(new ProposedEvent(provision.settlementId(), new SettlementProvisionConsumed(provision.settlementId(), allocation.itemId(), allocation.count(), true)));
-        if (provision.nextAllocation() + 1 < provision.allocations().size()) events.add(schedule(progressAfter(provision, action.dueAt().ticks() + 1L)));
+        if (provision.nextAllocation() + 1 < provision.allocations().size()) {
+            events.add(schedule(progressAfter(provision, action.dueAt().ticks() + 1L)));
+        } else {
+            events.add(schedule(StrategicObjectiveProcess.provisionReconsideration(provision, action.dueAt().ticks() + 1L)));
+        }
         return List.copyOf(events);
     }
 

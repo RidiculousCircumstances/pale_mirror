@@ -44,8 +44,8 @@ class FrontierBootstrapperTest {
     void bootstrapIsSeedDeterministicAndLocaleIndependent() {
         WorldId world = new WorldId("frontier:bootstrap");
         FrontierBootstrap first = FrontierBootstrapper.create(world, 7L);
-        assertEquals("bf20163aa6f7006ce36b9a296655ec58af43c594b13c98bf0a704803706a6198", first.canonicalSha256());
-        assertEquals("951b4a794c96e26b0f48bb5ad6f4cfd2e5a8ea5909e480e168c39054b0e55d47", FrontierBootstrapper.create(world, 8L).canonicalSha256());
+        assertEquals("46d6505129f17b0f1af9853c1f5c4f7305e83e63d5a567adcf11c1194cb9acd8", first.canonicalSha256());
+        assertEquals("7b7a08c95fd5b300aaddca2b8510f533d969cac94d5fc52509a8960e4f313d75", FrontierBootstrapper.create(world, 8L).canonicalSha256());
         assertEquals(first.canonicalSha256(), FrontierBootstrapper.create(world, 7L).canonicalSha256());
         assertNotEquals(first.canonicalSha256(), FrontierBootstrapper.create(world, 8L).canonicalSha256());
 
@@ -69,5 +69,30 @@ class FrontierBootstrapperTest {
         for (int ordinal = 0; ordinal < count; ordinal++) {
             assertEquals(batch.get(ordinal), FrontierSettlementActorSlots.residentSlot(bootstrap.bounds(), bootstrap.terrain(), settlement, housingBeds, ordinal));
         }
+    }
+
+    @Test
+    void initialResidentHomesAreDistributedAcrossTheCanonicalApron() {
+        FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:distributed-homes"), 7L);
+        Settlement settlement = bootstrap.settlements().getFirst();
+        int housingBeds = bootstrap.ruleset().facilityCapacity().intactHousingBeds();
+        List<BlockPosition> homes = FrontierSettlementActorSlots.residentSlots(bootstrap.bounds(), bootstrap.terrain(), settlement,
+                housingBeds, settlement.residents().size());
+
+        assertTrue(homes.stream().anyMatch(home -> home.x() < settlement.anchor().x()),
+                "the retained initial residents must not all originate on one east-west apron edge");
+        assertTrue(homes.stream().anyMatch(home -> home.x() > settlement.anchor().x()),
+                "the retained initial residents must occupy both sides of their canonical apron");
+        assertTrue(homes.stream().anyMatch(home -> home.z() < settlement.anchor().z()),
+                "the retained initial residents must not all originate on one north-south apron edge");
+        assertTrue(homes.stream().anyMatch(home -> home.z() > settlement.anchor().z()),
+                "the retained initial residents must occupy the complete public ring deterministically");
+        List<BlockPosition> allHomes = FrontierSettlementActorSlots.residentSlots(bootstrap.bounds(), bootstrap.terrain(), settlement,
+                housingBeds, housingBeds);
+        List<BlockPosition> guards = java.util.stream.IntStream.range(ResidentRole.GUARD.ordinal(), housingBeds)
+                .filter(ordinal -> ordinal % ResidentRole.values().length == ResidentRole.GUARD.ordinal())
+                .mapToObj(allHomes::get).toList();
+        assertEquals(guards.size(), new HashSet<>(guards).size(),
+                "the retained patrol role must keep distinct canonical ingress bodies");
     }
 }

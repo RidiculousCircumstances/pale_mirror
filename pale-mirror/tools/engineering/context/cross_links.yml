@@ -1,0 +1,147 @@
+schema_version: 1
+
+# Navigation index only: canonical contract wording remains in governance docs.
+# Every architecture.yml component has one base mapping; narrower entries are
+# selected by longest prefix and make the active F0.6R3 ownership chain reviewable.
+contracts:
+  - id: component-domain
+    owner: domain
+    paths: [pale-mirror-domain/]
+    canonical_refs: [architecture.yml]
+    critical_flows: [frontier-v3-command-event]
+    verification_families: [critical-code]
+  - id: component-frontier-v3
+    owner: frontier_v3
+    paths: [pale-mirror-frontier/]
+    canonical_refs: [architecture.yml, docs/frontier-v3-execution-semantics.md]
+    critical_flows: [frontier-v3-command-event, frontier-v3-hot-cold-scene]
+    verification_families: [critical-code]
+  - id: component-neoforge
+    owner: neoforge
+    paths: [pale-mirror-neoforge/]
+    canonical_refs: [architecture.yml, docs/frontier-v3-seamless-foundation.md]
+    critical_flows: [frontier-v3-hot-cold-scene, frontier-v3-restart-recovery]
+    verification_families: [critical-code]
+  - id: component-adapter-api
+    owner: adapter_api
+    paths: [pale-mirror-api/]
+    canonical_refs: [architecture.yml]
+    critical_flows: []
+    verification_families: [small-code]
+  - id: component-visuals
+    owner: visuals
+    paths: [pale-mirror-visuals/]
+    canonical_refs: [architecture.yml]
+    critical_flows: [authored-frontier-genesis, foundry-materialization-audit]
+    verification_families: [critical-code]
+  - id: component-automodel-lab
+    owner: automodel_lab
+    paths: [tools/automodel/]
+    canonical_refs: [architecture.yml]
+    critical_flows: []
+    verification_families: [small-code]
+  - id: component-frontier-v3-test-harness
+    owner: frontier_v3_test_harness
+    paths: [tools/frontier-v3-test-pilot/]
+    canonical_refs: [architecture.yml, docs/frontier-v3-diagnostic-plane.md]
+    critical_flows: [frontier-v3-test-pilot-causality]
+    verification_families: [focused-node]
+  - id: component-repository-context
+    owner: repository_context_engine
+    paths: [tools/engineering/context/]
+    canonical_refs: [architecture.yml, docs/repository-context-engine.md]
+    critical_flows: [repository-context-navigation]
+    verification_families: [focused-python]
+  - id: component-agent-assist
+    owner: agent_assist_tooling
+    paths: [tools/engineering/agent_assist/]
+    canonical_refs: [architecture.yml, docs/agent-assist-toolchain.md]
+    critical_flows: [agent-assist-feedback]
+    verification_families: [focused-python]
+
+  - id: f06r3-canonical-work
+    owner: frontier_v3
+    paths:
+      - pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierResourceSiteHarvestSceneSupport.java
+      - pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierResourceSitePlan.java
+      - pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/HumanAssignmentProjection.java
+      - pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/ResourceSiteHarvestTraversal.java
+      - pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierSceneBehaviors.java
+      - pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/AmbientActorProcess.java
+    canonical_refs: [docs/frontier-v3-execution-semantics.md, docs/frontier-v3-materialization-completeness.md]
+    critical_flows: [frontier-v3-hot-cold-scene]
+    verification_families: [focused-java, critical-code]
+  - id: f06r3-hot-cold-driver
+    owner: neoforge
+    paths:
+      - pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/frontier/v3/FrontierV3ResourceSiteHarvestSceneExecutor.java
+      - pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/frontier/v3/FrontierV3ServerRuntime.java
+    canonical_refs: [docs/frontier-v3-execution-semantics.md, docs/frontier-v3-seamless-foundation.md]
+    critical_flows: [frontier-v3-hot-cold-scene]
+    verification_families: [focused-java, critical-code]
+  - id: f06r3-exact-actor-carrier
+    owner: neoforge
+    paths:
+      - pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/frontier/v3/FrontierV3AmbientActorExecutor.java
+      - pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/frontier/v3/FrontierV3AmbientCarrierLedger.java
+    canonical_refs: [docs/frontier-v3-execution-semantics.md, docs/frontier-v3-seamless-foundation.md]
+    critical_flows: [frontier-v3-exact-actor-unload-return, frontier-v3-hot-cold-scene]
+    verification_families: [focused-java, critical-code]
+  - id: f06r3-minecraft-adoption-reconciliation
+    owner: neoforge
+    paths:
+      - pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/frontier/v3/FrontierV3SceneExecutor.java
+      - pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/frontier/v3/FrontierV3ScenePresentation.java
+      - pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/frontier/v3/FrontierV3ResourceSiteExecutor.java
+      - pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/frontier/v3/FrontierV3AmbientActorLocalTargets.java
+    canonical_refs: [docs/frontier-v3-execution-semantics.md, docs/frontier-v3-materialization-completeness.md]
+    critical_flows: [frontier-v3-hot-cold-scene, frontier-v3-exact-actor-unload-return]
+    verification_families: [focused-java, critical-code]
+  - id: f06r3-graybox-projection
+    owner: neoforge
+    paths:
+      - pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/frontier/v3/FrontierV3GrayboxExecutor.java
+    canonical_refs: [docs/frontier-v3-diagnostic-plane.md, docs/frontier-v3-execution-semantics.md]
+    critical_flows: [frontier-v3-hot-cold-scene, frontier-v3-diagnostic-causality]
+    verification_families: [focused-java, critical-code]
+  - id: f06r3-diagnostic-adoption
+    owner: neoforge
+    paths:
+      - pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/frontier/v3/FrontierV3ProjectionWorkDiagnostic.java
+      - pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/frontier/v3/FrontierV3ServerLifecycle.java
+    canonical_refs: [docs/frontier-v3-diagnostic-plane.md]
+    critical_flows: [frontier-v3-diagnostic-causality]
+    verification_families: [focused-java, critical-code]
+  - id: f06r3-persistence-restart
+    owner: neoforge
+    paths:
+      - pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/frontier/v3/FrontierFileStore.java
+    canonical_refs: [docs/frontier-v3-execution-semantics.md]
+    critical_flows: [frontier-v3-restart-recovery]
+    verification_families: [focused-java, critical-code]
+  - id: f06r3-native-carrier
+    owner: frontier_v3_test_harness
+    paths:
+      - tools/frontier-v3-test-pilot/scenarios/disposable-f06r3-recovered-duty.json
+      - tools/frontier-v3-test-pilot/src/f06r3-recovered-duty-carrier.mjs
+    canonical_refs: [docs/frontier-v3-diagnostic-plane.md, docs/frontier-v3-materialization-completeness.md]
+    critical_flows: [frontier-v3-test-pilot-causality]
+    verification_families: [focused-node, native-causal]
+
+active_tasks:
+  f06r3:
+    order: docs/work-orders/PM-F06R3-SHARED-HOT-LOCOMOTION-DUTY-CYCLE-01.md
+    canonical_refs:
+      - docs/frontier-v3-execution-semantics.md
+      - docs/frontier-v3-seamless-foundation.md
+      - docs/frontier-v3-materialization-completeness.md
+      - docs/frontier-v3-diagnostic-plane.md
+    contract_ids:
+      - f06r3-canonical-work
+      - f06r3-hot-cold-driver
+      - f06r3-exact-actor-carrier
+      - f06r3-minecraft-adoption-reconciliation
+      - f06r3-graybox-projection
+      - f06r3-diagnostic-adoption
+      - f06r3-persistence-restart
+      - f06r3-native-carrier

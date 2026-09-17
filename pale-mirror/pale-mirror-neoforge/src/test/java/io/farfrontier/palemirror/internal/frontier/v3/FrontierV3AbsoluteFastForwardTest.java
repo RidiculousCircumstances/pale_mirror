@@ -8,6 +8,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /** Focused admission regression: client delivery cannot become an implicit relative advance. */
 class FrontierV3AbsoluteFastForwardTest {
     @Test
+    void queuedColdAdvanceHasASmallLiveTickSlice() {
+        assertEquals(8, FrontierV3ServerLifecycle.fastForwardSliceTicks());
+        assertEquals(4, FrontierV3RuntimeBudgets.fastForwardTick().maxActions(),
+                "one coincident due wave may not monopolize the server thread");
+        assertTrue(FrontierV3ServerLifecycle.fastForwardSliceTimeRemaining(19_999_999L));
+        assertTrue(!FrontierV3ServerLifecycle.fastForwardSliceTimeRemaining(20_000_000L));
+    }
+
+    @Test
+    void heldAbsoluteTargetStillRunsTheOneOrdinaryPhysicalCustodyTurn() {
+        assertTrue(FrontierV3ServerLifecycle.runsObservedPhysicalTurnWhileCanonicalProgressIsHeld(false, true, false));
+        assertTrue(FrontierV3ServerLifecycle.runsObservedPhysicalTurnWhileCanonicalProgressIsHeld(true, false, false));
+        assertTrue(!FrontierV3ServerLifecycle.runsObservedPhysicalTurnWhileCanonicalProgressIsHeld(false, true, true));
+        assertTrue(!FrontierV3ServerLifecycle.runsObservedPhysicalTurnWhileCanonicalProgressIsHeld(false, false, false));
+    }
+
+    @Test
     void admitsOnlyOneBoundedFutureTargetFromTheServerCheckpoint() {
         assertEquals(23, FrontierV3ServerLifecycle.absoluteFastForwardDelta(24_600L, 24_623L).orElseThrow());
         assertTrue(FrontierV3ServerLifecycle.absoluteFastForwardDelta(24_623L, 24_623L).isEmpty(), "crossed target");
@@ -30,5 +47,20 @@ class FrontierV3AbsoluteFastForwardTest {
         assertEquals(14_000L, held.reachedCheckpointInstant());
         assertEquals(14_100L, rejected.targetInstant());
         assertEquals("REJECTED", rejected.status());
+    }
+
+    @Test
+    void retainsBoundedServerThreadAttributionAcrossColdSlices() {
+        var first = FrontierV3ServerLifecycle.nextFastForwardSliceTelemetry(null, 17L, 5L, 9L, 3);
+        var next = FrontierV3ServerLifecycle.nextFastForwardSliceTelemetry(first, 23L, 7L, 11L, 4);
+
+        assertEquals(2L, next.samples());
+        assertEquals(40L, next.totalNanos());
+        assertEquals(23L, next.maxNanos());
+        assertEquals(12L, next.safetyNanos());
+        assertEquals(7L, next.maxSafetyNanos());
+        assertEquals(20L, next.advanceNanos());
+        assertEquals(11L, next.maxAdvanceNanos());
+        assertEquals(7L, next.advancedTicks());
     }
 }

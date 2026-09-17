@@ -11,7 +11,7 @@ const xvfb = process.env.PALE_MIRROR_XVFB ?? '/home/rd/.local/bin/Xvfb';
 
 test('private Xvfb admits the real caller command only after a same-namespace GLX context', async (context) => {
   const fixture = await fixtureRoot(context);
-  const result = await invoke(fixture, ['bash', '-ceu', 'xdpyinfo -display "$DISPLAY" >/dev/null; printf caller-reached']);
+  const result = await invoke(fixture, ['bash', '-ceu', 'xdpyinfo -display "$DISPLAY" >/dev/null; test "$FRONTIER_V3_PILOT_PRIVATE_DISPLAY" = true; printf caller-reached']);
   assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout, /caller-reached/);
   const diagnostic = await oneDiagnostic(fixture);

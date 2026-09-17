@@ -188,13 +188,35 @@ public final class AmbientActorProcess {
         }
         ResidentProfile resident = state.humanPopulation().resident(actorId);
         if (resident != null) {
+            HumanAssignment assignment = HumanAssignmentProjection.compile(state).assignment(actorId);
+            ResourceSiteHarvestJob harvest = assignment.kind() == HumanAssignmentKind.FIELD_HARVEST
+                    ? state.resourceSites().sites().values().stream().map(ResourceSiteLifecycle::activeWork).flatMap(java.util.Optional::stream)
+                    .filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
+                    .filter(job -> job.id().equals(assignment.ownerId().orElseThrow(() ->
+                            new IllegalStateException("field-harvest assignment lacks its retained job"))))
+                    .reduce((left, right) -> { throw new IllegalStateException("field-harvest assignment has duplicate retained jobs"); })
+                    .orElseThrow(() -> new IllegalStateException("field-harvest assignment has no active retained job"))
+                    : null;
+            if (harvest != null) {
+                // A generic lease may be prepared to materialize this registered field scene.
+                // Its fallback goal must retain the job's exact cursor, never revive the
+                // ordinary four-cell post-harvest departure from a prior lease.  The field
+                // process still owns progress; this only makes restart/release custody safe.
+                return new AmbientGoal(AmbientGoalKind.WORK,
+                        harvest.traversal().linearCorridorSurfaces().get(harvest.traversalCursor()).support());
+            }
             Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), resident.settlementId());
             if (resident.profession() == ResidentProfession.SECURITY_WORKER) return new AmbientGoal(AmbientGoalKind.GUARD, settlement.anchor());
-            StructureKind kind = resident.profession() == ResidentProfession.AGRICULTURAL_WORKER ? StructureKind.FARM
-                    : resident.profession() == ResidentProfession.MEDICAL_WORKER ? StructureKind.INFIRMARY : StructureKind.WORKSHOP;
-            BlockPosition position = settlement.structures().stream().filter(structure -> structure.kind() == kind).findFirst()
-                    .orElseThrow().anchor();
-            return new AmbientGoal(AmbientGoalKind.WORK, position);
+            // Only a retained process owns purposeful work travel.  Profession is neither a
+            // route nor a work assignment: using the agricultural fallback to send a newly
+            // admitted body to the field-edge return surface made every idle farmer visibly
+            // converge there on first ingress.  PATROL keeps the physical body at its exact
+            // retained canonical support.  A completed harvest has already checkpointed the
+            // same actor at its observed terminal body, while active field, production,
+            // engineering, operation, migration and assembly paths resolve above with their
+            // exact retained cursors.
+            return new AmbientGoal(AmbientGoalKind.PATROL,
+                    state.actorLocations().get(actorId).body().supportingSurface().support());
         }
         Bioform bioform = java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
                 .filter(value -> value.id().equals(actorId)).findFirst().orElseThrow(() -> new IllegalArgumentException("ambient actor has no canonical role"));

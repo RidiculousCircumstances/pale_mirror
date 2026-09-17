@@ -12,6 +12,7 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurface;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus;
+import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSitePlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
@@ -140,7 +141,7 @@ final class FrontierV3ResourceSiteHarvestExecutor {
         FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
         if (intent.status() == PhysicalIntentStatus.RUNNING) {
             if (completeRunning(level, target.site(), ledger, chest, target.output())) { confirm(runtime, intent, target); }
-            else { fail(runtime, ledger, target, "completion-postcondition-conflict"); }
+            else { fail(level, runtime, ledger, target, "completion-postcondition-conflict"); }
             return;
         }
         // A completed cursor with a PREPARED intent is not an invitation to reconstruct a
@@ -151,15 +152,19 @@ final class FrontierV3ResourceSiteHarvestExecutor {
     /**
      * The one exact completion boundary for an intent that was already RUNNING while its named
      * farmer advanced the 64-cell HOT cursor.  A complete owned field with an empty exact depot
-     * slot is the normal first completion and may perform the one atomic receipt.  The same
-     * complete postcondition after restart only acknowledges the existing receipt.  Every other
-     * partial or altered world is conflict evidence, never a reason to manufacture wheat.
+     * slot is the normal first completion and may perform the one atomic receipt.  Deliberately
+     * leave the complete AIR cursor intact: regrowth belongs to the bounded site projector in
+     * the succeeding lifecycle, rather than making this terminal receipt recreate 64 crops in
+     * one server turn.  The same complete receipt after restart only acknowledges the existing
+     * output.  Every other partial or altered world is conflict evidence, never a reason to
+     * manufacture wheat.
      */
     static boolean completeRunning(ServerLevel level, ResourceSite site, FrontierV3ResourceSiteLedger ledger,
                                    ChestBlockEntity chest, ExactItemStack output) {
         if (completePostcondition(level, site, ledger, chest, output)) return true;
         if (!fullyHarvested(level, site, ledger) || !(output.custody() instanceof io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.ContainerSlot slot)
                 || !chest.getItem(slot.slot()).isEmpty()) return false;
+        if (ledger.hasHarvestReceipt(site.id(), output)) return false;
         return apply(level, ledger, site, chest, output);
     }
 
@@ -215,14 +220,21 @@ final class FrontierV3ResourceSiteHarvestExecutor {
 
     static boolean completePostcondition(ServerLevel level, ResourceSite site, FrontierV3ResourceSiteLedger ledger, ChestBlockEntity chest, ExactItemStack expected) {
         if (!(expected.custody() instanceof io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.ContainerSlot slot)) return false;
-        FrontierV3ResourceSiteLedger.Claim claim = ledger.claim(site.id()); ItemStack output = chest.getItem(slot.slot());
-        return claim != null && claim.status() == FrontierV3ResourceSiteLedger.Status.ACTIVE && claim.stage() == 0 && claim.harvestedCropSlots() == 0
-                && FrontierV3ResourceSiteExecutor.matches(level, site, 0) && FrontierV3CargoHandoffExecutor.exactMatch(output, expected);
+        ItemStack output = chest.getItem(slot.slot());
+        return ledger.hasHarvestReceipt(site.id(), expected) && fullyHarvested(level, site, ledger)
+                && FrontierV3CargoHandoffExecutor.exactMatch(output, expected);
     }
 
     static boolean apply(ServerLevel level, FrontierV3ResourceSiteLedger ledger, ResourceSite site, ChestBlockEntity chest, ExactItemStack output) {
         if (precondition(level, site, ledger, chest, output) != Precondition.READY) return false;
-        if (FrontierV3ResourceSiteExecutor.projectStage(level, ledger, site, 0) == FrontierV3ResourceSiteExecutor.StageProjectionResult.CONFLICT) return false;
+        if (!fullyHarvested(level, site, ledger)) {
+            for (int index = 0; index < site.cropSlots().size(); index++) {
+                BlockPosition crop = site.cropSlots().get(index);
+                level.setBlock(new BlockPos(crop.x(), crop.y(), crop.z()), net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), 3);
+                ledger.harvestOne(site.id(), index + 1);
+            }
+        }
+        if (!ledger.recordHarvestReceipt(site.id(), output)) return false;
         int slot = ((io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.ContainerSlot) output.custody()).slot();
         chest.setItem(slot, FrontierV3CargoHandoffExecutor.materializedStack(output)); chest.setChanged();
         return completePostcondition(level, site, ledger, chest, output);
@@ -231,7 +243,11 @@ final class FrontierV3ResourceSiteHarvestExecutor {
     private static void confirm(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent, Target target) {
         ResourceSiteHarvestObservation observation = new ResourceSiteHarvestObservation(new PhysicalObservationId("observation:" + intent.id().value().replace(':', '-')),
                 intent.id(), target.site().id(), target.job().workerId(), target.output(), 64);
-        transition(runtime, intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation), "confirmed");
+        if (!transition(runtime, intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation), "confirmed")) return;
+        // `submit` accepts the canonical receipt before the executor's decoded snapshot advances
+        // to GROWING.  Do not read that predecessor snapshot as a physical mismatch here: the
+        // next resource-site turn owns the confirmed receipt/growth-epoch transition through
+        // its fenced `isExactConfirmedHarvestRegrowth` admission.
     }
 
     private static Target target(FrontierWorldState state, PhysicalIntent intent) {
@@ -250,9 +266,14 @@ final class FrontierV3ResourceSiteHarvestExecutor {
         return java.util.stream.Stream.concat(site.cropSlots().stream(), site.soilSlots().stream())
                 .allMatch(slot -> level.hasChunkAt(new BlockPos(slot.x(), slot.y(), slot.z())));
     }
-    private static void fail(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierV3ResourceSiteLedger ledger, Target target, String cause) {
-        unknown(runtime, target.intent().id(), cause); FrontierV3ResourceSiteExecutor.recordConflict(runtime, ledger, target.site(), target.site().cropSlots().getFirst(),
-                io.farfrontier.palemirror.frontier.v3.model.ResourceSiteConflictReason.OBSERVED_MANAGED_CELL_MISMATCH);
+    private static void fail(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierV3ResourceSiteLedger ledger, Target target, String cause) {
+        unknown(runtime, target.intent().id(), cause);
+        io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = runtime.canonicalState().orElseThrow();
+        io.farfrontier.palemirror.frontier.v3.api.CommandId id = new io.farfrontier.palemirror.frontier.v3.api.CommandId(
+                "executor:resource-site-conflict-harvest-r" + checkpoint.revision().value());
+        FrontierV3ResourceSiteConflictExecutor.recordConflict(level, runtime, ledger, target.site(), target.site().cropSlots().getFirst(),
+                io.farfrontier.palemirror.frontier.v3.model.ResourceSiteConflictReason.OBSERVED_MANAGED_CELL_MISMATCH,
+                io.farfrontier.palemirror.frontier.v3.model.ResourceSiteConflictSource.ADAPTER_WRITE_FAILURE, id);
     }
     private static void unknown(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntentId id, String phase) {
         transition(runtime, id, PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty(), phase);

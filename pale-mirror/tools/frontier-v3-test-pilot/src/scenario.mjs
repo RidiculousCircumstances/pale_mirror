@@ -19,7 +19,7 @@ const VISIT_TIMEOUT_MS = 120_000;
 const INSPECT_TIMEOUT_MS = 30_000;
 const PILOT_CATALOG = resolve(dirname(new URL(import.meta.url).pathname), '../../../pale-mirror-frontier/src/testFixtures/resources/io/farfrontier/palemirror/frontier/v3/model/frontier-v3-pilot-profiles.properties');
 const { profiles: PILOT_PROFILES, defaultProfile: PILOT_DEFAULT_PROFILE } = loadPilotProfiles(PILOT_CATALOG);
-const EVIDENCE_ACTIONS = new Set(['walk', 'look', 'look_nearest_entity', 'break', 'place', 'open_container', 'quick_move_from_inventory', 'quick_move_from_container', 'split_move_from_container', 'wait_until_container_item', 'wait', 'wait_until_block', 'wait_until_diagnostic', 'wait_until_harvest_result', 'assert_complete_resource_site', 'fast_forward', 'fast_forward_to_instant', 'release_fast_forward_hold', 'inspect', 'assert_visible_block', 'assert_visible_board', 'assert_visible_entity', 'observe_entity_motion', 'interact_board', 'interact_nearest_entity', 'attack_nearest_entity', 'visit', 'visit_operation', 'look_operation']);
+const EVIDENCE_ACTIONS = new Set(['walk', 'look', 'look_nearest_entity', 'break', 'place', 'open_container', 'quick_move_from_inventory', 'quick_move_from_container', 'split_move_from_container', 'wait_until_container_item', 'wait', 'wait_until_block', 'wait_until_diagnostic', 'wait_until_harvest_result', 'assert_complete_resource_site', 'fast_forward', 'fast_forward_to_instant', 'release_fast_forward_hold', 'inspect', 'assert_visible_block', 'assert_visible_board', 'assert_visible_entity', 'observe_entity_motion', 'observe_settlement_population', 'interact_board', 'interact_nearest_entity', 'attack_nearest_entity', 'visit', 'visit_operation', 'look_operation']);
 const SETUP_ACTIONS = new Set(['command', 'observe', 'assert_fixture', 'visit']);
 
 /** Resolves only the unambiguous Xwayland session cookie name; it never reads the secret. */
@@ -116,12 +116,19 @@ export function validateScenario(scenario) {
     throw new Error('server.viewDistance must be an integer 2..32');
   }
   if (scenario.zeroPlayerPrelude !== undefined && (!scenario.zeroPlayerPrelude
-      || !Number.isInteger(scenario.zeroPlayerPrelude.advanceTicks)
-      || scenario.zeroPlayerPrelude.advanceTicks < (scenario.zeroPlayerPrelude.kind === 'cold_duty_cycle' ? 1 : 24_000)
-      || scenario.zeroPlayerPrelude.advanceTicks > 240_000 || !Number.isInteger(scenario.zeroPlayerPrelude.timeoutMs)
+      || !Number.isInteger(scenario.zeroPlayerPrelude.timeoutMs)
+      // The COLD carrier has a fixed eight-instant server-thread slice. Its first physical
+      // turn never owns immutable baseline construction, which is primed before any player
+      // can join; retain the bounded five-minute ordinary-player evidence window.
       || scenario.zeroPlayerPrelude.timeoutMs < 1_000 || scenario.zeroPlayerPrelude.timeoutMs > 300_000
-      || (scenario.zeroPlayerPrelude.kind !== undefined && scenario.zeroPlayerPrelude.kind !== 'cold_duty_cycle'))) {
-    throw new Error('zeroPlayerPrelude needs one bounded canonical advance before any client is launched');
+      || (scenario.zeroPlayerPrelude.kind !== undefined && scenario.zeroPlayerPrelude.kind !== 'cold_duty_cycle')
+      || (scenario.zeroPlayerPrelude.targetInstant === undefined && (!Number.isInteger(scenario.zeroPlayerPrelude.advanceTicks)
+          || scenario.zeroPlayerPrelude.advanceTicks < (scenario.zeroPlayerPrelude.kind === 'cold_duty_cycle' ? 1 : 24_000)
+          || scenario.zeroPlayerPrelude.advanceTicks > 240_000))
+      || (scenario.zeroPlayerPrelude.targetInstant !== undefined && (!Number.isSafeInteger(scenario.zeroPlayerPrelude.targetInstant)
+          || scenario.zeroPlayerPrelude.targetInstant < 1 || scenario.zeroPlayerPrelude.advanceTicks !== undefined
+          || scenario.zeroPlayerPrelude.holdAtTarget !== true)))) {
+    throw new Error('zeroPlayerPrelude needs one bounded relative advance or one held absolute canonical target before any client is launched');
   }
   if (scenario.restart !== undefined && (!scenario.restart || !Number.isInteger(scenario.restart.afterAction)
       || scenario.restart.afterAction < 1 || scenario.restart.afterAction >= (scenario.actions ?? []).length
@@ -249,9 +256,16 @@ export function validateScenario(scenario) {
           || !Number.isInteger(action.sampleEveryTicks) || action.sampleEveryTicks < 1 || action.sampleEveryTicks > 20
           || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 180_000
           || (action.nameContains !== undefined && (typeof action.nameContains !== 'string' || !action.nameContains || action.nameContains.length > 72))
+          || (action.workerId !== undefined && !requiredId(action.workerId, 'resident:'))
           || (action.maxDistance !== undefined && (!Number.isFinite(action.maxDistance) || action.maxDistance < 1 || action.maxDistance > 128))
           || (action.anchor !== undefined && !validPosition(action.anchor)))) {
         throw new Error('observe_entity_motion needs one bounded locally rendered entity and exact sampling window');
+      }
+      if (action.type === 'observe_settlement_population' && (!requiredId(action.settlementId, 'settlement:')
+          || !Number.isInteger(action.durationTicks) || action.durationTicks < 1 || action.durationTicks > 200
+          || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 60_000
+          || (action.maxDistance !== undefined && (!Number.isFinite(action.maxDistance) || action.maxDistance < 1 || action.maxDistance > 128)))) {
+        throw new Error('observe_settlement_population needs one settlement and bounded first-ingress sampling');
       }
       if (action.type === 'look_nearest_entity' && (!validItemKind(action.entityType) || typeof action.nameContains !== 'string' || !action.nameContains
           || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 120_000
@@ -304,7 +318,8 @@ export function validateScenario(scenario) {
       }
       if (action.type === 'wait_until_diagnostic' && (!validDiagnosticIdentity(action) || !action.expect || typeof action.expect !== 'object'
           || Array.isArray(action.expect) || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 300_000
-          || (action.requireIncreaseAt !== undefined && !validDiagnosticPath(action.requireIncreaseAt)))) {
+          || (action.requireIncreaseAt !== undefined && !validDiagnosticPath(action.requireIncreaseAt))
+          || (action.pollIntervalMs !== undefined && (!Number.isInteger(action.pollIntervalMs) || action.pollIntervalMs < 50 || action.pollIntervalMs > 1_000)))) {
         throw new Error('wait_until_diagnostic needs a read-only view, predicate and timeoutMs 0..300000');
       }
       if (action.type === 'wait_until_harvest_result' && (!requiredId(action.siteId, 'site:') || !requiredId(action.intentId, 'intent:')
@@ -433,7 +448,7 @@ function segment(scenario, first, end, setup, includeFirstBoundary) {
 }
 
 function validDiagnosticIdentity(value) {
-  return ['summary', 'performance', 'projection_work', 'aftermath', 'process', 'process_inventory', 'site', 'settlement', 'hive', 'hive_transfer', 'hive_mobilization', 'actor', 'item', 'resource', 'player_resource', 'container', 'reference_container', 'market_order', 'operation', 'route_construction', 'route_maintenance', 'route_topology', 'physical_delta', 'medical', 'scene', 'intent', 'trace', 'transit', 'traversal_foundry', 'hive_foundry', 'recovery', 'first_visibility'].includes(value.view)
+  return ['summary', 'performance', 'projection_work', 'aftermath', 'process', 'process_inventory', 'site', 'settlement', 'settlement_population', 'hive', 'hive_transfer', 'hive_mobilization', 'actor', 'item', 'resource', 'player_resource', 'container', 'reference_container', 'market_order', 'operation', 'route_construction', 'route_maintenance', 'route_topology', 'physical_delta', 'medical', 'scene', 'intent', 'trace', 'transit', 'traversal_foundry', 'hive_foundry', 'recovery', 'first_visibility'].includes(value.view)
     && typeof value.id === 'string' && (['summary', 'performance', 'projection_work', 'aftermath'].includes(value.view) || Boolean(value.id));
 }
 

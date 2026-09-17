@@ -42,7 +42,7 @@ class PatrolAssemblyTest {
     }
 
     @Test
-    void formationIngressAdvancesEveryOutstandingResidentWithoutSelectingALeader() {
+    void formationIngressAdvancesOneSafeResidentAtATime() {
         PatrolAssembly initial = new PatrolAssembly(Map.of(
                 LEADER, new PatrolAssembly.Member(corridor("formation-leader", -2, -1, 0), 0),
                 SCOUT, new PatrolAssembly.Member(corridor("formation-scout", 2, 3, 4), 0)));
@@ -50,10 +50,15 @@ class PatrolAssemblyTest {
         PatrolAssembly next = initial.advanceFormation();
 
         assertEquals(new BodyPosition(-1, 65, 0), next.bodies().get(LEADER));
-        assertEquals(new BodyPosition(3, 65, 0), next.bodies().get(SCOUT));
-        assertThrows(IllegalArgumentException.class, () -> new PatrolAssembly(Map.of(
-                LEADER, new PatrolAssembly.Member(corridor("overlap-leader", -1, 0), 0),
-                SCOUT, new PatrolAssembly.Member(corridor("overlap-scout", 1, 0), 0))).advanceFormation());
+        assertEquals(new BodyPosition(2, 65, 0), next.bodies().get(SCOUT),
+                "independent home ingress cannot move an unobserved second exact body in the same transition");
+        PatrolAssembly converging = new PatrolAssembly(Map.of(
+                LEADER, new PatrolAssembly.Member(corridor("overlap-leader", -1, 0, 1), 0),
+                SCOUT, new PatrolAssembly.Member(corridor("overlap-scout", 1, 0, -1), 0)));
+        PatrolAssembly staggered = converging.advanceFormation();
+        assertEquals(new BodyPosition(0, 65, 0), staggered.bodies().get(LEADER),
+                "converging resident routes admit one deterministic safe edge instead of overlapping a canonical body");
+        assertEquals(new BodyPosition(1, 65, 0), staggered.bodies().get(SCOUT));
     }
 
     private static TraversalTopology corridor(String name, int... xs) {

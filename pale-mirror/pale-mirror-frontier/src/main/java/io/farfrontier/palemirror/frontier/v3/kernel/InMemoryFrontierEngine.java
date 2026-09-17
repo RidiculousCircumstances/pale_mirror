@@ -391,7 +391,13 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                 acceptedCommandReceipt);
         Durability durability = events.stream().anyMatch(event -> event.payload().requiresDurableBeforeEffect())
                 ? Durability.DURABLE_BEFORE_EFFECT : Durability.BATCHABLE;
-        transactionCommitter.commit(transaction, durability);
+        // The write-ahead adapter is deliberately outside the reducer and validation spans:
+        // it can perform durable host I/O, and its tail must remain distinguishable from
+        // canonical planning when bounded COLD advancement shares the server thread.
+        try (FrontierExecutionMetrics.Span ignored = measure(FrontierExecutionMetrics.Stage.PERSISTENCE,
+                "write-ahead", worldId.value())) {
+            transactionCommitter.commit(transaction, durability);
+        }
         state = nextState;
         encodedState = encoded;
         revision = nextRevision;

@@ -3,13 +3,13 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.IdentityHashMap;
 
 /** Pure immutable source-site geometry derived from the stable fresh-world bootstrap. */
 public final class FrontierResourceSitePlan {
@@ -20,12 +20,14 @@ public final class FrontierResourceSitePlan {
      * Resource-site geometry is a pure function of an immutable fresh-world bootstrap.
      *
      * <p>Complete canonical validation may need that geometry on every accepted event. Keeping
-     * it in an identity-scoped derived cache avoids reconstructing the same twelve 64-cell field
-     * plans without walking the full value graph on every HOT/COLD lookup. A recovered bootstrap
-     * is a distinct immutable source and therefore receives its own derived value; the cache is
-     * never canonical world state. The returned value is immutable, so callers cannot alter a
-     * later validation through this cache.</p>
+     * it in a bounded exact-bootstrap cache avoids reconstructing the same twelve 64-cell field
+     * plans without walking the full value graph on every HOT/COLD lookup. A bootstrap is also
+     * the owner of its surveyed coordinate frame: test/runtime adapters can construct a
+     * translated bootstrap with the same world identity. Sharing a plan across those distinct
+     * immutable owners would retain foreign field coordinates. The returned value is immutable
+     * and the cache is never canonical world state.</p>
      */
+    private static final int MAX_CACHED_BOOTSTRAPS = 64;
     private static final Map<FrontierBootstrap, Map<SubjectId, ResourceSite>> BY_BOOTSTRAP =
             Collections.synchronizedMap(new IdentityHashMap<>());
 
@@ -34,7 +36,14 @@ public final class FrontierResourceSitePlan {
     public static Map<SubjectId, ResourceSite> compile(FrontierBootstrap bootstrap) {
         Objects.requireNonNull(bootstrap, "bootstrap");
         synchronized (BY_BOOTSTRAP) {
-            return BY_BOOTSTRAP.computeIfAbsent(bootstrap, FrontierResourceSitePlan::compileFresh);
+            Map<SubjectId, ResourceSite> cached = BY_BOOTSTRAP.get(bootstrap);
+            if (cached != null) return cached;
+            // Derived plans have no lifecycle authority. A bounded eviction only rebuilds pure
+            // geometry for an exact owner; it must never redirect another coordinate frame.
+            if (BY_BOOTSTRAP.size() >= MAX_CACHED_BOOTSTRAPS) BY_BOOTSTRAP.clear();
+            Map<SubjectId, ResourceSite> compiled = compileFresh(bootstrap);
+            BY_BOOTSTRAP.put(bootstrap, compiled);
+            return compiled;
         }
     }
 
