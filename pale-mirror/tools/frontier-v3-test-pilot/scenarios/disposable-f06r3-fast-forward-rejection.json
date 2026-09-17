@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "id": "disposable_f06r3_fast_forward_rejection",
+  "isolation": { "mode": "disposable_lite", "seed": 46 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "world", "viewDistance": 6 },
+  "pilot": { "username": "PMTestPilot" },
+  "assertNoServerTickStallDuringIngress": true,
+  "setup": [{ "type": "assert_fixture", "timeoutMs": 30000, "checks": [{ "view": "summary", "id": "", "expect": { "status": "ok", "settlements": 12, "sites": 12 } }] }],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 150, "y": 65, "z": -10 }, "settleMs": 0, "causalMilestone": "site7_physical_projection_before_operator_request" },
+    { "type": "fast_forward", "ticks": 10000, "expectTerminalStatus": "REJECTED", "expectReasonContains": "resource-site-projection:site:7-wheat-field", "timeoutMs": 30000, "causalMilestone": "relative_request_physical_boundary_receipt" },
+    { "type": "inspect", "view": "performance", "id": "", "causalMilestone": "rejected_relative_request_is_readable" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 388, "y": 65, "z": -355 }, "settleMs": 0, "causalMilestone": "ordinary_post_rejection_site4_projection" },
+    { "type": "inspect", "view": "settlement", "id": "settlement:4", "causalMilestone": "post_rejection_runtime_remains_active" },
+    { "type": "look", "at": { "diagnostic": { "view": "settlement", "id": "settlement:4", "field": "routeSurface" } }, "causalMilestone": "post_rejection_road_visibility" },
+    { "type": "assert_visible_block", "position": { "diagnostic": { "view": "settlement", "id": "settlement:4", "field": "routeSurface" } }, "timeoutMs": 30000, "causalMilestone": "post_rejection_road_materialized" }
+  ],
+  "assertions": [
+    { "after": 3, "view": "performance", "id": "", "expect": { "status": "ok", "fastForwardRemaining": 0 } },
+    { "after": 5, "view": "settlement", "id": "settlement:4", "expect": { "status": "ok" } }
+  ],
+  "frames": [{ "after": 7, "name": "f06r3-post-rejection-site4-road", "presentation": "player" }]
+}

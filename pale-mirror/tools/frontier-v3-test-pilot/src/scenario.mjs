@@ -306,7 +306,10 @@ export function validateScenario(scenario) {
       }
       if (action.type === 'inspect' && !validDiagnosticIdentity(action)) throw new Error('inspect needs a read-only v3 view and id');
       if (action.type === 'fast_forward' && (!Number.isInteger(action.ticks) || action.ticks < 1 || action.ticks > 24_000
-          || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 1 || action.timeoutMs > MAX_FAST_FORWARD_TIMEOUT_MS)) {
+          || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 1 || action.timeoutMs > MAX_FAST_FORWARD_TIMEOUT_MS
+          || (action.expectTerminalStatus !== undefined && !['COMPLETED', 'REJECTED'].includes(action.expectTerminalStatus))
+          || (action.expectReasonContains !== undefined && (typeof action.expectReasonContains !== 'string' || !action.expectReasonContains
+              || action.expectTerminalStatus !== 'REJECTED')))) {
         throw new Error(`fast_forward needs ticks 1..24000 and timeoutMs 1..${MAX_FAST_FORWARD_TIMEOUT_MS}`);
       }
       if (action.type === 'fast_forward_to_instant' && (!Number.isSafeInteger(action.targetInstant) || action.targetInstant < 1

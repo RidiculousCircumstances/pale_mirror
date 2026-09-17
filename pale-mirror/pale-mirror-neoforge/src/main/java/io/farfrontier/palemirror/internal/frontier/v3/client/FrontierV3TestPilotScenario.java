@@ -14,7 +14,9 @@ final class FrontierV3TestPilotScenario {
             "wait", "wait_until_block", "wait_until_diagnostic", "wait_until_harvest_result",
             "assert_complete_resource_site", "fast_forward", "fast_forward_to_instant",
             "release_fast_forward_hold", "command", "inspect", "look", "look_nearest_entity",
-            "walk", "break", "place", "assert_fixture", "visit", "assert_visible_block", "assert_visible_board", "observe_entity_motion", "observe_settlement_population", "open_container", "quick_move_from_inventory", "quick_move_from_container", "split_move_from_container",
+            "walk", "break", "place", "assert_fixture", "visit", "assert_visible_block", "assert_visible_board",
+            "observe_entity_motion", "observe_settlement_population", "open_container", "quick_move_from_inventory",
+            "quick_move_from_container", "split_move_from_container",
             "wait_until_container_item", "interact_board", "interact_nearest_entity", "attack_nearest_entity", "visit_operation", "look_operation", "assert_visible_entity");
     record Parsed(JsonArray setup, JsonArray actions, JsonArray frames) {
         int setupCount() { return setup.size(); }
@@ -79,7 +81,7 @@ final class FrontierV3TestPilotScenario {
                     (type.equals("interact_board") && !validBoardInteraction(action)) ||
                     (type.equals("interact_nearest_entity") && !validEntityInteraction(action)) ||
                     (type.equals("attack_nearest_entity") && !validEntityAttack(action)) ||
-                    (type.equals("fast_forward") && (!wholeTicks(action, 24_000L) || !positiveTimeout(action, 180_000L))) ||
+                    (type.equals("fast_forward") && !validRelativeFastForward(action)) ||
                     (type.equals("fast_forward_to_instant") && (!wholeTarget(action) || !positiveTimeout(action, 180_000L))) ||
                     (type.equals("open_container") && (!resolvablePosition(action, "position") || !timeout(action, 120_000L))) ||
                     (type.equals("place") && (!placePosition(action) || !itemKind(action) || !timeout(action, 120_000L))) ||
@@ -92,6 +94,15 @@ final class FrontierV3TestPilotScenario {
                 throw new IllegalArgumentException(section + " action " + index + " lacks required position/command");
             }
         }
+    }
+
+    private static boolean validRelativeFastForward(JsonObject action) {
+        if (!wholeTicks(action, 24_000L) || !positiveTimeout(action, 180_000L)) return false;
+        if (!action.has("expectTerminalStatus")) return !action.has("expectReasonContains");
+        String status = action.get("expectTerminalStatus").getAsString();
+        if (!Set.of("COMPLETED", "REJECTED").contains(status)) return false;
+        return !action.has("expectReasonContains") || status.equals("REJECTED")
+                && action.get("expectReasonContains").isJsonPrimitive() && !action.get("expectReasonContains").getAsString().isBlank();
     }
 
     private static boolean validCausalMilestone(JsonObject action, java.util.Set<String> values) {

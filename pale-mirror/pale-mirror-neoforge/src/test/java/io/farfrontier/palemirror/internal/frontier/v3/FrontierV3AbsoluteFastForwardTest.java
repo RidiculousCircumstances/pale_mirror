@@ -2,6 +2,8 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -47,6 +49,36 @@ class FrontierV3AbsoluteFastForwardTest {
         assertEquals(14_000L, held.reachedCheckpointInstant());
         assertEquals(14_100L, rejected.targetInstant());
         assertEquals("REJECTED", rejected.status());
+    }
+
+    @Test
+    void pendingPhysicalProjectionTerminalizesTheQueuedRelativeReceiptWithoutThrowingOrRetargetingIt() {
+        var queued = new FrontierV3ServerLifecycle.FastForwardRequestOutcome(1L, "RELATIVE", 10_000, 15_310L,
+                5_310L, null, "QUEUED", null);
+
+        var terminal = FrontierV3ServerLifecycle.terminalizeQueuedFastForwardRequest(List.of(queued), "RELATIVE", 5_342L,
+                "REJECTED", "physical work became pending during the relative interval: resource-site-projection:site:7-wheat-field");
+
+        assertEquals(1, terminal.size());
+        var receipt = terminal.getFirst();
+        assertEquals(1L, receipt.requestId(), "the terminal receipt belongs to the queued operator request");
+        assertEquals(15_310L, receipt.targetInstant(), "mid-flight rejection retains the original computed relative target");
+        assertEquals(5_342L, receipt.reachedCheckpointInstant(), "the stop boundary is recoverable rather than inferred from queueing");
+        assertEquals("REJECTED", receipt.status());
+        assertTrue(receipt.reason().contains("resource-site-projection:site:7-wheat-field"));
+    }
+
+    @Test
+    void physicalAdmissionRejectionStillHasOneCompleteRelativeOperatorReceipt() {
+        var rejected = new FrontierV3ServerLifecycle.FastForwardRequestOutcome(2L, "RELATIVE", 10_000, 15_310L,
+                5_310L, 5_310L, "REJECTED", "physical work is pending at admission: resource-site-projection:site:7-wheat-field");
+
+        assertEquals(2L, rejected.requestId());
+        assertEquals(15_310L, rejected.targetInstant());
+        assertEquals(5_310L, rejected.admittedCheckpointInstant());
+        assertEquals(5_310L, rejected.reachedCheckpointInstant());
+        assertEquals("REJECTED", rejected.status());
+        assertTrue(rejected.reason().contains("resource-site-projection:site:7-wheat-field"));
     }
 
     @Test

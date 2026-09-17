@@ -322,11 +322,15 @@ public final class FrontierV3ServerLifecycle {
         ServerLevel physicalWorld = FrontierV3PhysicalWorld.require(server);
         if (requiresPhysicalStep(physicalWorld, runtime)) {
             String blocker = physicalBlocker(physicalWorld, runtime);
-            recordFastForwardRequest(server, "RELATIVE", ticks, null, runtime.checkpointImage().orElseThrow().instant().ticks(), null,
+            long admitted = runtime.checkpointImage().orElseThrow().instant().ticks();
+            recordFastForwardRequest(server, "RELATIVE", ticks, admitted + ticks, admitted, admitted,
                     "REJECTED", "physical work is pending at admission: " + blocker);
             PaleMirrorMod.LOGGER.warn("Frontier v3 rejected relative fast-forward at admission because physical work is pending: {}", blocker);
             return false;
         }
+        // A past terminal result stays visible in the bounded receipt history, but it must not
+        // make the next admitted request look rejected in the live performance/status surface.
+        FAST_FORWARD_FAILURES.remove(server);
         INITIAL_CANONICAL_HOLDS.remove(server);
         FAST_FORWARD_REMAINING.put(server, ticks);
         long admitted = runtime.checkpointImage().orElseThrow().instant().ticks();
@@ -500,13 +504,13 @@ public final class FrontierV3ServerLifecycle {
                 FAST_FORWARD_REMAINING.remove(server);
                 FAST_FORWARD_FAILURES.put(server, "physical work became pending before the absolute target: " + physicalBlocker);
                 recordFastForwardTarget(server, target, null, null, "REJECTED", FAST_FORWARD_FAILURES.get(server));
-                updateFastForwardRequest(server, "ABSOLUTE", target, runtime.checkpointImage().orElseThrow().instant().ticks(), "REJECTED", FAST_FORWARD_FAILURES.get(server));
+                updateFastForwardRequest(server, "ABSOLUTE", runtime.checkpointImage().orElseThrow().instant().ticks(), "REJECTED", FAST_FORWARD_FAILURES.get(server));
                 PaleMirrorMod.LOGGER.warn("Frontier v3 rejected absolute fast-forward target because physical work became pending: {}", physicalBlocker);
             } else {
                 FAST_FORWARD_REMAINING.remove(server);
                 FAST_FORWARD_FAILURES.put(server, "physical work became pending during the relative interval: " + physicalBlocker);
                 PaleMirrorMod.LOGGER.warn("Frontier v3 rejected relative fast-forward because physical work became pending: {}", physicalBlocker);
-                updateFastForwardRequest(server, "RELATIVE", null, runtime.checkpointImage().orElseThrow().instant().ticks(), "REJECTED", FAST_FORWARD_FAILURES.get(server));
+                updateFastForwardRequest(server, "RELATIVE", runtime.checkpointImage().orElseThrow().instant().ticks(), "REJECTED", FAST_FORWARD_FAILURES.get(server));
             }
             recordFastForwardSlice(server, sliceStarted, safetyNanos, advanceNanos, 0);
             return;
@@ -530,7 +534,7 @@ public final class FrontierV3ServerLifecycle {
             Long target = FAST_FORWARD_TARGETS.get(server);
             if (target != null) recordFastForwardTarget(server, target, null, runtime.checkpointImage().orElseThrow().instant().ticks(), "HELD", null);
             long reached = runtime.checkpointImage().orElseThrow().instant().ticks();
-            updateFastForwardRequest(server, target == null ? "RELATIVE" : "ABSOLUTE", target, reached,
+            updateFastForwardRequest(server, target == null ? "RELATIVE" : "ABSOLUTE", reached,
                     target == null ? "COMPLETED" : "HELD", null);
             PaleMirrorMod.LOGGER.info("Frontier v3 completed operator fast-forward{}", FAST_FORWARD_TARGETS.containsKey(server) ? " at held absolute target" : "");
         } else FAST_FORWARD_REMAINING.put(server, next);
@@ -609,19 +613,36 @@ public final class FrontierV3ServerLifecycle {
         FAST_FORWARD_REQUESTS.put(server, List.copyOf(prior));
     }
 
-    private static void updateFastForwardRequest(MinecraftServer server, String kind, Long target, long reachedCheckpoint,
+    private static void updateFastForwardRequest(MinecraftServer server, String kind, long reachedCheckpoint,
                                                  String status, String reason) {
-        List<FastForwardRequestOutcome> prior = new ArrayList<>(fastForwardRequests(server));
+        List<FastForwardRequestOutcome> prior = terminalizeQueuedFastForwardRequest(fastForwardRequests(server), kind,
+                reachedCheckpoint, status, reason);
+        if (prior.equals(fastForwardRequests(server))) {
+            PaleMirrorMod.LOGGER.error("Frontier v3 could not correlate fast-forward terminal receipt kind={} status={}; retaining existing receipts", kind, status);
+            return;
+        }
+        FAST_FORWARD_REQUESTS.put(server, prior);
+    }
+
+    /**
+     * One request may be active at a time, so terminalization owns the queued receipt rather
+     * than recomputing a target from transient driver maps.  In particular a relative request
+     * retains its original target when physical work becomes pending between admission and the
+     * next canonical slice.
+     */
+    static List<FastForwardRequestOutcome> terminalizeQueuedFastForwardRequest(List<FastForwardRequestOutcome> requests,
+                                                                                  String kind, long reachedCheckpoint,
+                                                                                  String status, String reason) {
+        List<FastForwardRequestOutcome> prior = new ArrayList<>(Objects.requireNonNull(requests, "requests"));
         for (int index = prior.size() - 1; index >= 0; index--) {
             FastForwardRequestOutcome current = prior.get(index);
-            if (current.kind().equals(kind) && current.status().equals("QUEUED") && Objects.equals(current.targetInstant(), target)) {
+            if (current.kind().equals(kind) && current.status().equals("QUEUED")) {
                 prior.set(index, new FastForwardRequestOutcome(current.requestId(), current.kind(), current.requestedTicks(),
                         current.targetInstant(), current.admittedCheckpointInstant(), reachedCheckpoint, status, reason));
-                FAST_FORWARD_REQUESTS.put(server, List.copyOf(prior));
-                return;
+                return List.copyOf(prior);
             }
         }
-        throw new IllegalStateException("fast-forward terminal receipt has no queued request");
+        return List.copyOf(prior);
     }
 
     /** Bounded in-game receipt; the runtime remains the sole owner of canonical time. */
@@ -631,7 +652,8 @@ public final class FrontierV3ServerLifecycle {
         FastForwardRequestOutcome {
             if (requestId < 1L || !java.util.Set.of("RELATIVE", "ABSOLUTE").contains(kind) || requestedTicks < 0
                     || !java.util.Set.of("QUEUED", "COMPLETED", "HELD", "REJECTED", "RELEASED").contains(status)
-                    || ("RELATIVE".equals(kind) && (targetInstant == null || requestedTicks < 1))
+                    || ("RELATIVE".equals(kind) && (requestedTicks < 1
+                    || (targetInstant == null && !"REJECTED".equals(status))))
                     || ("ABSOLUTE".equals(kind) && (targetInstant == null || targetInstant < 1L))
                     || (("QUEUED".equals(status) || "COMPLETED".equals(status) || "HELD".equals(status) || "RELEASED".equals(status))
                     && admittedCheckpointInstant == null)
