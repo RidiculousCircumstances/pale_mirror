@@ -338,6 +338,7 @@ final class FrontierV3DiagnosticJson {
             var intent = state.physicalIntents().get(lineage.predecessorIntentId());
             boolean owned = output != null && output.id().equals(lineage.outputItemId()) && output.custody().equals(lineage.outputSlot());
             String successor = harvestSuccessor(state, lineage);
+            boolean physicalReceiptConfirmed = intent != null && intent.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED;
             return "{\"job\":\"" + quote(lineage.predecessorJobId().value()) + "\",\"worker\":\"" + quote(lineage.workerId().value())
                     + "\",\"outputItem\":\"" + quote(lineage.outputItemId().value()) + "\",\"outputSlot\":" + lineage.outputSlot().slot()
                     // `outputOwned` deliberately means the original exact wheat still occupies its
@@ -345,7 +346,8 @@ final class FrontierV3DiagnosticJson {
                     // successor receipt below, rather than a missing predecessor stack, is the
                     // durable zero-sum ownership fact.
                     + ",\"outputOwned\":" + owned + ",\"canonicalSuccessor\":" + lineage.composedIntoCanonicalSuccessor(state)
-                    + ",\"successor\":" + successor + ",\"physicalReceiptConfirmed\":" + lineage.outputReceiptConfirmed()
+                    + ",\"successor\":" + successor + ",\"physicalReceiptResolved\":" + lineage.outputReceiptResolved()
+                    + ",\"physicalReceiptConfirmed\":" + physicalReceiptConfirmed
                     + ",\"intentStatus\":\"" + (intent == null ? "MISSING" : intent.status().name()) + "\",\"terminalBody\":" + position(lineage.terminalBody()) + "}";
         }).orElse("null");
         return base("site", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(site.settlementId().value())

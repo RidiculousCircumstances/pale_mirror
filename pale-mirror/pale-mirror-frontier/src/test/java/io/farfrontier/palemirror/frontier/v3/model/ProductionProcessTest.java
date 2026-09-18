@@ -772,14 +772,11 @@ class ProductionProcessTest {
         harvesting = ResourceSiteHarvestProcess.reducePrepared(harvesting, siteId, firstPrepared.intent());
         harvesting = completeHarvest(harvesting, siteId, firstStarted.job().id());
         ResourceSiteHarvestLineage completed = harvesting.resourceSites().site(siteId).harvestLineage().orElseThrow();
-        ExactItemStack output = harvesting.inventory().items().get(completed.outputItemId());
         harvesting = StrategicObjectiveProcess.reduceTaskTransition(harvesting, new SubjectId("settlement:1"),
                 new StrategicTaskTransition(completed.predecessorTaskId(), StrategicTaskStatus.COMPLETED));
-        PhysicalIntentTransition confirmed = new PhysicalIntentTransition(firstPrepared.intent().id(), PhysicalIntentStatus.CONFIRMED,
-                Optional.of(new ResourceSiteHarvestObservation(new PhysicalObservationId("observation:relationship-harvest-first"), firstPrepared.intent().id(),
-                        siteId, completed.workerId(), output, 64)));
-        FrontierWorldState running = harvesting.transitionPhysicalIntent(firstPrepared.intent().id(), PhysicalIntentStatus.RUNNING, Optional.empty());
-        FrontierWorldState grown = running.transitionPhysicalIntent(firstPrepared.intent().id(), PhysicalIntentStatus.CONFIRMED, confirmed.observation());
+        assertFalse(harvesting.physicalIntents().containsKey(firstPrepared.intent().id()),
+                "terminal COLD composition cannot leave its prior physical subject unowned before the next growth epoch");
+        FrontierWorldState grown = harvesting;
         for (int stage = 0; stage < ResourceSiteLifecycle.MATURE_STAGE; stage++) {
             ResourceSiteLifecycle lifecycle = grown.resourceSites().site(siteId);
             grown = ResourceSiteProcess.reduceGrowth(grown, siteId,

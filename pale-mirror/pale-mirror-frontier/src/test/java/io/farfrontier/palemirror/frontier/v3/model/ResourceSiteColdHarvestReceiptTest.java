@@ -1,7 +1,6 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
@@ -18,7 +17,6 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResourceSiteColdHarvestReceiptTest {
     @Test
@@ -109,16 +107,17 @@ class ResourceSiteColdHarvestReceiptTest {
 
         ResourceSiteHarvestLineage complete = state.resourceSites().site(site).harvestLineage().orElseThrow();
         assertEquals(ResourceSitePhase.GROWING, state.resourceSites().site(site).phase());
-        assertTrue(complete.receiptPending());
+        assertFalse(complete.receiptPending(), "COLD composition closes the old physical request instead of retaining an unbounded pending receipt");
         assertEquals(started.job().traversal().linearCorridorSurfaces().getLast().standingBody(),
                 state.actorLocations().get(complete.workerId()).body(), "first visibility retains the exact completed field station");
         assertEquals(state.actorLocations().get(complete.workerId()).body(), complete.terminalBody(),
                 "the deferred receipt retains its exact terminal worker station across the lifecycle boundary");
-        assertEquals(PhysicalIntentStatus.PREPARED, state.physicalIntents().get(complete.predecessorIntentId()).status(),
-                "COLD completion retains its unstarted physical effect rather than claiming a false RUNNING boundary");
+        assertFalse(state.physicalIntents().containsKey(complete.predecessorIntentId()),
+                "COLD completion retires its composed unstarted physical effect rather than leaving an orphan PREPARED subject set");
         assertEquals(FencedRecoveryDisposition.REJECT_STALE,
-                state.fencedRecovery().tombstones().get(FencedRecoveryPhysicalIntentSupport.bindingId(
-                        state.physicalIntents().get(complete.predecessorIntentId()))).disposition(),
+                state.fencedRecovery().tombstones().values().stream()
+                        .filter(tombstone -> tombstone.ownerId().equals(site) && tombstone.reason().equals("canonical-composition"))
+                        .findFirst().orElseThrow().disposition(),
                 "the exact composition owner fences any late old-wheat materialization without calling it observed");
         assertEquals(StrategicTaskStatus.COMPLETED, state.strategicPlans().tasks().get(started.job().taskId()).status());
         ExactItemStack output = new ExactItemStack(complete.outputItemId(), new SubjectId("settlement:1"), "minecraft:wheat", 64, complete.outputSlot());
@@ -127,8 +126,8 @@ class ResourceSiteColdHarvestReceiptTest {
         FrontierWorldState restored = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().decode(
                 new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().encode(state));
         assertEquals(complete, restored.resourceSites().site(site).harvestLineage().orElseThrow(), "restart retains the same exact terminal COLD receipt lineage");
-        assertEquals(PhysicalIntentStatus.PREPARED, restored.physicalIntents().get(complete.predecessorIntentId()).status(),
-                "restart retains one deferred composition owner rather than replaying or falsely starting harvest work");
+        assertFalse(restored.physicalIntents().containsKey(complete.predecessorIntentId()),
+                "restart retains the retired composition boundary rather than replaying or falsely starting harvest work");
         assertEquals(output, restored.inventory().items().get(complete.outputItemId()),
                 "restart retains the same output custody independently from later materialization");
 
@@ -144,28 +143,12 @@ class ResourceSiteColdHarvestReceiptTest {
                         .map(ProductionStarted.class::cast).anyMatch(startedProduction -> startedProduction.inputItemId().equals(output.id())),
                 "this agricultural-only fixture has no admitted industrial worker; it must not manufacture a downstream owner");
         assertEquals(output, beforeReceipt.inventory().items().get(complete.outputItemId()),
-                "the deferred terminal output stays owned and materializable while the same farmer may admit a successor");
+                "the composed terminal output stays owned and projectable while the same farmer may admit a successor");
 
-        var missingPhysicalReceipt = new PhysicalIntentTransition(complete.predecessorIntentId(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART,
-                java.util.Optional.empty());
-        List<ProposedEvent> missingReceiptPlan = ResourceSiteHarvestProcess.planTransition(state,
-                state.physicalIntents().get(complete.predecessorIntentId()), missingPhysicalReceipt, 30_100L);
-        assertEquals(List.of(new ProposedEvent(site, missingPhysicalReceipt)), missingReceiptPlan,
-                "a deferred physical mismatch reaches its exact local-recovery owner instead of being silently rejected forever");
-        FrontierWorldState unresolved = state.transitionPhysicalIntent(complete.predecessorIntentId(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART,
-                java.util.Optional.empty());
-        assertEquals(ResourceSitePhase.GROWING, unresolved.resourceSites().site(site).phase(),
-                "a missing post-COLD receipt conflicts only its materialization owner, never the completed field lifecycle");
-        assertEquals(output, unresolved.inventory().items().get(complete.outputItemId()));
-        assertTrue(unresolved.inventory().conflicts().values().stream().anyMatch(conflict -> conflict.subjectId().equals(complete.outputItemId())),
-                "a missing post-COLD receipt is durable local output evidence, never permission to mint another stack");
-
-        java.util.Map<SubjectId, ActorLocation> displacedActors = new java.util.LinkedHashMap<>(state.actorLocations());
-        displacedActors.put(complete.workerId(), displacedActors.get(complete.workerId()).withBody(complete.terminalBody().offset(1, 0, 0)));
-        FrontierWorldState displaced = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(displacedActors));
-        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
-                () -> ResourceSiteHarvestProcess.validateRunningTransition(displaced, displaced.physicalIntents().get(complete.predecessorIntentId())),
-                "a deferred receipt may not acknowledge an output after its exact COLD terminal station was lost");
+        FrontierWorldState composed = state;
+        assertThrows(IllegalArgumentException.class,
+                () -> composed.transitionPhysicalIntent(complete.predecessorIntentId(), PhysicalIntentStatus.RUNNING, java.util.Optional.empty()),
+                "the composed request has no non-terminal transition path after its exact output is canonical");
 
         for (int stage = 0; stage < ResourceSiteLifecycle.MATURE_STAGE; stage++) {
             ResourceSiteLifecycle lifecycle = state.resourceSites().site(site);
@@ -196,19 +179,41 @@ class ResourceSiteColdHarvestReceiptTest {
         FrontierWorldState successorRestarted = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().decode(
                 new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().encode(state));
         assertEquals(successor.job().id(), ((ResourceSiteHarvestJob) successorRestarted.resourceSites().site(site).activeWork().orElseThrow()).id(),
-                "a subsequent epoch and restart retain the new active job without orphaning the predecessor composition owner");
+                "a subsequent epoch and restart retain the new active job without orphaning the retired predecessor request");
+        ScheduledAction successorAction = ((ScheduleEffect.Created) successorPlan.stream().map(ProposedEvent::payload)
+                .filter(ScheduleEffect.Created.class::isInstance).findFirst().orElseThrow()).action();
+        state = completeColdHarvest(state, site, successorAction);
+        ResourceSiteHarvestLineage successorComplete = state.resourceSites().site(site).harvestLineage().orElseThrow();
+        assertFalse(successorComplete.receiptPending());
+        assertFalse(state.physicalIntents().containsKey(complete.predecessorIntentId()));
+        assertFalse(state.physicalIntents().containsKey(successorComplete.predecessorIntentId()));
+        FrontierWorldState twiceRestarted = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().decode(
+                new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().encode(state));
+        assertEquals(successorComplete, twiceRestarted.resourceSites().site(site).harvestLineage().orElseThrow(),
+                "two zero-player harvest epochs survive restart with no orphan physical intent");
+        assertEquals(output, twiceRestarted.inventory().items().get(complete.outputItemId()),
+                "the first composed output remains exact canonical custody while a later epoch completes");
+    }
 
-        ResourceSiteHarvestObservation receipt = new ResourceSiteHarvestObservation(
-                new PhysicalObservationId("observation:" + complete.predecessorIntentId().value().replace(':', '-')),
-                complete.predecessorIntentId(), site, complete.workerId(), output, 64);
-        FrontierWorldState composedState = state;
-        assertThrows(IllegalArgumentException.class,
-                () -> ResourceSiteHarvestProcess.planTransition(composedState,
-                        composedState.physicalIntents().get(complete.predecessorIntentId()),
-                        new PhysicalIntentTransition(complete.predecessorIntentId(), PhysicalIntentStatus.RUNNING, java.util.Optional.empty()), 40_200L),
-                "a composed COLD lineage cannot replay its old physical wheat effect after a later load");
-        assertEquals(output, state.inventory().items().get(complete.outputItemId()),
-                "the composed output remains exact canonical custody while late old-world work is fenced");
+    private static FrontierWorldState completeColdHarvest(FrontierWorldState state, SubjectId site, ScheduledAction action) {
+        for (int step = 0; step < 256 && state.resourceSites().site(site).phase() == ResourceSitePhase.HARVESTING; step++) {
+            List<ProposedEvent> planned = ResourceSiteHarvestProcess.planColdProgress(state, action);
+            assertFalse(planned.isEmpty(), "COLD harvest must make one bounded durable disposition at step " + step);
+            for (ProposedEvent event : planned) {
+                switch (event.payload()) {
+                    case ResourceSiteHarvestColdTraversalAdvanced traversal -> state = ResourceSiteHarvestProcess.reduceColdTraversalAdvanced(state, site, traversal);
+                    case ResourceSiteHarvestCropPrepared crop -> state = ResourceSiteHarvestProcess.reduceCropPrepared(state, site, crop);
+                    case ResourceSiteHarvestProgressed progressed -> state = ResourceSiteHarvestProcess.reduceProgressed(state, site, progressed);
+                    case StrategicTaskTransition transition -> state = StrategicObjectiveProcess.reduceTaskTransition(state, new SubjectId("settlement:1"), transition);
+                    case ScheduleEffect.Rescheduled rescheduled -> action = rescheduled.replacement();
+                    case ScheduleEffect.Cancelled ignored -> { }
+                    case ScheduleEffect.Created ignored -> { }
+                    default -> throw new AssertionError("unexpected COLD harvest event: " + event.payload().type());
+                }
+            }
+        }
+        assertEquals(ResourceSitePhase.GROWING, state.resourceSites().site(site).phase());
+        return state;
     }
 
     private static FrontierWorldState matureField() {

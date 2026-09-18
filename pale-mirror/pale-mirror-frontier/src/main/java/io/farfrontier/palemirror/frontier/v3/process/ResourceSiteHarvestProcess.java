@@ -278,9 +278,17 @@ public final class ResourceSiteHarvestProcess {
         if (intent == null || intent.status() != PhysicalIntentStatus.PREPARED) {
             throw new IllegalArgumentException("resource-site COLD completion lacks its exact unstarted physical intent");
         }
+        // COLD has atomically made the exact output canonical and retired this effect's
+        // execution authority.  Keeping the PREPARED request after that composition leaves a
+        // dead subject set behind; a later field epoch can then overwrite the one bounded
+        // lineage that used to validate it.  Remove the request in this same transaction so a
+        // late replica can only be rejected by the recovery tombstone, never replayed.
+        java.util.Map<PhysicalIntentId, PhysicalIntent> intents = new java.util.LinkedHashMap<>(state.physicalIntents());
+        intents.remove(intent.id());
         return state.withChanges(FrontierWorldStateUpdate.begin()
                 .resourceSites(state.resourceSites().replace(next))
                 .inventory(state.inventory().store(output))
+                .physicalIntents(intents)
                 .fencedRecovery(FencedRecoveryPhysicalIntentSupport.composed(state.fencedRecovery(), intent)));
     }
 

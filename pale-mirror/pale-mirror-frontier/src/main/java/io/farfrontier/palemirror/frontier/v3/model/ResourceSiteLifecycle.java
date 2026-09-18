@@ -144,7 +144,7 @@ public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, l
         return next(ResourceSitePhase.GROWING, Math.addExact(growthEpoch, 1L), 0, Optional.empty(),
                 Optional.of(ResourceSiteHarvestLineage.completed(completed, growthEpoch)));
     }
-    /** Closes COLD semantic work while retaining one exact deferred physical output receipt. */
+    /** Closes COLD semantic work after atomically composing and fencing its exact physical request. */
     public ResourceSiteLifecycle harvestedDeferred() {
         ResourceSiteHarvestJob completed = activeWork.filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
                 .filter(job -> job.progress().complete()).orElse(null);
@@ -152,7 +152,7 @@ public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, l
             throw new IllegalStateException("resource site has no complete COLD harvest");
         }
         return next(ResourceSitePhase.GROWING, Math.addExact(growthEpoch, 1L), 0, Optional.empty(),
-                Optional.of(ResourceSiteHarvestLineage.completed(completed, growthEpoch, false)));
+                Optional.of(ResourceSiteHarvestLineage.completed(completed, growthEpoch)));
     }
     /** Plans the post-final-crop epoch before its crop events are reduced. */
     public ResourceSiteLifecycle harvestedDeferred(ResourceSiteHarvestJob completed) {
@@ -163,13 +163,13 @@ public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, l
             throw new IllegalArgumentException("resource site has no exact next complete COLD harvest");
         }
         return new ResourceSiteLifecycle(siteId, ResourceSitePhase.GROWING, Math.addExact(growthEpoch, 1L), 0, Optional.empty(), Optional.empty(),
-                Optional.of(ResourceSiteHarvestLineage.completed(completed, growthEpoch, false)));
+                Optional.of(ResourceSiteHarvestLineage.completed(completed, growthEpoch)));
     }
     public ResourceSiteLifecycle confirmDeferredHarvestReceipt(PhysicalIntentId intentId) {
         ResourceSiteHarvestLineage lineage = harvestLineage.filter(ResourceSiteHarvestLineage::receiptPending)
                 .filter(value -> value.predecessorIntentId().equals(intentId)).orElseThrow(
                         () -> new IllegalArgumentException("resource-site deferred harvest receipt has no matching lineage"));
-        return next(phase, growthEpoch, growthStage, activeWork, Optional.of(lineage.confirmReceipt()));
+        return next(phase, growthEpoch, growthStage, activeWork, Optional.of(lineage.resolveReceipt()));
     }
     public ResourceSiteLifecycle conflicted(ResourceSiteConflictDisposition disposition) {
         if (phase == ResourceSitePhase.DESTROYED) throw new IllegalStateException("destroyed resource site cannot become a conflict");

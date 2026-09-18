@@ -17,7 +17,7 @@ import java.util.Optional;
 public record ResourceSiteHarvestLineage(SubjectId predecessorJobId, SubjectId predecessorTaskId,
                                          SubjectId workerId, SubjectId outputItemId, long completedGrowthEpoch,
                                          BodyPosition terminalBody, PhysicalIntentId predecessorIntentId, InventoryCustody.ContainerSlot outputSlot,
-                                         boolean outputReceiptConfirmed, Optional<SubjectId> successorTaskId, Optional<SubjectId> successorJobId) {
+                                         boolean outputReceiptResolved, Optional<SubjectId> successorTaskId, Optional<SubjectId> successorJobId) {
     public ResourceSiteHarvestLineage {
         Objects.requireNonNull(predecessorJobId, "harvest lineage predecessor job");
         Objects.requireNonNull(predecessorTaskId, "harvest lineage predecessor task");
@@ -41,9 +41,9 @@ public record ResourceSiteHarvestLineage(SubjectId predecessorJobId, SubjectId p
         return completed(job, growthEpoch, true);
     }
 
-    public static ResourceSiteHarvestLineage completed(ResourceSiteHarvestJob job, long growthEpoch, boolean outputReceiptConfirmed) {
+    public static ResourceSiteHarvestLineage completed(ResourceSiteHarvestJob job, long growthEpoch, boolean outputReceiptResolved) {
         return new ResourceSiteHarvestLineage(job.id(), job.taskId(), job.workerId(), job.outputItemId(), growthEpoch,
-                job.traversal().linearCorridorSurfaces().getLast().standingBody(), job.intentId(), job.outputSlot(), outputReceiptConfirmed, Optional.empty(), Optional.empty());
+                job.traversal().linearCorridorSurfaces().getLast().standingBody(), job.intentId(), job.outputSlot(), outputReceiptResolved, Optional.empty(), Optional.empty());
     }
 
     public ResourceSiteHarvestLineage bindSuccessor(ResourceSiteHarvestJob job) {
@@ -52,10 +52,11 @@ public record ResourceSiteHarvestLineage(SubjectId predecessorJobId, SubjectId p
             throw new IllegalArgumentException("resource-site successor must retain its one completed farmer");
         }
         return new ResourceSiteHarvestLineage(predecessorJobId, predecessorTaskId, workerId, outputItemId, completedGrowthEpoch,
-                terminalBody, predecessorIntentId, outputSlot, outputReceiptConfirmed, Optional.of(job.taskId()), Optional.of(job.id()));
+                terminalBody, predecessorIntentId, outputSlot, outputReceiptResolved, Optional.of(job.taskId()), Optional.of(job.id()));
     }
 
-    public boolean receiptPending() { return !outputReceiptConfirmed; }
+    /** A physical receipt is open only while an exact current intent can still resolve it. */
+    public boolean receiptPending() { return !outputReceiptResolved; }
 
     /**
      * The old field write may remain RUNNING after its exact wheat has entered a later COLD
@@ -75,8 +76,8 @@ public record ResourceSiteHarvestLineage(SubjectId predecessorJobId, SubjectId p
                         && outputItemId.equals(receipt.inputId()));
         return activeCold || terminalExact;
     }
-    public ResourceSiteHarvestLineage confirmReceipt() {
-        if (outputReceiptConfirmed) throw new IllegalStateException("resource-site harvest receipt is already confirmed");
+    public ResourceSiteHarvestLineage resolveReceipt() {
+        if (outputReceiptResolved) throw new IllegalStateException("resource-site harvest receipt is already resolved");
         return new ResourceSiteHarvestLineage(predecessorJobId, predecessorTaskId, workerId, outputItemId, completedGrowthEpoch,
                 terminalBody, predecessorIntentId, outputSlot, true, successorTaskId, successorJobId);
     }

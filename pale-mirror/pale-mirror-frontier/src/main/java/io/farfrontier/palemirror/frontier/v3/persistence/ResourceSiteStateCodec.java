@@ -69,7 +69,7 @@ final class ResourceSiteStateCodec {
         output.writeInt(lineage.terminalBody().x()); output.writeInt(lineage.terminalBody().y()); output.writeInt(lineage.terminalBody().z());
         FrontierWorldStateCodec.writeString(output, lineage.predecessorIntentId().value());
         FrontierWorldStateCodec.writeCustody(output, lineage.outputSlot());
-        output.writeBoolean(lineage.outputReceiptConfirmed());
+        output.writeBoolean(lineage.outputReceiptResolved());
         output.writeBoolean(lineage.successorTaskId().isPresent());
         if (lineage.successorTaskId().isPresent()) {
             FrontierWorldStateCodec.writeString(output, lineage.successorTaskId().orElseThrow().value());

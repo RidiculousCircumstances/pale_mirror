@@ -279,7 +279,8 @@ class ResourceSiteHarvestTraversalTest extends ResourceSiteHarvestProcessTest {
                 "a complete crop receipt cannot skip the durable RUNNING boundary");
         assertEquals(output, harvesting.inventory().items().get(output.id()),
                 "a complete COLD cursor owns its one exact output before the loaded physical receipt");
-        assertEquals(PhysicalIntentStatus.PREPARED, harvesting.physicalIntents().get(prepared.intent().id()).status());
+        assertFalse(harvesting.physicalIntents().containsKey(prepared.intent().id()),
+                "terminal COLD composition retires its already-canonical physical request");
     }
 
     @Test
@@ -344,20 +345,19 @@ class ResourceSiteHarvestTraversalTest extends ResourceSiteHarvestProcessTest {
         ResourceSiteHarvestLineage after = state.resourceSites().site(cold.site()).harvestLineage().orElseThrow();
         assertEquals(ResourceSitePhase.GROWING, state.resourceSites().site(cold.site()).phase());
         assertEquals(64, state.inventory().items().get(after.outputItemId()).count());
-        assertEquals(PhysicalIntentStatus.PREPARED, state.physicalIntents().get(after.predecessorIntentId()).status());
+        assertFalse(state.physicalIntents().containsKey(after.predecessorIntentId()),
+                "terminal COLD composition cannot retain an unowned PREPARED intent into a later harvest epoch");
         assertTrue(state.inventory().items().containsKey(after.outputItemId()),
                 "the final COLD cursor has one canonical output without a HOT-only boundary");
     }
 
     @Test
-    void terminalHarvestReceiptCancelsItsExactColdContinuationAndARecoveredObsoleteActionIsConsumed() {
+    void terminalColdCompositionCancelsItsExactContinuationAndARecoveredObsoleteActionIsConsumed() {
         ColdHarvest cold = coldHarvestAfterSteps(125L, 0);
         ResourceSiteHarvestJob job = cold.job();
         FrontierWorldState completed = completeHarvestWork(cold.state(), cold.site(), job);
-        PhysicalIntent intent = completed.physicalIntents().get(job.intentId());
-        ExactItemStack output = new ExactItemStack(job.outputItemId(), new SubjectId("settlement:1"), "minecraft:wheat", 64, job.outputSlot());
-        PhysicalIntentTransition confirmed = new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.CONFIRMED,
-                Optional.of(receipt(intent, job, output)));
+        assertFalse(completed.physicalIntents().containsKey(job.intentId()),
+                "the canonical COLD output fences its old physical intent before the successor lifecycle can replace it");
 
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> obsolete = ResourceSiteHarvestProcess.planColdProgress(
                 completed,
