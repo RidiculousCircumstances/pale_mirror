@@ -165,11 +165,18 @@ public final class ResourceSiteHarvestProcess {
      */
     public static List<ProposedEvent> planColdProgress(FrontierWorldState state, ScheduledAction action) {
         ResourceSiteHarvestJob job = activeJob(state, action.subject());
-        // A terminal HOT receipt retires its recurrent continuation by stable schedule identity.
-        // Older/recovered tails can still carry that now-obsolete action, though; consume it as
-        // a bounded no-op rather than treating a completed job as an engine-wide invariant
-        // failure.  A foreign action still has no authority to change this aggregate.
-        if (job == null) return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Consumed(action.id())));
+        // A terminal receipt retires its recurrent continuation by stable schedule identity.
+        // Recovery can still encounter that exact, already-retired action in a pre-transition
+        // checkpoint/WAL seam.  It is a bounded terminal disposition only when the owning
+        // lifecycle retains the resolved predecessor lineage.  Do not turn an arbitrary absent
+        // job into a harmless no-op: an unknown durable action is a temporal referential-
+        // integrity violation and must retain the kernel's fail-closed boundary.
+        if (job == null) {
+            if (!retiredContinuation(state, action)) {
+                throw new IllegalArgumentException("resource-site harvest continuation has no active owner or resolved terminal disposition");
+            }
+            return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Consumed(action.id())));
+        }
         if (!action.id().equals(coldProgress(job, action.dueAt().ticks()).id())) return List.of();
         // A player-admitted conflict retains this job only as terminal causal evidence.  Its
         // already-durable COLD action must be consumed without a successor; otherwise a stale
@@ -489,6 +496,20 @@ public final class ResourceSiteHarvestProcess {
         return state.resourceSites().sites().values().stream().map(ResourceSiteLifecycle::activeWork).flatMap(java.util.Optional::stream)
                 .filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
                 .filter(job -> job.id().equals(jobId)).findFirst().orElse(null);
+    }
+
+    /**
+     * Accepts only a recoverable tail for the exact terminal owner that atomically retired it.
+     * The renewable site retains one bounded predecessor lineage; once a later epoch replaces
+     * that lineage, an older action is no longer classified and therefore fails closed.
+     */
+    private static boolean retiredContinuation(FrontierWorldState state, ScheduledAction action) {
+        if (!COLD_PROGRESS_KIND.equals(action.kind()) || action.priority() != 0 || action.weight() != 1) return false;
+        return state.resourceSites().sites().values().stream().map(ResourceSiteLifecycle::harvestLineage)
+                .flatMap(java.util.Optional::stream)
+                .filter(lineage -> lineage.outputReceiptResolved() && lineage.predecessorJobId().equals(action.subject()))
+                .anyMatch(lineage -> action.id().value().equals("schedule:resource-site-harvest-cold-progress-"
+                        + lineage.predecessorJobId().value().substring("job:".length())));
     }
 
     /**
