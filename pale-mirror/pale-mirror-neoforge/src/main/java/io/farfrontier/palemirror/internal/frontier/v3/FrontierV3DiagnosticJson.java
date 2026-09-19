@@ -21,6 +21,9 @@ import io.farfrontier.palemirror.frontier.v3.model.HumanAssignment;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSettlementWorkDiagnostic;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierMarketOrderDiagnostic;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.DiagnosticIncident;
+import io.farfrontier.palemirror.frontier.v3.model.DiagnosticSubject;
+import io.farfrontier.palemirror.frontier.v3.model.DiagnosticSubjectKind;
 import io.farfrontier.palemirror.frontier.v3.process.HivePerceptionProcess;
 import io.farfrontier.palemirror.frontier.v3.process.SettlementProvisionProcess;
 import io.farfrontier.palemirror.frontier.v3.model.HiveNutrientReceipt;
@@ -227,10 +230,10 @@ final class FrontierV3DiagnosticJson {
     }
 
     private static String summary(CheckpointImage checkpoint, FrontierWorldState state) {
-        long retainedConflicts = state.resourceSites().sites().values().stream()
-                .filter(site -> site.conflictDisposition().isPresent()).count();
-        long custodyDiagnostics = state.replicaCustody().diagnostics().size();
-        String verdict = retainedConflicts == 0 && state.inventory().conflicts().isEmpty() && custodyDiagnostics == 0 ? "green" : "blocked";
+        long retainedConflicts = state.diagnosticIncidents().incidents().values().stream().filter(DiagnosticIncident::awaitingReview).count();
+        long custodyDiagnostics = state.diagnosticIncidents().incidents().values().stream().filter(value -> value.diagnostic().owner().kind()
+                == io.farfrontier.palemirror.frontier.v3.model.DiagnosticOwnerKind.REPLICA_CUSTODY).count();
+        String verdict = retainedConflicts == 0 ? "green" : "blocked";
         return base("summary", "", checkpoint)
                 + ",\"status\":\"ok\",\"diagnosticVerdict\":\"" + verdict + "\",\"requiredConflicts\":" + retainedConflicts
                 + ",\"settlements\":" + state.bootstrap().settlements().size()
@@ -243,7 +246,9 @@ final class FrontierV3DiagnosticJson {
                 + ",\"sceneLeases\":" + state.sceneLeases().size()
                 + ",\"items\":" + state.inventory().items().size()
                 + ",\"inventoryConflicts\":" + state.inventory().conflicts().size()
-                + ",\"replicaCustodyDiagnostics\":" + custodyDiagnostics + "}";
+                + ",\"replicaCustodyDiagnostics\":" + custodyDiagnostics
+                + ",\"incidentIndexSize\":" + state.diagnosticIncidents().incidents().size()
+                + ",\"optionalDiagnosticDrops\":" + state.diagnosticIncidents().droppedOptional() + "}";
     }
 
     /** One bounded composition account; all counts are derived from canonical state. */
@@ -408,34 +413,32 @@ final class FrontierV3DiagnosticJson {
                 + ",\"traceCorrelation\":\"" + quote(incident.traceCorrelation()) + "\"}}";
     }
 
-    /** A read-only exact-subject causal account; it does not search for a substitute owner. */
+    /** A read-only typed-subject causal account; the caller supplies KIND/id, never an inferred kind. */
     private static String why(String id, CheckpointImage checkpoint, FrontierWorldState state) {
-        SubjectId subject = subject(id).orElse(null);
-        ResourceSiteLifecycle lifecycle = subject == null ? null : state.resourceSites().sites().get(subject);
-        if (lifecycle != null) {
-            String cause = lifecycle.conflictDisposition().map(FrontierV3DiagnosticJson::conflict).orElse("null");
-            return base("why", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(subject.value())
-                    + "\",\"state\":\"" + lifecycle.phase() + "\",\"cause\":" + cause + "}";
-        }
-        var inventory = subject == null ? null : state.inventory().conflicts().get(subject);
-        if (inventory != null) return base("why", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(inventory.containerId().value())
-                + "\",\"state\":\"RECONCILIATION_CONFLICT\",\"cause\":" + diagnostic(inventory.diagnostic()) + "}";
-        var custody = subject == null ? null : state.replicaCustody().diagnostics().get(subject);
-        if (custody == null) return unavailable("why", id, checkpoint, "not_found");
-        return base("why", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(custody.owner().id().value())
-                + "\",\"state\":\"" + custody.category() + "\",\"cause\":" + diagnostic(custody) + "}";
+        Optional<DiagnosticSubject> subject = typedSubject(id);
+        if (subject.isEmpty()) return unavailable("why", id, checkpoint, "typed_subject_required");
+        return state.diagnosticIncidents().why(subject.orElseThrow()).map(value -> base("why", id, checkpoint)
+                + ",\"status\":\"ok\",\"incident\":" + incident(value) + "}")
+                .orElseGet(() -> unavailable("why", id, checkpoint, "not_found"));
     }
 
-    /** Incident identity is retained by its canonical owner; this bounded lookup reads no chunks or mutable state. */
+    /** Exact persisted incident lookup; this bounded lookup reads no chunks or mutable state. */
     private static String incident(String id, CheckpointImage checkpoint, FrontierWorldState state) {
-        var value = state.resourceSites().sites().values().stream().flatMap(site -> site.conflictDisposition().stream())
-                .filter(disposition -> disposition.incident().id().equals(id)).findFirst();
-        if (value.isPresent()) return base("incident", id, checkpoint) + ",\"status\":\"ok\",\"cause\":" + conflict(value.orElseThrow()) + "}";
-        var inventory = subject(id).map(state.inventory().conflicts()::get).orElse(null);
-        if (inventory != null) return base("incident", id, checkpoint) + ",\"status\":\"ok\",\"cause\":" + diagnostic(inventory.diagnostic()) + "}";
-        var custody = subject(id).map(state.replicaCustody().diagnostics()::get).orElse(null);
-        if (custody == null) return unavailable("incident", id, checkpoint, "not_found");
-        return base("incident", id, checkpoint) + ",\"status\":\"ok\",\"cause\":" + diagnostic(custody) + "}";
+        return state.diagnosticIncidents().incident(id).map(value -> base("incident", id, checkpoint)
+                + ",\"status\":\"ok\",\"incident\":" + incident(value) + "}")
+                .orElseGet(() -> unavailable("incident", id, checkpoint, "not_found"));
+    }
+
+    private static Optional<DiagnosticSubject> typedSubject(String value) {
+        int delimiter = value.indexOf('/'); if (delimiter <= 0 || delimiter == value.length() - 1) return Optional.empty();
+        try { return Optional.of(new DiagnosticSubject(DiagnosticSubjectKind.valueOf(value.substring(0, delimiter)), new SubjectId(value.substring(delimiter + 1)))); }
+        catch (IllegalArgumentException invalid) { return Optional.empty(); }
+    }
+    private static String incident(DiagnosticIncident value) {
+        return "{\"id\":\"" + quote(value.id()) + "\",\"firstEvent\":\"" + quote(value.firstEventId())
+                + "\",\"firstCause\":\"" + quote(value.firstCauseId()) + "\",\"firstRevision\":" + value.firstRevision()
+                + ",\"lastRevision\":" + value.lastRevision() + ",\"occurrences\":" + value.occurrences()
+                + ",\"awaitingReview\":" + value.awaitingReview() + ",\"diagnostic\":" + diagnostic(value.diagnostic()) + "}";
     }
 
     private static String diagnostic(io.farfrontier.palemirror.frontier.v3.model.DiagnosticTuple value) {

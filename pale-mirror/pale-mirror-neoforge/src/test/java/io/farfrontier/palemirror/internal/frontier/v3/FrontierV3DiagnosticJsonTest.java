@@ -69,13 +69,15 @@ class FrontierV3DiagnosticJsonTest {
         SubjectId item = new SubjectId("item:bootstrap-1-engineering-tool-1");
         var slot = (InventoryCustody.ContainerSlot) baseline.inventory().items().get(item).custody();
         SubjectId incident = new SubjectId("conflict:diagnostic-player-custody");
-        FrontierWorldState conflicted = baseline.withInventory(baseline.inventory().recordConflict(
-                io.farfrontier.palemirror.frontier.v3.model.InventoryDiagnosticProducer.PLAYER_EXPECTED_SLOT_MISSING
-                        .create(incident, item, slot.containerId(), slot.slot())));
+        var conflict = io.farfrontier.palemirror.frontier.v3.model.InventoryDiagnosticProducer.PLAYER_EXPECTED_SLOT_MISSING
+                .create(incident, item, slot.containerId(), slot.slot());
+        var tuple = conflict.diagnostic();
+        FrontierWorldState conflicted = baseline.withInventory(baseline.inventory().recordConflict(conflict)).withDiagnosticIncidents(
+                baseline.diagnosticIncidents().retain(tuple, "event:fixture", "command:fixture", 4, 0));
         CheckpointImage checkpoint = new CheckpointImage(configuration.worldId(), new io.farfrontier.palemirror.frontier.v3.api.Revision(4L),
                 SimInstant.ZERO, new byte[]{1}, List.of(), List.of());
-        String why = FrontierV3DiagnosticJson.render("why", incident.value(), checkpoint, conflicted, Optional.empty());
-        String retained = FrontierV3DiagnosticJson.render("incident", incident.value(), checkpoint, conflicted, Optional.empty());
+        String why = FrontierV3DiagnosticJson.render("why", "INVENTORY_SLOT/" + incident.value(), checkpoint, conflicted, Optional.empty());
+        String retained = FrontierV3DiagnosticJson.render("incident", io.farfrontier.palemirror.frontier.v3.model.DiagnosticIncident.idFor(tuple), checkpoint, conflicted, Optional.empty());
         String summary = FrontierV3DiagnosticJson.render("summary", "", checkpoint, conflicted, Optional.empty());
         assertTrue(why.contains("\"reason\":\"INVENTORY_CONFLICT\"") && why.contains("\"owner\":\"" + slot.containerId().value()));
         assertTrue(retained.contains("\"subject\":\"" + incident.value()) && retained.contains("\"disposition\":\"INSPECT\""));
@@ -157,6 +159,8 @@ class FrontierV3DiagnosticJsonTest {
         var conflict = new io.farfrontier.palemirror.frontier.v3.model.ResourceSiteConflictObserved(siteId, site.cropSlots().getFirst(),
                 io.farfrontier.palemirror.frontier.v3.model.ResourceSiteDiagnosticProducer.ORDINARY_OBSERVATION_MISMATCH);
         FrontierWorldState conflicted = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteProcess.reduceConflict(initial, siteId, conflict);
+        String retainedId = conflicted.resourceSites().site(siteId).conflictDisposition().orElseThrow().incident().id();
+        conflicted = conflicted.withDiagnosticIncidents(conflicted.diagnosticIncidents().retain(retainedId, conflict.diagnostic(), "event:fixture", "command:fixture", 4, 9));
         CheckpointImage checkpoint = new CheckpointImage(configuration.worldId(), new io.farfrontier.palemirror.frontier.v3.api.Revision(4L),
                 new SimInstant(9L), new byte[] {1}, List.of(), List.of());
 
@@ -177,7 +181,7 @@ class FrontierV3DiagnosticJsonTest {
                 conflicted, Optional.empty());
         assertTrue(restartTrace.contains("\"status\":\"trace_incomplete\"") && restartTrace.contains("\"history\":\"compacted_or_restart_local\""),
                 "after volatile detail is gone, the persisted canonical incident remains queryable and explicitly incomplete");
-        assertTrue(FrontierV3DiagnosticJson.render("why", siteId.value(), checkpoint, conflicted, Optional.empty())
+        assertTrue(FrontierV3DiagnosticJson.render("why", "RESOURCE_SITE_CELL/" + siteId.value(), checkpoint, conflicted, Optional.empty())
                         .contains("\"owner\":\"" + siteId.value() + "\""),
                 "why reads the exact supplied subject instead of discovering another owner");
         assertTrue(FrontierV3DiagnosticJson.render("incident", incident.get("id").getAsString(), checkpoint, conflicted, Optional.empty())

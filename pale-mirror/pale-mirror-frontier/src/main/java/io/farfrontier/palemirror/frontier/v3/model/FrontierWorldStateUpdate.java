@@ -48,7 +48,8 @@ public final class FrontierWorldStateUpdate {
         RESOURCE_SITES,
         REPLICA_CUSTODY,
         DEFERRED_AFTERMATH,
-        FENCED_RECOVERY
+        FENCED_RECOVERY,
+        DIAGNOSTIC_INCIDENTS
     }
 
     private final EnumSet<Component> changed = EnumSet.noneOf(Component.class);
@@ -78,6 +79,7 @@ public final class FrontierWorldStateUpdate {
     private PhysicalReplicaCustodyState replicaCustody;
     private DeferredAftermathState deferredAftermath;
     private FencedRecoveryState fencedRecovery;
+    private DiagnosticIncidentIndex diagnosticIncidents;
 
     private FrontierWorldStateUpdate() { }
 
@@ -163,6 +165,9 @@ public final class FrontierWorldStateUpdate {
     public FrontierWorldStateUpdate fencedRecovery(FencedRecoveryState next) {
         mark(Component.FENCED_RECOVERY); fencedRecovery = require(next, "fenced recovery"); return this;
     }
+    public FrontierWorldStateUpdate diagnosticIncidents(DiagnosticIncidentIndex next) {
+        mark(Component.DIAGNOSTIC_INCIDENTS); diagnosticIncidents = require(next, "diagnostic incidents"); return this;
+    }
 
     Map<SubjectId, ActorLocation> actorLocations(FrontierWorldState state) { return changed(Component.ACTOR_LOCATIONS, actorLocations, state.actorLocations()); }
     Map<SubjectId, StructureCondition> structureConditions(FrontierWorldState state) { return changed(Component.STRUCTURE_CONDITIONS, structureConditions, state.structureConditions()); }
@@ -190,6 +195,7 @@ public final class FrontierWorldStateUpdate {
     PhysicalReplicaCustodyState replicaCustody(FrontierWorldState state) { return changed(Component.REPLICA_CUSTODY, replicaCustody, state.replicaCustody()); }
     DeferredAftermathState deferredAftermath(FrontierWorldState state) { return changed(Component.DEFERRED_AFTERMATH, deferredAftermath, state.deferredAftermath()); }
     FencedRecoveryState fencedRecovery(FrontierWorldState state) { return changed(Component.FENCED_RECOVERY, fencedRecovery, state.fencedRecovery()); }
+    DiagnosticIncidentIndex diagnosticIncidents(FrontierWorldState state) { return changed(Component.DIAGNOSTIC_INCIDENTS, diagnosticIncidents, state.diagnosticIncidents()); }
 
     private void mark(Component component) {
         if (!changed.add(component)) throw new IllegalStateException("state component is specified more than once: " + component);

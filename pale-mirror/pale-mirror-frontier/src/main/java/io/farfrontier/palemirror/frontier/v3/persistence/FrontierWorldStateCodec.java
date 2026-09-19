@@ -10,7 +10,7 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 171; private static final int MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 172; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -40,6 +40,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 writeReplicaCustody(output, state.replicaCustody());
                 DeferredAftermathStateCodec.write(output, state.deferredAftermath());
                 FencedRecoveryStateCodec.write(output, state.fencedRecovery());
+                DiagnosticIncidentIndexCodec.write(output, state.diagnosticIncidents());
                 ProductionJobStateCodec.write(output, state.productionJobs());
                 SettlementServiceWorkStateCodec.write(output, state.serviceWorks());
                 writeContracts(output, state.contracts());
@@ -82,6 +83,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             ExactInventory inventory = readInventory(input, economics); PhysicalReplicaCustodyState replicaCustody = readReplicaCustody(input);
             DeferredAftermathState deferredAftermath = DeferredAftermathStateCodec.read(input);
             FencedRecoveryState fencedRecovery = FencedRecoveryStateCodec.read(input);
+            DiagnosticIncidentIndex diagnosticIncidents = DiagnosticIncidentIndexCodec.read(input);
             Map<SubjectId, ProductionJob> jobs = ProductionJobStateCodec.read(input, true);
             Map<SubjectId, SettlementServiceWork> serviceWorks = SettlementServiceWorkStateCodec.read(input);
             Map<SubjectId, SupplyContract> contracts = readContracts(input); Map<SubjectId, RouteOperation> operations = readOperations(input, true, true, true, true, true, true, true);
@@ -97,7 +99,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             HumanPopulation population = HumanPopulationStateCodec.read(input, true, true, true, true, true, true, true);
             ResourceSiteState sites = ResourceSiteStateCodec.read(input);
             FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, inventory, jobs, serviceWorks, contracts, operations, history,
-                    intents, observations, scenes, colony, structureDamage, physicalDeltas, ambient, constructions, maintenances, topology, plans, population, companies, sites, replicaCustody, deferredAftermath, fencedRecovery);
+                    intents, observations, scenes, colony, structureDamage, physicalDeltas, ambient, constructions, maintenances, topology, plans, population, companies, sites, replicaCustody, deferredAftermath, fencedRecovery, diagnosticIncidents);
             if (input.available() != 0) throw new IllegalArgumentException("trailing Frontier v3 state bytes");
             FrontierWorldProcessCatalog.requirePhysicalLifecycleState(state);
             FrontierDomainRelationships.validate(state);

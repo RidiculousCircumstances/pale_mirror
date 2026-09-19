@@ -50,15 +50,16 @@ final class FrontierV3DiagnosticExecutorJson {
 
     static String trace(String id, CheckpointImage checkpoint, FrontierWorldState state, Optional<FrontierV3DiagnosticTrace.Entry> trace) {
         if (trace.isEmpty()) {
-            var incident = state.resourceSites().sites().values().stream().flatMap(site -> site.conflictDisposition().stream())
-                    .map(disposition -> disposition.incident()).filter(value -> value.traceCorrelation().equals(id)).findFirst();
+            String incidentId = id.startsWith("conflict:") ? id.substring("conflict:".length()) : id;
+            var incident = state.diagnosticIncidents().incident(incidentId);
             if (incident.isEmpty()) return FrontierV3DiagnosticJson.unavailable("trace", id, checkpoint, "not_found");
             var value = incident.orElseThrow();
             return FrontierV3DiagnosticJson.base("trace", id, checkpoint) + ",\"status\":\"trace_incomplete\",\"correlation\":\""
-                    + FrontierV3DiagnosticJson.quote(value.traceCorrelation()) + "\",\"reason\":\"" + FrontierV3DiagnosticJson.quote(value.reason())
-                    + "\",\"category\":\"" + value.category() + "\",\"owner\":\"" + FrontierV3DiagnosticJson.quote(value.ownerId().value())
-                    + "\",\"subject\":\"" + FrontierV3DiagnosticJson.quote(value.subjectId().value()) + "\",\"disposition\":\""
-                    + FrontierV3DiagnosticJson.quote(value.disposition()) + "\",\"history\":\"compacted_or_restart_local\"}";
+                    + FrontierV3DiagnosticJson.quote(id) + "\",\"reason\":\"" + FrontierV3DiagnosticJson.quote(value.diagnostic().reason().name())
+                    + "\",\"category\":\"" + value.diagnostic().category() + "\",\"owner\":\"" + FrontierV3DiagnosticJson.quote(value.diagnostic().owner().id().value())
+                    + "\",\"subject\":\"" + FrontierV3DiagnosticJson.quote(value.diagnostic().subject().id().value()) + "\",\"disposition\":\""
+                    + FrontierV3DiagnosticJson.quote(value.diagnostic().disposition().name()) + "\",\"firstCause\":\"" + FrontierV3DiagnosticJson.quote(value.firstCauseId())
+                    + "\",\"history\":\"compacted_or_restart_local\"}";
         }
         FrontierV3DiagnosticTrace.Entry entry = trace.orElseThrow();
         return FrontierV3DiagnosticJson.base("trace", id, checkpoint) + ",\"status\":\"ok\",\"correlation\":\""
