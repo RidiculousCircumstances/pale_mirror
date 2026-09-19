@@ -255,14 +255,16 @@ public final class FrontierV3ServerLifecycle {
         ServerLevel physicalWorld = FrontierV3PhysicalWorld.require(server);
         FrontierV3PerformanceMetrics metrics = new FrontierV3PerformanceMetrics();
         FrontierFileStore store = new FrontierFileStore(server.getWorldPath(LevelResource.ROOT), FrontierWorldRuntimeDefinition.payloadCodecs());
+        // The NeoForge host, not the reducer, supplies actual build/artifact/session provenance.
+        var diagnosticIdentity = FrontierV3DiagnosticRuntimeIdentity.openServerSession();
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime;
         try {
             RecoveryImage recovery = store.recover(configuration.worldId());
             configuration = FrontierWorldRecoveryConfiguration.select(configuration,
                     recovery.checkpoint().map(io.farfrontier.palemirror.frontier.v3.persistence.SnapshotRecord::checkpoint));
-            runtime = FrontierV3ServerRuntime.startRecovered(configuration.withExecutionMetrics(metrics), store, recovery, 200);
+            runtime = FrontierV3ServerRuntime.startRecovered(configuration.withExecutionMetrics(metrics), store, recovery, 200, diagnosticIdentity);
         } catch (RuntimeException error) {
-            runtime = FrontierV3ServerRuntime.failedStart(configuration.withExecutionMetrics(metrics), store, 200, error);
+            runtime = FrontierV3ServerRuntime.failedStart(configuration.withExecutionMetrics(metrics), store, 200, error, diagnosticIdentity);
         }
         RUNTIMES.put(server, runtime);
         if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE && Boolean.getBoolean(PILOT_INITIAL_CANONICAL_HOLD_PROPERTY)) {

@@ -119,8 +119,10 @@ class FrontierV3ServerRuntimeTest {
         WorldId world = new WorldId("frontier:resource-site-conflict-runtime-restart");
         FrontierStore store = new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs());
         var configuration = FrontierWorldRuntimeDefinition.configuration(world, 91L);
+        var firstHostSession = new io.farfrontier.palemirror.frontier.v3.model.DiagnosticRuntimeIdentity(
+                "neoforge", "tree:runtime-carrier", "sha256:runtime-carrier", "server-session:first");
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
-                FrontierV3ServerRuntime.start(configuration, store, 10_000);
+                FrontierV3ServerRuntime.start(configuration, store, 10_000, firstHostSession);
         FrontierWorldState initial = worldState(runtime);
         SubjectId site = new SubjectId("site:1-wheat-field");
         BlockPosition crop = io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSitePlan.compile(initial.bootstrap())
@@ -130,12 +132,21 @@ class FrontierV3ServerRuntimeTest {
         var first = worldState(runtime).resourceSites().site(site).conflictDisposition().orElseThrow().incident();
         assertEquals("incident:resource-site:1-wheat-field", first.id());
         assertEquals("PLAYER_WORLD_OBSERVATION", first.source());
+        var firstContext = worldState(runtime).diagnosticIncidents().why(first.diagnostic().subject()).orElseThrow().context();
+        assertTrue(firstContext.complete(), "the server-runtime reducer boundary carries supplied host provenance");
+        assertEquals(firstHostSession.sourceTree(), firstContext.sourceTree());
+        assertEquals(firstHostSession.jar(), firstContext.jar());
+        assertEquals(firstHostSession.restartIdentity(), firstContext.restartIdentity());
         runtime.shutdown();
 
+        var recoveredHostSession = new io.farfrontier.palemirror.frontier.v3.model.DiagnosticRuntimeIdentity(
+                "neoforge", "tree:runtime-carrier", "sha256:runtime-carrier", "server-session:recovered");
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> recovered =
-                FrontierV3ServerRuntime.start(configuration, store, 10_000);
+                FrontierV3ServerRuntime.start(configuration, store, 10_000, recoveredHostSession);
         assertEquals(first, worldState(recovered).resourceSites().site(site).conflictDisposition().orElseThrow().incident(),
                 "the runtime WAL recovery retains the first accepted canonical source and trace join");
+        assertEquals(firstContext, worldState(recovered).diagnosticIncidents().why(first.diagnostic().subject()).orElseThrow().context(),
+                "persisted bundle provenance remains the original factual server session after restart");
         recovered.shutdown();
     }
 

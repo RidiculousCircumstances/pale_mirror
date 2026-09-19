@@ -18,6 +18,8 @@ import io.farfrontier.palemirror.frontier.v3.persistence.FrontierStore;
 import io.farfrontier.palemirror.frontier.v3.persistence.RecoveryImage;
 import io.farfrontier.palemirror.frontier.v3.persistence.SnapshotReceipt;
 import io.farfrontier.palemirror.frontier.v3.persistence.SnapshotRecord;
+import io.farfrontier.palemirror.frontier.v3.model.DiagnosticCaptureScope;
+import io.farfrontier.palemirror.frontier.v3.model.DiagnosticRuntimeIdentity;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -33,6 +35,8 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     private final FrontierEngineConfiguration<S, P> configuration;
     private final FrontierStore store;
     private final int checkpointIntervalTicks;
+    /** Explicit host-owned identity, deliberately carried across every reducer entry. */
+    private final DiagnosticRuntimeIdentity diagnosticRuntimeIdentity;
     private FrontierCanonicalStateAccess<S, P> engine;
     private FrontierV3RuntimeStatus status;
     private SimInstant instant;
@@ -46,11 +50,12 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
 
     private FrontierV3ServerRuntime(
             FrontierEngineConfiguration<S, P> configuration, FrontierStore store, TransactionCommitter committer, int checkpointIntervalTicks, RecoveryImage recovered,
-            RuntimeException startupFailure
+            RuntimeException startupFailure, DiagnosticRuntimeIdentity diagnosticRuntimeIdentity
     ) {
         this.configuration = Objects.requireNonNull(configuration, "configuration")
                 .withTransactionCommitter(Objects.requireNonNull(committer, "transaction committer"));
         this.store = Objects.requireNonNull(store, "store");
+        this.diagnosticRuntimeIdentity = Objects.requireNonNull(diagnosticRuntimeIdentity, "diagnostic runtime identity");
         if (checkpointIntervalTicks < 1) throw new IllegalArgumentException("checkpoint interval must be positive");
         this.checkpointIntervalTicks = checkpointIntervalTicks;
         if (startupFailure != null) {
@@ -60,9 +65,11 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
         try {
             RecoveryImage image = recovered == null ? store.recover(configuration.worldId()) : recovered;
             if (!configuration.worldId().equals(image.worldId())) throw new IllegalArgumentException("recovery image belongs to a different Frontier world");
-            engine = image.checkpoint().isEmpty() && image.walTail().isEmpty()
-                    ? FrontierEngines.createCanonicalStateAccess(this.configuration)
-                    : FrontierEngines.recoverCanonicalStateAccess(this.configuration, image);
+            try (DiagnosticCaptureScope ignored = DiagnosticCaptureScope.open(diagnosticRuntimeIdentity)) {
+                engine = image.checkpoint().isEmpty() && image.walTail().isEmpty()
+                        ? FrontierEngines.createCanonicalStateAccess(this.configuration)
+                        : FrontierEngines.recoverCanonicalStateAccess(this.configuration, image);
+            }
             cachedCheckpoint = engine.checkpoint();
             instant = cachedCheckpoint.instant();
             status = FrontierV3RuntimeStatus.active();
@@ -74,22 +81,42 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     static <S, P extends FrontierProjection> FrontierV3ServerRuntime<S, P> start(
             FrontierEngineConfiguration<S, P> configuration, FrontierStore store, int checkpointIntervalTicks
     ) {
-        return new FrontierV3ServerRuntime<>(configuration, store, new FrontierStoreTransactionCommitter(store), checkpointIntervalTicks, null, null);
+        return start(configuration, store, checkpointIntervalTicks, DiagnosticRuntimeIdentity.unavailable());
+    }
+
+    /** Host composition must pass a factual identity; unscoped fixture callers remain visibly degraded. */
+    static <S, P extends FrontierProjection> FrontierV3ServerRuntime<S, P> start(
+            FrontierEngineConfiguration<S, P> configuration, FrontierStore store, int checkpointIntervalTicks, DiagnosticRuntimeIdentity identity
+    ) {
+        return new FrontierV3ServerRuntime<>(configuration, store, new FrontierStoreTransactionCommitter(store), checkpointIntervalTicks, null, null, identity);
     }
 
     /** Starts from one already-verified recovery image, avoiding a second store read after profile selection. */
     static <S, P extends FrontierProjection> FrontierV3ServerRuntime<S, P> startRecovered(
             FrontierEngineConfiguration<S, P> configuration, FrontierStore store, RecoveryImage recovered, int checkpointIntervalTicks
     ) {
+        return startRecovered(configuration, store, recovered, checkpointIntervalTicks, DiagnosticRuntimeIdentity.unavailable());
+    }
+
+    static <S, P extends FrontierProjection> FrontierV3ServerRuntime<S, P> startRecovered(
+            FrontierEngineConfiguration<S, P> configuration, FrontierStore store, RecoveryImage recovered, int checkpointIntervalTicks, DiagnosticRuntimeIdentity identity
+    ) {
         return new FrontierV3ServerRuntime<>(configuration, store, new FrontierStoreTransactionCommitter(store), checkpointIntervalTicks,
-                Objects.requireNonNull(recovered, "recovered image"), null);
+                Objects.requireNonNull(recovered, "recovered image"), null, identity);
     }
 
     /** Preserves visible fail-closed lifecycle state when recovery selection itself is invalid. */
     static <S, P extends FrontierProjection> FrontierV3ServerRuntime<S, P> failedStart(
             FrontierEngineConfiguration<S, P> configuration, FrontierStore store, int checkpointIntervalTicks, RuntimeException failure
     ) {
-        return new FrontierV3ServerRuntime<>(configuration, store, new FrontierStoreTransactionCommitter(store), checkpointIntervalTicks, null, Objects.requireNonNull(failure, "startup failure"));
+        return failedStart(configuration, store, checkpointIntervalTicks, failure, DiagnosticRuntimeIdentity.unavailable());
+    }
+
+    static <S, P extends FrontierProjection> FrontierV3ServerRuntime<S, P> failedStart(
+            FrontierEngineConfiguration<S, P> configuration, FrontierStore store, int checkpointIntervalTicks, RuntimeException failure, DiagnosticRuntimeIdentity identity
+    ) {
+        return new FrontierV3ServerRuntime<>(configuration, store, new FrontierStoreTransactionCommitter(store), checkpointIntervalTicks, null,
+                Objects.requireNonNull(failure, "startup failure"), identity);
     }
 
     FrontierV3RuntimeStatus status() { return status; }
@@ -127,7 +154,10 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     Optional<CommandResult> submit(FrontierCommand command) {
         Objects.requireNonNull(command, "command");
         if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return Optional.empty();
-        CommandResult result = engine.submit(command);
+        CommandResult result;
+        try (DiagnosticCaptureScope ignored = DiagnosticCaptureScope.open(diagnosticRuntimeIdentity)) {
+            result = engine.submit(command);
+        }
         // Even a rejected command may have quarantined the engine.  Discarding a read-only
         // image is harmless; successful commands must never leave a stale snapshot visible to a
         // later physical executor in the same server tick.
@@ -170,7 +200,10 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
         Objects.requireNonNull(budget, "budget");
         if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return Optional.empty();
         try {
-            AdvanceResult result = engine.advanceTo(instant.plus(1L), budget);
+            AdvanceResult result;
+            try (DiagnosticCaptureScope ignored = DiagnosticCaptureScope.open(diagnosticRuntimeIdentity)) {
+                result = engine.advanceTo(instant.plus(1L), budget);
+            }
             // SimInstant advances even when no due action mutates the aggregate, so each server
             // tick has a distinct immutable checkpoint image for adapter observation.
             cachedCheckpoint = null;

@@ -430,6 +430,15 @@ neoForge.runs.named('frontierV3SceneGameTestServer') {
 }
 
 def generateModMetadata = tasks.register('generateModMetadata', ProcessResources) {
+    // This is a build assertion about the exact source tree that produced this
+    // runtime.  It deliberately does not attempt to rediscover source identity
+    // in the reducer or at server runtime.
+    def sourceTreeIdentity = providers.exec {
+        commandLine 'git', 'rev-parse', 'HEAD^{tree}'
+    }.standardOutput.asText.get().trim()
+    def dirtySourceTree = !providers.exec {
+        commandLine 'git', 'status', '--porcelain', '--untracked-files=all'
+    }.standardOutput.asText.get().trim().isEmpty()
     def properties = [
             minecraft_version_range: rootProject.providers.gradleProperty('minecraft_version_range').get(),
             neo_version            : rootProject.providers.gradleProperty('neo_version').get(),
@@ -437,7 +446,10 @@ def generateModMetadata = tasks.register('generateModMetadata', ProcessResources
             mod_id                 : rootProject.providers.gradleProperty('mod_id').get(),
             mod_name               : rootProject.providers.gradleProperty('mod_name').get(),
             mod_license            : rootProject.providers.gradleProperty('mod_license').get(),
-            mod_version            : rootProject.providers.gradleProperty('mod_version').get()
+            mod_version            : rootProject.providers.gradleProperty('mod_version').get(),
+            // A versioned tree is meaningful only for a clean build.  A dirty development
+            // composition records unavailable instead of pretending that HEAD produced it.
+            source_tree            : dirtySourceTree ? 'unavailable' : sourceTreeIdentity
     ]
     inputs.properties(properties)
     from 'src/main/templates'
@@ -488,9 +500,15 @@ tasks.register('verifyPackagedJar') {
                     'assets/pale_mirror/models/item/regional_ledger.json',
                     'ftb_quests_presentation/chapters/pale_mirror_first_living_region.snbt',
                     'pale_mirror.item_firewall.mixins.json',
-                    'pale_mirror.frontier_v3.mixins.json'
+                    'pale_mirror.frontier_v3.mixins.json',
+                    'META-INF/pale-mirror-runtime-identity.properties'
             ].each { entry ->
                 if (jar.getEntry(entry) == null) throw new GradleException("${jarFile} is missing required PM safety entry ${entry}")
+            }
+            def identity = new Properties()
+            jar.getInputStream(jar.getEntry('META-INF/pale-mirror-runtime-identity.properties')).withCloseable { identity.load(it) }
+            if (identity.getProperty('sourceTree', '').trim().isEmpty()) {
+                throw new GradleException("${jarFile} is missing explicit runtime source-tree provenance")
             }
             if (jar.entries().any { entry -> entry.name.startsWith('journeymap/') }) {
                 throw new GradleException("${jarFile} must not package JourneyMap API classes")
