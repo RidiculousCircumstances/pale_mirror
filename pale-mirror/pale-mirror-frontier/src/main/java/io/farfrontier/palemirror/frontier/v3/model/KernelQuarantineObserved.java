@@ -12,6 +12,7 @@ public record KernelQuarantineObserved(SubjectId frontierId, Producer producer, 
         DUE_TRANSACTION(DiagnosticReason.FRONTIER_KERNEL_DUE_FAILURE);
         private final DiagnosticReason reason;
         Producer(DiagnosticReason reason) { this.reason = reason; }
+        public DiagnosticReason diagnosticReason() { return reason; }
         public DiagnosticTuple stamp(SubjectId frontierId) { return new DiagnosticTuple(reason, reason.category(),
                 new DiagnosticOwner(DiagnosticOwnerKind.FRONTIER_INSTANCE, frontierId),
                 new DiagnosticSubject(DiagnosticSubjectKind.FRONTIER_INSTANCE, frontierId), reason.disposition()); }

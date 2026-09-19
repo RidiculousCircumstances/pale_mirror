@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.frontier.v3.persistence;
 
 import io.farfrontier.palemirror.frontier.v3.kernel.KernelPayloadCodecs;
 import io.farfrontier.palemirror.frontier.v3.kernel.PayloadCodecs;
+import io.farfrontier.palemirror.frontier.v3.model.DiagnosticProducerContract;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -20,7 +21,9 @@ public final class FrontierWorldProcessCodecs {
     private FrontierWorldProcessCodecs() { }
 
     public static PayloadCodecs create() {
-        return PayloadCodecs.merge(BY_PROCESS.values().toArray(PayloadCodecs[]::new));
+        PayloadCodecs codecs = PayloadCodecs.merge(BY_PROCESS.values().toArray(PayloadCodecs[]::new));
+        DiagnosticProducerContract.requireCompleteInventory(codecs);
+        return codecs;
     }
 
     public static Map<String, Set<String>> typesByProcess() {

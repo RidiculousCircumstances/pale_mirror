@@ -10,16 +10,7 @@ public final class DiagnosticIncidentExtractor {
     private DiagnosticIncidentExtractor() { }
     /** Closed mechanically-auditable Frontier event inventory; legacy quarantine owns its own SavedData entry. */
     public static Set<DiagnosticReason> retainedReasons() {
-        EnumSet<DiagnosticReason> values = EnumSet.noneOf(DiagnosticReason.class);
-        for (ResourceSiteDiagnosticProducer producer : ResourceSiteDiagnosticProducer.values()) values.add(producer.diagnosticReason());
-        values.addAll(Set.of(DiagnosticReason.HIVE_GROWTH_BLOCKED, DiagnosticReason.HIVE_MOBILIZATION_CONFLICT,
-                DiagnosticReason.HIVE_NUTRIENT_BLOCKED, DiagnosticReason.ROUTE_PATROL_BLOCKED, DiagnosticReason.PRODUCTION_BLOCKED,
-                DiagnosticReason.RESIDENT_MIGRATION_BLOCKED, DiagnosticReason.OPERATION_FAILED, DiagnosticReason.SETTLEMENT_PROVISION_CONFLICT,
-                DiagnosticReason.SETTLEMENT_ASSAULT_CONFLICT, DiagnosticReason.INVENTORY_CONFLICT, DiagnosticReason.REPLICA_CUSTODY_CONFLICT,
-                DiagnosticReason.PHYSICAL_CUSTODY_UNRESOLVED, DiagnosticReason.SCENE_LEASE_RECOVERY_UNRESOLVED, DiagnosticReason.ROUTE_PATROL_MEMBER_LOST, DiagnosticReason.FRONTIER_KERNEL_COMMAND_FAILURE,
-                DiagnosticReason.FRONTIER_KERNEL_TRANSACTION_CAPACITY, DiagnosticReason.FRONTIER_KERNEL_DUE_FAILURE,
-                DiagnosticReason.FRONTIER_QUARANTINE));
-        return Set.copyOf(values);
+        return DiagnosticProducerContract.retainedReasons();
     }
     public static Optional<DiagnosticTuple> tuple(FrontierPayload payload) {
         return switch (payload) {
