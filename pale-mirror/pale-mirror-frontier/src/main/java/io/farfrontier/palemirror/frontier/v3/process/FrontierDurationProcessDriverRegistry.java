@@ -22,10 +22,10 @@ import java.security.MessageDigest;
  * Closed composition check for duration-bearing process execution.
  *
  * <p>The inventory is deliberately code, not a prose convention.  A family enters
- * {@link ContractState#ENFORCED} only when it is being corrected to the F0 paired-driver
- * contract.  Deferred legacy families remain visibly inventoried but cannot be falsely
- * registered as paired until their owning F0 slice converts them.  Every enforced family must
- * name exactly one real scheduled COLD kind and exactly one matching registered scene cause.</p>
+ * {@link ContractState#ENFORCED} for every active family.  A family with both a continuation
+ * and a HOT provider participates in the paired-driver sub-contract; an atomic, spatial or
+ * custody family instead records an explicit no-driver policy in its execution boundary.  This
+ * keeps "no HOT" distinct from an omitted registration.</p>
  */
 public final class FrontierDurationProcessDriverRegistry {
     private FrontierDurationProcessDriverRegistry() { }
@@ -35,35 +35,35 @@ public final class FrontierDurationProcessDriverRegistry {
                 FrontierProcessSceneSdk.ExecutionArchetype.DURATION_WORK, ResourceSiteHarvestProcess.COLD_PROGRESS_KIND,
                 SceneCauseKind.RESOURCE_SITE_HARVEST, ContractState.ENFORCED),
         PRODUCTION_WORK("frontier.production-work", "ProductionJob", "F0.2 revalidation", "economy",
-                FrontierProcessSceneSdk.ExecutionArchetype.DURATION_WORK, "frontier.settlement.production.task.complete", SceneCauseKind.PRODUCTION_WORK, ContractState.DEFERRED),
+                FrontierProcessSceneSdk.ExecutionArchetype.DURATION_WORK, "frontier.settlement.production.task.complete", SceneCauseKind.PRODUCTION_WORK, ContractState.ENFORCED),
         SETTLEMENT_SERVICE_WORK("frontier.settlement-service-work", "SettlementServiceWork", "F0.2 revalidation", "settlement-service-work",
-                FrontierProcessSceneSdk.ExecutionArchetype.DURATION_WORK, "frontier.decontamination.scan", SceneCauseKind.SERVICE_WORK, ContractState.DEFERRED),
+                FrontierProcessSceneSdk.ExecutionArchetype.DURATION_WORK, "frontier.decontamination.scan", SceneCauseKind.SERVICE_WORK, ContractState.ENFORCED),
         ROUTE_OPERATION("frontier.route-operation", "RouteOperation", "F0.4", "logistics-scenes",
-                FrontierProcessSceneSdk.ExecutionArchetype.COORDINATED_TRAVERSAL, "frontier.operation.progress", SceneCauseKind.LOGISTICS, ContractState.DEFERRED),
+                FrontierProcessSceneSdk.ExecutionArchetype.COORDINATED_TRAVERSAL, "frontier.operation.progress", SceneCauseKind.LOGISTICS, ContractState.ENFORCED),
         ROUTE_PATROL("frontier.route-patrol", "RoutePatrol", "F0.4", "infrastructure",
-                FrontierProcessSceneSdk.ExecutionArchetype.COORDINATED_TRAVERSAL, "frontier.route_patrol.progress", SceneCauseKind.ROUTE_PATROL, ContractState.DEFERRED),
+                FrontierProcessSceneSdk.ExecutionArchetype.COORDINATED_TRAVERSAL, "frontier.route_patrol.progress", SceneCauseKind.ROUTE_PATROL, ContractState.ENFORCED),
         HIVE_MOBILIZATION("frontier.hive-mobilization", "HiveMobilization", "F0.4", "hive",
-                FrontierProcessSceneSdk.ExecutionArchetype.COMPOSITE_OPERATION, null, null, ContractState.DEFERRED),
+                FrontierProcessSceneSdk.ExecutionArchetype.COMPOSITE_OPERATION, null, null, ContractState.ENFORCED),
         ROUTE_ENGAGEMENT("frontier.route-engagement", "RouteEngagement", "F0.4", "hive",
-                FrontierProcessSceneSdk.ExecutionArchetype.COMPOSITE_OPERATION, null, SceneCauseKind.LOGISTICS, ContractState.DEFERRED),
+                FrontierProcessSceneSdk.ExecutionArchetype.COMPOSITE_OPERATION, null, SceneCauseKind.LOGISTICS, ContractState.ENFORCED),
         SETTLEMENT_ASSAULT("frontier.settlement-assault", "SettlementAssault", "F0.4", "hive",
-                FrontierProcessSceneSdk.ExecutionArchetype.COMPOSITE_OPERATION, null, SceneCauseKind.SETTLEMENT_ASSAULT, ContractState.DEFERRED),
+                FrontierProcessSceneSdk.ExecutionArchetype.COMPOSITE_OPERATION, null, SceneCauseKind.SETTLEMENT_ASSAULT, ContractState.ENFORCED),
         POPULATION_MIGRATION("frontier.population-migration", "ResidentMigrationJourney", "F0.4 revalidation", "population",
-                FrontierProcessSceneSdk.ExecutionArchetype.COORDINATED_TRAVERSAL, "frontier.population.migration.progress", null, ContractState.DEFERRED),
+                FrontierProcessSceneSdk.ExecutionArchetype.COORDINATED_TRAVERSAL, "frontier.population.migration.progress", null, ContractState.ENFORCED),
         MEDICAL_TREATMENT("frontier.medical-treatment", "MedicalTreatment", "F0.2/F0.5", "settlement-service-work",
-                FrontierProcessSceneSdk.ExecutionArchetype.DURATION_WORK, "frontier.decontamination.scan", SceneCauseKind.MEDICAL_TREATMENT, ContractState.DEFERRED),
+                FrontierProcessSceneSdk.ExecutionArchetype.DURATION_WORK, "frontier.decontamination.scan", SceneCauseKind.MEDICAL_TREATMENT, ContractState.ENFORCED),
         ENGINEERING_WORKSITE("frontier.engineering-worksite", "RouteConstruction/RouteMaintenance", "F0.4/F0.5", "infrastructure",
-                FrontierProcessSceneSdk.ExecutionArchetype.DURATION_WORK, "frontier.route_maintenance.progress", SceneCauseKind.ENGINEERING_WORKSITE, ContractState.DEFERRED),
+                FrontierProcessSceneSdk.ExecutionArchetype.DURATION_WORK, "frontier.route_maintenance.progress", SceneCauseKind.ENGINEERING_WORKSITE, ContractState.ENFORCED),
         HIVE_GROWTH("frontier.hive-growth", "HiveGrowth", "F0.6 revalidation", "hive",
-                FrontierProcessSceneSdk.ExecutionArchetype.SPATIAL_FRONTIER, null, null, ContractState.DEFERRED),
+                FrontierProcessSceneSdk.ExecutionArchetype.SPATIAL_FRONTIER, null, null, ContractState.ENFORCED),
         HIVE_NUTRIENT_TRANSFER("frontier.hive-nutrient-transfer", "HiveNutrientTransfer", "F0.6 revalidation", "hive",
-                FrontierProcessSceneSdk.ExecutionArchetype.DURATION_WORK, "frontier.hive.nutrient.transfer.progress", null, ContractState.DEFERRED),
+                FrontierProcessSceneSdk.ExecutionArchetype.DURATION_WORK, "frontier.hive.nutrient.transfer.progress", null, ContractState.ENFORCED),
         SETTLEMENT_PROVISION("frontier.settlement-provision", "SettlementProvision", "F0.2 revalidation", "economy",
-                FrontierProcessSceneSdk.ExecutionArchetype.ATOMIC_INTENT, null, null, ContractState.DEFERRED),
+                FrontierProcessSceneSdk.ExecutionArchetype.ATOMIC_INTENT, null, null, ContractState.ENFORCED),
         RESOURCE_SITE_PREPARATION("frontier.resource-site-preparation", "ResourceSiteLifecycle", "F0.6 revalidation", "resource-sites",
-                FrontierProcessSceneSdk.ExecutionArchetype.ATOMIC_INTENT, null, null, ContractState.DEFERRED),
+                FrontierProcessSceneSdk.ExecutionArchetype.ATOMIC_INTENT, null, null, ContractState.ENFORCED),
         AMBIENT_ACTOR_CUSTODY("frontier.ambient-actor-custody", "ActorLocation", "F0.2/F0.5", "ambient-actors",
-                FrontierProcessSceneSdk.ExecutionArchetype.AMBIENT_CUSTODY, null, null, ContractState.DEFERRED);
+                FrontierProcessSceneSdk.ExecutionArchetype.AMBIENT_CUSTODY, null, null, ContractState.ENFORCED);
 
         private final FrontierProcessSceneSdk.FamilyKey sdkFamilyKey;
         private final String canonicalOwner;
@@ -85,9 +85,6 @@ public final class FrontierDurationProcessDriverRegistry {
             this.coldScheduledKind = coldScheduledKind;
             this.hotSceneCause = hotSceneCause;
             this.contractState = Objects.requireNonNull(contractState, "duration contract state");
-            if (contractState == ContractState.ENFORCED && (coldScheduledKind == null || hotSceneCause == null)) {
-                throw new IllegalArgumentException("enforced duration process needs both driver identities");
-            }
         }
 
         public FrontierProcessSceneSdk.FamilyKey sdkFamilyKey() { return sdkFamilyKey; }
@@ -98,6 +95,7 @@ public final class FrontierDurationProcessDriverRegistry {
         public String coldScheduledKind() { return coldScheduledKind; }
         public SceneCauseKind hotSceneCause() { return hotSceneCause; }
         public ContractState contractState() { return contractState; }
+        public boolean requiresPairedDrivers() { return coldScheduledKind != null && hotSceneCause != null; }
 
         /**
          * Stable internal SDK declaration.  These are current source vocabulary identifiers,
@@ -130,7 +128,48 @@ public final class FrontierDurationProcessDriverRegistry {
         }
     }
 
-    public enum ContractState { ENFORCED, DEFERRED }
+    /** A current active family may not be deferred.  Driver shape is declared separately. */
+    public enum ContractState { ENFORCED }
+
+    /** Explicitly distinguishes a registered Minecraft provider from an intentional no-HOT shape. */
+    public enum HotPolicy { REGISTERED_PROVIDER, NO_HOT_REQUIRED }
+
+    /**
+     * One durable execution-boundary declaration for an active simulation family.
+     *
+     * <p>This is a composition contract, not a new persistence store or scheduler.  The named
+     * owners remain the existing process module, engine queue, recovery carrier and diagnostic
+     * plane.  Keeping the declaration beside the retained SDK descriptor makes drift fail before
+     * a world is admitted or recovered.</p>
+     */
+    public record ExecutionBoundary(Family family, String canonicalOwner, String continuationOwner,
+                                    HotPolicy hotPolicy, String hotProvider, String custodyAuthority,
+                                    String physicalConfirmationOwner, String retirementAndLateInput,
+                                    int retainedRecordBound, String diagnosticSubject) {
+        public ExecutionBoundary {
+            family = Objects.requireNonNull(family, "execution boundary family");
+            canonicalOwner = required(canonicalOwner, "canonical owner");
+            continuationOwner = required(continuationOwner, "continuation owner");
+            hotPolicy = Objects.requireNonNull(hotPolicy, "HOT policy");
+            hotProvider = required(hotProvider, "HOT provider policy");
+            custodyAuthority = required(custodyAuthority, "custody authority");
+            physicalConfirmationOwner = required(physicalConfirmationOwner, "physical confirmation owner");
+            retirementAndLateInput = required(retirementAndLateInput, "retirement/late-input disposition");
+            if (retainedRecordBound < 1) throw new IllegalArgumentException("execution boundary retention must be positive");
+            diagnosticSubject = required(diagnosticSubject, "diagnostic subject");
+            if (hotPolicy == HotPolicy.REGISTERED_PROVIDER && !hotProvider.startsWith("scene:")) {
+                throw new IllegalArgumentException("registered HOT boundary requires a scene provider");
+            }
+            if (hotPolicy == HotPolicy.NO_HOT_REQUIRED && !hotProvider.startsWith("no-hot:")) {
+                throw new IllegalArgumentException("no-HOT boundary requires an explicit no-HOT policy");
+            }
+        }
+
+        private static String required(String value, String name) {
+            if (value == null || value.isBlank()) throw new IllegalArgumentException("execution boundary " + name);
+            return value;
+        }
+    }
 
     /**
      * Exact bounded work accounting supplied by a registered scene behavior.  The descriptor
@@ -177,6 +216,40 @@ public final class FrontierDurationProcessDriverRegistry {
             SceneAdmissionBinding.fixed(SceneCauseKind.SERVICE_WORK, Family.SETTLEMENT_SERVICE_WORK, 0, 0),
             SceneAdmissionBinding.fixed(SceneCauseKind.ROUTE_PATROL, Family.ROUTE_PATROL, 0, 0),
             SceneAdmissionBinding.logistics()));
+    private static final Map<Family, ExecutionBoundary> CURRENT_EXECUTION_BOUNDARIES = currentExecutionBoundaries();
+
+    /** Complete closed boundary inventory used by runtime composition, inspection and recovery. */
+    public static List<ExecutionBoundary> executionBoundaries() {
+        return CURRENT_EXECUTION_BOUNDARIES.values().stream().sorted(java.util.Comparator.comparing(value -> value.family().name())).toList();
+    }
+
+    public static ExecutionBoundary executionBoundary(Family family) {
+        ExecutionBoundary boundary = CURRENT_EXECUTION_BOUNDARIES.get(Objects.requireNonNull(family, "execution boundary family"));
+        if (boundary == null) throw new IllegalArgumentException("unregistered execution boundary family: " + family);
+        return boundary;
+    }
+
+    /** Fails closed if an active descriptor can no longer account for every execution boundary. */
+    public static void requireExecutionBoundaryComposition() {
+        if (!CURRENT_EXECUTION_BOUNDARIES.keySet().equals(inventory())) {
+            throw new IllegalStateException("execution-boundary inventory differs from active process inventory");
+        }
+        for (Family family : inventory()) {
+            ExecutionBoundary boundary = executionBoundary(family);
+            if (!boundary.canonicalOwner().equals(family.canonicalOwner())) {
+                throw new IllegalStateException("execution-boundary canonical owner drift: " + family);
+            }
+            if (family.hotSceneCause() == null) {
+                if (boundary.hotPolicy() != HotPolicy.NO_HOT_REQUIRED) throw new IllegalStateException("missing no-HOT policy: " + family);
+            } else if (boundary.hotPolicy() != HotPolicy.REGISTERED_PROVIDER
+                    || !boundary.hotProvider().equals("scene:" + family.hotSceneCause().name().toLowerCase(java.util.Locale.ROOT))) {
+                throw new IllegalStateException("execution-boundary HOT provider drift: " + family);
+            }
+            if ((family.coldScheduledKind() != null) != boundary.continuationOwner().startsWith("engine-schedule:")) {
+                throw new IllegalStateException("execution-boundary continuation policy drift: " + family);
+            }
+        }
+    }
 
     public sealed interface Driver permits ColdDriver, HotDriver { Family family(); }
 
@@ -194,10 +267,15 @@ public final class FrontierDurationProcessDriverRegistry {
         }
     }
 
-    /** The only F0.1 pair admitted into the active paired-driver contract. */
+    /** Every family with both production driver identities is registered exactly once. */
     public static List<Driver> currentRegistrations() {
-        return List.of(new ColdDriver(Family.RESOURCE_SITE_HARVEST, ResourceSiteHarvestProcess.COLD_PROGRESS_KIND),
-                new HotDriver(Family.RESOURCE_SITE_HARVEST, SceneCauseKind.RESOURCE_SITE_HARVEST));
+        List<Driver> registrations = new ArrayList<>();
+        for (Family family : Family.values()) {
+            if (!family.requiresPairedDrivers()) continue;
+            registrations.add(new ColdDriver(family, family.coldScheduledKind()));
+            registrations.add(new HotDriver(family, family.hotSceneCause()));
+        }
+        return List.copyOf(registrations);
     }
 
     /**
@@ -210,6 +288,7 @@ public final class FrontierDurationProcessDriverRegistry {
                                                  Set<String> scheduledKinds, Set<SceneCauseKind> sceneCauses,
                                                  Set<String> installedPayloadCodecs) {
         productionDescriptors = List.copyOf(Objects.requireNonNull(productionDescriptors, "production process descriptors"));
+        requireExecutionBoundaryComposition();
         compose(currentRegistrations(), scheduledKinds, sceneCauses);
         List<FrontierProcessSceneSdk.DescriptorDefinition> declarations = inventoryDefinitions(productionDescriptors);
         requireDescriptorComposition(declarations, productionDescriptors, scheduledKinds, sceneCauses, installedPayloadCodecs);
@@ -230,15 +309,14 @@ public final class FrontierDurationProcessDriverRegistry {
         EnumMap<Family, List<HotDriver>> hot = new EnumMap<>(Family.class);
         for (Driver registration : List.copyOf(registrations)) {
             Objects.requireNonNull(registration, "duration driver registration");
-            if (registration.family().contractState() != ContractState.ENFORCED) {
-                throw new IllegalArgumentException("duration family is not yet eligible for paired-driver registration: " + registration.family());
-            }
+            if (!registration.family().requiresPairedDrivers()) throw new IllegalArgumentException(
+                    "family has no declared paired-driver boundary: " + registration.family());
             if (registration instanceof ColdDriver driver) cold.computeIfAbsent(driver.family(), ignored -> new ArrayList<>()).add(driver);
             else if (registration instanceof HotDriver driver) hot.computeIfAbsent(driver.family(), ignored -> new ArrayList<>()).add(driver);
             else throw new IllegalArgumentException("unknown duration driver registration: " + registration.getClass().getName());
         }
         for (Family family : Family.values()) {
-            if (family.contractState() != ContractState.ENFORCED) continue;
+            if (!family.requiresPairedDrivers()) continue;
             List<ColdDriver> coldDrivers = cold.getOrDefault(family, List.of());
             List<HotDriver> hotDrivers = hot.getOrDefault(family, List.of());
             if (coldDrivers.size() != 1 || hotDrivers.size() != 1) {
@@ -581,6 +659,24 @@ public final class FrontierDurationProcessDriverRegistry {
         EnumMap<Family, FrontierProcessSceneSdk.DescriptorDefinition> values = new EnumMap<>(Family.class);
         for (Family family : inventory()) values.put(family, family.definition(requireProduction(family, CURRENT_PRODUCTION_BY_ID)));
         return Map.copyOf(values);
+    }
+
+    private static Map<Family, ExecutionBoundary> currentExecutionBoundaries() {
+        EnumMap<Family, ExecutionBoundary> boundaries = new EnumMap<>(Family.class);
+        for (Family family : Family.values()) {
+            String continuation = family.coldScheduledKind() == null
+                    ? "no-schedule:" + family.archetype().name().toLowerCase(java.util.Locale.ROOT)
+                    : "engine-schedule:" + family.coldScheduledKind();
+            HotPolicy hotPolicy = family.hotSceneCause() == null ? HotPolicy.NO_HOT_REQUIRED : HotPolicy.REGISTERED_PROVIDER;
+            String hotProvider = family.hotSceneCause() == null
+                    ? "no-hot:" + family.archetype().name().toLowerCase(java.util.Locale.ROOT)
+                    : "scene:" + family.hotSceneCause().name().toLowerCase(java.util.Locale.ROOT);
+            boundaries.put(family, new ExecutionBoundary(family, family.canonicalOwner(), continuation, hotPolicy, hotProvider,
+                    "fenced-recovery:intent-authority-epoch", "physical-observation:" + family.canonicalOwner(),
+                    "fenced-recovery:inspect-or-reject-stale", limitsFor(family).maxRetainedRecords(),
+                    "execution-boundary:" + family.sdkFamilyKey().value()));
+        }
+        return Map.copyOf(boundaries);
     }
 
     private static FrontierProcessSceneSdk.DescriptorDefinition currentDefinition(Family family) {

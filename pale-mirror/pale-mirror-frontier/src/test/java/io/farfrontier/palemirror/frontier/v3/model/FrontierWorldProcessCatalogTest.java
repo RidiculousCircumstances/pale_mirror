@@ -51,17 +51,23 @@ class FrontierWorldProcessCatalogTest {
     }
 
     @Test
-    void pairedDriverCompositionInventoriesEveryCurrentDurationFamilyAndRegistersHarvestExactlyOnce() {
+    void pairedDriverCompositionInventoriesEveryCurrentDurationFamilyAndRegistersEveryDeclaredPairExactlyOnce() {
         assertEquals(java.util.EnumSet.allOf(FrontierDurationProcessDriverRegistry.Family.class),
                 FrontierDurationProcessDriverRegistry.inventory());
         FrontierDurationProcessDriverRegistry.requireCurrentComposition(FrontierWorldProcessCatalog.descriptors(), FrontierWorldProcessCatalog.scheduledKinds(),
                 java.util.Set.of(SceneCauseKind.values()), FrontierWorldRuntimeDefinition.payloadCodecs().types());
-        assertEquals(List.of(
-                        new FrontierDurationProcessDriverRegistry.ColdDriver(FrontierDurationProcessDriverRegistry.Family.RESOURCE_SITE_HARVEST,
-                                "frontier.resource_site.harvest.cold_progress"),
-                        new FrontierDurationProcessDriverRegistry.HotDriver(FrontierDurationProcessDriverRegistry.Family.RESOURCE_SITE_HARVEST,
-                                SceneCauseKind.RESOURCE_SITE_HARVEST)),
-                FrontierDurationProcessDriverRegistry.currentRegistrations());
+        assertEquals(FrontierDurationProcessDriverRegistry.inventory().stream()
+                        .filter(FrontierDurationProcessDriverRegistry.Family::requiresPairedDrivers).count() * 2,
+                FrontierDurationProcessDriverRegistry.currentRegistrations().size());
+        assertTrue(FrontierDurationProcessDriverRegistry.currentRegistrations().contains(
+                new FrontierDurationProcessDriverRegistry.ColdDriver(FrontierDurationProcessDriverRegistry.Family.RESOURCE_SITE_HARVEST,
+                        "frontier.resource_site.harvest.cold_progress")));
+        assertTrue(FrontierDurationProcessDriverRegistry.currentRegistrations().contains(
+                new FrontierDurationProcessDriverRegistry.HotDriver(FrontierDurationProcessDriverRegistry.Family.PRODUCTION_WORK,
+                        SceneCauseKind.PRODUCTION_WORK)));
+        FrontierDurationProcessDriverRegistry.requireExecutionBoundaryComposition();
+        assertEquals(FrontierDurationProcessDriverRegistry.Family.values().length,
+                FrontierDurationProcessDriverRegistry.executionBoundaries().size());
     }
 
     @Test
