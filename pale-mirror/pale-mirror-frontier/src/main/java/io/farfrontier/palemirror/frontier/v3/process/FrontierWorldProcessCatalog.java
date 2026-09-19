@@ -124,6 +124,8 @@ public final class FrontierWorldProcessCatalog {
             Map.entry("infrastructure", new FrontierInfrastructureProcessModule()),
             Map.entry("settlement-service-work", new FrontierSettlementServiceWorkProcessModule()),
             Map.entry("strategy", new FrontierStrategyProcessModule()));
+    private static final PhysicalIntentLifecycleCapabilities PHYSICAL_LIFECYCLES =
+            PhysicalIntentLifecycleCapabilities.compose(MODULES.values());
     private static final Map<String, ScheduledPlanner> SCHEDULED_PLANNERS = Map.ofEntries(
             Map.entry("frontier.hive.infection.task", (state, action, autonomous) -> HiveInfectionProcess.plan(state, action)),
             Map.entry("frontier.settlement.production.task.start", (state, action, autonomous) -> ProductionProcess.planStart(state, action)),
@@ -521,6 +523,7 @@ public final class FrontierWorldProcessCatalog {
         if (module == null) throw new IllegalArgumentException("no Frontier world process module for: " + processId);
         return module;
     }
+    static PhysicalIntentLifecycleCapabilities physicalLifecycles() { return PHYSICAL_LIFECYCLES; }
     @SafeVarargs private static Set<String> union(Set<String>... values) {
         LinkedHashSet<String> result = new LinkedHashSet<>();
         for (Set<String> value : values) result.addAll(value);

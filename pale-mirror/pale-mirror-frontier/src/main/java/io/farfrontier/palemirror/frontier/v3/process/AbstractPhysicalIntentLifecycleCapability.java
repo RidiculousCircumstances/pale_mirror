@@ -1,0 +1,55 @@
+package io.farfrontier.palemirror.frontier.v3.process;
+
+import io.farfrontier.palemirror.frontier.v3.api.CommandRejection;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner;
+import io.farfrontier.palemirror.frontier.v3.api.RejectionCode;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentPrepared;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;
+
+import java.util.Set;
+
+/** Small family-local base for an explicit lifecycle policy; it contains no family routing. */
+abstract class AbstractPhysicalIntentLifecycleCapability implements PhysicalIntentLifecycleCapability {
+    private final PhysicalIntentLifecycleOwner owner;
+    private final Set<PhysicalIntentKind> kinds;
+    private final PhysicalIntentLifecycleRetirementPolicy retirementPolicy;
+
+    AbstractPhysicalIntentLifecycleCapability(PhysicalIntentLifecycleOwner owner, Set<PhysicalIntentKind> kinds,
+                                              PhysicalIntentLifecycleRetirementPolicy retirementPolicy) {
+        this.owner = owner;
+        this.kinds = Set.copyOf(kinds);
+        this.retirementPolicy = retirementPolicy;
+    }
+
+    @Override public final PhysicalIntentLifecycleOwner owner() { return owner; }
+    @Override public final Set<PhysicalIntentKind> compatibleKinds() { return kinds; }
+    @Override public final PhysicalIntentLifecycleRetirementPolicy retirementPolicy() { return retirementPolicy; }
+
+    @Override public CommandPlan planPrepared(FrontierWorldState state, FrontierCommand command, PhysicalIntentPrepared prepared) {
+        return rejected("physical executor cannot prepare " + owner.stableId());
+    }
+
+    @Override public CommandPlan planTransition(FrontierWorldState state, FrontierCommand command, PhysicalIntent intent,
+                                                PhysicalIntentTransition transition) {
+        return rejected("physical executor cannot transition " + owner.stableId());
+    }
+
+    @Override public FrontierWorldState reducePrepared(FrontierWorldState state, SubjectId subject, PhysicalIntent intent) {
+        throw new IllegalArgumentException("physical lifecycle owner does not admit preparation: " + owner.stableId());
+    }
+
+    @Override public FrontierWorldState reduceTransition(FrontierWorldState state, SubjectId subject, PhysicalIntent intent,
+                                                         PhysicalIntentTransition transition) {
+        throw new IllegalArgumentException("physical lifecycle owner does not admit transition: " + owner.stableId());
+    }
+
+    final CommandPlan.Rejected rejected(String message) {
+        return new CommandPlan.Rejected(new CommandRejection(RejectionCode.REJECTED_BY_POLICY, message));
+    }
+}

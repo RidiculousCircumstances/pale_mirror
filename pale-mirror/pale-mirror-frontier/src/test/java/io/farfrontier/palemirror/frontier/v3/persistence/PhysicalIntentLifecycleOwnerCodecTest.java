@@ -44,6 +44,13 @@ class PhysicalIntentLifecycleOwnerCodecTest {
     }
 
     @Test
+    void everyComposedOwnerHasItsOwnStableCodecIdentity() {
+        for (PhysicalIntentLifecycleOwner owner : PhysicalIntentLifecycleOwner.values()) {
+            assertEquals(owner, PhysicalIntentLifecycleOwner.fromWire(PhysicalIntentLifecycleOwner.CODEC_VERSION, owner.stableId()));
+        }
+    }
+
+    @Test
     void rejectsMissingUnknownStaleAndKindMismatchedOwnerIdentity() {
         assertTrue(Arrays.stream(PhysicalIntent.class.getConstructors()).allMatch(constructor ->
                 Arrays.asList(constructor.getParameterTypes()).contains(PhysicalIntentLifecycleOwner.class)),
@@ -52,7 +59,9 @@ class PhysicalIntentLifecycleOwnerCodecTest {
                 PhysicalIntentKind.PRODUCTION_TRANSFORMATION, PhysicalIntentStatus.PREPARED, new SubjectId("job:one"),
                 List.of(new SubjectId("job:one"), new SubjectId("item:input"), new SubjectId("item:output")), origin(), 0,
                 PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED, java.util.Optional.empty(), java.util.Optional.empty(), null));
-        assertMessage(() -> PhysicalIntentLifecycleOwner.fromWire(2, PhysicalIntentLifecycleOwner.PRODUCTION_WORK.stableId()), "codec version");
+        assertMessage(() -> PhysicalIntentLifecycleOwner.fromWire(1, PhysicalIntentLifecycleOwner.PRODUCTION_WORK.stableId()), "codec version");
+        assertMessage(() -> PhysicalIntentLifecycleOwner.fromWire(PhysicalIntentLifecycleOwner.CODEC_VERSION + 1,
+                PhysicalIntentLifecycleOwner.PRODUCTION_WORK.stableId()), "codec version");
         assertMessage(() -> PhysicalIntentLifecycleOwner.fromWire(PhysicalIntentLifecycleOwner.CODEC_VERSION, "frontier:unknown-owner"), "unknown");
         assertThrows(IllegalArgumentException.class, () -> new PhysicalIntent(new PhysicalIntentId("intent:mismatched-owner"),
                 PhysicalIntentKind.PRODUCTION_TRANSFORMATION, PhysicalIntentStatus.PREPARED, new SubjectId("job:one"),

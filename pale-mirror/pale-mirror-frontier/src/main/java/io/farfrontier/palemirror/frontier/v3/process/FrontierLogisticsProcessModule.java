@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner;
 import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
@@ -11,9 +12,64 @@ import io.farfrontier.palemirror.frontier.v3.model.*;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /** Exact owner for contracts, cargo, route operations and their HOT/COLD scenes. */
 final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule {
+    @Override public List<PhysicalIntentLifecycleCapability> physicalIntentLifecycleCapabilities() {
+        return List.of(new FunctionalPhysicalIntentLifecycleCapability(
+                PhysicalIntentLifecycleOwner.ROUTE_OPERATION,
+                Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_LOADING,
+                        io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_HANDOFF),
+                (state, command, prepared) -> FrontierWorldCommandPlanner.rejected("physical executor cannot prepare route operation work"),
+                FrontierLogisticsProcessModule::planPhysicalTransition,
+                FrontierLogisticsProcessModule::reducePhysicalPrepared,
+                FrontierLogisticsProcessModule::reducePhysicalTransition,
+                PhysicalIntentLifecycleRetirementPolicy.of(
+                        FrontierLogisticsProcessModule::planPhysicalTransition,
+                        FrontierLogisticsProcessModule::reducePhysicalTransition)));
+    }
+
+    private static CommandPlan planPhysicalTransition(FrontierWorldState state, FrontierCommand command,
+                                                       io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                       PhysicalIntentTransition transition) {
+        try {
+            if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_LOADING) {
+                return new CommandPlan.Accepted(SupplyOperationProcess.planCargoLoadingTransition(state, intent, transition, command.submittedAt().ticks()));
+            }
+            RouteOperation operation = state.operations().get(intent.causeSubjectId());
+            if (operation == null) return FrontierWorldCommandPlanner.rejected("physical intent has no owning operation");
+            return new CommandPlan.Accepted(SupplyOperationProcess.planTransition(state, intent, transition, command.submittedAt().ticks()));
+        } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+    }
+
+    private static FrontierWorldState reducePhysicalPrepared(FrontierWorldState state,
+                                                              io.farfrontier.palemirror.frontier.v3.api.SubjectId subject,
+                                                              io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent) {
+        if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_LOADING) {
+            return CargoLoadingStateSupport.reducePrepared(state, subject, intent);
+        }
+        RouteOperation operation = state.operations().get(intent.causeSubjectId());
+        if (operation == null || operation.stage() != OperationStage.ARRIVED || !subject.equals(operation.settlementId())
+                || !intent.subjectIds().contains(operation.cargoId()) || !intent.subjectIds().contains(operation.id())) {
+            throw new IllegalArgumentException("physical intent does not own arrived cargo hand-off");
+        }
+        return state.preparePhysicalIntent(intent);
+    }
+
+    private static FrontierWorldState reducePhysicalTransition(FrontierWorldState state,
+                                                               io.farfrontier.palemirror.frontier.v3.api.SubjectId subject,
+                                                               io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                               PhysicalIntentTransition transition) {
+        if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_LOADING) {
+            return CargoLoadingStateSupport.reduceTransition(state, subject, intent, transition);
+        }
+        RouteOperation operation = state.operations().get(intent.causeSubjectId());
+        if (operation == null || !subject.equals(operation.settlementId())) {
+            throw new IllegalArgumentException("physical intent transition subject does not own operation");
+        }
+        return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+    }
     @Override public CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
         if (command.payload() instanceof OperationAssemblyAdvanced advanced) {
             RouteOperation operation = state.operations().get(advanced.operationId());

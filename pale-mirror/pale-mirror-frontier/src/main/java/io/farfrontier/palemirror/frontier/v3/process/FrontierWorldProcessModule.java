@@ -5,6 +5,8 @@ import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
 import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 
+import java.util.List;
+
 /**
  * Closed executable owner for one finite Frontier process descriptor.
  *
@@ -13,6 +15,14 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
  * composition never rediscovers a domain by payload classpath scanning.</p>
  */
 interface FrontierWorldProcessModule {
+    /**
+     * Family-owned physical lifecycle behavior.  The process catalog composes these declarations
+     * without selecting a family from an intent kind.
+     */
+    default List<PhysicalIntentLifecycleCapability> physicalIntentLifecycleCapabilities() {
+        return List.of();
+    }
+
     default CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
         throw new IllegalArgumentException("process does not admit command payload: " + command.payload().type());
     }

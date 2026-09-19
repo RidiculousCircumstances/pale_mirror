@@ -3,15 +3,113 @@ package io.farfrontier.palemirror.frontier.v3.process;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 
 import java.util.List;
+import java.util.Set;
 
 /** Exact owner for resident demography, migration, provisioning and health facts. */
 final class FrontierPopulationProcessModule implements FrontierWorldProcessModule {
+    @Override public List<PhysicalIntentLifecycleCapability> physicalIntentLifecycleCapabilities() {
+        return List.of(birthConsumptionCapability(), medicalConsumptionCapability(), provisionConsumptionCapability());
+    }
+
+    private static PhysicalIntentLifecycleCapability birthConsumptionCapability() {
+        return new FunctionalPhysicalIntentLifecycleCapability(PhysicalIntentLifecycleOwner.POPULATION_MIGRATION,
+                Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXACT_ITEM_CONSUMPTION),
+                (state, command, prepared) -> FrontierWorldCommandPlanner.rejected("physical executor cannot prepare population consumption"),
+                (state, command, intent, transition) -> new CommandPlan.Accepted(
+                        PopulationBirthProcess.planTransition(state, intent, transition, command.submittedAt().ticks())),
+                PopulationBirthProcess::reducePrepared,
+                (state, subject, intent, transition) -> {
+                    ResidentBirthJob birth = state.humanPopulation().birthJobs().get(intent.causeSubjectId());
+                    if (birth == null || !subject.equals(birth.settlementId())) {
+                        throw new IllegalArgumentException("resident birth consumption transition lacks settlement ownership");
+                    }
+                    return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+                }, PhysicalIntentLifecycleRetirementPolicy.of(
+                        (state, command, intent, transition) -> new CommandPlan.Accepted(
+                                PopulationBirthProcess.planTransition(state, intent, transition, command.submittedAt().ticks())),
+                        (state, subject, intent, transition) -> {
+                            ResidentBirthJob birth = state.humanPopulation().birthJobs().get(intent.causeSubjectId());
+                            if (birth == null || !subject.equals(birth.settlementId())) {
+                                throw new IllegalArgumentException("resident birth consumption retirement lacks settlement ownership");
+                            }
+                            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+                        }));
+    }
+
+    private static PhysicalIntentLifecycleCapability medicalConsumptionCapability() {
+        return new FunctionalPhysicalIntentLifecycleCapability(PhysicalIntentLifecycleOwner.MEDICAL_TREATMENT,
+                Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXACT_ITEM_CONSUMPTION),
+                (state, command, prepared) -> FrontierWorldCommandPlanner.rejected("physical executor cannot prepare medical consumption"),
+                (state, command, intent, transition) -> {
+                    if ((transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING
+                            || transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED)
+                            && !FrontierMedicalTreatmentSceneSupport.permitsCurrentConsumptionIntent(state, intent)) {
+                        return FrontierWorldCommandPlanner.rejected("medical treatment consumption requires its current HOT infirmary scene");
+                    }
+                    return new CommandPlan.Accepted(MedicalTreatmentProcess.planTransition(state, intent, transition, command.submittedAt().ticks()));
+                },
+                (state, subject, intent) -> {
+                    MedicalEvacuationOperation operation = state.humanPopulation().medicalOperations().get(intent.causeSubjectId());
+                    if (operation == null || !subject.equals(operation.settlementId())) {
+                        throw new IllegalArgumentException("medical treatment must be prepared by its settlement");
+                    }
+                    MedicalTreatmentProcess.operationForIntent(state, intent);
+                    return state.preparePhysicalIntent(intent);
+                },
+                (state, subject, intent, transition) -> {
+                    MedicalEvacuationOperation operation = state.humanPopulation().medicalOperations().get(intent.causeSubjectId());
+                    if (operation == null || !subject.equals(operation.settlementId())) {
+                        throw new IllegalArgumentException("medical treatment consumption transition lacks settlement ownership");
+                    }
+                    MedicalTreatmentProcess.operationForIntent(state, intent);
+                    return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+                }, PhysicalIntentLifecycleRetirementPolicy.of(
+                        (state, command, intent, transition) -> {
+                            if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED
+                                    && !FrontierMedicalTreatmentSceneSupport.permitsCurrentConsumptionIntent(state, intent)) {
+                                return FrontierWorldCommandPlanner.rejected("medical treatment consumption requires its current HOT infirmary scene");
+                            }
+                            return new CommandPlan.Accepted(MedicalTreatmentProcess.planTransition(state, intent, transition, command.submittedAt().ticks()));
+                        },
+                        (state, subject, intent, transition) -> {
+                            MedicalEvacuationOperation operation = state.humanPopulation().medicalOperations().get(intent.causeSubjectId());
+                            if (operation == null || !subject.equals(operation.settlementId())) {
+                                throw new IllegalArgumentException("medical treatment consumption retirement lacks settlement ownership");
+                            }
+                            MedicalTreatmentProcess.operationForIntent(state, intent);
+                            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+                        }));
+    }
+
+    private static PhysicalIntentLifecycleCapability provisionConsumptionCapability() {
+        return new FunctionalPhysicalIntentLifecycleCapability(PhysicalIntentLifecycleOwner.SETTLEMENT_PROVISION,
+                Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXACT_ITEM_CONSUMPTION),
+                (state, command, prepared) -> FrontierWorldCommandPlanner.rejected("physical executor cannot prepare settlement provision"),
+                (state, command, intent, transition) -> new CommandPlan.Accepted(
+                        SettlementProvisionProcess.planTransition(state, intent, transition, command.submittedAt().ticks())),
+                SettlementProvisionProcess::reducePrepared,
+                (state, subject, intent, transition) -> {
+                    if (!state.humanPopulation().provisions().containsKey(intent.causeSubjectId()) || !subject.equals(intent.causeSubjectId())) {
+                        throw new IllegalArgumentException("settlement provision consumption transition lacks settlement ownership");
+                    }
+                    return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+                }, PhysicalIntentLifecycleRetirementPolicy.of(
+                        (state, command, intent, transition) -> new CommandPlan.Accepted(
+                                SettlementProvisionProcess.planTransition(state, intent, transition, command.submittedAt().ticks())),
+                        (state, subject, intent, transition) -> {
+                            if (!state.humanPopulation().provisions().containsKey(intent.causeSubjectId()) || !subject.equals(intent.causeSubjectId())) {
+                                throw new IllegalArgumentException("settlement provision consumption retirement lacks settlement ownership");
+                            }
+                            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+                        }));
+    }
     @Override public CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
         if (command.payload() instanceof ResidentBorn) {
             return FrontierWorldCommandPlanner.rejected("resident birth is emitted only by a confirmed population permit");

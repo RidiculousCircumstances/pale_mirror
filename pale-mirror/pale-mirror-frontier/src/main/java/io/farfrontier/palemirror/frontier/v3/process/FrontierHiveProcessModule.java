@@ -3,15 +3,188 @@ package io.farfrontier.palemirror.frontier.v3.process;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner;
 import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 
 import java.util.List;
+import java.util.Set;
 
 /** Exact owner for hive perception, doctrine, growth and combat facts. */
 final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
+    @Override public List<PhysicalIntentLifecycleCapability> physicalIntentLifecycleCapabilities() {
+        return List.of(explosionCapability(), nutrientTransferCapability(), hiveGrowthCapability(),
+                sceneStrikeCapability(PhysicalIntentLifecycleOwner.ROUTE_ENGAGEMENT),
+                settlementAssaultCapability());
+    }
+
+    private static PhysicalIntentLifecycleCapability explosionCapability() {
+        return new FunctionalPhysicalIntentLifecycleCapability(PhysicalIntentLifecycleOwner.HIVE_MOBILIZATION,
+                Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXPLOSION),
+                (state, command, prepared) -> {
+                    try {
+                        ExplosionStateSupport.validateIntent(state, prepared.intent());
+                        return new CommandPlan.Accepted(List.of(new ProposedEvent(state.bootstrap().hive().id(), prepared)));
+                    } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+                },
+                (state, command, intent, transition) -> new CommandPlan.Accepted(List.of(new ProposedEvent(state.bootstrap().hive().id(), transition))),
+                (state, subject, intent) -> {
+                    if (!subject.equals(state.bootstrap().hive().id())) throw new IllegalArgumentException("explosion intent must be prepared by the hive");
+                    ExplosionStateSupport.validateIntent(state, intent);
+                    return state.preparePhysicalIntent(intent);
+                },
+                (state, subject, intent, transition) -> {
+                    if (!subject.equals(state.bootstrap().hive().id())) throw new IllegalArgumentException("explosion transition lacks hive ownership");
+                    return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+                }, PhysicalIntentLifecycleRetirementPolicy.of(
+                        (state, command, intent, transition) -> new CommandPlan.Accepted(List.of(
+                                new ProposedEvent(state.bootstrap().hive().id(), transition))),
+                        (state, subject, intent, transition) -> {
+                            if (!subject.equals(state.bootstrap().hive().id())) throw new IllegalArgumentException("explosion retirement lacks hive ownership");
+                            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+                        }));
+    }
+
+    private static PhysicalIntentLifecycleCapability nutrientTransferCapability() {
+        return new FunctionalPhysicalIntentLifecycleCapability(PhysicalIntentLifecycleOwner.HIVE_NUTRIENT_TRANSFER,
+                Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.HIVE_NUTRIENT_DEPARTURE,
+                        io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.HIVE_NUTRIENT_ARRIVAL),
+                (state, command, prepared) -> {
+                    var intent = prepared.intent();
+                    boolean owns = state.bootstrap().hive().id().equals(intent.causeSubjectId())
+                            && state.hiveColony().nutrientTransfers().values().stream().anyMatch(transfer -> intent.subjectIds().contains(transfer.id()));
+                    return owns ? new CommandPlan.Accepted(List.of(new ProposedEvent(state.bootstrap().hive().id(), prepared)))
+                            : FrontierWorldCommandPlanner.rejected("hive nutrient endpoint has no retained transfer");
+                },
+                (state, command, intent, transition) -> new CommandPlan.Accepted(HiveNutrientTransferProcess.planTransition(
+                        state, intent, transition, command.submittedAt().ticks())),
+                (state, subject, intent) -> {
+                    if (!subject.equals(state.bootstrap().hive().id())) throw new IllegalArgumentException("hive nutrient endpoint intent must be prepared by the hive");
+                    return state.preparePhysicalIntent(intent);
+                },
+                (state, subject, intent, transition) -> {
+                    if (!subject.equals(state.bootstrap().hive().id())) throw new IllegalArgumentException("hive nutrient endpoint transition lacks hive ownership");
+                    return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+                }, PhysicalIntentLifecycleRetirementPolicy.of(
+                        (state, command, intent, transition) -> new CommandPlan.Accepted(HiveNutrientTransferProcess.planTransition(
+                                state, intent, transition, command.submittedAt().ticks())),
+                        (state, subject, intent, transition) -> {
+                            if (!subject.equals(state.bootstrap().hive().id())) throw new IllegalArgumentException("hive nutrient endpoint retirement lacks hive ownership");
+                            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+                        }));
+    }
+
+    private static PhysicalIntentLifecycleCapability hiveGrowthCapability() {
+        return new FunctionalPhysicalIntentLifecycleCapability(PhysicalIntentLifecycleOwner.HIVE_GROWTH,
+                Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXACT_ITEM_CONSUMPTION),
+                (state, command, prepared) -> FrontierWorldCommandPlanner.rejected("physical executor cannot prepare hive growth consumption"),
+                (state, command, intent, transition) -> new CommandPlan.Accepted(HiveGrowthProcess.planTransition(
+                        state, intent, transition, command.submittedAt().ticks())),
+                HiveGrowthProcess::reducePrepared,
+                (state, subject, intent, transition) -> {
+                    HiveGrowthJob job = state.hiveColony().growthJobs().get(intent.causeSubjectId());
+                    if (job == null || !subject.equals(job.hiveId())) throw new IllegalArgumentException("hive growth consumption transition lacks hive ownership");
+                    return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+                }, PhysicalIntentLifecycleRetirementPolicy.of(
+                        (state, command, intent, transition) -> new CommandPlan.Accepted(HiveGrowthProcess.planTransition(
+                                state, intent, transition, command.submittedAt().ticks())),
+                        (state, subject, intent, transition) -> {
+                            HiveGrowthJob job = state.hiveColony().growthJobs().get(intent.causeSubjectId());
+                            if (job == null || !subject.equals(job.hiveId())) throw new IllegalArgumentException("hive growth consumption retirement lacks hive ownership");
+                            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+                        }));
+    }
+
+    private static PhysicalIntentLifecycleCapability sceneStrikeCapability(PhysicalIntentLifecycleOwner owner) {
+        return new FunctionalPhysicalIntentLifecycleCapability(owner,
+                Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE),
+                (state, command, prepared) -> {
+                    try {
+                        SceneStrikeStateSupport.validateIntent(state, prepared.intent());
+                        return new CommandPlan.Accepted(List.of(new ProposedEvent(SceneStrikeStateSupport.owner(state, prepared.intent()), prepared)));
+                    } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+                },
+                (state, command, intent, transition) -> new CommandPlan.Accepted(List.of(new ProposedEvent(SceneStrikeStateSupport.owner(state, intent), transition))),
+                (state, subject, intent) -> {
+                    SceneStrikeStateSupport.validateIntent(state, intent);
+                    if (!subject.equals(SceneStrikeStateSupport.owner(state, intent))) throw new IllegalArgumentException("scene strike must be prepared by its exact scene owner");
+                    return state.preparePhysicalIntent(intent);
+                },
+                (state, subject, intent, transition) -> {
+                    if (!subject.equals(SceneStrikeStateSupport.owner(state, intent))) throw new IllegalArgumentException("scene strike transition lacks exact scene ownership");
+                    return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+                }, PhysicalIntentLifecycleRetirementPolicy.of(
+                        (state, command, intent, transition) -> new CommandPlan.Accepted(List.of(
+                                new ProposedEvent(SceneStrikeStateSupport.owner(state, intent), transition))),
+                        (state, subject, intent, transition) -> {
+                            if (!subject.equals(SceneStrikeStateSupport.owner(state, intent))) throw new IllegalArgumentException("scene strike retirement lacks exact scene ownership");
+                            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+                        }));
+    }
+
+    private static PhysicalIntentLifecycleCapability settlementAssaultCapability() {
+        return new FunctionalPhysicalIntentLifecycleCapability(PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT,
+                Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE,
+                        io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_ISSUE,
+                        io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_RETURN),
+                (state, command, prepared) -> planAssaultPreparation(state, prepared),
+                (state, command, intent, transition) -> planAssaultTransition(state, intent, transition),
+                FrontierHiveProcessModule::reduceAssaultPreparation,
+                FrontierHiveProcessModule::reduceAssaultTransition,
+                PhysicalIntentLifecycleRetirementPolicy.of(
+                        (state, command, intent, transition) -> planAssaultTransition(state, intent, transition),
+                        FrontierHiveProcessModule::reduceAssaultTransition));
+    }
+
+    private static CommandPlan planAssaultPreparation(FrontierWorldState state, PhysicalIntentPrepared prepared) {
+        if (prepared.intent().kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE) {
+            try {
+                SceneStrikeStateSupport.validateIntent(state, prepared.intent());
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(SceneStrikeStateSupport.owner(state, prepared.intent()), prepared)));
+            } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+        }
+        return FrontierWorldCommandPlanner.rejected("physical executor cannot prepare settlement-assault equipment");
+    }
+
+    private static CommandPlan planAssaultTransition(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                      PhysicalIntentTransition transition) {
+        if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE) {
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(SceneStrikeStateSupport.owner(state, intent), transition)));
+        }
+        if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_ISSUE) EquipmentIssueStateSupport.validateIntent(state, intent);
+        else EquipmentReturnStateSupport.validateIntent(state, intent);
+        return new CommandPlan.Accepted(List.of(new ProposedEvent(intent.causeSubjectId(), transition)));
+    }
+
+    private static FrontierWorldState reduceAssaultPreparation(FrontierWorldState state,
+                                                                io.farfrontier.palemirror.frontier.v3.api.SubjectId subject,
+                                                                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent) {
+        if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE) {
+            SceneStrikeStateSupport.validateIntent(state, intent);
+            if (!subject.equals(SceneStrikeStateSupport.owner(state, intent))) throw new IllegalArgumentException("scene strike must be prepared by its exact scene owner");
+        } else if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_ISSUE) {
+            EquipmentIssueStateSupport.validateIntent(state, intent);
+            if (!subject.equals(intent.causeSubjectId())) throw new IllegalArgumentException("equipment issue must be prepared by its settlement");
+        } else {
+            EquipmentReturnStateSupport.validateIntent(state, intent);
+            if (!subject.equals(intent.causeSubjectId())) throw new IllegalArgumentException("equipment return must be prepared by its settlement");
+        }
+        return state.preparePhysicalIntent(intent);
+    }
+
+    private static FrontierWorldState reduceAssaultTransition(FrontierWorldState state,
+                                                               io.farfrontier.palemirror.frontier.v3.api.SubjectId subject,
+                                                               io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                               PhysicalIntentTransition transition) {
+        if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE) {
+            if (!subject.equals(SceneStrikeStateSupport.owner(state, intent))) throw new IllegalArgumentException("scene strike transition lacks exact scene ownership");
+        } else if (!subject.equals(intent.causeSubjectId())) {
+            throw new IllegalArgumentException("settlement-assault equipment transition lacks settlement ownership");
+        }
+        return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+    }
     @Override public CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
         if (command.payload() instanceof ScoutPatrolAdvanced advanced) {
             try { HiveScoutPatrolProcess.reduce(state, state.bootstrap().hive().id(), advanced); }

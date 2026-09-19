@@ -3,13 +3,61 @@ package io.farfrontier.palemirror.frontier.v3.process;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 
+import java.util.List;
+import java.util.Set;
+
 /** Exact reducer owner for company, market and production facts. */
 final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
+    @Override public List<PhysicalIntentLifecycleCapability> physicalIntentLifecycleCapabilities() {
+        return List.of(new FunctionalPhysicalIntentLifecycleCapability(
+                PhysicalIntentLifecycleOwner.PRODUCTION_WORK,
+                Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.PRODUCTION_TRANSFORMATION),
+                (state, command, prepared) -> FrontierWorldCommandPlanner.rejected("physical executor cannot prepare production work"),
+                (state, command, intent, transition) -> {
+                    ProductionJob job = state.productionJobs().get(intent.causeSubjectId());
+                    if (job == null) return FrontierWorldCommandPlanner.rejected("production transformation has no active job");
+                    try {
+                        ProductionTransformationStateSupport.validateIntent(state, intent);
+                        return new CommandPlan.Accepted(List.of(new ProposedEvent(job.settlementId(), transition)));
+                    } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+                },
+                (state, subject, intent) -> {
+                    ProductionJob job = state.productionJobs().get(intent.causeSubjectId());
+                    if (job == null || !subject.equals(job.settlementId())) {
+                        throw new IllegalArgumentException("production transformation must be prepared by its settlement");
+                    }
+                    ProductionTransformationStateSupport.validateIntent(state, intent);
+                    return state.preparePhysicalIntent(intent);
+                },
+                (state, subject, intent, transition) -> {
+                    ProductionJob job = state.productionJobs().get(intent.causeSubjectId());
+                    if (job == null || !subject.equals(job.settlementId())) {
+                        throw new IllegalArgumentException("production transformation transition lacks settlement ownership");
+                    }
+                    return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+                }, PhysicalIntentLifecycleRetirementPolicy.of(
+                        (state, command, intent, transition) -> {
+                            ProductionJob job = state.productionJobs().get(intent.causeSubjectId());
+                            if (job == null) return FrontierWorldCommandPlanner.rejected("production transformation has no active job");
+                            try {
+                                ProductionTransformationStateSupport.validateIntent(state, intent);
+                                return new CommandPlan.Accepted(List.of(new ProposedEvent(job.settlementId(), transition)));
+                            } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+                        },
+                        (state, subject, intent, transition) -> {
+                            ProductionJob job = state.productionJobs().get(intent.causeSubjectId());
+                            if (job == null || !subject.equals(job.settlementId())) {
+                                throw new IllegalArgumentException("production transformation retirement lacks settlement ownership");
+                            }
+                            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+                        })));
+    }
     @Override public CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
         if (command.payload() instanceof ProductionWorkSceneLeasePrepared prepared) {
             try { return new CommandPlan.Accepted(java.util.List.of(new ProposedEvent(FrontierProductionWorkSceneSupport.owner(state,

@@ -26,10 +26,12 @@ public enum PhysicalIntentLifecycleOwner {
     HIVE_NUTRIENT_TRANSFER("frontier.hive-nutrient-transfer"),
     SETTLEMENT_PROVISION("frontier.settlement-provision"),
     RESOURCE_SITE_PREPARATION("frontier.resource-site-preparation"),
-    AMBIENT_ACTOR_CUSTODY("frontier.ambient-actor-custody");
+    AMBIENT_ACTOR_CUSTODY("frontier.ambient-actor-custody"),
+    DECONTAMINATION("frontier.decontamination"),
+    SETTLEMENT_SERVICE_DECONTAMINATION("frontier.settlement-service-decontamination");
 
     /** The first durable owner-capability codec.  Future incompatible meanings must bump it. */
-    public static final int CODEC_VERSION = 1;
+    public static final int CODEC_VERSION = 2;
 
     private final String stableId;
 
@@ -56,7 +58,9 @@ public enum PhysicalIntentLifecycleOwner {
                     || kind == PhysicalIntentKind.ROUTE_MAINTENANCE || kind == PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING
                     || kind == PhysicalIntentKind.STRUCTURAL_REPAIR || kind == PhysicalIntentKind.EQUIPMENT_ISSUE || kind == PhysicalIntentKind.EQUIPMENT_RETURN;
             case HIVE_NUTRIENT_TRANSFER -> kind == PhysicalIntentKind.HIVE_NUTRIENT_DEPARTURE || kind == PhysicalIntentKind.HIVE_NUTRIENT_ARRIVAL;
-            case SETTLEMENT_SERVICE_WORK -> kind == PhysicalIntentKind.SETTLEMENT_SERVICE_INPUT_ISSUE || kind == PhysicalIntentKind.DECONTAMINATION;
+            case SETTLEMENT_SERVICE_WORK -> kind == PhysicalIntentKind.SETTLEMENT_SERVICE_INPUT_ISSUE;
+            case DECONTAMINATION -> kind == PhysicalIntentKind.DECONTAMINATION;
+            case SETTLEMENT_SERVICE_DECONTAMINATION -> kind == PhysicalIntentKind.DECONTAMINATION;
             case HIVE_MOBILIZATION -> kind == PhysicalIntentKind.EXPLOSION;
             case ROUTE_ENGAGEMENT -> kind == PhysicalIntentKind.SCENE_STRIKE;
             case SETTLEMENT_ASSAULT -> kind == PhysicalIntentKind.SCENE_STRIKE || kind == PhysicalIntentKind.EQUIPMENT_ISSUE

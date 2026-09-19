@@ -10,9 +10,166 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 
 import java.util.List;
+import java.util.Set;
 
 /** Exact reducer owner for route construction and patrol facts. */
 final class FrontierInfrastructureProcessModule implements FrontierWorldProcessModule {
+    @Override public List<PhysicalIntentLifecycleCapability> physicalIntentLifecycleCapabilities() {
+        return List.of(engineeringCapability(), new NoPhysicalIntentLifecyclePolicy(
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ROUTE_PATROL));
+    }
+
+    private static PhysicalIntentLifecycleCapability engineeringCapability() {
+        return new FunctionalPhysicalIntentLifecycleCapability(
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE,
+                Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.STRUCTURAL_REPAIR,
+                        io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_CONSTRUCTION,
+                        io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING,
+                        io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_MAINTENANCE,
+                        io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING,
+                        io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_ISSUE,
+                        io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_RETURN),
+                FrontierInfrastructureProcessModule::planEngineeringPreparation,
+                FrontierInfrastructureProcessModule::planEngineeringTransition,
+                FrontierInfrastructureProcessModule::reduceEngineeringPreparation,
+                FrontierInfrastructureProcessModule::reduceEngineeringTransition,
+                PhysicalIntentLifecycleRetirementPolicy.of(
+                        FrontierInfrastructureProcessModule::planEngineeringTransition,
+                        FrontierInfrastructureProcessModule::reduceEngineeringTransition));
+    }
+
+    private static CommandPlan planEngineeringPreparation(FrontierWorldState state, FrontierCommand command, PhysicalIntentPrepared prepared) {
+        var intent = prepared.intent();
+        try {
+            return switch (intent.kind()) {
+                case STRUCTURAL_REPAIR -> new CommandPlan.Accepted(List.of(new ProposedEvent(
+                        FrontierWorldStateSupport.semanticOwner(state.bootstrap(), state.hiveColony(), intent.causeSubjectId()), prepared)));
+                case ROUTE_CONSTRUCTION -> {
+                    RouteConstructionStateSupport.validateIntent(state, intent);
+                    if (!FrontierEngineeringWorkSceneSupport.permitsCurrentWorkIntent(state, intent)) {
+                        yield FrontierWorldCommandPlanner.rejected("route construction physical work requires its current HOT engineering scene");
+                    }
+                    yield new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, prepared)));
+                }
+                case ROUTE_MAINTENANCE -> {
+                    RouteMaintenanceStateSupport.validateWorkIntent(state, intent);
+                    if (!FrontierEngineeringWorkSceneSupport.permitsCurrentWorkIntent(state, intent)) {
+                        yield FrontierWorldCommandPlanner.rejected("route maintenance physical work requires its current HOT engineering scene");
+                    }
+                    yield new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, prepared)));
+                }
+                case ROUTE_MAINTENANCE_MATERIAL_LOADING -> {
+                    RouteMaintenanceStateSupport.validateMaterialLoadingIntent(state, intent);
+                    yield new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, prepared)));
+                }
+                case ROUTE_CONSTRUCTION_MATERIAL_LOADING -> {
+                    RouteConstructionStateSupport.validateMaterialLoadingIntent(state, intent);
+                    yield new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, prepared)));
+                }
+                case EQUIPMENT_ISSUE -> {
+                    EquipmentIssueStateSupport.validateIntent(state, intent);
+                    yield new CommandPlan.Accepted(List.of(new ProposedEvent(intent.causeSubjectId(), prepared)));
+                }
+                case EQUIPMENT_RETURN -> {
+                    EquipmentReturnStateSupport.validateIntent(state, intent);
+                    yield new CommandPlan.Accepted(List.of(new ProposedEvent(intent.causeSubjectId(), prepared)));
+                }
+                default -> throw new IllegalArgumentException("engineering capability received undeclared kind");
+            };
+        } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+    }
+
+    private static CommandPlan planEngineeringTransition(FrontierWorldState state, FrontierCommand command,
+                                                         io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                         PhysicalIntentTransition transition) {
+        long now = command.submittedAt().ticks();
+        try {
+            return switch (intent.kind()) {
+                case STRUCTURAL_REPAIR -> new CommandPlan.Accepted(List.of(new ProposedEvent(
+                        FrontierWorldStateSupport.semanticOwner(state.bootstrap(), state.hiveColony(), intent.causeSubjectId()), transition)));
+                case ROUTE_CONSTRUCTION -> new CommandPlan.Accepted(RouteConstructionProcess.planTransition(state, intent, transition, now));
+                case ROUTE_CONSTRUCTION_MATERIAL_LOADING -> new CommandPlan.Accepted(RouteConstructionProcess.planMaterialLoadingTransition(state, intent, transition, now));
+                case ROUTE_MAINTENANCE -> new CommandPlan.Accepted(RouteMaintenanceProcess.planTransition(state, intent, transition, now));
+                case ROUTE_MAINTENANCE_MATERIAL_LOADING -> new CommandPlan.Accepted(RouteMaintenanceProcess.planMaterialLoadingTransition(state, intent, transition, now));
+                case EQUIPMENT_ISSUE -> {
+                    if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING) EquipmentIssueStateSupport.validateIntent(state, intent);
+                    yield new CommandPlan.Accepted(withEngineeringContinuation(state, intent, transition, now, false));
+                }
+                case EQUIPMENT_RETURN -> {
+                    if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING) EquipmentReturnStateSupport.validateIntent(state, intent);
+                    yield new CommandPlan.Accepted(withEngineeringContinuation(state, intent, transition, now, true));
+                }
+                default -> throw new IllegalArgumentException("engineering capability received undeclared kind");
+            };
+        } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+    }
+
+    private static FrontierWorldState reduceEngineeringPreparation(FrontierWorldState state,
+                                                                    io.farfrontier.palemirror.frontier.v3.api.SubjectId subject,
+                                                                    io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent) {
+        return switch (intent.kind()) {
+            case STRUCTURAL_REPAIR -> StructuralRepairProcess.reducePrepared(state, subject, intent);
+            case ROUTE_CONSTRUCTION -> RouteConstructionProcess.reducePrepared(state, subject, intent);
+            case ROUTE_MAINTENANCE, ROUTE_MAINTENANCE_MATERIAL_LOADING -> RouteMaintenanceProcess.reducePrepared(state, subject, intent);
+            case ROUTE_CONSTRUCTION_MATERIAL_LOADING -> {
+                if (!subject.equals(FrontierRouteNetwork.OWNER)) throw new IllegalArgumentException("route construction material pickup must be prepared by the route network");
+                RouteConstructionStateSupport.validateMaterialLoadingIntent(state, intent);
+                yield state.preparePhysicalIntent(intent);
+            }
+            case EQUIPMENT_ISSUE -> {
+                EquipmentIssueStateSupport.validateIntent(state, intent);
+                if (!subject.equals(intent.causeSubjectId())) throw new IllegalArgumentException("equipment issue must be prepared by its settlement");
+                yield state.preparePhysicalIntent(intent);
+            }
+            case EQUIPMENT_RETURN -> {
+                EquipmentReturnStateSupport.validateIntent(state, intent);
+                if (!subject.equals(intent.causeSubjectId())) throw new IllegalArgumentException("equipment return must be prepared by its settlement");
+                yield state.preparePhysicalIntent(intent);
+            }
+            default -> throw new IllegalArgumentException("engineering capability received undeclared kind");
+        };
+    }
+
+    private static FrontierWorldState reduceEngineeringTransition(FrontierWorldState state,
+                                                                   io.farfrontier.palemirror.frontier.v3.api.SubjectId subject,
+                                                                   io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                                   PhysicalIntentTransition transition) {
+        switch (intent.kind()) {
+            case STRUCTURAL_REPAIR, ROUTE_CONSTRUCTION -> {
+                if (!subject.equals(FrontierWorldStateSupport.semanticOwner(state.bootstrap(), state.hiveColony(), intent.causeSubjectId()))) {
+                    throw new IllegalArgumentException("engineering transition lacks its semantic owner");
+                }
+            }
+            case ROUTE_CONSTRUCTION_MATERIAL_LOADING, ROUTE_MAINTENANCE, ROUTE_MAINTENANCE_MATERIAL_LOADING -> {
+                if (!subject.equals(FrontierRouteNetwork.OWNER)) throw new IllegalArgumentException("engineering transition lacks route-network ownership");
+            }
+            case EQUIPMENT_ISSUE -> {
+                if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING) EquipmentIssueStateSupport.validateIntent(state, intent);
+                if (!subject.equals(intent.causeSubjectId())) throw new IllegalArgumentException("equipment issue transition lacks settlement ownership");
+            }
+            case EQUIPMENT_RETURN -> {
+                if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING) EquipmentReturnStateSupport.validateIntent(state, intent);
+                if (!subject.equals(intent.causeSubjectId())) throw new IllegalArgumentException("equipment return transition lacks settlement ownership");
+            }
+            default -> throw new IllegalArgumentException("engineering capability received undeclared kind");
+        }
+        return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+    }
+
+    private static List<ProposedEvent> withEngineeringContinuation(FrontierWorldState state,
+                                                                     io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                                     PhysicalIntentTransition transition, long now, boolean returning) {
+        ProposedEvent physical = new ProposedEvent(intent.causeSubjectId(), transition);
+        if (transition.status() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED || intent.subjectIds().isEmpty()) return List.of(physical);
+        io.farfrontier.palemirror.frontier.v3.api.SubjectId projectId = intent.subjectIds().getFirst();
+        RouteConstruction construction = state.routeConstructions().get(projectId);
+        if (construction != null) return List.of(physical, new ProposedEvent(projectId, new ScheduleEffect.Created(
+                returning ? RouteConstructionProcess.returnProgress(construction, Math.addExact(now, 1L)) : RouteConstructionProcess.progress(construction, Math.addExact(now, 1L)))));
+        RouteMaintenance maintenance = state.routeMaintenances().get(projectId);
+        if (maintenance != null) return List.of(physical, new ProposedEvent(projectId, new ScheduleEffect.Created(
+                returning ? RouteMaintenanceProcess.returnProgress(maintenance, Math.addExact(now, 1L)) : RouteMaintenanceProcess.progress(maintenance, Math.addExact(now, 1L)))));
+        return List.of(physical);
+    }
     @Override public CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
         if (command.payload() instanceof RoutePatrolSceneLeasePrepared prepared) {
             try { return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierRoutePatrolSceneSupport.owner(state,

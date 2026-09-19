@@ -3,8 +3,6 @@ package io.farfrontier.palemirror.frontier.v3.process;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
@@ -17,7 +15,13 @@ import java.util.List;
 final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule {
     @Override public CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
         if (command.payload() instanceof PhysicalIntentTransition || command.payload() instanceof PhysicalIntentPrepared) {
-            return FrontierPhysicalIntentCommandProcess.plan(state, command);
+            if (command.payload() instanceof PhysicalIntentPrepared prepared) {
+                return FrontierWorldProcessCatalog.physicalLifecycles().planPrepared(state, command, prepared);
+            }
+            PhysicalIntentTransition transition = (PhysicalIntentTransition) command.payload();
+            PhysicalIntent intent = state.physicalIntents().get(transition.intentId());
+            if (intent == null) return FrontierWorldCommandPlanner.rejected("physical intent is unknown");
+            return FrontierWorldProcessCatalog.physicalLifecycles().planTransition(state, command, intent, transition);
         }
         if (command.payload() instanceof StructureDamaged damage) {
             try { state.recordStructureDamage(damage); }
@@ -93,8 +97,9 @@ final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule 
 
     @Override public FrontierWorldState reduce(FrontierWorldState state, FrontierEvent event) {
         return switch (event.payload()) {
-            case PhysicalIntentPrepared prepared -> reducePrepared(state, event.subject(), prepared);
-            case PhysicalIntentTransition transition -> reduceTransition(state, event.subject(), transition);
+            case PhysicalIntentPrepared prepared -> FrontierWorldProcessCatalog.physicalLifecycles()
+                    .reducePrepared(state, event.subject(), prepared.intent());
+            case PhysicalIntentTransition transition -> reduceTransitionByOwner(state, event.subject(), transition);
             case StructureDamaged damaged -> reduceStructureDamaged(state, event.subject(), damaged);
             case PhysicalDeltaObserved observed -> FrontierWorldPhysicalObservationProcess.reduce(state, event.subject(), observed);
             case PhysicalDeltasObserved observed -> FrontierWorldPhysicalObservationProcess.reduce(state, event.subject(), observed);
@@ -111,182 +116,10 @@ final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule 
         };
     }
 
-    private static FrontierWorldState reducePrepared(FrontierWorldState state, SubjectId subject, PhysicalIntentPrepared prepared) {
-        PhysicalIntent intent = prepared.intent();
-        if (intent.kind() == PhysicalIntentKind.STRUCTURAL_REPAIR) return StructuralRepairProcess.reducePrepared(state, subject, intent);
-        if (intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION) return RouteConstructionProcess.reducePrepared(state, subject, intent);
-        if (intent.kind() == PhysicalIntentKind.ROUTE_MAINTENANCE || intent.kind() == PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING) {
-            return RouteMaintenanceProcess.reducePrepared(state, subject, intent);
-        }
-        if (intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING) {
-            if (!subject.equals(FrontierRouteNetwork.OWNER)) throw new IllegalArgumentException("route construction material pickup must be prepared by the route network");
-            RouteConstructionStateSupport.validateMaterialLoadingIntent(state, intent);
-            return state.preparePhysicalIntent(intent);
-        }
-        if (intent.kind() == PhysicalIntentKind.DECONTAMINATION) return DecontaminationProcess.reducePrepared(state, subject, intent);
-        if (intent.kind() == PhysicalIntentKind.RESOURCE_SITE_PREPARATION) return ResourceSiteProcess.reducePrepared(state, subject, intent);
-        if (intent.kind() == PhysicalIntentKind.RESOURCE_SITE_HARVEST) return ResourceSiteHarvestProcess.reducePrepared(state, subject, intent);
-        if (intent.kind() == PhysicalIntentKind.PRODUCTION_TRANSFORMATION) {
-            ProductionJob job = state.productionJobs().get(intent.causeSubjectId());
-            if (job == null || !subject.equals(job.settlementId())) throw new IllegalArgumentException("production transformation must be prepared by its settlement");
-            ProductionTransformationStateSupport.validateIntent(state, intent);
-            return state.preparePhysicalIntent(intent);
-        }
-        if (intent.kind() == PhysicalIntentKind.CARGO_LOADING) return CargoLoadingStateSupport.reducePrepared(state, subject, intent);
-        if (intent.kind() == PhysicalIntentKind.HIVE_NUTRIENT_DEPARTURE || intent.kind() == PhysicalIntentKind.HIVE_NUTRIENT_ARRIVAL) {
-            if (!subject.equals(state.bootstrap().hive().id())) throw new IllegalArgumentException("hive nutrient endpoint intent must be prepared by the hive");
-            return state.preparePhysicalIntent(intent);
-        }
-        if (intent.kind() == PhysicalIntentKind.EQUIPMENT_ISSUE) {
-            EquipmentIssueStateSupport.validateIntent(state, intent);
-            if (!subject.equals(intent.causeSubjectId())) throw new IllegalArgumentException("equipment issue must be prepared by its settlement");
-            return state.preparePhysicalIntent(intent);
-        }
-        if (intent.kind() == PhysicalIntentKind.EQUIPMENT_RETURN) {
-            EquipmentReturnStateSupport.validateIntent(state, intent);
-            if (!subject.equals(intent.causeSubjectId())) throw new IllegalArgumentException("equipment return must be prepared by its settlement");
-            return state.preparePhysicalIntent(intent);
-        }
-        if (intent.kind() == PhysicalIntentKind.EXACT_ITEM_CONSUMPTION) {
-            if (state.hiveColony().growthJobs().containsKey(intent.causeSubjectId())) return HiveGrowthProcess.reducePrepared(state, subject, intent);
-            if (state.humanPopulation().birthJobs().containsKey(intent.causeSubjectId())) return PopulationBirthProcess.reducePrepared(state, subject, intent);
-            if (state.humanPopulation().medicalOperations().containsKey(intent.causeSubjectId())) {
-                MedicalTreatmentProcess.operationForIntent(state, intent);
-                if (!subject.equals(state.humanPopulation().medicalOperations().get(intent.causeSubjectId()).settlementId())) {
-                    throw new IllegalArgumentException("medical treatment must be prepared by its settlement");
-                }
-                return state.preparePhysicalIntent(intent);
-            }
-            if (state.humanPopulation().provisions().containsKey(intent.causeSubjectId())) return SettlementProvisionProcess.reducePrepared(state, subject, intent);
-            throw new IllegalArgumentException("exact consumption has no supported owning process");
-        }
-        if (intent.kind() == PhysicalIntentKind.SCENE_STRIKE) {
-            SceneStrikeStateSupport.validateIntent(state, intent);
-            if (!subject.equals(SceneStrikeStateSupport.owner(state, intent))) throw new IllegalArgumentException("scene strike must be prepared by its exact scene owner");
-            return state.preparePhysicalIntent(intent);
-        }
-        if (intent.kind() == PhysicalIntentKind.EXPLOSION) {
-            if (!subject.equals(state.bootstrap().hive().id())) throw new IllegalArgumentException("explosion intent must be prepared by the hive");
-            ExplosionStateSupport.validateIntent(state, intent);
-            return state.preparePhysicalIntent(intent);
-        }
-        RouteOperation operation = state.operations().get(intent.causeSubjectId());
-        if (operation == null || operation.stage() != OperationStage.ARRIVED || !subject.equals(operation.settlementId())) {
-            throw new IllegalArgumentException("physical intent must be prepared by an arrived route operation owner");
-        }
-        if (intent.kind() != PhysicalIntentKind.CARGO_HANDOFF || !intent.subjectIds().contains(operation.cargoId())
-                || !intent.subjectIds().contains(operation.id())) throw new IllegalArgumentException("physical intent does not own arrived cargo hand-off");
-        return state.preparePhysicalIntent(intent);
-    }
-
-    private static FrontierWorldState reduceTransition(FrontierWorldState state, SubjectId subject, PhysicalIntentTransition transition) {
+    private static FrontierWorldState reduceTransitionByOwner(FrontierWorldState state, SubjectId subject, PhysicalIntentTransition transition) {
         PhysicalIntent intent = state.physicalIntents().get(transition.intentId());
         if (intent == null) throw new IllegalArgumentException("physical intent transition has no prepared intent");
-        if (intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING) {
-            if (!subject.equals(FrontierRouteNetwork.OWNER)) throw new IllegalArgumentException("route construction material pickup transition lacks route-network ownership");
-            return fencedTransition(state, intent, transition);
-        }
-        if (intent.kind() == PhysicalIntentKind.ROUTE_MAINTENANCE || intent.kind() == PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING) {
-            if (!subject.equals(FrontierRouteNetwork.OWNER)) throw new IllegalArgumentException("route maintenance transition lacks route-network ownership");
-            return fencedTransition(state, intent, transition);
-        }
-        if (intent.kind() == PhysicalIntentKind.SETTLEMENT_SERVICE_INPUT_ISSUE) {
-            SettlementServiceInputIssueStateSupport.validateIntent(state, intent);
-            SettlementServiceWork work = state.serviceWorks().get(intent.causeSubjectId());
-            if (work == null || !subject.equals(work.settlementId())) {
-                throw new IllegalArgumentException("service input issue transition lacks its retained settlement work owner");
-            }
-            return fencedTransition(state, intent, transition);
-        }
-        if (intent.kind() == PhysicalIntentKind.DECONTAMINATION && SettlementServiceDecontaminationStateSupport.owns(state, intent)) {
-            SettlementServiceWork work = state.serviceWorks().get(intent.causeSubjectId());
-            if (work == null || !subject.equals(work.settlementId())) {
-                throw new IllegalArgumentException("service decontamination transition lacks its retained settlement work owner");
-            }
-            if (transition.status() == PhysicalIntentStatus.RUNNING || transition.status() == PhysicalIntentStatus.CONFIRMED) {
-                SettlementServiceDecontaminationStateSupport.validateIntent(state, intent);
-            }
-            return fencedTransition(state, intent, transition);
-        }
-        if (intent.kind() == PhysicalIntentKind.STRUCTURAL_REPAIR || intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION || intent.kind() == PhysicalIntentKind.DECONTAMINATION) {
-            SubjectId owner = intent.kind() == PhysicalIntentKind.DECONTAMINATION ? DecontaminationProcess.owner(state, intent.causeSubjectId()).id()
-                    : FrontierWorldStateSupport.semanticOwner(state.bootstrap(), state.hiveColony(), intent.causeSubjectId());
-            if (!subject.equals(owner)) throw new IllegalArgumentException("structural repair transition lacks its owning settlement");
-            if (intent.kind() == PhysicalIntentKind.DECONTAMINATION) DecontaminationProcess.taskForIntent(state, intent, StrategicTaskStatus.ACTIVE);
-            return fencedTransition(state, intent, transition);
-        }
-        if (intent.kind() == PhysicalIntentKind.EXPLOSION) {
-            if (!subject.equals(state.bootstrap().hive().id())) throw new IllegalArgumentException("explosion transition lacks hive ownership");
-            return fencedTransition(state, intent, transition);
-        }
-        if (intent.kind() == PhysicalIntentKind.SCENE_STRIKE) {
-            if (!subject.equals(SceneStrikeStateSupport.owner(state, intent))) throw new IllegalArgumentException("scene strike transition lacks exact scene ownership");
-            return fencedTransition(state, intent, transition);
-        }
-        if (intent.kind() == PhysicalIntentKind.RESOURCE_SITE_PREPARATION || intent.kind() == PhysicalIntentKind.RESOURCE_SITE_HARVEST) {
-            if (!subject.equals(intent.causeSubjectId())) throw new IllegalArgumentException("resource-site transition lacks site ownership");
-            if (intent.kind() == PhysicalIntentKind.RESOURCE_SITE_HARVEST && transition.status() == PhysicalIntentStatus.RUNNING) {
-                ResourceSiteHarvestProcess.validateRunningTransition(state, intent);
-            }
-            return fencedTransition(state, intent, transition);
-        }
-        if (intent.kind() == PhysicalIntentKind.PRODUCTION_TRANSFORMATION) {
-            ProductionJob job = state.productionJobs().get(intent.causeSubjectId());
-            if (job == null || !subject.equals(job.settlementId())) throw new IllegalArgumentException("production transformation transition lacks settlement ownership");
-            return fencedTransition(state, intent, transition);
-        }
-        if (intent.kind() == PhysicalIntentKind.CARGO_LOADING) return fence(state, intent, transition,
-                CargoLoadingStateSupport.reduceTransition(state, subject, intent, transition));
-        if (intent.kind() == PhysicalIntentKind.HIVE_NUTRIENT_DEPARTURE || intent.kind() == PhysicalIntentKind.HIVE_NUTRIENT_ARRIVAL) {
-            if (!subject.equals(state.bootstrap().hive().id())) throw new IllegalArgumentException("hive nutrient endpoint transition lacks hive ownership");
-            return fencedTransition(state, intent, transition);
-        }
-        if (intent.kind() == PhysicalIntentKind.EQUIPMENT_ISSUE) {
-            if (transition.status() == PhysicalIntentStatus.RUNNING) EquipmentIssueStateSupport.validateIntent(state, intent);
-            if (!subject.equals(intent.causeSubjectId())) throw new IllegalArgumentException("equipment issue transition lacks settlement ownership");
-            return fencedTransition(state, intent, transition);
-        }
-        if (intent.kind() == PhysicalIntentKind.EQUIPMENT_RETURN) {
-            if (transition.status() == PhysicalIntentStatus.RUNNING) EquipmentReturnStateSupport.validateIntent(state, intent);
-            if (!subject.equals(intent.causeSubjectId())) throw new IllegalArgumentException("equipment return transition lacks settlement ownership");
-            return fencedTransition(state, intent, transition);
-        }
-        if (intent.kind() == PhysicalIntentKind.EXACT_ITEM_CONSUMPTION) {
-            HiveGrowthJob job = state.hiveColony().growthJobs().get(intent.causeSubjectId());
-            if (job != null) {
-                if (!subject.equals(job.hiveId())) throw new IllegalArgumentException("hive growth consumption transition lacks hive ownership");
-                return fencedTransition(state, intent, transition);
-            }
-            ResidentBirthJob birth = state.humanPopulation().birthJobs().get(intent.causeSubjectId());
-            if (birth != null) {
-                if (!subject.equals(birth.settlementId())) throw new IllegalArgumentException("resident birth consumption transition lacks settlement ownership");
-                return fencedTransition(state, intent, transition);
-            }
-            MedicalEvacuationOperation medical = state.humanPopulation().medicalOperations().get(intent.causeSubjectId());
-            if (medical != null) {
-                MedicalTreatmentProcess.operationForIntent(state, intent);
-                if (!subject.equals(medical.settlementId())) throw new IllegalArgumentException("medical treatment consumption transition lacks settlement ownership");
-                return fencedTransition(state, intent, transition);
-            }
-            if (!state.humanPopulation().provisions().containsKey(intent.causeSubjectId()) || !subject.equals(intent.causeSubjectId())) {
-                throw new IllegalArgumentException("settlement provision consumption transition lacks settlement ownership");
-            }
-            return fencedTransition(state, intent, transition);
-        }
-        RouteOperation operation = state.operations().get(intent.causeSubjectId());
-        if (operation == null || !subject.equals(operation.settlementId())) throw new IllegalArgumentException("physical intent transition subject does not own operation");
-        return fencedTransition(state, intent, transition);
-    }
-
-    private static FrontierWorldState fencedTransition(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentTransition transition) {
-        return fence(state, intent, transition, state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation()));
-    }
-
-    /** Apply the fence only after the owning reducer has accepted the exact physical transition. */
-    private static FrontierWorldState fence(FrontierWorldState before, PhysicalIntent intent, PhysicalIntentTransition transition,
-                                            FrontierWorldState reduced) {
-        return reduced.withChanges(FrontierWorldStateUpdate.begin().fencedRecovery(
-                FencedRecoveryPhysicalIntentSupport.transition(before.fencedRecovery(), intent, transition.status())));
+        return FrontierWorldProcessCatalog.physicalLifecycles().reduceTransition(state, subject, intent, transition);
     }
 
     private static FrontierWorldState reduceStructureDamaged(FrontierWorldState state, SubjectId subject, StructureDamaged damage) {

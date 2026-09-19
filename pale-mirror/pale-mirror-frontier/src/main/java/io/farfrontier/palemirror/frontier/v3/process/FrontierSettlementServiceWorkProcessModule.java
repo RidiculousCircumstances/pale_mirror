@@ -4,11 +4,107 @@ import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
 import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 
+import java.util.List;
+import java.util.Set;
+
 /** Sole pure-domain reducer owner for resident-owned settlement service work. */
 final class FrontierSettlementServiceWorkProcessModule implements FrontierWorldProcessModule {
+    @Override public List<PhysicalIntentLifecycleCapability> physicalIntentLifecycleCapabilities() {
+        return List.of(new FunctionalPhysicalIntentLifecycleCapability(
+                PhysicalIntentLifecycleOwner.SETTLEMENT_SERVICE_WORK,
+                Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SETTLEMENT_SERVICE_INPUT_ISSUE),
+                (state, command, prepared) -> FrontierWorldCommandPlanner.rejected("physical executor cannot prepare settlement service work"),
+                FrontierSettlementServiceWorkProcessModule::planPhysicalTransition,
+                FrontierSettlementServiceWorkProcessModule::reducePhysicalPrepared,
+                FrontierSettlementServiceWorkProcessModule::reducePhysicalTransition,
+                PhysicalIntentLifecycleRetirementPolicy.of(
+                        FrontierSettlementServiceWorkProcessModule::planPhysicalTransition,
+                        FrontierSettlementServiceWorkProcessModule::reducePhysicalTransition)),
+                new FunctionalPhysicalIntentLifecycleCapability(
+                        PhysicalIntentLifecycleOwner.SETTLEMENT_SERVICE_DECONTAMINATION,
+                        Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.DECONTAMINATION),
+                        (state, command, prepared) -> FrontierWorldCommandPlanner.rejected("physical executor cannot prepare settlement service decontamination"),
+                        FrontierSettlementServiceWorkProcessModule::planServiceDecontaminationTransition,
+                        FrontierSettlementServiceWorkProcessModule::reduceServiceDecontaminationPreparation,
+                        FrontierSettlementServiceWorkProcessModule::reduceServiceDecontaminationTransition,
+                        PhysicalIntentLifecycleRetirementPolicy.of(
+                                FrontierSettlementServiceWorkProcessModule::planServiceDecontaminationTransition,
+                                FrontierSettlementServiceWorkProcessModule::reduceServiceDecontaminationTransition)));
+    }
+
+    private static CommandPlan planServiceDecontaminationTransition(FrontierWorldState state, FrontierCommand command,
+                                                                     io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                                     PhysicalIntentTransition transition) {
+        SettlementServiceWork work = state.serviceWorks().get(intent.causeSubjectId());
+        if (work == null) return FrontierWorldCommandPlanner.rejected("service decontamination has no exact retained work");
+        if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING
+                || transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED) {
+            SettlementServiceDecontaminationStateSupport.validateIntent(state, intent);
+        }
+        ProposedEvent physical = new ProposedEvent(work.settlementId(), transition);
+        if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED) {
+            return new CommandPlan.Accepted(List.of(physical, new ProposedEvent(work.settlementId(),
+                    new StrategicTaskTransition(work.taskId(), StrategicTaskStatus.COMPLETED))));
+        }
+        if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) {
+            return new CommandPlan.Accepted(List.of(physical, new ProposedEvent(work.settlementId(),
+                    new StrategicTaskTransition(work.taskId(), StrategicTaskStatus.BLOCKED))));
+        }
+        return new CommandPlan.Accepted(List.of(physical));
+    }
+
+    private static FrontierWorldState reduceServiceDecontaminationPreparation(FrontierWorldState state,
+                                                                               io.farfrontier.palemirror.frontier.v3.api.SubjectId subject,
+                                                                               io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent) {
+        SettlementServiceWork work = state.serviceWorks().get(intent.causeSubjectId());
+        if (work == null || !subject.equals(work.settlementId())) throw new IllegalArgumentException("service decontamination preparation lacks its retained settlement owner");
+        return state.preparePhysicalIntent(intent);
+    }
+
+    private static FrontierWorldState reduceServiceDecontaminationTransition(FrontierWorldState state,
+                                                                              io.farfrontier.palemirror.frontier.v3.api.SubjectId subject,
+                                                                              io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                                              PhysicalIntentTransition transition) {
+        SettlementServiceWork work = state.serviceWorks().get(intent.causeSubjectId());
+        if (work == null || !subject.equals(work.settlementId())) throw new IllegalArgumentException("service decontamination transition lacks its retained settlement owner");
+        if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING
+                || transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED) {
+            SettlementServiceDecontaminationStateSupport.validateIntent(state, intent);
+        }
+        return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+    }
+
+    private static CommandPlan planPhysicalTransition(FrontierWorldState state, FrontierCommand command,
+                                                       io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                       PhysicalIntentTransition transition) {
+        SettlementServiceWork work = state.serviceWorks().get(intent.causeSubjectId());
+        if (work == null) return FrontierWorldCommandPlanner.rejected("service physical intent has no exact retained work");
+        SettlementServiceInputIssueStateSupport.validateIntent(state, intent);
+        return new CommandPlan.Accepted(List.of(new ProposedEvent(work.settlementId(), transition)));
+    }
+
+    private static FrontierWorldState reducePhysicalPrepared(FrontierWorldState state,
+                                                              io.farfrontier.palemirror.frontier.v3.api.SubjectId subject,
+                                                              io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent) {
+        SettlementServiceWork work = state.serviceWorks().get(intent.causeSubjectId());
+        if (work == null || !subject.equals(work.settlementId())) throw new IllegalArgumentException("service work preparation lacks its retained settlement owner");
+        SettlementServiceInputIssueStateSupport.validateIntent(state, intent);
+        return state.preparePhysicalIntent(intent);
+    }
+
+    private static FrontierWorldState reducePhysicalTransition(FrontierWorldState state,
+                                                               io.farfrontier.palemirror.frontier.v3.api.SubjectId subject,
+                                                               io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                               PhysicalIntentTransition transition) {
+        SettlementServiceWork work = state.serviceWorks().get(intent.causeSubjectId());
+        if (work == null || !subject.equals(work.settlementId())) throw new IllegalArgumentException("service work transition lacks its retained settlement owner");
+        SettlementServiceInputIssueStateSupport.validateIntent(state, intent);
+        return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+    }
     @Override public CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
         if (command.payload() instanceof SettlementServiceWorkSceneLeasePrepared prepared) {
             return ownLease(state, prepared.lease(), prepared);

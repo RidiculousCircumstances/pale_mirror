@@ -6,8 +6,14 @@ import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 
+import java.util.List;
+
 /** Exact owner for ambient body observations and leases. */
 final class FrontierAmbientProcessModule implements FrontierWorldProcessModule {
+    @Override public List<PhysicalIntentLifecycleCapability> physicalIntentLifecycleCapabilities() {
+        return List.of(new NoPhysicalIntentLifecyclePolicy(
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.AMBIENT_ACTOR_CUSTODY));
+    }
     @Override public CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
         if (command.payload() instanceof AmbientActorDied death) return AmbientActorProcess.plan(state, death);
         if (command.payload() instanceof AmbientActorObserved observation) return AmbientActorProcess.plan(state, observation);

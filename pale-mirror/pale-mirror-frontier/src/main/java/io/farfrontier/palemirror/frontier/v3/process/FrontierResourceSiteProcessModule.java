@@ -3,13 +3,66 @@ package io.farfrontier.palemirror.frontier.v3.process;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner;
 import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 
+import java.util.List;
+import java.util.Set;
+
 /** Exact reducer and physical-observation admission owner for resource sites. */
 final class FrontierResourceSiteProcessModule implements FrontierWorldProcessModule {
+    @Override public List<PhysicalIntentLifecycleCapability> physicalIntentLifecycleCapabilities() {
+        return List.of(new FunctionalPhysicalIntentLifecycleCapability(
+                PhysicalIntentLifecycleOwner.RESOURCE_SITE_PREPARATION,
+                Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.RESOURCE_SITE_PREPARATION),
+                (state, command, prepared) -> new CommandPlan.Accepted(List.of(new ProposedEvent(prepared.intent().causeSubjectId(), prepared))),
+                (state, command, intent, transition) -> new CommandPlan.Accepted(
+                        ResourceSiteProcess.planPreparationTransition(state, intent, transition, command.submittedAt().ticks())),
+                ResourceSiteProcess::reducePrepared,
+                (state, subject, intent, transition) -> {
+                    if (!subject.equals(intent.causeSubjectId())) throw new IllegalArgumentException("resource-site preparation transition lacks site ownership");
+                    return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+                }, PhysicalIntentLifecycleRetirementPolicy.of(
+                        (state, command, intent, transition) -> new CommandPlan.Accepted(
+                                ResourceSiteProcess.planPreparationTransition(state, intent, transition, command.submittedAt().ticks())),
+                        (state, subject, intent, transition) -> {
+                            if (!subject.equals(intent.causeSubjectId())) throw new IllegalArgumentException("resource-site preparation retirement lacks site ownership");
+                            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+                        })),
+                new FunctionalPhysicalIntentLifecycleCapability(
+                PhysicalIntentLifecycleOwner.RESOURCE_SITE_HARVEST,
+                Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.RESOURCE_SITE_HARVEST),
+                (state, command, prepared) -> FrontierWorldCommandPlanner.rejected("physical executor cannot prepare resource-site harvest"),
+                (state, command, intent, transition) -> new CommandPlan.Accepted(
+                        ResourceSiteHarvestProcess.planTransition(state, intent, transition, command.submittedAt().ticks())),
+                ResourceSiteHarvestProcess::reducePrepared,
+                (state, subject, intent, transition) -> {
+                    if (!subject.equals(intent.causeSubjectId())) throw new IllegalArgumentException("resource-site harvest transition lacks site ownership");
+                    if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING) {
+                        ResourceSiteHarvestProcess.validateRunningTransition(state, intent);
+                    }
+                    return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+                }, PhysicalIntentLifecycleRetirementPolicy.of(
+                        FrontierResourceSiteProcessModule::planHarvestRetirement,
+                        (state, subject, intent, transition) -> {
+                            if (!subject.equals(intent.causeSubjectId())) throw new IllegalArgumentException("resource-site harvest retirement lacks site ownership");
+                            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+                        })));
+    }
+
+    private static CommandPlan planHarvestRetirement(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierCommand command,
+                                                       io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                       PhysicalIntentTransition transition) {
+        try {
+            return new CommandPlan.Accepted(ResourceSiteHarvestProcess.planTransition(state, intent, transition,
+                    command.submittedAt().ticks()));
+        } catch (IllegalArgumentException invalid) {
+            return FrontierWorldCommandPlanner.rejected(invalid.getMessage());
+        }
+    }
     @Override public CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
         if (command.payload() instanceof ResourceSiteHarvestSceneLeasePrepared prepared) {
             try {
