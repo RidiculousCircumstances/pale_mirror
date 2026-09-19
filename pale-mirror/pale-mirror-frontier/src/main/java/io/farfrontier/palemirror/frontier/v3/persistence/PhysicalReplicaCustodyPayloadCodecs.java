@@ -52,10 +52,10 @@ final class PhysicalReplicaCustodyPayloadCodecs {
         @Override public byte[] encode(FrontierPayload payload) { return encodeBytes(output -> {
             ReplicaConflictObserved value = (ReplicaConflictObserved) payload; subject(output, value.objectId());
             output.writeLong(value.expectedCanonicalRevision()); output.writeLong(value.expectedReplicaRevision());
-            FrontierWorldPayloadCodecs.writeString(output, value.fingerprint()); FrontierWorldPayloadCodecs.writeString(output, value.provenance());
+            FrontierWorldPayloadCodecs.writeString(output, value.fingerprint()); FrontierWorldPayloadCodecs.writeString(output, value.provenance()); FrontierWorldPayloadCodecs.writeDiagnosticTuple(output, value.diagnostic());
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeBytes(bytes, input -> new ReplicaConflictObserved(
-                subject(input), input.readLong(), input.readLong(), FrontierWorldPayloadCodecs.readString(input), FrontierWorldPayloadCodecs.readString(input))); }
+                subject(input), input.readLong(), input.readLong(), FrontierWorldPayloadCodecs.readString(input), FrontierWorldPayloadCodecs.readString(input), FrontierWorldPayloadCodecs.readDiagnosticTuple(input))); }
     }
     private static final class Acquired extends Base {
         @Override public String type() { return "frontier.physical_custody_acquired"; }
@@ -75,10 +75,10 @@ final class PhysicalReplicaCustodyPayloadCodecs {
             CustodyUnresolved value = (CustodyUnresolved) payload;
             subject(output, value.scopeId()); output.writeLong(value.expectedEpoch());
             output.writeLong(value.expectedCanonicalRevision()); output.writeLong(value.expectedReplicaRevision());
-            output.writeByte(value.reason().wireTag());
+            output.writeByte(value.reason().wireTag()); FrontierWorldPayloadCodecs.writeDiagnosticTuple(output, value.diagnostic());
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeBytes(bytes,
-                input -> new CustodyUnresolved(subject(input), input.readLong(), input.readLong(), input.readLong(), readReason(input.readUnsignedByte()))); }
+                input -> new CustodyUnresolved(subject(input), input.readLong(), input.readLong(), input.readLong(), readReason(input.readUnsignedByte()), FrontierWorldPayloadCodecs.readDiagnosticTuple(input))); }
     }
     private static final class Released extends Base {
         @Override public String type() { return "frontier.physical_custody_released"; }

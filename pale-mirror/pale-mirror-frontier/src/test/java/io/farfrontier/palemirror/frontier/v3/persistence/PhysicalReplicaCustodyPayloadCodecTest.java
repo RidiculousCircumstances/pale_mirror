@@ -7,6 +7,7 @@ import io.farfrontier.palemirror.frontier.v3.model.PhysicalCustodyLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalCustodyUnresolvedReason;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyPayloads.*;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaRecord;
+import io.farfrontier.palemirror.frontier.v3.model.ReplicaCustodyDiagnosticProducer;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import org.junit.jupiter.api.Test;
 
@@ -28,9 +29,9 @@ class PhysicalReplicaCustodyPayloadCodecTest {
                 PhysicalCustodyLeaseStatus.ACQUIRED, null);
         List<FrontierPayload> payloads = List.of(new ReplicaDeclared(replica), new ReplicaEmitted(OBJECT, 10L, 2L, 11L,
                 "sha256:b", "owned:cycle-two"), new ReplicaObserved(OBJECT, 10L, 1L,
-                "sha256:a", "owned:genesis", 10L), new ReplicaConflictObserved(OBJECT, 10L, 2L, "sha256:foreign", "foreign:player"),
+                "sha256:a", "owned:genesis", 10L), ReplicaCustodyDiagnosticProducer.conflict(OBJECT, 10L, 2L, "sha256:foreign", "foreign:player"),
                 new CustodyAcquired(lease), new CustodyCheckpointed(SCOPE, 1L, 10L, 2L),
-                new CustodyUnresolved(SCOPE, 1L, 10L, 2L, PhysicalCustodyUnresolvedReason.RESTART_AMBIGUITY),
+                ReplicaCustodyDiagnosticProducer.unresolved(SCOPE, 1L, 10L, 2L, PhysicalCustodyUnresolvedReason.RESTART_AMBIGUITY),
                 new CustodyReleased(SCOPE, 1L, 10L, 2L));
         var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
         for (FrontierPayload payload : payloads) {

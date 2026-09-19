@@ -15,6 +15,7 @@ import io.farfrontier.palemirror.frontier.v3.model.RouteOperation;
 import io.farfrontier.palemirror.frontier.v3.model.RoutePatrol;
 import io.farfrontier.palemirror.frontier.v3.model.RoutePatrolBlocked;
 import io.farfrontier.palemirror.frontier.v3.model.RoutePatrolBlockReason;
+import io.farfrontier.palemirror.frontier.v3.model.RoutePatrolDiagnosticProducer;
 import io.farfrontier.palemirror.frontier.v3.model.StrategicTaskStatus;
 import io.farfrontier.palemirror.frontier.v3.model.StrategicTaskTransition;
 import io.farfrontier.palemirror.frontier.v3.model.SceneContinuation;
@@ -198,7 +199,7 @@ public final class FrontierSceneContinuationPlanner {
             if (!(continuation instanceof SceneContinuation.BlockRoutePatrol block)) throw invalid(continuation, kind());
             RoutePatrol patrol = state.strategicPlans().routePatrols().get(block.taskId());
             if (patrol == null || !patrol.active()) throw new IllegalArgumentException("scene recovery has no active route patrol");
-            return List.of(new ProposedEvent(patrol.settlementId(), new RoutePatrolBlocked(patrol.taskId(), RoutePatrolBlockReason.RECOVERY_UNRESOLVED)),
+            return List.of(new ProposedEvent(patrol.settlementId(), RoutePatrolDiagnosticProducer.RECOVERY_UNRESOLVED.create(patrol.taskId())),
                     new ProposedEvent(patrol.settlementId(), new StrategicTaskTransition(patrol.taskId(), StrategicTaskStatus.BLOCKED)));
         }
     }

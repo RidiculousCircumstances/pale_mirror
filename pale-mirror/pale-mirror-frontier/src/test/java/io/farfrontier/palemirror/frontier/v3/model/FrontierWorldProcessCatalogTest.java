@@ -207,7 +207,7 @@ class FrontierWorldProcessCatalogTest {
                         new SubjectId("object:representative"), "crate", 1L, "fingerprint:representative", "provenance:representative"))),
                 Map.entry("ambient-actors", new AmbientActorObserved(new SubjectId("actor:representative"), new BodyPosition(1, 64, 1), FixedScalar.ONE)),
                 Map.entry("logistics-scenes", new SceneLeaseTransition(new SceneLeaseId("scene:representative"), SceneLeaseStatus.HOT)),
-                Map.entry("population", new ResidentMigrationBlocked(new SubjectId("resident:representative"), ResidentMigrationBlockReason.QUARANTINE)),
+                Map.entry("population", ResidentMigrationDiagnosticProducer.QUARANTINE.create(new SubjectId("resident:representative"))),
                 Map.entry("economy", new MarketDemandExpired(new SubjectId("demand:representative"))),
                 Map.entry("resource-sites", new ResourceSiteGrowthAdvanced(new SubjectId("site:representative"), 1L, 0)),
                 Map.entry("hive", new InfectionChanged(new InfectionCell(1, 1), new FixedRatio(FixedScalar.ONE))),

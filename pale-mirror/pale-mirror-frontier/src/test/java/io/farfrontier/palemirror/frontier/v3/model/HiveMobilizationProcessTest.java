@@ -518,16 +518,15 @@ class HiveMobilizationProcessTest {
         HiveTaskAssembly.Member member = assembly.members().get(actor);
         HiveAssemblyBlockage blockage = new HiveAssemblyBlockage(actor, member.cursor(), member.nextSurface());
         FrontierWorldState conflicted = HiveMobilizationProcess.reduceConflicted(assembled.state(), assembled.state().bootstrap().hive().id(),
-                new HiveMobilizationConflicted(assembled.mobilization().id(), HiveMobilizationConflictReason.ASSEMBLY_PATH_BLOCKED, java.util.Optional.of(blockage)));
+                HiveMobilizationDiagnosticProducer.ASSEMBLY_PATH_BLOCKED.create(assembled.mobilization().id(), blockage));
 
         assertEquals(HiveMobilizationStatus.CONFLICT, conflicted.hiveColony().mobilizations().get(assembled.mobilization().id()).status());
         assertEquals(java.util.Optional.of(blockage), conflicted.hiveColony().mobilizations().get(assembled.mobilization().id()).assemblyBlockage());
         assertThrows(IllegalArgumentException.class, () -> HiveMobilizationProcess.reduceConflicted(assembled.state(), assembled.state().bootstrap().hive().id(),
-                new HiveMobilizationConflicted(assembled.mobilization().id(), HiveMobilizationConflictReason.ASSEMBLY_PATH_BLOCKED,
-                        java.util.Optional.of(new HiveAssemblyBlockage(actor, member.cursor() + 1, member.nextSurface())))));
+                HiveMobilizationDiagnosticProducer.ASSEMBLY_PATH_BLOCKED.create(assembled.mobilization().id(),
+                        new HiveAssemblyBlockage(actor, member.cursor() + 1, member.nextSurface()))));
         assertThrows(IllegalArgumentException.class, () -> HiveMobilizationProcess.reduceConflicted(assembled.state(),
-                assembled.state().bootstrap().hive().id(), new HiveMobilizationConflicted(assembled.mobilization().id(),
-                        HiveMobilizationConflictReason.COCOON_CHANGED)));
+                assembled.state().bootstrap().hive().id(), HiveMobilizationDiagnosticProducer.COCOON_CHANGED.create(assembled.mobilization().id())));
     }
 
     @Test void playerBrokenCocoonInterruptsOnlyItsInFlightMobilizationAndReleasesTheExactOccupant() {
@@ -571,7 +570,7 @@ class HiveMobilizationProcessTest {
         BodyPosition original = state.actorLocations().get(first).body();
         state = HiveMobilizationProcess.reduceReleaseStarted(state, fixture.hive(), new HiveMobilizationReleaseStarted(mobilization.id()));
         state = HiveMobilizationProcess.reduceConflicted(state, fixture.hive(),
-                new HiveMobilizationConflicted(mobilization.id(), HiveMobilizationConflictReason.UNKNOWN_AFTER_RESTART));
+                HiveMobilizationDiagnosticProducer.UNKNOWN_AFTER_RESTART.create(mobilization.id()));
 
         HiveMobilization conflicted = state.hiveColony().mobilizations().get(mobilization.id());
         assertEquals(HiveMobilizationStatus.CONFLICT, conflicted.status());

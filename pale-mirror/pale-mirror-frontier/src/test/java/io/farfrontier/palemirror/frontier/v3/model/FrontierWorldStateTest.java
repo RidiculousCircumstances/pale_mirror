@@ -452,7 +452,7 @@ class FrontierWorldStateTest {
                 new Bioform(new SubjectId("bioform:west-grown-remote"), hive, new SubjectId("nest:seed-west"), BioformChassis.RUNT,
                         java.util.Set.of(BioformMutation.ARMORED), BioformAssignment.DEFEND, new BlockPosition(-404, 64, 432)))));
         assertEquals(baseline, HiveGrowthProcess.reduceBlocked(baseline, hive,
-                new HiveGrowthBlocked(hive, east, new SubjectId("work:hive-growth-1"), HiveGrowthBlockReason.BIOMASS_UNAVAILABLE)));
+                HiveGrowthDiagnosticProducer.BIOMASS_UNAVAILABLE.create(hive, east, new SubjectId("work:hive-growth-1"))));
         FrontierWorldState completed = consumed.completeHiveGrowth(job.id());
         assertTrue(completed.hiveColony().growthJobs().isEmpty());
         assertEquals(job.organ(), completed.hiveColony().addedOrgans().get(job.organ().id()));
@@ -478,7 +478,7 @@ class FrontierWorldStateTest {
                 .transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, java.util.Optional.empty());
         FrontierWorldState unknown = running.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, java.util.Optional.empty());
         FrontierWorldState released = HiveGrowthProcess.reduceBlocked(unknown, hive,
-                new HiveGrowthBlocked(hive, east, job.id(), HiveGrowthBlockReason.PHYSICAL_CONSUMPTION_UNKNOWN));
+                HiveGrowthDiagnosticProducer.PHYSICAL_CONSUMPTION_UNKNOWN.create(hive, east, job.id()));
         assertTrue(released.hiveColony().growthJobs().isEmpty());
         assertTrue(released.inventory().items().containsKey(job.consumedItemId()), "unknown postcondition must never silently consume biomass");
     }

@@ -33,6 +33,7 @@ import io.farfrontier.palemirror.frontier.v3.model.HiveMobilization;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationAssemblyAdvanced;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationConflicted;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationConflictReason;
+import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationDiagnosticProducer;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationStatus;
 import io.farfrontier.palemirror.frontier.v3.model.HiveTaskAssembly;
 import io.farfrontier.palemirror.frontier.v3.model.EngineeringToolCustody;
@@ -545,9 +546,9 @@ final class FrontierV3AmbientActorExecutor {
             }
             if (!FrontierV3StandingPosition.hasExactStandingColumn(level, lease.goalBody().supportingSurface().support())) {
                 io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "ambient-hive-assembly-blocked",
-                        actorId.value(), new HiveMobilizationConflicted(mobilization.id(), HiveMobilizationConflictReason.ASSEMBLY_PATH_BLOCKED,
-                                java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.model.HiveAssemblyBlockage(actorId,
-                                        member.cursor(), member.nextSurface()))));
+                        actorId.value(), HiveMobilizationDiagnosticProducer.ASSEMBLY_PATH_BLOCKED.create(mobilization.id(),
+                                new io.farfrontier.palemirror.frontier.v3.model.HiveAssemblyBlockage(actorId,
+                                        member.cursor(), member.nextSurface())));
                 FrontierV3DiagnosticTrace.record(level.getServer(), "hive-assembly:" + mobilization.id().value(),
                         "hive_assembly_path_blocked", actorId, result);
                 body.getNavigation().stop();

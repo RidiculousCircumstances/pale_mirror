@@ -73,9 +73,9 @@ final class HiveMobilizationPayloadCodecs {
     private static final class ConflictedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.hive_mobilization_conflicted"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeValue(output -> { HiveMobilizationConflicted conflicted = (HiveMobilizationConflicted) payload;
-            writeSubject(output, conflicted.mobilizationId()); output.writeByte(conflicted.reason().wireTag()); writeBlockage(output, conflicted.assemblyBlockage()); }); }
+            writeSubject(output, conflicted.mobilizationId()); output.writeByte(conflicted.reason().wireTag()); writeBlockage(output, conflicted.assemblyBlockage()); FrontierWorldPayloadCodecs.writeDiagnosticTuple(output, conflicted.diagnostic()); }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeValue(bytes, input -> new HiveMobilizationConflicted(readSubject(input),
-                FrontierWireTags.require(HiveMobilizationConflictReason.class, input.readUnsignedByte()), readBlockage(input))); }
+                FrontierWireTags.require(HiveMobilizationConflictReason.class, input.readUnsignedByte()), readBlockage(input), FrontierWorldPayloadCodecs.readDiagnosticTuple(input))); }
     }
 
     private static void write(DataOutputStream output, HiveMobilization value) throws IOException {

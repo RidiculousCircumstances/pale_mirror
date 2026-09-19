@@ -31,12 +31,12 @@ public final class HiveNutrientTransferProcess {
         HiveNutrientTransfer transfer = HiveNutrientTransferStateSupport.requireTransit(state, action.subject());
         if (ReferenceContainerCustody.blocksCanonicalUse(state, transfer.sourceStoreId())
                 || ReferenceContainerCustody.blocksCanonicalUse(state, transfer.targetStoreId())) {
-            return List.of(new ProposedEvent(transfer.hiveId(), new HiveNutrientTransferBlocked(transfer.id(), HiveNutrientTransferBlockReason.CARGO_CUSTODY_LOST)));
+            return List.of(new ProposedEvent(transfer.hiveId(), HiveNutrientDiagnosticProducer.CARGO_CUSTODY_LOST.create(transfer.id())));
         }
         try {
             HiveNutrientTransferStateSupport.validateTransit(state, transfer);
         } catch (IllegalArgumentException blocked) {
-            return List.of(new ProposedEvent(transfer.hiveId(), new HiveNutrientTransferBlocked(transfer.id(), blockReason(state, transfer))));
+            return List.of(new ProposedEvent(transfer.hiveId(), producer(blockReason(state, transfer)).create(transfer.id())));
         }
         int nextCursor = transfer.cursor() + 1;
         if (nextCursor < transfer.corridor().size() - 1) {
@@ -44,7 +44,7 @@ public final class HiveNutrientTransferProcess {
                     schedule(advance(transfer, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().hiveNutrientTransferStepInterval())));
         }
         if (ReferenceContainerCustody.hasConflict(state, transfer.targetStoreId())) {
-            return List.of(new ProposedEvent(transfer.hiveId(), new HiveNutrientTransferBlocked(transfer.id(), HiveNutrientTransferBlockReason.CARGO_CUSTODY_LOST)));
+            return List.of(new ProposedEvent(transfer.hiveId(), HiveNutrientDiagnosticProducer.CARGO_CUSTODY_LOST.create(transfer.id())));
         }
         if (ReferenceContainerCustody.hasLiveCustody(state, transfer.targetStoreId())) {
             HiveNutrientTransfer waiting = transfer.advanceTo(nextCursor).awaitArrival(arrivalIntentId(transfer));
@@ -170,6 +170,11 @@ public final class HiveNutrientTransferProcess {
         if (ReferenceContainerCustody.hasConflict(state, transfer.targetStoreId())) return HiveNutrientTransferBlockReason.CARGO_CUSTODY_LOST;
         if (state.inventory().itemAt(transfer.targetStoreId(), transfer.targetSlot().slot()).isPresent()) return HiveNutrientTransferBlockReason.TARGET_SLOT_UNAVAILABLE;
         return HiveNutrientTransferBlockReason.CARGO_CUSTODY_LOST;
+    }
+    private static HiveNutrientDiagnosticProducer producer(HiveNutrientTransferBlockReason reason) {
+        return switch (reason) { case ENDPOINT_MATERIALIZED -> HiveNutrientDiagnosticProducer.ENDPOINT_MATERIALIZED;
+            case TARGET_SLOT_UNAVAILABLE -> HiveNutrientDiagnosticProducer.TARGET_SLOT_UNAVAILABLE;
+            case CARGO_CUSTODY_LOST -> HiveNutrientDiagnosticProducer.CARGO_CUSTODY_LOST; };
     }
 
     private static List<BlockPosition> corridor(BlockPosition source, BlockPosition target) {

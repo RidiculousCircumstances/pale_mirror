@@ -6,7 +6,10 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.util.Objects;
 
 /** Durable refusal to advance a journey; it never rewrites the resident's current location. */
-public record ResidentMigrationBlocked(SubjectId residentId, ResidentMigrationBlockReason reason) implements FrontierPayload {
-    public ResidentMigrationBlocked { Objects.requireNonNull(residentId, "migration resident"); Objects.requireNonNull(reason, "migration block reason"); }
+public record ResidentMigrationBlocked(SubjectId residentId, ResidentMigrationBlockReason reason,
+                                       DiagnosticTuple diagnostic) implements FrontierPayload {
+    public ResidentMigrationBlocked { Objects.requireNonNull(residentId, "migration resident"); Objects.requireNonNull(reason, "migration block reason"); diagnostic = Objects.requireNonNull(diagnostic, "migration block diagnostic");
+        if (diagnostic.reason() != DiagnosticReason.RESIDENT_MIGRATION_BLOCKED || !diagnostic.owner().id().equals(residentId)
+                || !diagnostic.subject().id().equals(residentId)) throw new IllegalArgumentException("migration block has a foreign diagnostic tuple"); }
     @Override public String type() { return "frontier.resident_migration_blocked"; }
 }

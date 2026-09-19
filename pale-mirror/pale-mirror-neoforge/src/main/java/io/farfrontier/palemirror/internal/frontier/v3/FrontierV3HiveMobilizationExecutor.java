@@ -13,6 +13,7 @@ import io.farfrontier.palemirror.frontier.v3.model.HiveCocoonPlan;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilization;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationCocoonReleased;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationConflictReason;
+import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationDiagnosticProducer;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationConflicted;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationReleaseStarted;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationStatus;
@@ -151,7 +152,13 @@ final class FrontierV3HiveMobilizationExecutor {
 
     private static void submitConflict(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                        FrontierWorldState state, HiveMobilization mobilization, HiveMobilizationConflictReason reason) {
-        submit(level, runtime, state, "hive-mobilization-conflict", mobilization.id(), new HiveMobilizationConflicted(mobilization.id(), reason));
+        HiveMobilizationDiagnosticProducer producer = switch (reason) {
+            case COCOON_CHANGED -> HiveMobilizationDiagnosticProducer.COCOON_CHANGED;
+            case DEPARTURE_UNAVAILABLE -> HiveMobilizationDiagnosticProducer.DEPARTURE_UNAVAILABLE;
+            case ASSEMBLY_PATH_BLOCKED -> HiveMobilizationDiagnosticProducer.ASSEMBLY_PATH_BLOCKED;
+            case UNKNOWN_AFTER_RESTART -> HiveMobilizationDiagnosticProducer.UNKNOWN_AFTER_RESTART;
+        };
+        submit(level, runtime, state, "hive-mobilization-conflict", mobilization.id(), producer.create(mobilization.id()));
     }
 
     private static boolean submit(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,

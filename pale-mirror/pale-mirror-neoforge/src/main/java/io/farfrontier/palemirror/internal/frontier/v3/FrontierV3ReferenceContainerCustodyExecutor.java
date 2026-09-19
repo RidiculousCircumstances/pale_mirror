@@ -23,6 +23,7 @@ import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaState;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackBinding;
 import io.farfrontier.palemirror.frontier.v3.model.ReferenceContainerCustody;
+import io.farfrontier.palemirror.frontier.v3.model.ReplicaCustodyDiagnosticProducer;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceCustody;
 import io.farfrontier.palemirror.frontier.v3.model.FungibleStackBindingsReleased;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
@@ -211,7 +212,7 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
     }
 
     private static void conflict(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalReplicaRecord replica, Observed observed) {
-        submit(runtime, "conflict", replica.objectId(), replica.replicaRevision(), new ReplicaConflictObserved(replica.objectId(),
+        submit(runtime, "conflict", replica.objectId(), replica.replicaRevision(), ReplicaCustodyDiagnosticProducer.conflict(replica.objectId(),
                 replica.emittedCanonicalRevision(), replica.replicaRevision(), observed.fingerprint(), observed.provenance()));
     }
 

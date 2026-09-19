@@ -47,10 +47,10 @@ final class RoutePatrolPayloadCodecs {
         @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
             RoutePatrolBlocked blocked = (RoutePatrolBlocked) payload;
             subject(output, blocked.taskId());
-            output.writeByte(blocked.reason().wireTag());
+            output.writeByte(blocked.reason().wireTag()); FrontierWorldPayloadCodecs.writeDiagnosticTuple(output, blocked.diagnostic());
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input ->
-                new RoutePatrolBlocked(subject(input), FrontierWireTags.require(RoutePatrolBlockReason.class, input.readUnsignedByte()))); }
+                new RoutePatrolBlocked(subject(input), FrontierWireTags.require(RoutePatrolBlockReason.class, input.readUnsignedByte()), FrontierWorldPayloadCodecs.readDiagnosticTuple(input))); }
     }; }
     static PayloadCodec prepared() { return new PayloadCodec() {
         @Override public String type() { return "frontier.route_patrol_scene_lease_prepared"; }

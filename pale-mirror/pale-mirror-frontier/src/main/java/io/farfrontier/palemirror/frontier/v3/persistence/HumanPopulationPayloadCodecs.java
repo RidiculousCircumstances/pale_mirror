@@ -93,12 +93,12 @@ final class HumanPopulationPayloadCodecs {
             @Override public String type() { return "frontier.resident_migration_blocked"; }
             @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
                 ResidentMigrationBlocked blocked = (ResidentMigrationBlocked) payload;
-                FrontierWorldPayloadCodecs.writeSubject(output, blocked.residentId()); output.writeByte(blocked.reason().wireTag());
+                FrontierWorldPayloadCodecs.writeSubject(output, blocked.residentId()); output.writeByte(blocked.reason().wireTag()); FrontierWorldPayloadCodecs.writeDiagnosticTuple(output, blocked.diagnostic());
             }); }
             @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
                 var resident = FrontierWorldPayloadCodecs.readSubject(input); int reason = input.readUnsignedByte();
                 if (reason >= ResidentMigrationBlockReason.values().length) throw new IllegalArgumentException("unknown resident migration block reason");
-                return new ResidentMigrationBlocked(resident.value(), FrontierWireTags.require(ResidentMigrationBlockReason.class, reason));
+                return new ResidentMigrationBlocked(resident.value(), FrontierWireTags.require(ResidentMigrationBlockReason.class, reason), FrontierWorldPayloadCodecs.readDiagnosticTuple(input));
             }); }
         };
     }

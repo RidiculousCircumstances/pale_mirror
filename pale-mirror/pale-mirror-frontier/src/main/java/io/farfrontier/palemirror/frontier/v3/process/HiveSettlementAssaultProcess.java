@@ -81,13 +81,11 @@ public final class HiveSettlementAssaultProcess {
         if (task == null || task.kind() != StrategicTaskKind.ASSAULT_SETTLEMENT || task.status() != StrategicTaskStatus.ACTIVE
                 || !task.ownerId().equals(mobilization.hiveId()) || !targetGeometryExists(state, mobilization.sighting())
                 || !currentSightingSupportsDeparture(state, mobilization, now) || !hasFreshLocalTerritory(state, mobilization.sighting(), now)) {
-            return List.of(new ProposedEvent(mobilization.hiveId(), new HiveMobilizationConflicted(mobilization.id(),
-                    HiveMobilizationConflictReason.DEPARTURE_UNAVAILABLE, Optional.empty())));
+            return List.of(new ProposedEvent(mobilization.hiveId(), HiveMobilizationDiagnosticProducer.DEPARTURE_UNAVAILABLE.create(mobilization.id())));
         }
         SettlementAssault assault = assaultFromAssembly(state, task, mobilization, completedAssembly);
         if (assault == null) {
-            return List.of(new ProposedEvent(mobilization.hiveId(), new HiveMobilizationConflicted(mobilization.id(),
-                    HiveMobilizationConflictReason.DEPARTURE_UNAVAILABLE, Optional.empty())));
+            return List.of(new ProposedEvent(mobilization.hiveId(), HiveMobilizationDiagnosticProducer.DEPARTURE_UNAVAILABLE.create(mobilization.id())));
         }
         List<ProposedEvent> events = new ArrayList<>();
         // One payload owns both ends of the custody transfer. A separate start event would

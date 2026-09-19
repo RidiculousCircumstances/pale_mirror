@@ -213,7 +213,7 @@ public final class HiveGrowthProcess {
         StrategicTask task = activeTask(state, job.hiveId()); ProposedEvent physical = new ProposedEvent(job.hiveId(), transition);
         if (transition.status() == PhysicalIntentStatus.CONFIRMED) return List.of(physical, schedule(complete(job, now + 200L)));
         if (transition.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) return List.of(physical,
-                new ProposedEvent(job.hiveId(), new HiveGrowthBlocked(job.hiveId(), job.nestId(), job.id(), HiveGrowthBlockReason.PHYSICAL_CONSUMPTION_UNKNOWN)),
+                new ProposedEvent(job.hiveId(), HiveGrowthDiagnosticProducer.PHYSICAL_CONSUMPTION_UNKNOWN.create(job.hiveId(), job.nestId(), job.id())),
                 transition(task, StrategicTaskStatus.BLOCKED));
         return List.of(physical);
     }

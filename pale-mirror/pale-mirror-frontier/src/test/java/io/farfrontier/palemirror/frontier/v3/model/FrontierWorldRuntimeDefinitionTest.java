@@ -225,7 +225,7 @@ class FrontierWorldRuntimeDefinitionTest {
         assertEquals(consumed, FrontierWorldRuntimeDefinition.payloadCodecs().decode(consumed.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(consumed)));
         assertEquals(1, completed.hiveColony().growthJobs().size());
         assertEquals(48, engine.projection(ProjectionQuery.summary()).bioformCount(), "without a materialized receipt growth must not fabricate biomass outputs");
-        HiveGrowthBlocked blocked = new HiveGrowthBlocked(job.hiveId(), job.nestId(), new SubjectId("work:hive-growth-2"), HiveGrowthBlockReason.BIOMASS_UNAVAILABLE);
+        HiveGrowthBlocked blocked = HiveGrowthDiagnosticProducer.BIOMASS_UNAVAILABLE.create(job.hiveId(), job.nestId(), new SubjectId("work:hive-growth-2"));
         assertEquals(blocked, FrontierWorldRuntimeDefinition.payloadCodecs().decode(blocked.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(blocked)));
     }
 

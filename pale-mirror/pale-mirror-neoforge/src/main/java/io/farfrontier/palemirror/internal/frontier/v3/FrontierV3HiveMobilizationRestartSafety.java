@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationConflicted;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationConflictReason;
+import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationDiagnosticProducer;
 import io.farfrontier.palemirror.frontier.v3.model.HiveMobilizationStatus;
 
 /**
@@ -23,7 +24,7 @@ final class FrontierV3HiveMobilizationRestartSafety {
             // naturally loaded inspection can explain the visible aftermath, but this exact
             // group must not make a body or progress from an uninspected physical effect.
             FrontierV3CommandSubmission.submit(runtime, "hive-mobilization-restart-unknown", mobilization.id().value(),
-                    new HiveMobilizationConflicted(mobilization.id(), HiveMobilizationConflictReason.UNKNOWN_AFTER_RESTART));
+                    HiveMobilizationDiagnosticProducer.UNKNOWN_AFTER_RESTART.create(mobilization.id()));
             count++;
         }
         return count;

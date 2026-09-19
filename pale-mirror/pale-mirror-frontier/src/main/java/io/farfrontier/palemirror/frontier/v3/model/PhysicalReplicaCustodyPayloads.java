@@ -32,12 +32,15 @@ public final class PhysicalReplicaCustodyPayloads {
         @Override public String type() { return "frontier.physical_replica_observed"; }
     }
     public record ReplicaConflictObserved(SubjectId objectId, long expectedCanonicalRevision, long expectedReplicaRevision,
-                                          String fingerprint, String provenance) implements FrontierPayload {
+                                          String fingerprint, String provenance, DiagnosticTuple diagnostic) implements FrontierPayload {
         public ReplicaConflictObserved {
             Objects.requireNonNull(objectId, "object id"); Objects.requireNonNull(fingerprint, "fingerprint"); Objects.requireNonNull(provenance, "provenance");
+            diagnostic = Objects.requireNonNull(diagnostic, "replica conflict diagnostic");
             if (expectedCanonicalRevision < 0 || expectedReplicaRevision < 1 || fingerprint.isBlank() || provenance.isBlank()) {
                 throw new IllegalArgumentException("replica conflict observation is invalid");
             }
+            if (diagnostic.reason() != DiagnosticReason.REPLICA_CUSTODY_CONFLICT || !diagnostic.owner().id().equals(objectId)
+                    || !diagnostic.subject().id().equals(objectId)) throw new IllegalArgumentException("replica conflict has a foreign diagnostic tuple");
         }
         @Override public String type() { return "frontier.physical_replica_conflict_observed"; }
     }
@@ -53,10 +56,13 @@ public final class PhysicalReplicaCustodyPayloads {
         @Override public boolean requiresDurableBeforeEffect() { return true; }
     }
     public record CustodyUnresolved(SubjectId scopeId, long expectedEpoch, long expectedCanonicalRevision, long expectedReplicaRevision,
-                                    PhysicalCustodyUnresolvedReason reason) implements FrontierPayload {
+                                    PhysicalCustodyUnresolvedReason reason, DiagnosticTuple diagnostic) implements FrontierPayload {
         public CustodyUnresolved {
             Objects.requireNonNull(scopeId, "scope id"); Objects.requireNonNull(reason, "reason");
             if (expectedEpoch < 1 || expectedCanonicalRevision < 0 || expectedReplicaRevision < 1) throw new IllegalArgumentException("custody fence is invalid");
+            diagnostic = Objects.requireNonNull(diagnostic, "custody unresolved diagnostic");
+            if (diagnostic.reason() != DiagnosticReason.PHYSICAL_CUSTODY_UNRESOLVED || !diagnostic.owner().id().equals(scopeId)
+                    || !diagnostic.subject().id().equals(scopeId)) throw new IllegalArgumentException("custody unresolved has a foreign diagnostic tuple");
         }
         @Override public String type() { return "frontier.physical_custody_unresolved"; }
     }

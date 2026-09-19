@@ -77,7 +77,7 @@ public final class RoutePatrolProcess {
                 try {
                     next = current.advanceFormation();
                 } catch (IllegalArgumentException unavailable) {
-                    events.add(new ProposedEvent(current.settlementId(), new RoutePatrolBlocked(current.taskId(), RoutePatrolBlockReason.NO_OPEN_RETAINED_EDGE)));
+                    events.add(new ProposedEvent(current.settlementId(), RoutePatrolDiagnosticProducer.NO_OPEN_RETAINED_EDGE.create(current.taskId())));
                     events.add(transition(task, StrategicTaskStatus.BLOCKED));
                     return List.copyOf(events);
                 }

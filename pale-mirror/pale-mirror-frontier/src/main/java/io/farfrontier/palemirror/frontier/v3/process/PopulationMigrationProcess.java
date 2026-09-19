@@ -70,7 +70,7 @@ public final class PopulationMigrationProcess {
         if (journey == null || !progress(action.subject()).id().equals(action.id())) return List.of();
         if (journey.status() == ResidentMigrationStatus.BLOCKED) return List.of();
         ResidentMigrationBlockReason reason = HumanPopulationStateSupport.migrationBlockReason(state, journey);
-        if (reason != null) return List.of(new ProposedEvent(journey.originSettlementId(), new ResidentMigrationBlocked(journey.residentId(), reason)));
+        if (reason != null) return List.of(new ProposedEvent(journey.originSettlementId(), producer(reason).create(journey.residentId())));
         if (!coldAvailable(state, journey.residentId())) {
             return List.of(schedule(progress(journey.residentId(), Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().migrationStepInterval()))));
         }
@@ -89,6 +89,12 @@ public final class PopulationMigrationProcess {
         }
         AmbientActorProcess.AmbientGoal goal = AmbientActorProcess.goalFor(advancedState, advanced.residentId());
         return AmbientLeaseStateProcess.retarget(advancedState, advanced.residentId(), goal.kind(), BodyPosition.above(new SurfaceAnchor(goal.position())));
+    }
+
+    private static ResidentMigrationDiagnosticProducer producer(ResidentMigrationBlockReason reason) {
+        return switch (reason) { case QUARANTINE -> ResidentMigrationDiagnosticProducer.QUARANTINE;
+            case DESTINATION_HOUSING_LOST -> ResidentMigrationDiagnosticProducer.DESTINATION_HOUSING_LOST;
+            case ROUTE_OBSTRUCTED -> ResidentMigrationDiagnosticProducer.ROUTE_OBSTRUCTED; };
     }
 
     private static Optional<Candidate> candidate(FrontierWorldState state, Settlement source) {

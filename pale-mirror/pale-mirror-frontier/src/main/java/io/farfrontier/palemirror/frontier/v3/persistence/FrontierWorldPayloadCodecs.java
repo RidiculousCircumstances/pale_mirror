@@ -488,11 +488,11 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     } private static final class HiveGrowthBlockedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.hive_growth_blocked"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> { HiveGrowthBlocked blocked = (HiveGrowthBlocked) payload;
-            writeSubject(output, blocked.hiveId()); writeSubject(output, blocked.nestId()); writeSubject(output, blocked.workId()); output.writeByte(blocked.reason().wireTag()); }); }
+            writeSubject(output, blocked.hiveId()); writeSubject(output, blocked.nestId()); writeSubject(output, blocked.workId()); output.writeByte(blocked.reason().wireTag()); writeDiagnosticTuple(output, blocked.diagnostic()); }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
             SubjectIdHolder hive = readSubject(input); SubjectIdHolder nest = readSubject(input); SubjectIdHolder work = readSubject(input); int reason = input.readUnsignedByte();
             if (reason >= HiveGrowthBlockReason.values().length) throw new IllegalArgumentException("unknown hive growth block reason");
-            return new HiveGrowthBlocked(hive.value(), nest.value(), work.value(), FrontierWireTags.require(HiveGrowthBlockReason.class, reason));
+            return new HiveGrowthBlocked(hive.value(), nest.value(), work.value(), FrontierWireTags.require(HiveGrowthBlockReason.class, reason), readDiagnosticTuple(input));
         }); }
     } private static final class HiveNutrientTransferStartedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.hive_nutrient_transfer_started"; }
@@ -510,10 +510,10 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     } private static final class HiveNutrientTransferBlockedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.hive_nutrient_transfer_blocked"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> { HiveNutrientTransferBlocked blocked = (HiveNutrientTransferBlocked) payload;
-            writeSubject(output, blocked.transferId()); output.writeByte(blocked.reason().wireTag()); }); }
+            writeSubject(output, blocked.transferId()); output.writeByte(blocked.reason().wireTag()); writeDiagnosticTuple(output, blocked.diagnostic()); }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> { SubjectId transfer = readSubject(input).value(); int reason = input.readUnsignedByte();
             if (reason >= HiveNutrientTransferBlockReason.values().length) throw new IllegalArgumentException("unknown hive nutrient transfer block reason");
-            return new HiveNutrientTransferBlocked(transfer, FrontierWireTags.require(HiveNutrientTransferBlockReason.class, reason)); }); }
+            return new HiveNutrientTransferBlocked(transfer, FrontierWireTags.require(HiveNutrientTransferBlockReason.class, reason), readDiagnosticTuple(input)); }); }
     } private static final class HiveNutrientTransferEndpointPreparedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.hive_nutrient_transfer_endpoint_prepared"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> writeHiveNutrientTransfer(output, ((HiveNutrientTransferEndpointPrepared) payload).transfer())); }
@@ -854,13 +854,13 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             default -> throw new IllegalArgumentException("unknown physical retirement-proof late disposition"); };
         return new PhysicalIntentRetirementProof(owner, intent, relations, continuation, lease, commitment, late);
     }
-    private static void writeDiagnosticTuple(DataOutputStream output, DiagnosticTuple diagnostic) throws IOException {
+    static void writeDiagnosticTuple(DataOutputStream output, DiagnosticTuple diagnostic) throws IOException {
         output.writeShort(diagnostic.reason().wireTag()); output.writeByte(diagnostic.category().wireTag());
         output.writeByte(DiagnosticWireTags.ownerTag(diagnostic.owner().kind())); writeSubject(output, diagnostic.owner().id());
         output.writeByte(DiagnosticWireTags.subjectTag(diagnostic.subject().kind())); writeSubject(output, diagnostic.subject().id());
         output.writeByte(diagnostic.disposition().wireTag());
     }
-    private static DiagnosticTuple readDiagnosticTuple(DataInputStream input) throws IOException {
+    static DiagnosticTuple readDiagnosticTuple(DataInputStream input) throws IOException {
         return new DiagnosticTuple(DiagnosticWireTags.reason(input.readUnsignedShort()), DiagnosticWireTags.category(input.readUnsignedByte()),
                 new DiagnosticOwner(DiagnosticWireTags.ownerKind(input.readUnsignedByte()), readSubject(input).value()),
                 new DiagnosticSubject(DiagnosticWireTags.subjectKind(input.readUnsignedByte()), readSubject(input).value()),
