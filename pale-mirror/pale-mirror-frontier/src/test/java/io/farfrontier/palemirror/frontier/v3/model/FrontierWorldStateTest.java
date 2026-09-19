@@ -476,7 +476,8 @@ class FrontierWorldStateTest {
                 PhysicalPostcondition.EXACT_ITEM_CONSUMED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.HIVE_GROWTH);
         FrontierWorldState running = HiveGrowthProcess.reducePrepared(active, hive, intent)
                 .transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, java.util.Optional.empty());
-        FrontierWorldState unknown = running.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, java.util.Optional.empty());
+        PhysicalIntent recoveryUnknown = running.physicalIntents().get(intent.id()).withRecoveryUnknown(PhysicalIntentRecoveryDiagnosticProducer.HIVE_GROWTH.stamp(intent));
+        FrontierWorldState unknown = running.withChanges(FrontierWorldStateUpdate.begin().physicalIntents(Map.of(intent.id(), recoveryUnknown)));
         FrontierWorldState released = HiveGrowthProcess.reduceBlocked(unknown, hive,
                 HiveGrowthDiagnosticProducer.PHYSICAL_CONSUMPTION_UNKNOWN.create(hive, east, job.id()));
         assertTrue(released.hiveColony().growthJobs().isEmpty());
