@@ -100,8 +100,9 @@ final class FrontierV3EngineeringWorkSceneExecutor {
         }
         FrontierV3SceneExecutor.rememberObserved(level, runtime, state, lease);
         if (state.physicalIntents().values().stream().anyMatch(intent -> (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_CONSTRUCTION
-                || intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_MAINTENANCE)
-                && intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.PROJECT).equals(FrontierSceneBehaviors.engineeringWorksite(lease).projectId())
+                && intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ROUTE_CONSTRUCTION_PROJECT).equals(FrontierSceneBehaviors.engineeringWorksite(lease).projectId())
+                || intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_MAINTENANCE
+                && intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ROUTE_MAINTENANCE).equals(FrontierSceneBehaviors.engineeringWorksite(lease).projectId()))
                 && (intent.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.PREPARED
                 || intent.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING))) return;
         EngineeringWorkSceneCause cause = FrontierSceneBehaviors.engineeringWorksite(lease);

@@ -51,7 +51,7 @@ public final class EngineeringEquipmentProcess {
                 + "-" + item.id().value().replace(':', '-');
         var anchor = settlement(state, project).anchor();
         return Optional.of(new PhysicalIntent(new PhysicalIntentId("intent:engineering-tool-issue-" + suffix), PhysicalIntentKind.EQUIPMENT_ISSUE,
-                PhysicalIntentStatus.PREPARED, project.settlementId(), PhysicalIntentRoleBinding.equipmentIssue(project.id(), resident, item.id()),
+                PhysicalIntentStatus.PREPARED, project.settlementId(), PhysicalIntentRoleBinding.engineeringEquipmentIssue(project.id(), resident, item.id()),
                 new FixedPosition(FixedScalar.whole(anchor.x()), FixedScalar.whole(anchor.y()), FixedScalar.whole(anchor.z())), 0,
                 PhysicalPostcondition.EQUIPMENT_ISSUED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE));
     }
@@ -66,7 +66,7 @@ public final class EngineeringEquipmentProcess {
                 + "-" + item.id().value().replace(':', '-');
         var anchor = settlement(state, project).anchor();
         return Optional.of(new PhysicalIntent(new PhysicalIntentId("intent:engineering-tool-return-" + suffix), PhysicalIntentKind.EQUIPMENT_RETURN,
-                PhysicalIntentStatus.PREPARED, project.settlementId(), PhysicalIntentRoleBinding.equipmentReturn(project.id(), actorId, item.id()),
+                PhysicalIntentStatus.PREPARED, project.settlementId(), PhysicalIntentRoleBinding.engineeringEquipmentReturn(project.id(), actorId, item.id()),
                 new FixedPosition(FixedScalar.whole(anchor.x()), FixedScalar.whole(anchor.y()), FixedScalar.whole(anchor.z())), 0,
                 PhysicalPostcondition.EQUIPMENT_RETURNED_OBSERVED, targetSlot, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE));
     }
@@ -127,7 +127,7 @@ public final class EngineeringEquipmentProcess {
 
     public static boolean pending(FrontierWorldState state, SubjectId projectId, PhysicalIntentKind kind) {
         return state.physicalIntents().values().stream().anyMatch(intent -> intent.kind() == kind && intent.status() != PhysicalIntentStatus.CONFIRMED
-                && intent.roles().require(PhysicalIntentSubjectRole.PROJECT).equals(projectId));
+                && intent.roles().require(PhysicalIntentSubjectRole.ENGINEERING_WORK_ORDER).equals(projectId));
     }
 
     public static boolean returnedOrLost(FrontierWorldState state, EngineeringWorkOrder project) {

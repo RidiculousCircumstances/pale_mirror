@@ -684,7 +684,7 @@ public final class FrontierV3SceneGameTests {
         SubjectId cause = SettlementAssaultCauseIdentity.strike(assault.id(), attacker, epoch);
         SceneLease foreign = receiptLease(canonical, new SceneLeaseId(canonical.id().value() + "-foreign"), canonical.revision());
         PhysicalIntent foreignIntent = new PhysicalIntent(FrontierV3SettlementAssaultReceiptBinding.intentId(canonical.worldId(), cause, foreign.id(), foreign.revision()),
-                PhysicalIntentKind.SCENE_STRIKE, PhysicalIntentStatus.PREPARED, cause, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.sceneStrike(attacker, target),
+                PhysicalIntentKind.SCENE_STRIKE, PhysicalIntentStatus.PREPARED, cause, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.assaultSceneStrike(attacker, target),
                 new io.farfrontier.palemirror.frontier.v3.api.FixedPosition(FixedScalar.whole(origin.getX()), FixedScalar.whole(origin.getY()), FixedScalar.whole(origin.getZ())),
                 0, io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition.SCENE_STRIKE_OBSERVED,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);

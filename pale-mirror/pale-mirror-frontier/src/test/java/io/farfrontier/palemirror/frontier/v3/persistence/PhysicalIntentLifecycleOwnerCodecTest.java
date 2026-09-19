@@ -73,21 +73,29 @@ class PhysicalIntentLifecycleOwnerCodecTest {
 
     @Test
     void typedRolesRejectMissingUnknownAndSwappedBindingsBeforeReplay() {
-        assertMessage(() -> PhysicalIntentRoleBinding.decode(PhysicalIntentKind.PRODUCTION_TRANSFORMATION,
-                Map.of(PhysicalIntentSubjectRole.JOB, new SubjectId("job:one"), PhysicalIntentSubjectRole.INPUT_ITEM, new SubjectId("item:input"))), "does not match");
+        assertMessage(() -> PhysicalIntentRoleBinding.decode(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleSchema.PRODUCTION,
+                Map.of(PhysicalIntentSubjectRole.PRODUCTION_JOB, new SubjectId("job:one"), PhysicalIntentSubjectRole.INPUT_ITEM, new SubjectId("item:input"))), "does not match");
         assertMessage(() -> PhysicalIntentSubjectRole.fromWire(255), "unknown");
+        assertMessage(() -> io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleSchema.fromWire(255), "unknown");
         PhysicalIntent swapped = new PhysicalIntent(new PhysicalIntentId("intent:swapped-production"), PhysicalIntentKind.PRODUCTION_TRANSFORMATION,
                 PhysicalIntentStatus.PREPARED, new SubjectId("job:one"),
                 PhysicalIntentRoleBinding.production(new SubjectId("job:one"), new SubjectId("item:output"), new SubjectId("item:input")), origin(), 0,
                 PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED, PhysicalIntentLifecycleOwner.PRODUCTION_WORK);
         assertEquals(swapped, roundTripPayload(swapped), "codec must retain the producer-stamped names without normalizing a forged role swap");
+        assertThrows(IllegalArgumentException.class, () -> new PhysicalIntent(new PhysicalIntentId("intent:cross-schema"), PhysicalIntentKind.ROUTE_CONSTRUCTION,
+                PhysicalIntentStatus.PREPARED, new SubjectId("maintenance:one"), PhysicalIntentRoleBinding.routeMaintenance(new SubjectId("route:one"), new SubjectId("maintenance:one"), new SubjectId("cargo:one"), new SubjectId("item:one")),
+                origin(), 0, PhysicalPostcondition.ROUTE_CONSTRUCTION_OBSERVED, PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE));
+        assertThrows(IllegalArgumentException.class, () -> new PhysicalIntent(new PhysicalIntentId("intent:wrong-owner-schema"), PhysicalIntentKind.PRODUCTION_TRANSFORMATION,
+                PhysicalIntentStatus.PREPARED, new SubjectId("job:one"), PhysicalIntentRoleBinding.production(new SubjectId("job:one"), new SubjectId("item:input"), new SubjectId("item:output")),
+                origin(), 0, PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED, PhysicalIntentLifecycleOwner.ROUTE_OPERATION));
+        assertMessage(() -> decodeWithSchemaTag(productionIntent(), 255), "unknown");
     }
 
     @Test
     void oldPersistenceEnvelopeFailsBeforeRecoveryCanReplayAnUntypedIntent() {
         byte[] snapshot = FrontierPersistenceCodec.encodeSnapshot(new SnapshotRecord(new CheckpointImage(new WorldId("frontier:owner-boundary"),
                 Revision.ZERO, SimInstant.ZERO, new byte[0], List.of(), List.of()), 0L));
-        snapshot[4] = 65; // The immediately preceding envelope version had no typed role-binding bytes.
+        snapshot[4] = 66; // The immediately preceding envelope version had typed roles but no closed role-schema bytes.
         assertMessage(() -> FrontierPersistenceCodec.decodeSnapshot(snapshot), "typed-role codec");
     }
 
@@ -105,6 +113,17 @@ class PhysicalIntentLifecycleOwnerCodecTest {
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
             try (DataOutputStream output = new DataOutputStream(bytes)) { PhysicalIntentPayloadCodec.write(output, intent); }
             try (DataInputStream input = new DataInputStream(new ByteArrayInputStream(bytes.toByteArray()))) { return PhysicalIntentPayloadCodec.read(input); }
+        } catch (java.io.IOException impossible) { throw new AssertionError(impossible); }
+    }
+
+    private static void decodeWithSchemaTag(PhysicalIntent intent, int tag) {
+        try {
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+            try (DataOutputStream output = new DataOutputStream(bytes)) { PhysicalIntentPayloadCodec.write(output, intent); }
+            byte[] forged = bytes.toByteArray();
+            int schemaOffset = 2 + intent.id().value().length() + 2 + 2 + intent.causeSubjectId().value().length();
+            forged[schemaOffset] = (byte) tag;
+            try (DataInputStream input = new DataInputStream(new ByteArrayInputStream(forged))) { PhysicalIntentPayloadCodec.read(input); }
         } catch (java.io.IOException impossible) { throw new AssertionError(impossible); }
     }
 

@@ -101,7 +101,7 @@ final class FrontierV3FastForwardSafety {
                         || lease.status() == SceneLeaseStatus.HOT || lease.status() == SceneLeaseStatus.DRAINING)
                 .filter(FrontierSceneBehaviors::isResourceSiteHarvest)
                 .map(FrontierSceneBehaviors::resourceSiteHarvest)
-                .anyMatch(cause -> intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.JOB).equals(cause.jobId()));
+                .anyMatch(cause -> intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.RESOURCE_SITE_JOB).equals(cause.jobId()));
     }
 
     private static boolean affectedAreaLoaded(ServerLevel level, PhysicalIntent intent) {

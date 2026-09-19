@@ -162,7 +162,7 @@ public final class RouteMaintenanceStateSupport {
                 .anyMatch(member -> EngineeringToolCustody.holdsTool(state, member)) || state.physicalIntents().values().stream()
                 .anyMatch(intent -> intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_RETURN
                         && intent.status() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED
-                        && intent.roles().require(PhysicalIntentSubjectRole.PROJECT).equals(maintenance.id()))) {
+                        && intent.roles().require(PhysicalIntentSubjectRole.ROUTE_MAINTENANCE).equals(maintenance.id()))) {
             throw new IllegalArgumentException("route maintenance close requires a repaired and disarmed operation");
         }
         boolean retainedScene = state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isEngineeringWorksite)
@@ -172,7 +172,7 @@ public final class RouteMaintenanceStateSupport {
         Map<SubjectId, RouteMaintenance> maintenances = new LinkedHashMap<>(state.routeMaintenances()); maintenances.remove(maintenance.id());
         Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent> intents = new LinkedHashMap<>(state.physicalIntents());
         Set<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId> retired = intents.values().stream().filter(intent -> ownsIntent(intent)
-                        && intent.roles().require(PhysicalIntentSubjectRole.OPERATION).equals(maintenance.id()))
+                        && intent.roles().require(PhysicalIntentSubjectRole.ROUTE_MAINTENANCE).equals(maintenance.id()))
                 .map(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent::id).collect(java.util.stream.Collectors.toSet());
         retired.forEach(intents::remove);
         Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(state.physicalObservations());
@@ -222,13 +222,13 @@ public final class RouteMaintenanceStateSupport {
                 || !intent.roles().require(PhysicalIntentSubjectRole.ROUTE).equals(FrontierRouteNetwork.OWNER)) {
             throw new IllegalArgumentException("route maintenance work intent has invalid route ownership");
         }
-        return java.util.Optional.ofNullable(state.routeMaintenances().get(intent.roles().require(PhysicalIntentSubjectRole.OPERATION))).filter(java.util.Objects::nonNull).orElseThrow(() -> new IllegalArgumentException("route maintenance work intent lacks an active operation"));
+        return java.util.Optional.ofNullable(state.routeMaintenances().get(intent.roles().require(PhysicalIntentSubjectRole.ROUTE_MAINTENANCE))).filter(java.util.Objects::nonNull).orElseThrow(() -> new IllegalArgumentException("route maintenance work intent lacks an active operation"));
     }
 
     public static void validateMaterialLoadingIntent(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent) {
         if (intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING
                 || !intent.roles().require(PhysicalIntentSubjectRole.ROUTE).equals(FrontierRouteNetwork.OWNER)
-                || !intent.causeSubjectId().equals(intent.roles().require(PhysicalIntentSubjectRole.OPERATION))) {
+                || !intent.causeSubjectId().equals(intent.roles().require(PhysicalIntentSubjectRole.ROUTE_MAINTENANCE))) {
             throw new IllegalArgumentException("route maintenance pickup has invalid ownership");
         }
         RouteMaintenance maintenance = state.routeMaintenances().get(intent.causeSubjectId());
@@ -297,7 +297,7 @@ public final class RouteMaintenanceStateSupport {
     static void validateReceipt(FrontierBootstrap bootstrap, RouteTopology topology, Map<SubjectId, RouteMaintenance> maintenances,
                                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent, RouteMaintenanceObservation observation) {
         if (intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_MAINTENANCE
-                || !intent.roles().require(PhysicalIntentSubjectRole.OPERATION).equals(observation.maintenanceId()) || !intent.roles().require(PhysicalIntentSubjectRole.MATERIAL).equals(observation.itemId())) {
+                || !intent.roles().require(PhysicalIntentSubjectRole.ROUTE_MAINTENANCE).equals(observation.maintenanceId()) || !intent.roles().require(PhysicalIntentSubjectRole.MATERIAL).equals(observation.itemId())) {
             throw new IllegalArgumentException("route maintenance receipt has foreign subjects");
         }
         RouteMaintenance maintenance = maintenances.get(observation.maintenanceId());
@@ -335,7 +335,7 @@ public final class RouteMaintenanceStateSupport {
 
     public static FrontierWorldState conflict(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
                                        Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent> intents) {
-        RouteMaintenance maintenance = java.util.Optional.ofNullable(state.routeMaintenances().get(intent.roles().require(PhysicalIntentSubjectRole.OPERATION))).filter(java.util.Objects::nonNull).orElseThrow(() -> new IllegalArgumentException("route maintenance conflict has no active operation"));
+        RouteMaintenance maintenance = java.util.Optional.ofNullable(state.routeMaintenances().get(intent.roles().require(PhysicalIntentSubjectRole.ROUTE_MAINTENANCE))).filter(java.util.Objects::nonNull).orElseThrow(() -> new IllegalArgumentException("route maintenance conflict has no active operation"));
         Map<SubjectId, RouteMaintenance> maintenances = new LinkedHashMap<>(state.routeMaintenances()); maintenances.put(maintenance.id(), maintenance.conflict());
         intents.put(intent.id(), intent.withStatus(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty()));
         return state.withChanges(FrontierWorldStateUpdate.begin().physicalIntents(intents).routeMaintenances(maintenances)

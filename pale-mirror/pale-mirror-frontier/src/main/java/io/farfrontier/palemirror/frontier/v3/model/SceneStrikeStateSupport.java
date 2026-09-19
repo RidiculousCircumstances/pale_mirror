@@ -174,7 +174,7 @@ public final class SceneStrikeStateSupport {
         if (attackers.isEmpty() || targets.isEmpty()) throw new IllegalArgumentException("settlement scene strike has no living exact combatants");
         SubjectId expectedAttacker = attackers.get(Math.floorMod(epoch, attackers.size()));
         SubjectId expectedTarget = targets.get(Math.floorMod(epoch, targets.size()));
-        if (!intent.roles().equals(PhysicalIntentRoleBinding.sceneStrike(expectedAttacker, expectedTarget))) {
+        if (!intent.roles().equals(PhysicalIntentRoleBinding.assaultSceneStrike(expectedAttacker, expectedTarget))) {
             throw new IllegalArgumentException("settlement scene strike does not match the exact COLD attacker and target");
         }
     }

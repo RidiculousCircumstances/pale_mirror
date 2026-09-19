@@ -22,7 +22,7 @@ public final class SettlementServiceInputIssueStateSupport {
 
     public static void validateIntent(FrontierWorldState state, PhysicalIntent intent) {
         if (!owns(intent)) return;
-        SubjectId workId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.PROJECT);
+        SubjectId workId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.SETTLEMENT_SERVICE_WORK);
         SettlementServiceWork work = state.serviceWorks().get(workId);
         if (work == null || !intent.id().equals(work.inputIssueIntentId()) || !intent.causeSubjectId().equals(workId)
                 || !intent.roles().equals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.serviceInputIssue(workId, work.workerId(), work.inputItemId()))
@@ -47,7 +47,7 @@ public final class SettlementServiceInputIssueStateSupport {
      */
     public static ExecutionEligibility executionEligibility(FrontierWorldState state, PhysicalIntent intent) {
         if (!owns(intent)) return ExecutionEligibility.INVALID;
-        SubjectId workId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.PROJECT);
+        SubjectId workId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.SETTLEMENT_SERVICE_WORK);
         SettlementServiceWork work = state.serviceWorks().get(workId);
         if (work == null || !intent.id().equals(work.inputIssueIntentId()) || !intent.causeSubjectId().equals(workId)
                 || !intent.roles().equals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.serviceInputIssue(workId, work.workerId(), work.inputItemId()))) {

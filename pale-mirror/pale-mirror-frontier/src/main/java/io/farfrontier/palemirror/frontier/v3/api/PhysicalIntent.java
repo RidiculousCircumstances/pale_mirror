@@ -35,7 +35,7 @@ public record PhysicalIntent(
         targetSlot = Objects.requireNonNull(targetSlot, "physical intent target slot");
         semanticTarget = Objects.requireNonNull(semanticTarget, "physical intent semantic target");
         lifecycleOwner = Objects.requireNonNull(lifecycleOwner, "physical intent lifecycle owner");
-        if (roles.kind() != kind) throw new IllegalArgumentException("physical intent roles do not match kind");
+        roles.validate(lifecycleOwner, kind);
         if (radiusBlocks < 0 || radiusBlocks > 64) throw new IllegalArgumentException("physical intent radius must be 0..64 blocks");
         switch (kind) {
             case CARGO_HANDOFF -> {
@@ -132,9 +132,6 @@ public record PhysicalIntent(
         }
         if (status == PhysicalIntentStatus.CONFIRMED != postconditionObservationId.isPresent()) {
             throw new IllegalArgumentException("only confirmed physical intent has an observed postcondition");
-        }
-        if (!lifecycleOwner.supports(kind)) {
-            throw new IllegalArgumentException("physical intent lifecycle owner " + lifecycleOwner.stableId() + " cannot own " + kind);
         }
     }
 

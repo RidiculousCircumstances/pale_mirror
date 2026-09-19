@@ -54,7 +54,7 @@ class HumanTacticalFunctionProjectionTest {
         PhysicalIntent issue = DefenderEquipmentProcess.plan(state, DefenderEquipmentProcess.review(assault, 201L)).stream()
                 .map(ProposedEvent::payload).filter(PhysicalIntentPrepared.class::isInstance).map(PhysicalIntentPrepared.class::cast)
                 .map(PhysicalIntentPrepared::intent).findFirst().orElseThrow();
-        SubjectId militia = issue.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.DEFENDER);
+        SubjectId militia = issue.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ASSAULT_DEFENDER);
         assertEquals(HumanTacticalFunction.MILITIA, HumanTacticalFunctionProjection.derive(state, militia));
         state = PhysicalIntentLifecycleFixture.transition(PhysicalIntentLifecycleFixture.prepare(state, assault.settlementId(), issue),
                 assault.settlementId(), issue, PhysicalIntentStatus.RUNNING, Optional.empty());

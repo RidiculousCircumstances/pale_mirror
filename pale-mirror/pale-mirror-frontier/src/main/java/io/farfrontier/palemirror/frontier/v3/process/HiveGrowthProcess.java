@@ -79,7 +79,7 @@ public final class HiveGrowthProcess {
                     new ProposedEvent(hive, new HiveGrowthBiomassConsumed(job.id(), job.consumedItemId())), schedule(complete(job, action.dueAt().ticks() + 200L)));
         }
         PhysicalIntent intent = new PhysicalIntent(job.consumptionIntentId(), PhysicalIntentKind.EXACT_ITEM_CONSUMPTION,
-                PhysicalIntentStatus.PREPARED, job.id(), PhysicalIntentRoleBinding.exactConsumption(job.id(), job.consumedItemId()),
+                PhysicalIntentStatus.PREPARED, job.id(), PhysicalIntentRoleBinding.hiveGrowthConsumption(job.id(), job.consumedItemId()),
                 new FixedPosition(FixedScalar.whole(nest.anchor().x()), FixedScalar.whole(nest.anchor().y()), FixedScalar.whole(nest.anchor().z())), 0,
                 PhysicalPostcondition.EXACT_ITEM_CONSUMED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.HIVE_GROWTH);
         return List.of(transition(task, StrategicTaskStatus.ACTIVE), new ProposedEvent(hive, new HiveGrowthStarted(job)),
@@ -185,7 +185,7 @@ public final class HiveGrowthProcess {
         if (intent.kind() != PhysicalIntentKind.EXACT_ITEM_CONSUMPTION) throw new IllegalArgumentException("hive growth has invalid physical intent kind");
         HiveGrowthJob job = state.hiveColony().growthJobs().get(intent.causeSubjectId());
         if (job == null || !subject.equals(job.hiveId()) || !intent.id().equals(job.consumptionIntentId())
-                || !intent.roles().equals(PhysicalIntentRoleBinding.exactConsumption(job.id(), job.consumedItemId()))) throw new IllegalArgumentException("hive growth consumption intent does not bind its active job");
+                || !intent.roles().equals(PhysicalIntentRoleBinding.hiveGrowthConsumption(job.id(), job.consumedItemId()))) throw new IllegalArgumentException("hive growth consumption intent does not bind its active job");
         if (job.inputHold() instanceof HiveGrowthInputHold.FungibleCold held) {
             CustodyAccount account = state.inventory().fungibleResources().accounts().get(held.accountId());
             boolean bound = account != null && state.inventory().fungibleResources().bindings().values().stream().anyMatch(binding -> binding.accountId().equals(account.id()));

@@ -8,6 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleSchema;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
@@ -27,7 +28,7 @@ final class PhysicalIntentPayloadCodec {
 
     static void write(DataOutputStream output, PhysicalIntent intent) throws IOException {
         FrontierWorldPayloadCodecs.writeString(output, intent.id().value()); output.writeByte(intent.kind().wireTag()); output.writeByte(intent.status().wireTag());
-        FrontierWorldPayloadCodecs.writeSubject(output, intent.causeSubjectId()); output.writeByte(intent.roles().namedRoles().size());
+        FrontierWorldPayloadCodecs.writeSubject(output, intent.causeSubjectId()); output.writeByte(intent.roles().schema().wireTag()); output.writeByte(intent.roles().namedRoles().size());
         for (var entry : intent.roles().namedRoles().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey(java.util.Comparator.comparingInt(PhysicalIntentSubjectRole::wireTag))).toList()) {
             output.writeByte(entry.getKey().wireTag()); FrontierWorldPayloadCodecs.writeSubject(output, entry.getValue());
         }
@@ -44,6 +45,7 @@ final class PhysicalIntentPayloadCodec {
     static PhysicalIntent read(DataInputStream input) throws IOException {
         PhysicalIntentId id = new PhysicalIntentId(FrontierWorldPayloadCodecs.readString(input));
         int kind = input.readUnsignedByte(); int status = input.readUnsignedByte(); FrontierWorldPayloadCodecs.SubjectIdHolder cause = FrontierWorldPayloadCodecs.readSubject(input);
+        PhysicalIntentRoleSchema schema = PhysicalIntentRoleSchema.fromWire(input.readUnsignedByte());
         EnumMap<PhysicalIntentSubjectRole, SubjectId> roles = new EnumMap<>(PhysicalIntentSubjectRole.class);
         for (int index = 0, count = input.readUnsignedByte(); index < count; index++) {
             PhysicalIntentSubjectRole role = PhysicalIntentSubjectRole.fromWire(input.readUnsignedByte());
@@ -59,7 +61,7 @@ final class PhysicalIntentPayloadCodec {
             throw new IllegalArgumentException("unknown physical intent enum value");
         }
         return new PhysicalIntent(id, FrontierWireTags.require(PhysicalIntentKind.class, kind), FrontierWireTags.require(PhysicalIntentStatus.class, status),
-                cause.value(), PhysicalIntentRoleBinding.decode(FrontierWireTags.require(PhysicalIntentKind.class, kind), roles), origin, radius, FrontierWireTags.require(PhysicalPostcondition.class, postcondition), observation, target, semanticTarget,
+                cause.value(), PhysicalIntentRoleBinding.decode(schema, roles), origin, radius, FrontierWireTags.require(PhysicalPostcondition.class, postcondition), observation, target, semanticTarget,
                 PhysicalIntentLifecycleOwner.fromWire(input.readUnsignedByte(), FrontierWorldPayloadCodecs.readString(input)));
     }
 }

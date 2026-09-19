@@ -86,7 +86,7 @@ public final class RouteMaintenanceProcess {
                                                      ScheduledAction action, Optional<ProposedEvent> retry) {
         if (state.physicalIntents().values().stream().anyMatch(intent -> (intent.kind() == PhysicalIntentKind.ROUTE_MAINTENANCE
                 || intent.kind() == PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING)
-                && intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.OPERATION).equals(maintenance.id())
+                && intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ROUTE_MAINTENANCE).equals(maintenance.id())
                 && (intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING))) return retryOnly(retry);
         if (!EngineeringToolCustody.ready(state, maintenance.team())) {
             if (!EngineeringDepotService.atStations(state, maintenance, EngineeringJourneyPurpose.MUSTER_DEPOT)) {
@@ -330,8 +330,8 @@ public final class RouteMaintenanceProcess {
     }
 
     private static RouteMaintenance maintenanceFor(FrontierWorldState state, PhysicalIntent intent) {
-        RouteMaintenance maintenance = state.routeMaintenances().get(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.OPERATION));
-        if (maintenance == null || !intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.OPERATION).equals(maintenance.id())) {
+        RouteMaintenance maintenance = state.routeMaintenances().get(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ROUTE_MAINTENANCE));
+        if (maintenance == null || !intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ROUTE_MAINTENANCE).equals(maintenance.id())) {
             throw new IllegalArgumentException("route maintenance intent has no retained project");
         }
         return maintenance;

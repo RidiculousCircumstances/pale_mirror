@@ -15,7 +15,7 @@ public final class EngineeringEquipmentStateSupport {
     }
 
     public static void validateIssue(FrontierWorldState state, PhysicalIntent intent) {
-        SubjectId projectId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.PROJECT), residentId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.DEFENDER), itemId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.EQUIPMENT);
+        SubjectId projectId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ENGINEERING_WORK_ORDER), residentId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ENGINEERING_WORKER), itemId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.EQUIPMENT);
         EngineeringWorkOrder project = project(state, projectId);
         EngineeringRecoveryTeam team = project.engineeringTeam().orElseThrow();
         ExactItemStack item = state.inventory().items().get(itemId);
@@ -32,7 +32,7 @@ public final class EngineeringEquipmentStateSupport {
     }
 
     public static InventoryCustody.ContainerSlot targetSlot(FrontierWorldState state, PhysicalIntent intent) {
-        EngineeringWorkOrder project = project(state, intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.PROJECT));
+        EngineeringWorkOrder project = project(state, intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ENGINEERING_WORK_ORDER));
         var target = intent.targetSlot().orElseThrow(() -> new IllegalArgumentException("engineering equipment return lacks typed target slot"));
         SubjectId depot = FrontierWorldState.depotId(project.settlementId());
         if (!target.containerId().equals(depot)) throw new IllegalArgumentException("engineering equipment return target is not the home depot");
@@ -40,7 +40,7 @@ public final class EngineeringEquipmentStateSupport {
     }
 
     public static void validateReturn(FrontierWorldState state, PhysicalIntent intent) {
-        SubjectId projectId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.PROJECT), residentId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.DEFENDER), itemId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.EQUIPMENT);
+        SubjectId projectId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ENGINEERING_WORK_ORDER), residentId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ENGINEERING_WORKER), itemId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.EQUIPMENT);
         EngineeringWorkOrder project = project(state, projectId);
         EngineeringRecoveryTeam team = project.engineeringTeam().orElseThrow();
         ExactItemStack item = state.inventory().items().get(itemId);
@@ -71,6 +71,8 @@ public final class EngineeringEquipmentStateSupport {
                                         SubjectId projectId, SubjectId residentId, SubjectId itemId) {
         return state.physicalIntents().values().stream().anyMatch(existing -> !existing.id().equals(candidate.id())
                 && existing.kind() == kind && existing.status() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED
-                && existing.roles().equals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.equipmentReturn(projectId, residentId, itemId)));
+                && existing.roles().equals(kind == PhysicalIntentKind.EQUIPMENT_ISSUE
+                        ? io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.engineeringEquipmentIssue(projectId, residentId, itemId)
+                        : io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.engineeringEquipmentReturn(projectId, residentId, itemId)));
     }
 }

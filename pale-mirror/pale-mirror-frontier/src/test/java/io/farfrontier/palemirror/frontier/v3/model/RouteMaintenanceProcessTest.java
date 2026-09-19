@@ -266,8 +266,8 @@ class RouteMaintenanceProcessTest {
 
         assertEquals("READY", readiness.reason());
         PhysicalIntent intent = EngineeringEquipmentProcess.returnOne(atServicePort, returned).orElseThrow();
-        assertEquals(returned.id(), intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.PROJECT));
-        assertEquals(engineer, intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.DEFENDER));
+        assertEquals(returned.id(), intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ENGINEERING_WORK_ORDER));
+        assertEquals(engineer, intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ENGINEERING_WORKER));
         assertEquals(tool.id(), intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.EQUIPMENT));
         assertEquals(readiness.targetSlot().orElseThrow(), intent.targetSlot().orElseThrow(),
                 "planner and diagnostic readiness must retain the same exact return destination");

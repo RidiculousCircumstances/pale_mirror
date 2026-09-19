@@ -244,7 +244,7 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
                     if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_ISSUE) EquipmentIssueStateSupport.validateIntent(state, intent);
                     else if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_RETURN) EquipmentReturnStateSupport.validateIntent(state, intent);
                     else throw new IllegalArgumentException("settlement assault has foreign intent kind");
-                    carrier = new PhysicalIntentRetirementAccount.Exact<>(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.DEFENDER)); commitment = new PhysicalIntentRetirementAccount.Exact<>(item);
+                    carrier = new PhysicalIntentRetirementAccount.Exact<>(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ASSAULT_DEFENDER)); commitment = new PhysicalIntentRetirementAccount.Exact<>(item);
                 }
             }
             default -> throw new IllegalArgumentException("hive retirement account received foreign owner");

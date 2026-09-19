@@ -104,7 +104,14 @@ final class FrontierV3EquipmentIssueExecutor {
     }
 
     private static Target target(FrontierWorldState state, PhysicalIntent intent) {
-        SubjectId ownerId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.PROJECT), residentId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.DEFENDER), itemId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.EQUIPMENT);
+        boolean engineering = intent.roles().schema() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleSchema.ENGINEERING_EQUIPMENT_ISSUE;
+        boolean assault = intent.roles().schema() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleSchema.ASSAULT_EQUIPMENT_ISSUE;
+        if (!engineering && !assault) return null;
+        SubjectId ownerId = engineering ? intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ENGINEERING_WORK_ORDER)
+                : intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.SETTLEMENT_ASSAULT);
+        SubjectId residentId = engineering ? intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ENGINEERING_WORKER)
+                : intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ASSAULT_DEFENDER);
+        SubjectId itemId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.EQUIPMENT);
         ExactItemStack item = state.inventory().items().get(itemId);
         try { EquipmentIssueStateSupport.validateIntent(state, intent); }
         catch (IllegalArgumentException invalid) { return null; }

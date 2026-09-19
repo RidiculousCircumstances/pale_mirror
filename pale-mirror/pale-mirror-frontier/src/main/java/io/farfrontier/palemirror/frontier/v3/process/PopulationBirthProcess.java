@@ -65,7 +65,7 @@ public final class PopulationBirthProcess {
                 Math.toIntExact(SettlementFacilityCapability.housingCapacity(state, settlement.id())), household, food.orElseThrow(), ordinal, placementOrdinal,
                 action.dueAt().ticks() + state.bootstrap().ruleset().cadence().populationBirthCompletionDelay());
         PhysicalIntent intent = new PhysicalIntent(job.consumptionIntentId(), PhysicalIntentKind.EXACT_ITEM_CONSUMPTION,
-                PhysicalIntentStatus.PREPARED, job.id(), PhysicalIntentRoleBinding.exactConsumption(job.id(), job.foodItemId()), fixed(job.position()), 0,
+                PhysicalIntentStatus.PREPARED, job.id(), PhysicalIntentRoleBinding.populationBirthConsumption(job.id(), job.foodItemId()), fixed(job.position()), 0,
                 PhysicalPostcondition.EXACT_ITEM_CONSUMED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.POPULATION_MIGRATION);
         events.add(new ProposedEvent(settlement.id(), new ResidentBirthStarted(job)));
         events.add(new ProposedEvent(settlement.id(), new PhysicalIntentPrepared(intent)));
@@ -115,7 +115,7 @@ public final class PopulationBirthProcess {
 
     public static FrontierWorldState reducePrepared(FrontierWorldState state, SubjectId subject, PhysicalIntent intent) {
         ResidentBirthJob job = jobForIntent(state, intent);
-        if (!subject.equals(job.settlementId()) || !intent.roles().equals(PhysicalIntentRoleBinding.exactConsumption(job.id(), job.foodItemId())) || !food(state, job.settlementId())
+        if (!subject.equals(job.settlementId()) || !intent.roles().equals(PhysicalIntentRoleBinding.populationBirthConsumption(job.id(), job.foodItemId())) || !food(state, job.settlementId())
                 .map(item -> item.id().equals(job.foodItemId())).orElse(false)) {
             throw new IllegalArgumentException("resident birth food intent does not bind an active owned stack");
         }

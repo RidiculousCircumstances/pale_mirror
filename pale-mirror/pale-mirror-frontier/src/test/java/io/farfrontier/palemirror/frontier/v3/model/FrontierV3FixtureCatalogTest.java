@@ -340,7 +340,7 @@ class FrontierV3FixtureCatalogTest {
         assertTrue(state.physicalIntents().values().stream().anyMatch(intent -> intent.causeSubjectId().equals(cold.id())
                 && intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING));
         assertTrue(state.physicalIntents().values().stream().noneMatch(intent -> intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_MAINTENANCE
-                        && intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.OPERATION).equals(loaded.id())),
+                        && intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ROUTE_MAINTENANCE).equals(loaded.id())),
                 "the fixture may retain COLD-ready cargo and crew, but a repair intent belongs exclusively to the later HOT worksite");
         assertEquals(ContainerSurfaceStatus.ACTIVE, state.inventory().surfaces().get(FrontierRouteNetwork.MAINTENANCE_CONTAINER).status());
     }

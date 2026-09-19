@@ -551,7 +551,7 @@ class FrontierV3ServerRuntimeTest {
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.RESOURCE_SITE_HARVEST);
         PhysicalIntent unsupported = new PhysicalIntent(new PhysicalIntentId("intent:restart-unsupported"), PhysicalIntentKind.SCENE_STRIKE,
                 PhysicalIntentStatus.RUNNING, new SubjectId("operation:supply-1-2"),
-                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.sceneStrike(new SubjectId("bioform:west-1"), new SubjectId("resident:1-1")),
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.routeSceneStrike(new SubjectId("bioform:west-1"), new SubjectId("resident:1-1")),
                 new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ROUTE_ENGAGEMENT);
 

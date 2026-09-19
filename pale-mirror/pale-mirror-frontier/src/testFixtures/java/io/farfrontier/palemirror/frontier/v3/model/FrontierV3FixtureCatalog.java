@@ -188,7 +188,7 @@ public final class FrontierV3FixtureCatalog {
         SettlementProvision provision = SettlementProvision.started(settlement.id(), 2, 0L, rations, recipients,
                 List.of(new SettlementRationAllocation(bread, recipients)));
         PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:settlement-provision-1-2-0"), PhysicalIntentKind.EXACT_ITEM_CONSUMPTION,
-                PhysicalIntentStatus.PREPARED, settlement.id(), PhysicalIntentRoleBinding.exactConsumption(settlement.id(), bread), new FixedPosition(FixedScalar.whole(settlement.anchor().x()),
+                PhysicalIntentStatus.PREPARED, settlement.id(), PhysicalIntentRoleBinding.settlementProvisionConsumption(settlement.id(), bread), new FixedPosition(FixedScalar.whole(settlement.anchor().x()),
                 FixedScalar.whole(settlement.anchor().y()), FixedScalar.whole(settlement.anchor().z())), 0, PhysicalPostcondition.EXACT_ITEM_CONSUMED_OBSERVED,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_PROVISION);
         state = state.withInventory(state.inventory().store(stack)).withHumanPopulation(population.withProvision(provision.beginPhysical(intent.id())))

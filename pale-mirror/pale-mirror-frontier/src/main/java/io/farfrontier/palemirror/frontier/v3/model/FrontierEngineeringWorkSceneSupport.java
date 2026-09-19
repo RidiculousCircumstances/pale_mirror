@@ -74,8 +74,8 @@ public final class FrontierEngineeringWorkSceneSupport {
     /** A retained crew may open only its current-cell work intent while its exact lease is HOT. */
     public static boolean permitsCurrentWorkIntent(FrontierWorldState state, PhysicalIntent intent) {
         SubjectId projectId = switch (intent.kind()) {
-            case ROUTE_CONSTRUCTION, ROUTE_CONSTRUCTION_MATERIAL_LOADING -> intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.PROJECT);
-            case ROUTE_MAINTENANCE, ROUTE_MAINTENANCE_MATERIAL_LOADING -> intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.OPERATION);
+            case ROUTE_CONSTRUCTION, ROUTE_CONSTRUCTION_MATERIAL_LOADING -> intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ROUTE_CONSTRUCTION_PROJECT);
+            case ROUTE_MAINTENANCE, ROUTE_MAINTENANCE_MATERIAL_LOADING -> intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ROUTE_MAINTENANCE);
             default -> null;
         };
         EngineeringWorkOrder project = projectId == null ? null : state.routeConstructions().containsKey(projectId)

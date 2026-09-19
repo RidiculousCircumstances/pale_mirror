@@ -133,7 +133,7 @@ final class FrontierV3SettlementServiceInputIssueExecutor {
     private static Target target(FrontierWorldState state, PhysicalIntent intent) {
         try { SettlementServiceInputIssueStateSupport.validateIntent(state, intent); }
         catch (IllegalArgumentException invalid) { return null; }
-        SubjectId workId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.PROJECT);
+        SubjectId workId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.SETTLEMENT_SERVICE_WORK);
         SettlementServiceWork work = state.serviceWorks().get(workId);
         ExactItemStack item = state.inventory().items().get(work.inputItemId());
         ContainerSurface surface = state.inventory().surfaces().get(work.inputSource().containerId());

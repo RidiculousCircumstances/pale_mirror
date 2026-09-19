@@ -27,6 +27,11 @@ class PhysicalIntentExplicitIdentityArchitectureTest {
         String allProduction = files.stream().map(this::read).reduce("", String::concat);
         assertFalse(allProduction.contains("fixtureDefault"), "production must not infer a lifecycle owner from PhysicalIntentKind");
         assertFalse(allProduction.contains("fixtureOnly"), "typed role bindings must not retain a fixture or ownerless construction bridge");
+        assertFalse(allProduction.contains("projectOrAssault"), "one nominal role must not be context-polymorphic");
+        assertFalse(allProduction.contains("PhysicalIntentRoleBinding.exactConsumption("), "exact consumption producers must state their nominal owner role");
+        assertFalse(allProduction.contains("PhysicalIntentRoleBinding.sceneStrike("), "scene-strike producers must state route or assault identity");
+        assertFalse(allProduction.contains("PhysicalIntentRoleBinding.equipmentIssue("), "equipment producers must state engineering or assault identity");
+        assertFalse(allProduction.contains("PhysicalIntentRoleBinding.equipmentReturn("), "equipment producers must state engineering or assault identity");
 
         for (Path file : files) {
             String source = read(file);
@@ -44,6 +49,8 @@ class PhysicalIntentExplicitIdentityArchitectureTest {
         String snapshotCodec = read(root.resolve("pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/persistence/PhysicalIntentStateCodec.java"));
         assertTrue(payloadCodec.contains("PhysicalIntentLifecycleOwner.fromWire") && snapshotCodec.contains("PhysicalIntentLifecycleOwner.fromWire"),
                 "WAL and snapshot recovery must decode the explicit stable owner identity, not derive one from intent kind");
+        assertTrue(payloadCodec.contains("PhysicalIntentRoleSchema.fromWire") && snapshotCodec.contains("PhysicalIntentRoleSchema.fromWire"),
+                "WAL and snapshot recovery must retain the exact closed role schema");
 
         String sceneExecutor = read(root.resolve("pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/frontier/v3/FrontierV3SceneExecutor.java"));
         assertTrue(sceneExecutor.contains("PhysicalIntentLifecycleOwner strikeOwner, PhysicalIntentLifecycleOwner explosionOwner")
@@ -71,6 +78,23 @@ class PhysicalIntentExplicitIdentityArchitectureTest {
                 continue;
             }
             assertFalse(source.contains("subjectIds("), () -> "production role extraction must use named bindings in " + file);
+        }
+    }
+
+    @Test
+    void productionCannotReadRetiredContextPolymorphicRoleNames() throws IOException {
+        Path root = repositoryRoot();
+        try (Stream<Path> paths = Stream.concat(Files.walk(root.resolve("pale-mirror-frontier/src/main/java")),
+                Files.walk(root.resolve("pale-mirror-neoforge/src/main/java")))) {
+            for (Path file : paths.filter(path -> path.toString().endsWith(".java")).toList()) {
+                if (file.getFileName().toString().equals("PhysicalIntentSubjectRole.java")) continue;
+                String source = read(file);
+                assertFalse(source.contains("PhysicalIntentSubjectRole.PROJECT"), () -> "contextual PROJECT role in " + file);
+                assertFalse(source.contains("PhysicalIntentSubjectRole.OPERATION"), () -> "contextual OPERATION role in " + file);
+                assertFalse(source.contains("PhysicalIntentSubjectRole.DEFENDER"), () -> "contextual DEFENDER role in " + file);
+                assertFalse(source.contains("PhysicalIntentSubjectRole.JOB"), () -> "contextual JOB role in " + file);
+                assertFalse(source.contains("PhysicalIntentSubjectRole.OWNER"), () -> "contextual OWNER role in " + file);
+            }
         }
     }
 

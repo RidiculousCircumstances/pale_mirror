@@ -255,7 +255,7 @@ public final class SettlementProvisionProcess {
         SettlementProvision provision = state.humanPopulation().provision(intent.causeSubjectId());
         if (provision.activeIntentId().filter(intent.id()::equals).isEmpty()) throw new IllegalArgumentException("exact consumption has no active settlement provision");
         SettlementRationAllocation allocation = provision.currentOrActiveAllocation();
-        if (!intent.roles().equals(PhysicalIntentRoleBinding.exactConsumption(provision.settlementId(), allocation.itemId()))) throw new IllegalArgumentException("settlement provision intent names a foreign allocation");
+        if (!intent.roles().equals(PhysicalIntentRoleBinding.settlementProvisionConsumption(provision.settlementId(), allocation.itemId()))) throw new IllegalArgumentException("settlement provision intent names a foreign allocation");
         return provision;
     }
 
@@ -267,7 +267,7 @@ public final class SettlementProvisionProcess {
         }
         SettlementRationAllocation allocation = provision.currentAllocation();
         if (!intent.id().equals(intent(state.bootstrap(), provision, allocation).id())
-                || !intent.roles().equals(PhysicalIntentRoleBinding.exactConsumption(provision.settlementId(), allocation.itemId()))) {
+                || !intent.roles().equals(PhysicalIntentRoleBinding.settlementProvisionConsumption(provision.settlementId(), allocation.itemId()))) {
             throw new IllegalArgumentException("settlement provision prepared intent names a foreign allocation");
         }
         return provision;
@@ -277,7 +277,7 @@ public final class SettlementProvisionProcess {
         String suffix = suffix(provision.settlementId()) + "-" + provision.cycleOrdinal() + "-" + provision.nextAllocation();
         Settlement settlement = FrontierWorldStateSupport.settlement(bootstrap, provision.settlementId());
         return new PhysicalIntent(new PhysicalIntentId("intent:settlement-provision-" + suffix), PhysicalIntentKind.EXACT_ITEM_CONSUMPTION,
-                PhysicalIntentStatus.PREPARED, provision.settlementId(), PhysicalIntentRoleBinding.exactConsumption(provision.settlementId(), allocation.itemId()),
+                PhysicalIntentStatus.PREPARED, provision.settlementId(), PhysicalIntentRoleBinding.settlementProvisionConsumption(provision.settlementId(), allocation.itemId()),
                 new FixedPosition(FixedScalar.whole(settlement.anchor().x()), FixedScalar.whole(settlement.anchor().y()), FixedScalar.whole(settlement.anchor().z())),
                 0, PhysicalPostcondition.EXACT_ITEM_CONSUMED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_PROVISION);
     }

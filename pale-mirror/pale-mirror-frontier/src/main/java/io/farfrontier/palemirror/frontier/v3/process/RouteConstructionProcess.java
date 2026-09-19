@@ -104,7 +104,7 @@ public final class RouteConstructionProcess {
         // to freeze an already admitted construction crew indefinitely.
         RouteConstruction active = activeProject.orElse(null);
         if (active != null && state.physicalIntents().values().stream().anyMatch(intent -> (intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION
-                || intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING) && intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.PROJECT).equals(active.id())
+                || intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING) && intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ROUTE_CONSTRUCTION_PROJECT).equals(active.id())
                 && (intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING))) return List.of(next);
         Optional<RouteConstruction> ready = state.routeConstructions().values().stream().filter(value -> value.status() == RouteConstructionStatus.READY)
                 .sorted(Comparator.comparing(RouteConstruction::id)).findFirst();
@@ -355,7 +355,7 @@ public final class RouteConstructionProcess {
         return state.preparePhysicalIntent(intent);
     }
     public static List<ProposedEvent> planTransition(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentTransition transition, long now) {
-        RouteConstruction project = java.util.Optional.ofNullable(state.routeConstructions().get(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.PROJECT)))
+        RouteConstruction project = java.util.Optional.ofNullable(state.routeConstructions().get(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ROUTE_CONSTRUCTION_PROJECT)))
                 .orElseThrow(() -> new IllegalArgumentException("route construction transition has no project"));
         StrategicTask task = constructionTask(state, project.settlementId(), StrategicTaskStatus.ACTIVE);
         ProposedEvent physical = new ProposedEvent(FrontierRouteNetwork.OWNER, transition);

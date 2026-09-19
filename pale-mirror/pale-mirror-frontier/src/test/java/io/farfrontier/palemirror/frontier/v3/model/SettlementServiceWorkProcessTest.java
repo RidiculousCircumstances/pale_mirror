@@ -44,7 +44,7 @@ class SettlementServiceWorkProcessTest {
                 .map(SettlementServiceWorkStarted.class::cast).findFirst().orElseThrow();
         assertEquals(StrategicTaskStatus.ACTIVE, activation.status());
         assertEquals(started.work().id(), started.inputIssueIntent().causeSubjectId());
-        assertEquals(started.work().id(), started.endpointIntent().roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.PROJECT));
+        assertEquals(started.work().id(), started.endpointIntent().roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.SETTLEMENT_SERVICE_WORK));
         assertEquals(started.work().workerId(), started.endpointIntent().roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.WORKER));
         assertEquals(item, started.endpointIntent().roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.INPUT_ITEM));
         assertFalse(planned.stream().anyMatch(event -> event.payload() instanceof io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentPrepared),

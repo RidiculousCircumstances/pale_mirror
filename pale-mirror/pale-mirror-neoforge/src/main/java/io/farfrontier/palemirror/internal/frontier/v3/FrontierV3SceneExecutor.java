@@ -542,7 +542,9 @@ final class FrontierV3SceneExecutor {
                     + sceneCause.value().replace(':', '-') + "-r" + lease.revision() + "-s" + confirmedStrikeCount(state, sceneCause));
             String key = intentId.value().substring("intent:scene-strike-".length());
             PhysicalIntent intent = new PhysicalIntent(intentId, PhysicalIntentKind.SCENE_STRIKE, PhysicalIntentStatus.PREPARED,
-                    sceneCause, PhysicalIntentRoleBinding.sceneStrike(attacker.member().actorId(), target.member().actorId()), position(attacker.entity()), 0,
+                    sceneCause, settlementAssault
+                            ? PhysicalIntentRoleBinding.assaultSceneStrike(attacker.member().actorId(), target.member().actorId())
+                            : PhysicalIntentRoleBinding.routeSceneStrike(attacker.member().actorId(), target.member().actorId()), position(attacker.entity()), 0,
                     PhysicalPostcondition.SCENE_STRIKE_OBSERVED, lifecycleOwner);
             submit(runtime, "scene-strike-prepare", key, new PhysicalIntentPrepared(intent)); return;
         }

@@ -8,6 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleSchema;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
@@ -31,7 +32,7 @@ final class PhysicalIntentStateCodec {
         FrontierWorldStateCodec.writeCount(output, intents.size());
         for (PhysicalIntent intent : intents.values().stream().sorted(Comparator.comparing(PhysicalIntent::id)).toList()) {
             FrontierWorldStateCodec.writeString(output, intent.id().value()); output.writeByte(intent.kind().wireTag()); output.writeByte(intent.status().wireTag());
-            FrontierWorldStateCodec.writeString(output, intent.causeSubjectId().value()); FrontierWorldStateCodec.writeCount(output, intent.roles().namedRoles().size());
+            FrontierWorldStateCodec.writeString(output, intent.causeSubjectId().value()); output.writeByte(intent.roles().schema().wireTag()); FrontierWorldStateCodec.writeCount(output, intent.roles().namedRoles().size());
             for (var entry : intent.roles().namedRoles().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey(java.util.Comparator.comparingInt(PhysicalIntentSubjectRole::wireTag))).toList()) {
                 output.writeByte(entry.getKey().wireTag()); FrontierWorldStateCodec.writeString(output, entry.getValue().value());
             }
@@ -50,7 +51,7 @@ final class PhysicalIntentStateCodec {
         Map<PhysicalIntentId, PhysicalIntent> intents = new LinkedHashMap<>();
         for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) {
             PhysicalIntentId id = new PhysicalIntentId(FrontierWorldStateCodec.readString(input)); int kind = input.readUnsignedByte(); int status = input.readUnsignedByte();
-            SubjectId cause = new SubjectId(FrontierWorldStateCodec.readString(input)); Map<PhysicalIntentSubjectRole, SubjectId> roles = new java.util.EnumMap<>(PhysicalIntentSubjectRole.class);
+            SubjectId cause = new SubjectId(FrontierWorldStateCodec.readString(input)); PhysicalIntentRoleSchema schema = PhysicalIntentRoleSchema.fromWire(input.readUnsignedByte()); Map<PhysicalIntentSubjectRole, SubjectId> roles = new java.util.EnumMap<>(PhysicalIntentSubjectRole.class);
             for (int subject = 0, subjectCount = FrontierWorldStateCodec.readCount(input); subject < subjectCount; subject++) {
                 PhysicalIntentSubjectRole role = PhysicalIntentSubjectRole.fromWire(input.readUnsignedByte());
                 if (roles.put(role, new SubjectId(FrontierWorldStateCodec.readString(input))) != null) throw new IllegalArgumentException("duplicate physical intent role tag");
@@ -63,7 +64,7 @@ final class PhysicalIntentStateCodec {
             Optional<PhysicalDeltaSemanticTarget> semanticTarget = input.readBoolean() ? Optional.of(PhysicalDeltaPayloadCodecs.readTarget(input)) : Optional.empty();
             PhysicalIntentLifecycleOwner lifecycleOwner = PhysicalIntentLifecycleOwner.fromWire(input.readUnsignedByte(), FrontierWorldStateCodec.readString(input));
             PhysicalIntent intent = new PhysicalIntent(id, FrontierWireTags.require(PhysicalIntentKind.class, kind), FrontierWireTags.require(PhysicalIntentStatus.class, status), cause,
-                    PhysicalIntentRoleBinding.decode(FrontierWireTags.require(PhysicalIntentKind.class, kind), roles), origin, radius, FrontierWireTags.require(PhysicalPostcondition.class, postcondition), observation, target, semanticTarget, lifecycleOwner);
+                    PhysicalIntentRoleBinding.decode(schema, roles), origin, radius, FrontierWireTags.require(PhysicalPostcondition.class, postcondition), observation, target, semanticTarget, lifecycleOwner);
             if (kind >= PhysicalIntentKind.values().length || status >= PhysicalIntentStatus.values().length || postcondition >= PhysicalPostcondition.values().length || intents.put(id, intent) != null) {
                 throw new IllegalArgumentException("invalid or duplicate physical intent");
             }

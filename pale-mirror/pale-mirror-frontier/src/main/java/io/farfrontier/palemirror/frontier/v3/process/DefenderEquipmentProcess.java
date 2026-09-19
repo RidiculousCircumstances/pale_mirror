@@ -54,7 +54,7 @@ public final class DefenderEquipmentProcess {
         List<SubjectId> candidates = assault.defenderIds().stream().sorted().filter(candidate -> state.inventory().actorItems(candidate).stream()
                         .noneMatch(item -> HumanTacticalFunctionProjection.isGrayboxWeaponKind(item.itemKind())))
                 .filter(candidate -> state.physicalIntents().values().stream().noneMatch(intent -> intent.kind() == PhysicalIntentKind.EQUIPMENT_ISSUE
-                        && intent.status() != PhysicalIntentStatus.CONFIRMED && intent.roles().require(PhysicalIntentSubjectRole.EQUIPMENT).equals(candidate))).toList();
+                        && intent.status() != PhysicalIntentStatus.CONFIRMED && intent.roles().require(PhysicalIntentSubjectRole.ASSAULT_DEFENDER).equals(candidate))).toList();
         SubjectId resident = candidates.stream().filter(candidate -> !candidate.equals(assault.defenderUnit().leaderId())).findFirst()
                 .orElse(candidates.isEmpty() ? null : candidates.getFirst());
         if (resident == null) return java.util.Optional.empty();
@@ -67,7 +67,7 @@ public final class DefenderEquipmentProcess {
         if (item == null) return java.util.Optional.empty();
         String suffix = assault.id().value().substring("assault:".length()) + "-" + resident.value().replace(':', '-') + "-" + item.id().value().replace(':', '-');
         return java.util.Optional.of(new PhysicalIntent(new PhysicalIntentId("intent:equipment-issue-" + suffix), PhysicalIntentKind.EQUIPMENT_ISSUE,
-                PhysicalIntentStatus.PREPARED, assault.settlementId(), PhysicalIntentRoleBinding.equipmentIssue(assault.id(), resident, item.id()),
+                PhysicalIntentStatus.PREPARED, assault.settlementId(), PhysicalIntentRoleBinding.assaultEquipmentIssue(assault.id(), resident, item.id()),
                 new FixedPosition(FixedScalar.whole(assault.settlementAnchor().x()), FixedScalar.whole(assault.settlementAnchor().y()), FixedScalar.whole(assault.settlementAnchor().z())),
                 0, PhysicalPostcondition.EQUIPMENT_ISSUED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT));
     }

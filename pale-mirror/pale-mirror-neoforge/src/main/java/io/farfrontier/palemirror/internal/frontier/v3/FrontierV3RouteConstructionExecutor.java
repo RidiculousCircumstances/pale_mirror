@@ -113,7 +113,7 @@ final class FrontierV3RouteConstructionExecutor {
 
     private static Target target(FrontierWorldState state, PhysicalIntent intent) {
         BlockPosition raw = wholeBlock(intent); if (raw == null) return null;
-        RouteConstruction project = state.routeConstructions().get(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.PROJECT));
+        RouteConstruction project = state.routeConstructions().get(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ROUTE_CONSTRUCTION_PROJECT));
         SubjectId cargoId = project == null ? null : project.cargoId().orElse(null);
         SubjectId itemId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.MATERIAL);
         ExactItemStack material = itemId == null ? null : state.inventory().items().get(itemId);
@@ -175,7 +175,7 @@ final class FrontierV3RouteConstructionExecutor {
         RouteConstruction project = state.routeConstructions().get(intent.causeSubjectId());
         if (project == null || project.status() != RouteConstructionStatus.BUILDING || project.cargoId().isPresent()) return null;
         SubjectId cargoId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.CARGO), cargoMaterialId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.CARGO_ITEM), itemId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.SOURCE_ITEM); ExactItemStack material = state.inventory().items().get(itemId);
-        if (material == null || !intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ROUTE).equals(material.economicOwnerId()) || !intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.PROJECT).equals(project.id())
+        if (material == null || !intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ROUTE).equals(material.economicOwnerId()) || !intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ROUTE_CONSTRUCTION_PROJECT).equals(project.id())
                 || !(material.custody() instanceof io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.ContainerSlot slot)
                 || !slot.containerId().equals(new SubjectId("container:frontier-route-maintenance"))) return null;
         ContainerSurface surface = state.inventory().surfaces().get(slot.containerId());

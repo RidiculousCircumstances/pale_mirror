@@ -61,7 +61,7 @@ public final class DefenderEquipmentReturnProcess {
         SubjectId depot = FrontierWorldState.depotId(assault.settlementId());
         if (state.inventory().surfaces().get(depot) == null || state.inventory().surfaces().get(depot).status() != ContainerSurfaceStatus.ACTIVE) return Optional.empty();
         if (state.physicalIntents().values().stream().anyMatch(intent -> intent.kind() == PhysicalIntentKind.EQUIPMENT_RETURN
-                && intent.status() != PhysicalIntentStatus.CONFIRMED && intent.roles().require(PhysicalIntentSubjectRole.PROJECT).equals(assault.id()))) return Optional.empty();
+                && intent.status() != PhysicalIntentStatus.CONFIRMED && intent.roles().require(PhysicalIntentSubjectRole.SETTLEMENT_ASSAULT).equals(assault.id()))) return Optional.empty();
         ExactItemStack item = assault.defenderIds().stream().sorted().flatMap(resident -> state.inventory().actorItems(resident).stream())
                 .filter(value -> value.economicOwnerId().equals(assault.settlementId()))
                 .filter(value -> HumanTacticalFunctionProjection.isGrayboxWeaponKind(value.itemKind()))
@@ -71,7 +71,7 @@ public final class DefenderEquipmentReturnProcess {
         String suffix = assault.id().value().substring("assault:".length()) + "-" + actor.actorId().value().replace(':', '-')
                 + "-" + item.id().value().replace(':', '-');
         return Optional.of(new PhysicalIntent(new PhysicalIntentId("intent:equipment-return-" + suffix), PhysicalIntentKind.EQUIPMENT_RETURN,
-                PhysicalIntentStatus.PREPARED, assault.settlementId(), PhysicalIntentRoleBinding.equipmentReturn(assault.id(), actor.actorId(), item.id()),
+                PhysicalIntentStatus.PREPARED, assault.settlementId(), PhysicalIntentRoleBinding.assaultEquipmentReturn(assault.id(), actor.actorId(), item.id()),
                 new FixedPosition(FixedScalar.whole(assault.settlementAnchor().x()), FixedScalar.whole(assault.settlementAnchor().y()),
                         FixedScalar.whole(assault.settlementAnchor().z())), 0, PhysicalPostcondition.EQUIPMENT_RETURNED_OBSERVED,
                 new PhysicalContainerSlot(depot, slot), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT));
@@ -79,7 +79,7 @@ public final class DefenderEquipmentReturnProcess {
 
     private static boolean hasPendingOrReturnable(FrontierWorldState state, SettlementAssault assault) {
         return state.physicalIntents().values().stream().anyMatch(intent -> intent.kind() == PhysicalIntentKind.EQUIPMENT_RETURN
-                        && intent.status() != PhysicalIntentStatus.CONFIRMED && intent.roles().require(PhysicalIntentSubjectRole.PROJECT).equals(assault.id()))
+                        && intent.status() != PhysicalIntentStatus.CONFIRMED && intent.roles().require(PhysicalIntentSubjectRole.SETTLEMENT_ASSAULT).equals(assault.id()))
                 || assault.defenderIds().stream().flatMap(resident -> state.inventory().actorItems(resident).stream())
                 .anyMatch(item -> item.economicOwnerId().equals(assault.settlementId())
                         && HumanTacticalFunctionProjection.isGrayboxWeaponKind(item.itemKind()));

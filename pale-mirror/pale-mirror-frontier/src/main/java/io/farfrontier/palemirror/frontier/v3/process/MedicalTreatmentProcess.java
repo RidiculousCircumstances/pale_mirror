@@ -51,7 +51,7 @@ public final class MedicalTreatmentProcess {
                 MedicalEvacuationTeam.forOperation(id, settlementId, List.of(medic.orElseThrow().id())), supply.orElseThrow().id(),
                 new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:" + id.value().replace(':', '-') + "-consume"), MedicalEvacuationStatus.PREPARED, -1L);
         PhysicalIntent intent = new PhysicalIntent(operation.consumptionIntentId(), PhysicalIntentKind.EXACT_ITEM_CONSUMPTION, PhysicalIntentStatus.PREPARED,
-                id, PhysicalIntentRoleBinding.exactConsumption(id, operation.supplyItemId()), new FixedPosition(FixedScalar.whole(infirmary.orElseThrow().anchor().x()),
+                id, PhysicalIntentRoleBinding.medicalTreatmentConsumption(id, operation.supplyItemId()), new FixedPosition(FixedScalar.whole(infirmary.orElseThrow().anchor().x()),
                 FixedScalar.whole(infirmary.orElseThrow().anchor().y()), FixedScalar.whole(infirmary.orElseThrow().anchor().z())), 0,
                 PhysicalPostcondition.EXACT_ITEM_CONSUMED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.MEDICAL_TREATMENT);
         return List.of(new ProposedEvent(settlementId, new MedicalTreatmentStarted(operation)), new ProposedEvent(settlementId, new PhysicalIntentPrepared(intent)));
@@ -113,7 +113,7 @@ public final class MedicalTreatmentProcess {
     public static MedicalEvacuationOperation operationForIntent(FrontierWorldState state, PhysicalIntent intent) {
         if (intent.kind() != PhysicalIntentKind.EXACT_ITEM_CONSUMPTION) throw new IllegalArgumentException("medical treatment has invalid physical intent kind");
         MedicalEvacuationOperation operation = state.humanPopulation().medicalOperations().get(intent.causeSubjectId());
-        if (operation == null || !operation.consumptionIntentId().equals(intent.id()) || !intent.roles().equals(PhysicalIntentRoleBinding.exactConsumption(operation.id(), operation.supplyItemId()))) {
+        if (operation == null || !operation.consumptionIntentId().equals(intent.id()) || !intent.roles().equals(PhysicalIntentRoleBinding.medicalTreatmentConsumption(operation.id(), operation.supplyItemId()))) {
             throw new IllegalArgumentException("medical treatment intent has no active exact operation");
         }
         return operation;

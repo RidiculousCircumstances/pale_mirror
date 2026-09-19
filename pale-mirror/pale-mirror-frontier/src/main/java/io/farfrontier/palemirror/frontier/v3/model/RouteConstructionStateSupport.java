@@ -82,7 +82,7 @@ public final class RouteConstructionStateSupport {
 
     public static void validateIntent(FrontierWorldState state, PhysicalIntent intent) {
         if (intent.kind() != PhysicalIntentKind.ROUTE_CONSTRUCTION) throw new IllegalArgumentException("route construction intent kind is invalid");
-        RouteConstruction project = java.util.Optional.ofNullable(state.routeConstructions().get(intent.roles().require(PhysicalIntentSubjectRole.PROJECT))).filter(java.util.Objects::nonNull).orElseThrow(() -> new IllegalArgumentException("route construction intent lacks an active project"));
+        RouteConstruction project = java.util.Optional.ofNullable(state.routeConstructions().get(intent.roles().require(PhysicalIntentSubjectRole.ROUTE_CONSTRUCTION_PROJECT))).filter(java.util.Objects::nonNull).orElseThrow(() -> new IllegalArgumentException("route construction intent lacks an active project"));
         SubjectId cargoId = project.cargoId().orElseThrow(() -> new IllegalArgumentException("route construction intent has no loaded material cargo"));
         if (!intent.roles().require(PhysicalIntentSubjectRole.CARGO).equals(cargoId)) throw new IllegalArgumentException("route construction intent lacks its material cargo");
         SubjectId materialId = intent.roles().require(PhysicalIntentSubjectRole.MATERIAL);
@@ -98,7 +98,7 @@ public final class RouteConstructionStateSupport {
 
     public static void validateMaterialLoadingIntent(FrontierWorldState state, PhysicalIntent intent) {
         if (intent.kind() != PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING || !intent.roles().require(PhysicalIntentSubjectRole.ROUTE).equals(FrontierRouteNetwork.OWNER)
-                || !intent.causeSubjectId().equals(intent.roles().require(PhysicalIntentSubjectRole.PROJECT))) {
+                || !intent.causeSubjectId().equals(intent.roles().require(PhysicalIntentSubjectRole.ROUTE_CONSTRUCTION_PROJECT))) {
             throw new IllegalArgumentException("route construction material loading has invalid ownership");
         }
         RouteConstruction project = state.routeConstructions().get(intent.causeSubjectId());
@@ -185,7 +185,7 @@ public final class RouteConstructionStateSupport {
                                        Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, PhysicalIntent> intents) {
         validateIntent(state, intent);
         RouteConstruction project = state.routeConstructions().get(observation.projectId());
-        if (project == null || !intent.roles().require(PhysicalIntentSubjectRole.PROJECT).equals(observation.projectId()) || !intent.roles().require(PhysicalIntentSubjectRole.MATERIAL).equals(observation.itemId())
+        if (project == null || !intent.roles().require(PhysicalIntentSubjectRole.ROUTE_CONSTRUCTION_PROJECT).equals(observation.projectId()) || !intent.roles().require(PhysicalIntentSubjectRole.MATERIAL).equals(observation.itemId())
                 || !observation.position().equals(nextCell(state, project))) throw new IllegalArgumentException("route construction receipt differs from active work");
         ExactItemStack material = state.inventory().items().get(observation.itemId());
         if (material == null) throw new IllegalArgumentException("route construction receipt lacks its COLD cargo item");
@@ -204,7 +204,7 @@ public final class RouteConstructionStateSupport {
 
     public static FrontierWorldState conflict(FrontierWorldState state, PhysicalIntent intent,
                                        Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, PhysicalIntent> intents) {
-        RouteConstruction project = java.util.Optional.ofNullable(state.routeConstructions().get(intent.roles().require(PhysicalIntentSubjectRole.PROJECT))).filter(java.util.Objects::nonNull).orElseThrow(() -> new IllegalArgumentException("route construction conflict lacks its project"));
+        RouteConstruction project = java.util.Optional.ofNullable(state.routeConstructions().get(intent.roles().require(PhysicalIntentSubjectRole.ROUTE_CONSTRUCTION_PROJECT))).filter(java.util.Objects::nonNull).orElseThrow(() -> new IllegalArgumentException("route construction conflict lacks its project"));
         Map<SubjectId, RouteConstruction> projects = new LinkedHashMap<>(state.routeConstructions());
         projects.put(project.id(), project.withConfirmedCells(project.confirmedCells(), RouteConstructionStatus.CONFLICT));
         intents.put(intent.id(), intent.withStatus(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, java.util.Optional.empty()));
@@ -219,7 +219,7 @@ public final class RouteConstructionStateSupport {
         Map<SubjectId, RouteConstruction> projects = new LinkedHashMap<>(state.routeConstructions()); projects.remove(projectId);
         Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, PhysicalIntent> intents = new LinkedHashMap<>(state.physicalIntents());
         java.util.Set<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId> retired = intents.values().stream()
-                .filter(intent -> intent.roles().require(PhysicalIntentSubjectRole.PROJECT).equals(projectId)).map(PhysicalIntent::id).collect(java.util.stream.Collectors.toSet());
+                .filter(intent -> intent.roles().require(PhysicalIntentSubjectRole.ROUTE_CONSTRUCTION_PROJECT).equals(projectId)).map(PhysicalIntent::id).collect(java.util.stream.Collectors.toSet());
         retired.forEach(intents::remove);
         Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(state.physicalObservations());
         observations.entrySet().removeIf(entry -> retired.contains(entry.getValue().intentId()));
@@ -298,7 +298,7 @@ public final class RouteConstructionStateSupport {
 
     static void validateReceipt(FrontierBootstrap bootstrap, RouteTopology topology, Map<SubjectId, RouteConstruction> projects,
                                 PhysicalIntent intent, RouteConstructionObservation observation) {
-        if (intent.kind() != PhysicalIntentKind.ROUTE_CONSTRUCTION || !intent.roles().require(PhysicalIntentSubjectRole.PROJECT).equals(observation.projectId())
+        if (intent.kind() != PhysicalIntentKind.ROUTE_CONSTRUCTION || !intent.roles().require(PhysicalIntentSubjectRole.ROUTE_CONSTRUCTION_PROJECT).equals(observation.projectId())
                 || !intent.roles().require(PhysicalIntentSubjectRole.MATERIAL).equals(observation.itemId())) throw new IllegalArgumentException("route construction receipt has foreign subjects");
         RouteConstruction project = projects.get(observation.projectId());
         if (project == null || !project.workCells().contains(observation.position())) throw new IllegalArgumentException("route construction receipt is outside its replacement corridor");

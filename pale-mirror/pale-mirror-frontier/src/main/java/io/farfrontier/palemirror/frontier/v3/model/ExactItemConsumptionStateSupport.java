@@ -1,6 +1,5 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole;
 
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
@@ -16,50 +15,45 @@ public final class ExactItemConsumptionStateSupport {
     /** Resolves the one active exact stack which a supported process is permitted to consume. */
     public static Claim claim(FrontierWorldState state, PhysicalIntent intent) {
         if (intent.kind() != PhysicalIntentKind.EXACT_ITEM_CONSUMPTION) throw new IllegalArgumentException("not an exact consumption intent");
-        HiveGrowthJob job = state.hiveColony().growthJobs().get(intent.causeSubjectId());
-        if (job != null) {
-            if (!job.consumptionIntentId().equals(intent.id()) || !intent.roles().equals(PhysicalIntentRoleBinding.exactConsumption(job.id(), job.consumedItemId()))) {
-                throw new IllegalArgumentException("exact consumption does not bind its hive growth job");
-            }
-            return ownedActiveClaim(state, job.consumedItemId(), state::isHiveStore, "hive store", 64);
-        }
-        ResidentBirthJob birth = state.humanPopulation().birthJobs().get(intent.causeSubjectId());
-        if (birth != null) {
-            if (!birth.consumptionIntentId().equals(intent.id()) || !intent.roles().equals(PhysicalIntentRoleBinding.exactConsumption(birth.id(), birth.foodItemId()))) {
-                throw new IllegalArgumentException("exact consumption does not bind its resident birth permit");
-            }
-            SubjectId depot = FrontierWorldState.depotId(birth.settlementId());
-            Claim claim = ownedActiveClaim(state, birth.foodItemId(), depot::equals, "settlement depot", 1);
-            if (!claim.ownerId().equals(birth.settlementId()) || !claim.item().itemKind().equals("minecraft:bread")) {
-                throw new IllegalArgumentException("resident birth has no exact owned food stack");
-            }
-            return claim;
-        }
-        MedicalEvacuationOperation medical = state.humanPopulation().medicalOperations().get(intent.causeSubjectId());
-        if (medical != null) {
-            if (!medical.consumptionIntentId().equals(intent.id()) || !intent.roles().equals(PhysicalIntentRoleBinding.exactConsumption(medical.id(), medical.supplyItemId()))) {
-                throw new IllegalArgumentException("exact consumption does not bind its medical treatment");
-            }
-            Claim claim = ownedActiveClaim(state, medical.supplyItemId(), FrontierWorldState.depotId(medical.settlementId())::equals, "settlement depot", 1);
-            if (!claim.ownerId().equals(medical.settlementId()) || !MedicalEvacuationStateSupport.FIRST_TREATMENT_SUPPLY.equals(claim.item().itemKind())) {
-                throw new IllegalArgumentException("medical treatment has no exact local supply");
-            }
-            return claim;
-        }
-        for (SettlementProvision provision : state.humanPopulation().provisions().values()) {
-            if (provision.activeIntentId().filter(intent.id()::equals).isEmpty()) continue;
-            SettlementRationAllocation allocation = provision.currentOrActiveAllocation();
-            if (!intent.causeSubjectId().equals(provision.settlementId()) || !intent.roles().equals(PhysicalIntentRoleBinding.exactConsumption(provision.settlementId(), allocation.itemId()))) {
-                throw new IllegalArgumentException("exact consumption does not bind its settlement provision allocation");
-            }
-            SubjectId depot = FrontierWorldState.depotId(provision.settlementId());
-            Claim claim = ownedActiveClaim(state, allocation.itemId(), depot::equals, "settlement depot", allocation.count());
-            if (!claim.ownerId().equals(provision.settlementId()) || !claim.item().itemKind().equals("minecraft:bread")) {
-                throw new IllegalArgumentException("settlement provision has no exact owned food stack");
-            }
-            return claim;
-        }
-        throw new IllegalArgumentException("exact consumption has no supported owning process");
+        return switch (intent.roles().schema()) {
+            case HIVE_GROWTH_CONSUMPTION -> hiveGrowthClaim(state, intent);
+            case POPULATION_BIRTH_CONSUMPTION -> populationBirthClaim(state, intent);
+            case MEDICAL_TREATMENT_CONSUMPTION -> medicalTreatmentClaim(state, intent);
+            case SETTLEMENT_PROVISION_CONSUMPTION -> settlementProvisionClaim(state, intent);
+            default -> throw new IllegalArgumentException("exact consumption has foreign role schema");
+        };
+    }
+
+    private static Claim hiveGrowthClaim(FrontierWorldState state, PhysicalIntent intent) {
+        HiveGrowthJob job = state.hiveColony().growthJobs().get(intent.roles().require(PhysicalIntentSubjectRole.HIVE_GROWTH_JOB));
+        if (job == null || !job.consumptionIntentId().equals(intent.id()) || !intent.causeSubjectId().equals(job.id())) throw new IllegalArgumentException("exact consumption does not bind its hive growth job");
+        return ownedActiveClaim(state, job.consumedItemId(), state::isHiveStore, "hive store", 64);
+    }
+
+    private static Claim populationBirthClaim(FrontierWorldState state, PhysicalIntent intent) {
+        ResidentBirthJob birth = state.humanPopulation().birthJobs().get(intent.roles().require(PhysicalIntentSubjectRole.POPULATION_BIRTH_JOB));
+        if (birth == null || !birth.consumptionIntentId().equals(intent.id()) || !intent.causeSubjectId().equals(birth.id())) throw new IllegalArgumentException("exact consumption does not bind its resident birth permit");
+        Claim claim = ownedActiveClaim(state, birth.foodItemId(), FrontierWorldState.depotId(birth.settlementId())::equals, "settlement depot", 1);
+        if (!claim.ownerId().equals(birth.settlementId()) || !claim.item().itemKind().equals("minecraft:bread")) throw new IllegalArgumentException("resident birth has no exact owned food stack");
+        return claim;
+    }
+
+    private static Claim medicalTreatmentClaim(FrontierWorldState state, PhysicalIntent intent) {
+        MedicalEvacuationOperation medical = state.humanPopulation().medicalOperations().get(intent.roles().require(PhysicalIntentSubjectRole.MEDICAL_TREATMENT_OPERATION));
+        if (medical == null || !medical.consumptionIntentId().equals(intent.id()) || !intent.causeSubjectId().equals(medical.id())) throw new IllegalArgumentException("exact consumption does not bind its medical treatment");
+        Claim claim = ownedActiveClaim(state, medical.supplyItemId(), FrontierWorldState.depotId(medical.settlementId())::equals, "settlement depot", 1);
+        if (!claim.ownerId().equals(medical.settlementId()) || !MedicalEvacuationStateSupport.FIRST_TREATMENT_SUPPLY.equals(claim.item().itemKind())) throw new IllegalArgumentException("medical treatment has no exact local supply");
+        return claim;
+    }
+
+    private static Claim settlementProvisionClaim(FrontierWorldState state, PhysicalIntent intent) {
+        SubjectId settlementId = intent.roles().require(PhysicalIntentSubjectRole.SETTLEMENT_PROVISION);
+        SettlementProvision provision = state.humanPopulation().provisions().get(settlementId);
+        if (provision == null || !intent.causeSubjectId().equals(settlementId) || provision.activeIntentId().filter(intent.id()::equals).isEmpty()) throw new IllegalArgumentException("exact consumption does not bind its settlement provision allocation");
+        SettlementRationAllocation allocation = provision.currentOrActiveAllocation();
+        Claim claim = ownedActiveClaim(state, allocation.itemId(), FrontierWorldState.depotId(settlementId)::equals, "settlement depot", allocation.count());
+        if (!claim.ownerId().equals(settlementId) || !claim.item().itemKind().equals("minecraft:bread")) throw new IllegalArgumentException("settlement provision has no exact owned food stack");
+        return claim;
     }
 
     static void validateReceipt(PhysicalIntent intent, ExactItemConsumedObservation receipt) {

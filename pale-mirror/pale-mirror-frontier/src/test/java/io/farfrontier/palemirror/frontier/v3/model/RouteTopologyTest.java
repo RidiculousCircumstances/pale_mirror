@@ -141,7 +141,7 @@ class RouteTopologyTest {
         PhysicalIntentPrepared loading = events.stream().map(event -> event.payload()).filter(PhysicalIntentPrepared.class::isInstance)
                 .map(PhysicalIntentPrepared.class::cast).findFirst().orElseThrow();
         assertEquals(PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING, loading.intent().kind());
-        assertEquals(project.id(), loading.intent().roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.PROJECT));
+        assertEquals(project.id(), loading.intent().roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ROUTE_CONSTRUCTION_PROJECT));
         FrontierWorldState loadingPrepared = state.preparePhysicalIntent(loading.intent());
         FrontierWorldState conflicted = RouteConstructionStateSupport.conflict(loadingPrepared, loading.intent(),
                 new java.util.LinkedHashMap<>(loadingPrepared.physicalIntents()));
