@@ -12,7 +12,7 @@ import java.util.Objects;
  */
 public record DiagnosticIncidentBundle(String incidentId, DiagnosticTuple diagnostic, String eventId,
                                        String causeId, long revision, long instant, int occurrences,
-                                       boolean awaitingReview) {
+                                       boolean awaitingReview, DiagnosticIncidentContext context) {
     public DiagnosticIncidentBundle {
         incidentId = require(incidentId, "incident bundle id");
         diagnostic = Objects.requireNonNull(diagnostic, "incident bundle diagnostic");
@@ -20,6 +20,7 @@ public record DiagnosticIncidentBundle(String incidentId, DiagnosticTuple diagno
         causeId = require(causeId, "incident bundle cause");
         if (revision < 0 || instant < 0 || occurrences <= 0) throw new IllegalArgumentException("invalid incident bundle coordinates");
         if (awaitingReview != DiagnosticIncident.terminal(diagnostic.category())) throw new IllegalArgumentException("incident bundle disposition disagrees with tuple");
+        context = Objects.requireNonNull(context, "incident bundle context");
     }
     private static String require(String value, String label) {
         value = Objects.requireNonNull(value, label);

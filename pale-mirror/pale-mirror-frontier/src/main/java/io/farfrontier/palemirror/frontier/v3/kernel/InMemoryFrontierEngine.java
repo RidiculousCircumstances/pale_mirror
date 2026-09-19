@@ -48,6 +48,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
     private final TransactionCommitter transactionCommitter;
     private final StateValidator<S> stateValidator;
     private final FrontierExecutionMetrics executionMetrics;
+    private final KernelQuarantineReporter<S> kernelQuarantineReporter;
     private ScheduledActionQueue schedules = new ScheduledActionQueue();
     private final Map<CommandId, CommandReceipt> receipts = new LinkedHashMap<>();
     private final List<TransactionRecord> transactions = new ArrayList<>();
@@ -71,7 +72,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
             List<ScheduledAction> initialSchedules
     ) {
         this(worldId, initialState, initialInstant, commandPlanner, scheduledPlanner, reducer, stateCodec,
-                projectionMapper, limits, initialSchedules, TransactionCommitter.noOp(), StateValidator.none(), FrontierExecutionMetrics.noOp());
+                projectionMapper, limits, initialSchedules, TransactionCommitter.noOp(), StateValidator.none(), FrontierExecutionMetrics.noOp(), KernelQuarantineReporter.disabled());
     }
 
     InMemoryFrontierEngine(
@@ -88,7 +89,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
             TransactionCommitter transactionCommitter
     ) {
         this(worldId, initialState, initialInstant, commandPlanner, scheduledPlanner, reducer, stateCodec,
-                projectionMapper, limits, initialSchedules, transactionCommitter, StateValidator.none(), FrontierExecutionMetrics.noOp());
+                projectionMapper, limits, initialSchedules, transactionCommitter, StateValidator.none(), FrontierExecutionMetrics.noOp(), KernelQuarantineReporter.disabled());
     }
 
     InMemoryFrontierEngine(
@@ -104,7 +105,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
             List<ScheduledAction> initialSchedules,
             TransactionCommitter transactionCommitter,
             StateValidator<S> stateValidator,
-            FrontierExecutionMetrics executionMetrics
+            FrontierExecutionMetrics executionMetrics, KernelQuarantineReporter<S> kernelQuarantineReporter
     ) {
         this.worldId = Objects.requireNonNull(worldId, "world id");
         this.state = Objects.requireNonNull(initialState, "initial state");
@@ -118,6 +119,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         this.transactionCommitter = Objects.requireNonNull(transactionCommitter, "transaction committer");
         this.stateValidator = Objects.requireNonNull(stateValidator, "state validator");
         this.executionMetrics = Objects.requireNonNull(executionMetrics, "execution metrics");
+        this.kernelQuarantineReporter = Objects.requireNonNull(kernelQuarantineReporter, "kernel quarantine reporter");
         this.stateValidator.validateInitial(initialState);
         List<ScheduledAction> initial = List.copyOf(initialSchedules);
         if (initial.size() > limits.maxPendingSchedules()) {
@@ -137,7 +139,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
             Consumer<S> stateValidator
     ) {
         this(worldId, initialState, initialInstant, commandPlanner, scheduledPlanner, reducer, stateCodec,
-                projectionMapper, limits, initialSchedules, transactionCommitter, StateValidator.complete(stateValidator), FrontierExecutionMetrics.noOp());
+                projectionMapper, limits, initialSchedules, transactionCommitter, StateValidator.complete(stateValidator), FrontierExecutionMetrics.noOp(), KernelQuarantineReporter.disabled());
     }
 
     static <S, P extends FrontierProjection> InMemoryFrontierEngine<S, P> recovered(
@@ -147,7 +149,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         InMemoryFrontierEngine<S, P> engine = new InMemoryFrontierEngine<>(configuration.worldId(), replay.state(), replay.instant(),
                 configuration.commandPlanner(), configuration.scheduledPlanner(), configuration.reducer(), configuration.stateCodec(),
                 configuration.projectionMapper(), configuration.limits(), replay.schedules(), configuration.transactionCommitter(),
-                configuration.stateValidator(), configuration.executionMetrics());
+                configuration.stateValidator(), configuration.executionMetrics(), configuration.kernelQuarantineReporter());
         engine.revision = replay.revision();
         for (CommandReceipt receipt : receipts) {
             if (engine.receipts.put(receipt.commandId(), receipt) != null) throw new IllegalArgumentException("duplicate recovered command receipt");
@@ -230,7 +232,8 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                 continue;
             }
             if (transactions.size() == limits.maxTransactions()) {
-                status = new EngineStatus(EngineStatus.Kind.QUARANTINED, "transaction retention capacity exhausted during due work");
+                quarantine(CauseChain.root(new CommandId("scheduler:" + action.id().value().replace(':', '/'))),
+                        KernelQuarantineReporter.Boundary.DUE_CAPACITY, new IllegalStateException("transaction retention capacity exhausted during due work"));
                 return advanceResult(completed, Optional.of(action));
             }
             try {
@@ -254,8 +257,9 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                 // make the WAL move backwards after an intervening physical command.
                 completed.add(commit(CauseChain.root(cause), laterOf(instant, action.dueAt()), events, Optional.empty()));
             } catch (RuntimeException error) {
-                status = new EngineStatus(EngineStatus.Kind.QUARANTINED, boundedFailure(
-                        new IllegalStateException("scheduled action " + action.kind() + "/" + action.id().value() + " failed", error)));
+                quarantine(CauseChain.root(new CommandId("scheduler:" + action.id().value().replace(':', '/'))),
+                        KernelQuarantineReporter.Boundary.DUE_TRANSACTION,
+                        new IllegalStateException("scheduled action " + action.kind() + "/" + action.id().value() + " failed", error));
                 return advanceResult(completed, Optional.of(action));
             }
         }
@@ -427,8 +431,18 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
     }
 
     private CommandResult.Rejected quarantine(FrontierCommand command, RuntimeException error) {
-        status = new EngineStatus(EngineStatus.Kind.QUARANTINED, boundedFailure(error));
+        quarantine(command.causes(), KernelQuarantineReporter.Boundary.COMMAND_TRANSACTION, error);
         return rejected(command, RejectionCode.INVARIANT_FAILURE, status.failureDetail().orElseThrow());
+    }
+
+    private void quarantine(CauseChain causes, KernelQuarantineReporter.Boundary boundary, RuntimeException error) {
+        try {
+            kernelQuarantineReporter.report(state, worldId, causes, instant, boundary, error)
+                    .ifPresent(event -> commit(causes, instant, List.of(event), Optional.empty()));
+        } catch (RuntimeException diagnosticFailure) {
+            error.addSuppressed(diagnosticFailure);
+        }
+        status = new EngineStatus(EngineStatus.Kind.QUARANTINED, boundedFailure(error));
     }
 
     private AdvanceResult advanceResult(List<TransactionId> completed, Optional<ScheduledAction> deferred) {

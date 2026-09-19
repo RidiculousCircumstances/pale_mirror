@@ -10,7 +10,7 @@ import java.util.Objects;
 public record DiagnosticIncident(String id, DiagnosticTuple diagnostic, String firstEventId,
                                 String firstCauseId, long firstRevision, long firstInstant,
                                 long lastRevision, long lastInstant, int occurrences,
-                                boolean awaitingReview) {
+                                boolean awaitingReview, DiagnosticIncidentContext context) {
     public DiagnosticIncident {
         id = require(id, "incident id"); diagnostic = Objects.requireNonNull(diagnostic, "incident diagnostic");
         firstEventId = require(firstEventId, "incident first event"); firstCauseId = require(firstCauseId, "incident first cause");
@@ -18,6 +18,10 @@ public record DiagnosticIncident(String id, DiagnosticTuple diagnostic, String f
             throw new IllegalArgumentException("invalid incident retention coordinates");
         }
         if (awaitingReview != terminal(diagnostic.category())) throw new IllegalArgumentException("incident review disposition disagrees with diagnostic category");
+        context = Objects.requireNonNull(context, "incident context");
+    }
+    public DiagnosticIncident(String id, DiagnosticTuple diagnostic, String firstEventId, String firstCauseId, long firstRevision, long firstInstant, long lastRevision, long lastInstant, int occurrences, boolean awaitingReview) {
+        this(id, diagnostic, firstEventId, firstCauseId, firstRevision, firstInstant, lastRevision, lastInstant, occurrences, awaitingReview, DiagnosticIncidentContext.unavailable());
     }
     public static String idFor(DiagnosticTuple tuple) {
         Objects.requireNonNull(tuple, "incident tuple");
@@ -29,11 +33,11 @@ public record DiagnosticIncident(String id, DiagnosticTuple diagnostic, String f
     }
     public DiagnosticIncident repeated(long revision, long instant) {
         if (revision < lastRevision || instant < lastInstant || occurrences == Integer.MAX_VALUE) throw new IllegalArgumentException("invalid incident repeat");
-        return new DiagnosticIncident(id, diagnostic, firstEventId, firstCauseId, firstRevision, firstInstant, revision, instant, occurrences + 1, awaitingReview);
+        return new DiagnosticIncident(id, diagnostic, firstEventId, firstCauseId, firstRevision, firstInstant, revision, instant, occurrences + 1, awaitingReview, context);
     }
     /** Automatic bundle export retains first causal identity while reporting the current occurrence count. */
     public DiagnosticIncidentBundle bundle() {
-        return new DiagnosticIncidentBundle(id, diagnostic, firstEventId, firstCauseId, firstRevision, firstInstant, occurrences, awaitingReview);
+        return new DiagnosticIncidentBundle(id, diagnostic, firstEventId, firstCauseId, firstRevision, firstInstant, occurrences, awaitingReview, context);
     }
     private static String require(String value, String label) { value = Objects.requireNonNull(value, label); if (value.isBlank()) throw new IllegalArgumentException(label + " is blank"); return value; }
 }

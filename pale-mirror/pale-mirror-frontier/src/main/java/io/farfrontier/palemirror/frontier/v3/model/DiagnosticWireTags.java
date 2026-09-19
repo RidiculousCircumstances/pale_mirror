@@ -14,7 +14,8 @@ public final class DiagnosticWireTags {
         case 303 -> DiagnosticReason.RESIDENT_MIGRATION_BLOCKED; case 304 -> DiagnosticReason.OPERATION_FAILED;
         case 305 -> DiagnosticReason.SETTLEMENT_PROVISION_CONFLICT; case 306 -> DiagnosticReason.SETTLEMENT_ASSAULT_CONFLICT; case 401 -> DiagnosticReason.INVENTORY_CONFLICT;
         case 402 -> DiagnosticReason.REPLICA_CUSTODY_CONFLICT; case 403 -> DiagnosticReason.PHYSICAL_CUSTODY_UNRESOLVED;
-        case 501 -> DiagnosticReason.FRONTIER_QUARANTINE;
+        case 501 -> DiagnosticReason.FRONTIER_QUARANTINE; case 502 -> DiagnosticReason.FRONTIER_KERNEL_COMMAND_FAILURE;
+        case 503 -> DiagnosticReason.FRONTIER_KERNEL_TRANSACTION_CAPACITY; case 504 -> DiagnosticReason.FRONTIER_KERNEL_DUE_FAILURE;
         default -> throw new IllegalArgumentException("unknown diagnostic reason tag: " + tag); }; }
     public static DiagnosticCategory category(int tag) { return switch (tag) {
         case 1 -> DiagnosticCategory.WAIT_OR_BLOCKED; case 2 -> DiagnosticCategory.DOMAIN_DISRUPTION;

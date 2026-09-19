@@ -30,7 +30,8 @@ public final class FrontierWorldProcessCatalog {
     }
 
     private static final Set<String> KERNEL = types(
-            "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled");
+            "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
+            "frontier.kernel_quarantine_observed");
     private static final Set<String> PHYSICAL = types(
             "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition",
             "frontier.structure_damaged", "frontier.resource_deposited", "frontier.fungible_stack_layout_observed", "frontier.fungible_resource_handoff_observed", "frontier.fungible_stack_bindings_released", "frontier.exact_item_custody_changed",
@@ -196,7 +197,7 @@ public final class FrontierWorldProcessCatalog {
 
     public static List<DeterministicProcessDescriptor> descriptors() {
         return List.of(
-                descriptor("kernel-schedule", Set.of(), Set.of(), Set.of(), emissions("kernel-schedule"), KERNEL),
+                descriptor("kernel-schedule", Set.of(), Set.of(), KERNEL, emissions("kernel-schedule"), KERNEL),
                 descriptor("physical-observation", physicalCommands(), Set.of(), PHYSICAL, emissions("physical-observation"), PHYSICAL),
                 descriptor("replica-custody", replicaCustodyCommands(), Set.of(), REPLICA_CUSTODY, emissions("replica-custody"), REPLICA_CUSTODY),
                 descriptor("ambient-actors", ambientCommands(), Set.of(), AMBIENT, emissions("ambient-actors"), AMBIENT),

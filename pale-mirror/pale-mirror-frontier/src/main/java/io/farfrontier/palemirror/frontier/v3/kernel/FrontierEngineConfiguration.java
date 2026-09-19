@@ -14,7 +14,7 @@ public record FrontierEngineConfiguration<S, P extends FrontierProjection>(
         CommandPlanner<S> commandPlanner, ScheduledActionPlanner<S> scheduledPlanner,
         EventReducer<S> reducer, StateCodec<S> stateCodec, ProjectionMapper<S, P> projectionMapper,
         EngineLimits limits, List<ScheduledAction> initialSchedules, TransactionCommitter transactionCommitter,
-        StateValidator<S> stateValidator, FrontierExecutionMetrics executionMetrics
+        StateValidator<S> stateValidator, FrontierExecutionMetrics executionMetrics, KernelQuarantineReporter<S> kernelQuarantineReporter
 ) {
     public FrontierEngineConfiguration {
         Objects.requireNonNull(worldId, "world id");
@@ -30,6 +30,7 @@ public record FrontierEngineConfiguration<S, P extends FrontierProjection>(
         Objects.requireNonNull(transactionCommitter, "transaction committer");
         Objects.requireNonNull(stateValidator, "state validator");
         executionMetrics = Objects.requireNonNull(executionMetrics, "execution metrics");
+        kernelQuarantineReporter = Objects.requireNonNull(kernelQuarantineReporter, "kernel quarantine reporter");
     }
 
     /** Compatibility constructor for small kernel fixtures that have no aggregate-specific audit. */
@@ -40,7 +41,7 @@ public record FrontierEngineConfiguration<S, P extends FrontierProjection>(
             EngineLimits limits, List<ScheduledAction> initialSchedules, TransactionCommitter transactionCommitter
     ) {
         this(worldId, initialState, initialInstant, commandPlanner, scheduledPlanner, reducer, stateCodec,
-                projectionMapper, limits, initialSchedules, transactionCommitter, StateValidator.none(), FrontierExecutionMetrics.noOp());
+                projectionMapper, limits, initialSchedules, transactionCommitter, StateValidator.none(), FrontierExecutionMetrics.noOp(), KernelQuarantineReporter.disabled());
     }
 
     /** Compatibility constructor with an explicit transition validator but no metrics adapter. */
@@ -52,30 +53,43 @@ public record FrontierEngineConfiguration<S, P extends FrontierProjection>(
             StateValidator<S> stateValidator
     ) {
         this(worldId, initialState, initialInstant, commandPlanner, scheduledPlanner, reducer, stateCodec,
-                projectionMapper, limits, initialSchedules, transactionCommitter, stateValidator, FrontierExecutionMetrics.noOp());
+                projectionMapper, limits, initialSchedules, transactionCommitter, stateValidator, FrontierExecutionMetrics.noOp(), KernelQuarantineReporter.disabled());
+    }
+
+    /** Compatibility constructor for configurations that provide metrics but no aggregate diagnostic bridge. */
+    public FrontierEngineConfiguration(WorldId worldId, S initialState, SimInstant initialInstant, CommandPlanner<S> commandPlanner,
+            ScheduledActionPlanner<S> scheduledPlanner, EventReducer<S> reducer, StateCodec<S> stateCodec, ProjectionMapper<S, P> projectionMapper,
+            EngineLimits limits, List<ScheduledAction> initialSchedules, TransactionCommitter transactionCommitter, StateValidator<S> stateValidator,
+            FrontierExecutionMetrics executionMetrics) {
+        this(worldId, initialState, initialInstant, commandPlanner, scheduledPlanner, reducer, stateCodec, projectionMapper, limits,
+                initialSchedules, transactionCommitter, stateValidator, executionMetrics, KernelQuarantineReporter.disabled());
     }
 
     /** Rebinds the pure aggregate to the owning server host's mandatory write-ahead boundary. */
     public FrontierEngineConfiguration<S, P> withTransactionCommitter(TransactionCommitter replacement) {
         return new FrontierEngineConfiguration<>(worldId, initialState, initialInstant, commandPlanner, scheduledPlanner,
-                reducer, stateCodec, projectionMapper, limits, initialSchedules, replacement, stateValidator, executionMetrics);
+                reducer, stateCodec, projectionMapper, limits, initialSchedules, replacement, stateValidator, executionMetrics, kernelQuarantineReporter);
     }
 
     /** Installs the aggregate's complete invariant audit at every commit/recovery boundary. */
     public FrontierEngineConfiguration<S, P> withStateValidator(Consumer<S> replacement) {
         return new FrontierEngineConfiguration<>(worldId, initialState, initialInstant, commandPlanner, scheduledPlanner,
-                reducer, stateCodec, projectionMapper, limits, initialSchedules, transactionCommitter, StateValidator.complete(replacement), executionMetrics);
+                reducer, stateCodec, projectionMapper, limits, initialSchedules, transactionCommitter, StateValidator.complete(replacement), executionMetrics, kernelQuarantineReporter);
     }
 
     /** Installs an aggregate-specific validator that can prove safe incremental transitions. */
     public FrontierEngineConfiguration<S, P> withTransitionValidator(StateValidator<S> replacement) {
         return new FrontierEngineConfiguration<>(worldId, initialState, initialInstant, commandPlanner, scheduledPlanner,
-                reducer, stateCodec, projectionMapper, limits, initialSchedules, transactionCommitter, replacement, executionMetrics);
+                reducer, stateCodec, projectionMapper, limits, initialSchedules, transactionCommitter, replacement, executionMetrics, kernelQuarantineReporter);
     }
 
     /** Adds an observational timing adapter; it is never part of canonical state or persistence. */
     public FrontierEngineConfiguration<S, P> withExecutionMetrics(FrontierExecutionMetrics replacement) {
         return new FrontierEngineConfiguration<>(worldId, initialState, initialInstant, commandPlanner, scheduledPlanner,
-                reducer, stateCodec, projectionMapper, limits, initialSchedules, transactionCommitter, stateValidator, replacement);
+                reducer, stateCodec, projectionMapper, limits, initialSchedules, transactionCommitter, stateValidator, replacement, kernelQuarantineReporter);
+    }
+    public FrontierEngineConfiguration<S, P> withKernelQuarantineReporter(KernelQuarantineReporter<S> replacement) {
+        return new FrontierEngineConfiguration<>(worldId, initialState, initialInstant, commandPlanner, scheduledPlanner, reducer, stateCodec,
+                projectionMapper, limits, initialSchedules, transactionCommitter, stateValidator, executionMetrics, replacement);
     }
 }

@@ -42,6 +42,11 @@ class DiagnosticIncidentIndexTest {
         assertEquals(payload.diagnostic(), bundle.diagnostic());
         assertEquals("event:diagnostic-1", bundle.eventId());
         assertEquals("command:diagnostic", bundle.causeId());
+        assertEquals(world.value(), bundle.context().world());
+        assertEquals("frontier-v3", bundle.context().runtime());
+        assertFalse(bundle.context().complete());
+        assertEquals("runtime_source_tree_jar_restart_identity_unavailable", bundle.context().degradation());
+        assertEquals(bundle.context(), restarted.diagnosticIncidents().bundle(id).orElseThrow().context());
     }
 
     @Test void oneIdentityProducesOneBoundedBundleEvenWhenTheSameFactIsRepeated() {

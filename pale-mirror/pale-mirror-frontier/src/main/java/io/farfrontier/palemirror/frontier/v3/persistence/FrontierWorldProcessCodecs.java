@@ -31,7 +31,8 @@ public final class FrontierWorldProcessCodecs {
 
     private static Map<String, PayloadCodecs> createByProcess() {
         Map<String, PayloadCodecs> result = new LinkedHashMap<>();
-        result.put("kernel-schedule", KernelPayloadCodecs.scheduleEffects());
+        result.put("kernel-schedule", PayloadCodecs.merge(
+                KernelPayloadCodecs.scheduleEffects(), FrontierWorldPayloadCodecs.kernelDiagnosticCodecs()));
         result.put("physical-observation", FrontierWorldPayloadCodecs.physicalCodecs());
         result.put("replica-custody", FrontierWorldPayloadCodecs.replicaCustodyCodecs());
         result.put("ambient-actors", FrontierWorldPayloadCodecs.ambientCodecs());

@@ -6,6 +6,7 @@ import java.nio.ByteBuffer; import java.io.ByteArrayInputStream; import java.io.
 /** Complete payload registry for the currently installed v3 world processes. */
 public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCodecs() { }
     public static PayloadCodecs create() { return FrontierWorldProcessCodecs.create(); }
+    static PayloadCodecs kernelDiagnosticCodecs() { return new PayloadCodecs(List.of(new KernelQuarantineCodec())); }
     static PayloadCodecs physicalCodecs() { return PayloadCodecs.merge(new PayloadCodecs(List.of(
             new PhysicalIntentPreparedCodec(), new PhysicalIntentTransitionCodec(), new StructureDamagedCodec(),
             PhysicalDeltaPayloadCodecs.single(), PhysicalDeltaPayloadCodecs.batch(), new ExactItemCustodyChangedCodec(), new ExactItemDestroyedCodec(),
@@ -57,7 +58,17 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     static PayloadCodecs settlementServiceWorkCodecs() { return SettlementServiceWorkPayloadCodecs.codecs(); }
     static PayloadCodecs strategyCodecs() { return new PayloadCodecs(List.of(StrategicPlanPayloadCodecs.selected(),
             StrategicPlanPayloadCodecs.taskPlanned(), StrategicPlanPayloadCodecs.transition(), StrategicPlanPayloadCodecs.infectionObserved())); }
-    private static final class InfectionCodec implements PayloadCodec {
+    private static final class KernelQuarantineCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.kernel_quarantine_observed"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
+            KernelQuarantineObserved value = (KernelQuarantineObserved) payload; writeSubject(output, value.frontierId());
+            output.writeByte(value.producer().ordinal()); writeString(output, value.failureIdentity());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
+            int producer = input.readUnsignedByte(); if (producer >= KernelQuarantineObserved.Producer.values().length) throw new IllegalArgumentException("invalid kernel quarantine producer");
+            return new KernelQuarantineObserved(readSubject(input).value(), KernelQuarantineObserved.Producer.values()[producer], readString(input));
+        }); }
+    } private static final class InfectionCodec implements PayloadCodec {
         @Override public String type() { return "frontier.infection_changed"; } @Override public byte[] encode(FrontierPayload payload) {
             InfectionChanged changed = (InfectionChanged) payload;
             return ByteBuffer.allocate(16).putInt(changed.cell().x()).putInt(changed.cell().z()).putLong(changed.intensity().value().raw()).array();

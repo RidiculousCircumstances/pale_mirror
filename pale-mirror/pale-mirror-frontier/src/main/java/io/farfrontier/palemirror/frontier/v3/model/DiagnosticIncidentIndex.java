@@ -29,10 +29,16 @@ public record DiagnosticIncidentIndex(Map<String, DiagnosticIncident> incidents,
     public Optional<DiagnosticIncidentBundle> bundle(String id) { return incident(id).map(DiagnosticIncident::bundle); }
     public Optional<DiagnosticIncident> why(DiagnosticSubject subject) { return Optional.ofNullable(bySubject.get(SubjectKey.of(subject))).map(incidents::get); }
     public DiagnosticIncidentIndex retain(DiagnosticTuple tuple, String eventId, String causeId, long revision, long instant) {
-        return retain(DiagnosticIncident.idFor(tuple), tuple, eventId, causeId, revision, instant);
+        return retain(DiagnosticIncident.idFor(tuple), tuple, eventId, causeId, revision, instant, DiagnosticIncidentContext.unavailable());
+    }
+    public DiagnosticIncidentIndex retain(DiagnosticTuple tuple, String eventId, String causeId, long revision, long instant, DiagnosticIncidentContext context) {
+        return retain(DiagnosticIncident.idFor(tuple), tuple, eventId, causeId, revision, instant, context);
     }
     public DiagnosticIncidentIndex retain(String id, DiagnosticTuple tuple, String eventId, String causeId, long revision, long instant) {
-        Objects.requireNonNull(tuple, "producer tuple");
+        return retain(id, tuple, eventId, causeId, revision, instant, DiagnosticIncidentContext.unavailable());
+    }
+    public DiagnosticIncidentIndex retain(String id, DiagnosticTuple tuple, String eventId, String causeId, long revision, long instant, DiagnosticIncidentContext context) {
+        Objects.requireNonNull(tuple, "producer tuple"); Objects.requireNonNull(context, "incident context");
         id = Objects.requireNonNull(id, "producer incident id"); SubjectKey key = SubjectKey.of(tuple.subject());
         DiagnosticIncident existing = incidents.get(id);
         if (existing != null) {
@@ -48,10 +54,10 @@ public record DiagnosticIncidentIndex(Map<String, DiagnosticIncident> incidents,
             return new DiagnosticIncidentIndex(incidents, bySubject, Math.addExact(droppedOptional, 1));
         }
         if (incidents.size() >= MAX_INCIDENTS) {
-            return compactOneOptional().retain(id, tuple, eventId, causeId, revision, instant);
+            return compactOneOptional().retain(id, tuple, eventId, causeId, revision, instant, context);
         }
         DiagnosticIncident created = new DiagnosticIncident(id, tuple, eventId, causeId, revision, instant, revision, instant, 1,
-                DiagnosticIncident.terminal(tuple.category()));
+                DiagnosticIncident.terminal(tuple.category()), context);
         Map<String, DiagnosticIncident> next = new LinkedHashMap<>(incidents); next.put(id, created);
         Map<SubjectKey, String> nextSubjects = new LinkedHashMap<>(bySubject); nextSubjects.put(key, id);
         return new DiagnosticIncidentIndex(next, nextSubjects, droppedOptional);

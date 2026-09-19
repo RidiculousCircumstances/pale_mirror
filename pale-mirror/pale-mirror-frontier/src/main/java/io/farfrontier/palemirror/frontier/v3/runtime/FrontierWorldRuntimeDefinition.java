@@ -54,7 +54,13 @@ public final class FrontierWorldRuntimeDefinition {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(worldId, seed, ruleset); FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
         return new FrontierEngineConfiguration<>(worldId, initial, SimInstant.ZERO, FrontierWorldRuntimeDefinition::planCommand,
                 (state, action) -> planScheduled(state, action, autonomousInterception), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(bootstrap), FrontierWorldProjectionCompiler::compile,
-                new EngineLimits(4_096, 1_200L, 4_096, 4_096), FrontierWorldProcessCatalog.initialSchedule(bootstrap), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE); }
+                new EngineLimits(4_096, 1_200L, 4_096, 4_096), FrontierWorldProcessCatalog.initialSchedule(bootstrap), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE)
+                .withKernelQuarantineReporter((state, world, causes, instant, boundary, failure) -> java.util.Optional.of(new ProposedEvent(
+                        new SubjectId(world.value()), new io.farfrontier.palemirror.frontier.v3.model.KernelQuarantineObserved(new SubjectId(world.value()),
+                        switch (boundary) { case COMMAND_TRANSACTION -> io.farfrontier.palemirror.frontier.v3.model.KernelQuarantineObserved.Producer.COMMAND_TRANSACTION;
+                            case DUE_CAPACITY -> io.farfrontier.palemirror.frontier.v3.model.KernelQuarantineObserved.Producer.DUE_CAPACITY;
+                            case DUE_TRANSACTION -> io.farfrontier.palemirror.frontier.v3.model.KernelQuarantineObserved.Producer.DUE_TRANSACTION; },
+                        failure.getClass().getSimpleName())))); }
     public static PayloadCodecs payloadCodecs() { return PAYLOAD_CODECS; }
     public static DeterministicProcessRegistry processRegistry() {
         FrontierWorldProcessCatalog.requirePhysicalLifecycleComposition();

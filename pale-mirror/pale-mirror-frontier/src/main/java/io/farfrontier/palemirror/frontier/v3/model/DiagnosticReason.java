@@ -25,7 +25,10 @@ public enum DiagnosticReason {
     INVENTORY_CONFLICT(401, DiagnosticCategory.RECONCILIATION_CONFLICT, DiagnosticOwnerKind.INVENTORY_CUSTODY, DiagnosticSubjectKind.INVENTORY_SLOT, DiagnosticDisposition.INSPECT),
     REPLICA_CUSTODY_CONFLICT(402, DiagnosticCategory.RECONCILIATION_CONFLICT, DiagnosticOwnerKind.REPLICA_CUSTODY, DiagnosticSubjectKind.REPLICA, DiagnosticDisposition.INSPECT),
     PHYSICAL_CUSTODY_UNRESOLVED(403, DiagnosticCategory.RECOVERY_UNKNOWN, DiagnosticOwnerKind.PHYSICAL_INTENT, DiagnosticSubjectKind.PHYSICAL_EFFECT, DiagnosticDisposition.INSPECT),
-    FRONTIER_QUARANTINE(501, DiagnosticCategory.CANONICAL_INVARIANT_FAILURE, DiagnosticOwnerKind.FRONTIER_INSTANCE, DiagnosticSubjectKind.FRONTIER_INSTANCE, DiagnosticDisposition.QUARANTINE);
+    FRONTIER_QUARANTINE(501, DiagnosticCategory.CANONICAL_INVARIANT_FAILURE, DiagnosticOwnerKind.FRONTIER_INSTANCE, DiagnosticSubjectKind.FRONTIER_INSTANCE, DiagnosticDisposition.QUARANTINE),
+    FRONTIER_KERNEL_COMMAND_FAILURE(502, DiagnosticCategory.ADAPTER_OR_INFRASTRUCTURE_ERROR, DiagnosticOwnerKind.FRONTIER_INSTANCE, DiagnosticSubjectKind.FRONTIER_INSTANCE, DiagnosticDisposition.QUARANTINE),
+    FRONTIER_KERNEL_TRANSACTION_CAPACITY(503, DiagnosticCategory.CANONICAL_INVARIANT_FAILURE, DiagnosticOwnerKind.FRONTIER_INSTANCE, DiagnosticSubjectKind.FRONTIER_INSTANCE, DiagnosticDisposition.QUARANTINE),
+    FRONTIER_KERNEL_DUE_FAILURE(504, DiagnosticCategory.ADAPTER_OR_INFRASTRUCTURE_ERROR, DiagnosticOwnerKind.FRONTIER_INSTANCE, DiagnosticSubjectKind.FRONTIER_INSTANCE, DiagnosticDisposition.QUARANTINE);
 
     private final int wireTag;
     private final DiagnosticCategory category;

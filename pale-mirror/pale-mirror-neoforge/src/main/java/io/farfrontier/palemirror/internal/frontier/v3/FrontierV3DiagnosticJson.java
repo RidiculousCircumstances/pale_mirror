@@ -446,7 +446,18 @@ final class FrontierV3DiagnosticJson {
         return "{\"incident\":\"" + quote(value.incidentId()) + "\",\"event\":\"" + quote(value.eventId())
                 + "\",\"cause\":\"" + quote(value.causeId()) + "\",\"revision\":" + value.revision()
                 + ",\"instant\":" + value.instant() + ",\"occurrences\":" + value.occurrences()
-                + ",\"awaitingReview\":" + value.awaitingReview() + ",\"diagnostic\":" + diagnostic(value.diagnostic()) + "}";
+                + ",\"awaitingReview\":" + value.awaitingReview() + ",\"diagnostic\":" + diagnostic(value.diagnostic())
+                + ",\"context\":" + context(value.context()) + "}";
+    }
+    private static String context(io.farfrontier.palemirror.frontier.v3.model.DiagnosticIncidentContext value) {
+        return "{\"world\":\"" + quote(value.world()) + "\",\"runtime\":\"" + quote(value.runtime())
+                + "\",\"sourceTree\":\"" + quote(value.sourceTree()) + "\",\"jar\":\"" + quote(value.jar())
+                + "\",\"ruleset\":\"" + quote(value.ruleset()) + "\",\"restartIdentity\":\"" + quote(value.restartIdentity())
+                + "\",\"causalWindow\":\"" + quote(value.causalWindow()) + "\",\"physical\":\"" + quote(value.physical())
+                + "\",\"claim\":\"" + quote(value.claim()) + "\",\"intent\":\"" + quote(value.intent())
+                + "\",\"observation\":\"" + quote(value.observation()) + "\",\"reconciliation\":\"" + quote(value.reconciliation())
+                + "\",\"projection\":\"" + quote(value.projection()) + "\",\"complete\":" + value.complete()
+                + ",\"degradation\":\"" + quote(value.degradation()) + "\"}";
     }
 
     private static String diagnostic(io.farfrontier.palemirror.frontier.v3.model.DiagnosticTuple value) {
