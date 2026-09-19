@@ -155,7 +155,9 @@ final class FrontierV3DiagnosticJson {
             case "medical" -> medical(id, checkpoint, state);
             case "scene" -> FrontierV3SceneDiagnosticJson.render(id, checkpoint, state, sceneReadiness);
             case "intent" -> intent(id, checkpoint, state, harvestReadiness, equipmentIssueReadiness, equipmentReturnReadiness);
-            case "trace" -> FrontierV3DiagnosticExecutorJson.trace(id, checkpoint, trace);
+            case "why" -> why(id, checkpoint, state);
+            case "trace" -> FrontierV3DiagnosticExecutorJson.trace(id, checkpoint, state, trace);
+            case "incident" -> incident(id, checkpoint, state);
             case "transit" -> transit(id, checkpoint, state);
             case "recovery" -> recovery(id, checkpoint, state);
             case "route_topology" -> routeTopology(id, checkpoint, state);
@@ -225,8 +227,12 @@ final class FrontierV3DiagnosticJson {
     }
 
     private static String summary(CheckpointImage checkpoint, FrontierWorldState state) {
+        long retainedConflicts = state.resourceSites().sites().values().stream()
+                .filter(site -> site.conflictDisposition().isPresent()).count();
+        String verdict = retainedConflicts == 0 && state.inventory().conflicts().isEmpty() ? "green" : "blocked";
         return base("summary", "", checkpoint)
-                + ",\"status\":\"ok\",\"settlements\":" + state.bootstrap().settlements().size()
+                + ",\"status\":\"ok\",\"diagnosticVerdict\":\"" + verdict + "\",\"requiredConflicts\":" + retainedConflicts
+                + ",\"settlements\":" + state.bootstrap().settlements().size()
                 + ",\"residents\":" + state.humanPopulation().residents().size()
                 + ",\"bioforms\":" + state.actorLocations().keySet().stream().filter(value -> value.value().startsWith("bioform:")).count()
                 + ",\"sites\":" + state.resourceSites().sites().size()
@@ -390,11 +396,32 @@ final class FrontierV3DiagnosticJson {
         var incident = value.incident();
         return "{\"position\":" + position(value.position()) + ",\"reason\":\"" + value.reason() + "\",\"policy\":\"" + value.policy()
                 + "\",\"incident\":{\"id\":\"" + quote(incident.id()) + "\",\"category\":\"" + incident.category()
-                + "\",\"reason\":\"" + quote(incident.reason()) + "\",\"owner\":\"" + quote(incident.ownerId().value())
+                + "\",\"categoryTag\":" + incident.diagnostic().category().wireTag() + ",\"reason\":\"" + quote(incident.reason())
+                + "\",\"reasonTag\":" + incident.diagnostic().reason().wireTag() + ",\"ownerKind\":\"" + incident.diagnostic().owner().kind()
+                + "\",\"owner\":\"" + quote(incident.ownerId().value()) + "\",\"subjectKind\":\"" + incident.diagnostic().subject().kind()
                 + "\",\"subject\":\"" + quote(incident.subjectId().value()) + "\",\"source\":\"" + quote(incident.source())
                 + "\",\"expected\":\"" + quote(incident.expectedFact()) + "\",\"observed\":\"" + quote(incident.observedFact())
                 + "\",\"preCanonical\":\"" + quote(incident.preCanonicalFact()) + "\",\"postCanonical\":\"" + quote(incident.postCanonicalFact())
-                + "\",\"disposition\":\"" + quote(incident.disposition()) + "\",\"traceCorrelation\":\"" + quote(incident.traceCorrelation()) + "\"}}";
+                + "\",\"disposition\":\"" + quote(incident.disposition()) + "\",\"dispositionTag\":" + incident.diagnostic().disposition().wireTag()
+                + ",\"traceCorrelation\":\"" + quote(incident.traceCorrelation()) + "\"}}";
+    }
+
+    /** A read-only exact-subject causal account; it does not search for a substitute owner. */
+    private static String why(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+        SubjectId subject = subject(id).orElse(null);
+        ResourceSiteLifecycle lifecycle = subject == null ? null : state.resourceSites().sites().get(subject);
+        if (lifecycle == null) return unavailable("why", id, checkpoint, "not_found");
+        String cause = lifecycle.conflictDisposition().map(FrontierV3DiagnosticJson::conflict).orElse("null");
+        return base("why", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(subject.value())
+                + "\",\"state\":\"" + lifecycle.phase() + "\",\"cause\":" + cause + "}";
+    }
+
+    /** Incident identity is retained by its canonical owner; this bounded lookup reads no chunks or mutable state. */
+    private static String incident(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+        var value = state.resourceSites().sites().values().stream().flatMap(site -> site.conflictDisposition().stream())
+                .filter(disposition -> disposition.incident().id().equals(id)).findFirst();
+        if (value.isEmpty()) return unavailable("incident", id, checkpoint, "not_found");
+        return base("incident", id, checkpoint) + ",\"status\":\"ok\",\"cause\":" + conflict(value.orElseThrow()) + "}";
     }
     private static String settlement(String id, CheckpointImage checkpoint, FrontierWorldState state) {
         SubjectId subject = subject(id).orElse(null);

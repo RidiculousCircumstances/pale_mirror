@@ -48,8 +48,18 @@ final class FrontierV3DiagnosticExecutorJson {
                 .orElse(null);
     }
 
-    static String trace(String id, CheckpointImage checkpoint, Optional<FrontierV3DiagnosticTrace.Entry> trace) {
-        if (trace.isEmpty()) return FrontierV3DiagnosticJson.unavailable("trace", id, checkpoint, "not_found");
+    static String trace(String id, CheckpointImage checkpoint, FrontierWorldState state, Optional<FrontierV3DiagnosticTrace.Entry> trace) {
+        if (trace.isEmpty()) {
+            var incident = state.resourceSites().sites().values().stream().flatMap(site -> site.conflictDisposition().stream())
+                    .map(disposition -> disposition.incident()).filter(value -> value.traceCorrelation().equals(id)).findFirst();
+            if (incident.isEmpty()) return FrontierV3DiagnosticJson.unavailable("trace", id, checkpoint, "not_found");
+            var value = incident.orElseThrow();
+            return FrontierV3DiagnosticJson.base("trace", id, checkpoint) + ",\"status\":\"trace_incomplete\",\"correlation\":\""
+                    + FrontierV3DiagnosticJson.quote(value.traceCorrelation()) + "\",\"reason\":\"" + FrontierV3DiagnosticJson.quote(value.reason())
+                    + "\",\"category\":\"" + value.category() + "\",\"owner\":\"" + FrontierV3DiagnosticJson.quote(value.ownerId().value())
+                    + "\",\"subject\":\"" + FrontierV3DiagnosticJson.quote(value.subjectId().value()) + "\",\"disposition\":\""
+                    + FrontierV3DiagnosticJson.quote(value.disposition()) + "\",\"history\":\"compacted_or_restart_local\"}";
+        }
         FrontierV3DiagnosticTrace.Entry entry = trace.orElseThrow();
         return FrontierV3DiagnosticJson.base("trace", id, checkpoint) + ",\"status\":\"ok\",\"correlation\":\""
                 + FrontierV3DiagnosticJson.quote(entry.correlation()) + "\",\"eventKind\":\""

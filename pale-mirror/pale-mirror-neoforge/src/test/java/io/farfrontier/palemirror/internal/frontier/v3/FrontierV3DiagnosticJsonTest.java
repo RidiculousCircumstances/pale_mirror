@@ -135,8 +135,7 @@ class FrontierV3DiagnosticJsonTest {
         SubjectId siteId = initial.resourceSites().sites().keySet().stream().sorted().findFirst().orElseThrow();
         var site = FrontierResourceSitePlan.compile(initial.bootstrap()).get(siteId);
         var conflict = new io.farfrontier.palemirror.frontier.v3.model.ResourceSiteConflictObserved(siteId, site.cropSlots().getFirst(),
-                io.farfrontier.palemirror.frontier.v3.model.ResourceSiteConflictReason.OBSERVED_MANAGED_CELL_MISMATCH,
-                io.farfrontier.palemirror.frontier.v3.model.ResourceSiteConflictSource.LIFECYCLE_RECONCILIATION);
+                io.farfrontier.palemirror.frontier.v3.model.ResourceSiteDiagnosticProducer.ORDINARY_OBSERVATION_MISMATCH);
         FrontierWorldState conflicted = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteProcess.reduceConflict(initial, siteId, conflict);
         CheckpointImage checkpoint = new CheckpointImage(configuration.worldId(), new io.farfrontier.palemirror.frontier.v3.api.Revision(4L),
                 new SimInstant(9L), new byte[] {1}, List.of(), List.of());
@@ -145,9 +144,24 @@ class FrontierV3DiagnosticJsonTest {
                 .substring(FrontierV3DiagnosticJson.PREFIX.length())).getAsJsonObject();
         var incident = json.getAsJsonObject("conflictDisposition").getAsJsonObject("incident");
         assertEquals("incident:resource-site:" + siteId.value().substring("site:".length()), incident.get("id").getAsString());
-        assertEquals("INVARIANT_FAILURE", incident.get("category").getAsString());
+        assertEquals("CANONICAL_INVARIANT_FAILURE", incident.get("category").getAsString());
         assertEquals(siteId.value(), incident.get("owner").getAsString());
+        assertEquals("RESOURCE_SITE", incident.get("ownerKind").getAsString());
+        assertEquals("RESOURCE_SITE_CELL", incident.get("subjectKind").getAsString());
         assertTrue(incident.get("traceCorrelation").getAsString().startsWith("conflict:incident:resource-site:"));
+        var summary = JsonParser.parseString(FrontierV3DiagnosticJson.render("summary", "", checkpoint, conflicted, Optional.empty())
+                .substring(FrontierV3DiagnosticJson.PREFIX.length())).getAsJsonObject();
+        assertEquals("blocked", summary.get("diagnosticVerdict").getAsString(),
+                "a retained required conflict may not be summarized as green");
+        String restartTrace = FrontierV3DiagnosticJson.render("trace", incident.get("traceCorrelation").getAsString(), checkpoint,
+                conflicted, Optional.empty());
+        assertTrue(restartTrace.contains("\"status\":\"trace_incomplete\"") && restartTrace.contains("\"history\":\"compacted_or_restart_local\""),
+                "after volatile detail is gone, the persisted canonical incident remains queryable and explicitly incomplete");
+        assertTrue(FrontierV3DiagnosticJson.render("why", siteId.value(), checkpoint, conflicted, Optional.empty())
+                        .contains("\"owner\":\"" + siteId.value() + "\""),
+                "why reads the exact supplied subject instead of discovering another owner");
+        assertTrue(FrontierV3DiagnosticJson.render("incident", incident.get("id").getAsString(), checkpoint, conflicted, Optional.empty())
+                        .contains("\"status\":\"ok\""), "incident reads the retained stable identity");
     }
 
     @Test

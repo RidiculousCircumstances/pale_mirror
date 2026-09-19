@@ -331,8 +331,7 @@ class ResourceSiteHarvestProcessTest {
         HotHarvest hot = hotHarvestAfterColdSteps(0);
         ResourceSiteHarvestJob job = hot.job();
         BlockPosition crop = FrontierResourceSitePlan.compile(hot.state().bootstrap()).get(hot.site()).cropSlots().getFirst();
-        ResourceSiteConflictObserved observed = new ResourceSiteConflictObserved(hot.site(), crop,
-                ResourceSiteConflictReason.PLAYER_REMOVED_MANAGED_CELL, ResourceSiteConflictSource.PLAYER_WORLD_OBSERVATION);
+        ResourceSiteConflictObserved observed = new ResourceSiteConflictObserved(hot.site(), crop, ResourceSiteDiagnosticProducer.PLAYER_REMOVED);
         CommandId commandId = new CommandId("command:site-harvest-player-break");
         FrontierCommand command = new FrontierCommand(1, commandId, hot.state().bootstrap().worldId(), new Revision(1L), new SimInstant(22_302L),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), observed);
@@ -353,7 +352,7 @@ class ResourceSiteHarvestProcessTest {
         assertEquals(ResourceSiteConflictPolicy.TERMINAL_REPAIR_REQUIRED,
                 conflicted.resourceSites().site(hot.site()).conflictDisposition().orElseThrow().policy());
         ConflictIncident incident = conflicted.resourceSites().site(hot.site()).conflictDisposition().orElseThrow().incident();
-        assertEquals(ConflictIncidentCategory.PLAYER_WORLD_DISRUPTION, incident.category());
+        assertEquals(DiagnosticCategory.DOMAIN_DISRUPTION, incident.category());
         assertEquals(ResourceSiteConflictSource.PLAYER_WORLD_OBSERVATION.name(), incident.source());
         assertEquals("conflict:incident:resource-site:" + hot.site().value().substring("site:".length()), incident.traceCorrelation(),
                 "the harvest's terminal canonical disposition retains the exact player-observation trace join");
@@ -381,15 +380,14 @@ class ResourceSiteHarvestProcessTest {
         HotHarvest hot = hotHarvestAfterColdSteps(0);
         ResourceSiteHarvestJob job = hot.job();
         BlockPosition crop = FrontierResourceSitePlan.compile(hot.state().bootstrap()).get(hot.site()).cropSlots().getFirst();
-        ResourceSiteConflictObserved observed = new ResourceSiteConflictObserved(hot.site(), crop,
-                ResourceSiteConflictReason.CARRIER_FENCE_UNRESOLVED, ResourceSiteConflictSource.SCENE_CARRIER_FENCE);
+        ResourceSiteConflictObserved observed = new ResourceSiteConflictObserved(hot.site(), crop, ResourceSiteDiagnosticProducer.SCENE_CARRIER_FENCE);
 
         FrontierWorldState conflicted = ResourceSiteProcess.reduceConflict(hot.state(), hot.site(), observed);
 
         ResourceSiteConflictDisposition disposition = conflicted.resourceSites().site(hot.site()).conflictDisposition().orElseThrow();
         assertEquals(ResourceSiteConflictReason.CARRIER_FENCE_UNRESOLVED, disposition.reason());
         assertEquals(ResourceSiteConflictPolicy.RECOVERY_INSPECTION_REQUIRED, disposition.policy());
-        assertEquals(ConflictIncidentCategory.LAWFUL_LIFECYCLE_LAG, disposition.incident().category());
+        assertEquals(DiagnosticCategory.RECOVERY_UNKNOWN, disposition.incident().category());
         assertEquals(ResourceSiteConflictSource.SCENE_CARRIER_FENCE.name(), disposition.incident().source());
         assertEquals(PhysicalIntentStatus.CONFLICTED, conflicted.physicalIntents().get(job.intentId()).status(),
                 "the isolated ambiguous field cannot keep an executable harvest intent");
@@ -408,7 +406,7 @@ class ResourceSiteHarvestProcessTest {
         FrontierWorldState prepared = hot.state().withChanges(FrontierWorldStateUpdate.begin().physicalIntents(intents));
 
         FrontierWorldState conflicted = ResourceSiteProcess.reduceConflict(prepared, hot.site(),
-                new ResourceSiteConflictObserved(hot.site(), crop, ResourceSiteConflictReason.PLAYER_REMOVED_MANAGED_CELL));
+                new ResourceSiteConflictObserved(hot.site(), crop, ResourceSiteDiagnosticProducer.PLAYER_REMOVED));
 
         assertEquals(PhysicalIntentStatus.CONFLICTED, conflicted.physicalIntents().get(job.intentId()).status(),
                 "the traversal-only profile records terminal player disposition without restart custody");

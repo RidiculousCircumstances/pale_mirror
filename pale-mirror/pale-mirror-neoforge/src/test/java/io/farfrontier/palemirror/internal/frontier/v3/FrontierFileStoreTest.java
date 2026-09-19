@@ -165,7 +165,7 @@ class FrontierFileStoreTest {
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(world, 77L));
         var crop = FrontierResourceSitePlan.compile(initial.bootstrap()).get(site).cropSlots().getFirst();
         ResourceSiteConflictObserved observed = new ResourceSiteConflictObserved(site, crop,
-                ResourceSiteConflictReason.PLAYER_REMOVED_MANAGED_CELL, ResourceSiteConflictSource.PLAYER_WORLD_OBSERVATION);
+                io.farfrontier.palemirror.frontier.v3.model.ResourceSiteDiagnosticProducer.PLAYER_REMOVED);
         FrontierFileStore store = new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs());
         store.installSnapshot(new SnapshotRecord(new CheckpointImage(world, Revision.ZERO, SimInstant.ZERO,
                 new FrontierWorldStateCodec().encode(initial), List.of(), List.of()), 0L));

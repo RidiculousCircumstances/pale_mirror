@@ -394,8 +394,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         if (site == null) throw new IllegalStateException("resource-site harvest scene has no immutable field");
         boolean accepted = FrontierV3ResourceSiteConflictExecutor.recordConflict(level, runtime, FrontierV3ResourceSiteLedger.get(level), site,
                 site.cropSlots().get(job.progress().nextCropSlotIndex()),
-                io.farfrontier.palemirror.frontier.v3.model.ResourceSiteConflictReason.CARRIER_FENCE_UNRESOLVED,
-                io.farfrontier.palemirror.frontier.v3.model.ResourceSiteConflictSource.SCENE_CARRIER_FENCE,
+                io.farfrontier.palemirror.frontier.v3.model.ResourceSiteDiagnosticProducer.SCENE_CARRIER_FENCE,
                 new io.farfrontier.palemirror.frontier.v3.api.CommandId("executor:resource-site-carrier-fence-"
                         + fence.name().toLowerCase(java.util.Locale.ROOT) + "-r" + lease.revision()));
         if (accepted) conflict(level, runtime, lease, "cold-carrier-" + fence.name().toLowerCase(java.util.Locale.ROOT));

@@ -115,7 +115,7 @@ class FrontierReadabilityPlanTest {
         ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).values().iterator().next();
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(site.id());
         ResourceSiteConflictObserved conflict = new ResourceSiteConflictObserved(site.id(), site.cropSlots().getFirst(),
-                ResourceSiteConflictReason.OBSERVED_MANAGED_CELL_MISMATCH, ResourceSiteConflictSource.LIFECYCLE_RECONCILIATION);
+                ResourceSiteDiagnosticProducer.ORDINARY_OBSERVATION_MISMATCH);
         FrontierWorldState conflicted = state.withResourceSites(state.resourceSites().replace(lifecycle.conflicted(
                 ResourceSiteConflictDisposition.terminal(site.cropSlots().getFirst(), ResourceSiteConflictReason.OBSERVED_MANAGED_CELL_MISMATCH,
                         ResourceSiteConflictIncidents.first(lifecycle, conflict)))));

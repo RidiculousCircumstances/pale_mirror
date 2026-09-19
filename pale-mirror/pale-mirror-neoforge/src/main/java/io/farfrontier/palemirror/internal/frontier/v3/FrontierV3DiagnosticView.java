@@ -45,7 +45,11 @@ public enum FrontierV3DiagnosticView {
     PHYSICAL_DELTA("physical_delta", true),
     SCENE("scene", true),
     INTENT("intent", true),
+    /** Bounded canonical owner/state and retained cause for one typed subject. */
+    WHY("why", true),
     TRACE("trace", true),
+    /** One retained canonical incident by its stable identity. */
+    INCIDENT("incident", true),
     TRANSIT("transit", true),
     RECOVERY("recovery", true),
     MEDICAL("medical", true),

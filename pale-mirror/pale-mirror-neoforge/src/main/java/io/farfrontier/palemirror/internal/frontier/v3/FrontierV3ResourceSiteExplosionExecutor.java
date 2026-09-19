@@ -61,8 +61,7 @@ final class FrontierV3ResourceSiteExplosionExecutor {
             if (FrontierV3ResourceSiteExecutor.matches(level, site, value.candidate().expectedStage())) { ledger.resolve(value); continue; }
             CommandId command = FrontierV3CommandIds.resourceSiteExplosionConflict(value.effectId(), site.id());
             if (!FrontierV3ResourceSiteConflictExecutor.recordConflict(level, runtime, FrontierV3ResourceSiteLedger.get(level), site,
-                    value.candidate().witness(), ResourceSiteConflictReason.EXPLOSION_DAMAGED_MANAGED_CELL,
-                    ResourceSiteConflictSource.EXPLOSION_WITNESS, command)) return;
+                    value.candidate().witness(), io.farfrontier.palemirror.frontier.v3.model.ResourceSiteDiagnosticProducer.EXPLOSION_DAMAGE, command)) return;
             ledger.resolve(value);
         }
     }

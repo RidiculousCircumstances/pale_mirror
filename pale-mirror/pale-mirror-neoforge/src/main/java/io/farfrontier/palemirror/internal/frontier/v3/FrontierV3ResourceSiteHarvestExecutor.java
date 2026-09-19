@@ -311,8 +311,7 @@ final class FrontierV3ResourceSiteHarvestExecutor {
         io.farfrontier.palemirror.frontier.v3.api.CommandId id = new io.farfrontier.palemirror.frontier.v3.api.CommandId(
                 "executor:resource-site-conflict-harvest-r" + checkpoint.revision().value());
         FrontierV3ResourceSiteConflictExecutor.recordConflict(level, runtime, ledger, target.site(), target.site().cropSlots().getFirst(),
-                io.farfrontier.palemirror.frontier.v3.model.ResourceSiteConflictReason.OBSERVED_MANAGED_CELL_MISMATCH,
-                io.farfrontier.palemirror.frontier.v3.model.ResourceSiteConflictSource.ADAPTER_WRITE_FAILURE, id);
+                io.farfrontier.palemirror.frontier.v3.model.ResourceSiteDiagnosticProducer.ADAPTER_WRITE_FAILURE, id);
     }
     private static void unknown(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntentId id, String phase) {
         transition(runtime, id, PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty(), phase);

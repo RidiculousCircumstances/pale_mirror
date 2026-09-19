@@ -57,7 +57,7 @@ class ResourceSiteProcessTest {
         FrontierWorldState state = prepared(initial()); SubjectId site = new SubjectId("site:1-wheat-field");
         ScheduledAction stale = ResourceSiteProcess.nextGrowth(state.resourceSites().site(site), 1_000L);
         BlockPosition affected = FrontierResourceSitePlan.compile(state.bootstrap()).get(site).soilSlots().getFirst();
-        FrontierWorldState conflicted = ResourceSiteProcess.reduceConflict(state, site, new ResourceSiteConflictObserved(site, affected, ResourceSiteConflictReason.OBSERVED_MANAGED_CELL_MISMATCH));
+        FrontierWorldState conflicted = ResourceSiteProcess.reduceConflict(state, site, new ResourceSiteConflictObserved(site, affected, ResourceSiteDiagnosticProducer.ORDINARY_OBSERVATION_MISMATCH));
         WorldId world = conflicted.bootstrap().worldId();
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(world, conflicted.bootstrap().seed());
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration = new FrontierEngineConfiguration<>(world, conflicted,

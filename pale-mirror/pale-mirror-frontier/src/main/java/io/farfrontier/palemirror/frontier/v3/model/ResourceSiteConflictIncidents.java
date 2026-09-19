@@ -10,10 +10,7 @@ public final class ResourceSiteConflictIncidents {
         String expected = "phase=" + lifecycle.phase() + ",epoch=" + lifecycle.growthEpoch() + ",stage=" + lifecycle.growthStage();
         String observed = "position=" + conflict.position().x() + "," + conflict.position().y() + "," + conflict.position().z()
                 + ",reason=" + conflict.reason() + ",source=" + conflict.source();
-        String disposition = ResourceSiteConflictDisposition.requiresRecoveryInspection(conflict.reason())
-                ? ResourceSiteConflictPolicy.RECOVERY_INSPECTION_REQUIRED.name()
-                : ResourceSiteConflictPolicy.TERMINAL_REPAIR_REQUIRED.name();
-        return new ConflictIncident(identity, conflict.source().category(), conflict.reason().name(), lifecycle.siteId(), lifecycle.siteId(),
-                conflict.source().name(), expected, observed, expected, "phase=CONFLICT," + expected, disposition, "conflict:" + identity);
+        return new ConflictIncident(identity, conflict.diagnostic(), conflict.source().name(), expected, observed, expected,
+                "phase=CONFLICT," + expected, "conflict:" + identity);
     }
 }

@@ -126,8 +126,7 @@ class FrontierV3ServerRuntimeTest {
         BlockPosition crop = io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSitePlan.compile(initial.bootstrap())
                 .get(site).cropSlots().getFirst();
         submitWorld(runtime, "resource-site-conflict-first", new io.farfrontier.palemirror.frontier.v3.model.ResourceSiteConflictObserved(site, crop,
-                io.farfrontier.palemirror.frontier.v3.model.ResourceSiteConflictReason.PLAYER_REMOVED_MANAGED_CELL,
-                io.farfrontier.palemirror.frontier.v3.model.ResourceSiteConflictSource.PLAYER_WORLD_OBSERVATION));
+                io.farfrontier.palemirror.frontier.v3.model.ResourceSiteDiagnosticProducer.PLAYER_REMOVED));
         var first = worldState(runtime).resourceSites().site(site).conflictDisposition().orElseThrow().incident();
         assertEquals("incident:resource-site:1-wheat-field", first.id());
         assertEquals("PLAYER_WORLD_OBSERVATION", first.source());

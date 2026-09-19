@@ -197,7 +197,7 @@ final class FrontierV3ResourceSiteExecutor {
             FrontierV3ResourceSiteLedger.Claim observedClaim = ledger.claim(site.id()); int observedStage = observedClaim == null ? lifecycle.growthStage() : observedClaim.stage();
             FrontierV3ResourceSiteConflictExecutor.recordLifecycleConflict(level, runtime, ledger, site,
                     firstMismatch(level, site, observedStage).orElse(site.cropSlots().getFirst()),
-                    ResourceSiteConflictReason.OBSERVED_MANAGED_CELL_MISMATCH, LifecycleConflictOrigin.ORDINARY_GROWTH,
+                    io.farfrontier.palemirror.frontier.v3.model.ResourceSiteDiagnosticProducer.ORDINARY_OBSERVATION_MISMATCH, LifecycleConflictOrigin.ORDINARY_GROWTH,
                     confirmedHarvestRegrowthAdmission(level, state, site, desiredStage, completed, observedClaim).name());
         }
     }
@@ -665,7 +665,7 @@ final class FrontierV3ResourceSiteExecutor {
                 FrontierV3ResourceSiteLedger.Claim claim = ledger.claim(site.id());
                 FrontierV3ResourceSiteConflictExecutor.recordLifecycleConflict(level, runtime, ledger, site,
                         firstMismatch(level, site, lifecycle.growthStage()).orElse(site.cropSlots().getFirst()),
-                        ResourceSiteConflictReason.OBSERVED_MANAGED_CELL_MISMATCH, LifecycleConflictOrigin.RESTART_RECONCILIATION,
+                        io.farfrontier.palemirror.frontier.v3.model.ResourceSiteDiagnosticProducer.RESTART_OBSERVATION_MISMATCH, LifecycleConflictOrigin.RESTART_RECONCILIATION,
                         "NOT_EVALUATED", claimPhysicalState(level, ledger, site, claim));
             }
             if (pending.isEmpty()) RECOVERY_SITES.remove(runtime);

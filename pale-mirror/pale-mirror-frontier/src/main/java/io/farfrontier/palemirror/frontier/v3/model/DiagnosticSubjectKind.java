@@ -1,0 +1,9 @@
+package io.farfrontier.palemirror.frontier.v3.model;
+
+/** Nominal affected-subject role; identifier spelling is never used to discover this role. */
+public enum DiagnosticSubjectKind {
+    RESOURCE_SITE_CELL, HARVEST_WORKER, PHYSICAL_EFFECT, SCENE_CARRIER,
+    HIVE_COCOON, HIVE_TRANSFER, ROUTE_MEMBER, ROUTE_CELL, PRODUCTION_INPUT,
+    FACILITY, RESIDENT_ASSIGNMENT, MEDICAL_PATIENT, INVENTORY_SLOT,
+    REPLICA, FRONTIER_INSTANCE, ADAPTER_BOUNDARY;
+}

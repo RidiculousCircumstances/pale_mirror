@@ -1,0 +1,9 @@
+package io.farfrontier.palemirror.frontier.v3.model;
+
+/** Nominal owner role; identifier spelling is never used to discover this role. */
+public enum DiagnosticOwnerKind {
+    RESOURCE_SITE, HARVEST_JOB, PHYSICAL_INTENT, SCENE_LEASE, HIVE_MOBILIZATION,
+    ROUTE_PATROL, PRODUCTION_JOB, SETTLEMENT_SERVICE_WORK, ROUTE_MAINTENANCE,
+    ROUTE_CONSTRUCTION, MEDICAL_EVACUATION, INVENTORY_CUSTODY, REPLICA_CUSTODY,
+    FRONTIER_INSTANCE, ADAPTER;
+}

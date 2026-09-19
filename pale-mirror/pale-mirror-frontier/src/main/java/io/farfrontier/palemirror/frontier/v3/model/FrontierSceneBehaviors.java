@@ -587,7 +587,7 @@ public final class FrontierSceneBehaviors {
             ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId());
             ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).get(job.siteId());
             ResourceSiteConflictObserved conflict = new ResourceSiteConflictObserved(job.siteId(), site.cropSlots().getFirst(),
-                    ResourceSiteConflictReason.WORKER_DIED, ResourceSiteConflictSource.WORKER_DEATH);
+                    ResourceSiteDiagnosticProducer.WORKER_DIED);
             ResourceSiteState sites = state.resourceSites().replace(lifecycle.conflicted(
                     ResourceSiteConflictDisposition.terminal(site.cropSlots().getFirst(), ResourceSiteConflictReason.WORKER_DIED,
                             ResourceSiteConflictIncidents.first(lifecycle, conflict))));

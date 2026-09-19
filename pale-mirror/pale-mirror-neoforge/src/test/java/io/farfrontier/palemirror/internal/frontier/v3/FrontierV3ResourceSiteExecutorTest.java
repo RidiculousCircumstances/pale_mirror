@@ -151,11 +151,11 @@ class FrontierV3ResourceSiteExecutorTest {
                 FrontierV3ResourceSiteConflictExecutor.lifecycleConflictTraceKind(
                         FrontierV3ResourceSiteExecutor.LifecycleConflictOrigin.ORDINARY_GROWTH, lifecycle, claim,
                         io.farfrontier.palemirror.frontier.v3.model.ResourceSiteConflictReason.OBSERVED_MANAGED_CELL_MISMATCH));
-        assertEquals(io.farfrontier.palemirror.frontier.v3.model.ResourceSiteConflictSource.LIFECYCLE_RECONCILIATION,
-                FrontierV3ResourceSiteConflictExecutor.lifecycleConflictSource(FrontierV3ResourceSiteExecutor.LifecycleConflictOrigin.ORDINARY_GROWTH));
-        assertEquals(io.farfrontier.palemirror.frontier.v3.model.ResourceSiteConflictSource.RESTART_RECONCILIATION,
-                FrontierV3ResourceSiteConflictExecutor.lifecycleConflictSource(FrontierV3ResourceSiteExecutor.LifecycleConflictOrigin.RESTART_RECONCILIATION),
-                "a restart ambiguity must not be relabelled as a live lifecycle invariant failure");
+        assertEquals(io.farfrontier.palemirror.frontier.v3.model.DiagnosticCategory.CANONICAL_INVARIANT_FAILURE,
+                io.farfrontier.palemirror.frontier.v3.model.ResourceSiteDiagnosticProducer.ORDINARY_OBSERVATION_MISMATCH.diagnosticReason().category());
+        assertEquals(io.farfrontier.palemirror.frontier.v3.model.DiagnosticCategory.RECOVERY_UNKNOWN,
+                io.farfrontier.palemirror.frontier.v3.model.ResourceSiteDiagnosticProducer.RESTART_OBSERVATION_MISMATCH.diagnosticReason().category(),
+                "the named restart producer must not be relabelled as a live lifecycle invariant failure");
     }
 
     @Test

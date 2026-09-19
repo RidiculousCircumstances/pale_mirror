@@ -92,21 +92,26 @@ final class ResourceSiteStateCodec {
     }
 
     private static void writeIncident(DataOutputStream output, ConflictIncident incident) throws IOException {
-        FrontierWorldStateCodec.writeString(output, incident.id()); output.writeByte(incident.category().wireTag());
-        FrontierWorldStateCodec.writeString(output, incident.reason()); FrontierWorldStateCodec.writeString(output, incident.ownerId().value());
-        FrontierWorldStateCodec.writeString(output, incident.subjectId().value()); FrontierWorldStateCodec.writeString(output, incident.source());
+        FrontierWorldStateCodec.writeString(output, incident.id());
+        output.writeShort(incident.diagnostic().reason().wireTag()); output.writeByte(incident.diagnostic().category().wireTag());
+        output.writeByte(DiagnosticWireTags.ownerTag(incident.diagnostic().owner().kind())); FrontierWorldStateCodec.writeString(output, incident.ownerId().value());
+        output.writeByte(DiagnosticWireTags.subjectTag(incident.diagnostic().subject().kind())); FrontierWorldStateCodec.writeString(output, incident.subjectId().value());
+        output.writeByte(incident.diagnostic().disposition().wireTag()); FrontierWorldStateCodec.writeString(output, incident.source());
         FrontierWorldStateCodec.writeString(output, incident.expectedFact()); FrontierWorldStateCodec.writeString(output, incident.observedFact());
         FrontierWorldStateCodec.writeString(output, incident.preCanonicalFact()); FrontierWorldStateCodec.writeString(output, incident.postCanonicalFact());
-        FrontierWorldStateCodec.writeString(output, incident.disposition()); FrontierWorldStateCodec.writeString(output, incident.traceCorrelation());
+        FrontierWorldStateCodec.writeString(output, incident.traceCorrelation());
     }
 
     private static ConflictIncident readIncident(DataInputStream input) throws IOException {
-        return new ConflictIncident(FrontierWorldStateCodec.readString(input),
-                FrontierWireTags.require(ConflictIncidentCategory.class, input.readUnsignedByte()), FrontierWorldStateCodec.readString(input),
-                new SubjectId(FrontierWorldStateCodec.readString(input)), new SubjectId(FrontierWorldStateCodec.readString(input)),
+        String id = FrontierWorldStateCodec.readString(input);
+        DiagnosticReason reason = DiagnosticWireTags.reason(input.readUnsignedShort());
+        DiagnosticCategory category = DiagnosticWireTags.category(input.readUnsignedByte());
+        DiagnosticOwner owner = new DiagnosticOwner(DiagnosticWireTags.ownerKind(input.readUnsignedByte()), new SubjectId(FrontierWorldStateCodec.readString(input)));
+        DiagnosticSubject subject = new DiagnosticSubject(DiagnosticWireTags.subjectKind(input.readUnsignedByte()), new SubjectId(FrontierWorldStateCodec.readString(input)));
+        DiagnosticDisposition disposition = DiagnosticWireTags.disposition(input.readUnsignedByte());
+        return new ConflictIncident(id, new DiagnosticTuple(reason, category, owner, subject, disposition), FrontierWorldStateCodec.readString(input),
                 FrontierWorldStateCodec.readString(input), FrontierWorldStateCodec.readString(input), FrontierWorldStateCodec.readString(input),
-                FrontierWorldStateCodec.readString(input), FrontierWorldStateCodec.readString(input), FrontierWorldStateCodec.readString(input),
-                FrontierWorldStateCodec.readString(input));
+                FrontierWorldStateCodec.readString(input), FrontierWorldStateCodec.readString(input));
     }
 
     private static void writeWork(DataOutputStream output, ResourceSiteWork work) throws IOException {
