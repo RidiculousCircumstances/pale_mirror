@@ -43,6 +43,12 @@ final class FrontierSettlementServiceWorkProcessModule implements FrontierWorldP
                 java.util.EnumSet.allOf(PhysicalIntentRetirementAccount.Dimension.class),
                 (before, after, intent, transition) -> {
                     if (intent.lifecycleOwner() != owner) throw new IllegalArgumentException("settlement-service retirement account owner mismatch");
+                    SettlementServiceWork work = before.serviceWorks().get(intent.causeSubjectId());
+                    if (work == null || FrontierDomainRelationships.view(before).edges().stream().noneMatch(edge -> edge.kind()
+                            == FrontierDomainRelationships.Kind.SERVICE_WORKER && edge.owner().stableKey()
+                            .equals(FrontierDomainRelationships.EntityKind.SERVICE_WORK + ":" + work.id().value()))) {
+                        throw new IllegalArgumentException("service retirement account lacks exact worker relation");
+                    }
                 });
     }
 
