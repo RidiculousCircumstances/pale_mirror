@@ -94,6 +94,11 @@ final class PhysicalIntentLifecycleCapabilities {
     FrontierWorldState reducePrepared(FrontierWorldState state, SubjectId subject, PhysicalIntent intent) {
         PhysicalIntentLifecycleCapability capability = capability(intent);
         FrontierWorldState reduced = capability.reducePrepared(state, subject, intent);
+        var existing = reduced.fencedRecovery().current().get(FencedRecoveryPhysicalIntentSupport.bindingId(intent));
+        if (existing != null) {
+            FencedRecoveryPhysicalIntentSupport.requirePreparedExecutionAuthority(reduced.fencedRecovery(), intent, capability.recoveryAsset(intent));
+            return reduced;
+        }
         return reduced.withChanges(FrontierWorldStateUpdate.begin().fencedRecovery(
                 FencedRecoveryPhysicalIntentSupport.prepared(reduced.fencedRecovery(), intent, capability.recoveryAsset(intent))));
     }

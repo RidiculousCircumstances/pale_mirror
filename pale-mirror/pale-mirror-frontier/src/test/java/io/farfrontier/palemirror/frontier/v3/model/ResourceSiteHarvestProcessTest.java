@@ -41,6 +41,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResourceSiteHarvestProcessTest {
     @Test
+    void directHarvestPreparationInstallsOneExactRecoveryFenceBeforeAnyPhysicalRun() {
+        FrontierWorldState ready = ready(initial()); SubjectId site = new SubjectId("site:1-wheat-field");
+        FrontierWorldState tasked = harvestTask(ready, site, 22_000L); StrategicTask task = onlyHarvestTask(tasked);
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planned = ResourceSiteHarvestProcess.plan(tasked,
+                ResourceSiteHarvestProcess.start(task, 22_100L));
+        ResourceSiteHarvestStarted started = (ResourceSiteHarvestStarted) planned.get(1).payload();
+        PhysicalIntent intent = ((PhysicalIntentPrepared) planned.get(2).payload()).intent();
+        FrontierWorldState prepared = ResourceSiteHarvestProcess.reducePrepared(ResourceSiteHarvestProcess.reduceStarted(
+                StrategicObjectiveProcess.reduceTaskTransition(tasked, new SubjectId("settlement:1"), (StrategicTaskTransition) planned.getFirst().payload()), site, started), site, intent);
+
+        FencedRecoveryPhysicalIntentSupport.requirePreparedExecutionAuthority(prepared.fencedRecovery(), intent, FencedRecoveryAsset.EFFECT);
+        assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleFixture.transition(prepared, site, intent,
+                PhysicalIntentStatus.RUNNING, Optional.empty()), "the owner must reject a COLD run before its exact farmer reaches a lawful terminal cursor or HOT lease");
+    }
+    @Test
     void fieldWorkerRetainsOneAdjacentTopologyAndCannotPrepareACropBeforeObservedArrival() {
         FrontierWorldState ready = ready(initial()); SubjectId site = new SubjectId("site:1-wheat-field");
         FrontierWorldState tasked = harvestTask(ready, site, 22_000L); StrategicTask task = onlyHarvestTask(tasked);
@@ -202,8 +217,8 @@ class ResourceSiteHarvestProcessTest {
                 .releaseSceneLease(lease.id(), List.of(new SceneMemberPosition(atField.workerId(), workerBody,
                         completeWork.actorLocations().get(atField.workerId()).condition().health())));
         ExactItemStack output = new ExactItemStack(atField.outputItemId(), new SubjectId("settlement:1"), "minecraft:wheat", 64, atField.outputSlot());
-        FrontierWorldState confirmed = closed.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.CONFIRMED,
-                Optional.of(receipt(prepared.intent(), atField, output)));
+        java.util.Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, PhysicalIntent> confirmedIntents = new java.util.LinkedHashMap<>(closed.physicalIntents());
+        FrontierWorldState confirmed = ResourceSitePhysicalIntentStateSupport.completeHarvest(closed, prepared.intent(), receipt(prepared.intent(), atField, output), confirmedIntents);
 
         assertEquals(SceneLeaseStatus.CLOSED, confirmed.sceneLeases().get(lease.id()).status());
         assertEquals(ResourceSitePhase.GROWING, confirmed.resourceSites().site(site).phase());
@@ -235,8 +250,9 @@ class ResourceSiteHarvestProcessTest {
         FrontierWorldState completeWork = completeHarvestWorkHot(harvesting.prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT),
                 site, atField, lease.id());
         ExactItemStack output = new ExactItemStack(atField.outputItemId(), new SubjectId("settlement:1"), "minecraft:wheat", 64, atField.outputSlot());
-        FrontierWorldState receiptFirst = completeWork.transitionSceneLease(lease.id(), SceneLeaseStatus.DRAINING)
-                .transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt(prepared.intent(), atField, output)));
+        FrontierWorldState draining = completeWork.transitionSceneLease(lease.id(), SceneLeaseStatus.DRAINING);
+        java.util.Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, PhysicalIntent> receiptIntents = new java.util.LinkedHashMap<>(draining.physicalIntents());
+        FrontierWorldState receiptFirst = ResourceSitePhysicalIntentStateSupport.completeHarvest(draining, prepared.intent(), receipt(prepared.intent(), atField, output), receiptIntents);
         SceneLeaseReleased released = new SceneLeaseReleased(lease.id(), List.of(new SceneMemberPosition(atField.workerId(), workerBody,
                 receiptFirst.actorLocations().get(atField.workerId()).condition().health())));
 
@@ -266,8 +282,8 @@ class ResourceSiteHarvestProcessTest {
         harvesting = harvesting.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.RUNNING, Optional.empty());
         ExactItemStack output = new ExactItemStack(started.job().outputItemId(), new SubjectId("settlement:1"), "minecraft:wheat", 64, started.job().outputSlot());
         FrontierWorldState state = harvesting;
-        assertThrows(IllegalArgumentException.class, () -> state.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.CONFIRMED,
-                Optional.of(receipt(prepared.intent(), started.job(), output))));
+        assertThrows(IllegalArgumentException.class, () -> ResourceSitePhysicalIntentStateSupport.completeHarvest(state, prepared.intent(),
+                receipt(prepared.intent(), started.job(), output), new java.util.LinkedHashMap<>(state.physicalIntents())));
 
         harvesting = advanceToCurrentCropStation(harvesting, site, started.job().id());
         harvesting = ResourceSiteHarvestProcess.reduceCropPrepared(harvesting, site, new ResourceSiteHarvestCropPrepared(started.job().id(), 0));
@@ -443,7 +459,8 @@ class ResourceSiteHarvestProcessTest {
 
         ResourceSiteHarvestObservation redirectedReceipt = receipt(prepared.intent(), started.job(), redirected);
         FrontierWorldState state = harvesting;
-        assertThrows(IllegalArgumentException.class, () -> state.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.CONFIRMED, Optional.of(redirectedReceipt)));
+        assertThrows(IllegalArgumentException.class, () -> ResourceSitePhysicalIntentStateSupport.completeHarvest(state, prepared.intent(), redirectedReceipt,
+                new java.util.LinkedHashMap<>(state.physicalIntents())));
     }
 
     @Test
@@ -462,7 +479,8 @@ class ResourceSiteHarvestProcessTest {
         ExactItemStack output = new ExactItemStack(started.job().outputItemId(), new SubjectId("settlement:1"), "minecraft:wheat", 64, started.job().outputSlot());
         FrontierWorldState withDuplicate = harvesting.withInventory(harvesting.inventory().store(output));
         ResourceSiteHarvestObservation receipt = receipt(prepared.intent(), started.job(), output);
-        assertThrows(IllegalArgumentException.class, () -> withDuplicate.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt)));
+        assertThrows(IllegalArgumentException.class, () -> ResourceSitePhysicalIntentStateSupport.completeHarvest(withDuplicate, prepared.intent(), receipt,
+                new java.util.LinkedHashMap<>(withDuplicate.physicalIntents())));
     }
 
     @Test

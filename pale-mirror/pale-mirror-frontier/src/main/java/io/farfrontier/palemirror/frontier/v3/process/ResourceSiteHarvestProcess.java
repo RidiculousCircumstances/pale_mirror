@@ -261,7 +261,9 @@ public final class ResourceSiteHarvestProcess {
     public static FrontierWorldState reducePrepared(FrontierWorldState state, SubjectId subject, PhysicalIntent intent) {
         if (intent.kind() != PhysicalIntentKind.RESOURCE_SITE_HARVEST || !subject.equals(intent.causeSubjectId())) throw new IllegalArgumentException("resource-site harvest intent is invalid");
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(intent.causeSubjectId()); validateIntent(state, lifecycle, intent);
-        return state.preparePhysicalIntent(intent);
+        FrontierWorldState prepared = state.preparePhysicalIntent(intent);
+        return prepared.withChanges(FrontierWorldStateUpdate.begin().fencedRecovery(
+                FencedRecoveryPhysicalIntentSupport.prepared(prepared.fencedRecovery(), intent, FencedRecoveryAsset.EFFECT)));
     }
 
     public static FrontierWorldState reduceProgressed(FrontierWorldState state, SubjectId subject, ResourceSiteHarvestProgressed progressed) {
