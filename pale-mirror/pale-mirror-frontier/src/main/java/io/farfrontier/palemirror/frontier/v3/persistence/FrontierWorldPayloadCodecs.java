@@ -157,14 +157,14 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     } private static final class ProductionBlockedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.production_blocked"; } @Override public byte[] encode(FrontierPayload payload) {
             ProductionBlocked blocked = (ProductionBlocked) payload;
-            return encodeProduction(output -> { writeSubject(output, blocked.settlementId()); writeSubject(output, blocked.facilityId()); writeSubject(output, blocked.workId()); output.writeByte(blocked.reason().wireTag()); });
+            return encodeProduction(output -> { writeSubject(output, blocked.settlementId()); writeSubject(output, blocked.facilityId()); writeSubject(output, blocked.workId()); output.writeByte(blocked.reason().wireTag()); writeDiagnosticTuple(output, blocked.diagnostic()); });
         }
         @Override public FrontierPayload decode(byte[] bytes) {
             return decodeProduction(bytes, input -> {
                 SubjectIdHolder settlement = readSubject(input); SubjectIdHolder facility = readSubject(input); SubjectIdHolder work = readSubject(input);
                 int ordinal = input.readUnsignedByte();
                 if (ordinal >= ProductionBlockReason.values().length) throw new IllegalArgumentException("unknown production block reason");
-                return new ProductionBlocked(settlement.value(), facility.value(), work.value(), FrontierWireTags.require(ProductionBlockReason.class, ordinal));
+                return new ProductionBlocked(settlement.value(), facility.value(), work.value(), FrontierWireTags.require(ProductionBlockReason.class, ordinal), readDiagnosticTuple(input));
             });
         }
     }
