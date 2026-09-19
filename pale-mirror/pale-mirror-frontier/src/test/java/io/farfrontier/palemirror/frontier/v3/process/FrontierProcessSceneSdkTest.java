@@ -39,14 +39,14 @@ class FrontierProcessSceneSdkTest {
     }
 
     @Test
-    void existingExactTransitConformsThroughTheSameSdkAsAnEnforcedNoHotFamily() {
+    void existingExactTransitConformsThroughTheSameSdkWithoutBecomingAnEnforcedFamily() {
         FrontierProcessSceneSdk.Descriptor<TransitContext> descriptor = new TransitDescriptor();
         FrontierProcessSceneSdk.requireDistinctFamilies(List.of(new HarvestDescriptor(), descriptor));
         assertEquals(FrontierDurationProcessDriverRegistry.Family.POPULATION_MIGRATION,
                 FrontierDurationProcessDriverRegistry.requireFamily(descriptor.family()));
-        assertEquals(FrontierDurationProcessDriverRegistry.ContractState.ENFORCED,
+        assertEquals(FrontierDurationProcessDriverRegistry.ContractState.DEFERRED,
                 FrontierDurationProcessDriverRegistry.Family.POPULATION_MIGRATION.contractState(),
-                "an active family has a closed execution boundary even when it intentionally has no HOT provider");
+                "F0.V conformance is not permission to close transit's later foundation slice");
         FrontierProcessSceneSdk.verify(descriptor);
     }
 
