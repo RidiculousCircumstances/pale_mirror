@@ -41,7 +41,7 @@ public final class TransactionReplayer {
                 if (event.payload() instanceof ScheduleEffect effect) ScheduleEffectApplier.apply(nextSchedules, effect);
                 else next = Objects.requireNonNull(reducer.apply(next, event), "reducer state");
             }
-            if (next != state) stateValidator.validateTransition(state, next);
+            if (next != state) stateValidator.validateTransaction(state, next, transaction.events(), schedules.snapshot(), nextSchedules.snapshot());
             if (stateCodec.encode(next) == null) throw new IllegalStateException("state codec returned null");
             state = next;
             nextSchedules.commit();

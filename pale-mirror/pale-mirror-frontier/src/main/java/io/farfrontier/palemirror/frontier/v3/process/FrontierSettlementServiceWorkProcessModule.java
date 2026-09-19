@@ -64,9 +64,9 @@ final class FrontierSettlementServiceWorkProcessModule implements FrontierWorldP
                         || edge.kind() == FrontierDomainRelationships.Kind.SERVICE_WORKER || edge.kind() == FrontierDomainRelationships.Kind.SERVICE_FACILITY
                         || edge.kind() == FrontierDomainRelationships.Kind.SERVICE_INPUT).toList();
         if (relations.size() != 4) throw new IllegalArgumentException("service retirement account does not bind its exact task/worker/facility/input relations");
-        var continuation = command == null ? new PhysicalIntentRetirementAccount.CheckedNone<io.farfrontier.palemirror.frontier.v3.api.ScheduleId>("reduction validates the already planned engine continuation")
+        var continuation = command == null ? new PhysicalIntentRetirementAccount.CheckedNone<io.farfrontier.palemirror.frontier.v3.api.ScheduleId>(io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentRetirementProof.Absence.NO_ENGINE_CONTINUATION)
                 : command.scheduleBinding().<PhysicalIntentRetirementAccount.Obligation<io.farfrontier.palemirror.frontier.v3.api.ScheduleId>>map(binding -> new PhysicalIntentRetirementAccount.Exact<>(binding.action().id()))
-                .orElseGet(() -> new PhysicalIntentRetirementAccount.CheckedNone<>("service terminal command has no engine continuation"));
+                .orElseGet(() -> new PhysicalIntentRetirementAccount.CheckedNone<>(io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentRetirementProof.Absence.NO_ENGINE_CONTINUATION));
         return new PhysicalIntentRetirementAccount.Binding(intent.lifecycleOwner(), intent.id(), new PhysicalIntentRetirementAccount.Exact<>(relations), continuation,
                 new PhysicalIntentRetirementAccount.Exact<>(work.workerId()), new PhysicalIntentRetirementAccount.Exact<>(work.inputItemId()),
                 transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART

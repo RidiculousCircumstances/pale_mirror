@@ -7,6 +7,7 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.RejectionCode;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryPhysicalIntentSupport;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
@@ -68,8 +69,23 @@ final class PhysicalIntentLifecycleCapabilities {
         try {
             CommandPlan plan = retires(transition) ? capability.retirementPolicy().plan(state, command, intent, transition)
                     : capability.planTransition(state, command, intent, transition);
-            if (retires(transition)) capability.retirementAccount().verifyPlan(state, command, intent, transition, plan);
-            return plan;
+            if (!retires(transition)) return plan;
+            PhysicalIntentRetirementAccount.Binding binding = capability.retirementAccount()
+                    .verifyPlan(state, command, intent, transition, plan);
+            if (!(plan instanceof CommandPlan.Accepted accepted) || binding == null) return plan;
+            int terminalEvents = 0;
+            java.util.List<ProposedEvent> accounted = new java.util.ArrayList<>(accepted.events().size());
+            for (ProposedEvent event : accepted.events()) {
+                if (event.payload() instanceof PhysicalIntentTransition candidate
+                        && candidate.intentId().equals(intent.id()) && candidate.status() == transition.status()) {
+                    terminalEvents++;
+                    accounted.add(new ProposedEvent(event.subject(), candidate.withRetirementProof(PhysicalIntentRetirementAccount.proof(binding))));
+                } else {
+                    accounted.add(event);
+                }
+            }
+            if (terminalEvents != 1) throw new IllegalArgumentException("retirement account must attach one proof to its exact terminal event");
+            return new CommandPlan.Accepted(accounted);
         } catch (IllegalArgumentException invalid) {
             return new CommandPlan.Rejected(new CommandRejection(RejectionCode.REJECTED_BY_POLICY, invalid.getMessage()));
         }

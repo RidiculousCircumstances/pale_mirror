@@ -378,7 +378,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         // every one-field state transition scan the entire 12-settlement world.
         if (nextState != state) {
             try (FrontierExecutionMetrics.Span ignored = measure(FrontierExecutionMetrics.Stage.VALIDATION, "canonical-state", worldId.value())) {
-                stateValidator.validateTransition(state, nextState);
+                stateValidator.validateTransaction(state, nextState, List.copyOf(events), schedules.snapshot(), nextSchedules.snapshot());
             }
         }
         // WAL commits are already durable before the state becomes authoritative. A complete

@@ -164,6 +164,14 @@ public final class ScheduledActionQueue {
             }
         }
 
+        List<ScheduledAction> snapshot() {
+            requireOpen();
+            List<ScheduledAction> values = new java.util.ArrayList<>(base.ordered.size() - removed.size() + created.size());
+            for (ScheduledAction action : base.ordered) if (!removed.contains(action.id())) values.add(action);
+            values.addAll(created.values()); values.sort(ScheduledAction::compareTo);
+            return List.copyOf(values);
+        }
+
         /** Applies a prevalidated overlay. No allocation proportional to unchanged future work occurs. */
         void commit() {
             requireOpen();

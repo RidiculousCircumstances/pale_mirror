@@ -155,18 +155,14 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
     private static PhysicalIntentRetirementAccount.Binding bindRetirement(FrontierWorldState before, FrontierCommand command,
                                                                             io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
                                                                             PhysicalIntentTransition transition) {
-        var continuation = command == null ? new PhysicalIntentRetirementAccount.CheckedNone<io.farfrontier.palemirror.frontier.v3.api.ScheduleId>("reduction validates the already planned engine continuation")
+        var continuation = command == null ? new PhysicalIntentRetirementAccount.CheckedNone<io.farfrontier.palemirror.frontier.v3.api.ScheduleId>(io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentRetirementProof.Absence.NO_ENGINE_CONTINUATION)
                 : command.scheduleBinding().<PhysicalIntentRetirementAccount.Obligation<io.farfrontier.palemirror.frontier.v3.api.ScheduleId>>map(binding -> new PhysicalIntentRetirementAccount.Exact<>(binding.action().id()))
-                .orElseGet(() -> new PhysicalIntentRetirementAccount.CheckedNone<>("hive terminal command has no engine continuation"));
+                .orElseGet(() -> new PhysicalIntentRetirementAccount.CheckedNone<>(io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentRetirementProof.Absence.NO_ENGINE_CONTINUATION));
         boolean mobilizationExplosion = intent.lifecycleOwner() == PhysicalIntentLifecycleOwner.HIVE_MOBILIZATION
                 && intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXPLOSION;
-        return new PhysicalIntentRetirementAccount.Binding(intent.lifecycleOwner(), intent.id(), new PhysicalIntentRetirementAccount.CheckedNone<>(mobilizationExplosion
-                        ? "hive mobilization roster is unaffected by its physical explosion retirement"
-                        : "hive owner has no current REL-001 retirement edge"), continuation,
-                new PhysicalIntentRetirementAccount.CheckedNone<>(mobilizationExplosion
-                        ? "hive mobilization roster is unaffected by its physical explosion retirement"
-                        : "hive owner has no lease/carrier on this physical endpoint"),
-                new PhysicalIntentRetirementAccount.CheckedNone<>("hive endpoint has no separately retained resource commitment"),
+        return new PhysicalIntentRetirementAccount.Binding(intent.lifecycleOwner(), intent.id(), new PhysicalIntentRetirementAccount.CheckedNone<>(io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentRetirementProof.Absence.NO_APPLICABLE_RELATION), continuation,
+                new PhysicalIntentRetirementAccount.CheckedNone<>(io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentRetirementProof.Absence.NO_LEASE_OR_CARRIER),
+                new PhysicalIntentRetirementAccount.CheckedNone<>(io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentRetirementProof.Absence.NO_RESOURCE_COMMITMENT),
                 transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
                         ? PhysicalIntentRetirementAccount.LateDisposition.RETAIN_AMBIGUOUS_RECOVERY
                         : PhysicalIntentRetirementAccount.LateDisposition.REJECT_STALE_ONCE);

@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
@@ -94,6 +95,30 @@ class PhysicalIntentLifecycleCompositionTest {
         composition.planTransition(null, null, intent,
                 new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, java.util.Optional.empty()));
         assertTrue(retired.get(), "terminal input must execute the owner-supplied retirement boundary");
+    }
+
+    @Test
+    void terminalPlanCarriesItsTypedAccountInsteadOfAProcessGlobalBinding() {
+        PhysicalIntentLifecycleOwner owner = PhysicalIntentLifecycleOwner.RESOURCE_SITE_PREPARATION;
+        List<PhysicalIntentLifecycleCapability> capabilities = Arrays.stream(PhysicalIntentLifecycleOwner.values())
+                .map(candidate -> capability(candidate, supported(candidate), candidate == owner
+                        ? PhysicalIntentLifecycleRetirementPolicy.of((state, command, intent, transition) ->
+                        new CommandPlan.Accepted(List.of(new io.farfrontier.palemirror.frontier.v3.api.ProposedEvent(intent.causeSubjectId(), transition))),
+                        (state, subject, intent, transition) -> state)
+                        : PhysicalIntentLifecycleRetirementPolicy.noPhysical(candidate))).toList();
+        PhysicalIntentLifecycleCapabilities composition = PhysicalIntentLifecycleCapabilities.compose(List.of(module(capabilities)));
+        PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:durable-retirement-account"),
+                PhysicalIntentKind.RESOURCE_SITE_PREPARATION, PhysicalIntentStatus.RUNNING,
+                new SubjectId("site:durable-retirement-account"), List.of(new SubjectId("site:durable-retirement-account"), new SubjectId("job:durable-retirement-account")),
+                new FixedPosition(FixedScalar.ZERO, FixedScalar.whole(64), FixedScalar.ZERO), 0,
+                PhysicalPostcondition.RESOURCE_SITE_PREPARED_OBSERVED, owner);
+        PhysicalIntentTransition terminal = new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, java.util.Optional.empty());
+
+        CommandPlan.Accepted plan = assertInstanceOf(CommandPlan.Accepted.class, composition.planTransition(null, null, intent, terminal));
+        PhysicalIntentTransition committed = assertInstanceOf(PhysicalIntentTransition.class, plan.events().getFirst().payload());
+        assertTrue(committed.retirementProof().isPresent());
+        assertEquals(owner, committed.retirementProof().orElseThrow().owner());
+        assertEquals(intent.id(), committed.retirementProof().orElseThrow().intentId());
     }
 
     @Test

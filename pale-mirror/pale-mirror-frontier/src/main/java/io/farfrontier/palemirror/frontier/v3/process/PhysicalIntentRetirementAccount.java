@@ -13,6 +13,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryPhysicalIntentS
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierDomainRelationships;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentRetirementProof;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.List;
@@ -50,19 +51,15 @@ interface PhysicalIntentRetirementAccount {
 
     sealed interface Obligation<T> permits Exact, CheckedNone { }
     record Exact<T>(T value) implements Obligation<T> { public Exact { Objects.requireNonNull(value, "exact retirement obligation"); } }
-    record CheckedNone<T>(String reason) implements Obligation<T> {
-        public CheckedNone { if (reason == null || reason.isBlank()) throw new IllegalArgumentException("checked-none retirement reason is required"); }
+    record CheckedNone<T>(PhysicalIntentRetirementProof.Absence absence) implements Obligation<T> {
+        public CheckedNone { Objects.requireNonNull(absence, "checked-none retirement absence"); }
     }
     enum LateDisposition { REJECT_STALE_ONCE, RETAIN_AMBIGUOUS_RECOVERY, NO_PHYSICAL_INPUT }
 
     /** Builds the real account before plan publication, from authoritative facts only. */
     default Binding bind(FrontierWorldState before, FrontierCommand command, PhysicalIntent intent,
                          PhysicalIntentTransition transition) {
-        Optional<ScheduleId> schedule = command == null ? Optional.empty() : command.scheduleBinding().map(binding -> binding.action().id());
-        return new Binding(owner(), intent.id(), new CheckedNone<>(owner().stableId() + " has no current REL-001 retirement edge"), schedule.<Obligation<ScheduleId>>map(Exact::new)
-                .orElseGet(() -> new CheckedNone<>("no engine continuation bound to this terminal command")),
-                new CheckedNone<>("owner declares no lease/carrier obligation"),
-                new CheckedNone<>("owner declares no resource commitment obligation"), lateDisposition(transition));
+        return defaultBinding(owner(), before, command, intent, transition);
     }
 
     private static LateDisposition lateDisposition(PhysicalIntentTransition transition) {
@@ -70,8 +67,8 @@ interface PhysicalIntentRetirementAccount {
                 ? LateDisposition.RETAIN_AMBIGUOUS_RECOVERY : LateDisposition.REJECT_STALE_ONCE;
     }
 
-    default void verifyPlan(FrontierWorldState before, FrontierCommand command, PhysicalIntent intent, PhysicalIntentTransition transition, CommandPlan plan) {
-        if (!(plan instanceof CommandPlan.Accepted accepted)) return;
+    default Binding verifyPlan(FrontierWorldState before, FrontierCommand command, PhysicalIntent intent, PhysicalIntentTransition transition, CommandPlan plan) {
+        if (!(plan instanceof CommandPlan.Accepted accepted)) return null;
         Binding binding = bind(before, command, intent, transition);
         if (binding.owner() != owner() || !binding.intentId().equals(intent.id())) {
             throw new IllegalArgumentException("retirement account does not bind its exact owner intent");
@@ -82,6 +79,9 @@ interface PhysicalIntentRetirementAccount {
                 throw new IllegalArgumentException("retirement account binds a relation absent from authoritative pre-state");
             }
         }
+        if (binding.relations() instanceof CheckedNone<?> && !beforeRelations(before, intent).isEmpty()) {
+            throw new IllegalArgumentException("retirement account falsely declares no applicable REL edge");
+        }
         validateObligation(binding.leaseOrCarrier(), exactRelations(binding.relations()), "lease/carrier");
         validateObligation(binding.commitment(), exactRelations(binding.relations()), "resource commitment");
         if (binding.continuation() instanceof Exact<ScheduleId> expected) {
@@ -90,19 +90,22 @@ interface PhysicalIntentRetirementAccount {
             // The engine owns its bound due-action and may consume it at the atomic command
             // boundary rather than represent it as a domain proposed event.  The account binds
             // that exact ID; a proposed schedule effect is permitted once, never duplicated.
-            if (matching > 1L) throw new IllegalArgumentException("retirement account duplicates its exact bound engine schedule effect");
+            if (matching != 1L) throw new IllegalArgumentException("retirement account must emit exactly one disposition for its exact bound engine schedule effect");
         }
-        command.scheduleBinding().ifPresent(scheduleBinding -> {
+        if (command != null) command.scheduleBinding().ifPresent(scheduleBinding -> {
             ScheduleId id = scheduleBinding.action().id();
             long matching = accepted.events().stream().map(event -> event.payload()).filter(ScheduleEffect.class::isInstance)
                     .map(ScheduleEffect.class::cast).filter(effect -> affects(effect, id)).count();
-            if (matching > 1L) throw new IllegalArgumentException("retirement account duplicates bound engine schedule effect");
+            if (matching != 1L) throw new IllegalArgumentException("retirement account must emit exactly one disposition for its bound engine schedule effect");
         });
+        return binding;
     }
 
     default void verifyReduced(FrontierWorldState before, FrontierWorldState after, PhysicalIntent intent,
                                PhysicalIntentTransition transition) {
-        Binding binding = bind(before, null, intent, transition);
+        PhysicalIntentRetirementProof proof = transition.retirementProof().orElseThrow(() ->
+                new IllegalArgumentException("terminal physical transition lacks its durable retirement proof"));
+        Binding binding = fromProof(proof);
         if (binding.owner() != owner() || !binding.intentId().equals(intent.id()) || binding.lateDisposition() != lateDisposition(transition)) {
             throw new IllegalArgumentException("retirement account does not retain its terminal owner/intent/disposition binding");
         }
@@ -110,6 +113,9 @@ interface PhysicalIntentRetirementAccount {
             if (!FrontierDomainRelationships.view(before).edges().contains(relation)) {
                 throw new IllegalArgumentException("retirement account relation is not an authoritative pre-state edge");
             }
+        }
+        if (binding.relations() instanceof CheckedNone<?> && !beforeRelations(before, intent).isEmpty()) {
+            throw new IllegalArgumentException("retirement proof falsely declares no applicable REL edge");
         }
         validateObligation(binding.leaseOrCarrier(), exactRelations(binding.relations()), "lease/carrier");
         validateObligation(binding.commitment(), exactRelations(binding.relations()), "resource commitment");
@@ -144,7 +150,7 @@ interface PhysicalIntentRetirementAccount {
 
     static PhysicalIntentRetirementAccount declared(PhysicalIntentLifecycleOwner owner, EnumSet<Dimension> dimensions,
                                                      OwnerStateCheck check) {
-        return declared(owner, dimensions, (before, command, intent, transition) -> defaultBinding(owner, command, intent, transition), check);
+        return declared(owner, dimensions, (before, command, intent, transition) -> defaultBinding(owner, before, command, intent, transition), check);
     }
 
     static PhysicalIntentRetirementAccount declared(PhysicalIntentLifecycleOwner owner, EnumSet<Dimension> dimensions,
@@ -170,13 +176,60 @@ interface PhysicalIntentRetirementAccount {
         };
     }
 
-    private static Binding defaultBinding(PhysicalIntentLifecycleOwner owner, FrontierCommand command, PhysicalIntent intent,
+    private static Binding defaultBinding(PhysicalIntentLifecycleOwner owner, FrontierWorldState before, FrontierCommand command, PhysicalIntent intent,
                                           PhysicalIntentTransition transition) {
         Optional<ScheduleId> schedule = command == null ? Optional.empty() : command.scheduleBinding().map(binding -> binding.action().id());
-        return new Binding(owner, intent.id(), new CheckedNone<>(owner.stableId() + " has no current REL-001 retirement edge"), schedule.<Obligation<ScheduleId>>map(Exact::new)
-                .orElseGet(() -> new CheckedNone<>("no engine continuation bound to this terminal command")),
-                new CheckedNone<>(owner.stableId() + " has no retained lease/carrier obligation in the current owner contract"),
-                new CheckedNone<>(owner.stableId() + " has no retained resource commitment in the current owner contract"), lateDisposition(transition));
+        List<FrontierDomainRelationships.Edge> related = beforeRelations(before, intent);
+        Obligation<List<FrontierDomainRelationships.Edge>> relations = related.isEmpty()
+                ? new CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_APPLICABLE_RELATION) : new Exact<>(related);
+        return new Binding(owner, intent.id(), relations, schedule.<Obligation<ScheduleId>>map(Exact::new)
+                .orElseGet(() -> new CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_ENGINE_CONTINUATION)),
+                new CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_LEASE_OR_CARRIER),
+                new CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_RESOURCE_COMMITMENT), lateDisposition(transition));
+    }
+
+    private static List<FrontierDomainRelationships.Edge> beforeRelations(FrontierWorldState before, PhysicalIntent intent) {
+        if (before == null) return List.of();
+        SubjectId subject = intent.causeSubjectId();
+        return FrontierDomainRelationships.view(before).edges().stream().filter(edge -> endpointIs(edge, subject)).toList();
+    }
+
+    static PhysicalIntentRetirementProof proof(Binding binding) {
+        return new PhysicalIntentRetirementProof(binding.owner(), binding.intentId(),
+                binding.relations() instanceof Exact<List<FrontierDomainRelationships.Edge>> exact
+                        ? new PhysicalIntentRetirementProof.ExactRelations(exact.value())
+                        : new PhysicalIntentRetirementProof.CheckedNoRelations(((CheckedNone<List<FrontierDomainRelationships.Edge>>) binding.relations()).absence()),
+                binding.continuation() instanceof Exact<ScheduleId> exact
+                        ? new PhysicalIntentRetirementProof.ExactSchedule(exact.value())
+                        : new PhysicalIntentRetirementProof.CheckedNoSchedule(((CheckedNone<ScheduleId>) binding.continuation()).absence()),
+                binding.leaseOrCarrier() instanceof Exact<SubjectId> exact
+                        ? new PhysicalIntentRetirementProof.ExactSubject(exact.value())
+                        : new PhysicalIntentRetirementProof.CheckedNoSubject(((CheckedNone<SubjectId>) binding.leaseOrCarrier()).absence()),
+                binding.commitment() instanceof Exact<SubjectId> exact
+                        ? new PhysicalIntentRetirementProof.ExactSubject(exact.value())
+                        : new PhysicalIntentRetirementProof.CheckedNoSubject(((CheckedNone<SubjectId>) binding.commitment()).absence()),
+                switch (binding.lateDisposition()) {
+                    case REJECT_STALE_ONCE -> PhysicalIntentRetirementProof.LateDisposition.REJECT_STALE_ONCE;
+                    case RETAIN_AMBIGUOUS_RECOVERY -> PhysicalIntentRetirementProof.LateDisposition.RETAIN_AMBIGUOUS_RECOVERY;
+                    case NO_PHYSICAL_INPUT -> PhysicalIntentRetirementProof.LateDisposition.NO_PHYSICAL_INPUT;
+                });
+    }
+
+    private static Binding fromProof(PhysicalIntentRetirementProof proof) {
+        return new Binding(proof.owner(), proof.intentId(),
+                proof.relations() instanceof PhysicalIntentRetirementProof.ExactRelations exact ? new Exact<>(exact.value())
+                        : new CheckedNone<>(((PhysicalIntentRetirementProof.CheckedNoRelations) proof.relations()).absence()),
+                proof.continuation() instanceof PhysicalIntentRetirementProof.ExactSchedule exact ? new Exact<>(exact.value())
+                        : new CheckedNone<>(((PhysicalIntentRetirementProof.CheckedNoSchedule) proof.continuation()).absence()),
+                proof.leaseOrCarrier() instanceof PhysicalIntentRetirementProof.ExactSubject exact ? new Exact<>(exact.value())
+                        : new CheckedNone<>(((PhysicalIntentRetirementProof.CheckedNoSubject) proof.leaseOrCarrier()).absence()),
+                proof.commitment() instanceof PhysicalIntentRetirementProof.ExactSubject exact ? new Exact<>(exact.value())
+                        : new CheckedNone<>(((PhysicalIntentRetirementProof.CheckedNoSubject) proof.commitment()).absence()),
+                switch (proof.lateDisposition()) {
+                    case REJECT_STALE_ONCE -> LateDisposition.REJECT_STALE_ONCE;
+                    case RETAIN_AMBIGUOUS_RECOVERY -> LateDisposition.RETAIN_AMBIGUOUS_RECOVERY;
+                    case NO_PHYSICAL_INPUT -> LateDisposition.NO_PHYSICAL_INPUT;
+                });
     }
 
     @FunctionalInterface interface BindingFactory {

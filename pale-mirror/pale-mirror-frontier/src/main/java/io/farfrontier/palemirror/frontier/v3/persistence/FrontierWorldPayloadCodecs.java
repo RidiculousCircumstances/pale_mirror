@@ -285,13 +285,17 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             PhysicalIntentTransition transition = (PhysicalIntentTransition) payload;
             return encodeProduction(output -> { writeString(output, transition.intentId().value()); output.writeByte(transition.status().wireTag());
                 output.writeBoolean(transition.observation().isPresent());
-                if (transition.observation().isPresent()) PhysicalEffectObservationPayloadCodec.write(output, transition.observation().orElseThrow()); });
+                if (transition.observation().isPresent()) PhysicalEffectObservationPayloadCodec.write(output, transition.observation().orElseThrow());
+                output.writeBoolean(transition.retirementProof().isPresent());
+                if (transition.retirementProof().isPresent()) writeRetirementProof(output, transition.retirementProof().orElseThrow()); });
         }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
             var id = new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(readString(input)); int status = input.readUnsignedByte(); boolean observed = input.readBoolean();
             var observation = observed ? java.util.Optional.of(PhysicalEffectObservationPayloadCodec.read(input)) : java.util.Optional.<PhysicalEffectObservation>empty();
+            var proof = input.readBoolean() ? java.util.Optional.of(readRetirementProof(input)) : java.util.Optional.<PhysicalIntentRetirementProof>empty();
             if (status >= io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.values().length) throw new IllegalArgumentException("unknown physical intent status");
-            return new PhysicalIntentTransition(id, FrontierWireTags.require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.class, status), observation);
+            var decodedStatus = FrontierWireTags.require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.class, status);
+            return new PhysicalIntentTransition(id, decodedStatus, observation, proof);
         }); }
     }
     private static final class SceneLeasePreparedCodec implements PayloadCodec {
@@ -819,7 +823,67 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             case 1 -> new InventoryCustody.Player(java.util.UUID.fromString(readString(input)));
             case 2 -> new InventoryCustody.WorldCarrier(java.util.UUID.fromString(readString(input))); case 3 -> new InventoryCustody.Actor(readSubject(input).value());
             default -> throw new IllegalArgumentException("unknown observed item custody kind"); };
-    } public static void writeSubject(DataOutputStream output, io.farfrontier.palemirror.frontier.v3.api.SubjectId value) throws IOException { writeString(output, value.value()); }
+    }
+    private static void writeRetirementProof(DataOutputStream output, PhysicalIntentRetirementProof proof) throws IOException {
+        output.writeByte(1); writeString(output, proof.owner().stableId()); writeString(output, proof.intentId().value());
+        if (proof.relations() instanceof PhysicalIntentRetirementProof.ExactRelations exact) {
+            output.writeByte(1); output.writeByte(exact.value().size()); for (FrontierDomainRelationships.Edge edge : exact.value()) writeRelationshipEdge(output, edge);
+        } else output.writeByte(0);
+        if (proof.continuation() instanceof PhysicalIntentRetirementProof.ExactSchedule exact) { output.writeByte(1); writeString(output, exact.value().value()); } else output.writeByte(0);
+        writeProofSubject(output, proof.leaseOrCarrier()); writeProofSubject(output, proof.commitment());
+        output.writeByte(switch (proof.lateDisposition()) { case REJECT_STALE_ONCE -> 1; case RETAIN_AMBIGUOUS_RECOVERY -> 2; case NO_PHYSICAL_INPUT -> 3; });
+    }
+    private static PhysicalIntentRetirementProof readRetirementProof(DataInputStream input) throws IOException {
+        if (input.readUnsignedByte() != 1) throw new IllegalArgumentException("unknown physical retirement-proof codec version");
+        var owner = io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.fromWire(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.CODEC_VERSION, readString(input));
+        var intent = new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(readString(input));
+        PhysicalIntentRetirementProof.RelationObligation relations;
+        if (input.readUnsignedByte() == 1) { java.util.List<FrontierDomainRelationships.Edge> edges = new java.util.ArrayList<>();
+            for (int index = 0, count = input.readUnsignedByte(); index < count; index++) edges.add(readRelationshipEdge(input)); relations = new PhysicalIntentRetirementProof.ExactRelations(edges);
+        } else relations = new PhysicalIntentRetirementProof.CheckedNoRelations(PhysicalIntentRetirementProof.Absence.NO_APPLICABLE_RELATION);
+        PhysicalIntentRetirementProof.ScheduleObligation continuation = input.readUnsignedByte() == 1
+                ? new PhysicalIntentRetirementProof.ExactSchedule(new io.farfrontier.palemirror.frontier.v3.api.ScheduleId(readString(input)))
+                : new PhysicalIntentRetirementProof.CheckedNoSchedule(PhysicalIntentRetirementProof.Absence.NO_ENGINE_CONTINUATION);
+        PhysicalIntentRetirementProof.SubjectObligation lease = readProofSubject(input, PhysicalIntentRetirementProof.Absence.NO_LEASE_OR_CARRIER);
+        PhysicalIntentRetirementProof.SubjectObligation commitment = readProofSubject(input, PhysicalIntentRetirementProof.Absence.NO_RESOURCE_COMMITMENT);
+        PhysicalIntentRetirementProof.LateDisposition late = switch (input.readUnsignedByte()) { case 1 -> PhysicalIntentRetirementProof.LateDisposition.REJECT_STALE_ONCE;
+            case 2 -> PhysicalIntentRetirementProof.LateDisposition.RETAIN_AMBIGUOUS_RECOVERY; case 3 -> PhysicalIntentRetirementProof.LateDisposition.NO_PHYSICAL_INPUT;
+            default -> throw new IllegalArgumentException("unknown physical retirement-proof late disposition"); };
+        return new PhysicalIntentRetirementProof(owner, intent, relations, continuation, lease, commitment, late);
+    }
+    private static void writeProofSubject(DataOutputStream output, PhysicalIntentRetirementProof.SubjectObligation obligation) throws IOException {
+        if (obligation instanceof PhysicalIntentRetirementProof.ExactSubject exact) { output.writeByte(1); writeSubject(output, exact.value()); } else output.writeByte(0);
+    }
+    private static PhysicalIntentRetirementProof.SubjectObligation readProofSubject(DataInputStream input, PhysicalIntentRetirementProof.Absence absence) throws IOException {
+        return input.readUnsignedByte() == 1 ? new PhysicalIntentRetirementProof.ExactSubject(readSubject(input).value()) : new PhysicalIntentRetirementProof.CheckedNoSubject(absence);
+    }
+    private static void writeRelationshipEdge(DataOutputStream output, FrontierDomainRelationships.Edge edge) throws IOException {
+        writeString(output, edge.kind().tag()); writeRelationshipEndpoint(output, edge.owner()); writeRelationshipEndpoint(output, edge.source()); writeRelationshipEndpoint(output, edge.target());
+        writeString(output, edge.lifecycle().name()); writeString(output, edge.correlation());
+    }
+    private static FrontierDomainRelationships.Edge readRelationshipEdge(DataInputStream input) throws IOException {
+        String tag = readString(input); FrontierDomainRelationships.Kind kind = java.util.Arrays.stream(FrontierDomainRelationships.Kind.values())
+                .filter(value -> value.tag().equals(tag)).findFirst().orElseThrow(() -> new IllegalArgumentException("unknown retirement relationship tag"));
+        var owner = readRelationshipEndpoint(input); var source = readRelationshipEndpoint(input); var target = readRelationshipEndpoint(input);
+        return new FrontierDomainRelationships.Edge(kind, owner, source, target, FrontierDomainRelationships.Lifecycle.valueOf(readString(input)), readString(input));
+    }
+    private static void writeRelationshipEndpoint(DataOutputStream output, FrontierDomainRelationships.Endpoint endpoint) throws IOException {
+        if (endpoint instanceof FrontierDomainRelationships.SubjectEndpoint subject) { output.writeByte(1); writeString(output, subject.kind().name()); writeSubject(output, subject.id()); }
+        else if (endpoint instanceof FrontierDomainRelationships.ProvisionAllocationEndpoint allocation) { output.writeByte(2); writeSubject(output, allocation.settlementId()); output.writeInt(allocation.cycle()); output.writeInt(allocation.ordinal()); }
+        else if (endpoint instanceof FrontierDomainRelationships.SceneLeaseEndpoint lease) { output.writeByte(3); writeString(output, lease.id().value()); }
+        else if (endpoint instanceof FrontierDomainRelationships.CarrierEvidenceEndpoint carrier) { output.writeByte(4); writeSubject(output, carrier.actorId()); writeString(output, carrier.carrierId()); }
+        else throw new IllegalArgumentException("unknown retirement relationship endpoint");
+    }
+    private static FrontierDomainRelationships.Endpoint readRelationshipEndpoint(DataInputStream input) throws IOException {
+        return switch (input.readUnsignedByte()) {
+            case 1 -> new FrontierDomainRelationships.SubjectEndpoint(FrontierDomainRelationships.EntityKind.valueOf(readString(input)), readSubject(input).value());
+            case 2 -> new FrontierDomainRelationships.ProvisionAllocationEndpoint(readSubject(input).value(), input.readInt(), input.readInt());
+            case 3 -> new FrontierDomainRelationships.SceneLeaseEndpoint(new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(readString(input)));
+            case 4 -> new FrontierDomainRelationships.CarrierEvidenceEndpoint(readSubject(input).value(), readString(input));
+            default -> throw new IllegalArgumentException("unknown retirement relationship endpoint tag");
+        };
+    }
+    public static void writeSubject(DataOutputStream output, io.farfrontier.palemirror.frontier.v3.api.SubjectId value) throws IOException { writeString(output, value.value()); }
     static SubjectIdHolder readSubject(DataInputStream input) throws IOException { return new SubjectIdHolder(new io.farfrontier.palemirror.frontier.v3.api.SubjectId(readString(input))); }
     public static void writeString(DataOutputStream output, String value) throws IOException {
         byte[] encoded = value.getBytes(java.nio.charset.StandardCharsets.UTF_8);

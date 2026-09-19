@@ -1,6 +1,9 @@
 package io.farfrontier.palemirror.frontier.v3.kernel;
 
+import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
+
 import java.util.Objects;
+import java.util.List;
 import java.util.function.Consumer;
 
 /**
@@ -16,6 +19,15 @@ public interface StateValidator<S> {
     void validateInitial(S state);
 
     void validateTransition(S previous, S next);
+
+    /**
+     * Transaction boundary with the complete committed batch and engine-owned schedule result.
+     * Implementations that only validate aggregate state retain their existing transition audit.
+     */
+    default void validateTransaction(S previous, S next, List<FrontierEvent> events,
+                                     List<ScheduledAction> schedulesBefore, List<ScheduledAction> schedulesAfter) {
+        validateTransition(previous, next);
+    }
 
     static <S> StateValidator<S> none() {
         return new StateValidator<>() {
