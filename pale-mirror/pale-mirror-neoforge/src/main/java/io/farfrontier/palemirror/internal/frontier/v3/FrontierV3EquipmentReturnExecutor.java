@@ -99,8 +99,7 @@ final class FrontierV3EquipmentReturnExecutor {
     }
 
     private static Target target(FrontierWorldState state, PhysicalIntent intent) {
-        if (intent.subjectIds().size() != 3) return null;
-        SubjectId ownerId = intent.subjectIds().getFirst(), residentId = intent.subjectIds().get(1), itemId = intent.subjectIds().get(2);
+        SubjectId ownerId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.PROJECT), residentId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.DEFENDER), itemId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.EQUIPMENT);
         ExactItemStack item = state.inventory().items().get(itemId);
         final InventoryCustody.ContainerSlot target;
         try { target = EquipmentReturnStateSupport.targetSlot(state, intent); }

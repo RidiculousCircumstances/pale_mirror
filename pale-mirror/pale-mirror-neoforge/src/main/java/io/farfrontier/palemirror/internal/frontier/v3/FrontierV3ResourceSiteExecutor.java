@@ -533,7 +533,7 @@ final class FrontierV3ResourceSiteExecutor {
             PhysicalIntent intent = state.physicalIntents().get(job.intentId());
             return intent != null && intent.kind() == PhysicalIntentKind.RESOURCE_SITE_HARVEST
                     && intent.status() == PhysicalIntentStatus.PREPARED && intent.causeSubjectId().equals(site.id())
-                    && intent.subjectIds().equals(List.of(site.id(), job.id(), job.workerId(), job.outputItemId()));
+                    && intent.roles().equals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.siteHarvest(site.id(), job.id(), job.workerId(), job.outputItemId()));
         });
     }
     private static boolean blankManagedSurface(ServerLevel level, ResourceSite site) {

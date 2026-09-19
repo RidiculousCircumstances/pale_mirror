@@ -90,14 +90,14 @@ final class FrontierInfrastructureProcessModule implements FrontierWorldProcessM
             case ROUTE_CONSTRUCTION_MATERIAL_LOADING, ROUTE_MAINTENANCE_MATERIAL_LOADING -> {
                 if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING) RouteConstructionStateSupport.validateMaterialLoadingIntent(state, intent);
                 else RouteMaintenanceStateSupport.validateMaterialLoadingIntent(state, intent);
-                carrier = new PhysicalIntentRetirementAccount.Exact<>(intent.subjectIds().get(1));
-                commitment = new PhysicalIntentRetirementAccount.Exact<>(intent.subjectIds().getLast());
+                carrier = new PhysicalIntentRetirementAccount.Exact<>(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.PROJECT));
+                commitment = new PhysicalIntentRetirementAccount.Exact<>(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.SOURCE_ITEM));
             }
             case EQUIPMENT_ISSUE, EQUIPMENT_RETURN -> {
                 if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_ISSUE) EquipmentIssueStateSupport.validateIntent(state, intent);
                 else EquipmentReturnStateSupport.validateIntent(state, intent);
-                carrier = new PhysicalIntentRetirementAccount.Exact<>(intent.subjectIds().get(1));
-                commitment = new PhysicalIntentRetirementAccount.Exact<>(intent.subjectIds().get(2));
+                carrier = new PhysicalIntentRetirementAccount.Exact<>(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.DEFENDER));
+                commitment = new PhysicalIntentRetirementAccount.Exact<>(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.EQUIPMENT));
             }
             default -> throw new IllegalArgumentException("engineering retirement has undeclared intent kind");
         }
@@ -286,8 +286,14 @@ final class FrontierInfrastructureProcessModule implements FrontierWorldProcessM
                                                                      io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
                                                                      PhysicalIntentTransition transition, long now, boolean returning) {
         ProposedEvent physical = new ProposedEvent(intent.causeSubjectId(), transition);
-        if (transition.status() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED || intent.subjectIds().isEmpty()) return List.of(physical);
-        io.farfrontier.palemirror.frontier.v3.api.SubjectId projectId = intent.subjectIds().getFirst();
+        if (transition.status() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED) return List.of(physical);
+        io.farfrontier.palemirror.frontier.v3.api.SubjectId projectId = switch (intent.kind()) {
+            case ROUTE_CONSTRUCTION, ROUTE_CONSTRUCTION_MATERIAL_LOADING -> intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.PROJECT);
+            case ROUTE_MAINTENANCE, ROUTE_MAINTENANCE_MATERIAL_LOADING -> intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.OPERATION);
+            case EQUIPMENT_ISSUE, EQUIPMENT_RETURN -> intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.PROJECT);
+            default -> null;
+        };
+        if (projectId == null) return List.of(physical);
         RouteConstruction construction = state.routeConstructions().get(projectId);
         if (construction != null) return List.of(physical, new ProposedEvent(projectId, new ScheduleEffect.Created(
                 returning ? RouteConstructionProcess.returnProgress(construction, Math.addExact(now, 1L)) : RouteConstructionProcess.progress(construction, Math.addExact(now, 1L)))));

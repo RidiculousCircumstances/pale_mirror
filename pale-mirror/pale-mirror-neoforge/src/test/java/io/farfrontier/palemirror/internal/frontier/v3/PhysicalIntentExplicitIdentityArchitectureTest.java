@@ -26,6 +26,7 @@ class PhysicalIntentExplicitIdentityArchitectureTest {
         }
         String allProduction = files.stream().map(this::read).reduce("", String::concat);
         assertFalse(allProduction.contains("fixtureDefault"), "production must not infer a lifecycle owner from PhysicalIntentKind");
+        assertFalse(allProduction.contains("fixtureOnly"), "typed role bindings must not retain a fixture or ownerless construction bridge");
 
         for (Path file : files) {
             String source = read(file);
@@ -49,6 +50,28 @@ class PhysicalIntentExplicitIdentityArchitectureTest {
                         && sceneExecutor.contains("executeExplosion(level, runtime, state, lease, explosionOwner)")
                         && sceneExecutor.contains("executeStrike(level, runtime, state, lease, strikeOwner)"),
                 "scene dispatch must receive family-supplied owners rather than derive authority from its intent kind or scene state");
+    }
+
+    @Test
+    void productionCannotRecoverSemanticRolesFromTheCompatibilityProjection() throws IOException {
+        Path root = repositoryRoot();
+        List<Path> files;
+        try (Stream<Path> paths = Stream.concat(
+                Files.walk(root.resolve("pale-mirror-frontier/src/main/java")),
+                Files.walk(root.resolve("pale-mirror-neoforge/src/main/java")))) {
+            files = paths.filter(path -> path.toString().endsWith(".java")).toList();
+        }
+        for (Path file : files) {
+            String source = read(file);
+            String name = file.getFileName().toString();
+            if (name.equals("PhysicalIntent.java") || name.equals("PhysicalIntentRoleBinding.java")) continue;
+            if (name.equals("FrontierV3DiagnosticJson.java")) {
+                assertTrue(source.contains("Presentation-only deterministic compatibility projection"),
+                        "the sole derived role projection must remain explicitly presentation-only");
+                continue;
+            }
+            assertFalse(source.contains("subjectIds("), () -> "production role extraction must use named bindings in " + file);
+        }
     }
 
     private Path repositoryRoot() {

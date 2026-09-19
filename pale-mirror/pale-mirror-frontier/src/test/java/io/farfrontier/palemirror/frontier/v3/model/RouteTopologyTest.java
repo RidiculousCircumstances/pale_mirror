@@ -141,13 +141,16 @@ class RouteTopologyTest {
         PhysicalIntentPrepared loading = events.stream().map(event -> event.payload()).filter(PhysicalIntentPrepared.class::isInstance)
                 .map(PhysicalIntentPrepared.class::cast).findFirst().orElseThrow();
         assertEquals(PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING, loading.intent().kind());
-        assertTrue(loading.intent().subjectIds().contains(project.id()));
-        FrontierWorldState conflicted = state.preparePhysicalIntent(loading.intent())
-                .transitionPhysicalIntent(loading.intent().id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty());
+        assertEquals(project.id(), loading.intent().roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.PROJECT));
+        FrontierWorldState loadingPrepared = state.preparePhysicalIntent(loading.intent());
+        FrontierWorldState conflicted = RouteConstructionStateSupport.conflict(loadingPrepared, loading.intent(),
+                new java.util.LinkedHashMap<>(loadingPrepared.physicalIntents()));
         assertEquals(RouteConstructionStatus.CONFLICT, conflicted.routeConstructions().get(project.id()).status());
         state = state.preparePhysicalIntent(loading.intent())
                 .transitionPhysicalIntent(loading.intent().id(), PhysicalIntentStatus.RUNNING, Optional.empty());
-        SubjectId cargoId = loading.intent().subjectIds().get(2), cargoItemId = loading.intent().subjectIds().get(3), sourceItemId = loading.intent().subjectIds().get(4);
+        SubjectId cargoId = loading.intent().roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.CARGO),
+                cargoItemId = loading.intent().roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.CARGO_ITEM),
+                sourceItemId = loading.intent().roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.SOURCE_ITEM);
         RouteConstructionMaterialLoadObservation receipt = new RouteConstructionMaterialLoadObservation(
                 new PhysicalObservationId("observation:route-work-load"), loading.intent().id(), project.id(), cargoId, sourceItemId, cargoItemId, 1);
         RouteConstructionMaterialLoaded loaded = new RouteConstructionMaterialLoaded(project.id(),
@@ -169,8 +172,9 @@ class RouteTopologyTest {
         state = RouteConstructionProcess.reducePrepared(state, FrontierRouteNetwork.OWNER, prepared.intent())
                 .transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.RUNNING, Optional.empty());
         BlockPosition position = FrontierGrayboxPlan.routeConstructionCells(state, project).getFirst();
-        state = state.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.CONFIRMED, Optional.of(new RouteConstructionObservation(
-                new PhysicalObservationId("observation:route-work"), prepared.intent().id(), project.id(), cargoItemId, position)));
+        state = RouteConstructionStateSupport.complete(state, prepared.intent(), new RouteConstructionObservation(
+                new PhysicalObservationId("observation:route-work"), prepared.intent().id(), project.id(), cargoItemId, position),
+                new java.util.LinkedHashMap<>(state.physicalIntents()));
         assertEquals(1, state.routeConstructions().get(project.id()).confirmedCells());
         assertEquals(1, state.inventory().items().get(materialId).count());
         assertTrue(state.routeConstructions().get(project.id()).cargoId().isEmpty(),
@@ -180,8 +184,8 @@ class RouteTopologyTest {
         PhysicalIntentPrepared nextLoading = RouteConstructionProcess.plan(state, RouteConstructionProcess.scan(3, 1_100L)).stream()
                 .map(event -> event.payload()).filter(PhysicalIntentPrepared.class::isInstance).map(PhysicalIntentPrepared.class::cast).findFirst().orElseThrow();
         assertEquals(PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING, nextLoading.intent().kind());
-        assertEquals(materialId, nextLoading.intent().subjectIds().get(4), "the remainder stays in the original maintenance stack");
-        assertTrue(!nextLoading.intent().subjectIds().get(2).equals(cargoId), "each extracted physical unit receives a fresh cargo identity");
+        assertEquals(materialId, nextLoading.intent().roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.SOURCE_ITEM), "the remainder stays in the original maintenance stack");
+        assertTrue(!nextLoading.intent().roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.CARGO).equals(cargoId), "each extracted physical unit receives a fresh cargo identity");
         assertTrue(!nextLoading.intent().id().equals(loading.intent().id()),
                 "a later material pickup must never reuse the completed intent identity");
         assertEquals(RouteTopology.initial(), state.routeTopology());

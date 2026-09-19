@@ -97,8 +97,7 @@ final class FrontierStrategyProcessModule implements FrontierWorldProcessModule 
 
     private static SubjectId reagent(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent) {
         DecontaminationStateSupport.validateIntent(state, intent);
-        return intent.subjectIds().stream().filter(id -> !id.equals(intent.causeSubjectId())).findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("decontamination retirement has no exact reagent"));
+        return intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.MATERIAL);
     }
 
     private static PhysicalIntentRetirementAccount.LateDisposition lateDisposition(PhysicalIntentTransition transition) {

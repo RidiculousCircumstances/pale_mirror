@@ -1,5 +1,8 @@
 package io.farfrontier.palemirror.frontier.v3.process;
 
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
+
 import io.farfrontier.palemirror.frontier.v3.model.*;
 
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
@@ -132,7 +135,9 @@ public final class HiveNutrientTransferProcess {
         HiveNutrientTransfer transfer = state.hiveColony().nutrientTransfers().values().stream()
                 .filter(value -> value.endpointIntentId().equals(java.util.Optional.of(intent.id()))).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("hive endpoint intent has no retained transfer"));
-        if (!intent.causeSubjectId().equals(transfer.hiveId()) || !intent.subjectIds().equals(List.of(transfer.id(), transfer.cargoId(), transfer.itemId())))
+        if (!intent.causeSubjectId().equals(transfer.hiveId()) || !intent.roles().equals(intent.kind() == PhysicalIntentKind.HIVE_NUTRIENT_DEPARTURE
+                ? PhysicalIntentRoleBinding.nutrientDeparture(transfer.id(), transfer.cargoId(), transfer.itemId())
+                : PhysicalIntentRoleBinding.nutrientArrival(transfer.id(), transfer.cargoId(), transfer.itemId())))
             throw new IllegalArgumentException("hive endpoint intent has foreign exact subjects");
         if (transition.status() == PhysicalIntentStatus.CONFIRMED) {
             List<ProposedEvent> events = new ArrayList<>(); events.add(new ProposedEvent(transfer.hiveId(), transition));

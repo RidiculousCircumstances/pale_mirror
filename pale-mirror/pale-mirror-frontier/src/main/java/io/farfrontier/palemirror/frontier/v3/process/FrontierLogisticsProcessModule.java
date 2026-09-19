@@ -131,7 +131,7 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
         }
         RouteOperation operation = state.operations().get(intent.causeSubjectId());
         if (operation == null || operation.stage() != OperationStage.ARRIVED || !subject.equals(operation.settlementId())
-                || !intent.subjectIds().contains(operation.cargoId()) || !intent.subjectIds().contains(operation.id())) {
+                || !intent.roles().equals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.cargoHandoff(operation.id(), operation.cargoId())) ) {
             throw new IllegalArgumentException("physical intent does not own arrived cargo hand-off");
         }
         return state.preparePhysicalIntent(intent);

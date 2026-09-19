@@ -131,9 +131,10 @@ class RouteConstructionTaskProcessTest {
                 .map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload).filter(PhysicalIntentPrepared.class::isInstance)
                 .map(PhysicalIntentPrepared.class::cast).findFirst().orElseThrow();
         assertEquals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_ISSUE, toolIssue.intent().kind());
-        assertEquals(project.id(), toolIssue.intent().subjectIds().getFirst());
+        assertEquals(project.id(), toolIssue.intent().roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.PROJECT));
         state = state.preparePhysicalIntent(toolIssue.intent());
-        SubjectId issuedItem = toolIssue.intent().subjectIds().get(2), issuedResident = toolIssue.intent().subjectIds().get(1);
+        SubjectId issuedItem = toolIssue.intent().roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.EQUIPMENT),
+                issuedResident = toolIssue.intent().roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.DEFENDER);
         ExactItemStack exactTool = state.inventory().items().get(issuedItem);
         state = EquipmentIssueStateSupport.complete(state, toolIssue.intent(), new EquipmentIssueObservation(
                 new PhysicalObservationId("observation:engineering-tool-issue"), toolIssue.intent().id(), project.id(), issuedResident, issuedItem,

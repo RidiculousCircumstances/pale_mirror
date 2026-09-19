@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.process;
 
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole;
+
 import io.farfrontier.palemirror.frontier.v3.model.*;
 
 import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
@@ -67,7 +69,7 @@ public final class StructuralRepairProcess {
             throw new IllegalArgumentException("structural repair intent has an invalid owner");
         }
         if (!subject.equals(repairOwner(state, intent.semanticTarget().orElseThrow()))
-                || intent.subjectIds().size() != 2 || !intent.subjectIds().contains(intent.causeSubjectId())) {
+                || !intent.roles().require(PhysicalIntentSubjectRole.STRUCTURE).equals(intent.causeSubjectId())) {
             throw new IllegalArgumentException("structural repair intent lacks its settlement owner or material");
         }
         if (state.physicalIntents().values().stream().anyMatch(existing -> existing.kind() == PhysicalIntentKind.STRUCTURAL_REPAIR

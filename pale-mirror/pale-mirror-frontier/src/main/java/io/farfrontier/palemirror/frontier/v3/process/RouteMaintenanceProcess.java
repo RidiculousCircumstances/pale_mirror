@@ -86,7 +86,7 @@ public final class RouteMaintenanceProcess {
                                                      ScheduledAction action, Optional<ProposedEvent> retry) {
         if (state.physicalIntents().values().stream().anyMatch(intent -> (intent.kind() == PhysicalIntentKind.ROUTE_MAINTENANCE
                 || intent.kind() == PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING)
-                && intent.subjectIds().contains(maintenance.id())
+                && intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.OPERATION).equals(maintenance.id())
                 && (intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING))) return retryOnly(retry);
         if (!EngineeringToolCustody.ready(state, maintenance.team())) {
             if (!EngineeringDepotService.atStations(state, maintenance, EngineeringJourneyPurpose.MUSTER_DEPOT)) {
@@ -265,7 +265,7 @@ public final class RouteMaintenanceProcess {
                         && state.inventory().surfaces().get(FrontierRouteNetwork.MAINTENANCE_CONTAINER).status() == ContainerSurfaceStatus.ACTIVE)
                 .filter(item -> state.physicalIntents().values().stream().noneMatch(intent -> intent.kind() == PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING
                         && (intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING)
-                        && intent.subjectIds().size() == 5 && intent.subjectIds().get(4).equals(item.id())))
+                        && intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.SOURCE_ITEM).equals(item.id())))
                 .sorted(Comparator.comparing(ExactItemStack::id)).findFirst();
     }
 
@@ -330,9 +330,8 @@ public final class RouteMaintenanceProcess {
     }
 
     private static RouteMaintenance maintenanceFor(FrontierWorldState state, PhysicalIntent intent) {
-        if (intent.subjectIds().size() < 2) throw new IllegalArgumentException("route maintenance intent lacks its exact project subject");
-        RouteMaintenance maintenance = state.routeMaintenances().get(intent.subjectIds().get(1));
-        if (maintenance == null || !intent.subjectIds().contains(maintenance.id())) {
+        RouteMaintenance maintenance = state.routeMaintenances().get(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.OPERATION));
+        if (maintenance == null || !intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.OPERATION).equals(maintenance.id())) {
             throw new IllegalArgumentException("route maintenance intent has no retained project");
         }
         return maintenance;

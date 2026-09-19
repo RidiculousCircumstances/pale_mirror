@@ -115,8 +115,8 @@ final class FrontierV3DecontaminationExecutor {
 
     private static Target target(FrontierWorldState state, PhysicalIntent intent, FrontierV3InfectionOverlayLedger ledger) {
         InfectionCell cell = cell(intent); if (intent.postcondition() != PhysicalPostcondition.DECONTAMINATION_OBSERVED || cell == null
-                || intent.subjectIds().size() != 2 || !intent.subjectIds().contains(intent.causeSubjectId())) return null;
-        SubjectId itemId = intent.subjectIds().stream().filter(id -> !id.equals(intent.causeSubjectId())).findFirst().orElse(null);
+                || !intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.FACILITY).equals(intent.causeSubjectId())) return null;
+        SubjectId itemId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.MATERIAL);
         ExactItemStack material = itemId == null ? null : state.inventory().items().get(itemId); Long prior = state.infection().get(cell) == null ? null : state.infection().get(cell).value().raw();
         if (material == null || !material.itemKind().equals(DecontaminationPolicy.REAGENT) || prior == null || !(material.custody() instanceof io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.ContainerSlot slot)) return null;
         ContainerSurface surface = state.inventory().surfaces().get(slot.containerId()); FrontierV3InfectionOverlayLedger.Claim claim = ledger.claim(cell);

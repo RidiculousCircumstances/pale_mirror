@@ -478,7 +478,7 @@ final class FrontierV3SceneExecutor {
         if (FrontierSceneBehaviors.logistics(lease).engagementId().isEmpty()) return false;
         SubjectId engagement = FrontierSceneBehaviors.logistics(lease).engagementId().orElseThrow();
         Optional<PhysicalIntent> unresolved = state.physicalIntents().values().stream().filter(intent -> intent.kind() == PhysicalIntentKind.EXPLOSION)
-                .filter(intent -> intent.subjectIds().size() == 2 && intent.subjectIds().getLast().equals(engagement))
+                .filter(intent -> intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ENGAGEMENT).equals(engagement))
                 .filter(intent -> intent.status() != PhysicalIntentStatus.CONFIRMED).min(Comparator.comparing(PhysicalIntent::id));
         if (unresolved.isPresent()) return true;
         List<Body> bodies = lease.members().stream().map(member -> body(level, state, lease, member)).flatMap(Optional::stream).toList();
@@ -491,7 +491,7 @@ final class FrontierV3SceneExecutor {
         forgetLastObserved(runtime, lease.id());
         BlockPos origin = target.entity().blockPosition();
         long effectEpoch = state.physicalIntents().values().stream().filter(value -> value.kind() == PhysicalIntentKind.EXPLOSION)
-                .filter(value -> value.subjectIds().contains(engagement)).count();
+                .filter(value -> value.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ENGAGEMENT).equals(engagement)).count();
         // A PhysicalIntent drives a deterministic Minecraft entity UUID. Include the canonical
         // world identity so two independent v3 fixtures in one GameTest level cannot claim the
         // same TNT body; production still has one stable ID for the same world/scene/epoch.
@@ -547,8 +547,8 @@ final class FrontierV3SceneExecutor {
             submit(runtime, "scene-strike-prepare", key, new PhysicalIntentPrepared(intent)); return;
         }
         PhysicalIntent intent = pending.orElseThrow();
-        Body attacker = bodies.stream().filter(body -> body.member().actorId().equals(intent.subjectIds().getFirst())).findFirst().orElse(null);
-        Body target = bodies.stream().filter(body -> body.member().actorId().equals(intent.subjectIds().getLast())).findFirst().orElse(null);
+        Body attacker = bodies.stream().filter(body -> body.member().actorId().equals(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ATTACKER))).findFirst().orElse(null);
+        Body target = bodies.stream().filter(body -> body.member().actorId().equals(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.TARGET))).findFirst().orElse(null);
         if (attacker == null || target == null || attacker.entity().distanceToSqr(target.entity()) > 3.61D) return;
         if (intent.status() == PhysicalIntentStatus.PREPARED) { submit(runtime, "scene-strike-running", intent.id().value(), new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty())); return; }
         forgetLastObserved(runtime, lease.id());
@@ -914,10 +914,10 @@ final class FrontierV3SceneExecutor {
         return new BlockPos(anchor.x() + (ordinal % 2) * 2, anchor.y(), anchor.z() + (ordinal / 2) * 2);
     }
     static Optional<Entity> explosionCause(ServerLevel level, FrontierWorldState state, PhysicalIntent intent) {
-        if (intent.kind() != PhysicalIntentKind.EXPLOSION || intent.subjectIds().size() != 2 || !bomber(state, intent.causeSubjectId())) return Optional.empty();
+        if (intent.kind() != PhysicalIntentKind.EXPLOSION || !bomber(state, intent.causeSubjectId())) return Optional.empty();
         return state.sceneLeases().values().stream().filter(lease -> lease.status() == SceneLeaseStatus.HOT)
                 .filter(FrontierSceneBehaviors::isLogistics)
-                .filter(lease -> FrontierSceneBehaviors.logistics(lease).engagementId().filter(intent.subjectIds().getLast()::equals).isPresent())
+                .filter(lease -> FrontierSceneBehaviors.logistics(lease).engagementId().filter(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ENGAGEMENT)::equals).isPresent())
                 .flatMap(lease -> lease.members().stream().filter(member -> member.actorId().equals(intent.causeSubjectId()))
                         .map(member -> new LeaseMember(lease, member))).filter(value -> owned(level.getEntity(value.member().entityId()), state, value.lease(), value.member()))
                 .map(value -> level.getEntity(value.member().entityId())).filter(entity -> entity instanceof Mob).filter(Entity::isAlive).findFirst();

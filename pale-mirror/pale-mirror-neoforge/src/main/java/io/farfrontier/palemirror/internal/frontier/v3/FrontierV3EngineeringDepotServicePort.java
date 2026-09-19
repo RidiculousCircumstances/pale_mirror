@@ -26,7 +26,7 @@ final class FrontierV3EngineeringDepotServicePort {
         EngineeringWorkOrder project = project(state, intent);
         if (project == null) return Readiness.NOT_ENGINEERING;
         if (!EngineeringDepotService.atStations(state, project, purpose)) return Readiness.CANONICAL_STATIONS_UNAVAILABLE;
-        var member = project.assembly().orElseThrow().members().get(intent.subjectIds().get(1));
+        var member = project.assembly().orElseThrow().members().get(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.DEFENDER));
         if (member == null || !member.arrived()) return Readiness.RESIDENT_NOT_AT_ASSIGNED_STATION;
         return bodyAtAssignedStation(resident, member.currentPosition())
                 ? Readiness.READY : Readiness.RESIDENT_NOT_AT_ASSIGNED_STATION;
@@ -41,8 +41,9 @@ final class FrontierV3EngineeringDepotServicePort {
     }
 
     private static EngineeringWorkOrder project(FrontierWorldState state, PhysicalIntent intent) {
-        EngineeringWorkOrder construction = state.routeConstructions().get(intent.subjectIds().getFirst());
-        return construction == null ? state.routeMaintenances().get(intent.subjectIds().getFirst()) : construction;
+        io.farfrontier.palemirror.frontier.v3.api.SubjectId projectId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.PROJECT);
+        EngineeringWorkOrder construction = state.routeConstructions().get(projectId);
+        return construction == null ? state.routeMaintenances().get(projectId) : construction;
     }
 
     enum Readiness {

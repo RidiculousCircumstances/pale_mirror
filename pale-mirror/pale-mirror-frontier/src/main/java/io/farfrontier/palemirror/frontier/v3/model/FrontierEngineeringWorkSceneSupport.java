@@ -73,12 +73,13 @@ public final class FrontierEngineeringWorkSceneSupport {
 
     /** A retained crew may open only its current-cell work intent while its exact lease is HOT. */
     public static boolean permitsCurrentWorkIntent(FrontierWorldState state, PhysicalIntent intent) {
-        EngineeringWorkOrder project = intent.subjectIds().stream().map(id -> {
-                    RouteConstruction construction = state.routeConstructions().get(id);
-                    RouteMaintenance maintenance = state.routeMaintenances().get(id);
-                    if (construction != null && maintenance != null) throw new IllegalArgumentException("engineering work owner is ambiguous");
-                    return construction != null ? construction : maintenance;
-                }).filter(java.util.Objects::nonNull).findFirst().orElse(null);
+        SubjectId projectId = switch (intent.kind()) {
+            case ROUTE_CONSTRUCTION, ROUTE_CONSTRUCTION_MATERIAL_LOADING -> intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.PROJECT);
+            case ROUTE_MAINTENANCE, ROUTE_MAINTENANCE_MATERIAL_LOADING -> intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.OPERATION);
+            default -> null;
+        };
+        EngineeringWorkOrder project = projectId == null ? null : state.routeConstructions().containsKey(projectId)
+                ? state.routeConstructions().get(projectId) : state.routeMaintenances().get(projectId);
         if (project == null || project.engineeringTeam().isEmpty() || project.cargoId().isEmpty()) return false;
         return state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isEngineeringWorksite)
                 .filter(lease -> lease.status() == SceneLeaseStatus.HOT).anyMatch(lease -> {

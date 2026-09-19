@@ -144,8 +144,7 @@ final class FrontierV3RouteMaintenanceExecutor {
         RouteMaintenance maintenance = RouteMaintenanceStateSupport.workOperation(state, intent);
         if (maintenance == null || !maintenance.building() || !maintenance.repairCell().equals(raw) || maintenance.cargoId().isEmpty()) return null;
         SubjectId cargoId = maintenance.cargoId().orElseThrow();
-        SubjectId itemId = intent.subjectIds().stream().filter(id -> !id.equals(FrontierRouteNetwork.OWNER) && !id.equals(maintenance.id()) && !id.equals(cargoId))
-                .findFirst().orElse(null);
+        SubjectId itemId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.MATERIAL);
         ExactItemStack material = itemId == null ? null : state.inventory().items().get(itemId);
         if (material == null || !material.custody().equals(new InventoryCustody.Cargo(cargoId))
                 || FrontierGrayboxPlan.intactSemanticCell(state.bootstrap(), state.hiveColony(), state.routeTopology(), state.routeConstructions(),
@@ -211,10 +210,10 @@ final class FrontierV3RouteMaintenanceExecutor {
     private static MaterialTarget materialTarget(FrontierWorldState state, PhysicalIntent intent) {
         BlockPosition origin = wholeBlock(intent); if (origin == null) return null;
         RouteMaintenance maintenance = state.routeMaintenances().get(intent.causeSubjectId());
-        if (maintenance == null || !maintenance.building() || maintenance.cargoId().isPresent() || intent.subjectIds().size() != 5) return null;
-        SubjectId cargoId = intent.subjectIds().get(2), cargoMaterialId = intent.subjectIds().get(3), sourceId = intent.subjectIds().get(4);
+        if (maintenance == null || !maintenance.building() || maintenance.cargoId().isPresent()) return null;
+        SubjectId cargoId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.CARGO), cargoMaterialId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.CARGO_ITEM), sourceId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.SOURCE_ITEM);
         ExactItemStack material = state.inventory().items().get(sourceId);
-        if (material == null || !intent.subjectIds().getFirst().equals(FrontierRouteNetwork.OWNER) || !intent.subjectIds().get(1).equals(maintenance.id())
+        if (material == null || !intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ROUTE).equals(FrontierRouteNetwork.OWNER) || !intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.OPERATION).equals(maintenance.id())
                 || !(material.custody() instanceof InventoryCustody.ContainerSlot slot) || !slot.containerId().equals(FrontierRouteNetwork.MAINTENANCE_CONTAINER)) return null;
         ContainerSurface surface = state.inventory().surfaces().get(slot.containerId());
         if (surface == null || surface.status() != ContainerSurfaceStatus.ACTIVE || !surface.position().equals(origin)) return null;

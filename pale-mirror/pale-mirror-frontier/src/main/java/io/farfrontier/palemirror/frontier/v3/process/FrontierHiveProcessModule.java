@@ -56,7 +56,7 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
                 (state, command, prepared) -> {
                     var intent = prepared.intent();
                     boolean owns = state.bootstrap().hive().id().equals(intent.causeSubjectId())
-                            && state.hiveColony().nutrientTransfers().values().stream().anyMatch(transfer -> intent.subjectIds().contains(transfer.id()));
+                            && state.hiveColony().nutrientTransfers().containsKey(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.TRANSFER));
                     return owns ? new CommandPlan.Accepted(List.of(new ProposedEvent(state.bootstrap().hive().id(), prepared)))
                             : FrontierWorldCommandPlanner.rejected("hive nutrient endpoint has no retained transfer");
                 },
@@ -154,13 +154,22 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
                     if (after == before) return;
                     if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) return;
                     if (intent.lifecycleOwner() == PhysicalIntentLifecycleOwner.HIVE_GROWTH) {
-                        SubjectId item = ((PhysicalIntentRetirementAccount.Exact<SubjectId>) binding.commitment()).value();
-                        if (after.inventory().items().containsKey(item)) throw new IllegalArgumentException("hive growth did not consume its exact input");
+                        HiveGrowthJob job = before.hiveColony().growthJobs().get(intent.causeSubjectId());
+                        if (job == null) throw new IllegalArgumentException("hive growth retirement lacks its exact pre-state job");
+                        if (job.inputHold() instanceof HiveGrowthInputHold.Exact) {
+                            SubjectId item = ((PhysicalIntentRetirementAccount.Exact<SubjectId>) binding.commitment()).value();
+                            if (after.inventory().items().containsKey(item)) throw new IllegalArgumentException("hive growth did not consume its exact input");
+                        } else if (job.inputHold() instanceof HiveGrowthInputHold.FungibleCold held
+                                && after.inventory().fungibleResources().claims().containsKey(held.claimId())) {
+                            throw new IllegalArgumentException("hive growth did not consume its exact fungible claim");
+                        }
                     }
                     if (intent.lifecycleOwner() == PhysicalIntentLifecycleOwner.HIVE_NUTRIENT_TRANSFER) {
                         HiveNutrientTransfer beforeTransfer = transfer(before, intent);
                         HiveNutrientTransfer afterTransfer = after.hiveColony().nutrientTransfers().get(beforeTransfer.id());
-                        if (afterTransfer == null || afterTransfer.phase() == beforeTransfer.phase()) {
+                        boolean terminalArrival = intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.HIVE_NUTRIENT_ARRIVAL;
+                        if ((afterTransfer == null && !terminalArrival)
+                                || (afterTransfer != null && afterTransfer.phase() == beforeTransfer.phase())) {
                             throw new IllegalArgumentException("hive nutrient retirement did not advance its exact transfer");
                         }
                     }
@@ -212,7 +221,16 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
             case HIVE_GROWTH -> {
                 HiveGrowthJob job = state.hiveColony().growthJobs().get(intent.causeSubjectId());
                 if (job == null || !job.consumptionIntentId().equals(intent.id())) throw new IllegalArgumentException("hive growth retirement lacks its exact job");
-                if (!state.inventory().items().containsKey(job.consumedItemId())) throw new IllegalArgumentException("hive growth retirement lost its exact input");
+                if (job.inputHold() instanceof HiveGrowthInputHold.Exact
+                        && !state.inventory().items().containsKey(job.consumedItemId())) {
+                    throw new IllegalArgumentException("hive growth retirement lost its exact input");
+                }
+                if (job.inputHold() instanceof HiveGrowthInputHold.FungibleCold held
+                        && (!state.inventory().fungibleResources().claims().containsKey(held.claimId())
+                        || state.inventory().fungibleResources().accounts().get(held.accountId()) == null
+                        || state.inventory().fungibleResources().accounts().get(held.accountId()).claimQuantities().getOrDefault(held.claimId(), 0) != 64)) {
+                    throw new IllegalArgumentException("hive growth retirement lost its exact fungible claim");
+                }
                 carrier = new PhysicalIntentRetirementAccount.Exact<>(job.nestId());
                 commitment = new PhysicalIntentRetirementAccount.Exact<>(job.consumedItemId());
             }
@@ -220,13 +238,13 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
                 if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE) {
                     SceneStrikeStateSupport.validateIntent(state, intent);
                     carrier = new PhysicalIntentRetirementAccount.Exact<>(intent.causeSubjectId());
-                    commitment = new PhysicalIntentRetirementAccount.Exact<>(intent.subjectIds().getFirst());
+                    commitment = new PhysicalIntentRetirementAccount.Exact<>(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ATTACKER));
                 } else {
-                    SubjectId item = intent.subjectIds().get(2);
+                    SubjectId item = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.EQUIPMENT);
                     if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_ISSUE) EquipmentIssueStateSupport.validateIntent(state, intent);
                     else if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_RETURN) EquipmentReturnStateSupport.validateIntent(state, intent);
                     else throw new IllegalArgumentException("settlement assault has foreign intent kind");
-                    carrier = new PhysicalIntentRetirementAccount.Exact<>(intent.subjectIds().get(1)); commitment = new PhysicalIntentRetirementAccount.Exact<>(item);
+                    carrier = new PhysicalIntentRetirementAccount.Exact<>(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.DEFENDER)); commitment = new PhysicalIntentRetirementAccount.Exact<>(item);
                 }
             }
             default -> throw new IllegalArgumentException("hive retirement account received foreign owner");
@@ -237,7 +255,8 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
     }
 
     private static HiveNutrientTransfer transfer(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent) {
-        HiveNutrientTransfer transfer = state.hiveColony().nutrientTransfers().get(intent.causeSubjectId());
+        HiveNutrientTransfer transfer = state.hiveColony().nutrientTransfers().get(
+                intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.TRANSFER));
         if (transfer == null || !transfer.endpointIntentId().filter(intent.id()::equals).isPresent()) {
             throw new IllegalArgumentException("hive nutrient retirement lacks its exact transfer");
         }
@@ -335,8 +354,7 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
                     if (!(evidence instanceof ExactItemConsumedObservation consumed)) {
                         throw new IllegalArgumentException("hive growth consumption requires exact or fungible item observation evidence");
                     }
-                    io.farfrontier.palemirror.frontier.v3.api.SubjectId itemId = current.subjectIds().stream()
-                            .filter(id -> !id.equals(current.causeSubjectId())).findFirst().orElseThrow();
+                    io.farfrontier.palemirror.frontier.v3.api.SubjectId itemId = current.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ITEM);
                     ExactItemStack item = currentState.inventory().items().get(itemId);
                     if (!itemId.equals(consumed.itemId()) || item == null || item.count() != consumed.countBefore()
                             || !(item.custody() instanceof InventoryCustody.ContainerSlot slot)) {

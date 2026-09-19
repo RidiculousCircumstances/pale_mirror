@@ -66,7 +66,7 @@ final class FrontierV3DiagnosticEngineeringJson {
     }
 
     private static long pendingIntents(FrontierWorldState state, SubjectId owner, boolean containsOwner) {
-        return state.physicalIntents().values().stream().filter(intent -> intent.subjectIds().contains(owner) == containsOwner).filter(FrontierV3DiagnosticEngineeringJson::pending).count();
+        return state.physicalIntents().values().stream().filter(intent -> intent.roles().namedRoles().containsValue(owner) == containsOwner).filter(FrontierV3DiagnosticEngineeringJson::pending).count();
     }
 
     private static boolean pending(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent) {

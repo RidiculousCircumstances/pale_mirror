@@ -40,7 +40,7 @@ class RouteMaintenanceProcessTest {
         PhysicalIntent recoveredIntent = recovered.physicalIntents().get(prepared.id());
         RouteMaintenanceMaterialLoadObservation observation = new RouteMaintenanceMaterialLoadObservation(
                 new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId("observation:running-maintenance-material"), recoveredIntent.id(), maintenance.id(),
-                maintenance.plannedCargoId(), prepared.subjectIds().get(4), maintenance.plannedCargoItemId(), 0);
+                maintenance.plannedCargoId(), prepared.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.SOURCE_ITEM), maintenance.plannedCargoItemId(), 0);
 
         RouteMaintenanceMaterialLoadObservation forgedSource = new RouteMaintenanceMaterialLoadObservation(
                 new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId("observation:running-maintenance-forged-source"), recoveredIntent.id(), maintenance.id(),
@@ -54,14 +54,14 @@ class RouteMaintenanceProcessTest {
                 new RouteMaintenanceMaterialLoaded(maintenance.id(), new CargoBatch(maintenance.plannedCargoId(), FrontierRouteNetwork.OWNER,
                         List.of(maintenance.plannedCargoItemId()))));
         assertEquals(maintenance.plannedCargoId(), loaded.routeMaintenances().get(maintenance.id()).cargoId().orElseThrow());
-        assertFalse(loaded.inventory().items().containsKey(prepared.subjectIds().get(4)),
+        assertFalse(loaded.inventory().items().containsKey(prepared.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.SOURCE_ITEM)),
                 "a recovered confirmed pickup consumes only the observed one-unit source");
         assertEquals(new InventoryCustody.Cargo(maintenance.plannedCargoId()), loaded.inventory().items().get(maintenance.plannedCargoItemId()).custody());
 
         FrontierWorldState conflicted = RouteMaintenanceStateSupport.conflict(recovered, recoveredIntent,
                 new java.util.LinkedHashMap<>(recovered.physicalIntents()));
         assertEquals(RouteMaintenanceStatus.CONFLICT, conflicted.routeMaintenances().get(maintenance.id()).status());
-        assertEquals(1, conflicted.inventory().items().get(prepared.subjectIds().get(4)).count(),
+        assertEquals(1, conflicted.inventory().items().get(prepared.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.SOURCE_ITEM)).count(),
                 "a missing or altered recovered source never fabricates the cargo transfer");
         assertTrue(conflicted.routeMaintenances().get(maintenance.id()).cargoId().isEmpty());
     }
@@ -266,7 +266,9 @@ class RouteMaintenanceProcessTest {
 
         assertEquals("READY", readiness.reason());
         PhysicalIntent intent = EngineeringEquipmentProcess.returnOne(atServicePort, returned).orElseThrow();
-        assertEquals(List.of(returned.id(), engineer, tool.id()), intent.subjectIds());
+        assertEquals(returned.id(), intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.PROJECT));
+        assertEquals(engineer, intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.DEFENDER));
+        assertEquals(tool.id(), intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.EQUIPMENT));
         assertEquals(readiness.targetSlot().orElseThrow(), intent.targetSlot().orElseThrow(),
                 "planner and diagnostic readiness must retain the same exact return destination");
     }

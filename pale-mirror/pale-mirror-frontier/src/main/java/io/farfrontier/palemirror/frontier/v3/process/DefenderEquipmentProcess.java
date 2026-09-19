@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.process;
 
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole;
+
 import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
@@ -52,7 +54,7 @@ public final class DefenderEquipmentProcess {
         List<SubjectId> candidates = assault.defenderIds().stream().sorted().filter(candidate -> state.inventory().actorItems(candidate).stream()
                         .noneMatch(item -> HumanTacticalFunctionProjection.isGrayboxWeaponKind(item.itemKind())))
                 .filter(candidate -> state.physicalIntents().values().stream().noneMatch(intent -> intent.kind() == PhysicalIntentKind.EQUIPMENT_ISSUE
-                        && intent.status() != PhysicalIntentStatus.CONFIRMED && intent.subjectIds().contains(candidate))).toList();
+                        && intent.status() != PhysicalIntentStatus.CONFIRMED && intent.roles().require(PhysicalIntentSubjectRole.EQUIPMENT).equals(candidate))).toList();
         SubjectId resident = candidates.stream().filter(candidate -> !candidate.equals(assault.defenderUnit().leaderId())).findFirst()
                 .orElse(candidates.isEmpty() ? null : candidates.getFirst());
         if (resident == null) return java.util.Optional.empty();
@@ -60,7 +62,7 @@ public final class DefenderEquipmentProcess {
                         && slot.containerId().equals(depot) && value.economicOwnerId().equals(assault.settlementId()))
                 .filter(value -> HumanTacticalFunctionProjection.isGrayboxWeaponKind(value.itemKind()))
                 .filter(value -> state.physicalIntents().values().stream().noneMatch(intent -> intent.kind() == PhysicalIntentKind.EQUIPMENT_ISSUE
-                        && intent.status() != PhysicalIntentStatus.CONFIRMED && intent.subjectIds().contains(value.id())))
+                        && intent.status() != PhysicalIntentStatus.CONFIRMED && intent.roles().require(PhysicalIntentSubjectRole.EQUIPMENT).equals(value.id())))
                 .min(Comparator.comparing(ExactItemStack::id)).orElse(null);
         if (item == null) return java.util.Optional.empty();
         String suffix = assault.id().value().substring("assault:".length()) + "-" + resident.value().replace(':', '-') + "-" + item.id().value().replace(':', '-');

@@ -920,7 +920,8 @@ final class FrontierV3DiagnosticJson {
         try { intent = state.physicalIntents().get(new PhysicalIntentId(id)); }
         catch (IllegalArgumentException invalid) { intent = null; }
         if (intent == null) return unavailable("intent", id, checkpoint, "not_found");
-        String subjects = intent.subjectIds().stream().sorted().map(value -> "\"" + quote(value.value()) + "\"").reduce((left, right) -> left + "," + right).orElse("");
+        // Presentation-only deterministic compatibility projection; it has no execution authority.
+        String subjects = intent.roles().subjectIds().stream().sorted().map(value -> "\"" + quote(value.value()) + "\"").reduce((left, right) -> left + "," + right).orElse("");
         return base("intent", id, checkpoint) + ",\"status\":\"ok\",\"intentKind\":\"" + intent.kind()
                 + "\",\"intentStatus\":\"" + intent.status() + "\",\"causeSubject\":\"" + quote(intent.causeSubjectId().value())
                 + "\",\"radius\":" + intent.radiusBlocks() + ",\"subjects\":[" + subjects + "]"

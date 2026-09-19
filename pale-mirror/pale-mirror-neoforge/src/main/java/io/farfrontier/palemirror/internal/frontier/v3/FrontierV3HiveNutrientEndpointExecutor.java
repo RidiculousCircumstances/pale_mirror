@@ -91,7 +91,7 @@ final class FrontierV3HiveNutrientEndpointExecutor {
         if (intent.kind() != PhysicalIntentKind.HIVE_NUTRIENT_DEPARTURE) return null;
         HiveNutrientTransfer transfer = state.hiveColony().nutrientTransfers().values().stream()
                 .filter(value -> value.fungibleContents() && value.endpointIntentId().equals(Optional.of(intent.id()))).findFirst().orElse(null);
-        if (transfer == null || !intent.subjectIds().equals(java.util.List.of(transfer.id(), transfer.cargoId(), transfer.itemId()))) return null;
+        if (transfer == null || !intent.roles().equals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.nutrientDeparture(transfer.id(), transfer.cargoId(), transfer.itemId()))) return null;
         List<CustodyAccount> accounts = state.inventory().fungibleResources().accounts().values().stream()
                 .filter(account -> account.custody() instanceof ResourceCustody.Container container && container.containerId().equals(transfer.sourceStoreId())).toList();
         if (accounts.size() != 1) return null;
@@ -158,7 +158,7 @@ final class FrontierV3HiveNutrientEndpointExecutor {
         if (intent.kind() != PhysicalIntentKind.HIVE_NUTRIENT_ARRIVAL) return null;
         HiveNutrientTransfer transfer = state.hiveColony().nutrientTransfers().values().stream()
                 .filter(value -> value.fungibleContents() && value.endpointIntentId().equals(Optional.of(intent.id()))).findFirst().orElse(null);
-        if (transfer == null || !intent.subjectIds().equals(java.util.List.of(transfer.id(), transfer.cargoId(), transfer.itemId()))) return null;
+        if (transfer == null || !intent.roles().equals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.nutrientArrival(transfer.id(), transfer.cargoId(), transfer.itemId()))) return null;
         CustodyAccount cargo = state.inventory().fungibleResources().accounts().values().stream().filter(account -> account.custody()
                 instanceof ResourceCustody.Cargo held && held.cargoId().equals(transfer.cargoId())).findFirst().orElse(null);
         ContainerSurface surface = state.inventory().surfaces().get(transfer.targetStoreId());
@@ -255,10 +255,11 @@ final class FrontierV3HiveNutrientEndpointExecutor {
     }
 
     private static Endpoint endpoint(FrontierWorldState state, PhysicalIntent intent) {
-        HiveNutrientTransfer transfer = state.hiveColony().nutrientTransfers().values().stream()
-                .filter(value -> intent.subjectIds().contains(value.id())).findFirst().orElse(null);
+        HiveNutrientTransfer transfer = state.hiveColony().nutrientTransfers().get(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.TRANSFER));
         if (transfer == null || !transfer.endpointIntentId().equals(Optional.of(intent.id()))
-                || !intent.subjectIds().equals(java.util.List.of(transfer.id(), transfer.cargoId(), transfer.itemId()))) {
+                || !intent.roles().equals(intent.kind() == PhysicalIntentKind.HIVE_NUTRIENT_DEPARTURE
+                ? io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.nutrientDeparture(transfer.id(), transfer.cargoId(), transfer.itemId())
+                : io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.nutrientArrival(transfer.id(), transfer.cargoId(), transfer.itemId()))) {
             throw new IllegalArgumentException("hive nutrient intent has no exact retained transfer");
         }
         boolean departure = intent.kind() == PhysicalIntentKind.HIVE_NUTRIENT_DEPARTURE;

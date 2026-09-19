@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.process;
 
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole;
+
 import io.farfrontier.palemirror.frontier.v3.model.*;
 
 import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
@@ -77,7 +79,7 @@ public final class SupplyOperationProcess {
                                                           PhysicalIntentTransition transition, long now) {
         CargoLoadingStateSupport.validateIntent(state, intent);
         SupplyContract contract = state.contracts().get(intent.causeSubjectId());
-        ExactItemStack item = state.inventory().items().get(intent.subjectIds().get(2));
+        ExactItemStack item = state.inventory().items().get(intent.roles().require(PhysicalIntentSubjectRole.SOURCE_ITEM));
         StrategicTask preparation = preparationTaskForContract(state, contract, StrategicTaskStatus.ACTIVE);
         if (transition.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) {
             return List.of(new ProposedEvent(contract.settlementId(), transition), transition(preparation, StrategicTaskStatus.BLOCKED),

@@ -354,7 +354,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                     && !RouteMaintenanceStateSupport.ownsMaintenance(routeMaintenances, intent.causeSubjectId()) && !ResourceSitePhysicalIntentStateSupport.ownsNonterminalSubject(resourceSites, intent.causeSubjectId())) {
                 throw new IllegalArgumentException("physical intent cause must be a canonical subject");
             }
-            for (SubjectId subject : intent.subjectIds()) {
+            for (SubjectId subject : intent.roles().namedRoles().values()) {
                 if (intent.status() == PhysicalIntentStatus.CONFIRMED || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART || preparedConflictCustody) continue;
                 RouteConstruction routeConstruction = routeConstructions.get(intent.causeSubjectId());
                 boolean hiveNutrientSubject = HiveNutrientTransferStateSupport.ownsIntentSubject(hiveColony, intent, subject);
@@ -609,7 +609,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         if (inventory.cargo().containsKey(contract.cargoId())
                 || operations.values().stream().anyMatch(operation -> operation.cargoId().equals(contract.cargoId()))
                 || physicalIntents.values().stream().anyMatch(intent -> intent.causeSubjectId().equals(contract.id())
-                || intent.subjectIds().contains(contract.id()) || intent.subjectIds().contains(contract.cargoId()))) {
+                || intent.roles().namedRoles().containsValue(contract.id()) || intent.roles().namedRoles().containsValue(contract.cargoId()))) {
             throw new IllegalArgumentException("a supply contract with acquired cargo or physical work may not be abandoned");
         }
         Map<SubjectId, SupplyContract> next = new LinkedHashMap<>(contracts); next.remove(contract.id());

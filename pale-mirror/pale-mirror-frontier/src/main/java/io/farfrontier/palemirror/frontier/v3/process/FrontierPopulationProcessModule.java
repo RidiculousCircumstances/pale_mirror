@@ -203,8 +203,7 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
         if (!(evidence instanceof ExactItemConsumedObservation consumed)) {
             throw new IllegalArgumentException("population consumption requires item observation evidence");
         }
-        io.farfrontier.palemirror.frontier.v3.api.SubjectId itemId = intent.subjectIds().stream()
-                .filter(id -> !id.equals(intent.causeSubjectId())).findFirst().orElseThrow();
+        io.farfrontier.palemirror.frontier.v3.api.SubjectId itemId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ITEM);
         ExactItemStack item = state.inventory().items().get(itemId);
         if (!itemId.equals(consumed.itemId()) || item == null || item.count() != consumed.countBefore()
                 || !(item.custody() instanceof InventoryCustody.ContainerSlot slot)) {

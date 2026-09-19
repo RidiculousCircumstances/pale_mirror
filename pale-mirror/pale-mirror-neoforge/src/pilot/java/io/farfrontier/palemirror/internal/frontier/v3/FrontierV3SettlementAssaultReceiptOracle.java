@@ -14,8 +14,8 @@ final class FrontierV3SettlementAssaultReceiptOracle {
                                                 FixedScalar targetHealthBefore, FixedScalar targetHealthAfter) {
         Objects.requireNonNull(intent, "intent"); Objects.requireNonNull(receipt, "receipt");
         Objects.requireNonNull(targetHealthBefore, "target health before"); Objects.requireNonNull(targetHealthAfter, "target health after");
-        if (!receipt.intentId().equals(intent.id()) || !receipt.attackerId().equals(intent.subjectIds().getFirst())
-                || !receipt.targetId().equals(intent.subjectIds().getLast())) {
+        if (!receipt.intentId().equals(intent.id()) || !receipt.attackerId().equals(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ATTACKER))
+                || !receipt.targetId().equals(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.TARGET))) {
             throw new IllegalArgumentException("scene strike receipt does not bind its exact intent members");
         }
         if (!receipt.targetHealthBefore().equals(targetHealthBefore) || !receipt.targetHealthAfter().equals(targetHealthAfter)

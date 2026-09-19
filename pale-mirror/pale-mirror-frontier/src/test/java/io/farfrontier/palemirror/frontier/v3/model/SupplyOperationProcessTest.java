@@ -128,7 +128,7 @@ class SupplyOperationProcessTest {
         PhysicalIntent intent = assertInstanceOf(PhysicalIntentPrepared.class, prepared.getFirst().payload()).intent();
         assertEquals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_LOADING, intent.kind());
         state = state.preparePhysicalIntent(intent).transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
-        ExactItemStack item = state.inventory().items().get(intent.subjectIds().get(2));
+        ExactItemStack item = state.inventory().items().get(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.SOURCE_ITEM));
         CargoLoadObservation receipt = new CargoLoadObservation(new PhysicalObservationId("observation:cargo-loading-test"), intent.id(), contract.id(),
                 contract.cargoId(), item.id(), item.count());
         PhysicalIntentTransition receiptTransition = new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));

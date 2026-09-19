@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.process;
 
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding;
+
 import io.farfrontier.palemirror.frontier.v3.model.*;
 
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
@@ -73,7 +75,7 @@ public final class ResourceSiteProcess {
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(intent.causeSubjectId());
         ResourceSitePreparationJob job = lifecycle.activeWork().filter(ResourceSitePreparationJob.class::isInstance).map(ResourceSitePreparationJob.class::cast)
                 .orElseThrow(() -> new IllegalArgumentException("resource-site preparation lacks active work"));
-        if (!intent.id().equals(job.intentId()) || !intent.subjectIds().equals(List.of(job.siteId(), job.id())) || intent.postcondition() != PhysicalPostcondition.RESOURCE_SITE_PREPARED_OBSERVED) {
+        if (!intent.id().equals(job.intentId()) || !intent.roles().equals(PhysicalIntentRoleBinding.sitePreparation(job.siteId(), job.id())) || intent.postcondition() != PhysicalPostcondition.RESOURCE_SITE_PREPARED_OBSERVED) {
             throw new IllegalArgumentException("resource-site preparation intent does not bind its active work");
         }
         return state.preparePhysicalIntent(intent);

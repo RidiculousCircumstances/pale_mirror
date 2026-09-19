@@ -104,7 +104,7 @@ public final class RouteConstructionProcess {
         // to freeze an already admitted construction crew indefinitely.
         RouteConstruction active = activeProject.orElse(null);
         if (active != null && state.physicalIntents().values().stream().anyMatch(intent -> (intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION
-                || intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING) && intent.subjectIds().contains(active.id())
+                || intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING) && intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.PROJECT).equals(active.id())
                 && (intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING))) return List.of(next);
         Optional<RouteConstruction> ready = state.routeConstructions().values().stream().filter(value -> value.status() == RouteConstructionStatus.READY)
                 .sorted(Comparator.comparing(RouteConstruction::id)).findFirst();
@@ -347,15 +347,15 @@ public final class RouteConstructionProcess {
 
     public static FrontierWorldState reducePrepared(FrontierWorldState state, SubjectId subject, PhysicalIntent intent) {
         if (!subject.equals(FrontierRouteNetwork.OWNER) || intent.kind() != PhysicalIntentKind.ROUTE_CONSTRUCTION
-                || !intent.causeSubjectId().equals(FrontierRouteNetwork.OWNER) || intent.subjectIds().size() != 4
-                || !intent.subjectIds().contains(FrontierRouteNetwork.OWNER)) throw new IllegalArgumentException("route construction intent has an invalid owner");
+                || !intent.causeSubjectId().equals(FrontierRouteNetwork.OWNER)
+                || !intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ROUTE).equals(FrontierRouteNetwork.OWNER)) throw new IllegalArgumentException("route construction intent has an invalid owner");
         if (state.physicalIntents().values().stream().anyMatch(existing -> existing.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION
                 && (existing.status() == PhysicalIntentStatus.PREPARED || existing.status() == PhysicalIntentStatus.RUNNING))) throw new IllegalArgumentException("only one route construction cell may be active");
         RouteConstructionStateSupport.validateIntent(state, intent);
         return state.preparePhysicalIntent(intent);
     }
     public static List<ProposedEvent> planTransition(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentTransition transition, long now) {
-        RouteConstruction project = intent.subjectIds().stream().map(state.routeConstructions()::get).filter(java.util.Objects::nonNull).findFirst()
+        RouteConstruction project = java.util.Optional.ofNullable(state.routeConstructions().get(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.PROJECT)))
                 .orElseThrow(() -> new IllegalArgumentException("route construction transition has no project"));
         StrategicTask task = constructionTask(state, project.settlementId(), StrategicTaskStatus.ACTIVE);
         ProposedEvent physical = new ProposedEvent(FrontierRouteNetwork.OWNER, transition);

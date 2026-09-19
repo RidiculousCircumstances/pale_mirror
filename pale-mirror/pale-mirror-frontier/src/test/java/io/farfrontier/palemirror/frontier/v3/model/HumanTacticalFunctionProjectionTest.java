@@ -15,6 +15,7 @@ import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.process.HiveSettlementAssaultProcess;
 import io.farfrontier.palemirror.frontier.v3.process.DefenderEquipmentProcess;
 import io.farfrontier.palemirror.frontier.v3.process.DefenderEquipmentReturnProcess;
+import io.farfrontier.palemirror.frontier.v3.process.PhysicalIntentLifecycleFixture;
 import io.farfrontier.palemirror.frontier.v3.process.StrategicObjectiveProcess;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import org.junit.jupiter.api.Test;
@@ -53,16 +54,18 @@ class HumanTacticalFunctionProjectionTest {
         PhysicalIntent issue = DefenderEquipmentProcess.plan(state, DefenderEquipmentProcess.review(assault, 201L)).stream()
                 .map(ProposedEvent::payload).filter(PhysicalIntentPrepared.class::isInstance).map(PhysicalIntentPrepared.class::cast)
                 .map(PhysicalIntentPrepared::intent).findFirst().orElseThrow();
-        SubjectId militia = issue.subjectIds().get(1);
+        SubjectId militia = issue.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.DEFENDER);
         assertEquals(HumanTacticalFunction.MILITIA, HumanTacticalFunctionProjection.derive(state, militia));
-        state = state.preparePhysicalIntent(issue).transitionPhysicalIntent(issue.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
+        state = PhysicalIntentLifecycleFixture.transition(PhysicalIntentLifecycleFixture.prepare(state, assault.settlementId(), issue),
+                assault.settlementId(), issue, PhysicalIntentStatus.RUNNING, Optional.empty());
         FrontierWorldState runningState = state;
         EquipmentIssueObservation forgedSource = new EquipmentIssueObservation(new PhysicalObservationId("observation:tactical-function-forged"), issue.id(),
                 assault.id(), militia, sword, new InventoryCustody.ContainerSlot(depot, slot + 1));
-        assertThrows(IllegalArgumentException.class, () -> runningState.transitionPhysicalIntent(issue.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(forgedSource)));
+        assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleFixture.transition(runningState, assault.settlementId(), issue,
+                PhysicalIntentStatus.CONFIRMED, Optional.of(forgedSource)));
         EquipmentIssueObservation receipt = new EquipmentIssueObservation(new PhysicalObservationId("observation:tactical-function-issue"), issue.id(),
                 assault.id(), militia, sword, new InventoryCustody.ContainerSlot(depot, slot));
-        state = state.transitionPhysicalIntent(issue.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
+        state = PhysicalIntentLifecycleFixture.transition(state, assault.settlementId(), issue, PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
 
         assertEquals(HumanTacticalFunction.ARMED_DEFENDER, HumanTacticalFunctionProjection.derive(state, militia));
         assertEquals("Northwatch ARMED DEFENDER\nUNIT READY", FrontierSceneLabels.actor(state, militia, false));
@@ -152,14 +155,16 @@ class HumanTacticalFunctionProjectionTest {
                 .map(PhysicalIntentPrepared::intent).findFirst().orElseThrow();
         assertEquals(PhysicalIntentKind.EQUIPMENT_RETURN, returned.kind());
         assertEquals(new io.farfrontier.palemirror.frontier.v3.api.PhysicalContainerSlot(depot, sourceSlot), returned.targetSlot().orElseThrow());
-        state = state.preparePhysicalIntent(returned).transitionPhysicalIntent(returned.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
+        state = PhysicalIntentLifecycleFixture.transition(PhysicalIntentLifecycleFixture.prepare(state, assault.settlementId(), returned),
+                assault.settlementId(), returned, PhysicalIntentStatus.RUNNING, Optional.empty());
         FrontierWorldState running = state;
         EquipmentReturnObservation forged = new EquipmentReturnObservation(new PhysicalObservationId("observation:tactical-return-forged"), returned.id(),
                 assault.id(), resident, sword, new InventoryCustody.ContainerSlot(depot, sourceSlot + 1));
-        assertThrows(IllegalArgumentException.class, () -> running.transitionPhysicalIntent(returned.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(forged)));
+        assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleFixture.transition(running, assault.settlementId(), returned,
+                PhysicalIntentStatus.CONFIRMED, Optional.of(forged)));
         EquipmentReturnObservation receipt = new EquipmentReturnObservation(new PhysicalObservationId("observation:tactical-return"), returned.id(),
                 assault.id(), resident, sword, new InventoryCustody.ContainerSlot(depot, sourceSlot));
-        state = state.transitionPhysicalIntent(returned.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
+        state = PhysicalIntentLifecycleFixture.transition(state, assault.settlementId(), returned, PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
 
         assertEquals(new InventoryCustody.ContainerSlot(depot, sourceSlot), state.inventory().items().get(sword).custody());
         assertEquals(HumanTacticalFunction.CIVILIAN, HumanTacticalFunctionProjection.derive(state, resident));

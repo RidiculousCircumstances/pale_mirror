@@ -113,7 +113,7 @@ public final class MedicalTreatmentProcess {
     public static MedicalEvacuationOperation operationForIntent(FrontierWorldState state, PhysicalIntent intent) {
         if (intent.kind() != PhysicalIntentKind.EXACT_ITEM_CONSUMPTION) throw new IllegalArgumentException("medical treatment has invalid physical intent kind");
         MedicalEvacuationOperation operation = state.humanPopulation().medicalOperations().get(intent.causeSubjectId());
-        if (operation == null || !operation.consumptionIntentId().equals(intent.id()) || !intent.subjectIds().equals(List.of(operation.id(), operation.supplyItemId()))) {
+        if (operation == null || !operation.consumptionIntentId().equals(intent.id()) || !intent.roles().equals(PhysicalIntentRoleBinding.exactConsumption(operation.id(), operation.supplyItemId()))) {
             throw new IllegalArgumentException("medical treatment intent has no active exact operation");
         }
         return operation;

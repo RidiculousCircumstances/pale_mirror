@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.process;
 
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole;
+
 import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalContainerSlot;
@@ -125,7 +127,7 @@ public final class EngineeringEquipmentProcess {
 
     public static boolean pending(FrontierWorldState state, SubjectId projectId, PhysicalIntentKind kind) {
         return state.physicalIntents().values().stream().anyMatch(intent -> intent.kind() == kind && intent.status() != PhysicalIntentStatus.CONFIRMED
-                && !intent.subjectIds().isEmpty() && intent.subjectIds().getFirst().equals(projectId));
+                && intent.roles().require(PhysicalIntentSubjectRole.PROJECT).equals(projectId));
     }
 
     public static boolean returnedOrLost(FrontierWorldState state, EngineeringWorkOrder project) {
@@ -135,7 +137,7 @@ public final class EngineeringEquipmentProcess {
 
     private static boolean reservedForIssue(FrontierWorldState state, SubjectId itemId) {
         return state.physicalIntents().values().stream().anyMatch(intent -> intent.kind() == PhysicalIntentKind.EQUIPMENT_ISSUE
-                && intent.status() != PhysicalIntentStatus.CONFIRMED && intent.subjectIds().contains(itemId));
+                && intent.status() != PhysicalIntentStatus.CONFIRMED && intent.roles().require(PhysicalIntentSubjectRole.EQUIPMENT).equals(itemId));
     }
 
     private static io.farfrontier.palemirror.frontier.v3.model.Settlement settlement(FrontierWorldState state, EngineeringWorkOrder project) {

@@ -210,7 +210,7 @@ public final class HiveNutrientTransferStateSupport {
 
     static FrontierWorldState completeFungiblePhysicalArrival(FrontierWorldState state, PhysicalIntent intent, FungibleCargoHandoffObservation observed,
                                                                Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, PhysicalIntent> intents) {
-        HiveNutrientTransfer transfer = requireUnblocked(state, intent.subjectIds().getFirst());
+        HiveNutrientTransfer transfer = requireUnblocked(state, intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.TRANSFER));
         if (!transfer.fungibleContents() || transfer.phase() != HiveNutrientTransferPhase.ARRIVAL_PENDING
                 || !transfer.endpointIntentId().equals(java.util.Optional.of(intent.id())) || !observed.intentId().equals(intent.id())
                 || !transfer.cargoId().equals(observed.cargoId())) {

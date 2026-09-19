@@ -214,7 +214,7 @@ public final class MarketClearingProcess {
         // nonterminal intent still does: a restart must be able to inspect its
         // exact live cause and subjects before doing anything in Minecraft.
         state.physicalIntents().values().stream().filter(intent -> intent.status() != PhysicalIntentStatus.CONFIRMED)
-                .forEach(intent -> { protectedIds.add(intent.causeSubjectId()); protectedIds.addAll(intent.subjectIds()); });
+                .forEach(intent -> { protectedIds.add(intent.causeSubjectId()); protectedIds.addAll(intent.roles().namedRoles().values()); });
         state.inventory().cargo().values().forEach(cargo -> { protectedIds.add(cargo.id()); protectedIds.addAll(cargo.itemIds()); });
         return Set.copyOf(protectedIds);
     }

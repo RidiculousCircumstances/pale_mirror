@@ -640,7 +640,7 @@ public final class FrontierV3SceneGameTests {
                 FrontierV3SceneExecutor.executeStrike(level, runtime, state(runtime), local,
                         io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
                 PhysicalIntent prepared = onlyStrike(state(runtime));
-                Entity target = level.getEntity(local.members().stream().filter(member -> member.actorId().equals(prepared.subjectIds().getLast())).findFirst().orElseThrow().entityId());
+                Entity target = level.getEntity(local.members().stream().filter(member -> member.actorId().equals(prepared.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.TARGET))).findFirst().orElseThrow().entityId());
                 if (!(target instanceof net.minecraft.world.entity.LivingEntity living)) throw new IllegalStateException("local exact target did not materialize");
                 requireEntityWithinTemplate(helper, templateBounds, living, "the health-observed strike target must remain inside the authored envelope");
                 FixedScalar before = fixed(living.getHealth());

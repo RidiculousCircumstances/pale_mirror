@@ -320,7 +320,8 @@ public final class SettlementProvisionProcess {
 
     private static boolean hasUnconfirmedPhysicalCustody(FrontierWorldState state, SubjectId itemId) {
         return state.physicalIntents().values().stream()
-                .anyMatch(intent -> intent.status() != PhysicalIntentStatus.CONFIRMED && intent.subjectIds().contains(itemId));
+                .anyMatch(intent -> intent.status() != PhysicalIntentStatus.CONFIRMED && intent.kind() == PhysicalIntentKind.EXACT_ITEM_CONSUMPTION
+                        && intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ITEM).equals(itemId));
     }
 
     private static List<ProposedEvent> planFungibleProgress(FrontierWorldState state, ScheduledAction action, SettlementProvision provision,

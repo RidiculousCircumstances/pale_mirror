@@ -14,7 +14,9 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding;
 import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
@@ -39,6 +41,25 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 class ProductionProcessTest {
+    @Test
+    void forgedWalRoleSwapIsRejectedByTheStampedProductionOwnerBeforeReplay() {
+        PreparedProduction prepared = activePhysicalProduction();
+        PhysicalIntent forged = new PhysicalIntent(new PhysicalIntentId("intent:production-forged-wal-role-swap"),
+                PhysicalIntentKind.PRODUCTION_TRANSFORMATION, PhysicalIntentStatus.PREPARED, prepared.job().id(),
+                PhysicalIntentRoleBinding.production(prepared.job().id(), prepared.job().outputItemId(), prepared.job().consumedItemId()),
+                new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0,
+                PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED, PhysicalIntentLifecycleOwner.PRODUCTION_WORK);
+
+        PhysicalIntentPrepared recovered = assertInstanceOf(PhysicalIntentPrepared.class,
+                FrontierWorldRuntimeDefinition.payloadCodecs().decode(new PhysicalIntentPrepared(forged).type(),
+                        FrontierWorldRuntimeDefinition.payloadCodecs().encode(new PhysicalIntentPrepared(forged))));
+
+        assertEquals(forged.roles(), recovered.intent().roles(), "WAL must retain producer-stamped role names exactly");
+        assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleFixture.prepare(
+                prepared.state(), prepared.settlementId(), recovered.intent()),
+                "the production owner must reject a forged input/output role swap before replay admission");
+    }
+
     @Test
     void deathRevokesNewWorkButSettlesAnAlreadyRunningPhysicalTransformationExactlyOnce() {
         PreparedProduction prepared = activePhysicalProduction();

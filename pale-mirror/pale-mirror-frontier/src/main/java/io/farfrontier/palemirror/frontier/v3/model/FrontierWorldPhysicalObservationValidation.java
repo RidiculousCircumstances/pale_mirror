@@ -30,7 +30,7 @@ final class FrontierWorldPhysicalObservationValidation {
                 FrontierCargoValidation.validateObservation(bootstrap, operations, contracts, inventory, intent, cargo);
             } else if (observation instanceof FungibleCargoHandoffObservation cargo) {
                 if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.HIVE_NUTRIENT_ARRIVAL) {
-                    if (intent.subjectIds().size() != 3 || !intent.subjectIds().get(1).equals(cargo.cargoId())) {
+                    if (!intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.CARGO).equals(cargo.cargoId())) {
                         throw new IllegalArgumentException("fungible nutrient arrival receipt has foreign cargo");
                     }
                     continue;
@@ -53,7 +53,7 @@ final class FrontierWorldPhysicalObservationValidation {
                 FungiblePhysicalObservation.bind(inventory.fungibleResources(), account.id(), cargo.authorityEpoch(), cargo.stacks());
             } else if (observation instanceof FungibleResourceConsumedObservation consumed) {
                 if (intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXACT_ITEM_CONSUMPTION
-                        || !intent.subjectIds().contains(consumed.lotId())) throw new IllegalArgumentException("fungible consumption receipt has foreign intent subjects");
+                        || !intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ITEM).equals(consumed.lotId())) throw new IllegalArgumentException("fungible consumption receipt has foreign intent subjects");
                 if (!consumed.remainingStacks().isEmpty()) throw new IllegalArgumentException("completed hive biomass receipt must consume its whole claimed layout");
             } else if (observation instanceof ExplosionObservation explosion) {
                 ExplosionStateSupport.validateReceipt(intent, explosion);
@@ -85,17 +85,17 @@ final class FrontierWorldPhysicalObservationValidation {
                 CargoLoadingStateSupport.validateReceipt(intent, loading);
             } else if (observation instanceof HiveNutrientDepartureObservation departure) {
                 if (intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.HIVE_NUTRIENT_DEPARTURE
-                        || !intent.subjectIds().equals(java.util.List.of(departure.transferId(), departure.cargoId(), departure.itemId()))) {
+                        || !intent.roles().equals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.nutrientDeparture(departure.transferId(), departure.cargoId(), departure.itemId()))) {
                     throw new IllegalArgumentException("hive nutrient departure receipt has foreign exact subjects");
                 }
             } else if (observation instanceof FungibleNutrientDepartureObservation departure) {
                 if (intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.HIVE_NUTRIENT_DEPARTURE
-                        || !intent.subjectIds().equals(java.util.List.of(departure.transferId(), departure.cargoId(), departure.lotId()))) {
+                        || !intent.roles().equals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.nutrientDeparture(departure.transferId(), departure.cargoId(), departure.lotId()))) {
                     throw new IllegalArgumentException("fungible nutrient departure receipt has foreign exact subjects");
                 }
             } else if (observation instanceof HiveNutrientArrivalObservation arrival) {
                 if (intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.HIVE_NUTRIENT_ARRIVAL
-                        || !intent.subjectIds().equals(java.util.List.of(arrival.transferId(), arrival.cargoId(), arrival.itemId()))) {
+                        || !intent.roles().equals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.nutrientArrival(arrival.transferId(), arrival.cargoId(), arrival.itemId()))) {
                     throw new IllegalArgumentException("hive nutrient arrival receipt has foreign exact subjects");
                 }
             } else if (observation instanceof EquipmentIssueObservation issue) {

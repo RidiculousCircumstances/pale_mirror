@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.process;
 
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole;
+
 import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
@@ -59,7 +61,7 @@ public final class DefenderEquipmentReturnProcess {
         SubjectId depot = FrontierWorldState.depotId(assault.settlementId());
         if (state.inventory().surfaces().get(depot) == null || state.inventory().surfaces().get(depot).status() != ContainerSurfaceStatus.ACTIVE) return Optional.empty();
         if (state.physicalIntents().values().stream().anyMatch(intent -> intent.kind() == PhysicalIntentKind.EQUIPMENT_RETURN
-                && intent.status() != PhysicalIntentStatus.CONFIRMED && intent.subjectIds().getFirst().equals(assault.id()))) return Optional.empty();
+                && intent.status() != PhysicalIntentStatus.CONFIRMED && intent.roles().require(PhysicalIntentSubjectRole.PROJECT).equals(assault.id()))) return Optional.empty();
         ExactItemStack item = assault.defenderIds().stream().sorted().flatMap(resident -> state.inventory().actorItems(resident).stream())
                 .filter(value -> value.economicOwnerId().equals(assault.settlementId()))
                 .filter(value -> HumanTacticalFunctionProjection.isGrayboxWeaponKind(value.itemKind()))
@@ -77,7 +79,7 @@ public final class DefenderEquipmentReturnProcess {
 
     private static boolean hasPendingOrReturnable(FrontierWorldState state, SettlementAssault assault) {
         return state.physicalIntents().values().stream().anyMatch(intent -> intent.kind() == PhysicalIntentKind.EQUIPMENT_RETURN
-                        && intent.status() != PhysicalIntentStatus.CONFIRMED && intent.subjectIds().getFirst().equals(assault.id()))
+                        && intent.status() != PhysicalIntentStatus.CONFIRMED && intent.roles().require(PhysicalIntentSubjectRole.PROJECT).equals(assault.id()))
                 || assault.defenderIds().stream().flatMap(resident -> state.inventory().actorItems(resident).stream())
                 .anyMatch(item -> item.economicOwnerId().equals(assault.settlementId())
                         && HumanTacticalFunctionProjection.isGrayboxWeaponKind(item.itemKind()));

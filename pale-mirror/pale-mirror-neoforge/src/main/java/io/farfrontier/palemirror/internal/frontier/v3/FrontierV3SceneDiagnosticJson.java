@@ -45,7 +45,7 @@ final class FrontierV3SceneDiagnosticJson {
         SubjectId engagement = logistics == null ? null : logistics.engagementId().orElse(null);
         var primaryMember = lease.members().getFirst();
         PhysicalIntent explosion = state.physicalIntents().values().stream().filter(value -> value.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXPLOSION)
-                .filter(value -> engagement != null && value.subjectIds().size() == 2 && value.subjectIds().getLast().equals(engagement))
+                .filter(value -> engagement != null && value.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.TARGET).equals(engagement))
                 .sorted(java.util.Comparator.comparing(PhysicalIntent::id)).findFirst().orElse(null);
         SubjectId strikeCause = logistics != null ? logistics.operationId() : assault != null ? assault.assaultId() : null;
         SettlementAssault assaultState = assault == null ? null : state.strategicPlans().settlementAssaults().get(assault.assaultId());
@@ -56,8 +56,8 @@ final class FrontierV3SceneDiagnosticJson {
         long strikeEpoch = strike == null || assaultState == null ? -1L : SettlementAssaultCauseIdentity.epoch(assaultState.id(), strike.causeSubjectId());
         SceneStrikeObservation receipt = strike == null ? null : strike.postconditionObservationId().map(state.physicalObservations()::get)
                 .filter(SceneStrikeObservation.class::isInstance).map(SceneStrikeObservation.class::cast).orElse(null);
-        boolean exactReceipt = receipt != null && receipt.intentId().equals(strike.id()) && receipt.attackerId().equals(strike.subjectIds().getFirst())
-                && receipt.targetId().equals(strike.subjectIds().getLast());
+        boolean exactReceipt = receipt != null && receipt.intentId().equals(strike.id()) && receipt.attackerId().equals(strike.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ATTACKER))
+                && receipt.targetId().equals(strike.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.TARGET));
         boolean healthChanged = exactReceipt && receipt.targetHealthAfter().compareTo(receipt.targetHealthBefore()) < 0;
         String recovery = lease.recoveryEvidence().map(value -> ",\"recoveryMissingActors\":" + FrontierV3DiagnosticJson.strings(value.missingActorIds().stream().map(SubjectId::value).sorted().toList())
                 + ",\"recoveryMissingCarrier\":" + value.missingCargoCarrier()).orElse("");
@@ -77,8 +77,8 @@ final class FrontierV3SceneDiagnosticJson {
                 + "\",\"primaryEntityUuid\":\"" + primaryMember.entityId() + "\",\"explosionStatus\":\"" + (explosion == null ? "NONE" : explosion.status()) + "\""
                 + ",\"strikeStatus\":\"" + (strike == null ? "NONE" : strike.status()) + "\""
                 + ",\"strikeCause\":\"" + FrontierV3DiagnosticJson.quote(strike == null ? "" : strike.causeSubjectId().value())
-                + "\",\"strikeAttacker\":\"" + FrontierV3DiagnosticJson.quote(strike == null ? "" : strike.subjectIds().getFirst().value())
-                + "\",\"strikeTarget\":\"" + FrontierV3DiagnosticJson.quote(strike == null ? "" : strike.subjectIds().getLast().value())
+                + "\",\"strikeAttacker\":\"" + FrontierV3DiagnosticJson.quote(strike == null ? "" : strike.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ATTACKER).value())
+                + "\",\"strikeTarget\":\"" + FrontierV3DiagnosticJson.quote(strike == null ? "" : strike.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.TARGET).value())
                 + "\",\"strikeIntent\":\"" + FrontierV3DiagnosticJson.quote(strike == null ? "" : strike.id().value())
                 + "\",\"strikeReceipt\":\"" + FrontierV3DiagnosticJson.quote(strike == null ? "" : strike.postconditionObservationId().map(value -> value.value()).orElse("")) + "\""
                 + ",\"strikeEpoch\":" + strikeEpoch + ",\"nextStrikeEpoch\":" + (assaultState == null ? -1 : assaultState.nextStrikeEpoch())

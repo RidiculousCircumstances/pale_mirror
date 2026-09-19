@@ -80,7 +80,7 @@ final class FrontierV3ExactItemConsumptionExecutor {
     private static FungibleTarget fungibleTarget(FrontierWorldState state, PhysicalIntent intent) {
         HiveGrowthJob job = state.hiveColony().growthJobs().get(intent.causeSubjectId());
         if (job == null || !(job.inputHold() instanceof HiveGrowthInputHold.FungibleCold held)
-                || !intent.subjectIds().equals(List.of(job.id(), held.itemId()))) return null;
+                || !intent.roles().equals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.exactConsumption(job.id(), held.itemId()))) return null;
         CustodyAccount account = state.inventory().fungibleResources().accounts().get(held.accountId());
         ResourceLot lot = state.inventory().fungibleResources().lots().get(held.itemId());
         if (account == null || lot == null || !(account.custody() instanceof ResourceCustody.Container container)) return null;

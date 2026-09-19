@@ -45,7 +45,12 @@ final class FrontierOperationStateSupport {
         }
         if (state.physicalIntents().values().stream().anyMatch(intent -> intent.status() != PhysicalIntentStatus.CONFIRMED
                 && (intent.causeSubjectId().equals(operation.id()) || intent.causeSubjectId().equals(contract.id())
-                || intent.subjectIds().contains(operation.id()) || intent.subjectIds().contains(contract.id()) || intent.subjectIds().contains(operation.cargoId())))) {
+                || switch (intent.kind()) {
+                    case CARGO_HANDOFF -> intent.roles().equals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.cargoHandoff(operation.id(), operation.cargoId()));
+                    case CARGO_LOADING -> intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.CONTRACT).equals(contract.id())
+                            || intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.CARGO).equals(operation.cargoId());
+                    default -> false;
+                }))) {
             throw new IllegalArgumentException("terminal logistics operation retains an unresolved physical intent");
         }
         return new TerminalLogisticsReceipt(operation.id(), contract.id(), operation.cargoId(), operation.settlementId(), operation.destinationId(),
@@ -86,11 +91,10 @@ final class FrontierOperationStateSupport {
         if (intent.status() != PhysicalIntentStatus.CONFIRMED) return false;
         return switch (intent.kind()) {
             case CARGO_HANDOFF -> intent.causeSubjectId().equals(operation.id())
-                    && intent.subjectIds().equals(java.util.List.of(operation.id(), operation.cargoId()));
+                    && intent.roles().equals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.cargoHandoff(operation.id(), operation.cargoId()));
             case CARGO_LOADING -> intent.causeSubjectId().equals(contract.id())
-                    && intent.subjectIds().size() == 3
-                    && intent.subjectIds().getFirst().equals(contract.id())
-                    && intent.subjectIds().get(1).equals(operation.cargoId());
+                    && intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.CONTRACT).equals(contract.id())
+                    && intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.CARGO).equals(operation.cargoId());
             default -> false;
         };
     }

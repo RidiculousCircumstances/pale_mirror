@@ -106,7 +106,7 @@ final class FrontierV3StructuralRepairExecutor {
         if (loss == null || loss.kind() != io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS
                 || !loss.semanticTarget().equals(intent.semanticTarget())) return null;
         GrayboxCell cell = FrontierGrayboxPlan.intactSemanticCell(state.bootstrap(), state.hiveColony(), state.routeTopology(), intent.causeSubjectId(), raw);
-        SubjectId itemId = intent.subjectIds().stream().filter(id -> !id.equals(intent.causeSubjectId())).findFirst().orElse(null);
+        SubjectId itemId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.MATERIAL);
         ExactItemStack material = itemId == null ? null : state.inventory().items().get(itemId);
         if (cell == null || !cell.semanticTarget().equals(intent.semanticTarget().orElse(null)) || material == null || !material.itemKind().equals(cell.material().repairItemKind())
                 || !(material.custody() instanceof io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.ContainerSlot slot)) return null;
