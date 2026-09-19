@@ -64,12 +64,12 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
                             || !commitment.value().equals(job.consumedItemId())) {
                         throw new IllegalArgumentException("production retirement account does not retain its exact declared relations, worker and input commitment");
                     }
-                    if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED
+                    if (after != before && transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED
                             && (after.productionJobs().containsKey(job.id()) || after.inventory().items().containsKey(job.consumedItemId())
                             || !after.inventory().items().containsKey(job.outputItemId()))) {
                         throw new IllegalArgumentException("production retirement account did not prove the committed input-to-output disposition");
                     }
-                    if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
+                    if (after != before && transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
                             && (!after.productionJobs().containsKey(job.id()) || !after.inventory().items().containsKey(job.consumedItemId()))) {
                         throw new IllegalArgumentException("production retirement account lost its ambiguous worker/input commitment");
                     }

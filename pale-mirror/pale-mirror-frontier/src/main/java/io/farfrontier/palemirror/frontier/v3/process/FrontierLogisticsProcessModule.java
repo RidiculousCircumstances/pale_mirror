@@ -55,7 +55,7 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
                             && !commitment.value().equals(operation.cargoId())) {
                         throw new IllegalArgumentException("route retirement account has a foreign carrier or cargo commitment");
                     }
-                    if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED
+                    if (after != before && transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED
                             && intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_HANDOFF
                             && before.contracts().values().stream().filter(contract -> contract.id().equals(operation.contractId()))
                             .findFirst().map(contract -> after.contracts().get(contract.id()).status() != ContractStatus.DELIVERED).orElse(true)) {

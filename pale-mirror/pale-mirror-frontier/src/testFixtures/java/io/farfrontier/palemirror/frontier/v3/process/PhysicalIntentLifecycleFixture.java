@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalEffectObservation;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;
+import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 
 import java.util.Optional;
 
@@ -23,7 +24,16 @@ public final class PhysicalIntentLifecycleFixture {
         if (current == null || !current.lifecycleOwner().equals(intent.lifecycleOwner())) {
             throw new IllegalArgumentException("fixture transition has no exact owner-stamped intent");
         }
-        return FrontierWorldProcessCatalog.physicalLifecycles().reduceTransition(state, subject, current,
-                new PhysicalIntentTransition(intent.id(), status, observation));
+        PhysicalIntentTransition requested = new PhysicalIntentTransition(intent.id(), status, observation);
+        CommandPlan plan = FrontierWorldProcessCatalog.physicalLifecycles().planTransition(state, null, current, requested);
+        if (!(plan instanceof CommandPlan.Accepted accepted)) {
+            throw new IllegalArgumentException("fixture transition is rejected by its exact lifecycle owner");
+        }
+        PhysicalIntentTransition accounted = accepted.events().stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                .filter(PhysicalIntentTransition.class::isInstance).map(PhysicalIntentTransition.class::cast)
+                .filter(candidate -> candidate.intentId().equals(intent.id()) && candidate.status() == status).reduce((left, right) -> {
+                    throw new IllegalArgumentException("fixture transition has duplicate terminal owner events");
+                }).orElseThrow(() -> new IllegalArgumentException("fixture transition lacks its terminal owner event"));
+        return FrontierWorldProcessCatalog.physicalLifecycles().reduceTransition(state, subject, current, accounted);
     }
 }
