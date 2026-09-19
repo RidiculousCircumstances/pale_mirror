@@ -43,12 +43,70 @@ final class FrontierInfrastructureProcessModule implements FrontierWorldProcessM
     private static PhysicalIntentRetirementAccount retirementAccount(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner owner) {
         return PhysicalIntentRetirementAccount.declared(owner,
                 java.util.EnumSet.allOf(PhysicalIntentRetirementAccount.Dimension.class),
-                (before, command, intent, transition) -> PhysicalIntentRetirementAccount.checkedNone(owner, command, intent, transition),
+                (before, command, intent, transition) -> retirementFacts(before, command, intent, transition, owner),
                 (before, intent, transition, binding) -> PhysicalIntentRetirementAccount.requireSameDeclaredAccount(binding,
-                        PhysicalIntentRetirementAccount.checkedNoneWithContinuation(owner, binding.continuation(), intent, transition)),
+                        retirementFacts(before, binding.continuation(), intent, transition, owner)),
                 (before, after, intent, transition, binding) -> {
                     if (intent.lifecycleOwner() != owner) throw new IllegalArgumentException("engineering retirement account owner mismatch");
+                    if (after == before) return;
+                    if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) return;
+                    if (binding.commitment() instanceof PhysicalIntentRetirementAccount.Exact<SubjectId> exact
+                            && (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_ISSUE
+                            || intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_RETURN)
+                            && !after.inventory().items().containsKey(exact.value())) {
+                        throw new IllegalArgumentException("engineering retirement lost its exact equipment commitment");
+                    }
                 });
+    }
+
+    private static PhysicalIntentRetirementAccount.Binding retirementFacts(FrontierWorldState state, FrontierCommand command,
+            io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent, PhysicalIntentTransition transition,
+            io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner owner) {
+        return retirementFacts(state, command == null
+                ? new PhysicalIntentRetirementAccount.CheckedNone<io.farfrontier.palemirror.frontier.v3.api.ScheduleId>(PhysicalIntentRetirementProof.Absence.NO_ENGINE_CONTINUATION)
+                : command.scheduleBinding().<PhysicalIntentRetirementAccount.Obligation<io.farfrontier.palemirror.frontier.v3.api.ScheduleId>>map(value -> new PhysicalIntentRetirementAccount.Exact<>(value.action().id()))
+                        .orElseGet(() -> new PhysicalIntentRetirementAccount.CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_ENGINE_CONTINUATION)), intent, transition, owner);
+    }
+
+    private static PhysicalIntentRetirementAccount.Binding retirementFacts(FrontierWorldState state,
+            PhysicalIntentRetirementAccount.Obligation<io.farfrontier.palemirror.frontier.v3.api.ScheduleId> continuation,
+            io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent, PhysicalIntentTransition transition,
+            io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner owner) {
+        PhysicalIntentRetirementAccount.Obligation<SubjectId> carrier;
+        PhysicalIntentRetirementAccount.Obligation<SubjectId> commitment = new PhysicalIntentRetirementAccount.CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_RESOURCE_COMMITMENT);
+        switch (intent.kind()) {
+            case STRUCTURAL_REPAIR -> {
+                StructuralRepairProcess.repairOwner(state, intent.semanticTarget().orElseThrow());
+                carrier = new PhysicalIntentRetirementAccount.Exact<>(intent.causeSubjectId());
+            }
+            case ROUTE_CONSTRUCTION -> {
+                RouteConstructionStateSupport.validateIntent(state, intent);
+                carrier = new PhysicalIntentRetirementAccount.Exact<>(intent.causeSubjectId());
+            }
+            case ROUTE_MAINTENANCE -> {
+                RouteMaintenanceStateSupport.validateWorkIntent(state, intent);
+                carrier = new PhysicalIntentRetirementAccount.Exact<>(intent.causeSubjectId());
+            }
+            case ROUTE_CONSTRUCTION_MATERIAL_LOADING, ROUTE_MAINTENANCE_MATERIAL_LOADING -> {
+                if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING) RouteConstructionStateSupport.validateMaterialLoadingIntent(state, intent);
+                else RouteMaintenanceStateSupport.validateMaterialLoadingIntent(state, intent);
+                carrier = new PhysicalIntentRetirementAccount.Exact<>(intent.subjectIds().get(1));
+                commitment = new PhysicalIntentRetirementAccount.Exact<>(intent.subjectIds().getLast());
+            }
+            case EQUIPMENT_ISSUE, EQUIPMENT_RETURN -> {
+                if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_ISSUE) EquipmentIssueStateSupport.validateIntent(state, intent);
+                else EquipmentReturnStateSupport.validateIntent(state, intent);
+                carrier = new PhysicalIntentRetirementAccount.Exact<>(intent.subjectIds().get(1));
+                commitment = new PhysicalIntentRetirementAccount.Exact<>(intent.subjectIds().get(2));
+            }
+            default -> throw new IllegalArgumentException("engineering retirement has undeclared intent kind");
+        }
+        // Engineering has no independent REL projection for these retained work aggregates;
+        // each switch arm above executes its owner-specific aggregate validation.
+        return new PhysicalIntentRetirementAccount.Binding(owner, intent.id(),
+                new PhysicalIntentRetirementAccount.CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_APPLICABLE_RELATION), continuation,
+                carrier, commitment, transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
+                        ? PhysicalIntentRetirementAccount.LateDisposition.RETAIN_AMBIGUOUS_RECOVERY : PhysicalIntentRetirementAccount.LateDisposition.REJECT_STALE_ONCE);
     }
 
     private static CommandPlan planEngineeringPreparation(FrontierWorldState state, FrontierCommand command, PhysicalIntentPrepared prepared) {

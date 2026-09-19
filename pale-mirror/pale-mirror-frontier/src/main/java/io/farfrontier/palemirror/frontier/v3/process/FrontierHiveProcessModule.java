@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
@@ -150,6 +151,25 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
                 FrontierHiveProcessModule::verifyRetirementBinding,
                 (before, after, intent, transition, binding) -> {
                     if (intent.lifecycleOwner() != owner) throw new IllegalArgumentException("hive retirement account owner mismatch");
+                    if (after == before) return;
+                    if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) return;
+                    if (intent.lifecycleOwner() == PhysicalIntentLifecycleOwner.HIVE_GROWTH) {
+                        SubjectId item = ((PhysicalIntentRetirementAccount.Exact<SubjectId>) binding.commitment()).value();
+                        if (after.inventory().items().containsKey(item)) throw new IllegalArgumentException("hive growth did not consume its exact input");
+                    }
+                    if (intent.lifecycleOwner() == PhysicalIntentLifecycleOwner.HIVE_NUTRIENT_TRANSFER) {
+                        HiveNutrientTransfer beforeTransfer = transfer(before, intent);
+                        HiveNutrientTransfer afterTransfer = after.hiveColony().nutrientTransfers().get(beforeTransfer.id());
+                        if (afterTransfer == null || afterTransfer.phase() == beforeTransfer.phase()) {
+                            throw new IllegalArgumentException("hive nutrient retirement did not advance its exact transfer");
+                        }
+                    }
+                    if (intent.lifecycleOwner() == PhysicalIntentLifecycleOwner.HIVE_MOBILIZATION
+                            && !before.hiveColony().mobilizations().equals(after.hiveColony().mobilizations())) {
+                        throw new IllegalArgumentException("hive explosion retirement changed a mobilization roster outside its exact effect boundary");
+                    }
+                    if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE
+                            && transition.observation().isEmpty()) throw new IllegalArgumentException("scene strike retirement lacks exact effect evidence");
                 });
     }
 
@@ -159,24 +179,69 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
         var continuation = command == null ? new PhysicalIntentRetirementAccount.CheckedNone<io.farfrontier.palemirror.frontier.v3.api.ScheduleId>(io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentRetirementProof.Absence.NO_ENGINE_CONTINUATION)
                 : command.scheduleBinding().<PhysicalIntentRetirementAccount.Obligation<io.farfrontier.palemirror.frontier.v3.api.ScheduleId>>map(binding -> new PhysicalIntentRetirementAccount.Exact<>(binding.action().id()))
                 .orElseGet(() -> new PhysicalIntentRetirementAccount.CheckedNone<>(io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentRetirementProof.Absence.NO_ENGINE_CONTINUATION));
-        boolean mobilizationExplosion = intent.lifecycleOwner() == PhysicalIntentLifecycleOwner.HIVE_MOBILIZATION
-                && intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXPLOSION;
-        return new PhysicalIntentRetirementAccount.Binding(intent.lifecycleOwner(), intent.id(), new PhysicalIntentRetirementAccount.CheckedNone<>(io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentRetirementProof.Absence.NO_APPLICABLE_RELATION), continuation,
-                new PhysicalIntentRetirementAccount.CheckedNone<>(io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentRetirementProof.Absence.NO_LEASE_OR_CARRIER),
-                new PhysicalIntentRetirementAccount.CheckedNone<>(io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentRetirementProof.Absence.NO_RESOURCE_COMMITMENT),
-                transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
-                        ? PhysicalIntentRetirementAccount.LateDisposition.RETAIN_AMBIGUOUS_RECOVERY
-                        : PhysicalIntentRetirementAccount.LateDisposition.REJECT_STALE_ONCE);
+        return retirementFacts(before, continuation, intent, transition);
     }
 
     private static void verifyRetirementBinding(FrontierWorldState before, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
                                                 PhysicalIntentTransition transition, PhysicalIntentRetirementAccount.Binding binding) {
-        PhysicalIntentRetirementAccount.requireSameDeclaredAccount(binding, new PhysicalIntentRetirementAccount.Binding(
-                intent.lifecycleOwner(), intent.id(), new PhysicalIntentRetirementAccount.CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_APPLICABLE_RELATION),
-                binding.continuation(), new PhysicalIntentRetirementAccount.CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_LEASE_OR_CARRIER),
-                new PhysicalIntentRetirementAccount.CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_RESOURCE_COMMITMENT),
+        PhysicalIntentRetirementAccount.requireSameDeclaredAccount(binding,
+                retirementFacts(before, binding.continuation(), intent, transition));
+    }
+
+    /** Each hive endpoint names its authoritative aggregate directly; no roster/cargo is inferred. */
+    private static PhysicalIntentRetirementAccount.Binding retirementFacts(FrontierWorldState state,
+            PhysicalIntentRetirementAccount.Obligation<io.farfrontier.palemirror.frontier.v3.api.ScheduleId> continuation,
+            io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent, PhysicalIntentTransition transition) {
+        var noneRelations = new PhysicalIntentRetirementAccount.CheckedNone<List<FrontierDomainRelationships.Edge>>(PhysicalIntentRetirementProof.Absence.NO_APPLICABLE_RELATION);
+        var noneSubject = new PhysicalIntentRetirementAccount.CheckedNone<io.farfrontier.palemirror.frontier.v3.api.SubjectId>(PhysicalIntentRetirementProof.Absence.NO_LEASE_OR_CARRIER);
+        PhysicalIntentRetirementAccount.Obligation<List<FrontierDomainRelationships.Edge>> relations = noneRelations;
+        PhysicalIntentRetirementAccount.Obligation<io.farfrontier.palemirror.frontier.v3.api.SubjectId> carrier = noneSubject;
+        PhysicalIntentRetirementAccount.Obligation<io.farfrontier.palemirror.frontier.v3.api.SubjectId> commitment = new PhysicalIntentRetirementAccount.CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_RESOURCE_COMMITMENT);
+        switch (intent.lifecycleOwner()) {
+            case HIVE_MOBILIZATION -> {
+                if (intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXPLOSION) throw new IllegalArgumentException("hive mobilization has foreign intent kind");
+                // An explosion is an effect-only endpoint, but it is still pinned to the one hive.
+                ExplosionStateSupport.validateIntent(state, intent);
+                carrier = new PhysicalIntentRetirementAccount.Exact<>(state.bootstrap().hive().id());
+            }
+            case HIVE_NUTRIENT_TRANSFER -> {
+                HiveNutrientTransfer transfer = transfer(state, intent);
+                carrier = new PhysicalIntentRetirementAccount.Exact<>(transfer.cargoId());
+                commitment = new PhysicalIntentRetirementAccount.Exact<>(transfer.itemId());
+            }
+            case HIVE_GROWTH -> {
+                HiveGrowthJob job = state.hiveColony().growthJobs().get(intent.causeSubjectId());
+                if (job == null || !job.consumptionIntentId().equals(intent.id())) throw new IllegalArgumentException("hive growth retirement lacks its exact job");
+                if (!state.inventory().items().containsKey(job.consumedItemId())) throw new IllegalArgumentException("hive growth retirement lost its exact input");
+                carrier = new PhysicalIntentRetirementAccount.Exact<>(job.nestId());
+                commitment = new PhysicalIntentRetirementAccount.Exact<>(job.consumedItemId());
+            }
+            case ROUTE_ENGAGEMENT, SETTLEMENT_ASSAULT -> {
+                if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE) {
+                    SceneStrikeStateSupport.validateIntent(state, intent);
+                    carrier = new PhysicalIntentRetirementAccount.Exact<>(intent.causeSubjectId());
+                    commitment = new PhysicalIntentRetirementAccount.Exact<>(intent.subjectIds().getFirst());
+                } else {
+                    SubjectId item = intent.subjectIds().get(2);
+                    if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_ISSUE) EquipmentIssueStateSupport.validateIntent(state, intent);
+                    else if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_RETURN) EquipmentReturnStateSupport.validateIntent(state, intent);
+                    else throw new IllegalArgumentException("settlement assault has foreign intent kind");
+                    carrier = new PhysicalIntentRetirementAccount.Exact<>(intent.subjectIds().get(1)); commitment = new PhysicalIntentRetirementAccount.Exact<>(item);
+                }
+            }
+            default -> throw new IllegalArgumentException("hive retirement account received foreign owner");
+        }
+        return new PhysicalIntentRetirementAccount.Binding(intent.lifecycleOwner(), intent.id(), relations, continuation, carrier, commitment,
                 transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
-                        ? PhysicalIntentRetirementAccount.LateDisposition.RETAIN_AMBIGUOUS_RECOVERY : PhysicalIntentRetirementAccount.LateDisposition.REJECT_STALE_ONCE));
+                        ? PhysicalIntentRetirementAccount.LateDisposition.RETAIN_AMBIGUOUS_RECOVERY : PhysicalIntentRetirementAccount.LateDisposition.REJECT_STALE_ONCE);
+    }
+
+    private static HiveNutrientTransfer transfer(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent) {
+        HiveNutrientTransfer transfer = state.hiveColony().nutrientTransfers().get(intent.causeSubjectId());
+        if (transfer == null || !transfer.endpointIntentId().filter(intent.id()::equals).isPresent()) {
+            throw new IllegalArgumentException("hive nutrient retirement lacks its exact transfer");
+        }
+        return transfer;
     }
 
     private static CommandPlan planAssaultPreparation(FrontierWorldState state, PhysicalIntentPrepared prepared) {

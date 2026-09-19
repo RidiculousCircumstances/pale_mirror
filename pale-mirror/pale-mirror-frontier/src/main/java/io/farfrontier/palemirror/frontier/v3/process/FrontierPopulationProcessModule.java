@@ -117,12 +117,73 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
     private static PhysicalIntentRetirementAccount retirementAccount(PhysicalIntentLifecycleOwner owner) {
         return PhysicalIntentRetirementAccount.declared(owner,
                 java.util.EnumSet.allOf(PhysicalIntentRetirementAccount.Dimension.class),
-                (before, command, intent, transition) -> PhysicalIntentRetirementAccount.checkedNone(owner, command, intent, transition),
+                (before, command, intent, transition) -> retirementFacts(before, command, intent, transition, owner),
                 (before, intent, transition, binding) -> PhysicalIntentRetirementAccount.requireSameDeclaredAccount(binding,
-                        PhysicalIntentRetirementAccount.checkedNoneWithContinuation(owner, binding.continuation(), intent, transition)),
+                        retirementFacts(before, binding.continuation(), intent, transition, owner)),
                 (before, after, intent, transition, binding) -> {
                     if (intent.lifecycleOwner() != owner) throw new IllegalArgumentException("population retirement account owner mismatch");
+                    SubjectId itemId = populationCommitment(before, intent, owner);
+                    ExactItemStack beforeItem = before.inventory().items().get(itemId);
+                    if (beforeItem == null) throw new IllegalArgumentException("population retirement account has no exact pre-state item commitment");
+                    if (after != before && transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED) {
+                        ExactItemStack afterItem = after.inventory().items().get(itemId);
+                        if (afterItem != null && afterItem.count() >= beforeItem.count()) {
+                            throw new IllegalArgumentException("population retirement account did not consume its exact committed item");
+                        }
+                    }
+                    if (after != before && transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
+                            && !beforeItem.equals(after.inventory().items().get(itemId))) {
+                        throw new IllegalArgumentException("population retirement account changed its exact item across an ambiguous recovery");
+                    }
                 });
+    }
+
+    private static PhysicalIntentRetirementAccount.Binding retirementFacts(FrontierWorldState state, FrontierCommand command,
+                                                                            io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                                            PhysicalIntentTransition transition, PhysicalIntentLifecycleOwner owner) {
+        var continuation = command == null ? new PhysicalIntentRetirementAccount.CheckedNone<io.farfrontier.palemirror.frontier.v3.api.ScheduleId>(PhysicalIntentRetirementProof.Absence.NO_ENGINE_CONTINUATION)
+                : command.scheduleBinding().<PhysicalIntentRetirementAccount.Obligation<io.farfrontier.palemirror.frontier.v3.api.ScheduleId>>map(bound -> new PhysicalIntentRetirementAccount.Exact<>(bound.action().id()))
+                .orElseGet(() -> new PhysicalIntentRetirementAccount.CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_ENGINE_CONTINUATION));
+        return retirementFacts(state, continuation, intent, transition, owner);
+    }
+
+    private static PhysicalIntentRetirementAccount.Binding retirementFacts(FrontierWorldState state,
+                                                                            PhysicalIntentRetirementAccount.Obligation<io.farfrontier.palemirror.frontier.v3.api.ScheduleId> continuation,
+                                                                            io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                                            PhysicalIntentTransition transition, PhysicalIntentLifecycleOwner owner) {
+        return new PhysicalIntentRetirementAccount.Binding(owner, intent.id(),
+                new PhysicalIntentRetirementAccount.CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_APPLICABLE_RELATION), continuation,
+                new PhysicalIntentRetirementAccount.CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_LEASE_OR_CARRIER),
+                new PhysicalIntentRetirementAccount.Exact<>(populationCommitment(state, intent, owner)), lateDisposition(transition));
+    }
+
+    /** Each exact-consumption owner names its item in its own retained aggregate; no subject-list search is authority. */
+    private static SubjectId populationCommitment(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                  PhysicalIntentLifecycleOwner owner) {
+        return switch (owner) {
+            case POPULATION_MIGRATION -> {
+                ResidentBirthJob birth = state.humanPopulation().birthJobs().get(intent.causeSubjectId());
+                if (birth == null || !birth.consumptionIntentId().equals(intent.id())) throw new IllegalArgumentException("birth retirement has no exact retained permit");
+                yield birth.foodItemId();
+            }
+            case MEDICAL_TREATMENT -> {
+                MedicalEvacuationOperation medical = state.humanPopulation().medicalOperations().get(intent.causeSubjectId());
+                if (medical == null || !medical.consumptionIntentId().equals(intent.id())) throw new IllegalArgumentException("medical retirement has no exact retained operation");
+                yield medical.supplyItemId();
+            }
+            case SETTLEMENT_PROVISION -> {
+                SettlementProvision provision = state.humanPopulation().provisions().get(intent.causeSubjectId());
+                if (provision == null || provision.activeIntentId().filter(intent.id()::equals).isEmpty()) throw new IllegalArgumentException("provision retirement has no exact retained allocation");
+                yield provision.currentOrActiveAllocation().itemId();
+            }
+            default -> throw new IllegalArgumentException("population retirement owner has no exact-consumption contract");
+        };
+    }
+
+    private static PhysicalIntentRetirementAccount.LateDisposition lateDisposition(PhysicalIntentTransition transition) {
+        return transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
+                ? PhysicalIntentRetirementAccount.LateDisposition.RETAIN_AMBIGUOUS_RECOVERY
+                : PhysicalIntentRetirementAccount.LateDisposition.REJECT_STALE_ONCE;
     }
 
     /** Population-owned exact-consumption terminal reduction; no aggregate kind dispatch participates. */

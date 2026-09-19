@@ -171,6 +171,24 @@ class PhysicalIntentLifecycleCompositionTest {
     }
 
     @Test
+    void declaredOwnerCannotCloseByRoundTrippingAGenericAllNoneAccount() {
+        PhysicalIntentLifecycleOwner owner = PhysicalIntentLifecycleOwner.RESOURCE_SITE_PREPARATION;
+        PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:generic-none"), PhysicalIntentKind.RESOURCE_SITE_PREPARATION,
+                PhysicalIntentStatus.RUNNING, new SubjectId("site:generic-none"), List.of(new SubjectId("site:generic-none"), new SubjectId("job:generic-none")),
+                new FixedPosition(FixedScalar.ZERO, FixedScalar.whole(64), FixedScalar.ZERO), 0,
+                PhysicalPostcondition.RESOURCE_SITE_PREPARED_OBSERVED, owner);
+        PhysicalIntentTransition terminal = new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, java.util.Optional.empty());
+        PhysicalIntentRetirementAccount generic = PhysicalIntentRetirementAccount.declared(owner,
+                java.util.EnumSet.allOf(PhysicalIntentRetirementAccount.Dimension.class),
+                (before, command, candidate, transition) -> PhysicalIntentRetirementAccount.checkedNone(owner, command, candidate, transition),
+                (before, candidate, transition, binding) -> PhysicalIntentRetirementAccount.requireSameDeclaredAccount(binding,
+                        PhysicalIntentRetirementAccount.checkedNoneWithContinuation(owner, binding.continuation(), candidate, transition)),
+                (before, after, candidate, transition, binding) -> { });
+        assertThrows(IllegalArgumentException.class, () -> generic.verifyPlan(null, null, intent, terminal,
+                new CommandPlan.Accepted(List.of(new io.farfrontier.palemirror.frontier.v3.api.ProposedEvent(intent.causeSubjectId(), terminal)))));
+    }
+
+    @Test
     void replayAccountEqualityRejectsAChangedEngineScheduleDisposition() {
         PhysicalIntentLifecycleOwner owner = PhysicalIntentLifecycleOwner.RESOURCE_SITE_PREPARATION;
         PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:replay-schedule"),
@@ -264,9 +282,22 @@ class PhysicalIntentLifecycleCompositionTest {
     private static PhysicalIntentRetirementAccount account(PhysicalIntentLifecycleOwner owner) {
         return PhysicalIntentRetirementAccount.declared(owner,
                 java.util.EnumSet.allOf(PhysicalIntentRetirementAccount.Dimension.class),
-                (before, command, intent, transition) -> PhysicalIntentRetirementAccount.checkedNone(owner, command, intent, transition),
+                (before, command, intent, transition) -> new PhysicalIntentRetirementAccount.Binding(owner, intent.id(),
+                        new PhysicalIntentRetirementAccount.CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_APPLICABLE_RELATION),
+                        command == null ? new PhysicalIntentRetirementAccount.CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_ENGINE_CONTINUATION)
+                                : command.scheduleBinding().<PhysicalIntentRetirementAccount.Obligation<ScheduleId>>map(value -> new PhysicalIntentRetirementAccount.Exact<>(value.action().id()))
+                                        .orElseGet(() -> new PhysicalIntentRetirementAccount.CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_ENGINE_CONTINUATION)),
+                        new PhysicalIntentRetirementAccount.Exact<>(intent.causeSubjectId()),
+                        new PhysicalIntentRetirementAccount.CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_RESOURCE_COMMITMENT),
+                        transition.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART ? PhysicalIntentRetirementAccount.LateDisposition.RETAIN_AMBIGUOUS_RECOVERY
+                                : PhysicalIntentRetirementAccount.LateDisposition.REJECT_STALE_ONCE),
                 (before, intent, transition, binding) -> PhysicalIntentRetirementAccount.requireSameDeclaredAccount(binding,
-                        PhysicalIntentRetirementAccount.checkedNoneWithContinuation(owner, binding.continuation(), intent, transition)),
+                        new PhysicalIntentRetirementAccount.Binding(owner, intent.id(),
+                                new PhysicalIntentRetirementAccount.CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_APPLICABLE_RELATION), binding.continuation(),
+                                new PhysicalIntentRetirementAccount.Exact<>(intent.causeSubjectId()),
+                                new PhysicalIntentRetirementAccount.CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_RESOURCE_COMMITMENT),
+                                transition.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART ? PhysicalIntentRetirementAccount.LateDisposition.RETAIN_AMBIGUOUS_RECOVERY
+                                        : PhysicalIntentRetirementAccount.LateDisposition.REJECT_STALE_ONCE)),
                 (before, after, intent, transition, binding) -> {
                     if (intent.lifecycleOwner() != owner) throw new IllegalArgumentException("test owner mismatch");
                 });

@@ -62,8 +62,8 @@ public final class FrontierWorldStateTransitionValidator implements StateValidat
     private static void validateSubject(PhysicalIntentRetirementProof.SubjectObligation subject,
                                         PhysicalIntentRetirementProof.RelationObligation relations, String dimension) {
         if (subject instanceof PhysicalIntentRetirementProof.ExactSubject exact
-                && (!(relations instanceof PhysicalIntentRetirementProof.ExactRelations edges)
-                || edges.value().stream().noneMatch(edge -> endpoint(edge.owner(), exact.value()) || endpoint(edge.source(), exact.value()) || endpoint(edge.target(), exact.value())))) {
+                && relations instanceof PhysicalIntentRetirementProof.ExactRelations edges
+                && edges.value().stream().noneMatch(edge -> endpoint(edge.owner(), exact.value()) || endpoint(edge.source(), exact.value()) || endpoint(edge.target(), exact.value()))) {
             throw new IllegalArgumentException("retirement proof " + dimension + " lacks its exact relation account");
         }
     }

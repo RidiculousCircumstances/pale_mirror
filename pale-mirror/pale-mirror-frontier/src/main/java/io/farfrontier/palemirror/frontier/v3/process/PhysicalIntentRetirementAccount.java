@@ -177,6 +177,10 @@ interface PhysicalIntentRetirementAccount {
                 if (binding.owner() != owner || !binding.intentId().equals(intent.id())) {
                     throw new IllegalArgumentException("retirement account factory returned a mismatched owner or intent");
                 }
+                if (binding.relations() instanceof CheckedNone<?> && binding.leaseOrCarrier() instanceof CheckedNone<?>
+                        && binding.commitment() instanceof CheckedNone<?>) {
+                    throw new IllegalArgumentException("physical lifecycle owners may not retire by round-tripping a generic all-none account");
+                }
                 return binding;
             }
         };
@@ -276,7 +280,11 @@ interface PhysicalIntentRetirementAccount {
     }
 
     private static void validateObligation(Obligation<SubjectId> obligation, List<FrontierDomainRelationships.Edge> relations, String dimension) {
-        if (obligation instanceof Exact<SubjectId> exact && relations.stream().noneMatch(edge -> endpointIs(edge, exact.value()))) {
+        // Some current physical owners retain an exact item/custody fact without a REL edge.
+        // Their family-local BindingCheck must prove that authoritative aggregate fact; when a
+        // family does declare relations, an exact subject must still be one of those edges.
+        if (obligation instanceof Exact<SubjectId> exact && !relations.isEmpty()
+                && relations.stream().noneMatch(edge -> endpointIs(edge, exact.value()))) {
             throw new IllegalArgumentException("retirement account " + dimension + " is not bound by one of its exact relations");
         }
     }

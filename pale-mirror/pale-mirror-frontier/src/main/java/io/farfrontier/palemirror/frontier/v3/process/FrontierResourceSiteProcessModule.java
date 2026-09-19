@@ -43,12 +43,77 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
     private static PhysicalIntentRetirementAccount retirementAccount(PhysicalIntentLifecycleOwner owner) {
         return PhysicalIntentRetirementAccount.declared(owner,
                 java.util.EnumSet.allOf(PhysicalIntentRetirementAccount.Dimension.class),
-                (before, command, intent, transition) -> PhysicalIntentRetirementAccount.checkedNone(owner, command, intent, transition),
+                (before, command, intent, transition) -> retirementFacts(before, command, intent, transition, owner),
                 (before, intent, transition, binding) -> PhysicalIntentRetirementAccount.requireSameDeclaredAccount(binding,
-                        PhysicalIntentRetirementAccount.checkedNoneWithContinuation(owner, binding.continuation(), intent, transition)),
+                        retirementFacts(before, binding.continuation(), intent, transition, owner)),
                 (before, after, intent, transition, binding) -> {
                     if (intent.lifecycleOwner() != owner) throw new IllegalArgumentException("resource-site retirement account owner mismatch");
+                    if (owner == PhysicalIntentLifecycleOwner.RESOURCE_SITE_HARVEST) {
+                        ResourceSiteHarvestJob job = harvestJob(before, intent);
+                        if (after != before && transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED
+                                && after.inventory().items().get(job.outputItemId()) == null) {
+                            throw new IllegalArgumentException("harvest retirement account did not retain its exact output outcome");
+                        }
+                    } else {
+                        preparation(before, intent);
+                    }
                 });
+    }
+
+    private static PhysicalIntentRetirementAccount.Binding retirementFacts(FrontierWorldState state, FrontierCommand command,
+                                                                            io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                                            PhysicalIntentTransition transition, PhysicalIntentLifecycleOwner owner) {
+        var continuation = command == null ? new PhysicalIntentRetirementAccount.CheckedNone<io.farfrontier.palemirror.frontier.v3.api.ScheduleId>(PhysicalIntentRetirementProof.Absence.NO_ENGINE_CONTINUATION)
+                : command.scheduleBinding().<PhysicalIntentRetirementAccount.Obligation<io.farfrontier.palemirror.frontier.v3.api.ScheduleId>>map(bound -> new PhysicalIntentRetirementAccount.Exact<>(bound.action().id()))
+                .orElseGet(() -> new PhysicalIntentRetirementAccount.CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_ENGINE_CONTINUATION));
+        return retirementFacts(state, continuation, intent, transition, owner);
+    }
+
+    private static PhysicalIntentRetirementAccount.Binding retirementFacts(FrontierWorldState state,
+                                                                            PhysicalIntentRetirementAccount.Obligation<io.farfrontier.palemirror.frontier.v3.api.ScheduleId> continuation,
+                                                                            io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                                            PhysicalIntentTransition transition, PhysicalIntentLifecycleOwner owner) {
+        if (owner == PhysicalIntentLifecycleOwner.RESOURCE_SITE_PREPARATION) {
+            ResourceSitePreparationJob job = preparation(state, intent);
+            return new PhysicalIntentRetirementAccount.Binding(owner, intent.id(),
+                    new PhysicalIntentRetirementAccount.CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_APPLICABLE_RELATION), continuation,
+                    new PhysicalIntentRetirementAccount.Exact<>(job.id()),
+                    new PhysicalIntentRetirementAccount.CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_RESOURCE_COMMITMENT), lateDisposition(transition));
+        }
+        ResourceSiteHarvestJob job = harvestJob(state, intent);
+        FrontierDomainRelationships.SubjectEndpoint site = new FrontierDomainRelationships.SubjectEndpoint(FrontierDomainRelationships.EntityKind.RESOURCE_SITE, job.siteId());
+        FrontierDomainRelationships.SubjectEndpoint harvest = new FrontierDomainRelationships.SubjectEndpoint(FrontierDomainRelationships.EntityKind.RESOURCE_HARVEST_JOB, job.id());
+        List<FrontierDomainRelationships.Edge> edges = FrontierDomainRelationships.view(state).edges().stream()
+                .filter(edge -> edge.owner().equals(site) && edge.kind() == FrontierDomainRelationships.Kind.HARVEST_SITE
+                        || edge.owner().equals(harvest) && (edge.kind() == FrontierDomainRelationships.Kind.HARVEST_TASK
+                        || edge.kind() == FrontierDomainRelationships.Kind.HARVEST_WORKER || edge.kind() == FrontierDomainRelationships.Kind.HARVEST_OUTPUT))
+                .toList();
+        if (edges.size() != 4) throw new IllegalArgumentException("harvest retirement account lacks its exact site/task/worker/output relations");
+        return new PhysicalIntentRetirementAccount.Binding(owner, intent.id(), new PhysicalIntentRetirementAccount.Exact<>(edges), continuation,
+                new PhysicalIntentRetirementAccount.Exact<>(job.workerId()), new PhysicalIntentRetirementAccount.Exact<>(job.outputItemId()), lateDisposition(transition));
+    }
+
+    private static ResourceSiteHarvestJob harvestJob(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent) {
+        ResourceSiteLifecycle lifecycle = state.resourceSites().sites().get(intent.causeSubjectId());
+        ResourceSiteHarvestJob job = lifecycle == null ? null : lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
+                .map(ResourceSiteHarvestJob.class::cast).orElse(null);
+        if (job == null || !job.intentId().equals(intent.id())) throw new IllegalArgumentException("harvest retirement account has no exact retained harvest job");
+        return job;
+    }
+
+    private static ResourceSitePreparationJob preparation(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent) {
+        ResourceSiteLifecycle lifecycle = state.resourceSites().sites().get(intent.causeSubjectId());
+        ResourceSitePreparationJob job = lifecycle == null ? null : lifecycle.activeWork().filter(ResourceSitePreparationJob.class::isInstance)
+                .map(ResourceSitePreparationJob.class::cast).filter(value -> value.intentId().equals(intent.id())).orElse(null);
+        if (job == null) {
+            throw new IllegalArgumentException("resource-site preparation retirement has no exact retained site job");
+        }
+        return job;
+    }
+
+    private static PhysicalIntentRetirementAccount.LateDisposition lateDisposition(PhysicalIntentTransition transition) {
+        return transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
+                ? PhysicalIntentRetirementAccount.LateDisposition.RETAIN_AMBIGUOUS_RECOVERY : PhysicalIntentRetirementAccount.LateDisposition.REJECT_STALE_ONCE;
     }
 
     private static FrontierWorldState reducePreparationTransition(FrontierWorldState state,

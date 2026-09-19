@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner;
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.*;
@@ -49,12 +50,61 @@ final class FrontierStrategyProcessModule implements FrontierWorldProcessModule 
     private static PhysicalIntentRetirementAccount retirementAccount(PhysicalIntentLifecycleOwner owner) {
         return PhysicalIntentRetirementAccount.declared(owner,
                 java.util.EnumSet.allOf(PhysicalIntentRetirementAccount.Dimension.class),
-                (before, command, intent, transition) -> PhysicalIntentRetirementAccount.checkedNone(owner, command, intent, transition),
+                (before, command, intent, transition) -> retirementFacts(before, command, intent, transition, owner),
                 (before, intent, transition, binding) -> PhysicalIntentRetirementAccount.requireSameDeclaredAccount(binding,
-                        PhysicalIntentRetirementAccount.checkedNoneWithContinuation(owner, binding.continuation(), intent, transition)),
+                        retirementFacts(before, binding.continuation(), intent, transition, owner)),
                 (before, after, intent, transition, binding) -> {
                     if (intent.lifecycleOwner() != owner) throw new IllegalArgumentException("strategy retirement account owner mismatch");
+                    if (after == before) return;
+                    SubjectId reagent = reagent(before, intent);
+                    ExactItemStack beforeItem = before.inventory().items().get(reagent);
+                    ExactItemStack afterItem = after.inventory().items().get(reagent);
+                    if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED
+                            && afterItem != null && afterItem.count() >= beforeItem.count()) {
+                        throw new IllegalArgumentException("decontamination retirement did not consume its exact reagent");
+                    }
+                    if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
+                            && !java.util.Objects.equals(beforeItem, afterItem)) {
+                        throw new IllegalArgumentException("ambiguous decontamination retirement lost its exact reagent");
+                    }
                 });
+    }
+
+    private static PhysicalIntentRetirementAccount.Binding retirementFacts(FrontierWorldState state, FrontierCommand command,
+                                                                            io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                                            PhysicalIntentTransition transition,
+                                                                            PhysicalIntentLifecycleOwner owner) {
+        return retirementFacts(state, command == null
+                ? new PhysicalIntentRetirementAccount.CheckedNone<io.farfrontier.palemirror.frontier.v3.api.ScheduleId>(PhysicalIntentRetirementProof.Absence.NO_ENGINE_CONTINUATION)
+                : command.scheduleBinding().<PhysicalIntentRetirementAccount.Obligation<io.farfrontier.palemirror.frontier.v3.api.ScheduleId>>map(value -> new PhysicalIntentRetirementAccount.Exact<>(value.action().id()))
+                        .orElseGet(() -> new PhysicalIntentRetirementAccount.CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_ENGINE_CONTINUATION)), intent, transition, owner);
+    }
+
+    private static PhysicalIntentRetirementAccount.Binding retirementFacts(FrontierWorldState state,
+                                                                            PhysicalIntentRetirementAccount.Obligation<io.farfrontier.palemirror.frontier.v3.api.ScheduleId> continuation,
+                                                                            io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                                            PhysicalIntentTransition transition,
+                                                                            PhysicalIntentLifecycleOwner owner) {
+        SubjectId reagent = reagent(state, intent);
+        // Decontamination's explicitly typed task has no REL projection: its facility and reagent
+        // are retained on the intent and task, and the owner verifies both below.
+        DecontaminationProcess.taskForIntent(state, intent, StrategicTaskStatus.ACTIVE);
+        return new PhysicalIntentRetirementAccount.Binding(owner, intent.id(),
+                new PhysicalIntentRetirementAccount.CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_APPLICABLE_RELATION), continuation,
+                new PhysicalIntentRetirementAccount.Exact<>(intent.causeSubjectId()),
+                new PhysicalIntentRetirementAccount.Exact<>(reagent), lateDisposition(transition));
+    }
+
+    private static SubjectId reagent(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent) {
+        DecontaminationStateSupport.validateIntent(state, intent);
+        return intent.subjectIds().stream().filter(id -> !id.equals(intent.causeSubjectId())).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("decontamination retirement has no exact reagent"));
+    }
+
+    private static PhysicalIntentRetirementAccount.LateDisposition lateDisposition(PhysicalIntentTransition transition) {
+        return transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
+                ? PhysicalIntentRetirementAccount.LateDisposition.RETAIN_AMBIGUOUS_RECOVERY
+                : PhysicalIntentRetirementAccount.LateDisposition.REJECT_STALE_ONCE;
     }
     @Override public FrontierWorldState reduce(FrontierWorldState state, FrontierEvent event) {
         return switch (event.payload()) {
