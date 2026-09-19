@@ -17,7 +17,8 @@ public final class DiagnosticIncidentExtractor {
                 DiagnosticReason.RESIDENT_MIGRATION_BLOCKED, DiagnosticReason.OPERATION_FAILED, DiagnosticReason.SETTLEMENT_PROVISION_CONFLICT,
                 DiagnosticReason.SETTLEMENT_ASSAULT_CONFLICT, DiagnosticReason.INVENTORY_CONFLICT, DiagnosticReason.REPLICA_CUSTODY_CONFLICT,
                 DiagnosticReason.PHYSICAL_CUSTODY_UNRESOLVED, DiagnosticReason.FRONTIER_KERNEL_COMMAND_FAILURE,
-                DiagnosticReason.FRONTIER_KERNEL_TRANSACTION_CAPACITY, DiagnosticReason.FRONTIER_KERNEL_DUE_FAILURE));
+                DiagnosticReason.FRONTIER_KERNEL_TRANSACTION_CAPACITY, DiagnosticReason.FRONTIER_KERNEL_DUE_FAILURE,
+                DiagnosticReason.FRONTIER_QUARANTINE));
         return Set.copyOf(values);
     }
     public static Optional<DiagnosticTuple> tuple(FrontierPayload payload) {

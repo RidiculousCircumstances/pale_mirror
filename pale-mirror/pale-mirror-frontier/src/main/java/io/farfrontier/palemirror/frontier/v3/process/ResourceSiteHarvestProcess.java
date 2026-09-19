@@ -226,7 +226,7 @@ public final class ResourceSiteHarvestProcess {
         ResourceSiteHarvestJob replacement = job.withProgress(progressed);
         List<ProposedEvent> events = new java.util.ArrayList<>(List.of(prefix));
         events.add(new ProposedEvent(job.siteId(), new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex())));
-        events.add(new ProposedEvent(job.siteId(), new ResourceSiteHarvestProgressed(job.id(), progressed.completedCropSlots())));
+        events.add(new ProposedEvent(job.siteId(), new ResourceSiteHarvestProgressed(job.id(), progressed.completedCropSlots(), action.id(), action.dueAt().ticks())));
         if (progressed.complete()) {
             // COLD owns the last retained crop just as it owns every preceding crop.  Its exact
             // output becomes canonical in the matching reducer.  An untouched PREPARED effect
@@ -278,7 +278,7 @@ public final class ResourceSiteHarvestProcess {
         ResourceSiteLifecycle advanced = lifecycle.advanceHarvest(job, progressed.completedCropSlots());
         ResourceSiteLifecycle next = progressed.completedCropSlots() == ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS
                 && !FrontierResourceSiteHarvestSceneSupport.hasNonClosedScene(state, job.id())
-                ? terminalLifecycle(state, advanced, job)
+                ? terminalLifecycle(state, advanced, job, progressed)
                 : advanced;
         if (next.phase() != ResourceSitePhase.GROWING || progressed.completedCropSlots() != ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS) {
             return state.withResourceSites(state.resourceSites().replace(next));
@@ -334,12 +334,21 @@ public final class ResourceSiteHarvestProcess {
     }
 
     private static ResourceSiteLifecycle terminalLifecycle(FrontierWorldState state, ResourceSiteLifecycle advanced,
-                                                            ResourceSiteHarvestJob job) {
+                                                            ResourceSiteHarvestJob job, ResourceSiteHarvestProgressed progressed) {
         PhysicalIntent intent = state.physicalIntents().get(job.intentId());
         if (intent == null || (intent.status() != PhysicalIntentStatus.PREPARED && intent.status() != PhysicalIntentStatus.RUNNING)) {
             throw new IllegalArgumentException("resource-site COLD terminal lifecycle lacks its exact admissible physical intent");
         }
-        return advanced.harvestedDeferred(intent.status() == PhysicalIntentStatus.PREPARED);
+        if (progressed.coldScheduleId().equals("not_captured")) {
+            return advanced.harvestedDeferred(intent.status() == PhysicalIntentStatus.PREPARED);
+        }
+        ScheduledAction action = new ScheduledAction(new ScheduleId(progressed.coldScheduleId()), new SimInstant(progressed.coldDueAt()),
+                0, job.id(), COLD_PROGRESS_KIND, 1);
+        requireContinuationBinding(job, action);
+        ResourceSiteHarvestJob completed = advanced.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
+                .map(ResourceSiteHarvestJob.class::cast).orElseThrow();
+        return advanced.harvestedDeferred(completed, intent.status() == PhysicalIntentStatus.PREPARED,
+                ResourceSiteHarvestCausality.captured(state, completed, action, intent.status() == PhysicalIntentStatus.RUNNING));
     }
 
     public static FrontierWorldState reduceCropPrepared(FrontierWorldState state, SubjectId subject, ResourceSiteHarvestCropPrepared prepared) {

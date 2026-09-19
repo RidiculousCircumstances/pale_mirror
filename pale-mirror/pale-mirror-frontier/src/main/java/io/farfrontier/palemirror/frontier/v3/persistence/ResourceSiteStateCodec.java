@@ -75,6 +75,19 @@ final class ResourceSiteStateCodec {
             FrontierWorldStateCodec.writeString(output, lineage.successorTaskId().orElseThrow().value());
             FrontierWorldStateCodec.writeString(output, lineage.successorJobId().orElseThrow().value());
         }
+        ResourceSiteHarvestCausality causality = lineage.causality();
+        FrontierWorldStateCodec.writeString(output, causality.coldScheduleId()); output.writeLong(causality.coldDueAt());
+        output.writeByte(causality.hotLeaseIds().size());
+        for (var lease : causality.hotLeaseIds()) FrontierWorldStateCodec.writeString(output, lease.value());
+        FrontierWorldStateCodec.writeString(output, causality.expectedPhysical());
+        FrontierWorldStateCodec.writeString(output, causality.observedPhysical());
+        FrontierWorldStateCodec.writeString(output, causality.reconciliation());
+        RetainedDiagnosticTrace trace = causality.trace();
+        FrontierWorldStateCodec.writeString(output, trace.correlation()); FrontierWorldStateCodec.writeString(output, trace.driver());
+        FrontierWorldStateCodec.writeString(output, trace.coldCommandId()); FrontierWorldStateCodec.writeString(output, trace.coldEventId());
+        output.writeLong(trace.coldRevision()); output.writeLong(trace.coldInstant()); FrontierWorldStateCodec.writeString(output, trace.observationId());
+        FrontierWorldStateCodec.writeString(output, trace.observationCommandId()); FrontierWorldStateCodec.writeString(output, trace.observationEventId());
+        output.writeLong(trace.observationRevision()); output.writeLong(trace.observationInstant());
     }
 
     private static ResourceSiteHarvestLineage readHarvestLineage(DataInputStream input) throws IOException {
@@ -86,9 +99,22 @@ final class ResourceSiteStateCodec {
         BodyPosition terminal = new BodyPosition(input.readInt(), input.readInt(), input.readInt());
         PhysicalIntentId intent = new PhysicalIntentId(FrontierWorldStateCodec.readString(input));
         InventoryCustody.ContainerSlot slot = readOutputSlot(input); boolean confirmed = input.readBoolean();
-        if (!input.readBoolean()) return new ResourceSiteHarvestLineage(predecessorJob, predecessorTask, worker, output, epoch, terminal, intent, slot, confirmed, Optional.empty(), Optional.empty());
+        Optional<SubjectId> successorTask = Optional.empty(); Optional<SubjectId> successorJob = Optional.empty();
+        if (input.readBoolean()) {
+            successorTask = Optional.of(new SubjectId(FrontierWorldStateCodec.readString(input)));
+            successorJob = Optional.of(new SubjectId(FrontierWorldStateCodec.readString(input)));
+        }
+        String schedule = FrontierWorldStateCodec.readString(input); long due = input.readLong(); int leaseCount = input.readUnsignedByte();
+        if (leaseCount > 32) throw new IllegalArgumentException("resource-site harvest HOT lease retention limit exceeded");
+        java.util.List<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId> leases = new java.util.ArrayList<>();
+        for (int index = 0; index < leaseCount; index++) leases.add(new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(FrontierWorldStateCodec.readString(input)));
+        String expected = FrontierWorldStateCodec.readString(input), observed = FrontierWorldStateCodec.readString(input), reconciliation = FrontierWorldStateCodec.readString(input);
+        RetainedDiagnosticTrace trace = new RetainedDiagnosticTrace(FrontierWorldStateCodec.readString(input), FrontierWorldStateCodec.readString(input),
+                FrontierWorldStateCodec.readString(input), FrontierWorldStateCodec.readString(input), input.readLong(), input.readLong(),
+                FrontierWorldStateCodec.readString(input), FrontierWorldStateCodec.readString(input), FrontierWorldStateCodec.readString(input), input.readLong(), input.readLong());
+        ResourceSiteHarvestCausality causality = new ResourceSiteHarvestCausality(schedule, due, leases, intent, expected, observed, reconciliation, trace);
         return new ResourceSiteHarvestLineage(predecessorJob, predecessorTask, worker, output, epoch, terminal, intent, slot, confirmed,
-                Optional.of(new SubjectId(FrontierWorldStateCodec.readString(input))), Optional.of(new SubjectId(FrontierWorldStateCodec.readString(input))));
+                successorTask, successorJob, causality);
     }
 
     private static void writeIncident(DataOutputStream output, ConflictIncident incident) throws IOException {

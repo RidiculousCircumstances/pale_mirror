@@ -377,13 +377,24 @@ final class FrontierV3DiagnosticJson {
                     + ",\"outputOwned\":" + owned + ",\"canonicalSuccessor\":" + lineage.composedIntoCanonicalSuccessor(state)
                     + ",\"successor\":" + successor + ",\"physicalReceiptResolved\":" + lineage.outputReceiptResolved()
                     + ",\"physicalReceiptConfirmed\":" + physicalReceiptConfirmed
-                    + ",\"intentStatus\":\"" + (intent == null ? "MISSING" : intent.status().name()) + "\",\"terminalBody\":" + position(lineage.terminalBody()) + "}";
+                    + ",\"intentStatus\":\"" + (intent == null ? "MISSING" : intent.status().name()) + "\",\"terminalBody\":" + position(lineage.terminalBody())
+                    + ",\"causalTrace\":" + harvestCausality(lineage.causality()) + "}";
         }).orElse("null");
         return base("site", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(site.settlementId().value())
                 + "\",\"facility\":\"" + quote(site.facilityId().value()) + "\",\"phase\":\"" + lifecycle.phase()
                 + "\",\"growthEpoch\":" + lifecycle.growthEpoch() + ",\"growthStage\":" + lifecycle.growthStage()
                 + ",\"activeWork\":\"" + quote(work) + "\",\"conflictDisposition\":" + conflict + ",\"terminalHarvest\":" + terminal + ",\"firstCrop\":" + position(site.cropSlots().getFirst())
                 + ",\"lastCrop\":" + position(site.cropSlots().getLast()) + "}";
+    }
+
+    /** Bounded retained COLD/HOT receipt lineage; this query never derives missing stages. */
+    private static String harvestCausality(io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestCausality value) {
+        return "{\"coldSchedule\":\"" + quote(value.coldScheduleId()) + "\",\"coldDueAt\":" + value.coldDueAt()
+                + ",\"hotLeases\":" + value.hotLeaseIds().stream().map(id -> "\"" + quote(id.value()) + "\"")
+                .collect(java.util.stream.Collectors.joining(",", "[", "]"))
+                + ",\"intent\":\"" + quote(value.intentId().value()) + "\",\"expectedPhysical\":\"" + quote(value.expectedPhysical())
+                + "\",\"observedPhysical\":\"" + quote(value.observedPhysical()) + "\",\"reconciliation\":\""
+                + quote(value.reconciliation()) + "\",\"completeForColdHotReceipt\":" + value.completeForColdHotReceipt() + "}";
     }
 
     /** Read-only terminal receipt link for an exact harvest input that is no longer a live stack. */

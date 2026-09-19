@@ -50,6 +50,18 @@ final class FrontierV3DiagnosticExecutorJson {
 
     static String trace(String id, CheckpointImage checkpoint, FrontierWorldState state, Optional<FrontierV3DiagnosticTrace.Entry> trace) {
         if (trace.isEmpty()) {
+            var retainedHarvest = io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestTrace.lookup(state, id);
+            if (retainedHarvest.isPresent()) {
+                var value = retainedHarvest.orElseThrow();
+                return FrontierV3DiagnosticJson.base("trace", id, checkpoint) + ",\"status\":\"retained\",\"correlation\":\""
+                        + FrontierV3DiagnosticJson.quote(value.correlation()) + "\",\"driver\":\"" + FrontierV3DiagnosticJson.quote(value.driver())
+                        + "\",\"cold\":{\"command\":\"" + FrontierV3DiagnosticJson.quote(value.coldCommandId()) + "\",\"event\":\""
+                        + FrontierV3DiagnosticJson.quote(value.coldEventId()) + "\",\"revision\":" + value.coldRevision() + ",\"instant\":" + value.coldInstant()
+                        + "},\"observation\":{\"id\":\"" + FrontierV3DiagnosticJson.quote(value.observationId()) + "\",\"command\":\""
+                        + FrontierV3DiagnosticJson.quote(value.observationCommandId()) + "\",\"event\":\"" + FrontierV3DiagnosticJson.quote(value.observationEventId())
+                        + "\",\"revision\":" + value.observationRevision() + ",\"instant\":" + value.observationInstant()
+                        + "},\"complete\":" + value.complete() + "}";
+            }
             String incidentId = id.startsWith("conflict:") ? id.substring("conflict:".length()) : id;
             var incident = state.diagnosticIncidents().incident(incidentId);
             if (incident.isEmpty()) return FrontierV3DiagnosticJson.unavailable("trace", id, checkpoint, "not_found");

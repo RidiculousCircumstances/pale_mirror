@@ -386,6 +386,14 @@ class ResourceSiteHarvestTraversalTest extends ResourceSiteHarvestProcessTest {
         ResourceSiteHarvestLineage lineage = released.resourceSites().site(hot.site()).harvestLineage().orElseThrow();
         assertEquals(ResourceSitePhase.GROWING, released.resourceSites().site(hot.site()).phase());
         assertTrue(lineage.receiptPending(), "a HOT-started physical effect remains one exact receipt owner after COLD closes semantic work");
+        ResourceSiteHarvestCausality pendingTrace = lineage.causality();
+        assertEquals(action.id().value(), pendingTrace.coldScheduleId(), "the terminal lineage retains the actual admitted COLD action, not a reconstructed schedule");
+        assertEquals(action.dueAt().ticks(), pendingTrace.coldDueAt());
+        assertEquals(List.of(hot.lease().id()), pendingTrace.hotLeaseIds(), "the retained HOT lease is linked by its typed job cause");
+        assertEquals(job.intentId(), pendingTrace.intentId());
+        assertTrue(pendingTrace.expectedPhysical().contains(job.outputItemId().value()));
+        assertEquals("not_observed", pendingTrace.observedPhysical());
+        assertEquals("pending_exact_physical_receipt", pendingTrace.reconciliation());
         assertEquals(PhysicalIntentStatus.RUNNING, released.physicalIntents().get(job.intentId()).status());
         assertEquals(64, released.inventory().items().get(job.outputItemId()).count());
         FrontierWorldState restored = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(released));
@@ -406,6 +414,10 @@ class ResourceSiteHarvestTraversalTest extends ResourceSiteHarvestProcessTest {
         FrontierWorldState confirmed = reduceCanonical(restored, "reconciled-receipt", 400L, receiptCommandId, receiptPlan.events().getFirst());
         assertFalse(confirmed.resourceSites().site(hot.site()).harvestLineage().orElseThrow().receiptPending(),
                 "the exact late receipt resolves only its retained HOT-started lineage");
+        ResourceSiteHarvestCausality confirmedTrace = confirmed.resourceSites().site(hot.site()).harvestLineage().orElseThrow().causality();
+        assertTrue(confirmedTrace.completeForColdHotReceipt(), "one retained identity covers COLD schedule, HOT lease, intent, observation and reconciliation after restart");
+        assertEquals("confirmed:" + receipt(running, job, output).id().value(), confirmedTrace.observedPhysical());
+        assertEquals("confirmed_exact_physical_receipt", confirmedTrace.reconciliation());
         assertEquals(output, confirmed.inventory().items().get(output.id()),
                 "late physical evidence confirms canonical custody without replaying wheat");
     }

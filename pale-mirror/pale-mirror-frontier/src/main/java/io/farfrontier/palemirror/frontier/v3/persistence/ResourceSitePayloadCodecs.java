@@ -133,13 +133,16 @@ final class ResourceSitePayloadCodecs {
             @Override public byte[] encode(FrontierPayload payload) {
                 ResourceSiteHarvestProgressed progressed = (ResourceSiteHarvestProgressed) payload;
                 byte[] job = bytes(progressed.jobId().value());
-                return ByteBuffer.allocate(1 + job.length + 1).put((byte) job.length).put(job).put((byte) progressed.completedCropSlots()).array();
+                byte[] schedule = bytes(progressed.coldScheduleId());
+                return ByteBuffer.allocate(1 + job.length + 1 + 1 + schedule.length + Long.BYTES).put((byte) job.length).put(job)
+                        .put((byte) progressed.completedCropSlots()).put((byte) schedule.length).put(schedule).putLong(progressed.coldDueAt()).array();
             }
             @Override public FrontierPayload decode(byte[] bytes) {
                 ByteBuffer input = ByteBuffer.wrap(bytes); String job = read(input);
                 if (!input.hasRemaining()) throw new IllegalArgumentException("truncated resource-site harvest progress payload");
-                int completed = Byte.toUnsignedInt(input.get()); if (input.hasRemaining()) throw new IllegalArgumentException("trailing resource-site harvest progress payload");
-                return new ResourceSiteHarvestProgressed(new SubjectId(job), completed);
+                int completed = Byte.toUnsignedInt(input.get()); String schedule = read(input);
+                if (input.remaining() != Long.BYTES) throw new IllegalArgumentException("malformed resource-site harvest progress payload");
+                return new ResourceSiteHarvestProgressed(new SubjectId(job), completed, schedule, input.getLong());
             }
         };
     }

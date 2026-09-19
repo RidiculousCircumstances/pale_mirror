@@ -4,6 +4,11 @@ import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -48,6 +53,43 @@ class DiagnosticAuthorityArchitectureTest {
         assertFalse(production.contains("new ProductionBlocked("), "production reducers must use their named tuple producer");
         assertTrue(patrol.contains("RoutePatrolDiagnosticProducer."));
         assertFalse(patrol.contains("new RoutePatrolBlocked("), "patrol reducers must use their named tuple producer");
+    }
+
+    @Test
+    void everyCurrentStampedPayloadAndReasonIsMechanicallyAccountedForWithoutACuratedSubset() throws Exception {
+        Path root = repositoryRoot();
+        List<Path> sources;
+        try (var paths = Files.walk(root)) {
+            sources = paths.filter(path -> path.toString().endsWith(".java"))
+                    .filter(path -> path.toString().contains("/src/main/java/"))
+                    .filter(path -> !path.getFileName().toString().equals("DiagnosticIncidentExtractor.java"))
+                    .filter(path -> !path.getFileName().toString().equals("DiagnosticReason.java"))
+                    .toList();
+        }
+        String extractor = Files.readString(root.resolve("pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/DiagnosticIncidentExtractor.java"));
+        Set<String> stampedPayloadOwners = new LinkedHashSet<>();
+        Set<DiagnosticReason> actualReasons = new LinkedHashSet<>();
+        Pattern reason = Pattern.compile("DiagnosticReason\\.([A-Z_]+)");
+        for (Path source : sources) {
+            String text = Files.readString(source);
+            // The actual source tree, not a manually maintained family list, defines this census.
+            if (text.contains("implements FrontierPayload") && text.contains("DiagnosticTuple")) {
+                stampedPayloadOwners.add(source.getFileName().toString().replace(".java", ""));
+            }
+            Matcher occurrences = reason.matcher(text);
+            while (occurrences.find()) actualReasons.add(DiagnosticReason.valueOf(occurrences.group(1)));
+        }
+        assertFalse(stampedPayloadOwners.isEmpty(), "source census must observe real tuple producers");
+        for (String owner : stampedPayloadOwners) {
+            assertTrue(extractor.contains("case " + owner + " ") || extractor.contains("case " + owner + "."),
+                    () -> "stamped payload owner is absent from the retained extractor: " + owner);
+        }
+        assertTrue(DiagnosticIncidentExtractor.retainedReasons().containsAll(actualReasons),
+                () -> "a currently referenced producer reason is absent from the retention registry: " + actualReasons);
+        assertFalse(DiagnosticIncident.terminal(DiagnosticCategory.WAIT_OR_BLOCKED),
+                "expected-absent wait/block outcomes cannot be promoted into terminal review truth");
+        assertFalse(DiagnosticIncident.terminal(DiagnosticCategory.DOMAIN_DISRUPTION),
+                "expected-absent domain disruption cannot be promoted into terminal review truth");
     }
 
     private static Path repositoryRoot() {

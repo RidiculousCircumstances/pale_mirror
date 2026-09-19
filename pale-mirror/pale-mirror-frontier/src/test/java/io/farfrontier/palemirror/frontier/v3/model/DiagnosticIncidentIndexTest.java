@@ -17,7 +17,6 @@ import java.util.EnumSet;
 class DiagnosticIncidentIndexTest {
     @Test void currentProducerInventoryHasNoUnretainedReason() {
         EnumSet<DiagnosticReason> expected = EnumSet.allOf(DiagnosticReason.class);
-        expected.remove(DiagnosticReason.FRONTIER_QUARANTINE);
         assertEquals(expected, DiagnosticIncidentExtractor.retainedReasons());
     }
     @Test void reducerAtomicallyRetainsExactOwnerLinkAndSnapshotRoundTripsIt() {
@@ -46,7 +45,28 @@ class DiagnosticIncidentIndexTest {
         assertEquals("frontier-v3", bundle.context().runtime());
         assertFalse(bundle.context().complete());
         assertEquals("runtime_source_tree_jar_restart_identity_unavailable", bundle.context().degradation());
+        assertTrue(bundle.context().physical().startsWith("expected=canonical_projection:"), "bounded physical context records the exact pre-event projection");
+        assertTrue(bundle.context().physical().contains("observed_event=frontier.resource_site_conflict_observed"));
+        assertTrue(bundle.context().claim().contains(payload.diagnostic().owner().id().value()));
+        assertTrue(bundle.context().reconciliation().contains(payload.diagnostic().disposition().name()));
         assertEquals(bundle.context(), restarted.diagnosticIncidents().bundle(id).orElseThrow().context());
+    }
+
+    @Test void owningRuntimeCanSupplyCompleteArtifactAndRestartIdentityWithoutReducerInference() {
+        WorldId world = new WorldId("frontier:diagnostic-runtime-identity");
+        var configuration = FrontierWorldRuntimeDefinition.configuration(world, 94L);
+        FrontierWorldState initial = configuration.initialState();
+        var site = initial.resourceSites().sites().keySet().stream().sorted().findFirst().orElseThrow();
+        var position = FrontierResourceSitePlan.compile(initial.bootstrap()).get(site).cropSlots().getFirst();
+        var payload = new ResourceSiteConflictObserved(site, position, ResourceSiteDiagnosticProducer.ORDINARY_OBSERVATION_MISMATCH);
+        FrontierWorldState reduced;
+        try (DiagnosticCaptureScope ignored = DiagnosticCaptureScope.open(new DiagnosticRuntimeIdentity("neoforge", "tree:fixture", "jar:fixture", "restart:fresh"))) {
+            reduced = configuration.reducer().apply(initial, event(world, site, payload, 1, 7));
+        }
+        DiagnosticIncidentContext context = reduced.diagnosticIncidents().why(payload.diagnostic().subject()).orElseThrow().context();
+        assertTrue(context.complete());
+        assertEquals("tree:fixture", context.sourceTree()); assertEquals("jar:fixture", context.jar());
+        assertEquals("restart:fresh", context.restartIdentity());
     }
 
     @Test void oneIdentityProducesOneBoundedBundleEvenWhenTheSameFactIsRepeated() {

@@ -168,17 +168,38 @@ public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, l
         ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
                 .orElseThrow(() -> new IllegalStateException("resource site has no active harvest"));
         if (phase != ResourceSitePhase.HARVESTING || !active.id().equals(completed.id()) || !completed.progress().complete()
-                || completed.progress().completedCropSlots() != active.progress().completedCropSlots() + 1) {
+                || !(active.equals(completed) || completed.progress().completedCropSlots() == active.progress().completedCropSlots() + 1)) {
             throw new IllegalArgumentException("resource site has no exact next complete COLD harvest");
         }
         return new ResourceSiteLifecycle(siteId, ResourceSitePhase.GROWING, Math.addExact(growthEpoch, 1L), 0, Optional.empty(), Optional.empty(),
                 Optional.of(ResourceSiteHarvestLineage.completed(completed, growthEpoch, outputReceiptResolved)));
     }
+    /** Terminal COLD action evidence is retained with the same immutable receipt lineage. */
+    public ResourceSiteLifecycle harvestedDeferred(ResourceSiteHarvestJob completed, boolean outputReceiptResolved,
+                                                   ResourceSiteHarvestCausality causality) {
+        ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
+                .orElseThrow(() -> new IllegalStateException("resource site has no active harvest"));
+        if (phase != ResourceSitePhase.HARVESTING || !active.id().equals(completed.id()) || !completed.progress().complete()
+                || !(active.equals(completed) || completed.progress().completedCropSlots() == active.progress().completedCropSlots() + 1)) {
+            throw new IllegalArgumentException("resource site has no exact next complete COLD harvest");
+        }
+        return new ResourceSiteLifecycle(siteId, ResourceSitePhase.GROWING, Math.addExact(growthEpoch, 1L), 0, Optional.empty(), Optional.empty(),
+                Optional.of(ResourceSiteHarvestLineage.completed(completed, growthEpoch, outputReceiptResolved, causality)));
+    }
     public ResourceSiteLifecycle confirmDeferredHarvestReceipt(PhysicalIntentId intentId) {
+        return confirmDeferredHarvestReceipt(intentId, null);
+    }
+    public ResourceSiteLifecycle confirmDeferredHarvestReceipt(PhysicalIntentId intentId,
+                                                                io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId observationId) {
         ResourceSiteHarvestLineage lineage = harvestLineage.filter(ResourceSiteHarvestLineage::receiptPending)
                 .filter(value -> value.predecessorIntentId().equals(intentId)).orElseThrow(
                         () -> new IllegalArgumentException("resource-site deferred harvest receipt has no matching lineage"));
-        return next(phase, growthEpoch, growthStage, activeWork, Optional.of(lineage.resolveReceipt()));
+        return next(phase, growthEpoch, growthStage, activeWork, Optional.of(lineage.resolveReceipt(observationId)));
+    }
+    public ResourceSiteLifecycle withHarvestTrace(RetainedDiagnosticTrace trace) {
+        ResourceSiteHarvestLineage lineage = harvestLineage.orElseThrow(() -> new IllegalArgumentException("resource-site trace has no lineage"));
+        if (!lineage.causality().trace().correlation().equals(trace.correlation())) throw new IllegalArgumentException("resource-site trace has foreign correlation");
+        return next(phase, growthEpoch, growthStage, activeWork, Optional.of(lineage.withTrace(trace)));
     }
     public ResourceSiteLifecycle conflicted(ResourceSiteConflictDisposition disposition) {
         if (phase == ResourceSitePhase.DESTROYED) throw new IllegalStateException("destroyed resource site cannot become a conflict");

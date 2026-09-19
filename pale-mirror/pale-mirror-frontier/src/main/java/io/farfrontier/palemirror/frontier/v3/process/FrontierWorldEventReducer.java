@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.DiagnosticIncidentExtractor;
 import io.farfrontier.palemirror.frontier.v3.model.KernelQuarantineObserved;
 import io.farfrontier.palemirror.frontier.v3.model.DiagnosticIncidentContext;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestTrace;
 
 /** Ordered reducer facade; type-specific policy belongs to the registered owning module. */
 public final class FrontierWorldEventReducer {
@@ -21,7 +22,7 @@ public final class FrontierWorldEventReducer {
                         event.revision().value(), event.instant().ticks(), DiagnosticIncidentContext.capture(state, event)));
             }
             String processId = processRegistry.requireReducedEventOwner(event.payload().type());
-            FrontierWorldState reduced = FrontierWorldProcessCatalog.reduce(processId, state, event);
+            FrontierWorldState reduced = ResourceSiteHarvestTrace.retain(FrontierWorldProcessCatalog.reduce(processId, state, event), event);
             return DiagnosticIncidentExtractor.tuple(event.payload()).map(tuple -> reduced.withDiagnosticIncidents(
                     reduced.diagnosticIncidents().retain(DiagnosticIncidentExtractor.incidentId(event.payload(), reduced, tuple), tuple, event.id().value(),
                             event.causes().commands().stream().map(command -> command.value()).collect(java.util.stream.Collectors.joining("->")),

@@ -120,7 +120,7 @@ public final class ResourceSitePhysicalIntentStateSupport {
         }
         nextIntents.put(intent.id(), intent.withStatus(PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(receipt.id())));
         Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(state.physicalObservations()); observations.put(receipt.id(), receipt);
-        return replace(state, state.resourceSites().replace(lifecycle.confirmDeferredHarvestReceipt(intent.id())),
+        return replace(state, state.resourceSites().replace(lifecycle.confirmDeferredHarvestReceipt(intent.id(), receipt.id())),
                 state.inventory(), nextIntents, observations);
     }
 
