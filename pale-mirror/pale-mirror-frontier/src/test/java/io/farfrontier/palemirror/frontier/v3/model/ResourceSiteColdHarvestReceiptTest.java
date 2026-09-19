@@ -41,7 +41,7 @@ class ResourceSiteColdHarvestReceiptTest {
                 (StrategicTaskTransition) planned.getFirst().payload());
         ResourceSiteHarvestStarted started = (ResourceSiteHarvestStarted) planned.get(1).payload();
         state = ResourceSiteHarvestProcess.reduceStarted(state, site, started);
-        state = ResourceSiteHarvestProcess.reducePrepared(state, site, ((PhysicalIntentPrepared) planned.get(2).payload()).intent());
+        state = prepareThroughRuntime(state, site, (PhysicalIntentPrepared) planned.get(2).payload());
         ScheduledAction firstAction = ((ScheduleEffect.Created) planned.get(3).payload()).action();
         ColdHarvestPendingTerminal pending = advanceBeforeTerminal(state, site, firstAction);
 
@@ -89,8 +89,8 @@ class ResourceSiteColdHarvestReceiptTest {
         renewed = StrategicObjectiveProcess.reduceTaskTransition(renewed, new SubjectId("settlement:1"),
                 (StrategicTaskTransition) successorPlan.getFirst().payload());
         renewed = ResourceSiteHarvestProcess.reduceStarted(renewed, site, successor);
-        renewed = ResourceSiteHarvestProcess.reducePrepared(renewed, site, ((PhysicalIntentPrepared) successorPlan.stream().map(ProposedEvent::payload)
-                .filter(PhysicalIntentPrepared.class::isInstance).findFirst().orElseThrow()).intent());
+        renewed = prepareThroughRuntime(renewed, site, (PhysicalIntentPrepared) successorPlan.stream().map(ProposedEvent::payload)
+                .filter(PhysicalIntentPrepared.class::isInstance).findFirst().orElseThrow());
         ScheduledAction successorAction = ((ScheduleEffect.Created) successorPlan.stream().map(ProposedEvent::payload)
                 .filter(ScheduleEffect.Created.class::isInstance).findFirst().orElseThrow()).action();
         renewed = completeColdHarvest(renewed, site, successorAction);
@@ -116,7 +116,7 @@ class ResourceSiteColdHarvestReceiptTest {
                 (StrategicTaskTransition) planned.getFirst().payload());
         ResourceSiteHarvestStarted started = (ResourceSiteHarvestStarted) planned.get(1).payload();
         state = ResourceSiteHarvestProcess.reduceStarted(state, site, started);
-        state = ResourceSiteHarvestProcess.reducePrepared(state, site, ((PhysicalIntentPrepared) planned.get(2).payload()).intent());
+        state = prepareThroughRuntime(state, site, (PhysicalIntentPrepared) planned.get(2).payload());
         ScheduledAction[] action = { ((ScheduleEffect.Created) planned.get(3).payload()).action() };
 
         while (((ResourceSiteHarvestJob) state.resourceSites().site(site).activeWork().orElseThrow()).progress().completedCropSlots() == 0) {
@@ -168,7 +168,7 @@ class ResourceSiteColdHarvestReceiptTest {
                 (StrategicTaskTransition) planned.getFirst().payload());
         ResourceSiteHarvestStarted started = (ResourceSiteHarvestStarted) planned.get(1).payload();
         state = ResourceSiteHarvestProcess.reduceStarted(state, site, started);
-        state = ResourceSiteHarvestProcess.reducePrepared(state, site, ((PhysicalIntentPrepared) planned.get(2).payload()).intent());
+        state = prepareThroughRuntime(state, site, (PhysicalIntentPrepared) planned.get(2).payload());
         ScheduledAction[] action = { ((ScheduleEffect.Created) planned.get(3).payload()).action() };
 
         while (state.resourceSites().site(site).phase() == ResourceSitePhase.HARVESTING) {
@@ -253,9 +253,8 @@ class ResourceSiteColdHarvestReceiptTest {
         state = StrategicObjectiveProcess.reduceTaskTransition(state, new SubjectId("settlement:1"),
                 (StrategicTaskTransition) successorPlan.getFirst().payload());
         state = ResourceSiteHarvestProcess.reduceStarted(state, site, successor);
-        state = ResourceSiteHarvestProcess.reducePrepared(state, site,
-                ((PhysicalIntentPrepared) successorPlan.stream().map(ProposedEvent::payload).filter(PhysicalIntentPrepared.class::isInstance)
-                        .findFirst().orElseThrow()).intent());
+        state = prepareThroughRuntime(state, site, (PhysicalIntentPrepared) successorPlan.stream().map(ProposedEvent::payload)
+                .filter(PhysicalIntentPrepared.class::isInstance).findFirst().orElseThrow());
         FrontierWorldState successorRestarted = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().decode(
                 new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().encode(state));
         assertEquals(successor.job().id(), ((ResourceSiteHarvestJob) successorRestarted.resourceSites().site(site).activeWork().orElseThrow()).id(),
@@ -315,6 +314,16 @@ class ResourceSiteColdHarvestReceiptTest {
     }
 
     private record ColdHarvestPendingTerminal(FrontierWorldState state, ScheduledAction action) { }
+
+    private static FrontierWorldState prepareThroughRuntime(FrontierWorldState state, SubjectId owner, PhysicalIntentPrepared prepared) {
+        io.farfrontier.palemirror.frontier.v3.api.CommandId commandId = new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:cold-harvest-prepare");
+        io.farfrontier.palemirror.frontier.v3.api.FrontierEvent event = new io.farfrontier.palemirror.frontier.v3.api.FrontierEvent(1,
+                new io.farfrontier.palemirror.frontier.v3.api.EventId("event:cold-harvest-prepare"),
+                new io.farfrontier.palemirror.frontier.v3.api.TransactionId("transaction:cold-harvest-prepare"), state.bootstrap().worldId(),
+                new io.farfrontier.palemirror.frontier.v3.api.Revision(1L), io.farfrontier.palemirror.frontier.v3.api.SimInstant.ZERO,
+                owner, io.farfrontier.palemirror.frontier.v3.api.CauseChain.root(commandId), prepared);
+        return FrontierWorldRuntimeDefinition.reduce(state, event);
+    }
 
     private static FrontierWorldState matureField() {
         SubjectId site = new SubjectId("site:1-wheat-field");
