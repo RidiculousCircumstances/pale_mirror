@@ -765,30 +765,6 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         next.put(intent.id(), intent);
         return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations, next, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
     }
-    /** Owner lifecycle policy supplies exact confirmed IDs; generic state never chooses a family to compact. */
-    public FrontierWorldState compactResolvedPhysicalIntents(Set<PhysicalIntentId> resolvedIds) {
-        Objects.requireNonNull(resolvedIds, "resolved physical intent ids");
-        if (resolvedIds.isEmpty()) return this;
-        Map<PhysicalIntentId, PhysicalIntent> next = new LinkedHashMap<>(physicalIntents);
-        Map<PhysicalObservationId, PhysicalEffectObservation> nextObservations = new LinkedHashMap<>(physicalObservations);
-        for (PhysicalIntentId id : resolvedIds) {
-            PhysicalIntent intent = next.get(Objects.requireNonNull(id, "resolved physical intent id"));
-            if (intent == null || intent.status() != PhysicalIntentStatus.CONFIRMED) {
-                throw new IllegalArgumentException("only owner-selected confirmed physical intent may compact: " + id.value());
-            }
-            PhysicalObservationId observationId = intent.postconditionObservationId()
-                    .orElseThrow(() -> new IllegalArgumentException("confirmed physical intent lacks its exact receipt"));
-            PhysicalEffectObservation observation = nextObservations.get(observationId);
-            if (observation == null || !observation.intentId().equals(id)) {
-                throw new IllegalArgumentException("confirmed physical intent lacks its exact paired receipt");
-            }
-            next.remove(id);
-            nextObservations.remove(observationId);
-        }
-        // Full aggregate validation proves an owner-selected terminal pair is not still an
-        // obligation of another retained capability; this method never chooses the pair.
-        return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations, next, nextObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
-    }
     /**
      * Package-local fixture seam. Production lifecycle reductions must reach
      * {@link PhysicalIntentTransitionStorage} through the composed owner capability.

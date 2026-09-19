@@ -43,7 +43,10 @@ public final class ResourceSitePhysicalIntentStateSupport {
     }
 
     static boolean ownsNonterminalSubject(ResourceSiteState sites, SubjectId subject) {
-        return sites.sites().values().stream().anyMatch(lifecycle -> lifecycle.phase() == ResourceSitePhase.HARVESTING && (lifecycle.siteId().equals(subject)
+        return sites.sites().values().stream().anyMatch(lifecycle -> lifecycle.phase() == ResourceSitePhase.UNPREPARED
+                && lifecycle.activeWork().filter(ResourceSitePreparationJob.class::isInstance).map(ResourceSitePreparationJob.class::cast)
+                .map(job -> job.siteId().equals(subject) || job.id().equals(subject)).orElse(false)
+                || lifecycle.phase() == ResourceSitePhase.HARVESTING && (lifecycle.siteId().equals(subject)
                 || jobId(lifecycle.siteId()).equals(subject) || lifecycle.activeWork().map(ResourceSiteWork::id).filter(subject::equals).isPresent()
                 || lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
                 .map(ResourceSiteHarvestJob::outputItemId).filter(subject::equals).isPresent())

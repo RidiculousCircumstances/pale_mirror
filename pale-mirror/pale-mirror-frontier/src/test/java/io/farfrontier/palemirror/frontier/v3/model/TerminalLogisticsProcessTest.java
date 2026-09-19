@@ -24,7 +24,6 @@ import org.junit.jupiter.api.Test;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -110,24 +109,6 @@ class TerminalLogisticsProcessTest {
         assertFalse(detached.physicalIntents().containsKey(loadingIntentId));
         assertFalse(detached.physicalObservations().containsKey(loadingObservationId));
         assertEquals(detached, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(detached)));
-    }
-
-    @Test
-    void ownerSelectedTerminalReceiptPairsCompactAtomicallyAndSurviveRecovery() {
-        FrontierWorldState settled = completedDeliveryWithConfirmedHandoff();
-        PhysicalIntentId handoff = new PhysicalIntentId("intent:cargo-handoff-supply-1-2");
-        PhysicalIntentId loading = new PhysicalIntentId("intent:cargo-loading-supply-1-2");
-
-        FrontierWorldState compacted = settled.compactResolvedPhysicalIntents(Set.of(handoff, loading));
-
-        assertFalse(compacted.physicalIntents().containsKey(handoff));
-        assertFalse(compacted.physicalIntents().containsKey(loading));
-        assertFalse(compacted.physicalObservations().containsKey(
-                new PhysicalObservationId("observation:terminal-logistics-confirmed-handoff")));
-        assertFalse(compacted.physicalObservations().containsKey(
-                new PhysicalObservationId("observation:terminal-logistics-confirmed-loading")));
-        assertEquals(compacted, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(compacted)),
-                "terminal history compaction must retain its safe disposition across snapshot recovery");
     }
 
     private static FrontierWorldState completedDelivery() { return completedDelivery(new WorldId("frontier:terminal-logistics")); }

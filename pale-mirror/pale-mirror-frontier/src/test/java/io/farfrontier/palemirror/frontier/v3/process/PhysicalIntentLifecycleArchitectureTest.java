@@ -62,22 +62,12 @@ class PhysicalIntentLifecycleArchitectureTest {
                         && composition.contains("owner retention share is saturated")
                         && composition.contains("must partition the aggregate unresolved admission bound"),
                 "same owner declarations must drive executable compaction and fair bounded admission, not diagnostic-only pressure");
-        String aggregate = Files.readString(root.resolve("main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWorldState.java"));
-        int compactionStart = aggregate.indexOf("compactResolvedPhysicalIntents");
-        int compactionEnd = aggregate.indexOf("FrontierWorldState transitionPhysicalIntent", compactionStart);
-        String compaction = aggregate.substring(compactionStart, compactionEnd);
-        assertTrue(compaction.contains("nextObservations.remove(observationId)") && compaction.contains("PhysicalIntentStatus.CONFIRMED"),
-                "terminal compaction must atomically retire only the exact confirmed intent/receipt pair");
-        assertFalse(compaction.contains("PhysicalIntentKind") || compaction.contains("lifecycleOwner()"),
-                "aggregate retention may validate owner-selected identities but must never discover a family to compact");
-        try (Stream<Path> paths = Files.walk(root.resolve("main/java"))) {
-            assertFalse(paths.filter(path -> path.toString().endsWith(".java"))
-                            .filter(path -> !path.getFileName().toString().equals("FrontierWorldState.java"))
-                            .filter(path -> !path.getFileName().toString().equals("PhysicalIntentLifecycleCapabilities.java"))
-                            .map(PhysicalIntentLifecycleArchitectureTest::readUnchecked)
-                            .anyMatch(source -> source.contains(".compactResolvedPhysicalIntents(")),
-                    "only the closed lifecycle composition may invoke aggregate terminal-history storage");
-        }
+        assertTrue(composition.contains("physicalIntents(intents).physicalObservations(observations)")
+                        && composition.contains("owner-selected terminal intent is not confirmed"),
+                "only closed composition may atomically retire the exact confirmed intent/receipt pair");
+        assertFalse(Files.readString(root.resolve("main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWorldState.java"))
+                        .contains("compactResolvedPhysicalIntents"),
+                "aggregate state must not expose an executable terminal-history compaction bypass");
         String fence = Files.readString(repositoryRoot().resolve("pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FencedRecoveryPhysicalIntentSupport.java"));
         assertFalse(fence.contains("intent.kind()") || fence.contains("switch (intent"),
                 "common recovery fencing must consume a family-supplied typed asset, never infer it from an intent kind");

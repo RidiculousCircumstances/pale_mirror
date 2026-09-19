@@ -3,8 +3,10 @@ package io.farfrontier.palemirror.frontier.v3.process;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.CommandRejection;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
 import io.farfrontier.palemirror.frontier.v3.api.RejectionCode;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
@@ -14,6 +16,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateUpdate;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentPrepared;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalEffectObservation;
 
 import java.util.Collection;
 import java.util.EnumMap;
@@ -223,7 +226,27 @@ final class PhysicalIntentLifecycleCapabilities {
     }
 
     private FrontierWorldState compactResolvedForPreparation(FrontierWorldState state, PhysicalIntentLifecycleCapability capability) {
-        return state.compactResolvedPhysicalIntents(compactableResolvedIds(state, capability));
+        java.util.Set<PhysicalIntentId> resolvedIds = compactableResolvedIds(state, capability);
+        if (resolvedIds.isEmpty()) return state;
+        Map<PhysicalIntentId, PhysicalIntent> intents = new java.util.LinkedHashMap<>(state.physicalIntents());
+        Map<PhysicalObservationId, PhysicalEffectObservation> observations = new java.util.LinkedHashMap<>(state.physicalObservations());
+        for (PhysicalIntentId id : resolvedIds) {
+            PhysicalIntent intent = intents.get(id);
+            if (intent == null || intent.status() != PhysicalIntentStatus.CONFIRMED) {
+                throw new IllegalArgumentException("owner-selected terminal intent is not confirmed: " + id.value());
+            }
+            PhysicalObservationId observationId = intent.postconditionObservationId()
+                    .orElseThrow(() -> new IllegalArgumentException("confirmed physical intent lacks its exact receipt"));
+            PhysicalEffectObservation observation = observations.get(observationId);
+            if (observation == null || !observation.intentId().equals(id)) {
+                throw new IllegalArgumentException("confirmed physical intent lacks its exact paired receipt");
+            }
+            intents.remove(id);
+            observations.remove(observationId);
+        }
+        // The closed composition is the sole terminal-history mutation authority. Constructing
+        // the replacement through the aggregate validator proves no retained obligation needs it.
+        return state.withChanges(FrontierWorldStateUpdate.begin().physicalIntents(intents).physicalObservations(observations));
     }
 
     private java.util.Set<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId> compactableResolvedIds(
