@@ -22,21 +22,25 @@ abstract class AbstractPhysicalIntentLifecycleCapability implements PhysicalInte
     private final PhysicalIntentLifecycleRetirementPolicy retirementPolicy;
     private final PhysicalIntentRetirementAccount retirementAccount;
     private final PhysicalIntentLifecycleDeclaration declaration;
+    private final PhysicalIntentResolvedRetentionPolicy resolvedRetentionPolicy;
 
     AbstractPhysicalIntentLifecycleCapability(PhysicalIntentLifecycleDeclaration declaration,
                                               PhysicalIntentLifecycleRetirementPolicy retirementPolicy,
-                                              PhysicalIntentRetirementAccount retirementAccount) {
+                                              PhysicalIntentRetirementAccount retirementAccount,
+                                              PhysicalIntentResolvedRetentionPolicy resolvedRetentionPolicy) {
         this.declaration = java.util.Objects.requireNonNull(declaration, "physical lifecycle declaration");
         this.owner = declaration.owner();
         this.kinds = declaration.kinds();
         this.retirementPolicy = retirementPolicy;
         this.retirementAccount = retirementAccount;
+        this.resolvedRetentionPolicy = java.util.Objects.requireNonNull(resolvedRetentionPolicy, "physical lifecycle resolved retention policy");
     }
 
     @Override public final PhysicalIntentLifecycleOwner owner() { return owner; }
     @Override public final Set<PhysicalIntentKind> compatibleKinds() { return kinds; }
     @Override public final PhysicalIntentLifecycleRetirementPolicy retirementPolicy() { return retirementPolicy; }
     @Override public final PhysicalIntentRetirementAccount retirementAccount() { return retirementAccount; }
+    @Override public final PhysicalIntentResolvedRetentionPolicy resolvedRetentionPolicy() { return resolvedRetentionPolicy; }
     @Override public PhysicalIntentLifecycleDeclaration declaration() { return declaration; }
     @Override public FencedRecoveryAsset recoveryAsset(PhysicalIntent intent) {
         throw new IllegalArgumentException("physical lifecycle owner has no declared recovery asset: " + owner.stableId());

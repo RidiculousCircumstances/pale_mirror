@@ -26,10 +26,13 @@ import java.util.Comparator;
 final class PhysicalIntentLifecycleCapabilities {
     private final Map<PhysicalIntentLifecycleOwner, PhysicalIntentLifecycleCapability> byOwner;
     private final String fingerprint;
+    private final int unresolvedAdmissionCapacity;
 
     private PhysicalIntentLifecycleCapabilities(Map<PhysicalIntentLifecycleOwner, PhysicalIntentLifecycleCapability> byOwner) {
         this.byOwner = Map.copyOf(byOwner);
         this.fingerprint = fingerprint(this.byOwner);
+        this.unresolvedAdmissionCapacity = this.byOwner.values().stream()
+                .mapToInt(capability -> capability.declaration().maxUnresolved()).sum();
     }
 
     static PhysicalIntentLifecycleCapabilities compose(Collection<? extends FrontierWorldProcessModule> modules) {
@@ -39,6 +42,7 @@ final class PhysicalIntentLifecycleCapabilities {
             for (PhysicalIntentLifecycleCapability capability : module.physicalIntentLifecycleCapabilities()) {
                 if (capability == null || capability.owner() == null || capability.compatibleKinds() == null
                         || capability.declaration() == null
+                        || capability.resolvedRetentionPolicy() == null
                         || capability.retirementPolicy() == null || capability.retirementAccount() == null
                         || capability.retirementAccount().owner() != capability.owner()
                         || !capability.retirementAccount().checkedDimensions()
@@ -52,6 +56,12 @@ final class PhysicalIntentLifecycleCapabilities {
                 if (declaration.owner() != capability.owner()
                         || !declaration.kinds().equals(capability.compatibleKinds())) {
                     throw new IllegalArgumentException("physical lifecycle capability has mismatched declared role schemas: "
+                            + capability.owner().stableId());
+                }
+                if (!declaration.kinds().isEmpty()
+                        && (declaration.maxUnresolved() != PhysicalIntentLifecycleDeclaration.MAX_PER_OWNER
+                        || declaration.maxResolvedRetention() != PhysicalIntentLifecycleDeclaration.MAX_PER_OWNER)) {
+                    throw new IllegalArgumentException("physical lifecycle owner must declare the exact fair retention share: "
                             + capability.owner().stableId());
                 }
             }
@@ -73,7 +83,11 @@ final class PhysicalIntentLifecycleCapabilities {
         if (!suppliedSchemas.equals(java.util.EnumSet.allOf(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleSchema.class))) {
             throw new IllegalArgumentException("physical lifecycle composition is missing an exact role-schema declaration");
         }
-        return new PhysicalIntentLifecycleCapabilities(capabilities);
+        PhysicalIntentLifecycleCapabilities composition = new PhysicalIntentLifecycleCapabilities(capabilities);
+        if (composition.unresolvedAdmissionCapacity != FrontierWorldState.MAX_PHYSICAL_INTENTS) {
+            throw new IllegalArgumentException("physical lifecycle declarations must partition the aggregate unresolved admission bound");
+        }
+        return composition;
     }
 
     CommandPlan planPrepared(FrontierWorldState state, FrontierCommand command, PhysicalIntentPrepared prepared) {
@@ -112,8 +126,9 @@ final class PhysicalIntentLifecycleCapabilities {
 
     FrontierWorldState reducePrepared(FrontierWorldState state, SubjectId subject, PhysicalIntent intent) {
         PhysicalIntentLifecycleCapability capability = capability(intent);
-        requirePreparationCapacity(state, capability);
-        FrontierWorldState reduced = capability.reducePrepared(state, subject, intent);
+        FrontierWorldState retained = compactResolvedForPreparation(state, capability);
+        requirePreparationCapacity(retained, capability);
+        FrontierWorldState reduced = capability.reducePrepared(retained, subject, intent);
         var existing = reduced.fencedRecovery().current().get(FencedRecoveryPhysicalIntentSupport.bindingId(intent));
         if (existing != null) {
             FencedRecoveryPhysicalIntentSupport.requirePreparedExecutionAuthority(reduced.fencedRecovery(), intent, capability.recoveryAsset(intent));
@@ -148,6 +163,9 @@ final class PhysicalIntentLifecycleCapabilities {
 
     String fingerprint() { return fingerprint; }
 
+    /** Sum of explicit owner quotas; diagnostics expose the exact fair aggregate partition. */
+    int unresolvedAdmissionCapacity() { return unresolvedAdmissionCapacity; }
+
     void requireRetainedState(FrontierWorldState state) {
         Objects.requireNonNull(state, "physical lifecycle retained state");
         for (PhysicalIntent intent : state.physicalIntents().values()) capability(intent);
@@ -168,7 +186,7 @@ final class PhysicalIntentLifecycleCapabilities {
             }
             PhysicalIntentLifecycleCompositionDiagnostic.Pressure pressure = unresolved >= declaration.maxUnresolved()
                     ? PhysicalIntentLifecycleCompositionDiagnostic.Pressure.UNRESOLVED_SATURATED
-                    : resolved >= declaration.maxResolvedRetention()
+                    : resolved >= declaration.maxResolvedRetention() || unresolved + resolved >= declaration.maxUnresolved()
                     ? PhysicalIntentLifecycleCompositionDiagnostic.Pressure.COMPACTION_REQUIRED
                     : PhysicalIntentLifecycleCompositionDiagnostic.Pressure.OPEN;
             owners.add(new PhysicalIntentLifecycleCompositionDiagnostic.Owner(owner, declaration.version(),
@@ -188,9 +206,49 @@ final class PhysicalIntentLifecycleCapabilities {
         if (unresolved >= declaration.maxUnresolved()) {
             throw new IllegalArgumentException("physical lifecycle unresolved work is saturated: " + capability.owner().stableId());
         }
-        if (resolved >= declaration.maxResolvedRetention()) {
-            throw new IllegalArgumentException("physical lifecycle requires owner compaction before new work: " + capability.owner().stableId());
+        java.util.Set<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId> compactable = compactableResolvedIds(state, capability);
+        if (resolved >= declaration.maxResolvedRetention()
+                && resolved - compactable.size() >= declaration.maxResolvedRetention()) {
+            throw new IllegalArgumentException("physical lifecycle resolved history requires owner-declared compaction: "
+                    + capability.owner().stableId());
         }
+        if (unresolved + resolved - compactable.size() >= declaration.maxUnresolved()) {
+            throw new IllegalArgumentException("physical lifecycle owner retention share is saturated: "
+                    + capability.owner().stableId());
+        }
+        int retainedAfterOwnerCompaction = state.physicalIntents().size() - compactable.size();
+        if (retainedAfterOwnerCompaction >= FrontierWorldState.MAX_PHYSICAL_INTENTS) {
+            throw new IllegalArgumentException("physical lifecycle aggregate retention is saturated by unresolved owner obligations");
+        }
+    }
+
+    private FrontierWorldState compactResolvedForPreparation(FrontierWorldState state, PhysicalIntentLifecycleCapability capability) {
+        return state.compactResolvedPhysicalIntents(compactableResolvedIds(state, capability));
+    }
+
+    private java.util.Set<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId> compactableResolvedIds(
+            FrontierWorldState state, PhysicalIntentLifecycleCapability capability) {
+        int resolved = 0;
+        for (PhysicalIntent intent : state.physicalIntents().values()) {
+            if (intent.lifecycleOwner() == capability.owner() && !capability.declaration().unresolved(intent)) resolved++;
+        }
+        if (resolved < capability.declaration().maxResolvedRetention()
+                && resolved + unresolvedCount(state, capability) < capability.declaration().maxUnresolved()) return java.util.Set.of();
+        java.util.Set<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId> ids = new java.util.LinkedHashSet<>();
+        for (PhysicalIntent intent : state.physicalIntents().values()) {
+            if (intent.lifecycleOwner() == capability.owner() && capability.resolvedRetentionPolicy().mayCompact(state, intent)) {
+                ids.add(intent.id());
+            }
+        }
+        return java.util.Set.copyOf(ids);
+    }
+
+    private int unresolvedCount(FrontierWorldState state, PhysicalIntentLifecycleCapability capability) {
+        int unresolved = 0;
+        for (PhysicalIntent intent : state.physicalIntents().values()) {
+            if (intent.lifecycleOwner() == capability.owner() && capability.declaration().unresolved(intent)) unresolved++;
+        }
+        return unresolved;
     }
 
     private static String fingerprint(Map<PhysicalIntentLifecycleOwner, PhysicalIntentLifecycleCapability> capabilities) {

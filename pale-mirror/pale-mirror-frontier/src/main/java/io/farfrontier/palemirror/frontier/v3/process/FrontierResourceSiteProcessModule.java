@@ -28,7 +28,7 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
                         (state, command, intent, transition) -> new CommandPlan.Accepted(
                                 ResourceSiteProcess.planPreparationTransition(state, intent, transition, command.submittedAt().ticks())),
                         FrontierResourceSiteProcessModule::reducePreparationTransition), intent -> FencedRecoveryAsset.EFFECT,
-                retirementAccount(PhysicalIntentLifecycleOwner.RESOURCE_SITE_PREPARATION)),
+                retirementAccount(PhysicalIntentLifecycleOwner.RESOURCE_SITE_PREPARATION), PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery()),
                 new FunctionalPhysicalIntentLifecycleCapability(
                 PhysicalIntentLifecycleDeclaration.physical(PhysicalIntentLifecycleOwner.RESOURCE_SITE_HARVEST,
                         Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.RESOURCE_SITE_HARVEST),
@@ -40,7 +40,7 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
                 FrontierResourceSiteProcessModule::reduceHarvestTransition, PhysicalIntentLifecycleRetirementPolicy.of(
                         FrontierResourceSiteProcessModule::planHarvestRetirement,
                         FrontierResourceSiteProcessModule::reduceHarvestTransition), intent -> FencedRecoveryAsset.EFFECT,
-                retirementAccount(PhysicalIntentLifecycleOwner.RESOURCE_SITE_HARVEST)));
+                retirementAccount(PhysicalIntentLifecycleOwner.RESOURCE_SITE_HARVEST), PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery()));
     }
 
     private static PhysicalIntentRetirementAccount retirementAccount(PhysicalIntentLifecycleOwner owner) {

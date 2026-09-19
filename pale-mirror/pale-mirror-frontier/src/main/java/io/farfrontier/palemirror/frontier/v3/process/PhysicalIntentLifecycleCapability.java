@@ -25,6 +25,9 @@ interface PhysicalIntentLifecycleCapability {
     /** Closed owner/kind/nominal-schema and retention declaration for this capability. */
     PhysicalIntentLifecycleDeclaration declaration();
 
+    /** Exact owner-supplied terminal-history disposition used before this owner admits new work. */
+    PhysicalIntentResolvedRetentionPolicy resolvedRetentionPolicy();
+
     /** Explicit executable terminal/late-input policy supplied by this owner's family. */
     PhysicalIntentLifecycleRetirementPolicy retirementPolicy();
 

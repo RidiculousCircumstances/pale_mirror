@@ -26,7 +26,7 @@ final class FrontierSettlementServiceWorkProcessModule implements FrontierWorldP
                 PhysicalIntentLifecycleRetirementPolicy.of(
                         FrontierSettlementServiceWorkProcessModule::planPhysicalTransition,
                         FrontierSettlementServiceWorkProcessModule::reducePhysicalTransition), intent -> FencedRecoveryAsset.EFFECT,
-                retirementAccount(PhysicalIntentLifecycleOwner.SETTLEMENT_SERVICE_WORK)),
+                retirementAccount(PhysicalIntentLifecycleOwner.SETTLEMENT_SERVICE_WORK), PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery()),
                 new FunctionalPhysicalIntentLifecycleCapability(
                         PhysicalIntentLifecycleDeclaration.physical(PhysicalIntentLifecycleOwner.SETTLEMENT_SERVICE_DECONTAMINATION,
                                 Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.DECONTAMINATION),
@@ -38,7 +38,7 @@ final class FrontierSettlementServiceWorkProcessModule implements FrontierWorldP
                         PhysicalIntentLifecycleRetirementPolicy.of(
                                 FrontierSettlementServiceWorkProcessModule::planServiceDecontaminationTransition,
                                 FrontierSettlementServiceWorkProcessModule::reduceServiceDecontaminationTransition), intent -> FencedRecoveryAsset.EFFECT,
-                        retirementAccount(PhysicalIntentLifecycleOwner.SETTLEMENT_SERVICE_DECONTAMINATION)));
+                        retirementAccount(PhysicalIntentLifecycleOwner.SETTLEMENT_SERVICE_DECONTAMINATION), PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery()));
     }
 
     private static PhysicalIntentRetirementAccount retirementAccount(PhysicalIntentLifecycleOwner owner) {

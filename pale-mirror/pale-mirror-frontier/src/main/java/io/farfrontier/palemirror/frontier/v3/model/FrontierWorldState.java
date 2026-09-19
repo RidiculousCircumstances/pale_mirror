@@ -12,7 +12,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         Map<SubjectId, AmbientActorLease> ambientLeases, Map<SubjectId, RouteConstruction> routeConstructions, Map<SubjectId, RouteMaintenance> routeMaintenances, RouteTopology routeTopology, StrategicPlanState strategicPlans,
         HumanPopulation humanPopulation, CompanyRegistry companies, ResourceSiteState resourceSites, PhysicalReplicaCustodyState replicaCustody,
         DeferredAftermathState deferredAftermath, FencedRecoveryState fencedRecovery) {
-    private static final FixedRatio ZERO_INFECTION = new FixedRatio(io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO); private static final int MAX_OPERATIONS = 1_024, MAX_PHYSICAL_INTENTS = 4_096, MAX_PHYSICAL_OBSERVATIONS = 4_096;
+    private static final FixedRatio ZERO_INFECTION = new FixedRatio(io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO); private static final int MAX_OPERATIONS = 1_024, MAX_PHYSICAL_OBSERVATIONS = 4_096;
+    public static final int MAX_PHYSICAL_INTENTS = 4_096;
     private static final int MAX_SCENE_LEASES = 1_024, MAX_AMBIENT_LEASES = 4_096, MAX_STRUCTURE_DAMAGE_CELLS = 65_536;
     private static final ThreadLocal<Integer> DEFERRED_FULL_VALIDATION_DEPTH = ThreadLocal.withInitial(() -> 0);
     public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocation> actorLocations,
@@ -763,6 +764,30 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         Map<PhysicalIntentId, PhysicalIntent> next = new LinkedHashMap<>(physicalIntents);
         next.put(intent.id(), intent);
         return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations, next, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
+    }
+    /** Owner lifecycle policy supplies exact confirmed IDs; generic state never chooses a family to compact. */
+    public FrontierWorldState compactResolvedPhysicalIntents(Set<PhysicalIntentId> resolvedIds) {
+        Objects.requireNonNull(resolvedIds, "resolved physical intent ids");
+        if (resolvedIds.isEmpty()) return this;
+        Map<PhysicalIntentId, PhysicalIntent> next = new LinkedHashMap<>(physicalIntents);
+        Map<PhysicalObservationId, PhysicalEffectObservation> nextObservations = new LinkedHashMap<>(physicalObservations);
+        for (PhysicalIntentId id : resolvedIds) {
+            PhysicalIntent intent = next.get(Objects.requireNonNull(id, "resolved physical intent id"));
+            if (intent == null || intent.status() != PhysicalIntentStatus.CONFIRMED) {
+                throw new IllegalArgumentException("only owner-selected confirmed physical intent may compact: " + id.value());
+            }
+            PhysicalObservationId observationId = intent.postconditionObservationId()
+                    .orElseThrow(() -> new IllegalArgumentException("confirmed physical intent lacks its exact receipt"));
+            PhysicalEffectObservation observation = nextObservations.get(observationId);
+            if (observation == null || !observation.intentId().equals(id)) {
+                throw new IllegalArgumentException("confirmed physical intent lacks its exact paired receipt");
+            }
+            next.remove(id);
+            nextObservations.remove(observationId);
+        }
+        // Full aggregate validation proves an owner-selected terminal pair is not still an
+        // obligation of another retained capability; this method never chooses the pair.
+        return next(actorLocations, structureConditions, infection, inventory, productionJobs, contracts, operations, next, nextObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas, ambientLeases);
     }
     /**
      * Package-local fixture seam. Production lifecycle reductions must reach

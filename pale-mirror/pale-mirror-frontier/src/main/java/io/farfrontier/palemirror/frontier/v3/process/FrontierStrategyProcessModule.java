@@ -46,7 +46,7 @@ final class FrontierStrategyProcessModule implements FrontierWorldProcessModule 
                                             evidence, new java.util.LinkedHashMap<>(intents)),
                                     PhysicalIntentTransitionStorage::recordUnknown);
                         }), intent -> FencedRecoveryAsset.EFFECT,
-                retirementAccount(PhysicalIntentLifecycleOwner.DECONTAMINATION)));
+                retirementAccount(PhysicalIntentLifecycleOwner.DECONTAMINATION), PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery()));
     }
 
     private static PhysicalIntentRetirementAccount retirementAccount(PhysicalIntentLifecycleOwner owner) {

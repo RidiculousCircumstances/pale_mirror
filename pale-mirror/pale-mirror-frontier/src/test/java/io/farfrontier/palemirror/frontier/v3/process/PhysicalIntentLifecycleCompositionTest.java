@@ -29,6 +29,7 @@ import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentRetirementProof;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
@@ -41,6 +42,27 @@ class PhysicalIntentLifecycleCompositionTest {
         assertDoesNotThrow(FrontierWorldProcessCatalog::physicalLifecycles);
         assertDoesNotThrow(() -> PhysicalIntentLifecycleCapabilities.compose(List.of(module(Arrays.stream(
                 PhysicalIntentLifecycleOwner.values()).map(owner -> capability(owner, supported(owner))).toList()))));
+        assertEquals(FrontierWorldState.MAX_PHYSICAL_INTENTS,
+                FrontierWorldProcessCatalog.physicalLifecycles().unresolvedAdmissionCapacity(),
+                "explicit per-owner quotas must partition the aggregate bound so no one owner can consume it first");
+        assertEquals(16 * PhysicalIntentLifecycleDeclaration.MAX_PER_OWNER,
+                FrontierWorldProcessCatalog.physicalLifecycles().unresolvedAdmissionCapacity(),
+                "all sixteen physical owners receive the same bounded unresolved admission share");
+    }
+
+    @Test
+    void unresolvedAndConflictedIntentsCannotBecomeCompactableHistory() {
+        PhysicalIntentLifecycleDeclaration declaration = PhysicalIntentLifecycleDeclaration.physical(
+                PhysicalIntentLifecycleOwner.RESOURCE_SITE_PREPARATION,
+                Set.of(PhysicalIntentKind.RESOURCE_SITE_PREPARATION), Set.of(PhysicalIntentRoleSchema.RESOURCE_SITE_PREPARATION));
+        PhysicalIntentResolvedRetentionPolicy policy = PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery();
+        PhysicalIntent unknown = retentionIntent("unknown", PhysicalIntentStatus.UNKNOWN_AFTER_RESTART);
+        PhysicalIntent conflicted = retentionIntent("conflicted", PhysicalIntentStatus.CONFLICTED);
+
+        assertTrue(declaration.unresolved(unknown));
+        assertTrue(declaration.unresolved(conflicted));
+        assertTrue(!policy.mayCompact(null, unknown));
+        assertTrue(!policy.mayCompact(null, conflicted));
     }
 
     @Test
@@ -62,6 +84,13 @@ class PhysicalIntentLifecycleCompositionTest {
         FrontierWorldProcessModule mismatchedAccount = module(Arrays.stream(PhysicalIntentLifecycleOwner.values())
                 .map(owner -> capability(owner, supported(owner), PhysicalIntentLifecycleRetirementPolicy.noPhysical(owner),
                         owner == first ? account(PhysicalIntentLifecycleOwner.RESOURCE_SITE_PREPARATION) : account(owner))).toList());
+        FrontierWorldProcessModule unfairShare = module(Arrays.stream(PhysicalIntentLifecycleOwner.values()).map(owner -> {
+            if (owner != first) return capability(owner, supported(owner));
+            return new AbstractPhysicalIntentLifecycleCapability(new PhysicalIntentLifecycleDeclaration(first,
+                    PhysicalIntentLifecycleDeclaration.VERSION, supported(first), Set.of(PhysicalIntentRoleSchema.RESOURCE_SITE_HARVEST), 257, 256),
+                    PhysicalIntentLifecycleRetirementPolicy.noPhysical(first), account(first),
+                    PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery()) { };
+        }).toList());
         PhysicalIntentRetirementAccount incomplete = new PhysicalIntentRetirementAccount() {
             @Override public PhysicalIntentLifecycleOwner owner() { return first; }
             @Override public java.util.EnumSet<Dimension> checkedDimensions() { return java.util.EnumSet.noneOf(Dimension.class); }
@@ -85,6 +114,8 @@ class PhysicalIntentLifecycleCompositionTest {
         assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleCapabilities.compose(List.of(missingRetirement)));
         assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleCapabilities.compose(List.of(missingAccount)));
         assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleCapabilities.compose(List.of(mismatchedAccount)));
+        assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleCapabilities.compose(List.of(unfairShare)),
+                "one owner cannot enlarge its declared share before aggregate admission is exhausted");
         assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleCapabilities.compose(List.of(incompleteAccount)));
         assertThrows(IllegalArgumentException.class, () -> new PhysicalIntentLifecycleDeclaration(first,
                 PhysicalIntentLifecycleDeclaration.VERSION + 1, supported(first), Set.of(PhysicalIntentRoleSchema.RESOURCE_SITE_HARVEST), 256, 256),
@@ -105,6 +136,9 @@ class PhysicalIntentLifecycleCompositionTest {
                         PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE,
                         supported(PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE), Set.of(PhysicalIntentRoleSchema.STRUCTURAL_REPAIR)),
                 "a partial owner declaration must fail at its boundary before composition can discover missing schemas");
+        assertThrows(NullPointerException.class, () -> new AbstractPhysicalIntentLifecycleCapability(
+                declaration(first, supported(first)), PhysicalIntentLifecycleRetirementPolicy.noPhysical(first), account(first), null) { },
+                "a physical owner cannot omit its executable resolved-history retention policy");
     }
 
     @Test
@@ -293,7 +327,8 @@ class PhysicalIntentLifecycleCompositionTest {
     private static PhysicalIntentLifecycleCapability capability(PhysicalIntentLifecycleOwner owner, Set<PhysicalIntentKind> kinds,
                                                                  PhysicalIntentLifecycleRetirementPolicy retirementPolicy,
                                                                  PhysicalIntentRetirementAccount account) {
-        return new AbstractPhysicalIntentLifecycleCapability(declaration(owner, kinds), retirementPolicy, account) { };
+        return new AbstractPhysicalIntentLifecycleCapability(declaration(owner, kinds), retirementPolicy, account,
+                PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery()) { };
     }
 
     private static PhysicalIntentRetirementAccount account(PhysicalIntentLifecycleOwner owner) {
@@ -332,5 +367,13 @@ class PhysicalIntentLifecycleCompositionTest {
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
         return kinds.isEmpty() ? new PhysicalIntentLifecycleDeclaration(owner, PhysicalIntentLifecycleDeclaration.VERSION, Set.of(), Set.of(), 0, 0)
                 : PhysicalIntentLifecycleDeclaration.physical(owner, kinds, schemas);
+    }
+
+    private static PhysicalIntent retentionIntent(String suffix, PhysicalIntentStatus status) {
+        SubjectId site = new SubjectId("site:retention-" + suffix);
+        return new PhysicalIntent(new PhysicalIntentId("intent:retention-" + suffix), PhysicalIntentKind.RESOURCE_SITE_PREPARATION,
+                status, site, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.sitePreparation(site,
+                new SubjectId("job:retention-" + suffix)), new FixedPosition(FixedScalar.ZERO, FixedScalar.whole(64), FixedScalar.ZERO),
+                0, PhysicalPostcondition.RESOURCE_SITE_PREPARED_OBSERVED, PhysicalIntentLifecycleOwner.RESOURCE_SITE_PREPARATION);
     }
 }

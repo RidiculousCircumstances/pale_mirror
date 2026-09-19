@@ -22,8 +22,8 @@ record PhysicalIntentLifecycleDeclaration(PhysicalIntentLifecycleOwner owner, in
                                           Set<PhysicalIntentRoleSchema> schemas,
                                           int maxUnresolved, int maxResolvedRetention) {
     static final int VERSION = 1;
-    /** Matches the canonical world intent cap; composition must not silently narrow existing throughput. */
-    static final int MAX_PER_OWNER = 4_096;
+    /** Sixteen physical owners each receive one 256-intent retained-work share of the 4,096 bound. */
+    static final int MAX_PER_OWNER = 256;
 
     PhysicalIntentLifecycleDeclaration {
         owner = Objects.requireNonNull(owner, "physical lifecycle declaration owner");
@@ -66,7 +66,7 @@ record PhysicalIntentLifecycleDeclaration(PhysicalIntentLifecycleOwner owner, in
 
     boolean unresolved(PhysicalIntent intent) {
         return intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING
-                || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART;
+                || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART || intent.status() == PhysicalIntentStatus.CONFLICTED;
     }
 
     String canonicalMaterial() {

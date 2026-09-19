@@ -9,6 +9,6 @@ final class NoPhysicalIntentLifecyclePolicy extends AbstractPhysicalIntentLifecy
     NoPhysicalIntentLifecyclePolicy(PhysicalIntentLifecycleOwner owner) {
         super(new PhysicalIntentLifecycleDeclaration(owner, PhysicalIntentLifecycleDeclaration.VERSION, Set.of(), Set.of(), 0, 0),
                 PhysicalIntentLifecycleRetirementPolicy.noPhysical(owner),
-                PhysicalIntentRetirementAccount.noPhysical(owner));
+                PhysicalIntentRetirementAccount.noPhysical(owner), PhysicalIntentResolvedRetentionPolicy.none());
     }
 }

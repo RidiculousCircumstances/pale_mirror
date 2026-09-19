@@ -43,7 +43,7 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
                             }
                             return reducePopulationConsumption(state, intent, transition);
                         }), intent -> FencedRecoveryAsset.EFFECT,
-                retirementAccount(PhysicalIntentLifecycleOwner.POPULATION_MIGRATION));
+                retirementAccount(PhysicalIntentLifecycleOwner.POPULATION_MIGRATION), PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery());
     }
 
     private static PhysicalIntentLifecycleCapability medicalConsumptionCapability() {
@@ -90,7 +90,7 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
                             MedicalTreatmentProcess.operationForIntent(state, intent);
                             return reducePopulationConsumption(state, intent, transition);
                         }), intent -> FencedRecoveryAsset.EFFECT,
-                retirementAccount(PhysicalIntentLifecycleOwner.MEDICAL_TREATMENT));
+                retirementAccount(PhysicalIntentLifecycleOwner.MEDICAL_TREATMENT), PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery());
     }
 
     private static PhysicalIntentLifecycleCapability provisionConsumptionCapability() {
@@ -115,7 +115,7 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
                             }
                             return reducePopulationConsumption(state, intent, transition);
                 }), intent -> FencedRecoveryAsset.EFFECT,
-                retirementAccount(PhysicalIntentLifecycleOwner.SETTLEMENT_PROVISION));
+                retirementAccount(PhysicalIntentLifecycleOwner.SETTLEMENT_PROVISION), PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery());
     }
 
     private static PhysicalIntentRetirementAccount retirementAccount(PhysicalIntentLifecycleOwner owner) {

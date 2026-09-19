@@ -29,8 +29,9 @@ final class FunctionalPhysicalIntentLifecycleCapability extends AbstractPhysical
                                                 PreparedReducer preparedReducer, TransitionReducer transitionReducer,
                                                 PhysicalIntentLifecycleRetirementPolicy retirementPolicy,
                                                 RecoveryAssetResolver recoveryAssetResolver,
-                                                PhysicalIntentRetirementAccount retirementAccount) {
-        super(declaration, retirementPolicy, retirementAccount);
+                                                PhysicalIntentRetirementAccount retirementAccount,
+                                                PhysicalIntentResolvedRetentionPolicy resolvedRetentionPolicy) {
+        super(declaration, retirementPolicy, retirementAccount, resolvedRetentionPolicy);
         this.preparedPlanner = preparedPlanner;
         this.transitionPlanner = transitionPlanner;
         this.preparedReducer = preparedReducer;

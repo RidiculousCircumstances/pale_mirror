@@ -13,7 +13,8 @@ import org.junit.jupiter.api.Test;
 class PhysicalIntentLifecycleArchitectureTest {
     @Test
     void commonIngressDoesNotDispatchByPhysicalKindOrConcreteFamily() throws IOException {
-        Path process = repositoryRoot().resolve("pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process");
+        Path root = repositoryRoot().resolve("pale-mirror-frontier/src");
+        Path process = root.resolve("main/java/io/farfrontier/palemirror/frontier/v3/process");
         String ingress = Files.readString(process.resolve("FrontierPhysicalProcessModule.java"));
         String composition = Files.readString(process.resolve("PhysicalIntentLifecycleCapabilities.java"));
 
@@ -53,6 +54,30 @@ class PhysicalIntentLifecycleArchitectureTest {
                 "terminal and late input must execute the owner-supplied retirement boundary");
         assertTrue(Files.readString(process.resolve("PhysicalIntentLifecycleCapability.java")).contains("retirementPolicy()"),
                 "every lifecycle capability must declare an executable retirement policy");
+        String retention = Files.readString(process.resolve("PhysicalIntentResolvedRetentionPolicy.java"));
+        assertTrue(retention.contains("FencedRecoveryPhysicalIntentSupport.bindingId(intent)")
+                        && retention.contains("PhysicalIntentStatus.CONFIRMED"),
+                "resolved-history disposition must preserve every live recovery authority and only select settled receipts");
+        assertTrue(composition.contains("compactResolvedForPreparation")
+                        && composition.contains("owner retention share is saturated")
+                        && composition.contains("must partition the aggregate unresolved admission bound"),
+                "same owner declarations must drive executable compaction and fair bounded admission, not diagnostic-only pressure");
+        String aggregate = Files.readString(root.resolve("main/java/io/farfrontier/palemirror/frontier/v3/model/FrontierWorldState.java"));
+        int compactionStart = aggregate.indexOf("compactResolvedPhysicalIntents");
+        int compactionEnd = aggregate.indexOf("FrontierWorldState transitionPhysicalIntent", compactionStart);
+        String compaction = aggregate.substring(compactionStart, compactionEnd);
+        assertTrue(compaction.contains("nextObservations.remove(observationId)") && compaction.contains("PhysicalIntentStatus.CONFIRMED"),
+                "terminal compaction must atomically retire only the exact confirmed intent/receipt pair");
+        assertFalse(compaction.contains("PhysicalIntentKind") || compaction.contains("lifecycleOwner()"),
+                "aggregate retention may validate owner-selected identities but must never discover a family to compact");
+        try (Stream<Path> paths = Files.walk(root.resolve("main/java"))) {
+            assertFalse(paths.filter(path -> path.toString().endsWith(".java"))
+                            .filter(path -> !path.getFileName().toString().equals("FrontierWorldState.java"))
+                            .filter(path -> !path.getFileName().toString().equals("PhysicalIntentLifecycleCapabilities.java"))
+                            .map(PhysicalIntentLifecycleArchitectureTest::readUnchecked)
+                            .anyMatch(source -> source.contains(".compactResolvedPhysicalIntents(")),
+                    "only the closed lifecycle composition may invoke aggregate terminal-history storage");
+        }
         String fence = Files.readString(repositoryRoot().resolve("pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/FencedRecoveryPhysicalIntentSupport.java"));
         assertFalse(fence.contains("intent.kind()") || fence.contains("switch (intent"),
                 "common recovery fencing must consume a family-supplied typed asset, never infer it from an intent kind");
