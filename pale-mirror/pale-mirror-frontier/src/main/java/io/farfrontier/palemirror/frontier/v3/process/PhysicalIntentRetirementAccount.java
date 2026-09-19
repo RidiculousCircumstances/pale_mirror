@@ -83,6 +83,8 @@ interface PhysicalIntentRetirementAccount {
                 throw new IllegalArgumentException("retirement account binds a relation absent from authoritative pre-state");
             }
         }
+        validateObligation(binding.leaseOrCarrier(), binding.relations(), "lease/carrier");
+        validateObligation(binding.commitment(), binding.relations(), "resource commitment");
         if (binding.continuation() instanceof Exact<ScheduleId> expected) {
             long matching = accepted.events().stream().map(event -> event.payload()).filter(ScheduleEffect.class::isInstance)
                     .map(ScheduleEffect.class::cast).filter(effect -> affects(effect, expected.value())).count();
@@ -110,6 +112,8 @@ interface PhysicalIntentRetirementAccount {
                 throw new IllegalArgumentException("retirement account relation is not an authoritative pre-state edge");
             }
         }
+        validateObligation(binding.leaseOrCarrier(), binding.relations(), "lease/carrier");
+        validateObligation(binding.commitment(), binding.relations(), "resource commitment");
         PhysicalIntent terminal = after.physicalIntents().get(intent.id());
         if (terminal == null || terminal.status() != transition.status()) throw new IllegalArgumentException("retirement account lost its exact terminal intent");
         var bindingId = FencedRecoveryPhysicalIntentSupport.bindingId(intent);
@@ -172,12 +176,26 @@ interface PhysicalIntentRetirementAccount {
         Optional<ScheduleId> schedule = command == null ? Optional.empty() : command.scheduleBinding().map(binding -> binding.action().id());
         return new Binding(owner, intent.id(), List.of(), schedule.<Obligation<ScheduleId>>map(Exact::new)
                 .orElseGet(() -> new CheckedNone<>("no engine continuation bound to this terminal command")),
-                new CheckedNone<>("owner declares no lease/carrier obligation"),
-                new CheckedNone<>("owner declares no resource commitment obligation"), lateDisposition(transition));
+                new CheckedNone<>(owner.stableId() + " has no retained lease/carrier obligation in the current owner contract"),
+                new CheckedNone<>(owner.stableId() + " has no retained resource commitment in the current owner contract"), lateDisposition(transition));
     }
 
     @FunctionalInterface interface BindingFactory {
         Binding bind(FrontierWorldState before, FrontierCommand command, PhysicalIntent intent, PhysicalIntentTransition transition);
+    }
+
+    private static void validateObligation(Obligation<SubjectId> obligation, List<FrontierDomainRelationships.Edge> relations, String dimension) {
+        if (obligation instanceof Exact<SubjectId> exact && relations.stream().noneMatch(edge -> endpointIs(edge, exact.value()))) {
+            throw new IllegalArgumentException("retirement account " + dimension + " is not bound by one of its exact relations");
+        }
+    }
+
+    private static boolean endpointIs(FrontierDomainRelationships.Edge edge, SubjectId id) {
+        return endpointIs(edge.owner(), id) || endpointIs(edge.source(), id) || endpointIs(edge.target(), id);
+    }
+
+    private static boolean endpointIs(FrontierDomainRelationships.Endpoint endpoint, SubjectId id) {
+        return endpoint instanceof FrontierDomainRelationships.SubjectEndpoint subject && subject.id().equals(id);
     }
 
     private static boolean affects(ScheduleEffect effect, ScheduleId id) {
