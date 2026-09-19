@@ -56,9 +56,13 @@ final class FencedRecoveryPayloadCodecs {
                 Ambiguous value = (Ambiguous) payload;
                 id(output, value.bindingId()); output.writeLong(value.expectedEpoch());
                 FrontierWorldPayloadCodecs.writeString(output, value.reason()); output.writeByte(value.action().wireTag());
+                FrontierWorldPayloadCodecs.writeDiagnosticTuple(output, value.diagnostic());
             });
         }
-        @Override public FrontierPayload decode(byte[] bytes) { return payload(bytes, input -> new Ambiguous(id(input), input.readLong(), FrontierWorldPayloadCodecs.readString(input), disposition(input.readUnsignedByte()))); }
+        @Override public FrontierPayload decode(byte[] bytes) {
+            return payload(bytes, input -> new Ambiguous(id(input), input.readLong(), FrontierWorldPayloadCodecs.readString(input),
+                    disposition(input.readUnsignedByte()), FrontierWorldPayloadCodecs.readDiagnosticTuple(input)));
+        }
     }
     private static void writeBinding(DataOutputStream output, FencedRecoveryBinding value) throws IOException {
         FrontierWorldPayloadCodecs.writeSubject(output, value.bindingId()); output.writeByte(value.asset().wireTag());

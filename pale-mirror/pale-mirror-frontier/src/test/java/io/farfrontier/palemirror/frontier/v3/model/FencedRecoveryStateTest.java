@@ -84,6 +84,34 @@ class FencedRecoveryStateTest {
     }
 
     @Test
+    void ambiguityRequiresReplicaCustodyAuthorityAndRetainsItAcrossWalAndSnapshotRecovery() {
+        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:fenced-recovery-diagnostic"), 91L));
+        submit(engine, new Prepared(binding(EFFECT, FencedRecoveryAsset.EFFECT, 1L, false)));
+        submit(engine, new Running(EFFECT, 1L));
+
+        DiagnosticTuple foreign = new DiagnosticTuple(DiagnosticReason.FENCED_RECOVERY_AMBIGUOUS,
+                DiagnosticCategory.RECOVERY_UNKNOWN,
+                new DiagnosticOwner(DiagnosticOwnerKind.REPLICA_CUSTODY, BODY),
+                new DiagnosticSubject(DiagnosticSubjectKind.PHYSICAL_EFFECT, BODY), DiagnosticDisposition.INSPECT);
+        assertThrows(IllegalArgumentException.class, () -> new Ambiguous(EFFECT, 1L, "uninspectable-physical-effect",
+                FencedRecoveryDisposition.INSPECT, foreign), "the reducer must never accept a tuple for another recovery binding");
+
+        Ambiguous admitted = FencedRecoveryDiagnosticProducer.ambiguous(EFFECT, 1L, "uninspectable-physical-effect", FencedRecoveryDisposition.INSPECT);
+        assertEquals(admitted, FrontierWorldRuntimeDefinition.payloadCodecs().decode(admitted.type(),
+                FrontierWorldRuntimeDefinition.payloadCodecs().encode(admitted)),
+                "the installed WAL registry must retain the producer-stamped ambiguity tuple");
+        submit(engine, admitted);
+        FrontierWorldState changed = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        DiagnosticIncident incident = changed.diagnosticIncidents().why(admitted.diagnostic().subject()).orElseThrow();
+        assertEquals(admitted.diagnostic(), incident.diagnostic());
+        assertEquals(FencedRecoveryPhase.AMBIGUOUS, changed.fencedRecovery().current().get(EFFECT).phase());
+
+        FrontierWorldState recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(changed));
+        assertEquals(admitted.diagnostic(), recovered.diagnosticIncidents().why(admitted.diagnostic().subject()).orElseThrow().diagnostic());
+        assertEquals(FencedRecoveryPhase.AMBIGUOUS, recovered.fencedRecovery().current().get(EFFECT).phase());
+    }
+
+    @Test
     void boundedTombstoneRetentionCompactsOnlyForANewDurableAuthorityAndStillRejectsUnknownLateProjection() {
         java.util.Map<SubjectId, FencedRecoveryTombstone> retained = new java.util.LinkedHashMap<>();
         for (int index = 0; index < FencedRecoveryState.MAX_BINDINGS; index++) {

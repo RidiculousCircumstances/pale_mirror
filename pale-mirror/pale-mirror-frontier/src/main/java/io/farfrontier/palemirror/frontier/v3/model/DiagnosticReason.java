@@ -27,6 +27,7 @@ public enum DiagnosticReason {
     PHYSICAL_CUSTODY_UNRESOLVED(403, DiagnosticCategory.RECOVERY_UNKNOWN, DiagnosticOwnerKind.PHYSICAL_INTENT, DiagnosticSubjectKind.PHYSICAL_EFFECT, DiagnosticDisposition.INSPECT),
     SCENE_LEASE_RECOVERY_UNRESOLVED(404, DiagnosticCategory.RECOVERY_UNKNOWN, DiagnosticOwnerKind.SCENE_LEASE, DiagnosticSubjectKind.SCENE_CARRIER, DiagnosticDisposition.INSPECT),
     ROUTE_PATROL_MEMBER_LOST(405, DiagnosticCategory.DOMAIN_DISRUPTION, DiagnosticOwnerKind.ROUTE_PATROL, DiagnosticSubjectKind.ROUTE_MEMBER, DiagnosticDisposition.INSPECT),
+    FENCED_RECOVERY_AMBIGUOUS(406, DiagnosticCategory.RECOVERY_UNKNOWN, DiagnosticOwnerKind.REPLICA_CUSTODY, DiagnosticSubjectKind.PHYSICAL_EFFECT, DiagnosticDisposition.INSPECT),
     FRONTIER_QUARANTINE(501, DiagnosticCategory.CANONICAL_INVARIANT_FAILURE, DiagnosticOwnerKind.FRONTIER_INSTANCE, DiagnosticSubjectKind.FRONTIER_INSTANCE, DiagnosticDisposition.QUARANTINE),
     FRONTIER_KERNEL_COMMAND_FAILURE(502, DiagnosticCategory.ADAPTER_OR_INFRASTRUCTURE_ERROR, DiagnosticOwnerKind.FRONTIER_INSTANCE, DiagnosticSubjectKind.FRONTIER_INSTANCE, DiagnosticDisposition.QUARANTINE),
     FRONTIER_KERNEL_TRANSACTION_CAPACITY(503, DiagnosticCategory.CANONICAL_INVARIANT_FAILURE, DiagnosticOwnerKind.FRONTIER_INSTANCE, DiagnosticSubjectKind.FRONTIER_INSTANCE, DiagnosticDisposition.QUARANTINE),

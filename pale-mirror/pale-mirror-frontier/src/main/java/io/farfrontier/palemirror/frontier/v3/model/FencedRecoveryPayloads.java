@@ -30,11 +30,18 @@ public final class FencedRecoveryPayloads {
         public RevokedToCold { require(bindingId, expectedEpoch); }
         @Override public String type() { return "frontier.fenced_recovery_revoked_to_cold"; }
     }
-    public record Ambiguous(SubjectId bindingId, long expectedEpoch, String reason, FencedRecoveryDisposition action) implements FrontierPayload {
+    /**
+     * A potentially applied physical consequence is locally unknown.  The replica-custody
+     * producer stamps this exact binding before the ambiguity can enter canonical recovery.
+     */
+    public record Ambiguous(SubjectId bindingId, long expectedEpoch, String reason, FencedRecoveryDisposition action,
+                            DiagnosticTuple diagnostic) implements FrontierPayload {
         public Ambiguous {
             require(bindingId, expectedEpoch); Objects.requireNonNull(reason, "recovery reason");
             Objects.requireNonNull(action, "recovery action");
+            diagnostic = Objects.requireNonNull(diagnostic, "recovery ambiguity diagnostic");
             if (reason.isBlank() || reason.length() > 96) throw new IllegalArgumentException("recovery ambiguity reason is invalid");
+            FencedRecoveryDiagnosticProducer.requireExact(bindingId, diagnostic);
         }
         @Override public String type() { return "frontier.fenced_recovery_ambiguous"; }
     }

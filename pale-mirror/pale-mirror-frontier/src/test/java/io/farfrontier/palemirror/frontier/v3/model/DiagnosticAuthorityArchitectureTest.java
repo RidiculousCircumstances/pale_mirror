@@ -84,6 +84,20 @@ class DiagnosticAuthorityArchitectureTest {
                 "a declared diagnostic kind cannot reduce without its producer-stamped authority");
     }
 
+    @Test
+    void fencedRecoveryAmbiguityIsARequiredNominalProducerNotAnOrdinaryPayload() {
+        var binding = new io.farfrontier.palemirror.frontier.v3.api.SubjectId("binding:diagnostic-recovery");
+        var admitted = FencedRecoveryDiagnosticProducer.ambiguous(binding, 1L, "physical-observation-unavailable", FencedRecoveryDisposition.INSPECT);
+        DiagnosticProducerContract.requireAdmitted(admitted);
+        assertTrue(DiagnosticIncidentExtractor.tuple(admitted).isPresent());
+        assertThrows(IllegalArgumentException.class, () -> new FencedRecoveryPayloads.Ambiguous(binding, 1L,
+                "physical-observation-unavailable", FencedRecoveryDisposition.INSPECT,
+                new DiagnosticTuple(DiagnosticReason.FENCED_RECOVERY_AMBIGUOUS, DiagnosticCategory.RECOVERY_UNKNOWN,
+                        new DiagnosticOwner(DiagnosticOwnerKind.REPLICA_CUSTODY, new io.farfrontier.palemirror.frontier.v3.api.SubjectId("binding:foreign")),
+                        new DiagnosticSubject(DiagnosticSubjectKind.PHYSICAL_EFFECT, new io.farfrontier.palemirror.frontier.v3.api.SubjectId("binding:foreign")),
+                        DiagnosticDisposition.INSPECT)));
+    }
+
     private record UnspecifiedPayload() implements io.farfrontier.palemirror.frontier.v3.api.FrontierPayload {
         @Override public String type() { return "frontier.test_unlisted_payload"; }
     }
