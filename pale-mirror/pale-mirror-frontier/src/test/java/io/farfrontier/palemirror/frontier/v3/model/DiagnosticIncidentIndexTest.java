@@ -31,6 +31,22 @@ class DiagnosticIncidentIndexTest {
         FrontierWorldState restarted = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(reduced));
         assertEquals(incident, restarted.diagnosticIncidents().incident(id).orElseThrow());
         assertEquals(incident, restarted.diagnosticIncidents().why(payload.diagnostic().subject()).orElseThrow());
+        DiagnosticIncidentBundle bundle = restarted.diagnosticIncidents().bundle(id).orElseThrow();
+        assertEquals(id, bundle.incidentId());
+        assertEquals(payload.diagnostic(), bundle.diagnostic());
+        assertEquals("event:diagnostic-1", bundle.eventId());
+        assertEquals("command:diagnostic", bundle.causeId());
+    }
+
+    @Test void oneIdentityProducesOneBoundedBundleEvenWhenTheSameFactIsRepeated() {
+        DiagnosticTuple tuple = tuple(7);
+        DiagnosticIncidentIndex retained = DiagnosticIncidentIndex.empty().retain(tuple, "event:first", "cause:first", 3, 5)
+                .retain(tuple, "event:later", "cause:later", 4, 6);
+        DiagnosticIncidentBundle bundle = retained.bundle(DiagnosticIncident.idFor(tuple)).orElseThrow();
+        assertEquals(1, retained.incidents().size());
+        assertEquals("event:first", bundle.eventId(), "bundle identity retains its first event rather than a sampled later event");
+        assertEquals("cause:first", bundle.causeId());
+        assertEquals(2, bundle.occurrences());
     }
 
     @Test void terminalAdmissionFailsClosedInsteadOfEvictingAnUnresolvedExplanation() {

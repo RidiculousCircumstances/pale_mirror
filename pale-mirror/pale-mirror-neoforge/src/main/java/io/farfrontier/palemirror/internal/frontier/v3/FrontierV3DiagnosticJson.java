@@ -438,6 +438,14 @@ final class FrontierV3DiagnosticJson {
         return "{\"id\":\"" + quote(value.id()) + "\",\"firstEvent\":\"" + quote(value.firstEventId())
                 + "\",\"firstCause\":\"" + quote(value.firstCauseId()) + "\",\"firstRevision\":" + value.firstRevision()
                 + ",\"lastRevision\":" + value.lastRevision() + ",\"occurrences\":" + value.occurrences()
+                + ",\"awaitingReview\":" + value.awaitingReview() + ",\"diagnostic\":" + diagnostic(value.diagnostic())
+                + ",\"bundle\":" + bundle(value.bundle()) + "}";
+    }
+    /** Read-only identity-complete carrier for bounded incident export; it is never an owner lookup. */
+    private static String bundle(io.farfrontier.palemirror.frontier.v3.model.DiagnosticIncidentBundle value) {
+        return "{\"incident\":\"" + quote(value.incidentId()) + "\",\"event\":\"" + quote(value.eventId())
+                + "\",\"cause\":\"" + quote(value.causeId()) + "\",\"revision\":" + value.revision()
+                + ",\"instant\":" + value.instant() + ",\"occurrences\":" + value.occurrences()
                 + ",\"awaitingReview\":" + value.awaitingReview() + ",\"diagnostic\":" + diagnostic(value.diagnostic()) + "}";
     }
 

@@ -83,6 +83,34 @@ public final class FrontierV3PlayerCustodyGameTests {
         runtime.shutdown(); helper.succeed();
     }
 
+    /** An ordinary player chest move, rather than a constructed canonical conflict, must retain a diagnosable incident. */
+    @GameTest(batch = "pm-frontier-v3-player-withdrawal", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void ordinaryPlayerForeignChestMoveRetainsOneBlockedDiagnosticAcrossSnapshot(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); WorldId world = new WorldId("frontier:player-foreign-slot-diagnostic");
+        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime = exactWheatRuntime(world);
+        SubjectId container = new SubjectId("container:1-depot"); BlockPos chestPosition = interior(helper);
+        level.setBlock(chestPosition.below(), Blocks.STONE.defaultBlockState(), 3);
+        ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.claimFreshChest(level, chestPosition, container);
+        FrontierV3CommandSubmission.submit(runtime, "player-foreign-slot-prepare", container.value(), new ContainerSurfaceTransition(container, ContainerSurfaceStatus.PREPARED));
+        FrontierV3CommandSubmission.submit(runtime, "player-foreign-slot-active", container.value(), new ContainerSurfaceTransition(container, ContainerSurfaceStatus.ACTIVE));
+        var player = helper.makeMockServerPlayerInLevel();
+        player.getInventory().setItem(0, new ItemStack(Items.CARROT, 1));
+        chest.setItem(0, player.getInventory().removeItemNoUpdate(0)); chest.setChanged();
+
+        helper.assertTrue(FrontierV3InventoryObservationExecutor.observeOne(level, runtime, state(runtime), FrontierV3HopperCarrierLedger.get(level),
+                        new FrontierV3InventoryObservationExecutor.StoreChest(chestPosition, container), chest),
+                "the ordinary foreign player stack must be observed as one canonical conflict");
+        FrontierWorldState conflicted = state(runtime);
+        var conflict = conflicted.inventory().conflicts().values().stream().findFirst().orElseThrow();
+        var incident = conflicted.diagnosticIncidents().why(conflict.diagnostic().subject()).orElseThrow();
+        helper.assertValueEqual(incident.diagnostic(), conflict.diagnostic(), "why lookup must retain the producer-stamped tuple");
+        helper.assertTrue(incident.awaitingReview(), "one retained player conflict must block an otherwise green aggregate");
+        FrontierWorldState restarted = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(conflicted));
+        helper.assertValueEqual(restarted.diagnosticIncidents().bundle(incident.id()).orElseThrow(), incident.bundle(),
+                "snapshot restart must retain the same identity-complete incident bundle");
+        runtime.shutdown(); helper.succeed();
+    }
+
     @GameTest(batch = "pm-frontier-v3-player-withdrawal", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void activeChestTransfersOneFungiblePortionToItsRealPlayer(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); WorldId world = new WorldId("frontier:fungible-player-withdrawal-game-test");

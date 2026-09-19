@@ -81,6 +81,8 @@ class FrontierV3DiagnosticJsonTest {
         String summary = FrontierV3DiagnosticJson.render("summary", "", checkpoint, conflicted, Optional.empty());
         assertTrue(why.contains("\"reason\":\"INVENTORY_CONFLICT\"") && why.contains("\"owner\":\"" + slot.containerId().value()));
         assertTrue(retained.contains("\"subject\":\"" + incident.value()) && retained.contains("\"disposition\":\"INSPECT\""));
+        assertTrue(retained.contains("\"bundle\":{") && retained.contains("\"event\":\"event:fixture\""),
+                "one incident lookup must automatically render its identity-complete bounded bundle");
         assertTrue(summary.contains("\"diagnosticVerdict\":\"blocked\"") && summary.contains("\"inventoryConflicts\":1"));
     }
 

@@ -25,6 +25,8 @@ public record DiagnosticIncidentIndex(Map<String, DiagnosticIncident> incidents,
     }
     public static DiagnosticIncidentIndex empty() { return new DiagnosticIncidentIndex(Map.of(), Map.of(), 0); }
     public Optional<DiagnosticIncident> incident(String id) { return Optional.ofNullable(incidents.get(id)); }
+    /** Exact, automatic bundle lookup.  There is exactly one bundle for one retained incident identity. */
+    public Optional<DiagnosticIncidentBundle> bundle(String id) { return incident(id).map(DiagnosticIncident::bundle); }
     public Optional<DiagnosticIncident> why(DiagnosticSubject subject) { return Optional.ofNullable(bySubject.get(SubjectKey.of(subject))).map(incidents::get); }
     public DiagnosticIncidentIndex retain(DiagnosticTuple tuple, String eventId, String causeId, long revision, long instant) {
         return retain(DiagnosticIncident.idFor(tuple), tuple, eventId, causeId, revision, instant);
@@ -38,13 +40,14 @@ public record DiagnosticIncidentIndex(Map<String, DiagnosticIncident> incidents,
             Map<String, DiagnosticIncident> next = new LinkedHashMap<>(incidents); next.put(id, existing.repeated(revision, instant));
             return new DiagnosticIncidentIndex(next, bySubject, droppedOptional);
         }
+        String retainedSubjectId = bySubject.get(key);
+        if (retainedSubjectId != null) throw new IllegalStateException("diagnostic subject already has a different retained incident identity");
         // A new terminal account must be admitted or reject its canonical transaction. Optional
         // nonterminal detail degrades visibly; it can never make a terminal summary green.
         if (!DiagnosticIncident.terminal(tuple.category()) && optionalCount() >= MAX_OPTIONAL) {
             return new DiagnosticIncidentIndex(incidents, bySubject, Math.addExact(droppedOptional, 1));
         }
         if (incidents.size() >= MAX_INCIDENTS) {
-            if (DiagnosticIncident.terminal(tuple.category())) throw new IllegalStateException("diagnostic incident admission exhausted for required terminal fact");
             return compactOneOptional().retain(id, tuple, eventId, causeId, revision, instant);
         }
         DiagnosticIncident created = new DiagnosticIncident(id, tuple, eventId, causeId, revision, instant, revision, instant, 1,

@@ -31,5 +31,9 @@ public record DiagnosticIncident(String id, DiagnosticTuple diagnostic, String f
         if (revision < lastRevision || instant < lastInstant || occurrences == Integer.MAX_VALUE) throw new IllegalArgumentException("invalid incident repeat");
         return new DiagnosticIncident(id, diagnostic, firstEventId, firstCauseId, firstRevision, firstInstant, revision, instant, occurrences + 1, awaitingReview);
     }
+    /** Automatic bundle export retains first causal identity while reporting the current occurrence count. */
+    public DiagnosticIncidentBundle bundle() {
+        return new DiagnosticIncidentBundle(id, diagnostic, firstEventId, firstCauseId, firstRevision, firstInstant, occurrences, awaitingReview);
+    }
     private static String require(String value, String label) { value = Objects.requireNonNull(value, label); if (value.isBlank()) throw new IllegalArgumentException(label + " is blank"); return value; }
 }
