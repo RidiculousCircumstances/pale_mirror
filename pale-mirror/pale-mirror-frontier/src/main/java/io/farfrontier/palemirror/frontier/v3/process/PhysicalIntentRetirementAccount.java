@@ -19,12 +19,9 @@ import java.util.List;
 import java.util.EnumSet;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 
 /** Executable, transaction-local account supplied by the owner of a retiring physical intent. */
 interface PhysicalIntentRetirementAccount {
-    /** Ephemeral transaction carrier; never persistence or scheduler authority. */
-    ConcurrentHashMap<TransactionKey, Binding> PLANNED = new ConcurrentHashMap<>();
     enum Dimension { REL_EDGES, ENGINE_CONTINUATION, LEASE_OR_CARRIER, RESOURCE_COMMITMENT, LATE_RECOVERY }
 
     PhysicalIntentLifecycleOwner owner();
@@ -53,13 +50,10 @@ interface PhysicalIntentRetirementAccount {
 
     sealed interface Obligation<T> permits Exact, CheckedNone { }
     record Exact<T>(T value) implements Obligation<T> { public Exact { Objects.requireNonNull(value, "exact retirement obligation"); } }
-    record CheckedNone<T>(String reason, AbsenceCheck check) implements Obligation<T> {
-        public CheckedNone { if (reason == null || reason.isBlank()) throw new IllegalArgumentException("checked-none retirement reason is required"); Objects.requireNonNull(check, "checked-none retirement check"); }
-        CheckedNone(String reason) { this(reason, (before, intent) -> { }); }
+    record CheckedNone<T>(String reason) implements Obligation<T> {
+        public CheckedNone { if (reason == null || reason.isBlank()) throw new IllegalArgumentException("checked-none retirement reason is required"); }
     }
     enum LateDisposition { REJECT_STALE_ONCE, RETAIN_AMBIGUOUS_RECOVERY, NO_PHYSICAL_INPUT }
-    record TransactionKey(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId intentId, PhysicalIntentStatus status) { }
-    @FunctionalInterface interface AbsenceCheck { void verify(FrontierWorldState before, PhysicalIntent intent); }
 
     /** Builds the real account before plan publication, from authoritative facts only. */
     default Binding bind(FrontierWorldState before, FrontierCommand command, PhysicalIntent intent,
@@ -90,7 +84,6 @@ interface PhysicalIntentRetirementAccount {
         }
         validateObligation(binding.leaseOrCarrier(), exactRelations(binding.relations()), "lease/carrier");
         validateObligation(binding.commitment(), exactRelations(binding.relations()), "resource commitment");
-        validateCheckedNone(binding, before, intent);
         if (binding.continuation() instanceof Exact<ScheduleId> expected) {
             long matching = accepted.events().stream().map(event -> event.payload()).filter(ScheduleEffect.class::isInstance)
                     .map(ScheduleEffect.class::cast).filter(effect -> affects(effect, expected.value())).count();
@@ -105,18 +98,11 @@ interface PhysicalIntentRetirementAccount {
                     .map(ScheduleEffect.class::cast).filter(effect -> affects(effect, id)).count();
             if (matching > 1L) throw new IllegalArgumentException("retirement account duplicates bound engine schedule effect");
         });
-        TransactionKey key = new TransactionKey(intent.id(), transition.status());
-        // Planning may be retried before the engine publishes its one accepted event batch;
-        // replace only the same immutable pre-publication account.  A second committed event is
-        // still rejected by the fenced recovery authority at reduction.
-        PLANNED.put(key, binding);
     }
 
     default void verifyReduced(FrontierWorldState before, FrontierWorldState after, PhysicalIntent intent,
                                PhysicalIntentTransition transition) {
-        TransactionKey key = new TransactionKey(intent.id(), transition.status());
-        Binding binding = PLANNED.remove(key);
-        if (binding == null) binding = bind(before, null, intent, transition);
+        Binding binding = bind(before, null, intent, transition);
         if (binding.owner() != owner() || !binding.intentId().equals(intent.id()) || binding.lateDisposition() != lateDisposition(transition)) {
             throw new IllegalArgumentException("retirement account does not retain its terminal owner/intent/disposition binding");
         }
@@ -127,7 +113,6 @@ interface PhysicalIntentRetirementAccount {
         }
         validateObligation(binding.leaseOrCarrier(), exactRelations(binding.relations()), "lease/carrier");
         validateObligation(binding.commitment(), exactRelations(binding.relations()), "resource commitment");
-        validateCheckedNone(binding, before, intent);
         PhysicalIntent terminal = after.physicalIntents().get(intent.id());
         if (terminal == null || terminal.status() != transition.status()) throw new IllegalArgumentException("retirement account lost its exact terminal intent");
         var bindingId = FencedRecoveryPhysicalIntentSupport.bindingId(intent);
@@ -221,14 +206,6 @@ interface PhysicalIntentRetirementAccount {
 
     private static boolean endpointIs(FrontierDomainRelationships.Endpoint endpoint, SubjectId id) {
         return endpoint instanceof FrontierDomainRelationships.SubjectEndpoint subject && subject.id().equals(id);
-    }
-
-    private static void validateCheckedNone(Binding binding, FrontierWorldState before, PhysicalIntent intent) {
-        validateCheckedNone(binding.relations(), before, intent); validateCheckedNone(binding.continuation(), before, intent);
-        validateCheckedNone(binding.leaseOrCarrier(), before, intent); validateCheckedNone(binding.commitment(), before, intent);
-    }
-    private static void validateCheckedNone(Obligation<?> obligation, FrontierWorldState before, PhysicalIntent intent) {
-        if (obligation instanceof CheckedNone<?> none) none.check().verify(before, intent);
     }
 
     private static boolean affects(ScheduleEffect effect, ScheduleId id) {
