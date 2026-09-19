@@ -68,7 +68,7 @@ final class PhysicalIntentLifecycleCapabilities {
         try {
             CommandPlan plan = retires(transition) ? capability.retirementPolicy().plan(state, command, intent, transition)
                     : capability.planTransition(state, command, intent, transition);
-            if (retires(transition)) capability.retirementAccount().verifyPlan(command, intent, transition, plan);
+            if (retires(transition)) capability.retirementAccount().verifyPlan(state, command, intent, transition, plan);
             return plan;
         } catch (IllegalArgumentException invalid) {
             return new CommandPlan.Rejected(new CommandRejection(RejectionCode.REJECTED_BY_POLICY, invalid.getMessage()));
