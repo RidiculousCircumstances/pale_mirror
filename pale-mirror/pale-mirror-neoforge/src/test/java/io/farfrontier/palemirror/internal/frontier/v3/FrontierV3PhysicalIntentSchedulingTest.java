@@ -64,7 +64,8 @@ class FrontierV3PhysicalIntentSchedulingTest {
                     List.of(new SubjectId("route:" + suffix), owner, new SubjectId("cargo:" + suffix), new SubjectId("cargo-item:" + suffix),
                             new SubjectId("source-item:" + suffix)),
                     new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0,
-                    PhysicalPostcondition.ROUTE_MAINTENANCE_MATERIAL_LOADED_OBSERVED);
+                    PhysicalPostcondition.ROUTE_MAINTENANCE_MATERIAL_LOADED_OBSERVED,
+                    io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE);
         }
         PhysicalPostcondition postcondition = kind == PhysicalIntentKind.EQUIPMENT_ISSUE
                 ? PhysicalPostcondition.EQUIPMENT_ISSUED_OBSERVED : PhysicalPostcondition.EQUIPMENT_RETURNED_OBSERVED;
@@ -72,11 +73,12 @@ class FrontierV3PhysicalIntentSchedulingTest {
             return new PhysicalIntent(new PhysicalIntentId("intent:equipment-" + suffix), kind, PhysicalIntentStatus.PREPARED, owner,
                     List.of(owner, new SubjectId("resident:" + suffix), new SubjectId("item:" + suffix)),
                     new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0, postcondition,
-                    new PhysicalContainerSlot(new SubjectId("container:" + suffix), 0));
+                    new PhysicalContainerSlot(new SubjectId("container:" + suffix), 0),
+                    io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
         }
         return new PhysicalIntent(new PhysicalIntentId("intent:equipment-" + suffix), kind, PhysicalIntentStatus.PREPARED, owner,
                 List.of(owner, new SubjectId("resident:" + suffix), new SubjectId("item:" + suffix)),
                 new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0,
-                postcondition);
+                postcondition, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
     }
 }

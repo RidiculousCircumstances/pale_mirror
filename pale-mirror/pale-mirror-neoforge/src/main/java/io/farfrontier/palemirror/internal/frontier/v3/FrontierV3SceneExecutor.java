@@ -11,6 +11,7 @@ import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
@@ -154,7 +155,8 @@ final class FrontierV3SceneExecutor {
         }
         state.sceneLeases().values().stream().sorted(Comparator.comparing(SceneLease::id)).filter(FrontierSceneBehaviors::isLogistics)
                 .filter(lease -> lease.status() != SceneLeaseStatus.CLOSED)
-                .findFirst().ifPresent(lease -> execute(level, runtime, state, lease));
+                .findFirst().ifPresent(lease -> execute(level, runtime, state, lease, PhysicalIntentLifecycleOwner.ROUTE_ENGAGEMENT,
+                        PhysicalIntentLifecycleOwner.HIVE_MOBILIZATION));
         return true;
     }
     private static SceneLease lease(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, RouteOperation operation) {
@@ -201,7 +203,8 @@ final class FrontierV3SceneExecutor {
                             captures.stream().map(SceneMemberPosition::actorId).collect(java.util.stream.Collectors.toSet())), captures)));
         }
     }
-    private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
+    private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease,
+                                PhysicalIntentLifecycleOwner strikeOwner, PhysicalIntentLifecycleOwner explosionOwner) {
         requireRegisteredSceneTurn(lease);
         switch (lease.status()) {
             case PREPARED -> materializePrepared(level, runtime, state, lease);
@@ -222,7 +225,7 @@ final class FrontierV3SceneExecutor {
                 }
                 if (observeHotTravelAdvance(level, runtime, state, lease)) return;
                 if (combatEnabled(lease) && level.getGameTime() % 20L == 0L
-                        && !executeExplosion(level, runtime, state, lease)) executeStrike(level, runtime, state, lease);
+                        && !executeExplosion(level, runtime, state, lease, explosionOwner)) executeStrike(level, runtime, state, lease, strikeOwner);
                 rememberObserved(level, runtime, state, lease);
             }
             case DRAINING -> {
@@ -470,7 +473,7 @@ final class FrontierV3SceneExecutor {
     }
     /** Executes one durable effect phase; HOT scheduling supplies the twenty-tick cadence. */
     static boolean executeExplosion(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                    FrontierWorldState state, SceneLease lease) {
+                                    FrontierWorldState state, SceneLease lease, PhysicalIntentLifecycleOwner lifecycleOwner) {
         if (FrontierSceneBehaviors.logistics(lease).engagementId().isEmpty()) return false;
         SubjectId engagement = FrontierSceneBehaviors.logistics(lease).engagementId().orElseThrow();
         Optional<PhysicalIntent> unresolved = state.physicalIntents().values().stream().filter(intent -> intent.kind() == PhysicalIntentKind.EXPLOSION)
@@ -494,11 +497,12 @@ final class FrontierV3SceneExecutor {
         String world = state.bootstrap().worldId().value().replace(':', '-');
         String key = world + "-scene-r" + lease.revision() + "-e" + effectEpoch;
         PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:explosion-" + key), PhysicalIntentKind.EXPLOSION, PhysicalIntentStatus.PREPARED,
-                bomber.member().actorId(), List.of(bomber.member().actorId(), engagement), position(origin), 4, PhysicalPostcondition.EXPLOSION_OBSERVED);
+                bomber.member().actorId(), List.of(bomber.member().actorId(), engagement), position(origin), 4, PhysicalPostcondition.EXPLOSION_OBSERVED, lifecycleOwner);
         submit(runtime, "explosion-prepare", key, new PhysicalIntentPrepared(intent));
         return true;
     }
-    static void executeStrike(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
+    static void executeStrike(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease,
+                              PhysicalIntentLifecycleOwner lifecycleOwner) {
         boolean settlementAssault = FrontierSceneBehaviors.isSettlementAssault(lease);
         List<Body> bodies = lease.members().stream().map(member -> body(level, state, lease, member)).flatMap(Optional::stream).toList();
         SettlementAssault assault = settlementAssault ? state.strategicPlans().settlementAssaults().get(FrontierSceneBehaviors.settlementAssault(lease).assaultId()) : null;
@@ -537,7 +541,8 @@ final class FrontierV3SceneExecutor {
                     + sceneCause.value().replace(':', '-') + "-r" + lease.revision() + "-s" + confirmedStrikeCount(state, sceneCause));
             String key = intentId.value().substring("intent:scene-strike-".length());
             PhysicalIntent intent = new PhysicalIntent(intentId, PhysicalIntentKind.SCENE_STRIKE, PhysicalIntentStatus.PREPARED,
-                    sceneCause, List.of(attacker.member().actorId(), target.member().actorId()), position(attacker.entity()), 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED);
+                    sceneCause, List.of(attacker.member().actorId(), target.member().actorId()), position(attacker.entity()), 0,
+                    PhysicalPostcondition.SCENE_STRIKE_OBSERVED, lifecycleOwner);
             submit(runtime, "scene-strike-prepare", key, new PhysicalIntentPrepared(intent)); return;
         }
         PhysicalIntent intent = pending.orElseThrow();

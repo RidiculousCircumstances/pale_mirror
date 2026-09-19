@@ -291,7 +291,8 @@ final class FrontierV3SettlementAssaultSceneExecutor {
         }
         if (level.getGameTime() % 20L == 0L) {
             forgetObserved(runtime, lease.id());
-            FrontierV3SceneExecutor.executeStrike(level, runtime, state, lease);
+            FrontierV3SceneExecutor.executeStrike(level, runtime, state, lease,
+                    io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
         }
         rememberObserved(level, runtime, state, lease);
     }

@@ -129,7 +129,8 @@ public final class FrontierV3ObserverCombatCalibrationGameTests {
     }
 
     private static void prepareHotStrike(GameTestHelper helper, Session session) {
-        FrontierV3SceneExecutor.executeStrike(helper.getLevel(), session.runtime(), state(session.runtime()), session.lease());
+        FrontierV3SceneExecutor.executeStrike(helper.getLevel(), session.runtime(), state(session.runtime()), session.lease(),
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ROUTE_ENGAGEMENT);
         PhysicalIntent intent = onlyStrike(state(session.runtime()));
         helper.assertTrue(intent.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.PREPARED,
                 "the independent HOT sample must first retain its canonical prepared strike");
@@ -137,13 +138,15 @@ public final class FrontierV3ObserverCombatCalibrationGameTests {
     }
 
     private static void runHotStrike(GameTestHelper helper, Session session) {
-        FrontierV3SceneExecutor.executeStrike(helper.getLevel(), session.runtime(), state(session.runtime()), session.lease());
+        FrontierV3SceneExecutor.executeStrike(helper.getLevel(), session.runtime(), state(session.runtime()), session.lease(),
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ROUTE_ENGAGEMENT);
         helper.assertTrue(onlyStrike(state(session.runtime())).status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING,
                 "the physical HOT sample must durably enter RUNNING before vanilla damage");
     }
 
     private static Sample confirmAndRelease(GameTestHelper helper, Session session) {
-        FrontierV3SceneExecutor.executeStrike(helper.getLevel(), session.runtime(), state(session.runtime()), session.lease());
+        FrontierV3SceneExecutor.executeStrike(helper.getLevel(), session.runtime(), state(session.runtime()), session.lease(),
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ROUTE_ENGAGEMENT);
         FrontierWorldState confirmedState = state(session.runtime());
         PhysicalIntent intent = onlyStrike(confirmedState);
         SceneStrikeObservation receipt = (SceneStrikeObservation) confirmedState.physicalObservations()

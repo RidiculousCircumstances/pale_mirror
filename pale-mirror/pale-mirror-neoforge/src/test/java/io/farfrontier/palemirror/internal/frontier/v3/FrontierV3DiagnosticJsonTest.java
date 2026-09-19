@@ -753,7 +753,8 @@ class FrontierV3DiagnosticJsonTest {
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.PREPARED,
                 firstCause, List.of(firstAttacker, firstTarget), new io.farfrontier.palemirror.frontier.v3.api.FixedPosition(
                 io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO, io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO,
-                io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO), 0, io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition.SCENE_STRIKE_OBSERVED);
+                io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO), 0, io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition.SCENE_STRIKE_OBSERVED,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
         state = state.preparePhysicalIntent(firstIntent).transitionPhysicalIntent(firstIntent.id(), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING, Optional.empty())
                 .transitionPhysicalIntent(firstIntent.id(), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED, Optional.of(
                         new io.farfrontier.palemirror.frontier.v3.model.SceneStrikeObservation(new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId("observation:diagnostic-assault-old"),
@@ -779,7 +780,8 @@ class FrontierV3DiagnosticJsonTest {
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.PREPARED,
                 secondCause, List.of(secondAttacker, secondTarget), new io.farfrontier.palemirror.frontier.v3.api.FixedPosition(
                 io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO, io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO,
-                io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO), 0, io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition.SCENE_STRIKE_OBSERVED);
+                io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO), 0, io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition.SCENE_STRIKE_OBSERVED,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
         state = state.preparePhysicalIntent(secondIntent);
 
         String scene = FrontierV3DiagnosticJson.render("scene", assault.id().value(), checkpoint, state, Optional.empty());

@@ -634,14 +634,17 @@ public final class FrontierV3SceneGameTests {
                     body.setPos(origin.getX() + 0.25D + (index % 3) * 0.4D, origin.getY(), origin.getZ() + 0.25D + (index / 3) * 0.4D);
                     requireEntityWithinTemplate(helper, templateBounds, body, "every strike-position write must remain inside the authored envelope");
                 }
-                FrontierV3SceneExecutor.executeStrike(level, runtime, state(runtime), local);
-                FrontierV3SceneExecutor.executeStrike(level, runtime, state(runtime), local);
+                FrontierV3SceneExecutor.executeStrike(level, runtime, state(runtime), local,
+                        io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
+                FrontierV3SceneExecutor.executeStrike(level, runtime, state(runtime), local,
+                        io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
                 PhysicalIntent prepared = onlyStrike(state(runtime));
                 Entity target = level.getEntity(local.members().stream().filter(member -> member.actorId().equals(prepared.subjectIds().getLast())).findFirst().orElseThrow().entityId());
                 if (!(target instanceof net.minecraft.world.entity.LivingEntity living)) throw new IllegalStateException("local exact target did not materialize");
                 requireEntityWithinTemplate(helper, templateBounds, living, "the health-observed strike target must remain inside the authored envelope");
                 FixedScalar before = fixed(living.getHealth());
-                FrontierV3SceneExecutor.executeStrike(level, runtime, state(runtime), local);
+                FrontierV3SceneExecutor.executeStrike(level, runtime, state(runtime), local,
+                        io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
                 PhysicalIntent confirmed = onlyStrike(state(runtime));
                 SceneStrikeObservation receipt = (SceneStrikeObservation) state(runtime).physicalObservations().get(confirmed.postconditionObservationId().orElseThrow());
                 FixedScalar after = fixed(living.getHealth());
@@ -682,7 +685,8 @@ public final class FrontierV3SceneGameTests {
         PhysicalIntent foreignIntent = new PhysicalIntent(FrontierV3SettlementAssaultReceiptBinding.intentId(canonical.worldId(), cause, foreign.id(), foreign.revision()),
                 PhysicalIntentKind.SCENE_STRIKE, PhysicalIntentStatus.PREPARED, cause, List.of(attacker, target),
                 new io.farfrontier.palemirror.frontier.v3.api.FixedPosition(FixedScalar.whole(origin.getX()), FixedScalar.whole(origin.getY()), FixedScalar.whole(origin.getZ())),
-                0, io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition.SCENE_STRIKE_OBSERVED);
+                0, io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition.SCENE_STRIKE_OBSERVED,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
         int before = current.physicalIntents().size(); boolean rejected = false;
         try {
             FrontierV3CommandSubmission.submit(runtime, "foreign-assault-strike-prepare", foreign.id().value(),
@@ -756,7 +760,8 @@ public final class FrontierV3SceneGameTests {
             bomberBody.setPos(origin.getX() + 0.5D, origin.getY(), origin.getZ() + 0.5D);
             lease.members().stream().filter(member -> member.actorId().value().startsWith("resident:")).findFirst().map(SceneMember::entityId).map(level::getEntity)
                     .ifPresent(body -> body.setPos(origin.getX() + 1.25D, origin.getY(), origin.getZ() + 0.5D));
-            helper.assertTrue(FrontierV3SceneExecutor.executeExplosion(level, runtime, state(runtime), lease), "a nearby owned HOT bomber must prepare a blast instead of inventing a non-durable hit");
+            helper.assertTrue(FrontierV3SceneExecutor.executeExplosion(level, runtime, state(runtime), lease,
+                    io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.HIVE_MOBILIZATION), "a nearby owned HOT bomber must prepare a blast instead of inventing a non-durable hit");
             PhysicalIntent intent = state(runtime).physicalIntents().values().stream().filter(value -> value.kind() == PhysicalIntentKind.EXPLOSION).findFirst()
                     .orElseThrow(() -> new IllegalStateException("the hot bomber did not retain its explosion intent"));
             helper.assertValueEqual(intent.status(), PhysicalIntentStatus.PREPARED, "the blast must be durable before Minecraft receives it");
@@ -827,7 +832,8 @@ public final class FrontierV3SceneGameTests {
                 helper.assertTrue(bomberBody != null, "the real TNT fixture must retain its exact bomber body"); bomberBody.setPos(origin.getX() + 0.5D, origin.getY(), origin.getZ() + 0.5D);
                 lease.members().stream().filter(member -> member.actorId().value().startsWith("resident:")).findFirst().map(SceneMember::entityId).map(level::getEntity)
                         .ifPresent(body -> body.setPos(origin.getX() + 1.25D, origin.getY(), origin.getZ() + 0.5D));
-                helper.assertTrue(FrontierV3SceneExecutor.executeExplosion(level, runtime, state(runtime), lease), "the hot scene must durably prepare its real blast");
+                helper.assertTrue(FrontierV3SceneExecutor.executeExplosion(level, runtime, state(runtime), lease,
+                        io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.HIVE_MOBILIZATION), "the hot scene must durably prepare its real blast");
                 PhysicalIntent intent = state(runtime).physicalIntents().values().stream().filter(value -> value.kind() == PhysicalIntentKind.EXPLOSION).findFirst().orElseThrow();
                 FrontierV3ExplosionExecutor.tick(level, runtime);
                 Entity bomb = level.getEntity(FrontierV3BomberBomb.entityId(intent.id()));

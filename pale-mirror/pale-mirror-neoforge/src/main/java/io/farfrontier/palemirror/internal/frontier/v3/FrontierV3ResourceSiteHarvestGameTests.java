@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
@@ -265,7 +266,7 @@ public final class FrontierV3ResourceSiteHarvestGameTests {
             PhysicalIntent preparation = new PhysicalIntent(preparationId, PhysicalIntentKind.RESOURCE_SITE_PREPARATION,
                     PhysicalIntentStatus.PREPARED, site.id(), List.of(site.id(), new SubjectId("job:site-prepare-resource-harvest-cold-prefix")),
                     new FixedPosition(FixedScalar.whole(origin.x()), FixedScalar.whole(origin.y()), FixedScalar.whole(origin.z())), 0,
-                    PhysicalPostcondition.RESOURCE_SITE_PREPARED_OBSERVED).withStatus(PhysicalIntentStatus.CONFIRMED,
+                    PhysicalPostcondition.RESOURCE_SITE_PREPARED_OBSERVED, PhysicalIntentLifecycleOwner.RESOURCE_SITE_PREPARATION).withStatus(PhysicalIntentStatus.CONFIRMED,
                     Optional.of(new PhysicalObservationId("observation:site-prepare-resource-harvest-cold-prefix")));
             FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.fixture();
             helper.assertTrue(FrontierV3ResourceSiteExecutor.baseline(level, site),
@@ -290,7 +291,7 @@ public final class FrontierV3ResourceSiteHarvestGameTests {
             PhysicalIntent preparation = new PhysicalIntent(preparationId, PhysicalIntentKind.RESOURCE_SITE_PREPARATION,
                     PhysicalIntentStatus.PREPARED, site.id(), List.of(site.id(), new SubjectId("job:site-prepare-resource-harvest-cold-owned-prefix")),
                     new FixedPosition(FixedScalar.whole(origin.x()), FixedScalar.whole(origin.y()), FixedScalar.whole(origin.z())), 0,
-                    PhysicalPostcondition.RESOURCE_SITE_PREPARED_OBSERVED).withStatus(PhysicalIntentStatus.CONFIRMED,
+                    PhysicalPostcondition.RESOURCE_SITE_PREPARED_OBSERVED, PhysicalIntentLifecycleOwner.RESOURCE_SITE_PREPARATION).withStatus(PhysicalIntentStatus.CONFIRMED,
                     Optional.of(new PhysicalObservationId("observation:site-prepare-resource-harvest-cold-owned-prefix")));
             FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.fixture();
             helper.assertValueEqual(FrontierV3ResourceSiteExecutor.classifyHarvestRestart(level, ledger, site, preparation, 63).state(),
