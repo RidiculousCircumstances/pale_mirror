@@ -23,7 +23,7 @@ class RouteConstructionPayloadCodecTest {
         SubjectId project = new SubjectId("construction:codec"), cargo = new SubjectId("cargo:route-build-codec"),
                 item = new SubjectId("item:codec-concrete"), cargoItem = new SubjectId("item:route-build-codec");
         PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:route-build-codec"), PhysicalIntentKind.ROUTE_CONSTRUCTION,
-                PhysicalIntentStatus.PREPARED, FrontierRouteNetwork.OWNER, List.of(FrontierRouteNetwork.OWNER, project, cargo, cargoItem),
+                PhysicalIntentStatus.PREPARED, FrontierRouteNetwork.OWNER, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.routeConstruction(FrontierRouteNetwork.OWNER, project, cargo, cargoItem),
                 new FixedPosition(FixedScalar.whole(12), FixedScalar.whole(64), FixedScalar.whole(18)), 0, PhysicalPostcondition.ROUTE_CONSTRUCTION_OBSERVED,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE);
         RouteConstructionObservation observation = new RouteConstructionObservation(new PhysicalObservationId("observation:route-build-codec"), intent.id(),
@@ -32,7 +32,7 @@ class RouteConstructionPayloadCodecTest {
         var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
         assertEquals(transition, codecs.decode(transition.type(), codecs.encode(transition)));
         PhysicalIntent loadIntent = new PhysicalIntent(new PhysicalIntentId("intent:route-load-codec"), PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING,
-                PhysicalIntentStatus.PREPARED, project, List.of(FrontierRouteNetwork.OWNER, project, cargo, cargoItem, item),
+                PhysicalIntentStatus.PREPARED, project, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.routeConstructionLoading(FrontierRouteNetwork.OWNER, project, cargo, cargoItem, item),
                 new FixedPosition(FixedScalar.whole(12), FixedScalar.whole(64), FixedScalar.whole(18)), 0,
                 PhysicalPostcondition.ROUTE_CONSTRUCTION_MATERIAL_LOADED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE);
         RouteConstructionMaterialLoadObservation load = new RouteConstructionMaterialLoadObservation(new PhysicalObservationId("observation:route-load-codec"),
@@ -49,7 +49,7 @@ class RouteConstructionPayloadCodecTest {
         SubjectId maintenance = new SubjectId("maintenance:codec"), maintenanceCargo = new SubjectId("cargo:route-maintenance-codec"),
                 maintenanceItem = new SubjectId("item:route-maintenance-codec");
         PhysicalIntent maintenanceIntent = new PhysicalIntent(new PhysicalIntentId("intent:route-maintenance-codec"), PhysicalIntentKind.ROUTE_MAINTENANCE,
-                PhysicalIntentStatus.PREPARED, FrontierRouteNetwork.OWNER, List.of(FrontierRouteNetwork.OWNER, maintenance, maintenanceCargo, maintenanceItem),
+                PhysicalIntentStatus.PREPARED, FrontierRouteNetwork.OWNER, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.routeMaintenance(FrontierRouteNetwork.OWNER, maintenance, maintenanceCargo, maintenanceItem),
                 new FixedPosition(FixedScalar.whole(12), FixedScalar.whole(64), FixedScalar.whole(18)), 0, PhysicalPostcondition.ROUTE_MAINTENANCE_OBSERVED,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE);
         RouteMaintenanceObservation repair = new RouteMaintenanceObservation(new PhysicalObservationId("observation:route-maintenance-codec"), maintenanceIntent.id(),
@@ -58,7 +58,7 @@ class RouteConstructionPayloadCodecTest {
         assertEquals(repairTransition, codecs.decode(repairTransition.type(), codecs.encode(repairTransition)));
         PhysicalIntent maintenanceLoadIntent = new PhysicalIntent(new PhysicalIntentId("intent:route-maintenance-load-codec"),
                 PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING, PhysicalIntentStatus.PREPARED, maintenance,
-                List.of(FrontierRouteNetwork.OWNER, maintenance, maintenanceCargo, maintenanceItem, item),
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.routeMaintenanceLoading(FrontierRouteNetwork.OWNER, maintenance, maintenanceCargo, maintenanceItem, item),
                 new FixedPosition(FixedScalar.whole(12), FixedScalar.whole(64), FixedScalar.whole(18)), 0,
                 PhysicalPostcondition.ROUTE_MAINTENANCE_MATERIAL_LOADED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE);
         RouteMaintenanceMaterialLoadObservation maintenanceLoad = new RouteMaintenanceMaterialLoadObservation(
@@ -70,7 +70,7 @@ class RouteConstructionPayloadCodecTest {
                 reagent = new SubjectId("item:service-reagent"), depot = new SubjectId("container:1-depot");
         PhysicalIntent serviceInputIntent = new PhysicalIntent(new PhysicalIntentId("intent:service-input-codec"),
                 PhysicalIntentKind.SETTLEMENT_SERVICE_INPUT_ISSUE, PhysicalIntentStatus.PREPARED, service,
-                List.of(service, worker, reagent), new FixedPosition(FixedScalar.whole(12), FixedScalar.whole(64), FixedScalar.whole(18)), 0,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.serviceInputIssue(service, worker, reagent), new FixedPosition(FixedScalar.whole(12), FixedScalar.whole(64), FixedScalar.whole(18)), 0,
                 PhysicalPostcondition.SETTLEMENT_SERVICE_INPUT_ISSUED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_SERVICE_WORK);
         SettlementServiceInputIssueObservation serviceInput = new SettlementServiceInputIssueObservation(
                 new PhysicalObservationId("observation:service-input-codec"), serviceInputIntent.id(), service, worker, reagent,

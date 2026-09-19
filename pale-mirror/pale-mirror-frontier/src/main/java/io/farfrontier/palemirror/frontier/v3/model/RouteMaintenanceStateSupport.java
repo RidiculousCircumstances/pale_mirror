@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole;
 
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -161,7 +162,7 @@ public final class RouteMaintenanceStateSupport {
                 .anyMatch(member -> EngineeringToolCustody.holdsTool(state, member)) || state.physicalIntents().values().stream()
                 .anyMatch(intent -> intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_RETURN
                         && intent.status() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED
-                        && !intent.subjectIds().isEmpty() && intent.subjectIds().getFirst().equals(maintenance.id()))) {
+                        && intent.roles().require(PhysicalIntentSubjectRole.PROJECT).equals(maintenance.id()))) {
             throw new IllegalArgumentException("route maintenance close requires a repaired and disarmed operation");
         }
         boolean retainedScene = state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isEngineeringWorksite)
@@ -170,7 +171,8 @@ public final class RouteMaintenanceStateSupport {
         if (retainedScene) throw new IllegalArgumentException("route maintenance close cannot discard a retained worksite lease");
         Map<SubjectId, RouteMaintenance> maintenances = new LinkedHashMap<>(state.routeMaintenances()); maintenances.remove(maintenance.id());
         Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent> intents = new LinkedHashMap<>(state.physicalIntents());
-        Set<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId> retired = intents.values().stream().filter(intent -> intent.subjectIds().contains(maintenance.id()))
+        Set<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId> retired = intents.values().stream().filter(intent -> ownsIntent(intent)
+                        && intent.roles().require(PhysicalIntentSubjectRole.OPERATION).equals(maintenance.id()))
                 .map(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent::id).collect(java.util.stream.Collectors.toSet());
         retired.forEach(intents::remove);
         Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(state.physicalObservations());
@@ -185,13 +187,12 @@ public final class RouteMaintenanceStateSupport {
 
     public static void validateWorkIntent(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent) {
         if (intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_MAINTENANCE
-                || !intent.causeSubjectId().equals(FrontierRouteNetwork.OWNER) || !intent.subjectIds().contains(FrontierRouteNetwork.OWNER)) {
+                || !intent.causeSubjectId().equals(FrontierRouteNetwork.OWNER) || !intent.roles().require(PhysicalIntentSubjectRole.ROUTE).equals(FrontierRouteNetwork.OWNER)) {
             throw new IllegalArgumentException("route maintenance work intent has invalid route ownership");
         }
         RouteMaintenance maintenance = workOperation(state, intent);
         SubjectId cargoId = maintenance.cargoId().orElseThrow(() -> new IllegalArgumentException("route maintenance work intent has no cargo"));
-        SubjectId itemId = intent.subjectIds().stream().filter(id -> !id.equals(FrontierRouteNetwork.OWNER) && !id.equals(maintenance.id()) && !id.equals(cargoId))
-                .findFirst().orElseThrow(() -> new IllegalArgumentException("route maintenance work intent lacks an exact material"));
+        SubjectId itemId = intent.roles().require(PhysicalIntentSubjectRole.MATERIAL);
         ExactItemStack item = state.inventory().items().get(itemId); CargoBatch cargo = state.inventory().cargo().get(cargoId);
         PhysicalDelta loss = state.physicalDeltas().get(maintenance.repairCell());
         if (!maintenance.building() || cargo == null || !cargo.ownerId().equals(FrontierRouteNetwork.OWNER)
@@ -218,24 +219,23 @@ public final class RouteMaintenanceStateSupport {
     public static RouteMaintenance workOperation(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent) {
         if (intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_MAINTENANCE
                 || !intent.causeSubjectId().equals(FrontierRouteNetwork.OWNER)
-                || !intent.subjectIds().contains(FrontierRouteNetwork.OWNER)) {
+                || !intent.roles().require(PhysicalIntentSubjectRole.ROUTE).equals(FrontierRouteNetwork.OWNER)) {
             throw new IllegalArgumentException("route maintenance work intent has invalid route ownership");
         }
-        return intent.subjectIds().stream().map(state.routeMaintenances()::get).filter(java.util.Objects::nonNull)
-                .findFirst().orElseThrow(() -> new IllegalArgumentException("route maintenance work intent lacks an active operation"));
+        return java.util.Optional.ofNullable(state.routeMaintenances().get(intent.roles().require(PhysicalIntentSubjectRole.OPERATION))).filter(java.util.Objects::nonNull).orElseThrow(() -> new IllegalArgumentException("route maintenance work intent lacks an active operation"));
     }
 
     public static void validateMaterialLoadingIntent(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent) {
         if (intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING
-                || intent.subjectIds().size() != 5 || !intent.subjectIds().getFirst().equals(FrontierRouteNetwork.OWNER)
-                || !intent.causeSubjectId().equals(intent.subjectIds().get(1))) {
+                || !intent.roles().require(PhysicalIntentSubjectRole.ROUTE).equals(FrontierRouteNetwork.OWNER)
+                || !intent.causeSubjectId().equals(intent.roles().require(PhysicalIntentSubjectRole.OPERATION))) {
             throw new IllegalArgumentException("route maintenance pickup has invalid ownership");
         }
         RouteMaintenance maintenance = state.routeMaintenances().get(intent.causeSubjectId());
         if (maintenance == null || !maintenance.building() || maintenance.cargoId().isPresent()) {
             throw new IllegalArgumentException("route maintenance pickup has no unsupplied active operation");
         }
-        SubjectId cargo = intent.subjectIds().get(2), cargoItem = intent.subjectIds().get(3), source = intent.subjectIds().get(4);
+        SubjectId cargo = intent.roles().require(PhysicalIntentSubjectRole.CARGO), cargoItem = intent.roles().require(PhysicalIntentSubjectRole.CARGO_ITEM), source = intent.roles().require(PhysicalIntentSubjectRole.SOURCE_ITEM);
         ExactItemStack item = state.inventory().items().get(source);
         if (!cargo.equals(maintenance.plannedCargoId()) || state.inventory().cargo().containsKey(cargo)
                 || !cargoItem.equals(maintenance.plannedCargoItemId()) || state.inventory().items().containsKey(cargoItem)
@@ -251,7 +251,7 @@ public final class RouteMaintenanceStateSupport {
                 == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING
                 && (existing.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.PREPARED
                 || existing.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING)
-                && !existing.id().equals(intent.id()) && existing.subjectIds().size() == 5 && existing.subjectIds().get(4).equals(source));
+                && !existing.id().equals(intent.id()) && existing.roles().require(PhysicalIntentSubjectRole.SOURCE_ITEM).equals(source));
         if (sourceAlreadyReserved) throw new IllegalArgumentException("route maintenance source stack is already reserved by another active pickup");
     }
 
@@ -260,8 +260,8 @@ public final class RouteMaintenanceStateSupport {
         validateMaterialLoadingIntent(state, intent);
         ExactItemStack source = state.inventory().items().get(observation.sourceItemId());
         if (!intent.id().equals(observation.intentId()) || !intent.causeSubjectId().equals(observation.maintenanceId())
-                || !intent.subjectIds().get(2).equals(observation.cargoId()) || !intent.subjectIds().get(3).equals(observation.cargoItemId())
-                || !intent.subjectIds().get(4).equals(observation.sourceItemId()) || source == null
+                || !intent.roles().require(PhysicalIntentSubjectRole.CARGO).equals(observation.cargoId()) || !intent.roles().require(PhysicalIntentSubjectRole.CARGO_ITEM).equals(observation.cargoItemId())
+                || !intent.roles().require(PhysicalIntentSubjectRole.SOURCE_ITEM).equals(observation.sourceItemId()) || source == null
                 || observation.sourceRemainingCount() != source.count() - 1) {
             throw new IllegalArgumentException("route maintenance pickup receipt differs from prepared intent");
         }
@@ -275,9 +275,9 @@ public final class RouteMaintenanceStateSupport {
                                                            RouteMaintenanceMaterialLoadObservation observation) {
         if (intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING
                 || !intent.id().equals(observation.intentId()) || !intent.causeSubjectId().equals(observation.maintenanceId())
-                || intent.subjectIds().size() != 5 || !intent.subjectIds().getFirst().equals(FrontierRouteNetwork.OWNER)
-                || !intent.subjectIds().get(2).equals(observation.cargoId()) || !intent.subjectIds().get(3).equals(observation.cargoItemId())
-                || !intent.subjectIds().get(4).equals(observation.sourceItemId())) {
+                || !intent.roles().require(PhysicalIntentSubjectRole.ROUTE).equals(FrontierRouteNetwork.OWNER)
+                || !intent.roles().require(PhysicalIntentSubjectRole.CARGO).equals(observation.cargoId()) || !intent.roles().require(PhysicalIntentSubjectRole.CARGO_ITEM).equals(observation.cargoItemId())
+                || !intent.roles().require(PhysicalIntentSubjectRole.SOURCE_ITEM).equals(observation.sourceItemId())) {
             throw new IllegalArgumentException("route maintenance material recovery receipt has foreign identities");
         }
         RouteMaintenance maintenance = maintenances.get(observation.maintenanceId()); CargoBatch cargo = inventory.cargo().get(observation.cargoId());
@@ -297,7 +297,7 @@ public final class RouteMaintenanceStateSupport {
     static void validateReceipt(FrontierBootstrap bootstrap, RouteTopology topology, Map<SubjectId, RouteMaintenance> maintenances,
                                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent, RouteMaintenanceObservation observation) {
         if (intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_MAINTENANCE
-                || !intent.subjectIds().contains(observation.maintenanceId()) || !intent.subjectIds().contains(observation.itemId())) {
+                || !intent.roles().require(PhysicalIntentSubjectRole.OPERATION).equals(observation.maintenanceId()) || !intent.roles().require(PhysicalIntentSubjectRole.MATERIAL).equals(observation.itemId())) {
             throw new IllegalArgumentException("route maintenance receipt has foreign subjects");
         }
         RouteMaintenance maintenance = maintenances.get(observation.maintenanceId());
@@ -320,7 +320,7 @@ public final class RouteMaintenanceStateSupport {
                                        Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent> intents) {
         validateWorkIntent(state, intent);
         RouteMaintenance maintenance = state.routeMaintenances().get(observation.maintenanceId());
-        if (maintenance == null || !intent.subjectIds().contains(observation.itemId()) || !observation.position().equals(maintenance.repairCell())) {
+        if (maintenance == null || !intent.roles().require(PhysicalIntentSubjectRole.MATERIAL).equals(observation.itemId()) || !observation.position().equals(maintenance.repairCell())) {
             throw new IllegalArgumentException("route maintenance receipt differs from active repair");
         }
         Map<SubjectId, RouteMaintenance> maintenances = new LinkedHashMap<>(state.routeMaintenances()); maintenances.put(maintenance.id(), maintenance.ready().withoutCargo());
@@ -335,8 +335,7 @@ public final class RouteMaintenanceStateSupport {
 
     public static FrontierWorldState conflict(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
                                        Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent> intents) {
-        RouteMaintenance maintenance = intent.subjectIds().stream().map(state.routeMaintenances()::get).filter(java.util.Objects::nonNull)
-                .findFirst().orElseThrow(() -> new IllegalArgumentException("route maintenance conflict has no active operation"));
+        RouteMaintenance maintenance = java.util.Optional.ofNullable(state.routeMaintenances().get(intent.roles().require(PhysicalIntentSubjectRole.OPERATION))).filter(java.util.Objects::nonNull).orElseThrow(() -> new IllegalArgumentException("route maintenance conflict has no active operation"));
         Map<SubjectId, RouteMaintenance> maintenances = new LinkedHashMap<>(state.routeMaintenances()); maintenances.put(maintenance.id(), maintenance.conflict());
         intents.put(intent.id(), intent.withStatus(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty()));
         return state.withChanges(FrontierWorldStateUpdate.begin().physicalIntents(intents).routeMaintenances(maintenances)

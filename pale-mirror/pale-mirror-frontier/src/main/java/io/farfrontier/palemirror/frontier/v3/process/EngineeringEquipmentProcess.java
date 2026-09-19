@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalContainerSlot;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
@@ -48,7 +49,7 @@ public final class EngineeringEquipmentProcess {
                 + "-" + item.id().value().replace(':', '-');
         var anchor = settlement(state, project).anchor();
         return Optional.of(new PhysicalIntent(new PhysicalIntentId("intent:engineering-tool-issue-" + suffix), PhysicalIntentKind.EQUIPMENT_ISSUE,
-                PhysicalIntentStatus.PREPARED, project.settlementId(), List.of(project.id(), resident, item.id()),
+                PhysicalIntentStatus.PREPARED, project.settlementId(), PhysicalIntentRoleBinding.equipmentIssue(project.id(), resident, item.id()),
                 new FixedPosition(FixedScalar.whole(anchor.x()), FixedScalar.whole(anchor.y()), FixedScalar.whole(anchor.z())), 0,
                 PhysicalPostcondition.EQUIPMENT_ISSUED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE));
     }
@@ -63,7 +64,7 @@ public final class EngineeringEquipmentProcess {
                 + "-" + item.id().value().replace(':', '-');
         var anchor = settlement(state, project).anchor();
         return Optional.of(new PhysicalIntent(new PhysicalIntentId("intent:engineering-tool-return-" + suffix), PhysicalIntentKind.EQUIPMENT_RETURN,
-                PhysicalIntentStatus.PREPARED, project.settlementId(), List.of(project.id(), actorId, item.id()),
+                PhysicalIntentStatus.PREPARED, project.settlementId(), PhysicalIntentRoleBinding.equipmentReturn(project.id(), actorId, item.id()),
                 new FixedPosition(FixedScalar.whole(anchor.x()), FixedScalar.whole(anchor.y()), FixedScalar.whole(anchor.z())), 0,
                 PhysicalPostcondition.EQUIPMENT_RETURNED_OBSERVED, targetSlot, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE));
     }

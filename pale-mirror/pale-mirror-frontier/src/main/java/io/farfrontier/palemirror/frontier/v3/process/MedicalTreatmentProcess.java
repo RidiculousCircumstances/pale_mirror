@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.process;
 import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
@@ -50,7 +51,7 @@ public final class MedicalTreatmentProcess {
                 MedicalEvacuationTeam.forOperation(id, settlementId, List.of(medic.orElseThrow().id())), supply.orElseThrow().id(),
                 new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:" + id.value().replace(':', '-') + "-consume"), MedicalEvacuationStatus.PREPARED, -1L);
         PhysicalIntent intent = new PhysicalIntent(operation.consumptionIntentId(), PhysicalIntentKind.EXACT_ITEM_CONSUMPTION, PhysicalIntentStatus.PREPARED,
-                id, List.of(id, operation.supplyItemId()), new FixedPosition(FixedScalar.whole(infirmary.orElseThrow().anchor().x()),
+                id, PhysicalIntentRoleBinding.exactConsumption(id, operation.supplyItemId()), new FixedPosition(FixedScalar.whole(infirmary.orElseThrow().anchor().x()),
                 FixedScalar.whole(infirmary.orElseThrow().anchor().y()), FixedScalar.whole(infirmary.orElseThrow().anchor().z())), 0,
                 PhysicalPostcondition.EXACT_ITEM_CONSUMED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.MEDICAL_TREATMENT);
         return List.of(new ProposedEvent(settlementId, new MedicalTreatmentStarted(operation)), new ProposedEvent(settlementId, new PhysicalIntentPrepared(intent)));

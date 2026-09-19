@@ -53,9 +53,9 @@ final class SettlementServiceWorkStateSupport {
             PhysicalIntent endpoint = intents.get(work.endpointIntentId());
             if (inputIssue == null || inputIssue.kind() != PhysicalIntentKind.SETTLEMENT_SERVICE_INPUT_ISSUE
                     || !inputIssue.causeSubjectId().equals(work.id())
-                    || !inputIssue.subjectIds().equals(java.util.List.of(work.id(), work.workerId(), work.inputItemId()))
+                    || !inputIssue.roles().equals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.serviceInputIssue(work.id(), work.workerId(), work.inputItemId()))
                     || endpoint == null || !endpoint.causeSubjectId().equals(work.id())
-                    || !endpoint.subjectIds().contains(work.inputItemId())
+                    || !endpoint.roles().equals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.serviceDecontamination(work.id(), work.workerId(), work.inputItemId()))
                     || work.kind() == SettlementServiceWorkKind.DECONTAMINATION && endpoint.kind() != PhysicalIntentKind.DECONTAMINATION
                     || work.kind() == SettlementServiceWorkKind.STRUCTURAL_REPAIR && endpoint.kind() != PhysicalIntentKind.STRUCTURAL_REPAIR) {
                 throw new IllegalArgumentException("service work must retain exact input-issue and endpoint intents");

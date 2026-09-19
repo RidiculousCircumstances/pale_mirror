@@ -50,7 +50,7 @@ class FrontierV3ResourceSiteHarvestExecutorTest {
         SubjectId output = new SubjectId("item:site-harvest-" + settlement + "-wheat-field-1-wheat");
         return new PhysicalIntent(new PhysicalIntentId("intent:site-harvest-" + settlement + "-wheat-field-1"),
                 PhysicalIntentKind.RESOURCE_SITE_HARVEST, PhysicalIntentStatus.PREPARED, site,
-                List.of(site, job, worker, output), new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.siteHarvest(site, job, worker, output), new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0,
                 PhysicalPostcondition.RESOURCE_SITE_HARVESTED_OBSERVED,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.RESOURCE_SITE_HARVEST);
     }

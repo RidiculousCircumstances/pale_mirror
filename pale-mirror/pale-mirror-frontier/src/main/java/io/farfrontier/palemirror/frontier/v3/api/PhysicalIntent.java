@@ -2,7 +2,6 @@ package io.farfrontier.palemirror.frontier.v3.api;
 
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTarget;
 
-import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -15,7 +14,7 @@ public record PhysicalIntent(
         PhysicalIntentKind kind,
         PhysicalIntentStatus status,
         SubjectId causeSubjectId,
-        List<SubjectId> subjectIds,
+        PhysicalIntentRoleBinding roles,
         FixedPosition origin,
         int radiusBlocks,
         PhysicalPostcondition postcondition,
@@ -29,16 +28,14 @@ public record PhysicalIntent(
         Objects.requireNonNull(kind, "physical intent kind");
         Objects.requireNonNull(status, "physical intent status");
         Objects.requireNonNull(causeSubjectId, "physical intent cause subject");
-        subjectIds = List.copyOf(subjectIds);
+        roles = Objects.requireNonNull(roles, "physical intent roles");
         Objects.requireNonNull(origin, "physical intent origin");
         Objects.requireNonNull(postcondition, "physical intent postcondition");
         postconditionObservationId = Objects.requireNonNull(postconditionObservationId, "physical intent postcondition observation");
         targetSlot = Objects.requireNonNull(targetSlot, "physical intent target slot");
         semanticTarget = Objects.requireNonNull(semanticTarget, "physical intent semantic target");
         lifecycleOwner = Objects.requireNonNull(lifecycleOwner, "physical intent lifecycle owner");
-        if (subjectIds.isEmpty() || subjectIds.size() > 32 || subjectIds.stream().distinct().count() != subjectIds.size()) {
-            throw new IllegalArgumentException("physical intent must name one to thirty-two distinct subjects");
-        }
+        if (roles.kind() != kind) throw new IllegalArgumentException("physical intent roles do not match kind");
         if (radiusBlocks < 0 || radiusBlocks > 64) throw new IllegalArgumentException("physical intent radius must be 0..64 blocks");
         switch (kind) {
             case CARGO_HANDOFF -> {
@@ -57,72 +54,72 @@ public record PhysicalIntent(
                 }
             }
             case SCENE_STRIKE -> {
-                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.SCENE_STRIKE_OBSERVED || subjectIds.size() != 2) {
+                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.SCENE_STRIKE_OBSERVED) {
                     throw new IllegalArgumentException("scene strike must bind one exact attacker and target without an area radius");
                 }
             }
             case EXACT_ITEM_CONSUMPTION -> {
-                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.EXACT_ITEM_CONSUMED_OBSERVED || subjectIds.size() != 2) {
+                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.EXACT_ITEM_CONSUMED_OBSERVED) {
                     throw new IllegalArgumentException("exact item consumption must bind one owner and one exact stack without an area radius");
                 }
             }
             case RESOURCE_SITE_PREPARATION -> {
-                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.RESOURCE_SITE_PREPARED_OBSERVED || subjectIds.size() != 2) {
+                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.RESOURCE_SITE_PREPARED_OBSERVED) {
                     throw new IllegalArgumentException("resource-site preparation must bind one site and one job without an area radius");
                 }
             }
             case RESOURCE_SITE_HARVEST -> {
-                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.RESOURCE_SITE_HARVESTED_OBSERVED || subjectIds.size() != 4) {
+                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.RESOURCE_SITE_HARVESTED_OBSERVED) {
                     throw new IllegalArgumentException("resource-site harvest must bind one site, job, worker and output without an area radius");
                 }
             }
             case PRODUCTION_TRANSFORMATION -> {
-                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED || subjectIds.size() != 3) {
+                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED) {
                     throw new IllegalArgumentException("production transformation must bind one job, input and output without an area radius");
                 }
             }
             case CARGO_LOADING -> {
-                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.CARGO_LOADED_FROM_DEPOT_OBSERVED || subjectIds.size() != 3) {
+                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.CARGO_LOADED_FROM_DEPOT_OBSERVED) {
                     throw new IllegalArgumentException("cargo loading must bind contract, cargo and exact depot stack without an area radius");
                 }
             }
             case ROUTE_CONSTRUCTION_MATERIAL_LOADING -> {
-                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.ROUTE_CONSTRUCTION_MATERIAL_LOADED_OBSERVED || subjectIds.size() != 5) {
+                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.ROUTE_CONSTRUCTION_MATERIAL_LOADED_OBSERVED) {
                     throw new IllegalArgumentException("route construction material loading must bind route, project, cargo, cargo item and source stack without an area radius");
                 }
             }
             case ROUTE_MAINTENANCE -> {
-                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.ROUTE_MAINTENANCE_OBSERVED || subjectIds.size() != 4) {
+                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.ROUTE_MAINTENANCE_OBSERVED) {
                     throw new IllegalArgumentException("route maintenance must bind route, operation, cargo and exact material without an area radius");
                 }
             }
             case ROUTE_MAINTENANCE_MATERIAL_LOADING -> {
-                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.ROUTE_MAINTENANCE_MATERIAL_LOADED_OBSERVED || subjectIds.size() != 5) {
+                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.ROUTE_MAINTENANCE_MATERIAL_LOADED_OBSERVED) {
                     throw new IllegalArgumentException("route maintenance material loading must bind route, operation, cargo, cargo item and source stack without an area radius");
                 }
             }
             case HIVE_NUTRIENT_DEPARTURE -> {
-                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.HIVE_NUTRIENT_DEPARTED_OBSERVED || subjectIds.size() != 3) {
+                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.HIVE_NUTRIENT_DEPARTED_OBSERVED) {
                     throw new IllegalArgumentException("hive nutrient departure must bind transfer, cargo and exact source stack without an area radius");
                 }
             }
             case HIVE_NUTRIENT_ARRIVAL -> {
-                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.HIVE_NUTRIENT_ARRIVED_OBSERVED || subjectIds.size() != 3) {
+                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.HIVE_NUTRIENT_ARRIVED_OBSERVED) {
                     throw new IllegalArgumentException("hive nutrient arrival must bind transfer, cargo and exact target stack without an area radius");
                 }
             }
             case EQUIPMENT_ISSUE -> {
-                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.EQUIPMENT_ISSUED_OBSERVED || subjectIds.size() != 3) {
+                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.EQUIPMENT_ISSUED_OBSERVED) {
                     throw new IllegalArgumentException("equipment issue must bind assault, defender and exact stack without an area radius");
                 }
             }
             case EQUIPMENT_RETURN -> {
-                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.EQUIPMENT_RETURNED_OBSERVED || subjectIds.size() != 3 || targetSlot.isEmpty()) {
+                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.EQUIPMENT_RETURNED_OBSERVED || targetSlot.isEmpty()) {
                     throw new IllegalArgumentException("equipment return must bind assault, defender, exact stack and typed target slot without an area radius");
                 }
             }
             case SETTLEMENT_SERVICE_INPUT_ISSUE -> {
-                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.SETTLEMENT_SERVICE_INPUT_ISSUED_OBSERVED || subjectIds.size() != 3) {
+                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.SETTLEMENT_SERVICE_INPUT_ISSUED_OBSERVED) {
                     throw new IllegalArgumentException("service input issue must bind work, worker and exact stack without an area radius");
                 }
             }
@@ -142,32 +139,32 @@ public record PhysicalIntent(
     }
 
     public PhysicalIntent(PhysicalIntentId id, PhysicalIntentKind kind, PhysicalIntentStatus status, SubjectId causeSubjectId,
-                          List<SubjectId> subjectIds, FixedPosition origin, int radiusBlocks, PhysicalPostcondition postcondition,
+                          PhysicalIntentRoleBinding roles, FixedPosition origin, int radiusBlocks, PhysicalPostcondition postcondition,
                           PhysicalIntentLifecycleOwner lifecycleOwner) {
-        this(id, kind, status, causeSubjectId, subjectIds, origin, radiusBlocks, postcondition, Optional.empty(), Optional.empty(), Optional.empty(), lifecycleOwner);
+        this(id, kind, status, causeSubjectId, roles, origin, radiusBlocks, postcondition, Optional.empty(), Optional.empty(), Optional.empty(), lifecycleOwner);
     }
 
-    /** Legacy non-repair shape remains non-authoritative; structural repair must use the typed-target constructor. */
     public PhysicalIntent(PhysicalIntentId id, PhysicalIntentKind kind, PhysicalIntentStatus status, SubjectId causeSubjectId,
-                          List<SubjectId> subjectIds, FixedPosition origin, int radiusBlocks, PhysicalPostcondition postcondition,
+                          PhysicalIntentRoleBinding roles, FixedPosition origin, int radiusBlocks, PhysicalPostcondition postcondition,
                           Optional<PhysicalObservationId> postconditionObservationId, Optional<PhysicalContainerSlot> targetSlot,
                           PhysicalIntentLifecycleOwner lifecycleOwner) {
-        this(id, kind, status, causeSubjectId, subjectIds, origin, radiusBlocks, postcondition, postconditionObservationId, targetSlot, Optional.empty(), lifecycleOwner);
+        this(id, kind, status, causeSubjectId, roles, origin, radiusBlocks, postcondition, postconditionObservationId, targetSlot, Optional.empty(), lifecycleOwner);
     }
-
     public PhysicalIntent(PhysicalIntentId id, PhysicalIntentKind kind, PhysicalIntentStatus status, SubjectId causeSubjectId,
-                          List<SubjectId> subjectIds, FixedPosition origin, int radiusBlocks, PhysicalPostcondition postcondition,
+                          PhysicalIntentRoleBinding roles, FixedPosition origin, int radiusBlocks, PhysicalPostcondition postcondition,
                           PhysicalContainerSlot targetSlot, PhysicalIntentLifecycleOwner lifecycleOwner) {
-        this(id, kind, status, causeSubjectId, subjectIds, origin, radiusBlocks, postcondition, Optional.empty(), Optional.of(targetSlot), Optional.empty(), lifecycleOwner);
+        this(id, kind, status, causeSubjectId, roles, origin, radiusBlocks, postcondition, Optional.empty(), Optional.of(targetSlot), Optional.empty(), lifecycleOwner);
     }
-
     public PhysicalIntent(PhysicalIntentId id, PhysicalIntentKind kind, PhysicalIntentStatus status, SubjectId causeSubjectId,
-                          List<SubjectId> subjectIds, FixedPosition origin, int radiusBlocks, PhysicalPostcondition postcondition,
+                          PhysicalIntentRoleBinding roles, FixedPosition origin, int radiusBlocks, PhysicalPostcondition postcondition,
                           PhysicalDeltaSemanticTarget semanticTarget, PhysicalIntentLifecycleOwner lifecycleOwner) {
-        this(id, kind, status, causeSubjectId, subjectIds, origin, radiusBlocks, postcondition, Optional.empty(), Optional.empty(), Optional.of(semanticTarget), lifecycleOwner);
+        this(id, kind, status, causeSubjectId, roles, origin, radiusBlocks, postcondition, Optional.empty(), Optional.empty(), Optional.of(semanticTarget), lifecycleOwner);
     }
 
     public PhysicalIntent withStatus(PhysicalIntentStatus nextStatus, Optional<PhysicalObservationId> observationId) {
-        return new PhysicalIntent(id, kind, nextStatus, causeSubjectId, subjectIds, origin, radiusBlocks, postcondition, observationId, targetSlot, semanticTarget, lifecycleOwner);
+        return new PhysicalIntent(id, kind, nextStatus, causeSubjectId, roles, origin, radiusBlocks, postcondition, observationId, targetSlot, semanticTarget, lifecycleOwner);
     }
+
+    /** Deterministic compatibility/index data. It is never semantic authority. */
+    public java.util.List<SubjectId> subjectIds() { return roles.subjectIds(); }
 }

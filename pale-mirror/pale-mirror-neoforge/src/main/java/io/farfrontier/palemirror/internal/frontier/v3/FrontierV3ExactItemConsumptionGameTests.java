@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.PaleMirrorMod;
 import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner;
@@ -62,7 +63,7 @@ public final class FrontierV3ExactItemConsumptionGameTests {
         ResidentBirthJob job = new ResidentBirthJob(new SubjectId("job:resident-birth-game-test"), settlement.id(), parent.householdId(), food,
                 new PhysicalIntentId("intent:resident-birth-food-game-test"), newborn, settlement.anchor());
         PhysicalIntent intent = new PhysicalIntent(job.consumptionIntentId(), PhysicalIntentKind.EXACT_ITEM_CONSUMPTION, PhysicalIntentStatus.PREPARED,
-                job.id(), java.util.List.of(job.id(), food), new FixedPosition(FixedScalar.whole(settlement.anchor().x()), FixedScalar.whole(settlement.anchor().y()),
+                job.id(), PhysicalIntentRoleBinding.exactConsumption(job.id(), food), new FixedPosition(FixedScalar.whole(settlement.anchor().x()), FixedScalar.whole(settlement.anchor().y()),
                 FixedScalar.whole(settlement.anchor().z())), 0, PhysicalPostcondition.EXACT_ITEM_CONSUMED_OBSERVED,
                 PhysicalIntentLifecycleOwner.POPULATION_MIGRATION);
         state = state.startResidentBirth(job).preparePhysicalIntent(intent);

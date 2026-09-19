@@ -22,11 +22,10 @@ public final class SettlementServiceInputIssueStateSupport {
 
     public static void validateIntent(FrontierWorldState state, PhysicalIntent intent) {
         if (!owns(intent)) return;
-        if (intent.subjectIds().size() != 3) throw new IllegalArgumentException("service input issue requires work, worker and exact item");
-        SubjectId workId = intent.subjectIds().getFirst();
+        SubjectId workId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.PROJECT);
         SettlementServiceWork work = state.serviceWorks().get(workId);
         if (work == null || !intent.id().equals(work.inputIssueIntentId()) || !intent.causeSubjectId().equals(workId)
-                || !intent.subjectIds().equals(java.util.List.of(workId, work.workerId(), work.inputItemId()))
+                || !intent.roles().equals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.serviceInputIssue(workId, work.workerId(), work.inputItemId()))
                 || work.phase() != SettlementServiceWorkPhase.INPUT_ISSUE_PENDING) {
             throw new IllegalArgumentException("service input issue must bind the exact retained work at its source station");
         }
@@ -47,11 +46,11 @@ public final class SettlementServiceInputIssueStateSupport {
      * canonical conflict.
      */
     public static ExecutionEligibility executionEligibility(FrontierWorldState state, PhysicalIntent intent) {
-        if (!owns(intent) || intent.subjectIds().size() != 3) return ExecutionEligibility.INVALID;
-        SubjectId workId = intent.subjectIds().getFirst();
+        if (!owns(intent)) return ExecutionEligibility.INVALID;
+        SubjectId workId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.PROJECT);
         SettlementServiceWork work = state.serviceWorks().get(workId);
         if (work == null || !intent.id().equals(work.inputIssueIntentId()) || !intent.causeSubjectId().equals(workId)
-                || !intent.subjectIds().equals(java.util.List.of(workId, work.workerId(), work.inputItemId()))) {
+                || !intent.roles().equals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.serviceInputIssue(workId, work.workerId(), work.inputItemId()))) {
             return ExecutionEligibility.INVALID;
         }
         if (work.phase() != SettlementServiceWorkPhase.INPUT_ISSUE_PENDING) return ExecutionEligibility.DEFERRED;
@@ -91,7 +90,7 @@ public final class SettlementServiceInputIssueStateSupport {
 
     static void validateReceiptForRecovery(PhysicalIntent intent, SettlementServiceInputIssueObservation receipt) {
         if (!owns(intent) || !intent.id().equals(receipt.intentId())
-                || !intent.subjectIds().equals(java.util.List.of(receipt.workId(), receipt.workerId(), receipt.itemId()))) {
+                || !intent.roles().equals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.serviceInputIssue(receipt.workId(), receipt.workerId(), receipt.itemId()))) {
             throw new IllegalArgumentException("service input-issue receipt has foreign exact subjects");
         }
     }

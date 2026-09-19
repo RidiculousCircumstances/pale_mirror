@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
@@ -204,7 +205,7 @@ public final class SupplyOperationProcess {
     static List<ProposedEvent> planTransition(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentTransition transition, long now) {
         if (intent.kind() != PhysicalIntentKind.CARGO_HANDOFF) throw new IllegalArgumentException("supply transition has an invalid physical intent kind");
         RouteOperation operation = state.operations().get(intent.causeSubjectId());
-        if (operation == null || operation.stage() != OperationStage.ARRIVED || !intent.subjectIds().equals(List.of(operation.id(), operation.cargoId()))) {
+        if (operation == null || operation.stage() != OperationStage.ARRIVED || !intent.roles().equals(PhysicalIntentRoleBinding.cargoHandoff(operation.id(), operation.cargoId()))) {
             throw new IllegalArgumentException("supply transition lacks its arrived route operation");
         }
         StrategicTask task = deliveryTaskForOperation(state, operation, StrategicTaskStatus.ACTIVE);
@@ -347,7 +348,7 @@ public final class SupplyOperationProcess {
     private static PhysicalIntent cargoLoadingIntent(SupplyContract contract, ExactItemStack item, ContainerSurface surface) {
         BlockPosition position = surface.position();
         return new PhysicalIntent(new PhysicalIntentId("intent:cargo-load-" + contract.id().value().substring("contract:".length())),
-                PhysicalIntentKind.CARGO_LOADING, PhysicalIntentStatus.PREPARED, contract.id(), List.of(contract.id(), contract.cargoId(), item.id()),
+                PhysicalIntentKind.CARGO_LOADING, PhysicalIntentStatus.PREPARED, contract.id(), PhysicalIntentRoleBinding.cargoLoading(contract.id(), contract.cargoId(), item.id()),
                 new FixedPosition(FixedScalar.whole(position.x()), FixedScalar.whole(position.y()), FixedScalar.whole(position.z())), 0,
                 PhysicalPostcondition.CARGO_LOADED_FROM_DEPOT_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ROUTE_OPERATION);
     }
@@ -449,7 +450,7 @@ public final class SupplyOperationProcess {
     private static PhysicalIntent cargoHandoffIntent(RouteOperation operation) {
         BlockPosition target = operation.route().getLast(); FixedPosition origin = new FixedPosition(FixedScalar.whole(target.x()), FixedScalar.whole(target.y()), FixedScalar.whole(target.z()));
         return new PhysicalIntent(new PhysicalIntentId("intent:cargo-handoff-" + operation.id().value().substring("operation:".length())), PhysicalIntentKind.CARGO_HANDOFF,
-                PhysicalIntentStatus.PREPARED, operation.id(), List.of(operation.id(), operation.cargoId()), origin, 0, PhysicalPostcondition.CARGO_HANDOFF_OBSERVED,
+                PhysicalIntentStatus.PREPARED, operation.id(), PhysicalIntentRoleBinding.cargoHandoff(operation.id(), operation.cargoId()), origin, 0, PhysicalPostcondition.CARGO_HANDOFF_OBSERVED,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ROUTE_OPERATION);
     }
 }

@@ -9,6 +9,7 @@ import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner;
@@ -497,7 +498,7 @@ final class FrontierV3SceneExecutor {
         String world = state.bootstrap().worldId().value().replace(':', '-');
         String key = world + "-scene-r" + lease.revision() + "-e" + effectEpoch;
         PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:explosion-" + key), PhysicalIntentKind.EXPLOSION, PhysicalIntentStatus.PREPARED,
-                bomber.member().actorId(), List.of(bomber.member().actorId(), engagement), position(origin), 4, PhysicalPostcondition.EXPLOSION_OBSERVED, lifecycleOwner);
+                bomber.member().actorId(), PhysicalIntentRoleBinding.explosion(bomber.member().actorId(), engagement), position(origin), 4, PhysicalPostcondition.EXPLOSION_OBSERVED, lifecycleOwner);
         submit(runtime, "explosion-prepare", key, new PhysicalIntentPrepared(intent));
         return true;
     }
@@ -541,7 +542,7 @@ final class FrontierV3SceneExecutor {
                     + sceneCause.value().replace(':', '-') + "-r" + lease.revision() + "-s" + confirmedStrikeCount(state, sceneCause));
             String key = intentId.value().substring("intent:scene-strike-".length());
             PhysicalIntent intent = new PhysicalIntent(intentId, PhysicalIntentKind.SCENE_STRIKE, PhysicalIntentStatus.PREPARED,
-                    sceneCause, List.of(attacker.member().actorId(), target.member().actorId()), position(attacker.entity()), 0,
+                    sceneCause, PhysicalIntentRoleBinding.sceneStrike(attacker.member().actorId(), target.member().actorId()), position(attacker.entity()), 0,
                     PhysicalPostcondition.SCENE_STRIKE_OBSERVED, lifecycleOwner);
             submit(runtime, "scene-strike-prepare", key, new PhysicalIntentPrepared(intent)); return;
         }

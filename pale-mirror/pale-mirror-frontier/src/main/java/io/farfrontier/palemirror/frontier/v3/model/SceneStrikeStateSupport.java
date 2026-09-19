@@ -1,8 +1,6 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
-import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.*;
 
 import java.util.Map;
 
@@ -35,9 +33,9 @@ public final class SceneStrikeStateSupport {
                 throw new IllegalArgumentException("logistics scene strike must retain one en-route operation");
             }
         }
-        SubjectId attacker = intent.subjectIds().getFirst(), target = intent.subjectIds().getLast();
+        SubjectId attacker = attacker(intent), target = target(intent);
         ActorLocation attackerLocation = actors.get(attacker), targetLocation = actors.get(target);
-        if (!lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet()).containsAll(intent.subjectIds())
+        if (!lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet()).containsAll(members(intent))
                 || attackerLocation == null || targetLocation == null || attackerLocation.condition().status() != ActorLifeStatus.ALIVE
                 || targetLocation.condition().status() != ActorLifeStatus.ALIVE) {
             throw new IllegalArgumentException("scene strike must bind two living members of its exact HOT lease");
@@ -46,7 +44,7 @@ public final class SceneStrikeStateSupport {
 
     public static void validateObservation(FrontierWorldState state, PhysicalIntent intent, SceneStrikeObservation observation) {
         SceneLease lease = matchingLease(state, intent);
-        if (!lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet()).containsAll(intent.subjectIds())) {
+        if (!lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet()).containsAll(members(intent))) {
             throw new IllegalArgumentException("scene strike receipt has no matching exact scene lease");
         }
         validateMembers(intent, observation);
@@ -58,7 +56,7 @@ public final class SceneStrikeStateSupport {
     static void validateObservation(Map<SubjectId, RouteOperation> operations, Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> leases,
                                     PhysicalIntent intent, SceneStrikeObservation observation) {
         if (leases.values().stream().filter(lease -> matches(lease, intent)).noneMatch(lease -> lease.members().stream()
-                .map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet()).containsAll(intent.subjectIds()))) {
+                .map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet()).containsAll(members(intent)))) {
             throw new IllegalArgumentException("scene strike receipt has no matching exact scene lease");
         }
         validateMembers(intent, observation);
@@ -90,20 +88,20 @@ public final class SceneStrikeStateSupport {
 
     private static boolean matches(SceneLease lease, PhysicalIntent intent) {
         if (FrontierSceneBehaviors.owns(lease, intent.causeSubjectId())) return true;
-        if (!FrontierSceneBehaviors.isSettlementAssault(lease) || intent.subjectIds().isEmpty()) return false;
+        if (!FrontierSceneBehaviors.isSettlementAssault(lease)) return false;
         SettlementAssaultSceneCause cause = FrontierSceneBehaviors.settlementAssault(lease);
         if (!SettlementAssaultCauseIdentity.belongsTo(cause.assaultId(), intent.causeSubjectId())) return false;
         long epoch = SettlementAssaultCauseIdentity.epoch(cause.assaultId(), intent.causeSubjectId());
-        return intent.causeSubjectId().equals(SettlementAssaultCauseIdentity.strike(cause.assaultId(), intent.subjectIds().getFirst(), epoch));
+        return intent.causeSubjectId().equals(SettlementAssaultCauseIdentity.strike(cause.assaultId(), attacker(intent), epoch));
     }
 
     private static boolean matches(StrategicPlanState plans, Iterable<PhysicalIntent> intents, SceneLease lease, PhysicalIntent intent) {
         if (FrontierSceneBehaviors.owns(lease, intent.causeSubjectId())) return true;
-        if (!FrontierSceneBehaviors.isSettlementAssault(lease) || intent.subjectIds().isEmpty() || !isSettlementAssaultCause(plans, intent)) return false;
+        if (!FrontierSceneBehaviors.isSettlementAssault(lease) || !isSettlementAssaultCause(plans, intent)) return false;
         SettlementAssault assault = plans.settlementAssaults().get(FrontierSceneBehaviors.settlementAssault(lease).assaultId());
         if (assault == null || !SettlementAssaultCauseIdentity.belongsTo(assault.id(), intent.causeSubjectId())) return false;
         long epoch = SettlementAssaultCauseIdentity.epoch(assault.id(), intent.causeSubjectId());
-        if (!intent.causeSubjectId().equals(SettlementAssaultCauseIdentity.strike(assault.id(), intent.subjectIds().getFirst(), epoch))) return false;
+        if (!intent.causeSubjectId().equals(SettlementAssaultCauseIdentity.strike(assault.id(), attacker(intent), epoch))) return false;
         long next = SettlementAssaultCauseIdentity.hotEpoch(assault, intents);
         return intent.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED
                 ? epoch < next : epoch == next;
@@ -117,9 +115,9 @@ public final class SceneStrikeStateSupport {
     }
 
     private static void validateMembers(Map<SubjectId, ActorLocation> actors, SceneLease lease, PhysicalIntent intent) {
-        SubjectId attacker = intent.subjectIds().getFirst(), target = intent.subjectIds().getLast();
+        SubjectId attacker = attacker(intent), target = target(intent);
         ActorLocation attackerLocation = actors.get(attacker), targetLocation = actors.get(target);
-        if (!lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet()).containsAll(intent.subjectIds())
+        if (!lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet()).containsAll(members(intent))
                 || attackerLocation == null || targetLocation == null || attackerLocation.condition().status() != ActorLifeStatus.ALIVE
                 || targetLocation.condition().status() != ActorLifeStatus.ALIVE) {
             throw new IllegalArgumentException("scene strike must bind two living members of its exact HOT lease");
@@ -127,7 +125,7 @@ public final class SceneStrikeStateSupport {
     }
 
     private static void validateMembers(PhysicalIntent intent, SceneStrikeObservation observation) {
-        if (!intent.subjectIds().getFirst().equals(observation.attackerId()) || !intent.subjectIds().getLast().equals(observation.targetId())) {
+        if (!attacker(intent).equals(observation.attackerId()) || !target(intent).equals(observation.targetId())) {
             throw new IllegalArgumentException("scene strike receipt differs from its exact prepared members");
         }
     }
@@ -139,7 +137,7 @@ public final class SceneStrikeStateSupport {
      */
     private static void validateObservedWound(Map<SubjectId, ActorLocation> actors, PhysicalIntent intent,
                                               SceneStrikeObservation observation) {
-        ActorLocation target = actors.get(intent.subjectIds().getLast());
+        ActorLocation target = actors.get(target(intent));
         if (target == null) throw new IllegalArgumentException("scene strike has no target actor");
         if (observation.targetHealthAfter().compareTo(io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO) == 0) {
             if (target.condition().status() != ActorLifeStatus.DEAD) {
@@ -176,7 +174,7 @@ public final class SceneStrikeStateSupport {
         if (attackers.isEmpty() || targets.isEmpty()) throw new IllegalArgumentException("settlement scene strike has no living exact combatants");
         SubjectId expectedAttacker = attackers.get(Math.floorMod(epoch, attackers.size()));
         SubjectId expectedTarget = targets.get(Math.floorMod(epoch, targets.size()));
-        if (!intent.subjectIds().equals(java.util.List.of(expectedAttacker, expectedTarget))) {
+        if (!intent.roles().equals(PhysicalIntentRoleBinding.sceneStrike(expectedAttacker, expectedTarget))) {
             throw new IllegalArgumentException("settlement scene strike does not match the exact COLD attacker and target");
         }
     }
@@ -185,4 +183,8 @@ public final class SceneStrikeStateSupport {
         ActorLocation actor = actors.get(actorId);
         return actor != null && actor.condition().status() == ActorLifeStatus.ALIVE;
     }
+
+    private static SubjectId attacker(PhysicalIntent intent) { return intent.roles().require(PhysicalIntentSubjectRole.ATTACKER); }
+    private static SubjectId target(PhysicalIntent intent) { return intent.roles().require(PhysicalIntentSubjectRole.TARGET); }
+    private static java.util.Set<SubjectId> members(PhysicalIntent intent) { return java.util.Set.of(attacker(intent), target(intent)); }
 }

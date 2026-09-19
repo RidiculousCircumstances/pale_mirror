@@ -1,5 +1,8 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole;
+
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
@@ -33,7 +36,7 @@ public final class ExplosionStateSupport {
                 .findFirst().orElseThrow(() -> new IllegalArgumentException("explosion requires one HOT bomber scene"));
         RouteEngagement engagement = state.strategicPlans().routeEngagements().get(FrontierSceneBehaviors.logistics(lease).engagementId().orElseThrow());
         if (engagement == null || engagement.status() != RouteEngagementStatus.HOT || !engagement.attackerIds().contains(bomber.id())
-                || intent.subjectIds().size() != 2 || !intent.subjectIds().getFirst().equals(bomber.id()) || !intent.subjectIds().getLast().equals(engagement.id())) {
+                || !intent.roles().equals(PhysicalIntentRoleBinding.explosion(bomber.id(), engagement.id()))) {
             throw new IllegalArgumentException("explosion must bind its exact HOT bomber and engagement");
         }
     }

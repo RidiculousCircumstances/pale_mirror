@@ -7,7 +7,9 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
@@ -16,7 +18,7 @@ import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTarget;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.Optional;
 
 /** Stable WAL representation of a physical intent, including its typed external target. */
@@ -25,8 +27,10 @@ final class PhysicalIntentPayloadCodec {
 
     static void write(DataOutputStream output, PhysicalIntent intent) throws IOException {
         FrontierWorldPayloadCodecs.writeString(output, intent.id().value()); output.writeByte(intent.kind().wireTag()); output.writeByte(intent.status().wireTag());
-        FrontierWorldPayloadCodecs.writeSubject(output, intent.causeSubjectId()); output.writeByte(intent.subjectIds().size());
-        for (SubjectId subject : intent.subjectIds()) FrontierWorldPayloadCodecs.writeSubject(output, subject);
+        FrontierWorldPayloadCodecs.writeSubject(output, intent.causeSubjectId()); output.writeByte(intent.roles().namedRoles().size());
+        for (var entry : intent.roles().namedRoles().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey(java.util.Comparator.comparingInt(PhysicalIntentSubjectRole::wireTag))).toList()) {
+            output.writeByte(entry.getKey().wireTag()); FrontierWorldPayloadCodecs.writeSubject(output, entry.getValue());
+        }
         output.writeLong(intent.origin().x().raw()); output.writeLong(intent.origin().y().raw()); output.writeLong(intent.origin().z().raw());
         output.writeByte(intent.radiusBlocks()); output.writeByte(intent.postcondition().wireTag()); output.writeBoolean(intent.postconditionObservationId().isPresent());
         if (intent.postconditionObservationId().isPresent()) FrontierWorldPayloadCodecs.writeString(output, intent.postconditionObservationId().orElseThrow().value());
@@ -40,8 +44,11 @@ final class PhysicalIntentPayloadCodec {
     static PhysicalIntent read(DataInputStream input) throws IOException {
         PhysicalIntentId id = new PhysicalIntentId(FrontierWorldPayloadCodecs.readString(input));
         int kind = input.readUnsignedByte(); int status = input.readUnsignedByte(); FrontierWorldPayloadCodecs.SubjectIdHolder cause = FrontierWorldPayloadCodecs.readSubject(input);
-        ArrayList<SubjectId> subjects = new ArrayList<>();
-        for (int index = 0, count = input.readUnsignedByte(); index < count; index++) subjects.add(FrontierWorldPayloadCodecs.readSubject(input).value());
+        EnumMap<PhysicalIntentSubjectRole, SubjectId> roles = new EnumMap<>(PhysicalIntentSubjectRole.class);
+        for (int index = 0, count = input.readUnsignedByte(); index < count; index++) {
+            PhysicalIntentSubjectRole role = PhysicalIntentSubjectRole.fromWire(input.readUnsignedByte());
+            if (roles.put(role, FrontierWorldPayloadCodecs.readSubject(input).value()) != null) throw new IllegalArgumentException("duplicate physical intent role tag");
+        }
         FixedPosition origin = new FixedPosition(new FixedScalar(input.readLong()), new FixedScalar(input.readLong()), new FixedScalar(input.readLong()));
         int radius = input.readUnsignedByte(); int postcondition = input.readUnsignedByte(); boolean observed = input.readBoolean();
         Optional<PhysicalObservationId> observation = observed ? Optional.of(new PhysicalObservationId(FrontierWorldPayloadCodecs.readString(input))) : Optional.empty();
@@ -52,7 +59,7 @@ final class PhysicalIntentPayloadCodec {
             throw new IllegalArgumentException("unknown physical intent enum value");
         }
         return new PhysicalIntent(id, FrontierWireTags.require(PhysicalIntentKind.class, kind), FrontierWireTags.require(PhysicalIntentStatus.class, status),
-                cause.value(), subjects, origin, radius, FrontierWireTags.require(PhysicalPostcondition.class, postcondition), observation, target, semanticTarget,
+                cause.value(), PhysicalIntentRoleBinding.decode(FrontierWireTags.require(PhysicalIntentKind.class, kind), roles), origin, radius, FrontierWireTags.require(PhysicalPostcondition.class, postcondition), observation, target, semanticTarget,
                 PhysicalIntentLifecycleOwner.fromWire(input.readUnsignedByte(), FrontierWorldPayloadCodecs.readString(input)));
     }
 }

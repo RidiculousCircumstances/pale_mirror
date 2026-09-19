@@ -27,7 +27,7 @@ public final class SettlementServiceDecontaminationStateSupport {
                                                   Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, SettlementServiceWork> works) {
         SettlementServiceWork work = works.get(intent.causeSubjectId());
         if (work == null || work.kind() != SettlementServiceWorkKind.DECONTAMINATION || !intent.id().equals(work.endpointIntentId())
-                || !intent.subjectIds().equals(java.util.List.of(work.id(), work.workerId(), work.inputItemId()))
+                || !intent.roles().equals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.serviceDecontamination(work.id(), work.workerId(), work.inputItemId()))
                 || !observation.intentId().equals(intent.id()) || !observation.itemId().equals(work.inputItemId())
                 || !(work.target() instanceof SettlementServiceTarget.Infection target) || !observation.cell().equals(target.cell())) {
             throw new IllegalArgumentException("service decontamination receipt has foreign retained work subjects");
@@ -42,7 +42,7 @@ public final class SettlementServiceDecontaminationStateSupport {
                 && intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART;
         if (work == null || work.kind() != SettlementServiceWorkKind.DECONTAMINATION || !intent.id().equals(work.endpointIntentId())
                 || (!readyToExecute && !recoveringExactEffect) || !(work.target() instanceof SettlementServiceTarget.Infection target)
-                || !intent.subjectIds().equals(java.util.List.of(work.id(), work.workerId(), work.inputItemId()))) {
+                || !intent.roles().equals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.serviceDecontamination(work.id(), work.workerId(), work.inputItemId()))) {
             throw new IllegalArgumentException("service decontamination must bind one effect-ready or exact-recovery retained work");
         }
         ExactItemStack item = state.inventory().items().get(work.inputItemId());
@@ -65,7 +65,7 @@ public final class SettlementServiceDecontaminationStateSupport {
         if (!owns(state, intent)) return ExecutionEligibility.INVALID;
         SettlementServiceWork work = state.serviceWorks().get(intent.causeSubjectId());
         if (work == null || work.kind() != SettlementServiceWorkKind.DECONTAMINATION || !intent.id().equals(work.endpointIntentId())
-                || !intent.subjectIds().equals(java.util.List.of(work.id(), work.workerId(), work.inputItemId()))) {
+                || !intent.roles().equals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.serviceDecontamination(work.id(), work.workerId(), work.inputItemId()))) {
             return ExecutionEligibility.INVALID;
         }
         boolean ready = work.phase() == SettlementServiceWorkPhase.EFFECT_READY && intent.status() != PhysicalIntentStatus.UNKNOWN_AFTER_RESTART;

@@ -351,7 +351,7 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
     void materializedTransformationCannotBePreparedBeforeTheExactWorkerFinishesItsRetainedCycle() {
         MaterializedProduction prepared = activeMaterializedProduction();
         PhysicalIntent early = new PhysicalIntent(new PhysicalIntentId("intent:production-transform-too-early"), PhysicalIntentKind.PRODUCTION_TRANSFORMATION,
-                PhysicalIntentStatus.PREPARED, prepared.job().id(), List.of(prepared.job().id(), prepared.job().consumedItemId(), prepared.job().outputItemId()),
+                PhysicalIntentStatus.PREPARED, prepared.job().id(), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.production(prepared.job().id(), prepared.job().consumedItemId(), prepared.job().outputItemId()),
                 new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0, PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.PRODUCTION_WORK);
         assertThrows(IllegalArgumentException.class, () -> prepared.state().preparePhysicalIntent(early));
@@ -673,7 +673,7 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         MaterializedProduction prepared = activeMaterializedProduction();
         PhysicalIntent premature = new PhysicalIntent(new PhysicalIntentId("intent:production-transform-premature"),
                 PhysicalIntentKind.PRODUCTION_TRANSFORMATION, PhysicalIntentStatus.PREPARED, prepared.job().id(),
-                List.of(prepared.job().id(), prepared.job().consumedItemId(), prepared.job().outputItemId()),
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.production(prepared.job().id(), prepared.job().consumedItemId(), prepared.job().outputItemId()),
                 new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0,
                 PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.PRODUCTION_WORK);
 

@@ -15,8 +15,7 @@ public final class EngineeringEquipmentStateSupport {
     }
 
     public static void validateIssue(FrontierWorldState state, PhysicalIntent intent) {
-        if (intent.subjectIds().size() != 3) throw new IllegalArgumentException("engineering equipment issue needs exact owner, resident and item");
-        SubjectId projectId = intent.subjectIds().getFirst(), residentId = intent.subjectIds().get(1), itemId = intent.subjectIds().get(2);
+        SubjectId projectId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.PROJECT), residentId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.DEFENDER), itemId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.EQUIPMENT);
         EngineeringWorkOrder project = project(state, projectId);
         EngineeringRecoveryTeam team = project.engineeringTeam().orElseThrow();
         ExactItemStack item = state.inventory().items().get(itemId);
@@ -33,7 +32,7 @@ public final class EngineeringEquipmentStateSupport {
     }
 
     public static InventoryCustody.ContainerSlot targetSlot(FrontierWorldState state, PhysicalIntent intent) {
-        EngineeringWorkOrder project = project(state, intent.subjectIds().getFirst());
+        EngineeringWorkOrder project = project(state, intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.PROJECT));
         var target = intent.targetSlot().orElseThrow(() -> new IllegalArgumentException("engineering equipment return lacks typed target slot"));
         SubjectId depot = FrontierWorldState.depotId(project.settlementId());
         if (!target.containerId().equals(depot)) throw new IllegalArgumentException("engineering equipment return target is not the home depot");
@@ -41,8 +40,7 @@ public final class EngineeringEquipmentStateSupport {
     }
 
     public static void validateReturn(FrontierWorldState state, PhysicalIntent intent) {
-        if (intent.subjectIds().size() != 3) throw new IllegalArgumentException("engineering equipment return needs exact owner, resident and item");
-        SubjectId projectId = intent.subjectIds().getFirst(), residentId = intent.subjectIds().get(1), itemId = intent.subjectIds().get(2);
+        SubjectId projectId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.PROJECT), residentId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.DEFENDER), itemId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.EQUIPMENT);
         EngineeringWorkOrder project = project(state, projectId);
         EngineeringRecoveryTeam team = project.engineeringTeam().orElseThrow();
         ExactItemStack item = state.inventory().items().get(itemId);
@@ -73,6 +71,6 @@ public final class EngineeringEquipmentStateSupport {
                                         SubjectId projectId, SubjectId residentId, SubjectId itemId) {
         return state.physicalIntents().values().stream().anyMatch(existing -> !existing.id().equals(candidate.id())
                 && existing.kind() == kind && existing.status() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED
-                && existing.subjectIds().equals(java.util.List.of(projectId, residentId, itemId)));
+                && existing.roles().equals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.equipmentReturn(projectId, residentId, itemId)));
     }
 }

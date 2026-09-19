@@ -1,8 +1,6 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
-import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.*;
 
 /** Pure validation and canonical receipt for one exact human-equipment issue boundary. */
 public final class EquipmentIssueStateSupport {
@@ -10,8 +8,7 @@ public final class EquipmentIssueStateSupport {
 
     public static void validateIntent(FrontierWorldState state, PhysicalIntent intent) {
         if (intent.kind() != PhysicalIntentKind.EQUIPMENT_ISSUE) throw new IllegalArgumentException("not an equipment issue intent");
-        if (intent.subjectIds().size() != 3) throw new IllegalArgumentException("equipment issue needs exact owner, resident and item");
-        SubjectId ownerId = intent.subjectIds().get(0), residentId = intent.subjectIds().get(1), itemId = intent.subjectIds().get(2);
+        SubjectId ownerId = intent.roles().require(PhysicalIntentSubjectRole.PROJECT), residentId = intent.roles().require(PhysicalIntentSubjectRole.DEFENDER), itemId = intent.roles().require(PhysicalIntentSubjectRole.EQUIPMENT);
         if (state.routeConstructions().containsKey(ownerId) || state.routeMaintenances().containsKey(ownerId)) {
             EngineeringEquipmentStateSupport.validateIssue(state, intent);
             return;
@@ -38,7 +35,7 @@ public final class EquipmentIssueStateSupport {
      * transitions must not invalidate this historical evidence during snapshot/WAL recovery.
      */
     public static void validateReceiptForRecovery(ExactInventory inventory, PhysicalIntent intent, EquipmentIssueObservation receipt) {
-        if (intent.kind() != PhysicalIntentKind.EQUIPMENT_ISSUE || !intent.subjectIds().equals(java.util.List.of(receipt.ownerId(), receipt.residentId(), receipt.itemId()))) {
+        if (intent.kind() != PhysicalIntentKind.EQUIPMENT_ISSUE || !intent.roles().equals(PhysicalIntentRoleBinding.equipmentIssue(receipt.ownerId(), receipt.residentId(), receipt.itemId()))) {
             throw new IllegalArgumentException("equipment issue receipt has foreign exact subjects");
         }
     }
@@ -51,7 +48,7 @@ public final class EquipmentIssueStateSupport {
     public static FrontierWorldState complete(FrontierWorldState state, PhysicalIntent intent, EquipmentIssueObservation receipt,
                                               java.util.Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, PhysicalIntent> nextIntents) {
         validateIntent(state, intent);
-        SubjectId ownerId = intent.subjectIds().get(0), residentId = intent.subjectIds().get(1), itemId = intent.subjectIds().get(2);
+        SubjectId ownerId = intent.roles().require(PhysicalIntentSubjectRole.PROJECT), residentId = intent.roles().require(PhysicalIntentSubjectRole.DEFENDER), itemId = intent.roles().require(PhysicalIntentSubjectRole.EQUIPMENT);
         ExactItemStack item = state.inventory().items().get(itemId);
         if (!receipt.ownerId().equals(ownerId) || !receipt.residentId().equals(residentId) || !receipt.itemId().equals(itemId)
                 || !receipt.sourceSlot().equals(item.custody())) throw new IllegalArgumentException("equipment issue receipt does not match exact intent");

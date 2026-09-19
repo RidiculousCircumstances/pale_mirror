@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
@@ -243,7 +244,7 @@ public final class RouteMaintenanceProcess {
         if (surface == null || surface.status() != ContainerSurfaceStatus.ACTIVE) throw new IllegalArgumentException("route maintenance source surface is not active");
         return new PhysicalIntent(new PhysicalIntentId("intent:route-maintenance-load-" + maintenance.id().value().replace(':', '-')),
                 PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING, PhysicalIntentStatus.PREPARED, maintenance.id(),
-                List.of(FrontierRouteNetwork.OWNER, maintenance.id(), maintenance.plannedCargoId(), maintenance.plannedCargoItemId(), source.id()),
+                PhysicalIntentRoleBinding.routeMaintenanceLoading(FrontierRouteNetwork.OWNER, maintenance.id(), maintenance.plannedCargoId(), maintenance.plannedCargoItemId(), source.id()),
                 new FixedPosition(FixedScalar.whole(surface.position().x()), FixedScalar.whole(surface.position().y()), FixedScalar.whole(surface.position().z())), 0,
                 PhysicalPostcondition.ROUTE_MAINTENANCE_MATERIAL_LOADED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE);
     }
@@ -252,7 +253,7 @@ public final class RouteMaintenanceProcess {
         BlockPosition position = maintenance.repairCell();
         return new PhysicalIntent(new PhysicalIntentId("intent:route-maintenance-" + maintenance.id().value().replace(':', '-')),
                 PhysicalIntentKind.ROUTE_MAINTENANCE, PhysicalIntentStatus.PREPARED, FrontierRouteNetwork.OWNER,
-                List.of(FrontierRouteNetwork.OWNER, maintenance.id(), cargoId, itemId),
+                PhysicalIntentRoleBinding.routeMaintenance(FrontierRouteNetwork.OWNER, maintenance.id(), cargoId, itemId),
                 new FixedPosition(FixedScalar.whole(position.x()), FixedScalar.whole(position.y()), FixedScalar.whole(position.z())), 0,
                 PhysicalPostcondition.ROUTE_MAINTENANCE_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE);
     }

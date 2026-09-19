@@ -1,5 +1,8 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole;
+
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
@@ -23,8 +26,8 @@ public final class CargoLoadingStateSupport {
                 || contract == null || contract.status() != ContractStatus.ORDERED) {
             throw new IllegalArgumentException("cargo loading requires one ordered supply contract");
         }
-        SubjectId itemId = intent.subjectIds().get(2);
-        if (!intent.subjectIds().equals(List.of(contract.id(), contract.cargoId(), itemId))) {
+        SubjectId itemId = intent.roles().require(PhysicalIntentSubjectRole.SOURCE_ITEM);
+        if (!intent.roles().equals(PhysicalIntentRoleBinding.cargoLoading(contract.id(), contract.cargoId(), itemId))) {
             throw new IllegalArgumentException("cargo loading intent has foreign subjects");
         }
         ExactItemStack item = state.inventory().items().get(itemId);
@@ -46,7 +49,7 @@ public final class CargoLoadingStateSupport {
         }
         validateIntent(state, intent);
         SupplyContract contract = state.contracts().get(intent.causeSubjectId());
-        ExactItemStack item = state.inventory().items().get(intent.subjectIds().get(2));
+        ExactItemStack item = state.inventory().items().get(intent.roles().require(PhysicalIntentSubjectRole.SOURCE_ITEM));
         if (contract == null || item == null || !intent.id().equals(receipt.intentId()) || !contract.id().equals(receipt.contractId())
                 || !contract.cargoId().equals(receipt.cargoId()) || !item.id().equals(receipt.itemId()) || item.count() != receipt.itemCount()) {
             throw new IllegalArgumentException("cargo loading receipt does not match its exact contract stack");
@@ -60,7 +63,7 @@ public final class CargoLoadingStateSupport {
 
     public static void validateReceipt(PhysicalIntent intent, CargoLoadObservation receipt) {
         if (intent.kind() != PhysicalIntentKind.CARGO_LOADING || !intent.id().equals(receipt.intentId())
-                || !intent.subjectIds().equals(List.of(receipt.contractId(), receipt.cargoId(), receipt.itemId()))) {
+                || !intent.roles().equals(PhysicalIntentRoleBinding.cargoLoading(receipt.contractId(), receipt.cargoId(), receipt.itemId()))) {
             throw new IllegalArgumentException("cargo-load receipt names a foreign intent or exact stack");
         }
     }
@@ -89,7 +92,7 @@ public final class CargoLoadingStateSupport {
     public static Target target(FrontierWorldState state, PhysicalIntent intent) {
         validateIntent(state, intent);
         SupplyContract contract = state.contracts().get(intent.causeSubjectId());
-        ExactItemStack item = state.inventory().items().get(intent.subjectIds().get(2));
+        ExactItemStack item = state.inventory().items().get(intent.roles().require(PhysicalIntentSubjectRole.SOURCE_ITEM));
         InventoryCustody.ContainerSlot slot = (InventoryCustody.ContainerSlot) item.custody();
         ContainerSurface surface = state.inventory().surfaces().get(slot.containerId());
         return new Target(contract, item, slot, surface.position());

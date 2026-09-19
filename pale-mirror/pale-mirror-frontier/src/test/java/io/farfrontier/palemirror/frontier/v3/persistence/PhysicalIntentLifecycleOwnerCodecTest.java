@@ -11,7 +11,9 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.Revision;
@@ -57,7 +59,7 @@ class PhysicalIntentLifecycleOwnerCodecTest {
                 "every public physical-intent construction path must require an explicit lifecycle owner");
         assertThrows(NullPointerException.class, () -> new PhysicalIntent(new PhysicalIntentId("intent:missing-owner"),
                 PhysicalIntentKind.PRODUCTION_TRANSFORMATION, PhysicalIntentStatus.PREPARED, new SubjectId("job:one"),
-                List.of(new SubjectId("job:one"), new SubjectId("item:input"), new SubjectId("item:output")), origin(), 0,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.production(new SubjectId("job:one"), new SubjectId("item:input"), new SubjectId("item:output")), origin(), 0,
                 PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED, java.util.Optional.empty(), java.util.Optional.empty(), null));
         assertMessage(() -> PhysicalIntentLifecycleOwner.fromWire(1, PhysicalIntentLifecycleOwner.PRODUCTION_WORK.stableId()), "codec version");
         assertMessage(() -> PhysicalIntentLifecycleOwner.fromWire(PhysicalIntentLifecycleOwner.CODEC_VERSION + 1,
@@ -65,26 +67,46 @@ class PhysicalIntentLifecycleOwnerCodecTest {
         assertMessage(() -> PhysicalIntentLifecycleOwner.fromWire(PhysicalIntentLifecycleOwner.CODEC_VERSION, "frontier:unknown-owner"), "unknown");
         assertThrows(IllegalArgumentException.class, () -> new PhysicalIntent(new PhysicalIntentId("intent:mismatched-owner"),
                 PhysicalIntentKind.PRODUCTION_TRANSFORMATION, PhysicalIntentStatus.PREPARED, new SubjectId("job:one"),
-                List.of(new SubjectId("job:one"), new SubjectId("item:input"), new SubjectId("item:output")), origin(), 0,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.production(new SubjectId("job:one"), new SubjectId("item:input"), new SubjectId("item:output")), origin(), 0,
                 PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED, PhysicalIntentLifecycleOwner.ROUTE_OPERATION));
     }
 
     @Test
-    void oldPersistenceEnvelopeFailsBeforeRecoveryCanReplayAnOwnerlessIntent() {
+    void typedRolesRejectMissingUnknownAndSwappedBindingsBeforeReplay() {
+        assertMessage(() -> PhysicalIntentRoleBinding.decode(PhysicalIntentKind.PRODUCTION_TRANSFORMATION,
+                Map.of(PhysicalIntentSubjectRole.JOB, new SubjectId("job:one"), PhysicalIntentSubjectRole.INPUT_ITEM, new SubjectId("item:input"))), "does not match");
+        assertMessage(() -> PhysicalIntentSubjectRole.fromWire(255), "unknown");
+        PhysicalIntent swapped = new PhysicalIntent(new PhysicalIntentId("intent:swapped-production"), PhysicalIntentKind.PRODUCTION_TRANSFORMATION,
+                PhysicalIntentStatus.PREPARED, new SubjectId("job:one"),
+                PhysicalIntentRoleBinding.production(new SubjectId("job:one"), new SubjectId("item:output"), new SubjectId("item:input")), origin(), 0,
+                PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED, PhysicalIntentLifecycleOwner.PRODUCTION_WORK);
+        assertEquals(swapped, roundTripPayload(swapped), "codec must retain the producer-stamped names without normalizing a forged role swap");
+    }
+
+    @Test
+    void oldPersistenceEnvelopeFailsBeforeRecoveryCanReplayAnUntypedIntent() {
         byte[] snapshot = FrontierPersistenceCodec.encodeSnapshot(new SnapshotRecord(new CheckpointImage(new WorldId("frontier:owner-boundary"),
                 Revision.ZERO, SimInstant.ZERO, new byte[0], List.of(), List.of()), 0L));
-        snapshot[4] = 64; // The immediately preceding envelope version had no lifecycle-owner bytes.
-        assertMessage(() -> FrontierPersistenceCodec.decodeSnapshot(snapshot), "lifecycle-owner codec");
+        snapshot[4] = 65; // The immediately preceding envelope version had no typed role-binding bytes.
+        assertMessage(() -> FrontierPersistenceCodec.decodeSnapshot(snapshot), "typed-role codec");
     }
 
     private static PhysicalIntent productionIntent() {
         return new PhysicalIntent(new PhysicalIntentId("intent:owner-round-trip"), PhysicalIntentKind.PRODUCTION_TRANSFORMATION,
                 PhysicalIntentStatus.PREPARED, new SubjectId("job:one"),
-                List.of(new SubjectId("job:one"), new SubjectId("item:input"), new SubjectId("item:output")), origin(), 0,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.production(new SubjectId("job:one"), new SubjectId("item:input"), new SubjectId("item:output")), origin(), 0,
                 PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED, PhysicalIntentLifecycleOwner.PRODUCTION_WORK);
     }
 
     private static FixedPosition origin() { return new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO); }
+
+    private static PhysicalIntent roundTripPayload(PhysicalIntent intent) {
+        try {
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+            try (DataOutputStream output = new DataOutputStream(bytes)) { PhysicalIntentPayloadCodec.write(output, intent); }
+            try (DataInputStream input = new DataInputStream(new ByteArrayInputStream(bytes.toByteArray()))) { return PhysicalIntentPayloadCodec.read(input); }
+        } catch (java.io.IOException impossible) { throw new AssertionError(impossible); }
+    }
 
     private static void assertMessage(Runnable action, String fragment) {
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class, action::run);

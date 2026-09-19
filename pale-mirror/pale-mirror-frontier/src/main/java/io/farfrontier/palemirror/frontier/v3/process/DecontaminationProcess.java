@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
@@ -42,7 +43,7 @@ public final class DecontaminationProcess {
         if (candidate.isEmpty()) return List.of(new ProposedEvent(task.orElseThrow().ownerId(), new StrategicTaskTransition(task.orElseThrow().id(), StrategicTaskStatus.BLOCKED)), next);
         Candidate value = candidate.orElseThrow(); InfectionCell cell = value.cell();
         PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:decontamination-" + ordinal), PhysicalIntentKind.DECONTAMINATION,
-                PhysicalIntentStatus.PREPARED, value.facility().id(), List.of(value.facility().id(), value.material().id()),
+                PhysicalIntentStatus.PREPARED, value.facility().id(), PhysicalIntentRoleBinding.decontamination(value.facility().id(), value.material().id()),
                 new FixedPosition(FixedScalar.whole(cell.originAtY(0).x()), FixedScalar.whole(0), FixedScalar.whole(cell.originAtY(0).z())), 0,
                 PhysicalPostcondition.DECONTAMINATION_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.DECONTAMINATION);
         return List.of(new ProposedEvent(value.settlement().id(), new StrategicTaskTransition(value.task().id(), StrategicTaskStatus.ACTIVE)),

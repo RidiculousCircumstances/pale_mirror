@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
@@ -299,7 +300,7 @@ public final class RouteConstructionProcess {
         // than reused when the next unit is requested after a restart.
         return new PhysicalIntent(new PhysicalIntentId("intent:route-material-load-" + project.id().value().replace(':', '-') + "-" + project.confirmedCells()),
                 PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING, PhysicalIntentStatus.PREPARED, project.id(),
-                List.of(FrontierRouteNetwork.OWNER, project.id(), cargo, cargoItemId(project), material.id()),
+                PhysicalIntentRoleBinding.routeConstructionLoading(FrontierRouteNetwork.OWNER, project.id(), cargo, cargoItemId(project), material.id()),
                 new FixedPosition(FixedScalar.whole(position.x()), FixedScalar.whole(position.y()), FixedScalar.whole(position.z())), 0,
                 PhysicalPostcondition.ROUTE_CONSTRUCTION_MATERIAL_LOADED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE);
     }
@@ -315,7 +316,7 @@ public final class RouteConstructionProcess {
         BlockPosition position = project.workCells().get(project.confirmedCells());
         return new PhysicalIntent(new PhysicalIntentId("intent:route-build-" + project.id().value().replace(':', '-') + "-" + project.confirmedCells()),
                 PhysicalIntentKind.ROUTE_CONSTRUCTION, PhysicalIntentStatus.PREPARED, FrontierRouteNetwork.OWNER,
-                List.of(FrontierRouteNetwork.OWNER, project.id(), cargoId, materialId),
+                PhysicalIntentRoleBinding.routeConstruction(FrontierRouteNetwork.OWNER, project.id(), cargoId, materialId),
                 new FixedPosition(FixedScalar.whole(position.x()), FixedScalar.whole(position.y()), FixedScalar.whole(position.z())), 0,
                 PhysicalPostcondition.ROUTE_CONSTRUCTION_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE);
     }

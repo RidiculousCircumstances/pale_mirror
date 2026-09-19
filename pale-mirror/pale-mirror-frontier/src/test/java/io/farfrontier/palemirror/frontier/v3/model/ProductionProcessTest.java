@@ -678,7 +678,7 @@ class ProductionProcessTest {
         materialized = new MaterializedProduction(materialized.state().withChanges(FrontierWorldStateUpdate.begin()
                 .productionJobs(java.util.Map.of(ready.id(), ready))), ready, materialized.order(), materialized.settlementId(), materialized.taskId());
         PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:production-transform-1-physical"), PhysicalIntentKind.PRODUCTION_TRANSFORMATION,
-                PhysicalIntentStatus.PREPARED, materialized.job().id(), List.of(materialized.job().id(), materialized.job().consumedItemId(), materialized.job().outputItemId()),
+                PhysicalIntentStatus.PREPARED, materialized.job().id(), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.production(materialized.job().id(), materialized.job().consumedItemId(), materialized.job().outputItemId()),
                 new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0, PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.PRODUCTION_WORK);
         return new PreparedProduction(PhysicalIntentLifecycleFixture.prepare(materialized.state(), materialized.settlementId(), intent), materialized.job(), intent,

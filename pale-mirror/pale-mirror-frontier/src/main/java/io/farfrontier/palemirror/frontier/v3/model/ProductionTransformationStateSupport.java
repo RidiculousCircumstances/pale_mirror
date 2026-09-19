@@ -1,5 +1,8 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole;
+
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
@@ -17,7 +20,7 @@ public final class ProductionTransformationStateSupport {
     public static void validateIntent(FrontierWorldState state, PhysicalIntent intent) {
         if (intent.kind() != PhysicalIntentKind.PRODUCTION_TRANSFORMATION) return;
         ProductionJob job = state.productionJobs().get(intent.causeSubjectId());
-        if (job == null || !intent.subjectIds().equals(List.of(job.id(), job.consumedItemId(), job.outputItemId()))) {
+        if (job == null || !intent.roles().equals(PhysicalIntentRoleBinding.production(job.id(), job.consumedItemId(), job.outputItemId()))) {
             throw new IllegalArgumentException("production transformation must bind its active job, input and output");
         }
         if (!(job.inputHold() instanceof ProductionInputHold.Materialized)) {
@@ -76,8 +79,8 @@ public final class ProductionTransformationStateSupport {
 
     static void validateReceipt(PhysicalIntent intent, ProductionTransformationObservation observation) {
         if (intent.kind() != PhysicalIntentKind.PRODUCTION_TRANSFORMATION || !intent.id().equals(observation.intentId())
-                || intent.subjectIds().size() != 3 || !intent.subjectIds().get(1).equals(observation.inputItemId())
-                || !intent.subjectIds().get(2).equals(observation.outputItemId())) {
+                || !intent.roles().require(PhysicalIntentSubjectRole.INPUT_ITEM).equals(observation.inputItemId())
+                || !intent.roles().require(PhysicalIntentSubjectRole.OUTPUT_ITEM).equals(observation.outputItemId())) {
             throw new IllegalArgumentException("production transformation receipt names a foreign intent or item");
         }
     }

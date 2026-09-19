@@ -1,5 +1,8 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole;
+
 import io.farfrontier.palemirror.frontier.v3.api.FixedRatio;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
@@ -16,8 +19,8 @@ public final class DecontaminationStateSupport {
 
     public static void validateIntent(FrontierWorldState state, PhysicalIntent intent) {
         Settlement settlement = owner(state.bootstrap(), intent.causeSubjectId());
-        if (intent.subjectIds().size() != 2 || !intent.subjectIds().contains(intent.causeSubjectId())) throw new IllegalArgumentException("decontamination intent subjects are invalid");
-        SubjectId itemId = intent.subjectIds().stream().filter(id -> !id.equals(intent.causeSubjectId())).findFirst().orElseThrow();
+        if (!intent.roles().require(PhysicalIntentSubjectRole.FACILITY).equals(intent.causeSubjectId())) throw new IllegalArgumentException("decontamination intent facility does not match its cause");
+        SubjectId itemId = intent.roles().require(PhysicalIntentSubjectRole.MATERIAL);
         ExactItemStack material = state.inventory().items().get(itemId);
         if (material == null || !material.itemKind().equals(DecontaminationPolicy.REAGENT) || !(material.custody() instanceof InventoryCustody.ContainerSlot slot)) {
             throw new IllegalArgumentException("decontamination intent lacks its exact reagent");
@@ -33,7 +36,7 @@ public final class DecontaminationStateSupport {
                                        Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, PhysicalIntent> intents) {
         validateIntent(state, intent);
         InfectionCell cell = cell(intent); FixedRatio current = state.infection().get(cell);
-        if (!intent.subjectIds().contains(observation.itemId()) || !observation.cell().equals(cell) || observation.priorRaw() != current.value().raw()) {
+        if (!intent.roles().require(PhysicalIntentSubjectRole.MATERIAL).equals(observation.itemId()) || !observation.cell().equals(cell) || observation.priorRaw() != current.value().raw()) {
             throw new IllegalArgumentException("decontamination receipt does not match its exact target");
         }
         long remaining = Math.max(0L, Math.subtractExact(observation.priorRaw(), state.bootstrap().ruleset().rates().decontaminationReduction().raw()));
@@ -60,7 +63,7 @@ public final class DecontaminationStateSupport {
         // legitimately reinfect the exact same cell. Requiring the present field to preserve an
         // old receipt's remaining intensity would make that physical consequence impossible and
         // turn valid autonomous re-infection into recovery corruption.
-        if (!observation.cell().equals(cell) || observation.remainingRaw() != expected || !intent.subjectIds().contains(observation.itemId())) {
+        if (!observation.cell().equals(cell) || observation.remainingRaw() != expected || !intent.roles().require(PhysicalIntentSubjectRole.MATERIAL).equals(observation.itemId())) {
             throw new IllegalArgumentException("decontamination observation is invalid");
         }
     }

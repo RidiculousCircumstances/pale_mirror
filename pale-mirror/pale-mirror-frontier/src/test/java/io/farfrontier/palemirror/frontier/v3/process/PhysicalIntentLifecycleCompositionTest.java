@@ -106,7 +106,7 @@ class PhysicalIntentLifecycleCompositionTest {
         PhysicalIntentLifecycleCapabilities composition = PhysicalIntentLifecycleCapabilities.compose(List.of(module(capabilities)));
         PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:retirement-owner"),
                 PhysicalIntentKind.RESOURCE_SITE_PREPARATION, PhysicalIntentStatus.RUNNING,
-                new SubjectId("site:retirement-owner"), List.of(new SubjectId("site:retirement-owner"), new SubjectId("job:retirement-owner")),
+                new SubjectId("site:retirement-owner"), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.sitePreparation(new SubjectId("site:retirement-owner"), new SubjectId("job:retirement-owner")),
                 new FixedPosition(FixedScalar.ZERO, FixedScalar.whole(64), FixedScalar.ZERO), 0,
                 PhysicalPostcondition.RESOURCE_SITE_PREPARED_OBSERVED, owner);
 
@@ -127,7 +127,7 @@ class PhysicalIntentLifecycleCompositionTest {
         PhysicalIntentLifecycleCapabilities composition = PhysicalIntentLifecycleCapabilities.compose(List.of(module(capabilities)));
         PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:durable-retirement-account"),
                 PhysicalIntentKind.RESOURCE_SITE_PREPARATION, PhysicalIntentStatus.RUNNING,
-                new SubjectId("site:durable-retirement-account"), List.of(new SubjectId("site:durable-retirement-account"), new SubjectId("job:durable-retirement-account")),
+                new SubjectId("site:durable-retirement-account"), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.sitePreparation(new SubjectId("site:durable-retirement-account"), new SubjectId("job:durable-retirement-account")),
                 new FixedPosition(FixedScalar.ZERO, FixedScalar.whole(64), FixedScalar.ZERO), 0,
                 PhysicalPostcondition.RESOURCE_SITE_PREPARED_OBSERVED, owner);
         PhysicalIntentTransition terminal = new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, java.util.Optional.empty());
@@ -151,7 +151,7 @@ class PhysicalIntentLifecycleCompositionTest {
         PhysicalIntentLifecycleOwner owner = PhysicalIntentLifecycleOwner.RESOURCE_SITE_PREPARATION;
         PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:none-schedule"),
                 PhysicalIntentKind.RESOURCE_SITE_PREPARATION, PhysicalIntentStatus.RUNNING,
-                new SubjectId("site:none-schedule"), List.of(new SubjectId("site:none-schedule"), new SubjectId("job:none-schedule")),
+                new SubjectId("site:none-schedule"), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.sitePreparation(new SubjectId("site:none-schedule"), new SubjectId("job:none-schedule")),
                 new FixedPosition(FixedScalar.ZERO, FixedScalar.whole(64), FixedScalar.ZERO), 0,
                 PhysicalPostcondition.RESOURCE_SITE_PREPARED_OBSERVED, owner);
         PhysicalIntentTransition terminal = new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, java.util.Optional.empty());
@@ -174,7 +174,7 @@ class PhysicalIntentLifecycleCompositionTest {
     void declaredOwnerCannotCloseByRoundTrippingAGenericAllNoneAccount() {
         PhysicalIntentLifecycleOwner owner = PhysicalIntentLifecycleOwner.RESOURCE_SITE_PREPARATION;
         PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:generic-none"), PhysicalIntentKind.RESOURCE_SITE_PREPARATION,
-                PhysicalIntentStatus.RUNNING, new SubjectId("site:generic-none"), List.of(new SubjectId("site:generic-none"), new SubjectId("job:generic-none")),
+                PhysicalIntentStatus.RUNNING, new SubjectId("site:generic-none"), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.sitePreparation(new SubjectId("site:generic-none"), new SubjectId("job:generic-none")),
                 new FixedPosition(FixedScalar.ZERO, FixedScalar.whole(64), FixedScalar.ZERO), 0,
                 PhysicalPostcondition.RESOURCE_SITE_PREPARED_OBSERVED, owner);
         PhysicalIntentTransition terminal = new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, java.util.Optional.empty());
@@ -193,7 +193,7 @@ class PhysicalIntentLifecycleCompositionTest {
         PhysicalIntentLifecycleOwner owner = PhysicalIntentLifecycleOwner.RESOURCE_SITE_PREPARATION;
         PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:replay-schedule"),
                 PhysicalIntentKind.RESOURCE_SITE_PREPARATION, PhysicalIntentStatus.RUNNING,
-                new SubjectId("site:replay-schedule"), List.of(new SubjectId("site:replay-schedule"), new SubjectId("job:replay-schedule")),
+                new SubjectId("site:replay-schedule"), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.sitePreparation(new SubjectId("site:replay-schedule"), new SubjectId("job:replay-schedule")),
                 new FixedPosition(FixedScalar.ZERO, FixedScalar.whole(64), FixedScalar.ZERO), 0,
                 PhysicalPostcondition.RESOURCE_SITE_PREPARED_OBSERVED, owner);
         PhysicalIntentTransition terminal = new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, java.util.Optional.empty());
@@ -210,7 +210,7 @@ class PhysicalIntentLifecycleCompositionTest {
         PhysicalIntentLifecycleOwner owner = PhysicalIntentLifecycleOwner.RESOURCE_SITE_PREPARATION;
         PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:exact-schedule"),
                 PhysicalIntentKind.RESOURCE_SITE_PREPARATION, PhysicalIntentStatus.RUNNING,
-                new SubjectId("site:exact-schedule"), List.of(new SubjectId("site:exact-schedule"), new SubjectId("job:exact-schedule")),
+                new SubjectId("site:exact-schedule"), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.sitePreparation(new SubjectId("site:exact-schedule"), new SubjectId("job:exact-schedule")),
                 new FixedPosition(FixedScalar.ZERO, FixedScalar.whole(64), FixedScalar.ZERO), 0,
                 PhysicalPostcondition.RESOURCE_SITE_PREPARED_OBSERVED, owner);
         PhysicalIntentTransition terminal = new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, java.util.Optional.empty());

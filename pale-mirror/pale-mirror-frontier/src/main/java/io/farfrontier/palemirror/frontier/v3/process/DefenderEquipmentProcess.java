@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.process;
 import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
@@ -64,7 +65,7 @@ public final class DefenderEquipmentProcess {
         if (item == null) return java.util.Optional.empty();
         String suffix = assault.id().value().substring("assault:".length()) + "-" + resident.value().replace(':', '-') + "-" + item.id().value().replace(':', '-');
         return java.util.Optional.of(new PhysicalIntent(new PhysicalIntentId("intent:equipment-issue-" + suffix), PhysicalIntentKind.EQUIPMENT_ISSUE,
-                PhysicalIntentStatus.PREPARED, assault.settlementId(), List.of(assault.id(), resident, item.id()),
+                PhysicalIntentStatus.PREPARED, assault.settlementId(), PhysicalIntentRoleBinding.equipmentIssue(assault.id(), resident, item.id()),
                 new FixedPosition(FixedScalar.whole(assault.settlementAnchor().x()), FixedScalar.whole(assault.settlementAnchor().y()), FixedScalar.whole(assault.settlementAnchor().z())),
                 0, PhysicalPostcondition.EQUIPMENT_ISSUED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT));
     }

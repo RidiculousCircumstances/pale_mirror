@@ -1,5 +1,8 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole;
+
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
@@ -16,7 +19,7 @@ public final class StructuralRepairStateSupport {
         if (intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.STRUCTURAL_REPAIR) {
             throw new IllegalArgumentException("repair receipt belongs to a non-repair intent");
         }
-        if (!intent.subjectIds().contains(repair.itemId())) {
+        if (!intent.roles().require(PhysicalIntentSubjectRole.MATERIAL).equals(repair.itemId())) {
             throw new IllegalArgumentException("repair receipt lacks its exact structure and material");
         }
         if (!repair.position().equals(blockPosition(intent.origin()))) throw new IllegalArgumentException("repair receipt position differs from intent origin");

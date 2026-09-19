@@ -61,7 +61,7 @@ class FrontierV3PhysicalIntentSchedulingTest {
         SubjectId owner = new SubjectId("owner:" + suffix);
         if (kind == PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING) {
             return new PhysicalIntent(new PhysicalIntentId("intent:maintenance-load-" + suffix), kind, PhysicalIntentStatus.PREPARED, owner,
-                    List.of(new SubjectId("route:" + suffix), owner, new SubjectId("cargo:" + suffix), new SubjectId("cargo-item:" + suffix),
+                    io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.routeMaintenanceLoading(new SubjectId("route:" + suffix), owner, new SubjectId("cargo:" + suffix), new SubjectId("cargo-item:" + suffix),
                             new SubjectId("source-item:" + suffix)),
                     new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0,
                     PhysicalPostcondition.ROUTE_MAINTENANCE_MATERIAL_LOADED_OBSERVED,
@@ -71,13 +71,13 @@ class FrontierV3PhysicalIntentSchedulingTest {
                 ? PhysicalPostcondition.EQUIPMENT_ISSUED_OBSERVED : PhysicalPostcondition.EQUIPMENT_RETURNED_OBSERVED;
         if (kind == PhysicalIntentKind.EQUIPMENT_RETURN) {
             return new PhysicalIntent(new PhysicalIntentId("intent:equipment-" + suffix), kind, PhysicalIntentStatus.PREPARED, owner,
-                    List.of(owner, new SubjectId("resident:" + suffix), new SubjectId("item:" + suffix)),
+                    io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.equipmentReturn(owner, new SubjectId("resident:" + suffix), new SubjectId("item:" + suffix)),
                     new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0, postcondition,
                     new PhysicalContainerSlot(new SubjectId("container:" + suffix), 0),
                     io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
         }
         return new PhysicalIntent(new PhysicalIntentId("intent:equipment-" + suffix), kind, PhysicalIntentStatus.PREPARED, owner,
-                List.of(owner, new SubjectId("resident:" + suffix), new SubjectId("item:" + suffix)),
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.equipmentIssue(owner, new SubjectId("resident:" + suffix), new SubjectId("item:" + suffix)),
                 new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0,
                 postcondition, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
     }

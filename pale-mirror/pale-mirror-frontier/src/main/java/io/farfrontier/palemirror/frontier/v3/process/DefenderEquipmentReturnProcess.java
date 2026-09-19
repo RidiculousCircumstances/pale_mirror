@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.process;
 import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
@@ -68,7 +69,7 @@ public final class DefenderEquipmentReturnProcess {
         String suffix = assault.id().value().substring("assault:".length()) + "-" + actor.actorId().value().replace(':', '-')
                 + "-" + item.id().value().replace(':', '-');
         return Optional.of(new PhysicalIntent(new PhysicalIntentId("intent:equipment-return-" + suffix), PhysicalIntentKind.EQUIPMENT_RETURN,
-                PhysicalIntentStatus.PREPARED, assault.settlementId(), List.of(assault.id(), actor.actorId(), item.id()),
+                PhysicalIntentStatus.PREPARED, assault.settlementId(), PhysicalIntentRoleBinding.equipmentReturn(assault.id(), actor.actorId(), item.id()),
                 new FixedPosition(FixedScalar.whole(assault.settlementAnchor().x()), FixedScalar.whole(assault.settlementAnchor().y()),
                         FixedScalar.whole(assault.settlementAnchor().z())), 0, PhysicalPostcondition.EQUIPMENT_RETURNED_OBSERVED,
                 new PhysicalContainerSlot(depot, slot), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT));

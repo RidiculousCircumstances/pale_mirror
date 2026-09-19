@@ -479,7 +479,7 @@ class FrontierV3ServerRuntimeTest {
         FrontierWorldState hot = worldState(runtime); SubjectId bomber = hot.bootstrap().hive().bioforms().stream().filter(io.farfrontier.palemirror.frontier.v3.model.Bioform::isExplosiveAssaulter)
                 .filter(value -> candidate.actorIds().contains(value.id())).findFirst().orElseThrow().id();
         var point = hot.actorLocations().get(bomber).body(); PhysicalIntentId intentId = new PhysicalIntentId("intent:managed-explosion-restart");
-        PhysicalIntent intent = new PhysicalIntent(intentId, PhysicalIntentKind.EXPLOSION, PhysicalIntentStatus.PREPARED, bomber, List.of(bomber, candidate.engagementId()),
+        PhysicalIntent intent = new PhysicalIntent(intentId, PhysicalIntentKind.EXPLOSION, PhysicalIntentStatus.PREPARED, bomber, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.explosion(bomber, candidate.engagementId()),
                 new FixedPosition(FixedScalar.whole(point.x()), FixedScalar.whole(point.y()), FixedScalar.whole(point.z())), 4, PhysicalPostcondition.EXPLOSION_OBSERVED,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.HIVE_MOBILIZATION);
         submitWorld(runtime, "prepare-explosion", new PhysicalIntentPrepared(intent)); submitWorld(runtime, "run-explosion", new PhysicalIntentTransition(intentId, PhysicalIntentStatus.RUNNING, java.util.Optional.empty()));
@@ -544,14 +544,14 @@ class FrontierV3ServerRuntimeTest {
     void restartSafetyLeavesRunningHarvestForItsLoadedFieldAndDepotInspector() {
         PhysicalIntent harvest = new PhysicalIntent(new PhysicalIntentId("intent:restart-harvest"), PhysicalIntentKind.RESOURCE_SITE_HARVEST,
                 PhysicalIntentStatus.RUNNING, new SubjectId("site:1-wheat-field"),
-                List.of(new SubjectId("site:1-wheat-field"), new SubjectId("job:site-harvest-1-wheat-field-1"),
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.siteHarvest(new SubjectId("site:1-wheat-field"), new SubjectId("job:site-harvest-1-wheat-field-1"),
                         new SubjectId("resident:1-1"), new SubjectId("item:site-harvest-1-wheat-field-1-wheat")),
                 new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0,
                 PhysicalPostcondition.RESOURCE_SITE_HARVESTED_OBSERVED,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.RESOURCE_SITE_HARVEST);
         PhysicalIntent unsupported = new PhysicalIntent(new PhysicalIntentId("intent:restart-unsupported"), PhysicalIntentKind.SCENE_STRIKE,
                 PhysicalIntentStatus.RUNNING, new SubjectId("operation:supply-1-2"),
-                List.of(new SubjectId("bioform:west-1"), new SubjectId("resident:1-1")),
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.sceneStrike(new SubjectId("bioform:west-1"), new SubjectId("resident:1-1")),
                 new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ROUTE_ENGAGEMENT);
 

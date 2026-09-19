@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.process;
 import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
@@ -195,10 +196,10 @@ public final class SettlementServiceWorkProcess {
                 traversal.inputTraversal().linearCorridorSurfaces().size() == 1
                         ? SettlementServiceWorkPhase.INPUT_ISSUE_PENDING : SettlementServiceWorkPhase.PREPARED, 0);
         PhysicalIntent inputIssue = new PhysicalIntent(inputIssueId, PhysicalIntentKind.SETTLEMENT_SERVICE_INPUT_ISSUE, PhysicalIntentStatus.PREPARED,
-                work.id(), List.of(work.id(), work.workerId(), work.inputItemId()), fixed(work.inputStation().support()), 0,
+                work.id(), PhysicalIntentRoleBinding.serviceInputIssue(work.id(), work.workerId(), work.inputItemId()), fixed(work.inputStation().support()), 0,
                 PhysicalPostcondition.SETTLEMENT_SERVICE_INPUT_ISSUED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_SERVICE_WORK);
         PhysicalIntent endpoint = new PhysicalIntent(endpointId, PhysicalIntentKind.DECONTAMINATION, PhysicalIntentStatus.PREPARED,
-                work.id(), List.of(work.id(), work.workerId(), work.inputItemId()), fixed(cell.originAtY(0)), 0,
+                work.id(), PhysicalIntentRoleBinding.serviceDecontamination(work.id(), work.workerId(), work.inputItemId()), fixed(cell.originAtY(0)), 0,
                 PhysicalPostcondition.DECONTAMINATION_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_SERVICE_DECONTAMINATION);
         return Optional.of(new Candidate(task, settlement, work, inputIssue, endpoint));
     }

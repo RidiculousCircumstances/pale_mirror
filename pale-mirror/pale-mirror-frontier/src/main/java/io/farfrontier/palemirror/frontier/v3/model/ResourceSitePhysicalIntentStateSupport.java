@@ -1,5 +1,8 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole;
+
 import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
@@ -33,7 +36,7 @@ public final class ResourceSitePhysicalIntentStateSupport {
         ResourceSitePreparationJob job = preparation(lifecycle, intent.id());
         ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).get(lifecycle.siteId());
         FixedPosition expectedOrigin = new FixedPosition(FixedScalar.whole(site.cropSlots().getFirst().x()), FixedScalar.whole(site.cropSlots().getFirst().y()), FixedScalar.whole(site.cropSlots().getFirst().z()));
-        if (intent.status() != PhysicalIntentStatus.PREPARED || !intent.subjectIds().equals(List.of(job.siteId(), job.id()))
+        if (intent.status() != PhysicalIntentStatus.PREPARED || !intent.roles().equals(PhysicalIntentRoleBinding.sitePreparation(job.siteId(), job.id()))
                 || !intent.origin().equals(expectedOrigin) || intent.radiusBlocks() != 0 || intent.postcondition() != PhysicalPostcondition.RESOURCE_SITE_PREPARED_OBSERVED) {
             throw new IllegalArgumentException("resource-site preparation intent does not exactly match its prepared field");
         }
@@ -179,7 +182,7 @@ public final class ResourceSitePhysicalIntentStateSupport {
     static void validateReceipt(PhysicalIntent intent, ResourceSitePreparationObservation receipt) {
         if (intent.kind() != PhysicalIntentKind.RESOURCE_SITE_PREPARATION || intent.postcondition() != PhysicalPostcondition.RESOURCE_SITE_PREPARED_OBSERVED
                 || !intent.id().equals(receipt.intentId()) || !intent.causeSubjectId().equals(receipt.siteId())
-                || !intent.subjectIds().equals(List.of(receipt.siteId(), jobId(receipt.siteId())))) {
+                || !intent.roles().equals(PhysicalIntentRoleBinding.sitePreparation(receipt.siteId(), jobId(receipt.siteId())))) {
             throw new IllegalArgumentException("resource-site preparation receipt does not match its exact field intent");
         }
     }
@@ -187,8 +190,8 @@ public final class ResourceSitePhysicalIntentStateSupport {
     static void validateHarvestReceipt(FrontierBootstrap bootstrap, PhysicalIntent intent, ResourceSiteHarvestObservation receipt) {
         ResourceSite site = FrontierResourceSitePlan.compile(bootstrap).get(intent.causeSubjectId()); ExactItemStack output = receipt.output();
         if (site == null || intent.kind() != PhysicalIntentKind.RESOURCE_SITE_HARVEST || intent.postcondition() != PhysicalPostcondition.RESOURCE_SITE_HARVESTED_OBSERVED
-                || !intent.id().equals(receipt.intentId()) || !intent.causeSubjectId().equals(receipt.siteId()) || intent.subjectIds().size() != 4
-                || !intent.subjectIds().get(2).equals(receipt.workerId()) || !intent.subjectIds().get(3).equals(output.id())
+                || !intent.id().equals(receipt.intentId()) || !intent.causeSubjectId().equals(receipt.siteId())
+                || !intent.roles().require(PhysicalIntentSubjectRole.WORKER).equals(receipt.workerId()) || !intent.roles().require(PhysicalIntentSubjectRole.OUTPUT_ITEM).equals(output.id())
                 || !output.economicOwnerId().equals(site.settlementId()) || !output.itemKind().equals("minecraft:wheat") || output.count() != 64
                 || !(output.custody() instanceof InventoryCustody.ContainerSlot slot) || !slot.containerId().equals(FrontierWorldState.depotId(site.settlementId()))) {
             throw new IllegalArgumentException("resource-site harvest receipt does not match its exact output claim");
@@ -221,14 +224,14 @@ public final class ResourceSitePhysicalIntentStateSupport {
 
     private static boolean matchesDeferredHarvestBinding(ResourceSiteLifecycle lifecycle, PhysicalIntent intent, ResourceSiteHarvestLineage lineage) {
         return intent.kind() == PhysicalIntentKind.RESOURCE_SITE_HARVEST && intent.causeSubjectId().equals(lifecycle.siteId())
-                && intent.subjectIds().equals(List.of(lifecycle.siteId(), lineage.predecessorJobId(), lineage.workerId(), lineage.outputItemId()))
+                && intent.roles().equals(PhysicalIntentRoleBinding.siteHarvest(lifecycle.siteId(), lineage.predecessorJobId(), lineage.workerId(), lineage.outputItemId()))
                 && intent.postcondition() == PhysicalPostcondition.RESOURCE_SITE_HARVESTED_OBSERVED;
     }
 
     private static void validateHarvestBinding(ResourceSiteLifecycle lifecycle, PhysicalIntent intent) {
         ResourceSiteHarvestJob job = harvest(lifecycle, intent.id());
         if (intent.kind() != PhysicalIntentKind.RESOURCE_SITE_HARVEST || !intent.causeSubjectId().equals(lifecycle.siteId())
-                || !intent.subjectIds().equals(List.of(job.siteId(), job.id(), job.workerId(), job.outputItemId()))
+                || !intent.roles().equals(PhysicalIntentRoleBinding.siteHarvest(job.siteId(), job.id(), job.workerId(), job.outputItemId()))
                 || intent.postcondition() != PhysicalPostcondition.RESOURCE_SITE_HARVESTED_OBSERVED) {
             throw new IllegalArgumentException("resource-site harvest intent does not bind its active job");
         }
