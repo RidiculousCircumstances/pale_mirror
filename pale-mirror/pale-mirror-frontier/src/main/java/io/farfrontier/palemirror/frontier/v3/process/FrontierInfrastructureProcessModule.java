@@ -43,7 +43,7 @@ final class FrontierInfrastructureProcessModule implements FrontierWorldProcessM
                         FrontierInfrastructureProcessModule::reduceEngineeringTransition),
                 FrontierInfrastructureProcessModule::engineeringRecoveryAsset,
                 retirementAccount(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE),
-                PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery());
+                PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery(), PhysicalIntentRecoveryDiagnosticProducer.ENGINEERING_WORKSITE);
     }
 
     private static PhysicalIntentRetirementAccount retirementAccount(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner owner) {

@@ -10,7 +10,7 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 168; private static final int MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 170; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -552,7 +552,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         writeCount(output, inventory.conflicts().size());
         for (InventoryConflict conflict : inventory.conflicts().values().stream().sorted(Comparator.comparing(InventoryConflict::id)).toList()) {
             writeString(output, conflict.id().value()); writeString(output, conflict.subjectId().value()); writeString(output, conflict.containerId().value());
-            output.writeByte(conflict.slot()); output.writeByte(conflict.kind().wireTag());
+            output.writeByte(conflict.slot()); output.writeByte(conflict.kind().wireTag()); writeDiagnosticTuple(output, conflict.diagnostic());
         }
         FungibleResourceStateCodec.write(output, inventory.fungibleResources());
     }
@@ -599,11 +599,23 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             SubjectId id = new SubjectId(readString(input)); SubjectId item = new SubjectId(readString(input)); SubjectId container = new SubjectId(readString(input));
             int slot = input.readUnsignedByte(); int kind = input.readUnsignedByte();
             if (kind >= InventoryConflictKind.values().length
-                    || conflicts.put(id, new InventoryConflict(id, item, container, slot, FrontierWireTags.require(InventoryConflictKind.class, kind))) != null) {
+                    || conflicts.put(id, new InventoryConflict(id, item, container, slot, FrontierWireTags.require(InventoryConflictKind.class, kind), readDiagnosticTuple(input))) != null) {
                 throw new IllegalArgumentException("invalid or duplicate inventory conflict");
             }
         }
         return new ExactInventory(containers, items, cargo, players, carriers, conflicts, surfaces, economics, FungibleResourceStateCodec.read(input));
+    }
+    private static void writeDiagnosticTuple(DataOutputStream output, DiagnosticTuple diagnostic) throws IOException {
+        output.writeShort(diagnostic.reason().wireTag()); output.writeByte(diagnostic.category().wireTag());
+        output.writeByte(DiagnosticWireTags.ownerTag(diagnostic.owner().kind())); writeString(output, diagnostic.owner().id().value());
+        output.writeByte(DiagnosticWireTags.subjectTag(diagnostic.subject().kind())); writeString(output, diagnostic.subject().id().value());
+        output.writeByte(diagnostic.disposition().wireTag());
+    }
+    private static DiagnosticTuple readDiagnosticTuple(DataInputStream input) throws IOException {
+        return new DiagnosticTuple(DiagnosticWireTags.reason(input.readUnsignedShort()), DiagnosticWireTags.category(input.readUnsignedByte()),
+                new DiagnosticOwner(DiagnosticWireTags.ownerKind(input.readUnsignedByte()), new SubjectId(readString(input))),
+                new DiagnosticSubject(DiagnosticWireTags.subjectKind(input.readUnsignedByte()), new SubjectId(readString(input))),
+                DiagnosticWireTags.disposition(input.readUnsignedByte()));
     }
     private static void writeContracts(DataOutputStream output, Map<SubjectId, SupplyContract> contracts) throws IOException {
         writeCount(output, contracts.size()); for (SupplyContract contract : contracts.values().stream().sorted(java.util.Comparator.comparing(SupplyContract::id)).toList()) {

@@ -111,7 +111,7 @@ public final class SettlementServiceDecontaminationStateSupport {
         if (work == null || !intent.id().equals(work.endpointIntentId()) || work.kind() != SettlementServiceWorkKind.DECONTAMINATION) {
             throw new IllegalArgumentException("service decontamination unknown transition has no exact retained work");
         }
-        intents.put(intent.id(), intent.withStatus(PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, java.util.Optional.empty()));
+        intents.put(intent.id(), intent.withRecoveryUnknown(PhysicalIntentRecoveryDiagnosticProducer.SETTLEMENT_SERVICE_DECONTAMINATION.stamp(intent)));
         Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, SettlementServiceWork> works = new LinkedHashMap<>(state.serviceWorks());
         works.put(work.id(), work.withPhase(SettlementServiceWorkPhase.UNKNOWN_AFTER_RESTART, 0));
         Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases());

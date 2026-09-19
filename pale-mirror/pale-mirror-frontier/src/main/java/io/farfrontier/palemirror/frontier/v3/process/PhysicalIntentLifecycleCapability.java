@@ -10,6 +10,8 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryAsset;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentPrepared;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;
+import io.farfrontier.palemirror.frontier.v3.model.DiagnosticTuple;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentRecoveryDiagnosticProducer;
 
 import java.util.Set;
 
@@ -35,6 +37,12 @@ interface PhysicalIntentLifecycleCapability {
 
     /** Family-supplied fence asset; common lifecycle storage may validate it but never infer it from kind. */
     FencedRecoveryAsset recoveryAsset(PhysicalIntent intent);
+
+    /** Exact family declaration for an otherwise ambiguous restart boundary; never selected from kind/status. */
+    DiagnosticTuple recoveryUnknownDiagnostic(PhysicalIntent intent);
+
+    /** The declaration-owned producer identity is independently checked during closed composition. */
+    PhysicalIntentRecoveryDiagnosticProducer recoveryDiagnosticProducer();
 
     CommandPlan planPrepared(FrontierWorldState state, FrontierCommand command, PhysicalIntentPrepared prepared);
 

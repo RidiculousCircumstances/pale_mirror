@@ -17,6 +17,7 @@ import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryConflict;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryConflictKind;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryConflictObserved;
+import io.farfrontier.palemirror.frontier.v3.model.InventoryDiagnosticProducer;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceDeposited;
 import io.farfrontier.palemirror.frontier.v3.model.ReferenceContainerCustody;
 import net.minecraft.core.BlockPos;
@@ -76,7 +77,7 @@ final class FrontierV3InventoryObservationExecutor {
                 if (actual.isEmpty() && hoppers.size() == 1) {
                     HopperCandidate hopper = hoppers.getFirst(); HopperCarrierBinding binding = bindHopperCarrier(hopperCarriers, hopper.hopper(), hopper.slot());
                     if (binding.status() == HopperCarrierStatus.CONFLICT) {
-                        recordConflict(runtime, state, expected.id(), store.containerId(), slot, InventoryConflictKind.FOREIGN_OR_DUPLICATE);
+                        recordConflict(runtime, state, expected.id(), store.containerId(), slot, InventoryDiagnosticProducer.HOPPER_FOREIGN_OR_DUPLICATE_SLOT);
                         return true;
                     }
                     submit(runtime, expected.id(), custody, new InventoryCustody.WorldCarrier(binding.carrierId()));
@@ -88,7 +89,7 @@ final class FrontierV3InventoryObservationExecutor {
                     return true;
                 }
                 recordConflict(runtime, state, expected.id(), store.containerId(), slot,
-                        actual.isEmpty() ? InventoryConflictKind.MISSING : InventoryConflictKind.FOREIGN_OR_DUPLICATE);
+                        actual.isEmpty() ? InventoryDiagnosticProducer.PLAYER_EXPECTED_SLOT_MISSING : InventoryDiagnosticProducer.PLAYER_FOREIGN_OR_DUPLICATE_SLOT);
                 return true;
             }
             if (actual.isEmpty()) continue;
@@ -105,7 +106,7 @@ final class FrontierV3InventoryObservationExecutor {
                 return true;
             }
             if (playerItem == null || !(playerItem.custody() instanceof InventoryCustody.Player) || !playersHolding(level, playerItem).isEmpty()) {
-                recordConflict(runtime, state, store.containerId(), store.containerId(), slot, InventoryConflictKind.FOREIGN_OR_DUPLICATE);
+                recordConflict(runtime, state, store.containerId(), store.containerId(), slot, InventoryDiagnosticProducer.PLAYER_FOREIGN_OR_DUPLICATE_SLOT);
                 return true;
             }
             submit(runtime, playerItem.id(), playerItem.custody(), custody);
@@ -204,9 +205,9 @@ final class FrontierV3InventoryObservationExecutor {
         FrontierV3CargoHandoffExecutor.clearPendingIngress(actual);
     }
     private static void recordConflict(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SubjectId subject,
-                                       SubjectId container, int slot, InventoryConflictKind kind) {
-        SubjectId id = new SubjectId("conflict:inventory-" + subject.value().replace(':', '-') + "-" + container.value().replace(':', '-') + "-" + slot + "-k" + kind.ordinal());
-        InventoryConflict conflict = new InventoryConflict(id, subject, container, slot, kind);
+                                       SubjectId container, int slot, InventoryDiagnosticProducer producer) {
+        SubjectId id = new SubjectId("conflict:inventory-" + subject.value().replace(':', '-') + "-" + container.value().replace(':', '-') + "-" + slot + "-p" + producer.wireTag());
+        InventoryConflict conflict = producer.create(id, subject, container, slot);
         if (state.inventory().conflicts().containsKey(id)) return;
         io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = runtime.canonicalState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         CommandId commandId = new CommandId("executor:inventory-conflict-" + id.value().replace(':', '-') + "-r" + checkpoint.revision().value());

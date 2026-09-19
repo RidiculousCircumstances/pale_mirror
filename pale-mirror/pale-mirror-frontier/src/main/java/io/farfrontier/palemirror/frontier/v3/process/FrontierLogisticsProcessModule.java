@@ -31,7 +31,7 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
                         FrontierLogisticsProcessModule::planPhysicalTransition,
                         FrontierLogisticsProcessModule::reducePhysicalTransition),
                 intent -> FencedRecoveryAsset.CARGO,
-                retirementAccount(PhysicalIntentLifecycleOwner.ROUTE_OPERATION), PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery()));
+                retirementAccount(PhysicalIntentLifecycleOwner.ROUTE_OPERATION), PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery(), PhysicalIntentRecoveryDiagnosticProducer.ROUTE_OPERATION));
     }
 
     private static PhysicalIntentRetirementAccount retirementAccount(PhysicalIntentLifecycleOwner owner) {

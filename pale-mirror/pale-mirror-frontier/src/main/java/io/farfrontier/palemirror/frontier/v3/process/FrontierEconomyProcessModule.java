@@ -47,7 +47,7 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
                             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
                         },
                         FrontierEconomyProcessModule::reduceProductionTransition), intent -> FencedRecoveryAsset.EFFECT,
-                retirementAccount(PhysicalIntentLifecycleOwner.PRODUCTION_WORK), PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery()));
+                retirementAccount(PhysicalIntentLifecycleOwner.PRODUCTION_WORK), PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery(), PhysicalIntentRecoveryDiagnosticProducer.PRODUCTION_WORK));
     }
 
     private static PhysicalIntentRetirementAccount retirementAccount(PhysicalIntentLifecycleOwner owner) {

@@ -244,7 +244,7 @@ public final class HiveNutrientTransferStateSupport {
         HiveNutrientTransfer transfer = state.hiveColony().nutrientTransfers().values().stream()
                 .filter(value -> value.endpointIntentId().equals(java.util.Optional.of(intent.id()))).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("hive endpoint intent has no transfer"));
-        intents.put(intent.id(), intent.withStatus(PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, java.util.Optional.empty()));
+        intents.put(intent.id(), intent.withRecoveryUnknown(PhysicalIntentRecoveryDiagnosticProducer.HIVE_NUTRIENT_TRANSFER.stamp(intent)));
         return state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(), state.contracts(), state.operations(), intents,
                 state.physicalObservations(), state.sceneLeases(), state.hiveColony().blockNutrientTransfer(transfer.id(), HiveNutrientTransferBlockReason.CARGO_CUSTODY_LOST),
                 state.structureDamage(), state.physicalDeltas(), state.ambientLeases());

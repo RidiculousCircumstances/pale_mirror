@@ -45,6 +45,7 @@ final class PhysicalIntentLifecycleCapabilities {
             for (PhysicalIntentLifecycleCapability capability : module.physicalIntentLifecycleCapabilities()) {
                 if (capability == null || capability.owner() == null || capability.compatibleKinds() == null
                         || capability.declaration() == null
+                        || capability.recoveryDiagnosticProducer() == null
                         || capability.resolvedRetentionPolicy() == null
                         || capability.retirementPolicy() == null || capability.retirementAccount() == null
                         || capability.retirementAccount().owner() != capability.owner()
@@ -57,7 +58,8 @@ final class PhysicalIntentLifecycleCapabilities {
                 }
                 PhysicalIntentLifecycleDeclaration declaration = capability.declaration();
                 if (declaration.owner() != capability.owner()
-                        || !declaration.kinds().equals(capability.compatibleKinds())) {
+                        || !declaration.kinds().equals(capability.compatibleKinds())
+                        || (!declaration.kinds().isEmpty() && capability.recoveryDiagnosticProducer().owner() != capability.owner())) {
                     throw new IllegalArgumentException("physical lifecycle capability has mismatched declared role schemas: "
                             + capability.owner().stableId());
                 }
@@ -102,18 +104,20 @@ final class PhysicalIntentLifecycleCapabilities {
     CommandPlan planTransition(FrontierWorldState state, FrontierCommand command, PhysicalIntent intent,
                                PhysicalIntentTransition transition) {
         PhysicalIntentLifecycleCapability capability = capability(intent);
+        PhysicalIntentTransition declared = transition.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
+                ? transition.withRecoveryDiagnostic(capability.recoveryUnknownDiagnostic(intent)) : transition;
         try {
-            CommandPlan plan = retires(transition) ? capability.retirementPolicy().plan(state, command, intent, transition)
-                    : capability.planTransition(state, command, intent, transition);
-            if (!retires(transition)) return plan;
+            CommandPlan plan = retires(declared) ? capability.retirementPolicy().plan(state, command, intent, declared)
+                    : capability.planTransition(state, command, intent, declared);
+            if (!retires(declared)) return plan;
             PhysicalIntentRetirementAccount.Binding binding = capability.retirementAccount()
-                    .verifyPlan(state, command, intent, transition, plan);
+                    .verifyPlan(state, command, intent, declared, plan);
             if (!(plan instanceof CommandPlan.Accepted accepted) || binding == null) return plan;
             int terminalEvents = 0;
             java.util.List<ProposedEvent> accounted = new java.util.ArrayList<>(accepted.events().size());
             for (ProposedEvent event : accepted.events()) {
                 if (event.payload() instanceof PhysicalIntentTransition candidate
-                        && candidate.intentId().equals(intent.id()) && candidate.status() == transition.status()) {
+                        && candidate.intentId().equals(intent.id()) && candidate.status() == declared.status()) {
                     terminalEvents++;
                     accounted.add(new ProposedEvent(event.subject(), candidate.withRetirementProof(PhysicalIntentRetirementAccount.proof(binding))));
                 } else {
@@ -144,6 +148,9 @@ final class PhysicalIntentLifecycleCapabilities {
     FrontierWorldState reduceTransition(FrontierWorldState state, SubjectId subject, PhysicalIntent intent,
                                         PhysicalIntentTransition transition) {
         PhysicalIntentLifecycleCapability capability = capability(intent);
+        if (transition.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART && transition.diagnostic().isEmpty()) {
+            throw new IllegalArgumentException("persisted recovery-unknown transition lacks a producer-stamped diagnostic tuple");
+        }
         FrontierWorldState reduced = retires(transition)
                 ? capability.retirementPolicy().reduce(state, subject, intent, transition)
                 : capability.reduceTransition(state, subject, intent, transition);

@@ -287,15 +287,18 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
                 output.writeBoolean(transition.observation().isPresent());
                 if (transition.observation().isPresent()) PhysicalEffectObservationPayloadCodec.write(output, transition.observation().orElseThrow());
                 output.writeBoolean(transition.retirementProof().isPresent());
-                if (transition.retirementProof().isPresent()) writeRetirementProof(output, transition.retirementProof().orElseThrow()); });
+                if (transition.retirementProof().isPresent()) writeRetirementProof(output, transition.retirementProof().orElseThrow());
+                output.writeBoolean(transition.diagnostic().isPresent());
+                if (transition.diagnostic().isPresent()) writeDiagnosticTuple(output, transition.diagnostic().orElseThrow()); });
         }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
             var id = new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(readString(input)); int status = input.readUnsignedByte(); boolean observed = input.readBoolean();
             var observation = observed ? java.util.Optional.of(PhysicalEffectObservationPayloadCodec.read(input)) : java.util.Optional.<PhysicalEffectObservation>empty();
             var proof = input.readBoolean() ? java.util.Optional.of(readRetirementProof(input)) : java.util.Optional.<PhysicalIntentRetirementProof>empty();
+            var diagnostic = input.readBoolean() ? java.util.Optional.of(readDiagnosticTuple(input)) : java.util.Optional.<DiagnosticTuple>empty();
             if (status >= io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.values().length) throw new IllegalArgumentException("unknown physical intent status");
             var decodedStatus = FrontierWireTags.require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.class, status);
-            return new PhysicalIntentTransition(id, decodedStatus, observation, proof);
+            return new PhysicalIntentTransition(id, decodedStatus, observation, proof, diagnostic);
         }); }
     }
     private static final class SceneLeasePreparedCodec implements PayloadCodec {
@@ -441,13 +444,13 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
             InventoryConflict conflict = ((InventoryConflictObserved) payload).conflict();
             writeSubject(output, conflict.id()); writeSubject(output, conflict.subjectId()); writeSubject(output, conflict.containerId());
-            output.writeByte(conflict.slot()); output.writeByte(conflict.kind().wireTag());
+            output.writeByte(conflict.slot()); output.writeByte(conflict.kind().wireTag()); writeDiagnosticTuple(output, conflict.diagnostic());
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
             var id = readSubject(input).value(); var item = readSubject(input).value(); var container = readSubject(input).value();
             int slot = input.readUnsignedByte(); int kind = input.readUnsignedByte();
             if (kind >= InventoryConflictKind.values().length) throw new IllegalArgumentException("unknown inventory conflict kind");
-            return new InventoryConflictObserved(new InventoryConflict(id, item, container, slot, FrontierWireTags.require(InventoryConflictKind.class, kind)));
+            return new InventoryConflictObserved(new InventoryConflict(id, item, container, slot, FrontierWireTags.require(InventoryConflictKind.class, kind), readDiagnosticTuple(input)));
         }); }
     }
     private static final class ContainerSurfaceTransitionCodec implements PayloadCodec {
@@ -850,6 +853,18 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             case 2 -> PhysicalIntentRetirementProof.LateDisposition.RETAIN_AMBIGUOUS_RECOVERY; case 3 -> PhysicalIntentRetirementProof.LateDisposition.NO_PHYSICAL_INPUT;
             default -> throw new IllegalArgumentException("unknown physical retirement-proof late disposition"); };
         return new PhysicalIntentRetirementProof(owner, intent, relations, continuation, lease, commitment, late);
+    }
+    private static void writeDiagnosticTuple(DataOutputStream output, DiagnosticTuple diagnostic) throws IOException {
+        output.writeShort(diagnostic.reason().wireTag()); output.writeByte(diagnostic.category().wireTag());
+        output.writeByte(DiagnosticWireTags.ownerTag(diagnostic.owner().kind())); writeSubject(output, diagnostic.owner().id());
+        output.writeByte(DiagnosticWireTags.subjectTag(diagnostic.subject().kind())); writeSubject(output, diagnostic.subject().id());
+        output.writeByte(diagnostic.disposition().wireTag());
+    }
+    private static DiagnosticTuple readDiagnosticTuple(DataInputStream input) throws IOException {
+        return new DiagnosticTuple(DiagnosticWireTags.reason(input.readUnsignedShort()), DiagnosticWireTags.category(input.readUnsignedByte()),
+                new DiagnosticOwner(DiagnosticWireTags.ownerKind(input.readUnsignedByte()), readSubject(input).value()),
+                new DiagnosticSubject(DiagnosticWireTags.subjectKind(input.readUnsignedByte()), readSubject(input).value()),
+                DiagnosticWireTags.disposition(input.readUnsignedByte()));
     }
     private static void writeProofSubject(DataOutputStream output, PhysicalIntentRetirementProof.SubjectObligation obligation) throws IOException {
         if (obligation instanceof PhysicalIntentRetirementProof.ExactSubject exact) { output.writeByte(1); writeSubject(output, exact.value()); } else output.writeByte(0);

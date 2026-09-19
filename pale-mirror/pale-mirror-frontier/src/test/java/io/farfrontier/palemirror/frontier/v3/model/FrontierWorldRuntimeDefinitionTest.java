@@ -378,7 +378,7 @@ class FrontierWorldRuntimeDefinitionTest {
         SubjectId itemId = new SubjectId("item:bootstrap-1-engineering-tool-1");
         InventoryCustody.ContainerSlot source = (InventoryCustody.ContainerSlot) before.inventory().items().get(itemId).custody();
         SubjectId containerId = source.containerId();
-        InventoryConflict conflict = new InventoryConflict(new SubjectId("conflict:inventory-bootstrap-tool"), itemId, containerId, source.slot(), InventoryConflictKind.MISSING);
+        InventoryConflict conflict = InventoryDiagnosticProducer.PLAYER_EXPECTED_SLOT_MISSING.create(new SubjectId("conflict:inventory-bootstrap-tool"), itemId, containerId, source.slot());
         var checkpoint = engine.checkpoint();
         var commandId = new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:inventory-conflict");
 
@@ -391,8 +391,7 @@ class FrontierWorldRuntimeDefinitionTest {
         assertEquals(source, after.inventory().items().get(itemId).custody());
         assertEquals(1, engine.projection(ProjectionQuery.summary()).inventoryConflictCount());
 
-        InventoryConflict foreign = new InventoryConflict(new SubjectId("conflict:foreign"), new SubjectId("item:untracked"), containerId, 1,
-                InventoryConflictKind.FOREIGN_OR_DUPLICATE);
+        InventoryConflict foreign = InventoryDiagnosticProducer.PLAYER_FOREIGN_OR_DUPLICATE_SLOT.create(new SubjectId("conflict:foreign"), new SubjectId("item:untracked"), containerId, 1);
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Rejected.class,
                 engine.submit(new io.farfrontier.palemirror.frontier.v3.api.FrontierCommand(1,
                         new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:foreign-inventory-conflict"), worldId,

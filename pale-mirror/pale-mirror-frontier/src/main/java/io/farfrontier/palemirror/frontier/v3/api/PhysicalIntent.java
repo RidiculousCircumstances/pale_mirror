@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.api;
 
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTarget;
+import io.farfrontier.palemirror.frontier.v3.model.DiagnosticTuple;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -21,7 +22,8 @@ public record PhysicalIntent(
         Optional<PhysicalObservationId> postconditionObservationId,
         Optional<PhysicalContainerSlot> targetSlot,
         Optional<PhysicalDeltaSemanticTarget> semanticTarget,
-        PhysicalIntentLifecycleOwner lifecycleOwner
+        PhysicalIntentLifecycleOwner lifecycleOwner,
+        Optional<DiagnosticTuple> diagnostic
 ) {
     public PhysicalIntent {
         Objects.requireNonNull(id, "physical intent id");
@@ -35,6 +37,7 @@ public record PhysicalIntent(
         targetSlot = Objects.requireNonNull(targetSlot, "physical intent target slot");
         semanticTarget = Objects.requireNonNull(semanticTarget, "physical intent semantic target");
         lifecycleOwner = Objects.requireNonNull(lifecycleOwner, "physical intent lifecycle owner");
+        diagnostic = Objects.requireNonNull(diagnostic, "physical intent diagnostic");
         roles.validate(lifecycleOwner, kind);
         if (radiusBlocks < 0 || radiusBlocks > 64) throw new IllegalArgumentException("physical intent radius must be 0..64 blocks");
         switch (kind) {
@@ -133,33 +136,56 @@ public record PhysicalIntent(
         if (status == PhysicalIntentStatus.CONFIRMED != postconditionObservationId.isPresent()) {
             throw new IllegalArgumentException("only confirmed physical intent has an observed postcondition");
         }
+        if (status == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) {
+            DiagnosticTuple retained = diagnostic.orElseThrow(() -> new IllegalArgumentException("recovery-unknown physical intent requires a stamped diagnostic tuple"));
+            if (retained.reason() != io.farfrontier.palemirror.frontier.v3.model.DiagnosticReason.PHYSICAL_CUSTODY_UNRESOLVED
+                    || retained.owner().id().value().equals(id.value()) == false
+                    || retained.subject().id().value().equals(id.value()) == false) {
+                throw new IllegalArgumentException("recovery-unknown physical intent retains a foreign diagnostic tuple");
+            }
+        } else if (diagnostic.isPresent()) {
+            throw new IllegalArgumentException("only recovery-unknown physical intent may retain a diagnostic tuple");
+        }
     }
 
     public PhysicalIntent(PhysicalIntentId id, PhysicalIntentKind kind, PhysicalIntentStatus status, SubjectId causeSubjectId,
                           PhysicalIntentRoleBinding roles, FixedPosition origin, int radiusBlocks, PhysicalPostcondition postcondition,
                           PhysicalIntentLifecycleOwner lifecycleOwner) {
-        this(id, kind, status, causeSubjectId, roles, origin, radiusBlocks, postcondition, Optional.empty(), Optional.empty(), Optional.empty(), lifecycleOwner);
+        this(id, kind, status, causeSubjectId, roles, origin, radiusBlocks, postcondition, Optional.empty(), Optional.empty(), Optional.empty(), lifecycleOwner, Optional.empty());
     }
 
     public PhysicalIntent(PhysicalIntentId id, PhysicalIntentKind kind, PhysicalIntentStatus status, SubjectId causeSubjectId,
                           PhysicalIntentRoleBinding roles, FixedPosition origin, int radiusBlocks, PhysicalPostcondition postcondition,
                           Optional<PhysicalObservationId> postconditionObservationId, Optional<PhysicalContainerSlot> targetSlot,
                           PhysicalIntentLifecycleOwner lifecycleOwner) {
-        this(id, kind, status, causeSubjectId, roles, origin, radiusBlocks, postcondition, postconditionObservationId, targetSlot, Optional.empty(), lifecycleOwner);
+        this(id, kind, status, causeSubjectId, roles, origin, radiusBlocks, postcondition, postconditionObservationId, targetSlot, Optional.empty(), lifecycleOwner, Optional.empty());
     }
     public PhysicalIntent(PhysicalIntentId id, PhysicalIntentKind kind, PhysicalIntentStatus status, SubjectId causeSubjectId,
                           PhysicalIntentRoleBinding roles, FixedPosition origin, int radiusBlocks, PhysicalPostcondition postcondition,
                           PhysicalContainerSlot targetSlot, PhysicalIntentLifecycleOwner lifecycleOwner) {
-        this(id, kind, status, causeSubjectId, roles, origin, radiusBlocks, postcondition, Optional.empty(), Optional.of(targetSlot), Optional.empty(), lifecycleOwner);
+        this(id, kind, status, causeSubjectId, roles, origin, radiusBlocks, postcondition, Optional.empty(), Optional.of(targetSlot), Optional.empty(), lifecycleOwner, Optional.empty());
     }
     public PhysicalIntent(PhysicalIntentId id, PhysicalIntentKind kind, PhysicalIntentStatus status, SubjectId causeSubjectId,
                           PhysicalIntentRoleBinding roles, FixedPosition origin, int radiusBlocks, PhysicalPostcondition postcondition,
                           PhysicalDeltaSemanticTarget semanticTarget, PhysicalIntentLifecycleOwner lifecycleOwner) {
-        this(id, kind, status, causeSubjectId, roles, origin, radiusBlocks, postcondition, Optional.empty(), Optional.empty(), Optional.of(semanticTarget), lifecycleOwner);
+        this(id, kind, status, causeSubjectId, roles, origin, radiusBlocks, postcondition, Optional.empty(), Optional.empty(), Optional.of(semanticTarget), lifecycleOwner, Optional.empty());
+    }
+
+    public PhysicalIntent(PhysicalIntentId id, PhysicalIntentKind kind, PhysicalIntentStatus status, SubjectId causeSubjectId,
+                          PhysicalIntentRoleBinding roles, FixedPosition origin, int radiusBlocks, PhysicalPostcondition postcondition,
+                          Optional<PhysicalObservationId> postconditionObservationId, Optional<PhysicalContainerSlot> targetSlot,
+                          Optional<PhysicalDeltaSemanticTarget> semanticTarget, PhysicalIntentLifecycleOwner lifecycleOwner) {
+        this(id, kind, status, causeSubjectId, roles, origin, radiusBlocks, postcondition, postconditionObservationId, targetSlot, semanticTarget, lifecycleOwner, Optional.empty());
     }
 
     public PhysicalIntent withStatus(PhysicalIntentStatus nextStatus, Optional<PhysicalObservationId> observationId) {
-        return new PhysicalIntent(id, kind, nextStatus, causeSubjectId, roles, origin, radiusBlocks, postcondition, observationId, targetSlot, semanticTarget, lifecycleOwner);
+        return new PhysicalIntent(id, kind, nextStatus, causeSubjectId, roles, origin, radiusBlocks, postcondition, observationId, targetSlot, semanticTarget, lifecycleOwner, Optional.empty());
+    }
+
+    /** The boundary that retains restart ambiguity must supply its already-classified exact tuple. */
+    public PhysicalIntent withRecoveryUnknown(DiagnosticTuple stampedDiagnostic) {
+        return new PhysicalIntent(id, kind, PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, causeSubjectId, roles, origin, radiusBlocks,
+                postcondition, Optional.empty(), targetSlot, semanticTarget, lifecycleOwner, Optional.of(stampedDiagnostic));
     }
 
     /** Deterministic compatibility/index data. It is never semantic authority. */

@@ -28,6 +28,15 @@ import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentRetirementProof;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentRecoveryDiagnosticProducer;
+import io.farfrontier.palemirror.frontier.v3.model.DiagnosticCategory;
+import io.farfrontier.palemirror.frontier.v3.model.DiagnosticDisposition;
+import io.farfrontier.palemirror.frontier.v3.model.DiagnosticOwner;
+import io.farfrontier.palemirror.frontier.v3.model.DiagnosticOwnerKind;
+import io.farfrontier.palemirror.frontier.v3.model.DiagnosticReason;
+import io.farfrontier.palemirror.frontier.v3.model.DiagnosticSubject;
+import io.farfrontier.palemirror.frontier.v3.model.DiagnosticSubjectKind;
+import io.farfrontier.palemirror.frontier.v3.model.DiagnosticTuple;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import java.util.Arrays;
@@ -89,7 +98,7 @@ class PhysicalIntentLifecycleCompositionTest {
             return new AbstractPhysicalIntentLifecycleCapability(new PhysicalIntentLifecycleDeclaration(first,
                     PhysicalIntentLifecycleDeclaration.VERSION, supported(first), Set.of(PhysicalIntentRoleSchema.RESOURCE_SITE_HARVEST), 257, 256),
                     PhysicalIntentLifecycleRetirementPolicy.noPhysical(first), account(first),
-                    PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery()) { };
+                    PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery(), PhysicalIntentRecoveryDiagnosticProducer.RESOURCE_SITE_PREPARATION) { };
         }).toList());
         PhysicalIntentRetirementAccount incomplete = new PhysicalIntentRetirementAccount() {
             @Override public PhysicalIntentLifecycleOwner owner() { return first; }
@@ -137,7 +146,8 @@ class PhysicalIntentLifecycleCompositionTest {
                         supported(PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE), Set.of(PhysicalIntentRoleSchema.STRUCTURAL_REPAIR)),
                 "a partial owner declaration must fail at its boundary before composition can discover missing schemas");
         assertThrows(NullPointerException.class, () -> new AbstractPhysicalIntentLifecycleCapability(
-                declaration(first, supported(first)), PhysicalIntentLifecycleRetirementPolicy.noPhysical(first), account(first), null) { },
+                declaration(first, supported(first)), PhysicalIntentLifecycleRetirementPolicy.noPhysical(first), account(first), null,
+                PhysicalIntentRecoveryDiagnosticProducer.RESOURCE_SITE_PREPARATION) { },
                 "a physical owner cannot omit its executable resolved-history retention policy");
     }
 
@@ -297,7 +307,7 @@ class PhysicalIntentLifecycleCompositionTest {
                 new PhysicalIntentRetirementProof.CheckedNoSubject(PhysicalIntentRetirementProof.Absence.NO_RESOURCE_COMMITMENT),
                 PhysicalIntentRetirementProof.LateDisposition.RETAIN_AMBIGUOUS_RECOVERY);
         PhysicalIntentTransition payload = new PhysicalIntentTransition(intentId, PhysicalIntentStatus.UNKNOWN_AFTER_RESTART,
-                java.util.Optional.empty(), java.util.Optional.of(proof));
+                java.util.Optional.empty(), java.util.Optional.of(proof), java.util.Optional.of(recoveryDiagnostic(intentId)));
         assertEquals(payload, FrontierWorldRuntimeDefinition.payloadCodecs().decode(payload.type(),
                 FrontierWorldRuntimeDefinition.payloadCodecs().encode(payload)));
     }
@@ -328,7 +338,15 @@ class PhysicalIntentLifecycleCompositionTest {
                                                                  PhysicalIntentLifecycleRetirementPolicy retirementPolicy,
                                                                  PhysicalIntentRetirementAccount account) {
         return new AbstractPhysicalIntentLifecycleCapability(declaration(owner, kinds), retirementPolicy, account,
-                PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery()) { };
+                PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery(),
+                kinds.isEmpty() ? PhysicalIntentRecoveryDiagnosticProducer.NO_PHYSICAL_CAPABILITY : PhysicalIntentRecoveryDiagnosticProducer.valueOf(owner.name())) { };
+    }
+
+    private static DiagnosticTuple recoveryDiagnostic(PhysicalIntentId intentId) {
+        SubjectId id = new SubjectId(intentId.value());
+        return new DiagnosticTuple(DiagnosticReason.PHYSICAL_CUSTODY_UNRESOLVED, DiagnosticCategory.RECOVERY_UNKNOWN,
+                new DiagnosticOwner(DiagnosticOwnerKind.PHYSICAL_INTENT, id),
+                new DiagnosticSubject(DiagnosticSubjectKind.PHYSICAL_EFFECT, id), DiagnosticDisposition.INSPECT);
     }
 
     private static PhysicalIntentRetirementAccount account(PhysicalIntentLifecycleOwner owner) {
@@ -371,9 +389,11 @@ class PhysicalIntentLifecycleCompositionTest {
 
     private static PhysicalIntent retentionIntent(String suffix, PhysicalIntentStatus status) {
         SubjectId site = new SubjectId("site:retention-" + suffix);
-        return new PhysicalIntent(new PhysicalIntentId("intent:retention-" + suffix), PhysicalIntentKind.RESOURCE_SITE_PREPARATION,
-                status, site, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.sitePreparation(site,
+        PhysicalIntent prepared = new PhysicalIntent(new PhysicalIntentId("intent:retention-" + suffix), PhysicalIntentKind.RESOURCE_SITE_PREPARATION,
+                status == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART ? PhysicalIntentStatus.PREPARED : status, site, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.sitePreparation(site,
                 new SubjectId("job:retention-" + suffix)), new FixedPosition(FixedScalar.ZERO, FixedScalar.whole(64), FixedScalar.ZERO),
                 0, PhysicalPostcondition.RESOURCE_SITE_PREPARED_OBSERVED, PhysicalIntentLifecycleOwner.RESOURCE_SITE_PREPARATION);
+        return status == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
+                ? prepared.withRecoveryUnknown(PhysicalIntentRecoveryDiagnosticProducer.RESOURCE_SITE_PREPARATION.stamp(prepared)) : prepared;
     }
 }

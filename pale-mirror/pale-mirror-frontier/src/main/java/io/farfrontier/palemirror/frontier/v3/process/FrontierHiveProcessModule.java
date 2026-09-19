@@ -47,7 +47,7 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
                             if (!subject.equals(state.bootstrap().hive().id())) throw new IllegalArgumentException("explosion retirement lacks hive ownership");
                             return reduceExplosionTransition(state, intent, transition);
                         }), intent -> FencedRecoveryAsset.EFFECT,
-                retirementAccount(PhysicalIntentLifecycleOwner.HIVE_MOBILIZATION), PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery());
+                retirementAccount(PhysicalIntentLifecycleOwner.HIVE_MOBILIZATION), PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery(), PhysicalIntentRecoveryDiagnosticProducer.HIVE_MOBILIZATION);
     }
 
     private static PhysicalIntentLifecycleCapability nutrientTransferCapability() {
@@ -78,7 +78,7 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
                             if (!subject.equals(state.bootstrap().hive().id())) throw new IllegalArgumentException("hive nutrient endpoint retirement lacks hive ownership");
                             return reduceNutrientTransition(state, intent, transition);
                         }), intent -> FencedRecoveryAsset.CARGO,
-                retirementAccount(PhysicalIntentLifecycleOwner.HIVE_NUTRIENT_TRANSFER), PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery());
+                retirementAccount(PhysicalIntentLifecycleOwner.HIVE_NUTRIENT_TRANSFER), PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery(), PhysicalIntentRecoveryDiagnosticProducer.HIVE_NUTRIENT_TRANSFER);
     }
 
     private static PhysicalIntentLifecycleCapability hiveGrowthCapability() {
@@ -101,7 +101,7 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
                             if (job == null || !subject.equals(job.hiveId())) throw new IllegalArgumentException("hive growth consumption retirement lacks hive ownership");
                             return reduceHiveGrowthConsumption(state, intent, transition);
                         }), intent -> FencedRecoveryAsset.EFFECT,
-                retirementAccount(PhysicalIntentLifecycleOwner.HIVE_GROWTH), PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery());
+                retirementAccount(PhysicalIntentLifecycleOwner.HIVE_GROWTH), PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery(), PhysicalIntentRecoveryDiagnosticProducer.HIVE_GROWTH);
     }
 
     private static PhysicalIntentLifecycleCapability routeSceneStrikeCapability() {
@@ -130,7 +130,7 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
                             if (!subject.equals(SceneStrikeStateSupport.owner(state, intent))) throw new IllegalArgumentException("scene strike retirement lacks exact scene ownership");
                             return reduceSceneStrikeTransition(state, intent, transition);
                         }), intent -> FencedRecoveryAsset.EFFECT,
-                retirementAccount(PhysicalIntentLifecycleOwner.ROUTE_ENGAGEMENT), PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery());
+                retirementAccount(PhysicalIntentLifecycleOwner.ROUTE_ENGAGEMENT), PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery(), PhysicalIntentRecoveryDiagnosticProducer.ROUTE_ENGAGEMENT);
     }
 
     private static PhysicalIntentLifecycleCapability settlementAssaultCapability() {
@@ -147,7 +147,7 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
                 PhysicalIntentLifecycleRetirementPolicy.of(
                         (state, command, intent, transition) -> planAssaultTransition(state, intent, transition),
                         FrontierHiveProcessModule::reduceAssaultTransition), intent -> FencedRecoveryAsset.EFFECT,
-                retirementAccount(PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT), PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery());
+                retirementAccount(PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT), PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery(), PhysicalIntentRecoveryDiagnosticProducer.SETTLEMENT_ASSAULT);
     }
 
     private static PhysicalIntentRetirementAccount retirementAccount(PhysicalIntentLifecycleOwner owner) {

@@ -63,6 +63,26 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class FrontierV3DiagnosticJsonTest {
     @Test
+    void playerCustodyConflictKeepsTheSameStampedCauseForWhyIncidentAndBlockedAggregate() {
+        var configuration = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:diagnostic-player-conflict"), 91L);
+        FrontierWorldState baseline = configuration.initialState();
+        SubjectId item = new SubjectId("item:bootstrap-1-engineering-tool-1");
+        var slot = (InventoryCustody.ContainerSlot) baseline.inventory().items().get(item).custody();
+        SubjectId incident = new SubjectId("conflict:diagnostic-player-custody");
+        FrontierWorldState conflicted = baseline.withInventory(baseline.inventory().recordConflict(
+                io.farfrontier.palemirror.frontier.v3.model.InventoryDiagnosticProducer.PLAYER_EXPECTED_SLOT_MISSING
+                        .create(incident, item, slot.containerId(), slot.slot())));
+        CheckpointImage checkpoint = new CheckpointImage(configuration.worldId(), new io.farfrontier.palemirror.frontier.v3.api.Revision(4L),
+                SimInstant.ZERO, new byte[]{1}, List.of(), List.of());
+        String why = FrontierV3DiagnosticJson.render("why", incident.value(), checkpoint, conflicted, Optional.empty());
+        String retained = FrontierV3DiagnosticJson.render("incident", incident.value(), checkpoint, conflicted, Optional.empty());
+        String summary = FrontierV3DiagnosticJson.render("summary", "", checkpoint, conflicted, Optional.empty());
+        assertTrue(why.contains("\"reason\":\"INVENTORY_CONFLICT\"") && why.contains("\"owner\":\"" + slot.containerId().value()));
+        assertTrue(retained.contains("\"subject\":\"" + incident.value()) && retained.contains("\"disposition\":\"INSPECT\""));
+        assertTrue(summary.contains("\"diagnosticVerdict\":\"blocked\"") && summary.contains("\"inventoryConflicts\":1"));
+    }
+
+    @Test
     void settlementPopulationReceiptIsBoundedCompleteAndReadOnlyBeforeAClientVisit() {
         var configuration = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:diagnostic-first-ingress"), 47L);
         FrontierWorldState state = configuration.initialState();

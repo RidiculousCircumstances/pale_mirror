@@ -220,7 +220,7 @@ class ExactInventoryTest {
         InventoryCustody.ContainerSlot slot = new InventoryCustody.ContainerSlot(container, 3);
         ExactInventory inventory = new ExactInventory(Map.of(container, new ContainerRecord(container, owner, 9)),
                 Map.of(item, new ExactItemStack(item, owner, "minecraft:bread", 8, slot)), Map.of(), Map.of(), Map.of(), Map.of(), surfaceFor(container));
-        InventoryConflict conflict = new InventoryConflict(new SubjectId("conflict:inventory-bread"), item, container, 3, InventoryConflictKind.MISSING);
+        InventoryConflict conflict = InventoryDiagnosticProducer.PLAYER_EXPECTED_SLOT_MISSING.create(new SubjectId("conflict:inventory-bread"), item, container, 3);
 
         ExactInventory observed = inventory.recordConflict(conflict);
         assertEquals(conflict, observed.conflicts().get(conflict.id()));
@@ -229,7 +229,7 @@ class ExactInventoryTest {
         ExactInventory consumed = observed.consume(item, 8);
         assertEquals(conflict, consumed.conflicts().get(conflict.id()),
                 "durable conflict evidence remains anchored at its physical container after its original exact subject retires");
-        assertThrows(IllegalArgumentException.class, () -> observed.recordConflict(new InventoryConflict(conflict.id(), item, container, 3, InventoryConflictKind.FOREIGN_OR_DUPLICATE)));
+        assertThrows(IllegalArgumentException.class, () -> observed.recordConflict(InventoryDiagnosticProducer.PLAYER_FOREIGN_OR_DUPLICATE_SLOT.create(conflict.id(), item, container, 3)));
     }
 
     private static Map<SubjectId, ContainerSurface> surfaceFor(SubjectId container) {

@@ -15,6 +15,12 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWireTags;
+import io.farfrontier.palemirror.frontier.v3.model.DiagnosticCategory;
+import io.farfrontier.palemirror.frontier.v3.model.DiagnosticDisposition;
+import io.farfrontier.palemirror.frontier.v3.model.DiagnosticOwner;
+import io.farfrontier.palemirror.frontier.v3.model.DiagnosticSubject;
+import io.farfrontier.palemirror.frontier.v3.model.DiagnosticTuple;
+import io.farfrontier.palemirror.frontier.v3.model.DiagnosticWireTags;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTarget;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -44,6 +50,8 @@ final class PhysicalIntentStateCodec {
             output.writeBoolean(intent.semanticTarget().isPresent());
             if (intent.semanticTarget().isPresent()) { PhysicalDeltaPayloadCodecs.writeTarget(output, intent.semanticTarget().orElseThrow()); }
             output.writeByte(PhysicalIntentLifecycleOwner.CODEC_VERSION); FrontierWorldStateCodec.writeString(output, intent.lifecycleOwner().stableId());
+            output.writeBoolean(intent.diagnostic().isPresent());
+            if (intent.diagnostic().isPresent()) writeDiagnostic(output, intent.diagnostic().orElseThrow());
         }
     }
 
@@ -63,12 +71,25 @@ final class PhysicalIntentStateCodec {
                     ? Optional.of(new PhysicalContainerSlot(new SubjectId(FrontierWorldStateCodec.readString(input)), input.readUnsignedByte())) : Optional.empty();
             Optional<PhysicalDeltaSemanticTarget> semanticTarget = input.readBoolean() ? Optional.of(PhysicalDeltaPayloadCodecs.readTarget(input)) : Optional.empty();
             PhysicalIntentLifecycleOwner lifecycleOwner = PhysicalIntentLifecycleOwner.fromWire(input.readUnsignedByte(), FrontierWorldStateCodec.readString(input));
+            Optional<DiagnosticTuple> diagnostic = input.readBoolean() ? Optional.of(readDiagnostic(input)) : Optional.empty();
             PhysicalIntent intent = new PhysicalIntent(id, FrontierWireTags.require(PhysicalIntentKind.class, kind), FrontierWireTags.require(PhysicalIntentStatus.class, status), cause,
-                    PhysicalIntentRoleBinding.decode(schema, roles), origin, radius, FrontierWireTags.require(PhysicalPostcondition.class, postcondition), observation, target, semanticTarget, lifecycleOwner);
+                    PhysicalIntentRoleBinding.decode(schema, roles), origin, radius, FrontierWireTags.require(PhysicalPostcondition.class, postcondition), observation, target, semanticTarget, lifecycleOwner, diagnostic);
             if (kind >= PhysicalIntentKind.values().length || status >= PhysicalIntentStatus.values().length || postcondition >= PhysicalPostcondition.values().length || intents.put(id, intent) != null) {
                 throw new IllegalArgumentException("invalid or duplicate physical intent");
             }
         }
         return intents;
+    }
+    private static void writeDiagnostic(DataOutputStream output, DiagnosticTuple diagnostic) throws IOException {
+        output.writeShort(diagnostic.reason().wireTag()); output.writeByte(diagnostic.category().wireTag());
+        output.writeByte(DiagnosticWireTags.ownerTag(diagnostic.owner().kind())); FrontierWorldStateCodec.writeString(output, diagnostic.owner().id().value());
+        output.writeByte(DiagnosticWireTags.subjectTag(diagnostic.subject().kind())); FrontierWorldStateCodec.writeString(output, diagnostic.subject().id().value());
+        output.writeByte(diagnostic.disposition().wireTag());
+    }
+    private static DiagnosticTuple readDiagnostic(DataInputStream input) throws IOException {
+        return new DiagnosticTuple(DiagnosticWireTags.reason(input.readUnsignedShort()), DiagnosticWireTags.category(input.readUnsignedByte()),
+                new DiagnosticOwner(DiagnosticWireTags.ownerKind(input.readUnsignedByte()), new SubjectId(FrontierWorldStateCodec.readString(input))),
+                new DiagnosticSubject(DiagnosticWireTags.subjectKind(input.readUnsignedByte()), new SubjectId(FrontierWorldStateCodec.readString(input))),
+                DiagnosticWireTags.disposition(input.readUnsignedByte()));
     }
 }

@@ -8,6 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryAsset;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentPrepared;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentRecoveryDiagnosticProducer;
 
 
 /** Wiring adapter only; every callback is supplied by the owning family module. */
@@ -30,8 +31,9 @@ final class FunctionalPhysicalIntentLifecycleCapability extends AbstractPhysical
                                                 PhysicalIntentLifecycleRetirementPolicy retirementPolicy,
                                                 RecoveryAssetResolver recoveryAssetResolver,
                                                 PhysicalIntentRetirementAccount retirementAccount,
-                                                PhysicalIntentResolvedRetentionPolicy resolvedRetentionPolicy) {
-        super(declaration, retirementPolicy, retirementAccount, resolvedRetentionPolicy);
+                                                PhysicalIntentResolvedRetentionPolicy resolvedRetentionPolicy,
+                                                PhysicalIntentRecoveryDiagnosticProducer recoveryDiagnosticProducer) {
+        super(declaration, retirementPolicy, retirementAccount, resolvedRetentionPolicy, recoveryDiagnosticProducer);
         this.preparedPlanner = preparedPlanner;
         this.transitionPlanner = transitionPlanner;
         this.preparedReducer = preparedReducer;

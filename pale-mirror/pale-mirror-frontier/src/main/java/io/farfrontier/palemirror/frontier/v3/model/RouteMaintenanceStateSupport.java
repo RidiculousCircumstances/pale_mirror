@@ -337,7 +337,7 @@ public final class RouteMaintenanceStateSupport {
                                        Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent> intents) {
         RouteMaintenance maintenance = java.util.Optional.ofNullable(state.routeMaintenances().get(intent.roles().require(PhysicalIntentSubjectRole.ROUTE_MAINTENANCE))).filter(java.util.Objects::nonNull).orElseThrow(() -> new IllegalArgumentException("route maintenance conflict has no active operation"));
         Map<SubjectId, RouteMaintenance> maintenances = new LinkedHashMap<>(state.routeMaintenances()); maintenances.put(maintenance.id(), maintenance.conflict());
-        intents.put(intent.id(), intent.withStatus(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty()));
+        intents.put(intent.id(), intent.withRecoveryUnknown(PhysicalIntentRecoveryDiagnosticProducer.ENGINEERING_WORKSITE.stamp(intent)));
         return state.withChanges(FrontierWorldStateUpdate.begin().physicalIntents(intents).routeMaintenances(maintenances)
                 .sceneLeases(FrontierEngineeringWorkSceneSupport.drainProjectWorksites(state, maintenance.id())));
     }

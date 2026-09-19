@@ -30,6 +30,20 @@ class DiagnosticAuthorityArchitectureTest {
         assertFalse(wires.contains("ordinal()"), "persistent diagnostic identities must never depend on enum order");
     }
 
+    @Test
+    void inventoryAndRecoveryAuthoritiesCannotClassifyFromStatusOrConflictKind() throws Exception {
+        Path root = repositoryRoot();
+        String inventory = Files.readString(root.resolve("pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/InventoryConflict.java"));
+        String storage = Files.readString(root.resolve("pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/model/PhysicalIntentTransitionStorage.java"));
+        String capabilities = Files.readString(root.resolve("pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/process/PhysicalIntentLifecycleCapabilities.java"));
+        String executor = Files.readString(root.resolve("pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/frontier/v3/FrontierV3InventoryObservationExecutor.java"));
+        assertTrue(inventory.contains("DiagnosticTuple diagnostic") && inventory.contains("DiagnosticReason.INVENTORY_CONFLICT"));
+        assertTrue(storage.contains("transition.diagnostic().orElseThrow"), "storage must reject a recovery status that was not already stamped");
+        assertTrue(capabilities.contains("capability.recoveryUnknownDiagnostic(intent)"), "closed owner capability must supply recovery authority before reduction");
+        assertFalse(executor.contains("kind.ordinal()"), "inventory diagnostic identity must not depend on enum order");
+        assertFalse(executor.contains("new InventoryConflict("), "executor must use a named stamped inventory producer");
+    }
+
     private static Path repositoryRoot() {
         Path path = Path.of("").toAbsolutePath();
         while (path != null && !Files.exists(path.resolve("pale-mirror-frontier"))) path = path.getParent();

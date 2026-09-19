@@ -9,6 +9,7 @@ final class NoPhysicalIntentLifecyclePolicy extends AbstractPhysicalIntentLifecy
     NoPhysicalIntentLifecyclePolicy(PhysicalIntentLifecycleOwner owner) {
         super(new PhysicalIntentLifecycleDeclaration(owner, PhysicalIntentLifecycleDeclaration.VERSION, Set.of(), Set.of(), 0, 0),
                 PhysicalIntentLifecycleRetirementPolicy.noPhysical(owner),
-                PhysicalIntentRetirementAccount.noPhysical(owner), PhysicalIntentResolvedRetentionPolicy.none());
+                PhysicalIntentRetirementAccount.noPhysical(owner), PhysicalIntentResolvedRetentionPolicy.none(),
+                io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentRecoveryDiagnosticProducer.NO_PHYSICAL_CAPABILITY);
     }
 }

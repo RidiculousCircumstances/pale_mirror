@@ -135,9 +135,9 @@ public final class ResourceSitePhysicalIntentStateSupport {
                 // Semantic completion and its exact depot custody already happened in COLD.
                 // A missing/foreign later physical surface therefore belongs to this one
                 // materialization intent, not to the renewable field or its successor.
-                InventoryConflict receiptConflict = new InventoryConflict(
+                InventoryConflict receiptConflict = InventoryDiagnosticProducer.RESOURCE_SITE_DEFERRED_RECEIPT_MISSING.create(
                         new SubjectId("conflict:resource-site-deferred-" + intent.id().value().replace(':', '-')),
-                        deferred.outputItemId(), deferred.outputSlot().containerId(), deferred.outputSlot().slot(), InventoryConflictKind.MISSING);
+                        deferred.outputItemId(), deferred.outputSlot().containerId(), deferred.outputSlot().slot());
                 return replace(state, state.resourceSites(), state.inventory().recordConflict(receiptConflict), nextIntents, state.physicalObservations());
             }
             harvest(lifecycle, intent.id());

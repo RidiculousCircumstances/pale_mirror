@@ -12,6 +12,8 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryAsset;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentPrepared;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;
+import io.farfrontier.palemirror.frontier.v3.model.DiagnosticTuple;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentRecoveryDiagnosticProducer;
 
 import java.util.Set;
 
@@ -23,17 +25,20 @@ abstract class AbstractPhysicalIntentLifecycleCapability implements PhysicalInte
     private final PhysicalIntentRetirementAccount retirementAccount;
     private final PhysicalIntentLifecycleDeclaration declaration;
     private final PhysicalIntentResolvedRetentionPolicy resolvedRetentionPolicy;
+    private final PhysicalIntentRecoveryDiagnosticProducer recoveryDiagnosticProducer;
 
     AbstractPhysicalIntentLifecycleCapability(PhysicalIntentLifecycleDeclaration declaration,
                                               PhysicalIntentLifecycleRetirementPolicy retirementPolicy,
                                               PhysicalIntentRetirementAccount retirementAccount,
-                                              PhysicalIntentResolvedRetentionPolicy resolvedRetentionPolicy) {
+                                              PhysicalIntentResolvedRetentionPolicy resolvedRetentionPolicy,
+                                              PhysicalIntentRecoveryDiagnosticProducer recoveryDiagnosticProducer) {
         this.declaration = java.util.Objects.requireNonNull(declaration, "physical lifecycle declaration");
         this.owner = declaration.owner();
         this.kinds = declaration.kinds();
         this.retirementPolicy = retirementPolicy;
         this.retirementAccount = retirementAccount;
         this.resolvedRetentionPolicy = java.util.Objects.requireNonNull(resolvedRetentionPolicy, "physical lifecycle resolved retention policy");
+        this.recoveryDiagnosticProducer = java.util.Objects.requireNonNull(recoveryDiagnosticProducer, "physical lifecycle recovery diagnostic producer");
     }
 
     @Override public final PhysicalIntentLifecycleOwner owner() { return owner; }
@@ -45,6 +50,10 @@ abstract class AbstractPhysicalIntentLifecycleCapability implements PhysicalInte
     @Override public FencedRecoveryAsset recoveryAsset(PhysicalIntent intent) {
         throw new IllegalArgumentException("physical lifecycle owner has no declared recovery asset: " + owner.stableId());
     }
+    @Override public final DiagnosticTuple recoveryUnknownDiagnostic(PhysicalIntent intent) {
+        return recoveryDiagnosticProducer.stamp(intent);
+    }
+    @Override public final PhysicalIntentRecoveryDiagnosticProducer recoveryDiagnosticProducer() { return recoveryDiagnosticProducer; }
 
     @Override public CommandPlan planPrepared(FrontierWorldState state, FrontierCommand command, PhysicalIntentPrepared prepared) {
         return rejected("physical executor cannot prepare " + owner.stableId());

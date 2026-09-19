@@ -410,18 +410,33 @@ final class FrontierV3DiagnosticJson {
     private static String why(String id, CheckpointImage checkpoint, FrontierWorldState state) {
         SubjectId subject = subject(id).orElse(null);
         ResourceSiteLifecycle lifecycle = subject == null ? null : state.resourceSites().sites().get(subject);
-        if (lifecycle == null) return unavailable("why", id, checkpoint, "not_found");
-        String cause = lifecycle.conflictDisposition().map(FrontierV3DiagnosticJson::conflict).orElse("null");
-        return base("why", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(subject.value())
-                + "\",\"state\":\"" + lifecycle.phase() + "\",\"cause\":" + cause + "}";
+        if (lifecycle != null) {
+            String cause = lifecycle.conflictDisposition().map(FrontierV3DiagnosticJson::conflict).orElse("null");
+            return base("why", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(subject.value())
+                    + "\",\"state\":\"" + lifecycle.phase() + "\",\"cause\":" + cause + "}";
+        }
+        var inventory = subject == null ? null : state.inventory().conflicts().get(subject);
+        if (inventory == null) return unavailable("why", id, checkpoint, "not_found");
+        return base("why", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(inventory.containerId().value())
+                + "\",\"state\":\"RECONCILIATION_CONFLICT\",\"cause\":" + diagnostic(inventory.diagnostic()) + "}";
     }
 
     /** Incident identity is retained by its canonical owner; this bounded lookup reads no chunks or mutable state. */
     private static String incident(String id, CheckpointImage checkpoint, FrontierWorldState state) {
         var value = state.resourceSites().sites().values().stream().flatMap(site -> site.conflictDisposition().stream())
                 .filter(disposition -> disposition.incident().id().equals(id)).findFirst();
-        if (value.isEmpty()) return unavailable("incident", id, checkpoint, "not_found");
-        return base("incident", id, checkpoint) + ",\"status\":\"ok\",\"cause\":" + conflict(value.orElseThrow()) + "}";
+        if (value.isPresent()) return base("incident", id, checkpoint) + ",\"status\":\"ok\",\"cause\":" + conflict(value.orElseThrow()) + "}";
+        var inventory = subject(id).map(state.inventory().conflicts()::get).orElse(null);
+        if (inventory == null) return unavailable("incident", id, checkpoint, "not_found");
+        return base("incident", id, checkpoint) + ",\"status\":\"ok\",\"cause\":" + diagnostic(inventory.diagnostic()) + "}";
+    }
+
+    private static String diagnostic(io.farfrontier.palemirror.frontier.v3.model.DiagnosticTuple value) {
+        return "{\"category\":\"" + value.category() + "\",\"categoryTag\":" + value.category().wireTag()
+                + ",\"reason\":\"" + value.reason() + "\",\"reasonTag\":" + value.reason().wireTag()
+                + ",\"ownerKind\":\"" + value.owner().kind() + "\",\"owner\":\"" + quote(value.owner().id().value())
+                + "\",\"subjectKind\":\"" + value.subject().kind() + "\",\"subject\":\"" + quote(value.subject().id().value())
+                + "\",\"disposition\":\"" + value.disposition() + "\",\"dispositionTag\":" + value.disposition().wireTag() + "}";
     }
     private static String settlement(String id, CheckpointImage checkpoint, FrontierWorldState state) {
         SubjectId subject = subject(id).orElse(null);

@@ -15,6 +15,10 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWireTags;
+import io.farfrontier.palemirror.frontier.v3.model.DiagnosticOwner;
+import io.farfrontier.palemirror.frontier.v3.model.DiagnosticSubject;
+import io.farfrontier.palemirror.frontier.v3.model.DiagnosticTuple;
+import io.farfrontier.palemirror.frontier.v3.model.DiagnosticWireTags;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTarget;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -40,6 +44,8 @@ final class PhysicalIntentPayloadCodec {
         output.writeBoolean(intent.semanticTarget().isPresent());
         if (intent.semanticTarget().isPresent()) PhysicalDeltaPayloadCodecs.writeTarget(output, intent.semanticTarget().orElseThrow());
         output.writeByte(PhysicalIntentLifecycleOwner.CODEC_VERSION); FrontierWorldPayloadCodecs.writeString(output, intent.lifecycleOwner().stableId());
+        output.writeBoolean(intent.diagnostic().isPresent());
+        if (intent.diagnostic().isPresent()) writeDiagnostic(output, intent.diagnostic().orElseThrow());
     }
 
     static PhysicalIntent read(DataInputStream input) throws IOException {
@@ -60,8 +66,22 @@ final class PhysicalIntentPayloadCodec {
         if (kind >= PhysicalIntentKind.values().length || status >= PhysicalIntentStatus.values().length || postcondition >= PhysicalPostcondition.values().length) {
             throw new IllegalArgumentException("unknown physical intent enum value");
         }
+        PhysicalIntentLifecycleOwner lifecycleOwner = PhysicalIntentLifecycleOwner.fromWire(input.readUnsignedByte(), FrontierWorldPayloadCodecs.readString(input));
+        Optional<DiagnosticTuple> diagnostic = input.readBoolean() ? Optional.of(readDiagnostic(input)) : Optional.empty();
         return new PhysicalIntent(id, FrontierWireTags.require(PhysicalIntentKind.class, kind), FrontierWireTags.require(PhysicalIntentStatus.class, status),
                 cause.value(), PhysicalIntentRoleBinding.decode(schema, roles), origin, radius, FrontierWireTags.require(PhysicalPostcondition.class, postcondition), observation, target, semanticTarget,
-                PhysicalIntentLifecycleOwner.fromWire(input.readUnsignedByte(), FrontierWorldPayloadCodecs.readString(input)));
+                lifecycleOwner, diagnostic);
+    }
+    private static void writeDiagnostic(DataOutputStream output, DiagnosticTuple diagnostic) throws IOException {
+        output.writeShort(diagnostic.reason().wireTag()); output.writeByte(diagnostic.category().wireTag());
+        output.writeByte(DiagnosticWireTags.ownerTag(diagnostic.owner().kind())); FrontierWorldPayloadCodecs.writeSubject(output, diagnostic.owner().id());
+        output.writeByte(DiagnosticWireTags.subjectTag(diagnostic.subject().kind())); FrontierWorldPayloadCodecs.writeSubject(output, diagnostic.subject().id());
+        output.writeByte(diagnostic.disposition().wireTag());
+    }
+    private static DiagnosticTuple readDiagnostic(DataInputStream input) throws IOException {
+        return new DiagnosticTuple(DiagnosticWireTags.reason(input.readUnsignedShort()), DiagnosticWireTags.category(input.readUnsignedByte()),
+                new DiagnosticOwner(DiagnosticWireTags.ownerKind(input.readUnsignedByte()), FrontierWorldPayloadCodecs.readSubject(input).value()),
+                new DiagnosticSubject(DiagnosticWireTags.subjectKind(input.readUnsignedByte()), FrontierWorldPayloadCodecs.readSubject(input).value()),
+                DiagnosticWireTags.disposition(input.readUnsignedByte()));
     }
 }

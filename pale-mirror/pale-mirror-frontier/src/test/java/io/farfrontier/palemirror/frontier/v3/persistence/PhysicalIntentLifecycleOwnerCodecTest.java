@@ -20,6 +20,15 @@ import io.farfrontier.palemirror.frontier.v3.api.Revision;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentRecoveryDiagnosticProducer;
+import io.farfrontier.palemirror.frontier.v3.model.DiagnosticCategory;
+import io.farfrontier.palemirror.frontier.v3.model.DiagnosticDisposition;
+import io.farfrontier.palemirror.frontier.v3.model.DiagnosticOwner;
+import io.farfrontier.palemirror.frontier.v3.model.DiagnosticOwnerKind;
+import io.farfrontier.palemirror.frontier.v3.model.DiagnosticReason;
+import io.farfrontier.palemirror.frontier.v3.model.DiagnosticSubject;
+import io.farfrontier.palemirror.frontier.v3.model.DiagnosticSubjectKind;
+import io.farfrontier.palemirror.frontier.v3.model.DiagnosticTuple;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
@@ -45,6 +54,25 @@ class PhysicalIntentLifecycleOwnerCodecTest {
         try (DataInputStream input = new DataInputStream(new ByteArrayInputStream(snapshotBytes.toByteArray()))) {
             assertEquals(Map.of(intent.id(), intent), PhysicalIntentStateCodec.read(input, true));
         }
+    }
+
+    @Test
+    void recoveryUnknownCannotExistWithoutAnExactTupleAndItsWalAndSnapshotBytesFailClosedWhenForged() throws Exception {
+        PhysicalIntent prepared = productionIntent();
+        assertThrows(IllegalArgumentException.class, () -> prepared.withStatus(PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, java.util.Optional.empty()));
+        PhysicalIntent unknown = prepared.withRecoveryUnknown(PhysicalIntentRecoveryDiagnosticProducer.PRODUCTION_WORK.stamp(prepared));
+        assertEquals(unknown, roundTripPayload(unknown));
+        ByteArrayOutputStream snapshot = new ByteArrayOutputStream();
+        try (DataOutputStream output = new DataOutputStream(snapshot)) { PhysicalIntentStateCodec.write(output, Map.of(unknown.id(), unknown)); }
+        try (DataInputStream input = new DataInputStream(new ByteArrayInputStream(snapshot.toByteArray()))) {
+            assertEquals(Map.of(unknown.id(), unknown), PhysicalIntentStateCodec.read(input, true));
+        }
+        DiagnosticTuple forged = new DiagnosticTuple(DiagnosticReason.PHYSICAL_CUSTODY_UNRESOLVED, DiagnosticCategory.RECOVERY_UNKNOWN,
+                new DiagnosticOwner(DiagnosticOwnerKind.PHYSICAL_INTENT, new SubjectId("intent:foreign")),
+                new DiagnosticSubject(DiagnosticSubjectKind.PHYSICAL_EFFECT, new SubjectId("intent:foreign")), DiagnosticDisposition.INSPECT);
+        assertThrows(IllegalArgumentException.class, () -> new PhysicalIntent(prepared.id(), prepared.kind(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART,
+                prepared.causeSubjectId(), prepared.roles(), prepared.origin(), prepared.radiusBlocks(), prepared.postcondition(), java.util.Optional.empty(),
+                prepared.targetSlot(), prepared.semanticTarget(), prepared.lifecycleOwner(), java.util.Optional.of(forged)));
     }
 
     @Test

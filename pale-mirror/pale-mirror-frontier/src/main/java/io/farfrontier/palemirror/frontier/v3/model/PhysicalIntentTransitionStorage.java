@@ -44,10 +44,12 @@ public final class PhysicalIntentTransitionStorage {
                 throw new IllegalArgumentException("non-confirmed physical intent transition cannot carry observation evidence");
             }
             Map<PhysicalIntentId, PhysicalIntent> next = new LinkedHashMap<>(state.physicalIntents());
-            next.put(current.id(), current.withStatus(status, Optional.empty()));
             if (status == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) {
+                next.put(current.id(), current.withRecoveryUnknown(transition.diagnostic().orElseThrow(() ->
+                        new IllegalArgumentException("recovery-unknown transition requires the owner-supplied diagnostic tuple"))));
                 return recoveryUnknown.reduce(state, current, Map.copyOf(next));
             }
+            next.put(current.id(), current.withStatus(status, Optional.empty()));
             return record(state, next, state.physicalObservations());
         }
         PhysicalEffectObservation evidence = transition.observation().orElseThrow(

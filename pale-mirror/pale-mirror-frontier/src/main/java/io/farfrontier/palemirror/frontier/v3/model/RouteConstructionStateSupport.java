@@ -207,7 +207,7 @@ public final class RouteConstructionStateSupport {
         RouteConstruction project = java.util.Optional.ofNullable(state.routeConstructions().get(intent.roles().require(PhysicalIntentSubjectRole.ROUTE_CONSTRUCTION_PROJECT))).filter(java.util.Objects::nonNull).orElseThrow(() -> new IllegalArgumentException("route construction conflict lacks its project"));
         Map<SubjectId, RouteConstruction> projects = new LinkedHashMap<>(state.routeConstructions());
         projects.put(project.id(), project.withConfirmedCells(project.confirmedCells(), RouteConstructionStatus.CONFLICT));
-        intents.put(intent.id(), intent.withStatus(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, java.util.Optional.empty()));
+        intents.put(intent.id(), intent.withRecoveryUnknown(PhysicalIntentRecoveryDiagnosticProducer.ENGINEERING_WORKSITE.stamp(intent)));
         return state.withChanges(FrontierWorldStateUpdate.begin().physicalIntents(intents).routeConstructions(projects)
                 .sceneLeases(FrontierEngineeringWorkSceneSupport.drainProjectWorksites(state, project.id())));
     }
