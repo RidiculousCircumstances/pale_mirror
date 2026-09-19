@@ -291,6 +291,30 @@ public final class FrontierDomainRelationships {
         }
     }
 
+    /**
+     * Non-authoritative consistency check for owner-declared exact edges.  Callers supply the
+     * complete account from their retained aggregates; this method never selects or infers an
+     * obligation for them.
+     */
+    public static void validateDeclaredEdges(FrontierWorldState state, List<Edge> declared) {
+        Objects.requireNonNull(state, "relationship declared-edge state");
+        List<Edge> exact = List.copyOf(Objects.requireNonNull(declared, "relationship declared edges"));
+        if (exact.isEmpty() || exact.stream().distinct().count() != exact.size()) {
+            throw new IllegalArgumentException("declared relationship account must be nonempty and duplicate-free");
+        }
+        for (Edge edge : exact) declaration(edge.kind()).validate(edge);
+        if (!view(state).edges().containsAll(exact)) {
+            throw new IllegalArgumentException("declared relationship account is absent from authoritative pre-state");
+        }
+    }
+
+    /** Constructs one exact declared edge after enforcing the closed relationship manifest. */
+    public static Edge declaredEdge(Kind kind, Endpoint owner, Endpoint source, Endpoint target, Lifecycle lifecycle, String correlation) {
+        Edge edge = new Edge(kind, owner, source, target, lifecycle, correlation);
+        declaration(kind).validate(edge);
+        return edge;
+    }
+
     private static void addStrategic(FrontierWorldState state, List<Edge> edges, List<Incident> incidents) {
         for (StrategicTask task : state.strategicPlans().tasks().values()) {
             Endpoint taskEndpoint = subject(EntityKind.TASK, task.id());

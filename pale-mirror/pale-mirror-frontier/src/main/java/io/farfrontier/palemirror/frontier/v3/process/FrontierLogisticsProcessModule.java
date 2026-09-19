@@ -40,11 +40,9 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
                 (before, after, intent, transition, binding) -> {
                     if (intent.lifecycleOwner() != owner) throw new IllegalArgumentException("route retirement account owner mismatch");
                     RouteOperation operation = before.operations().get(intent.causeSubjectId());
-                    if (operation == null || FrontierDomainRelationships.view(before).edges().stream().noneMatch(edge -> edge.kind()
-                            == FrontierDomainRelationships.Kind.CONTRACT_ROUTE_OPERATION && edge.target().equals(
-                            new FrontierDomainRelationships.SubjectEndpoint(FrontierDomainRelationships.EntityKind.ROUTE_OPERATION, operation.id())))) {
-                        throw new IllegalArgumentException("route retirement account lacks exact contract relation");
-                    }
+                    if (operation == null || before.contracts().get(operation.contractId()) == null
+                            || !before.contracts().get(operation.contractId()).cargoId().equals(operation.cargoId()))
+                        throw new IllegalArgumentException("route retirement account lacks exact retained contract/cargo facts");
                     if (!after.operations().containsKey(intent.causeSubjectId()) && transition.status()
                             == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) {
                         throw new IllegalArgumentException("route retirement account lost ambiguous operation authority");
@@ -93,21 +91,25 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
                         ? PhysicalIntentRetirementAccount.LateDisposition.RETAIN_AMBIGUOUS_RECOVERY : PhysicalIntentRetirementAccount.LateDisposition.REJECT_STALE_ONCE));
     }
 
-    /** Exact authoritative owners, never correlation-string discovery, bind route retirement. */
+    /** Exact retained contract/operation fields, never a relationship-view query, bind route retirement. */
     private static List<FrontierDomainRelationships.Edge> retirementRelations(FrontierWorldState state, RouteOperation operation) {
+        SupplyContract retainedContract = state.contracts().get(operation.contractId());
+        if (retainedContract == null || !retainedContract.cargoId().equals(operation.cargoId())) {
+            throw new IllegalArgumentException("route retirement account does not retain its exact contract/cargo facts");
+        }
         FrontierDomainRelationships.SubjectEndpoint contract = new FrontierDomainRelationships.SubjectEndpoint(
-                FrontierDomainRelationships.EntityKind.SUPPLY_CONTRACT, operation.contractId());
+                FrontierDomainRelationships.EntityKind.SUPPLY_CONTRACT, retainedContract.id());
         FrontierDomainRelationships.SubjectEndpoint route = new FrontierDomainRelationships.SubjectEndpoint(
                 FrontierDomainRelationships.EntityKind.ROUTE_OPERATION, operation.id());
-        List<FrontierDomainRelationships.Edge> relations = FrontierDomainRelationships.view(state).edges().stream()
-                .filter(edge -> ((edge.kind() == FrontierDomainRelationships.Kind.CONTRACT_ROUTE_OPERATION
-                        || edge.kind() == FrontierDomainRelationships.Kind.CONTRACT_CARGO) && edge.owner().equals(contract))
-                        || (edge.kind() == FrontierDomainRelationships.Kind.ROUTE_CARRIER && edge.owner().equals(route)))
-                .toList();
-        if (relations.size() != 3) {
-            throw new IllegalArgumentException("route retirement account does not bind its exact contract/cargo/carrier relations");
-        }
-        return relations;
+        return List.of(
+                FrontierDomainRelationships.declaredEdge(FrontierDomainRelationships.Kind.CONTRACT_ROUTE_OPERATION, contract, contract, route,
+                        FrontierDomainRelationships.Lifecycle.ACTIVE, operation.id().value()),
+                FrontierDomainRelationships.declaredEdge(FrontierDomainRelationships.Kind.CONTRACT_CARGO, contract, contract,
+                        new FrontierDomainRelationships.SubjectEndpoint(FrontierDomainRelationships.EntityKind.CARGO, retainedContract.cargoId()),
+                        FrontierDomainRelationships.Lifecycle.ACTIVE, retainedContract.id().value()),
+                FrontierDomainRelationships.declaredEdge(FrontierDomainRelationships.Kind.ROUTE_CARRIER, route, route,
+                        new FrontierDomainRelationships.SubjectEndpoint(FrontierDomainRelationships.EntityKind.RESIDENT, operation.cargoCarrierId()),
+                        FrontierDomainRelationships.Lifecycle.ACTIVE, operation.id().value()));
     }
 
     private static CommandPlan planPhysicalTransition(FrontierWorldState state, FrontierCommand command,

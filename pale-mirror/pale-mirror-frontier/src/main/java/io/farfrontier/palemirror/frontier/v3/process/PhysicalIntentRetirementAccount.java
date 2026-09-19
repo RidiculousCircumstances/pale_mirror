@@ -73,12 +73,8 @@ interface PhysicalIntentRetirementAccount {
         if (binding.owner() != owner() || !binding.intentId().equals(intent.id())) {
             throw new IllegalArgumentException("retirement account does not bind its exact owner intent");
         }
-        for (FrontierDomainRelationships.Edge relation : exactRelations(binding.relations())) {
-            if (relation == null) throw new IllegalArgumentException("retirement account has a null relation binding");
-            if (!FrontierDomainRelationships.view(before).edges().contains(relation)) {
-                throw new IllegalArgumentException("retirement account binds a relation absent from authoritative pre-state");
-            }
-        }
+        List<FrontierDomainRelationships.Edge> declaredRelations = exactRelations(binding.relations());
+        if (!declaredRelations.isEmpty()) FrontierDomainRelationships.validateDeclaredEdges(before, declaredRelations);
         validateObligation(binding.leaseOrCarrier(), exactRelations(binding.relations()), "lease/carrier");
         validateObligation(binding.commitment(), exactRelations(binding.relations()), "resource commitment");
         verifyDeclaredBinding(before, intent, transition, binding);
@@ -112,11 +108,8 @@ interface PhysicalIntentRetirementAccount {
         if (binding.owner() != owner() || !binding.intentId().equals(intent.id()) || binding.lateDisposition() != lateDisposition(transition)) {
             throw new IllegalArgumentException("retirement account does not retain its terminal owner/intent/disposition binding");
         }
-        for (FrontierDomainRelationships.Edge relation : exactRelations(binding.relations())) {
-            if (!FrontierDomainRelationships.view(before).edges().contains(relation)) {
-                throw new IllegalArgumentException("retirement account relation is not an authoritative pre-state edge");
-            }
-        }
+        List<FrontierDomainRelationships.Edge> declaredRelations = exactRelations(binding.relations());
+        if (!declaredRelations.isEmpty()) FrontierDomainRelationships.validateDeclaredEdges(before, declaredRelations);
         validateObligation(binding.leaseOrCarrier(), exactRelations(binding.relations()), "lease/carrier");
         validateObligation(binding.commitment(), exactRelations(binding.relations()), "resource commitment");
         verifyDeclaredBinding(before, intent, transition, binding);

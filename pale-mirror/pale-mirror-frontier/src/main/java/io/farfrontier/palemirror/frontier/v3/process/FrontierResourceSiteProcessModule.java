@@ -83,12 +83,15 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
         ResourceSiteHarvestJob job = harvestJob(state, intent);
         FrontierDomainRelationships.SubjectEndpoint site = new FrontierDomainRelationships.SubjectEndpoint(FrontierDomainRelationships.EntityKind.RESOURCE_SITE, job.siteId());
         FrontierDomainRelationships.SubjectEndpoint harvest = new FrontierDomainRelationships.SubjectEndpoint(FrontierDomainRelationships.EntityKind.RESOURCE_HARVEST_JOB, job.id());
-        List<FrontierDomainRelationships.Edge> edges = FrontierDomainRelationships.view(state).edges().stream()
-                .filter(edge -> edge.owner().equals(site) && edge.kind() == FrontierDomainRelationships.Kind.HARVEST_SITE
-                        || edge.owner().equals(harvest) && (edge.kind() == FrontierDomainRelationships.Kind.HARVEST_TASK
-                        || edge.kind() == FrontierDomainRelationships.Kind.HARVEST_WORKER || edge.kind() == FrontierDomainRelationships.Kind.HARVEST_OUTPUT))
-                .toList();
-        if (edges.size() != 4) throw new IllegalArgumentException("harvest retirement account lacks its exact site/task/worker/output relations");
+        List<FrontierDomainRelationships.Edge> edges = List.of(
+                FrontierDomainRelationships.declaredEdge(FrontierDomainRelationships.Kind.HARVEST_SITE, site, site, harvest,
+                        FrontierDomainRelationships.Lifecycle.ACTIVE, job.id().value()),
+                FrontierDomainRelationships.declaredEdge(FrontierDomainRelationships.Kind.HARVEST_TASK, harvest, harvest,
+                        new FrontierDomainRelationships.SubjectEndpoint(FrontierDomainRelationships.EntityKind.TASK, job.taskId()), FrontierDomainRelationships.Lifecycle.ACTIVE, job.id().value()),
+                FrontierDomainRelationships.declaredEdge(FrontierDomainRelationships.Kind.HARVEST_WORKER, harvest, harvest,
+                        new FrontierDomainRelationships.SubjectEndpoint(FrontierDomainRelationships.EntityKind.RESIDENT, job.workerId()), FrontierDomainRelationships.Lifecycle.ACTIVE, job.id().value()),
+                FrontierDomainRelationships.declaredEdge(FrontierDomainRelationships.Kind.HARVEST_OUTPUT, harvest, harvest,
+                        new FrontierDomainRelationships.SubjectEndpoint(FrontierDomainRelationships.EntityKind.EXACT_ITEM, job.outputItemId()), FrontierDomainRelationships.Lifecycle.ACTIVE, job.id().value()));
         return new PhysicalIntentRetirementAccount.Binding(owner, intent.id(), new PhysicalIntentRetirementAccount.Exact<>(edges), continuation,
                 new PhysicalIntentRetirementAccount.Exact<>(job.workerId()), new PhysicalIntentRetirementAccount.Exact<>(job.outputItemId()), lateDisposition(transition));
     }
