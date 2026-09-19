@@ -39,6 +39,28 @@ public record PhysicalIntentRetirementProof(
     public enum Absence { NO_APPLICABLE_RELATION, NO_ENGINE_CONTINUATION, NO_LEASE_OR_CARRIER, NO_RESOURCE_COMMITMENT }
     public enum LateDisposition { REJECT_STALE_ONCE, RETAIN_AMBIGUOUS_RECOVERY, NO_PHYSICAL_INPUT }
 
+    /** Stable proof-envelope tags; never Java enum ordinals or names. */
+    public static String entityKindTag(FrontierDomainRelationships.EntityKind kind) { return "rel.entity." + switch (kind) {
+        case OBJECTIVE -> "objective"; case TASK -> "task"; case MARKET_DEMAND -> "market-demand"; case MARKET_QUOTE -> "market-quote";
+        case MARKET_ORDER -> "market-order"; case FINANCIAL_RESERVATION -> "financial-reservation"; case PRODUCTION_JOB -> "production-job";
+        case RESOURCE_SITE -> "resource-site"; case RESOURCE_HARVEST_JOB -> "resource-harvest-job"; case RESIDENT -> "resident";
+        case EXACT_ITEM -> "exact-item"; case RESOURCE_LOT -> "resource-lot"; case RESOURCE_CLAIM -> "resource-claim";
+        case PROVISION_CYCLE -> "provision-cycle"; case PROVISION_ALLOCATION -> "provision-allocation"; case SCENE_LEASE -> "scene-lease";
+        case AMBIENT_LEASE -> "ambient-lease"; case CARRIER_EVIDENCE -> "carrier-evidence"; case SUPPLY_CONTRACT -> "supply-contract";
+        case ROUTE_OPERATION -> "route-operation"; case CARGO -> "cargo"; case SERVICE_WORK -> "service-work";
+        case HIVE_MOBILIZATION -> "hive-mobilization"; case BIOFORM -> "bioform"; case STRUCTURE -> "structure"; }; }
+    public static FrontierDomainRelationships.EntityKind entityKindFromTag(String tag) {
+        for (FrontierDomainRelationships.EntityKind kind : FrontierDomainRelationships.EntityKind.values()) if (entityKindTag(kind).equals(tag)) return kind;
+        throw new IllegalArgumentException("unknown retirement relationship entity tag");
+    }
+    public static String lifecycleTag(FrontierDomainRelationships.Lifecycle lifecycle) { return switch (lifecycle) {
+        case ACTIVE -> "rel.lifecycle.active"; case TERMINAL_RETAINED -> "rel.lifecycle.terminal-retained";
+        case TERMINAL_COMPACTED -> "rel.lifecycle.terminal-compacted"; case PREPARED -> "rel.lifecycle.prepared"; case OBSERVED -> "rel.lifecycle.observed"; }; }
+    public static FrontierDomainRelationships.Lifecycle lifecycleFromTag(String tag) {
+        for (FrontierDomainRelationships.Lifecycle lifecycle : FrontierDomainRelationships.Lifecycle.values()) if (lifecycleTag(lifecycle).equals(tag)) return lifecycle;
+        throw new IllegalArgumentException("unknown retirement relationship lifecycle tag");
+    }
+
     public sealed interface RelationObligation permits ExactRelations, CheckedNoRelations { }
     public record ExactRelations(List<FrontierDomainRelationships.Edge> value) implements RelationObligation {
         public ExactRelations {

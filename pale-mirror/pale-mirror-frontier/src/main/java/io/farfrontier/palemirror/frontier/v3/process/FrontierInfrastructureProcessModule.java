@@ -43,7 +43,8 @@ final class FrontierInfrastructureProcessModule implements FrontierWorldProcessM
     private static PhysicalIntentRetirementAccount retirementAccount(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner owner) {
         return PhysicalIntentRetirementAccount.declared(owner,
                 java.util.EnumSet.allOf(PhysicalIntentRetirementAccount.Dimension.class),
-                (before, after, intent, transition) -> {
+                (before, command, intent, transition) -> PhysicalIntentRetirementAccount.checkedNone(owner, command, intent, transition),
+                (before, after, intent, transition, binding) -> {
                     if (intent.lifecycleOwner() != owner) throw new IllegalArgumentException("engineering retirement account owner mismatch");
                 });
     }

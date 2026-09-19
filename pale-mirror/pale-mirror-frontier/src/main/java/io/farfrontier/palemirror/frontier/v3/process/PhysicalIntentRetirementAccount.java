@@ -28,7 +28,7 @@ interface PhysicalIntentRetirementAccount {
     PhysicalIntentLifecycleOwner owner();
     EnumSet<Dimension> checkedDimensions();
     void verifyOwnerState(FrontierWorldState before, FrontierWorldState after, PhysicalIntent intent,
-                          PhysicalIntentTransition transition);
+                          PhysicalIntentTransition transition, Binding binding);
 
     /**
      * The owner-supplied transaction-local facts for one terminal transition.  These are not a
@@ -57,10 +57,8 @@ interface PhysicalIntentRetirementAccount {
     enum LateDisposition { REJECT_STALE_ONCE, RETAIN_AMBIGUOUS_RECOVERY, NO_PHYSICAL_INPUT }
 
     /** Builds the real account before plan publication, from authoritative facts only. */
-    default Binding bind(FrontierWorldState before, FrontierCommand command, PhysicalIntent intent,
-                         PhysicalIntentTransition transition) {
-        return defaultBinding(owner(), before, command, intent, transition);
-    }
+    Binding bind(FrontierWorldState before, FrontierCommand command, PhysicalIntent intent,
+                 PhysicalIntentTransition transition);
 
     private static LateDisposition lateDisposition(PhysicalIntentTransition transition) {
         return transition.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
@@ -79,11 +77,9 @@ interface PhysicalIntentRetirementAccount {
                 throw new IllegalArgumentException("retirement account binds a relation absent from authoritative pre-state");
             }
         }
-        if (binding.relations() instanceof CheckedNone<?> && !beforeRelations(before, intent).isEmpty()) {
-            throw new IllegalArgumentException("retirement account falsely declares no applicable REL edge");
-        }
         validateObligation(binding.leaseOrCarrier(), exactRelations(binding.relations()), "lease/carrier");
         validateObligation(binding.commitment(), exactRelations(binding.relations()), "resource commitment");
+        verifyOwnerState(before, before, intent, transition, binding);
         if (binding.continuation() instanceof Exact<ScheduleId> expected) {
             long matching = accepted.events().stream().map(event -> event.payload()).filter(ScheduleEffect.class::isInstance)
                     .map(ScheduleEffect.class::cast).filter(effect -> affects(effect, expected.value())).count();
@@ -114,9 +110,6 @@ interface PhysicalIntentRetirementAccount {
                 throw new IllegalArgumentException("retirement account relation is not an authoritative pre-state edge");
             }
         }
-        if (binding.relations() instanceof CheckedNone<?> && !beforeRelations(before, intent).isEmpty()) {
-            throw new IllegalArgumentException("retirement proof falsely declares no applicable REL edge");
-        }
         validateObligation(binding.leaseOrCarrier(), exactRelations(binding.relations()), "lease/carrier");
         validateObligation(binding.commitment(), exactRelations(binding.relations()), "resource commitment");
         PhysicalIntent terminal = after.physicalIntents().get(intent.id());
@@ -138,19 +131,16 @@ interface PhysicalIntentRetirementAccount {
                 throw new IllegalArgumentException("retirement account did not close confirmed late-input authority");
             }
         }
-        verifyOwnerState(before, after, intent, transition);
+        verifyOwnerState(before, after, intent, transition, binding);
     }
 
     /** A closed checked-none account is still explicit: no physical intent may use it successfully. */
     static PhysicalIntentRetirementAccount noPhysical(PhysicalIntentLifecycleOwner owner) {
-        return declared(owner, EnumSet.allOf(Dimension.class), (before, after, intent, transition) -> {
+        return declared(owner, EnumSet.allOf(Dimension.class),
+                (before, command, intent, transition) -> checkedNone(owner, command, intent, transition),
+                (before, after, intent, transition, binding) -> {
             throw new IllegalArgumentException("no-physical owner cannot retire an intent");
         });
-    }
-
-    static PhysicalIntentRetirementAccount declared(PhysicalIntentLifecycleOwner owner, EnumSet<Dimension> dimensions,
-                                                     OwnerStateCheck check) {
-        return declared(owner, dimensions, (before, command, intent, transition) -> defaultBinding(owner, before, command, intent, transition), check);
     }
 
     static PhysicalIntentRetirementAccount declared(PhysicalIntentLifecycleOwner owner, EnumSet<Dimension> dimensions,
@@ -164,7 +154,7 @@ interface PhysicalIntentRetirementAccount {
             @Override public PhysicalIntentLifecycleOwner owner() { return owner; }
             @Override public EnumSet<Dimension> checkedDimensions() { return EnumSet.copyOf(checked); }
             @Override public void verifyOwnerState(FrontierWorldState before, FrontierWorldState after, PhysicalIntent intent,
-                                                   PhysicalIntentTransition transition) { check.verify(before, after, intent, transition); }
+                                                   PhysicalIntentTransition transition, Binding binding) { check.verify(before, after, intent, transition, binding); }
             @Override public Binding bind(FrontierWorldState before, FrontierCommand command, PhysicalIntent intent,
                                           PhysicalIntentTransition transition) {
                 Binding binding = bindings.bind(before, command, intent, transition);
@@ -176,23 +166,15 @@ interface PhysicalIntentRetirementAccount {
         };
     }
 
-    private static Binding defaultBinding(PhysicalIntentLifecycleOwner owner, FrontierWorldState before, FrontierCommand command, PhysicalIntent intent,
-                                          PhysicalIntentTransition transition) {
+    static Binding checkedNone(PhysicalIntentLifecycleOwner owner, FrontierCommand command, PhysicalIntent intent,
+                               PhysicalIntentTransition transition) {
         Optional<ScheduleId> schedule = command == null ? Optional.empty() : command.scheduleBinding().map(binding -> binding.action().id());
-        List<FrontierDomainRelationships.Edge> related = beforeRelations(before, intent);
-        Obligation<List<FrontierDomainRelationships.Edge>> relations = related.isEmpty()
-                ? new CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_APPLICABLE_RELATION) : new Exact<>(related);
-        return new Binding(owner, intent.id(), relations, schedule.<Obligation<ScheduleId>>map(Exact::new)
+        return new Binding(owner, intent.id(), new CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_APPLICABLE_RELATION), schedule.<Obligation<ScheduleId>>map(Exact::new)
                 .orElseGet(() -> new CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_ENGINE_CONTINUATION)),
                 new CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_LEASE_OR_CARRIER),
                 new CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_RESOURCE_COMMITMENT), lateDisposition(transition));
     }
 
-    private static List<FrontierDomainRelationships.Edge> beforeRelations(FrontierWorldState before, PhysicalIntent intent) {
-        if (before == null) return List.of();
-        SubjectId subject = intent.causeSubjectId();
-        return FrontierDomainRelationships.view(before).edges().stream().filter(edge -> endpointIs(edge, subject)).toList();
-    }
 
     static PhysicalIntentRetirementProof proof(Binding binding) {
         return new PhysicalIntentRetirementProof(binding.owner(), binding.intentId(),
@@ -271,6 +253,6 @@ interface PhysicalIntentRetirementAccount {
     }
 
     @FunctionalInterface interface OwnerStateCheck {
-        void verify(FrontierWorldState before, FrontierWorldState after, PhysicalIntent intent, PhysicalIntentTransition transition);
+        void verify(FrontierWorldState before, FrontierWorldState after, PhysicalIntent intent, PhysicalIntentTransition transition, Binding binding);
     }
 }

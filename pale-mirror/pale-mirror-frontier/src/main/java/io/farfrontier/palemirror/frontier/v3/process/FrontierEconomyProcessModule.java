@@ -51,11 +51,37 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
     private static PhysicalIntentRetirementAccount retirementAccount(PhysicalIntentLifecycleOwner owner) {
         return PhysicalIntentRetirementAccount.declared(owner,
                 java.util.EnumSet.allOf(PhysicalIntentRetirementAccount.Dimension.class),
-                (before, after, intent, transition) -> {
+                FrontierEconomyProcessModule::bindRetirement,
+                (before, after, intent, transition, binding) -> {
                     if (intent.lifecycleOwner() != owner || !before.productionJobs().containsKey(intent.causeSubjectId())) {
                         throw new IllegalArgumentException("production retirement account lacks its exact pre-state job");
                     }
+                    ProductionJob job = before.productionJobs().get(intent.causeSubjectId());
+                    if (!(binding.relations() instanceof PhysicalIntentRetirementAccount.Exact<java.util.List<FrontierDomainRelationships.Edge>> exact)
+                            || exact.value().size() != 3 || !(binding.leaseOrCarrier() instanceof PhysicalIntentRetirementAccount.Exact<SubjectId> carrier)
+                            || !carrier.value().equals(job.workerId()) || !(binding.commitment() instanceof PhysicalIntentRetirementAccount.Exact<SubjectId> commitment)
+                            || !commitment.value().equals(job.consumedItemId())) {
+                        throw new IllegalArgumentException("production retirement account does not retain its exact declared relations, worker and input commitment");
+                    }
                 });
+    }
+
+    private static PhysicalIntentRetirementAccount.Binding bindRetirement(FrontierWorldState before, FrontierCommand command,
+                                                                            io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                                            PhysicalIntentTransition transition) {
+        ProductionJob job = before.productionJobs().get(intent.causeSubjectId());
+        if (job == null) throw new IllegalArgumentException("production retirement account has no exact job");
+        FrontierDomainRelationships.SubjectEndpoint owner = new FrontierDomainRelationships.SubjectEndpoint(FrontierDomainRelationships.EntityKind.PRODUCTION_JOB, job.id());
+        java.util.List<FrontierDomainRelationships.Edge> relations = FrontierDomainRelationships.view(before).edges().stream()
+                .filter(edge -> edge.owner().equals(owner)).filter(edge -> edge.kind() == FrontierDomainRelationships.Kind.JOB_WORKER
+                        || edge.kind() == FrontierDomainRelationships.Kind.JOB_INPUT || edge.kind() == FrontierDomainRelationships.Kind.JOB_OUTPUT).toList();
+        if (relations.size() != 3) throw new IllegalArgumentException("production retirement account lacks its declared worker/input/output relations");
+        var continuation = command.scheduleBinding().<PhysicalIntentRetirementAccount.Obligation<io.farfrontier.palemirror.frontier.v3.api.ScheduleId>>map(value -> new PhysicalIntentRetirementAccount.Exact<>(value.action().id()))
+                .orElseGet(() -> new PhysicalIntentRetirementAccount.CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_ENGINE_CONTINUATION));
+        return new PhysicalIntentRetirementAccount.Binding(intent.lifecycleOwner(), intent.id(), new PhysicalIntentRetirementAccount.Exact<>(relations), continuation,
+                new PhysicalIntentRetirementAccount.Exact<>(job.workerId()), new PhysicalIntentRetirementAccount.Exact<>(job.consumedItemId()),
+                transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
+                        ? PhysicalIntentRetirementAccount.LateDisposition.RETAIN_AMBIGUOUS_RECOVERY : PhysicalIntentRetirementAccount.LateDisposition.REJECT_STALE_ONCE);
     }
 
     private static FrontierWorldState reduceProductionTransition(FrontierWorldState state, SubjectId subject,

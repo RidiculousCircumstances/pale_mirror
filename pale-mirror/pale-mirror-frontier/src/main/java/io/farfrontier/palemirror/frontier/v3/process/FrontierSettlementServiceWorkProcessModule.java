@@ -42,7 +42,7 @@ final class FrontierSettlementServiceWorkProcessModule implements FrontierWorldP
         return PhysicalIntentRetirementAccount.declared(owner,
                 java.util.EnumSet.allOf(PhysicalIntentRetirementAccount.Dimension.class),
                 FrontierSettlementServiceWorkProcessModule::bindRetirement,
-                (before, after, intent, transition) -> {
+                (before, after, intent, transition, binding) -> {
                     if (intent.lifecycleOwner() != owner) throw new IllegalArgumentException("settlement-service retirement account owner mismatch");
                     SettlementServiceWork work = before.serviceWorks().get(intent.causeSubjectId());
                     if (work == null || FrontierDomainRelationships.view(before).edges().stream().noneMatch(edge -> edge.kind()

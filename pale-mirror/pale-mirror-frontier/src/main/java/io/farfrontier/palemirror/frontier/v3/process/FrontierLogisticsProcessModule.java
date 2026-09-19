@@ -36,7 +36,7 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
         return PhysicalIntentRetirementAccount.declared(owner,
                 java.util.EnumSet.allOf(PhysicalIntentRetirementAccount.Dimension.class),
                 FrontierLogisticsProcessModule::bindRetirement,
-                (before, after, intent, transition) -> {
+                (before, after, intent, transition, binding) -> {
                     if (intent.lifecycleOwner() != owner) throw new IllegalArgumentException("route retirement account owner mismatch");
                     RouteOperation operation = before.operations().get(intent.causeSubjectId());
                     if (operation == null || FrontierDomainRelationships.view(before).edges().stream().noneMatch(edge -> edge.kind()

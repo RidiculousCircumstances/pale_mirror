@@ -859,16 +859,16 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     }
     private static void writeRelationshipEdge(DataOutputStream output, FrontierDomainRelationships.Edge edge) throws IOException {
         writeString(output, edge.kind().tag()); writeRelationshipEndpoint(output, edge.owner()); writeRelationshipEndpoint(output, edge.source()); writeRelationshipEndpoint(output, edge.target());
-        writeString(output, edge.lifecycle().name()); writeString(output, edge.correlation());
+        writeString(output, PhysicalIntentRetirementProof.lifecycleTag(edge.lifecycle())); writeString(output, edge.correlation());
     }
     private static FrontierDomainRelationships.Edge readRelationshipEdge(DataInputStream input) throws IOException {
         String tag = readString(input); FrontierDomainRelationships.Kind kind = java.util.Arrays.stream(FrontierDomainRelationships.Kind.values())
                 .filter(value -> value.tag().equals(tag)).findFirst().orElseThrow(() -> new IllegalArgumentException("unknown retirement relationship tag"));
         var owner = readRelationshipEndpoint(input); var source = readRelationshipEndpoint(input); var target = readRelationshipEndpoint(input);
-        return new FrontierDomainRelationships.Edge(kind, owner, source, target, FrontierDomainRelationships.Lifecycle.valueOf(readString(input)), readString(input));
+        return new FrontierDomainRelationships.Edge(kind, owner, source, target, PhysicalIntentRetirementProof.lifecycleFromTag(readString(input)), readString(input));
     }
     private static void writeRelationshipEndpoint(DataOutputStream output, FrontierDomainRelationships.Endpoint endpoint) throws IOException {
-        if (endpoint instanceof FrontierDomainRelationships.SubjectEndpoint subject) { output.writeByte(1); writeString(output, subject.kind().name()); writeSubject(output, subject.id()); }
+        if (endpoint instanceof FrontierDomainRelationships.SubjectEndpoint subject) { output.writeByte(1); writeString(output, PhysicalIntentRetirementProof.entityKindTag(subject.kind())); writeSubject(output, subject.id()); }
         else if (endpoint instanceof FrontierDomainRelationships.ProvisionAllocationEndpoint allocation) { output.writeByte(2); writeSubject(output, allocation.settlementId()); output.writeInt(allocation.cycle()); output.writeInt(allocation.ordinal()); }
         else if (endpoint instanceof FrontierDomainRelationships.SceneLeaseEndpoint lease) { output.writeByte(3); writeString(output, lease.id().value()); }
         else if (endpoint instanceof FrontierDomainRelationships.CarrierEvidenceEndpoint carrier) { output.writeByte(4); writeSubject(output, carrier.actorId()); writeString(output, carrier.carrierId()); }
@@ -876,7 +876,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     }
     private static FrontierDomainRelationships.Endpoint readRelationshipEndpoint(DataInputStream input) throws IOException {
         return switch (input.readUnsignedByte()) {
-            case 1 -> new FrontierDomainRelationships.SubjectEndpoint(FrontierDomainRelationships.EntityKind.valueOf(readString(input)), readSubject(input).value());
+            case 1 -> new FrontierDomainRelationships.SubjectEndpoint(PhysicalIntentRetirementProof.entityKindFromTag(readString(input)), readSubject(input).value());
             case 2 -> new FrontierDomainRelationships.ProvisionAllocationEndpoint(readSubject(input).value(), input.readInt(), input.readInt());
             case 3 -> new FrontierDomainRelationships.SceneLeaseEndpoint(new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(readString(input)));
             case 4 -> new FrontierDomainRelationships.CarrierEvidenceEndpoint(readSubject(input).value(), readString(input));

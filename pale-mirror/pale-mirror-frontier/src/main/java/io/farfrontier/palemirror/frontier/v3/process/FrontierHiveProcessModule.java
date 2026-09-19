@@ -147,7 +147,7 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
         return PhysicalIntentRetirementAccount.declared(owner,
                 java.util.EnumSet.allOf(PhysicalIntentRetirementAccount.Dimension.class),
                 FrontierHiveProcessModule::bindRetirement,
-                (before, after, intent, transition) -> {
+                (before, after, intent, transition, binding) -> {
                     if (intent.lifecycleOwner() != owner) throw new IllegalArgumentException("hive retirement account owner mismatch");
                 });
     }

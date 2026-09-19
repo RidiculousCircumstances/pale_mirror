@@ -55,9 +55,14 @@ class PhysicalIntentLifecycleCompositionTest {
         PhysicalIntentRetirementAccount incomplete = new PhysicalIntentRetirementAccount() {
             @Override public PhysicalIntentLifecycleOwner owner() { return first; }
             @Override public java.util.EnumSet<Dimension> checkedDimensions() { return java.util.EnumSet.noneOf(Dimension.class); }
+            @Override public Binding bind(io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState before,
+                                          io.farfrontier.palemirror.frontier.v3.api.FrontierCommand command,
+                                          PhysicalIntent intent, PhysicalIntentTransition transition) {
+                return PhysicalIntentRetirementAccount.checkedNone(first, command, intent, transition);
+            }
             @Override public void verifyOwnerState(io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState before,
                                                    io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState after,
-                                                   PhysicalIntent intent, PhysicalIntentTransition transition) { }
+                                                   PhysicalIntent intent, PhysicalIntentTransition transition, Binding binding) { }
         };
         FrontierWorldProcessModule incompleteAccount = module(Arrays.stream(PhysicalIntentLifecycleOwner.values())
                 .map(owner -> capability(owner, supported(owner), PhysicalIntentLifecycleRetirementPolicy.noPhysical(owner),
@@ -152,7 +157,8 @@ class PhysicalIntentLifecycleCompositionTest {
     private static PhysicalIntentRetirementAccount account(PhysicalIntentLifecycleOwner owner) {
         return PhysicalIntentRetirementAccount.declared(owner,
                 java.util.EnumSet.allOf(PhysicalIntentRetirementAccount.Dimension.class),
-                (before, after, intent, transition) -> {
+                (before, command, intent, transition) -> PhysicalIntentRetirementAccount.checkedNone(owner, command, intent, transition),
+                (before, after, intent, transition, binding) -> {
                     if (intent.lifecycleOwner() != owner) throw new IllegalArgumentException("test owner mismatch");
                 });
     }
