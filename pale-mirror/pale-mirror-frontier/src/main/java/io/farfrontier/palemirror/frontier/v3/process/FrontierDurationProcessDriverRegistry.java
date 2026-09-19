@@ -5,7 +5,6 @@ import io.farfrontier.palemirror.frontier.v3.kernel.DeterministicProcessDescript
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.LogisticsSceneCause;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierPhysicalIntentLifecycle;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 
 import java.util.ArrayList;
@@ -250,7 +249,6 @@ public final class FrontierDurationProcessDriverRegistry {
                 throw new IllegalStateException("execution-boundary continuation policy drift: " + family);
             }
         }
-        FrontierPhysicalIntentLifecycle.requireComposition(inventory());
     }
 
     public sealed interface Driver permits ColdDriver, HotDriver { Family family(); }
