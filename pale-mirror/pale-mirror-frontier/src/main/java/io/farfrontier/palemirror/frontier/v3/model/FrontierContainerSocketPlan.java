@@ -26,7 +26,7 @@ public final class FrontierContainerSocketPlan {
             // equivalent topology-aware point predicate; use it without changing the immutable
             // plan or the source of truth.
             return FrontierRouteNetwork.isSurfaceCell(state.bootstrap(), state.routeTopology(), position)
-                    ? Optional.of(new GrayboxCell(position, FrontierRouteNetwork.OWNER, GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE))
+                    ? Optional.of(new GrayboxCell(position, new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER), GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE))
                     : Optional.empty();
         }
         for (Settlement settlement : state.bootstrap().settlements()) {
@@ -35,17 +35,17 @@ public final class FrontierContainerSocketPlan {
             return settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.DEPOT)
                     .filter(structure -> state.structureConditions().get(structure.id()) != StructureCondition.DESTROYED)
                     .filter(structure -> SettlementDepotServicePort.forDepot(structure).socketSurface().support().equals(position))
-                    .map(structure -> new GrayboxCell(position, structure.id(), GrayboxMaterial.DEPOT, GrayboxSemanticPart.FOUNDATION)).findFirst();
+                    .map(structure -> new GrayboxCell(position, new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, structure.id()), GrayboxMaterial.DEPOT, GrayboxSemanticPart.FOUNDATION)).findFirst();
         }
         for (HiveOrgan organ : state.bootstrap().hive().organs()) {
             if (organ.containerId().filter(surface.containerId()::equals).isPresent() && organ.anchor().equals(position)) {
-                return Optional.of(new GrayboxCell(position, organ.id(), hiveMaterial(organ), GrayboxSemanticPart.HIVE_TISSUE));
+                return Optional.of(new GrayboxCell(position, new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.HIVE_ORGAN, organ.id()), hiveMaterial(organ), GrayboxSemanticPart.HIVE_TISSUE));
             }
         }
         HiveOrgan added = state.hiveColony().addedOrgans().values().stream()
                 .filter(organ -> organ.containerId().filter(surface.containerId()::equals).isPresent())
                 .filter(organ -> organ.anchor().equals(position)).findFirst().orElse(null);
-        return added == null ? Optional.empty() : Optional.of(new GrayboxCell(position, added.id(), hiveMaterial(added), GrayboxSemanticPart.HIVE_TISSUE));
+        return added == null ? Optional.empty() : Optional.of(new GrayboxCell(position, new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.HIVE_ORGAN, added.id()), hiveMaterial(added), GrayboxSemanticPart.HIVE_TISSUE));
     }
 
     private static GrayboxMaterial hiveMaterial(HiveOrgan organ) {

@@ -78,7 +78,7 @@ final class FrontierV3StructuralRepairExecutor {
         if (!level.getBlockState(target.position()).equals(FrontierV3GrayboxExecutor.material(target.cell().material()))) {
             unknown(runtime, intent.id(), "postcondition-conflict"); return;
         }
-        FrontierV3GrayboxLedger.get(level).repaired(target.position(), target.cell().ownerId().value(), target.cell().material().name(), target.cell().semanticPart().name());
+        FrontierV3GrayboxLedger.get(level).repaired(target.position(), target.cell().ownerId().value(), target.cell().semanticTarget().kind().wireTag(), target.cell().material().name(), target.cell().semanticPart().name());
         StructuralRepairObservation observation = new StructuralRepairObservation(
                 new PhysicalObservationId("observation:" + intent.id().value().replace(':', '-')), intent.id(), target.material().id(),
                 new BlockPosition(target.position().getX(), target.position().getY(), target.position().getZ()));
@@ -96,7 +96,7 @@ final class FrontierV3StructuralRepairExecutor {
         if (!FrontierV3CargoHandoffExecutor.exactMatch(stack, material) || !level.getBlockState(position).isAir()) return false;
         if (!level.setBlock(position, FrontierV3GrayboxExecutor.material(cell.material()), 3)) return false;
         stack.shrink(1); chest.setItem(slot, stack); chest.setChanged();
-        ledger.repaired(position, cell.ownerId().value(), cell.material().name(), cell.semanticPart().name());
+        ledger.repaired(position, cell.ownerId().value(), cell.semanticTarget().kind().wireTag(), cell.material().name(), cell.semanticPart().name());
         return true;
     }
 
@@ -104,11 +104,11 @@ final class FrontierV3StructuralRepairExecutor {
         BlockPosition raw = wholeBlock(intent); if (raw == null) return null;
         io.farfrontier.palemirror.frontier.v3.model.PhysicalDelta loss = state.physicalDeltas().get(raw);
         if (loss == null || loss.kind() != io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS
-                || !loss.ownerId().equals(Optional.of(intent.causeSubjectId()))) return null;
+                || !loss.semanticTarget().equals(intent.semanticTarget())) return null;
         GrayboxCell cell = FrontierGrayboxPlan.intactSemanticCell(state.bootstrap(), state.hiveColony(), state.routeTopology(), intent.causeSubjectId(), raw);
         SubjectId itemId = intent.subjectIds().stream().filter(id -> !id.equals(intent.causeSubjectId())).findFirst().orElse(null);
         ExactItemStack material = itemId == null ? null : state.inventory().items().get(itemId);
-        if (cell == null || material == null || !material.itemKind().equals(cell.material().repairItemKind())
+        if (cell == null || !cell.semanticTarget().equals(intent.semanticTarget().orElse(null)) || material == null || !material.itemKind().equals(cell.material().repairItemKind())
                 || !(material.custody() instanceof io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.ContainerSlot slot)) return null;
         ContainerSurface surface = state.inventory().surfaces().get(slot.containerId());
         if (surface == null) return null;

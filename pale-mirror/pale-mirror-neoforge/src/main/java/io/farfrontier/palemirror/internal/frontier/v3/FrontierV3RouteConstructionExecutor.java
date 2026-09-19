@@ -100,7 +100,7 @@ final class FrontierV3RouteConstructionExecutor {
         if (!level.getBlockState(position).isAir() || ledger.claim(position) != null) return false;
         ledger.ensureCapacityFor(position);
         if (!level.setBlock(position, FrontierV3GrayboxExecutor.material(cell.material()), 3)) return false;
-        ledger.applied(position, cell.ownerId().value(), cell.material().name(), cell.semanticPart().name());
+        ledger.applied(position, cell.ownerId().value(), cell.semanticTarget().kind().wireTag(), cell.material().name(), cell.semanticPart().name());
         return true;
     }
 
@@ -122,7 +122,8 @@ final class FrontierV3RouteConstructionExecutor {
                 || cargoId == null || !material.custody().equals(new io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.Cargo(cargoId))) return null;
         List<BlockPosition> cells = FrontierGrayboxPlan.routeConstructionCells(state, project);
         if (project.confirmedCells() >= cells.size() || !cells.get(project.confirmedCells()).equals(raw)) return null;
-        return new Target(new BlockPos(raw.x(), raw.y(), raw.z()), new GrayboxCell(raw, new SubjectId("route:frontier-network"), GrayboxMaterial.ROUTE,
+        return new Target(new BlockPos(raw.x(), raw.y(), raw.z()), new GrayboxCell(raw, new io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTarget(
+                io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, new SubjectId("route:frontier-network")), GrayboxMaterial.ROUTE,
                 GrayboxSemanticPart.ROUTE_SURFACE), project, material);
     }
 

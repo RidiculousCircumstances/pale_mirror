@@ -407,7 +407,8 @@ public final class HiveSettlementAssaultProcess {
         // The cause is the exact semantic strike, not merely the bioform that happened to make it.
         SubjectId cause = SettlementAssaultCauseIdentity.strike(assault.id(), attacker, assault.nextStrikeEpoch());
         return Optional.of(new DeferredAftermath(id, assault.hiveId(), cause, now, java.util.OptionalLong.empty(), "captive-bomber-strike:" + assault.id().value(),
-                DeferredAftermathKnowledge.KNOWN_CLEAR, assault.nextStrikeEpoch(), List.of(new DeferredAftermathCell(position, cell.ownerId(), cell.material(), cell.semanticPart(),
+                DeferredAftermathKnowledge.KNOWN_CLEAR, assault.nextStrikeEpoch(), List.of(new DeferredAftermathCell(position,
+                new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, cell.ownerId()), cell.material(), cell.semanticPart(),
                 -1L, DeferredAftermathCellStatus.PENDING)), 0));
     }
     private static SubjectId choose(List<SubjectId> values, int epoch) { return values.get(Math.floorMod(epoch, values.size())); }

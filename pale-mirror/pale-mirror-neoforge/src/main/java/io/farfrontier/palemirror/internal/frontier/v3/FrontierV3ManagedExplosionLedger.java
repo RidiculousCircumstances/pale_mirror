@@ -34,7 +34,7 @@ import java.util.UUID;
 /** Durable post-impact evidence for a real v3-owned explosion, never a replay queue. */
 final class FrontierV3ManagedExplosionLedger extends SavedData {
     private static final String NAME = "pale_mirror_frontier_v3_managed_explosions";
-    private static final int FORMAT = 3, MAX_EFFECTS = 64, MAX_CELLS = 65_536, MAX_ENTITIES = 128, MAX_ITEMS = 256;
+    private static final int FORMAT = 4, MAX_EFFECTS = 64, MAX_CELLS = 65_536, MAX_ENTITIES = 128, MAX_ITEMS = 256;
     private final LinkedHashMap<String, Pending> pending;
 
     private FrontierV3ManagedExplosionLedger() { this(new LinkedHashMap<>()); }
@@ -183,12 +183,13 @@ final class FrontierV3ManagedExplosionLedger extends SavedData {
         try {
             var material = io.farfrontier.palemirror.frontier.v3.model.GrayboxMaterial.valueOf(claim.material());
             var part = io.farfrontier.palemirror.frontier.v3.model.GrayboxSemanticPart.valueOf(claim.semanticPart());
-            return baseline.equals(FrontierV3GrayboxExecutor.material(material)) ? Optional.of(new FrontierV3PhysicalObservationLedger.Semantic(claim.owner(), part.name())) : Optional.empty();
+            io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.fromWireTag(claim.targetTag());
+            return baseline.equals(FrontierV3GrayboxExecutor.material(material)) ? Optional.of(new FrontierV3PhysicalObservationLedger.Semantic(claim.owner(), claim.targetTag(), part.name())) : Optional.empty();
         } catch (IllegalArgumentException ignored) { return Optional.empty(); }
     }
 
     static FrontierV3ManagedExplosionLedger load(CompoundTag tag, HolderLookup.Provider registries) {
-        int format = tag.getInt("format"); if (format != 1 && format != 2 && format != FORMAT) throw new IllegalStateException("incompatible v3 managed explosion ledger");
+        int format = tag.getInt("format"); if (format != FORMAT) throw new IllegalStateException("incompatible v3 managed explosion ledger; fresh current-schema world required");
         ListTag values = tag.getList("pending", Tag.TAG_COMPOUND);
         if (values.size() > MAX_EFFECTS) throw new IllegalStateException("v3 managed explosion retention exceeded");
         LinkedHashMap<String, Pending> pending = new LinkedHashMap<>();
@@ -213,14 +214,14 @@ final class FrontierV3ManagedExplosionLedger extends SavedData {
         BlockState baseline(HolderLookup.Provider registries) { return NbtUtils.readBlockState(registries.lookupOrThrow(net.minecraft.core.registries.Registries.BLOCK), baseline); }
         CompoundTag save() {
             CompoundTag value = new CompoundTag(); value.putLong("pos", position); value.put("baseline", baseline.copy());
-            semantic.ifPresent(known -> { value.putString("owner", known.owner()); value.putString("part", known.semanticPart()); });
+            semantic.ifPresent(known -> { value.putString("owner", known.owner()); value.putInt("targetTag", known.targetTag()); value.putString("part", known.semanticPart()); });
             infectionCell.ifPresent(cell -> { value.putInt("infectionX", cell.x()); value.putInt("infectionZ", cell.z()); }); return value;
         }
         static BlockCandidate load(CompoundTag value) {
             if (!value.contains("pos", Tag.TAG_LONG) || !value.contains("baseline", Tag.TAG_COMPOUND)) throw new IllegalStateException("incomplete managed explosion block");
-            boolean owner = value.contains("owner", Tag.TAG_STRING), part = value.contains("part", Tag.TAG_STRING), x = value.contains("infectionX", Tag.TAG_INT), z = value.contains("infectionZ", Tag.TAG_INT);
-            if (owner != part || x != z) throw new IllegalStateException("partial managed explosion block evidence");
-            return new BlockCandidate(value.getLong("pos"), value.getCompound("baseline"), owner ? Optional.of(new FrontierV3PhysicalObservationLedger.Semantic(value.getString("owner"), value.getString("part"))) : Optional.empty(),
+            boolean owner = value.contains("owner", Tag.TAG_STRING), target = value.contains("targetTag", Tag.TAG_INT), part = value.contains("part", Tag.TAG_STRING), x = value.contains("infectionX", Tag.TAG_INT), z = value.contains("infectionZ", Tag.TAG_INT);
+            if (owner != part || owner != target || x != z) throw new IllegalStateException("partial managed explosion block evidence");
+            return new BlockCandidate(value.getLong("pos"), value.getCompound("baseline"), owner ? Optional.of(new FrontierV3PhysicalObservationLedger.Semantic(value.getString("owner"), value.getInt("targetTag"), value.getString("part"))) : Optional.empty(),
                     x ? Optional.of(new InfectionCell(value.getInt("infectionX"), value.getInt("infectionZ"))) : Optional.empty());
         }
     }

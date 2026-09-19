@@ -512,7 +512,7 @@ class FrontierV3ServerRuntimeTest {
         io.farfrontier.palemirror.frontier.v3.model.DeferredAftermath aftermath = new io.farfrontier.palemirror.frontier.v3.model.DeferredAftermath(
                 aftermathId, initial.bootstrap().hive().id(), new SubjectId("bioform:east-2"), 0L, java.util.OptionalLong.empty(),
                 "test:runtime-recovery", io.farfrontier.palemirror.frontier.v3.model.DeferredAftermathKnowledge.KNOWN_CLEAR, 0L,
-                List.of(new io.farfrontier.palemirror.frontier.v3.model.DeferredAftermathCell(hall.anchor(), cell.ownerId(), cell.material(), cell.semanticPart(),
+                List.of(new io.farfrontier.palemirror.frontier.v3.model.DeferredAftermathCell(hall.anchor(), cell.semanticTarget(), cell.material(), cell.semanticPart(),
                         io.farfrontier.palemirror.frontier.v3.model.DeferredAftermathCellStatus.PENDING)), 0);
         var configuration = new io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<>(base.worldId(),
                 initial.withChanges(io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateUpdate.begin()

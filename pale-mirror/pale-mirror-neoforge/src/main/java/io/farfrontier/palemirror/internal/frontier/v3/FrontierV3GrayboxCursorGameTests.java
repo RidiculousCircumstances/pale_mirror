@@ -6,6 +6,8 @@ import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxCell;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxMaterial;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxSemanticPart;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTarget;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
@@ -39,7 +41,7 @@ public final class FrontierV3GrayboxCursorGameTests {
     public static void publicAccessSurfaceRequiresSupportAndRetainsHallProvenance(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); BlockPos position = helper.absolutePos(new BlockPos(16, 8, 0));
         GrayboxCell surface = new GrayboxCell(new BlockPosition(position.getX(), position.getY(), position.getZ()),
-                new SubjectId("structure:access-hall"), GrayboxMaterial.ROUTE, GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE);
+                target(PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, "structure:access-hall"), GrayboxMaterial.ROUTE, GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE);
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
         helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, surface), FrontierV3GrayboxExecutor.ProjectionResult.DEFERRED,
                 "an unsupported public access sill must defer rather than float or adopt terrain");
@@ -58,7 +60,7 @@ public final class FrontierV3GrayboxCursorGameTests {
     public static void worksiteStagingRequiresRealSupportAndKeepsProjectProvenance(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); BlockPos position = helper.absolutePos(new BlockPos(20, 8, 0));
         GrayboxCell staging = new GrayboxCell(new BlockPosition(position.getX(), position.getY(), position.getZ()),
-                new SubjectId("construction:staging-proof"), GrayboxMaterial.WORKSITE, GrayboxSemanticPart.WORKSITE_STAGING);
+                target(PhysicalDeltaSemanticTargetKind.ROUTE_CONSTRUCTION, "construction:staging-proof"), GrayboxMaterial.WORKSITE, GrayboxSemanticPart.WORKSITE_STAGING);
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
         helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, staging), FrontierV3GrayboxExecutor.ProjectionResult.DEFERRED,
                 "a temporary work floor may not float merely to make a scene materialize");
@@ -78,9 +80,9 @@ public final class FrontierV3GrayboxCursorGameTests {
         BlockPos input = helper.absolutePos(new BlockPos(22, 8, 0)), processing = input.east();
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
         GrayboxCell inputStation = new GrayboxCell(new BlockPosition(input.getX(), input.getY(), input.getZ()),
-                new SubjectId("structure:workshop-stations"), GrayboxMaterial.WORKSHOP_INPUT, GrayboxSemanticPart.WORKSHOP_INPUT_STATION);
+                target(PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, "structure:workshop-stations"), GrayboxMaterial.WORKSHOP_INPUT, GrayboxSemanticPart.WORKSHOP_INPUT_STATION);
         GrayboxCell processingStation = new GrayboxCell(new BlockPosition(processing.getX(), processing.getY(), processing.getZ()),
-                new SubjectId("structure:workshop-stations"), GrayboxMaterial.WORKSHOP_PROCESS, GrayboxSemanticPart.WORKSHOP_PROCESS_STATION);
+                target(PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, "structure:workshop-stations"), GrayboxMaterial.WORKSHOP_PROCESS, GrayboxSemanticPart.WORKSHOP_PROCESS_STATION);
         level.setBlock(input.below(), Blocks.STONE.defaultBlockState(), 3);
         level.setBlock(processing.below(), Blocks.STONE.defaultBlockState(), 3);
         helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, inputStation), FrontierV3GrayboxExecutor.ProjectionResult.APPLIED,
@@ -105,18 +107,26 @@ public final class FrontierV3GrayboxCursorGameTests {
         // air template so another GameTest cannot inherit its SavedData claims.
         for (int offset = 0; offset < 16; offset++) {
             BlockPos position = helper.absolutePos(new BlockPos(offset, 8, 4));
-            ledger.applied(position, "structure:static-" + offset, GrayboxMaterial.HALL.name(), GrayboxSemanticPart.FOUNDATION.name());
+            ledger.applied(position, "structure:static-" + offset,
+                    io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE.wireTag(),
+                    GrayboxMaterial.HALL.name(), GrayboxSemanticPart.FOUNDATION.name());
         }
         BlockPos first = helper.absolutePos(new BlockPos(0, 8, 8));
         BlockPos second = helper.absolutePos(new BlockPos(1, 8, 8));
-        ledger.applied(first, "construction:index-a", GrayboxMaterial.WORKSITE.name(), GrayboxSemanticPart.WORKSITE_STAGING.name());
-        ledger.applied(second, "construction:index-b", GrayboxMaterial.WORKSITE.name(), GrayboxSemanticPart.WORKSITE_STAGING.name());
+        ledger.applied(first, "construction:index-a",
+                io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.ROUTE_CONSTRUCTION.wireTag(),
+                GrayboxMaterial.WORKSITE.name(), GrayboxSemanticPart.WORKSITE_STAGING.name());
+        ledger.applied(second, "construction:index-b",
+                io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.ROUTE_CONSTRUCTION.wireTag(),
+                GrayboxMaterial.WORKSITE.name(), GrayboxSemanticPart.WORKSITE_STAGING.name());
         FrontierV3GrayboxLedger restored = FrontierV3GrayboxLedger.load(ledger.save(new net.minecraft.nbt.CompoundTag(), level.registryAccess()), level.registryAccess());
         helper.assertValueEqual(restored.claimsWithSemanticPart(GrayboxSemanticPart.WORKSITE_STAGING.name()).stream()
                         .filter(value -> value.claim().owner().startsWith("construction:index-"))
                         .map(value -> value.position().asLong()).toList(), List.of(first.asLong(), second.asLong()),
                 "only this test's exact retained temporary claims are returned in stable order after restart; concurrent worksite provenance is not this owner's work");
-        restored.retire(first, "construction:index-a", GrayboxMaterial.WORKSITE.name(), GrayboxSemanticPart.WORKSITE_STAGING.name());
+        restored.retire(first, "construction:index-a",
+                io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.ROUTE_CONSTRUCTION.wireTag(),
+                GrayboxMaterial.WORKSITE.name(), GrayboxSemanticPart.WORKSITE_STAGING.name());
         helper.assertValueEqual(restored.claimsWithSemanticPart(GrayboxSemanticPart.WORKSITE_STAGING.name()).stream()
                         .filter(value -> value.claim().owner().startsWith("construction:index-"))
                         .count(), 1L,
@@ -154,9 +164,9 @@ public final class FrontierV3GrayboxCursorGameTests {
         ServerLevel level = helper.getLevel(); BlockPos footing = helper.absolutePos(new BlockPos(26, 8, 4)); BlockPos sill = footing.above();
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
         GrayboxCell foundation = new GrayboxCell(new BlockPosition(footing.getX(), footing.getY(), footing.getZ()),
-                new SubjectId("structure:surveyed-infirmary"), GrayboxMaterial.INFIRMARY, GrayboxSemanticPart.FOUNDATION);
+                target(PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, "structure:surveyed-infirmary"), GrayboxMaterial.INFIRMARY, GrayboxSemanticPart.FOUNDATION);
         GrayboxCell publicSill = new GrayboxCell(new BlockPosition(sill.getX(), sill.getY(), sill.getZ()),
-                new SubjectId("settlement:surveyed"), GrayboxMaterial.ROUTE, GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE);
+                target(PhysicalDeltaSemanticTargetKind.SETTLEMENT_INFRASTRUCTURE, "settlement:surveyed"), GrayboxMaterial.ROUTE, GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE);
 
         helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, publicSill), FrontierV3GrayboxExecutor.ProjectionResult.DEFERRED,
                 "a higher facility approach must not float before its immutable footing is physically present");
@@ -176,9 +186,9 @@ public final class FrontierV3GrayboxCursorGameTests {
         ServerLevel level = helper.getLevel(); BlockPos root = helper.absolutePos(new BlockPos(30, 8, 4)); BlockPos organBase = root.above();
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
         GrayboxCell rootTissue = new GrayboxCell(new BlockPosition(root.getX(), root.getY(), root.getZ()),
-                new SubjectId("organ:surveyed-hive-ganglion"), GrayboxMaterial.HIVE_GANGLION, GrayboxSemanticPart.FOUNDATION);
+                target(PhysicalDeltaSemanticTargetKind.HIVE_ORGAN, "organ:surveyed-hive-ganglion"), GrayboxMaterial.HIVE_GANGLION, GrayboxSemanticPart.FOUNDATION);
         GrayboxCell organTissue = new GrayboxCell(new BlockPosition(organBase.getX(), organBase.getY(), organBase.getZ()),
-                new SubjectId("organ:surveyed-hive-ganglion"), GrayboxMaterial.HIVE_GANGLION, GrayboxSemanticPart.HIVE_TISSUE);
+                target(PhysicalDeltaSemanticTargetKind.HIVE_ORGAN, "organ:surveyed-hive-ganglion"), GrayboxMaterial.HIVE_GANGLION, GrayboxSemanticPart.HIVE_TISSUE);
 
         level.setBlock(root.below(), Blocks.AIR.defaultBlockState(), 3);
         helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, rootTissue), FrontierV3GrayboxExecutor.ProjectionResult.DEFERRED,
@@ -225,16 +235,19 @@ public final class FrontierV3GrayboxCursorGameTests {
     }
 
     private static GrayboxCell cell(int x, int y, int z, String owner) {
-        return new GrayboxCell(new BlockPosition(x, y, z), new SubjectId(owner), GrayboxMaterial.HIVE_STORE, GrayboxSemanticPart.HIVE_TISSUE);
+        return new GrayboxCell(new BlockPosition(x, y, z), target(PhysicalDeltaSemanticTargetKind.HIVE_ORGAN, owner), GrayboxMaterial.HIVE_STORE, GrayboxSemanticPart.HIVE_TISSUE);
     }
 
     private static GrayboxCell routeSurface(BlockPos position) {
         return new GrayboxCell(new BlockPosition(position.getX(), position.getY(), position.getZ()),
-                new SubjectId("route:frontier-network"), GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
+                target(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, "route:frontier-network"), GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
     }
 
     private static GrayboxCell routeFoundation(BlockPos position) {
         return new GrayboxCell(new BlockPosition(position.getX(), position.getY(), position.getZ()),
-                new SubjectId("route:frontier-network"), GrayboxMaterial.ROUTE_FOUNDATION, GrayboxSemanticPart.ROUTE_FOUNDATION);
+                target(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, "route:frontier-network"), GrayboxMaterial.ROUTE_FOUNDATION, GrayboxSemanticPart.ROUTE_FOUNDATION);
+    }
+    private static PhysicalDeltaSemanticTarget target(PhysicalDeltaSemanticTargetKind kind, String subject) {
+        return new PhysicalDeltaSemanticTarget(kind, new SubjectId(subject));
     }
 }

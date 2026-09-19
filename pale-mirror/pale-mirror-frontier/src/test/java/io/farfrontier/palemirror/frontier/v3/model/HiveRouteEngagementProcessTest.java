@@ -651,7 +651,7 @@ class HiveRouteEngagementProcessTest {
         if (cells.size() != losses) throw new IllegalStateException("test organ has too few exact cells");
         for (GrayboxCell cell : cells) {
             state = state.recordPhysicalDelta(new PhysicalDelta(cell.position(), PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
-                    Optional.of(organ.id()), Optional.of(cell.semanticPart()), "test:relay-loss"));
+                    Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.HIVE_ORGAN, organ.id())), Optional.of(cell.semanticPart()), "test:relay-loss"));
         }
         return state;
     }

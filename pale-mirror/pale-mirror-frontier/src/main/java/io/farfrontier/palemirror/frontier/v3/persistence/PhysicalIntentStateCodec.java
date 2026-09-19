@@ -12,6 +12,7 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWireTags;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTarget;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -36,6 +37,8 @@ final class PhysicalIntentStateCodec {
             if (intent.postconditionObservationId().isPresent()) FrontierWorldStateCodec.writeString(output, intent.postconditionObservationId().orElseThrow().value());
             output.writeBoolean(intent.targetSlot().isPresent());
             if (intent.targetSlot().isPresent()) { FrontierWorldStateCodec.writeString(output, intent.targetSlot().orElseThrow().containerId().value()); output.writeByte(intent.targetSlot().orElseThrow().slot()); }
+            output.writeBoolean(intent.semanticTarget().isPresent());
+            if (intent.semanticTarget().isPresent()) { PhysicalDeltaPayloadCodecs.writeTarget(output, intent.semanticTarget().orElseThrow()); }
             output.writeByte(PhysicalIntentLifecycleOwner.CODEC_VERSION); FrontierWorldStateCodec.writeString(output, intent.lifecycleOwner().stableId());
         }
     }
@@ -51,9 +54,10 @@ final class PhysicalIntentStateCodec {
             Optional<PhysicalObservationId> observation = observed ? Optional.of(new PhysicalObservationId(FrontierWorldStateCodec.readString(input))) : Optional.empty();
             Optional<PhysicalContainerSlot> target = hasTypedTargetSlot && input.readBoolean()
                     ? Optional.of(new PhysicalContainerSlot(new SubjectId(FrontierWorldStateCodec.readString(input)), input.readUnsignedByte())) : Optional.empty();
+            Optional<PhysicalDeltaSemanticTarget> semanticTarget = input.readBoolean() ? Optional.of(PhysicalDeltaPayloadCodecs.readTarget(input)) : Optional.empty();
             PhysicalIntentLifecycleOwner lifecycleOwner = PhysicalIntentLifecycleOwner.fromWire(input.readUnsignedByte(), FrontierWorldStateCodec.readString(input));
             PhysicalIntent intent = new PhysicalIntent(id, FrontierWireTags.require(PhysicalIntentKind.class, kind), FrontierWireTags.require(PhysicalIntentStatus.class, status), cause,
-                    subjects, origin, radius, FrontierWireTags.require(PhysicalPostcondition.class, postcondition), observation, target, lifecycleOwner);
+                    subjects, origin, radius, FrontierWireTags.require(PhysicalPostcondition.class, postcondition), observation, target, semanticTarget, lifecycleOwner);
             if (kind >= PhysicalIntentKind.values().length || status >= PhysicalIntentStatus.values().length || postcondition >= PhysicalPostcondition.values().length || intents.put(id, intent) != null) {
                 throw new IllegalArgumentException("invalid or duplicate physical intent");
             }

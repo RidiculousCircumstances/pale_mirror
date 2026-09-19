@@ -27,7 +27,7 @@ class RouteConstructionProcessIntegrationTest {
         FrontierWorldState initial = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         SubjectId settlement = initial.bootstrap().settlements().getFirst().id();
         BlockPosition loss = initial.routeTopology().supplyWaypoints(initial.bootstrap(), settlement).get(1);
-        PhysicalDelta delta = new PhysicalDelta(loss, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, Optional.of(FrontierRouteNetwork.OWNER),
+        PhysicalDelta delta = new PhysicalDelta(loss, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)),
                 Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "blast:test");
         CommandId commandId = new CommandId("command:route-reroute-loss");
         assertInstanceOf(CommandResult.Accepted.class, engine.submit(new FrontierCommand(1, commandId, worldId, engine.checkpoint().revision(),

@@ -58,7 +58,8 @@ final class HiveLifecycleStateSupport {
         }
         if (lifecycle.phase() != BioformLifecyclePhase.WAKING) return lifecycle.phase().permitsAmbientBody();
         return physicalDeltas.values().stream().anyMatch(delta -> delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS
-                && delta.ownerId().filter(actorId::equals).isPresent()
+                && delta.semanticTarget().filter(target -> target.kind() == PhysicalDeltaSemanticTargetKind.HIVE_COCOON
+                && target.subjectId().equals(actorId)).isPresent()
                 && delta.semanticPart().filter(GrayboxSemanticPart.COCOON::equals).isPresent());
     }
 

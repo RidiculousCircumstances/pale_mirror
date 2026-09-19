@@ -75,7 +75,8 @@ public final class FrontierReadabilityPlan {
     public static ReadabilityInput input(FrontierWorldState state) {
         Objects.requireNonNull(state, "readability state");
         boolean routeDamaged = state.physicalDeltas().values().stream()
-                .anyMatch(delta -> delta.ownerId().equals(java.util.Optional.of(FrontierRouteNetwork.OWNER)));
+                .anyMatch(delta -> delta.semanticTarget().filter(target -> target.kind() == PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK
+                        && FrontierRouteNetwork.OWNER.equals(target.subjectId())).isPresent());
         boolean sceneConflict = state.sceneLeases().values().stream().anyMatch(lease -> lease.status() == SceneLeaseStatus.CONFLICT);
         boolean caravan = state.operations().values().stream().anyMatch(operation -> operation.stage() == OperationStage.EN_ROUTE);
         RouteConstruction construction = state.routeConstructions().values().stream()
@@ -205,7 +206,8 @@ public final class FrontierReadabilityPlan {
 
     private static void addRouteNetwork(Map<SubjectId, FrontierObjectBoard> values, FrontierWorldState state) {
         boolean damaged = state.physicalDeltas().values().stream().anyMatch(delta ->
-                delta.ownerId().equals(java.util.Optional.of(FrontierRouteNetwork.OWNER)));
+                delta.semanticTarget().filter(target -> target.kind() == PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK
+                        && FrontierRouteNetwork.OWNER.equals(target.subjectId())).isPresent());
         boolean sceneConflict = state.sceneLeases().values().stream().anyMatch(lease -> lease.status() == SceneLeaseStatus.CONFLICT);
         boolean caravan = state.operations().values().stream().anyMatch(operation -> operation.stage() == OperationStage.EN_ROUTE);
         FrontierObjectBoard.Tone tone = damaged || sceneConflict ? FrontierObjectBoard.Tone.WARNING : FrontierObjectBoard.Tone.SETTLEMENT;

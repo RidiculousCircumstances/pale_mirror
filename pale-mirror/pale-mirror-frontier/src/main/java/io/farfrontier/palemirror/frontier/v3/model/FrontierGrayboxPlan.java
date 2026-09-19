@@ -466,7 +466,7 @@ public final class FrontierGrayboxPlan {
             if (position.equals(HiveCocoonPlan.cocoonCell(hibernaculum, slot))) {
                 // The tray and its occupant are distinct exact semantic cells. Observation and
                 // projection must agree on the occupant palette too.
-                return new GrayboxCell(position, owner, GrayboxMaterial.HIVE_COCOON, GrayboxSemanticPart.COCOON);
+                return new GrayboxCell(position, target(PhysicalDeltaSemanticTargetKind.HIVE_COCOON, owner), GrayboxMaterial.HIVE_COCOON, GrayboxSemanticPart.COCOON);
             }
         }
         for (Settlement settlement : bootstrap.settlements()) for (SettlementStructure structure : settlement.structures()) {
@@ -480,29 +480,29 @@ public final class FrontierGrayboxPlan {
             SettlementResidentIngressPlan.Plan ingress = SettlementResidentIngressPlan.compile(bootstrap.bounds(), bootstrap.terrain(), settlement,
                     bootstrap.ruleset().facilityCapacity().intactHousingBeds());
             if (ingress.foundationCells().contains(position)) {
-                return new GrayboxCell(position, owner, GrayboxMaterial.ROUTE_FOUNDATION, GrayboxSemanticPart.FOUNDATION);
+                return new GrayboxCell(position, target(PhysicalDeltaSemanticTargetKind.SETTLEMENT_INFRASTRUCTURE, owner), GrayboxMaterial.ROUTE_FOUNDATION, GrayboxSemanticPart.FOUNDATION);
             }
             if (ingress.ownedSurfaces().stream().map(SurfaceAnchor::support).anyMatch(position::equals)) {
-                return new GrayboxCell(position, owner, GrayboxMaterial.ROUTE, GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE);
+                return new GrayboxCell(position, target(PhysicalDeltaSemanticTargetKind.SETTLEMENT_INFRASTRUCTURE, owner), GrayboxMaterial.ROUTE, GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE);
             }
             if (SettlementLocalCirculation.foundationCells(bootstrap.terrain(), settlement).contains(position)) {
-                return new GrayboxCell(position, owner, GrayboxMaterial.ROUTE_FOUNDATION, GrayboxSemanticPart.FOUNDATION);
+                return new GrayboxCell(position, target(PhysicalDeltaSemanticTargetKind.SETTLEMENT_INFRASTRUCTURE, owner), GrayboxMaterial.ROUTE_FOUNDATION, GrayboxSemanticPart.FOUNDATION);
             }
             if (SettlementLocalCirculation.surfaceCells(settlement).contains(position)) {
-                return new GrayboxCell(position, owner, GrayboxMaterial.ROUTE, GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE);
+                return new GrayboxCell(position, target(PhysicalDeltaSemanticTargetKind.SETTLEMENT_INFRASTRUCTURE, owner), GrayboxMaterial.ROUTE, GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE);
             }
         }
         if (FrontierRouteNetwork.OWNER.equals(owner)) {
             if (FrontierRouteNetwork.isSurfaceCell(bootstrap, topology, position)) {
-                return new GrayboxCell(position, owner, GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
+                return new GrayboxCell(position, target(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, owner), GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
             }
             if (FrontierRouteNetwork.isFoundationCell(bootstrap, topology, position)) {
-                return new GrayboxCell(position, owner, GrayboxMaterial.ROUTE_FOUNDATION, GrayboxSemanticPart.ROUTE_FOUNDATION);
+                return new GrayboxCell(position, target(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, owner), GrayboxMaterial.ROUTE_FOUNDATION, GrayboxSemanticPart.ROUTE_FOUNDATION);
             }
         }
         RouteConstruction project = constructions.get(owner);
         if (project != null && EngineeringWorksite.intactStagingCells(bootstrap, topology, project).contains(position)) {
-            return new GrayboxCell(position, owner, GrayboxMaterial.WORKSITE, GrayboxSemanticPart.WORKSITE_STAGING);
+            return new GrayboxCell(position, target(PhysicalDeltaSemanticTargetKind.ROUTE_CONSTRUCTION, owner), GrayboxMaterial.WORKSITE, GrayboxSemanticPart.WORKSITE_STAGING);
         }
         return null;
     }
@@ -535,7 +535,7 @@ public final class FrontierGrayboxPlan {
 
     private static void addStructure(Map<BlockPosition, GrayboxCell> cells, TerrainSurfacePlan terrain, SettlementStructure structure, StructureCondition condition) {
         visitStructureCells(terrain, structure, condition, (position, part) -> {
-            add(cells, position, structure.id(), structureMaterial(structure.kind(), part), part);
+            add(cells, position, PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, structure.id(), structureMaterial(structure.kind(), part), part);
             return false;
         });
     }
@@ -616,7 +616,7 @@ public final class FrontierGrayboxPlan {
             // Hiveroot is organ-owned support, not a second organ body.  Its FOUNDATION
             // semantic makes the generic executor require a real lower block while its
             // exact organ owner keeps physical loss/accounting causal.
-            add(cells, root, organ.id(), material, GrayboxSemanticPart.FOUNDATION);
+            add(cells, root, PhysicalDeltaSemanticTargetKind.HIVE_ORGAN, organ.id(), material, GrayboxSemanticPart.FOUNDATION);
         }
         addOrgan(cells, organ, material);
     }
@@ -641,7 +641,7 @@ public final class FrontierGrayboxPlan {
             // Unlike sealed hive organs, a hibernaculum is deliberately a shallow open tray.
             // Its living cocoons are visible, reachable and individually causal to the player.
             for (int x = -2; x <= 2; x++) for (int z = -2; z <= 2; z++) {
-                add(cells, organ.anchor().offset(x, 0, z), organ.id(), material, GrayboxSemanticPart.HIVE_TISSUE);
+                add(cells, organ.anchor().offset(x, 0, z), PhysicalDeltaSemanticTargetKind.HIVE_ORGAN, organ.id(), material, GrayboxSemanticPart.HIVE_TISSUE);
             }
             return;
         }
@@ -652,12 +652,12 @@ public final class FrontierGrayboxPlan {
             boolean ganglionThroat = organ.kind() == HiveOrganKind.GANGLION && y > 0 && y < 3
                     && (Math.abs(x) == 2 && z == 0 || Math.abs(z) == 2 && x == 0);
             if (!ganglionThroat && (y == 3 || Math.abs(x) == 2 || Math.abs(z) == 2)) {
-                add(cells, organ.anchor().offset(x, y, z), organ.id(), material, GrayboxSemanticPart.HIVE_TISSUE);
+                add(cells, organ.anchor().offset(x, y, z), PhysicalDeltaSemanticTargetKind.HIVE_ORGAN, organ.id(), material, GrayboxSemanticPart.HIVE_TISSUE);
             }
         }
         // A STORE is hollow like the other organs, but its exact chest must stand on a planned
         // tissue socket rather than on an arbitrary world block.
-        if (organ.containerId().isPresent()) add(cells, organ.anchor(), organ.id(), material, GrayboxSemanticPart.HIVE_TISSUE);
+        if (organ.containerId().isPresent()) add(cells, organ.anchor(), PhysicalDeltaSemanticTargetKind.HIVE_ORGAN, organ.id(), material, GrayboxSemanticPart.HIVE_TISSUE);
     }
 
     private static void addOccupiedCocoons(Map<BlockPosition, GrayboxCell> cells, FrontierBootstrap bootstrap, HiveColony colony) {
@@ -670,7 +670,7 @@ public final class FrontierGrayboxPlan {
                 .sorted(Map.Entry.comparingByKey()).forEach(entry -> {
                     HiveCocoonSlot slot = entry.getValue().homeSlot().orElseThrow();
                     BlockPosition position = HiveCocoonPlan.cocoonCell(findHiveOrgan(bootstrap, colony, slot.hibernaculumId()), slot);
-                    add(cells, position, entry.getKey(), GrayboxMaterial.HIVE_COCOON, GrayboxSemanticPart.COCOON);
+                    add(cells, position, PhysicalDeltaSemanticTargetKind.HIVE_COCOON, entry.getKey(), GrayboxMaterial.HIVE_COCOON, GrayboxSemanticPart.COCOON);
                 });
     }
 
@@ -682,18 +682,18 @@ public final class FrontierGrayboxPlan {
     private static void addRoutes(Map<BlockPosition, GrayboxCell> cells, FrontierBootstrap bootstrap, RouteTopology topology) {
         FrontierRouteNetwork.RouteFootprint footprint = FrontierRouteNetwork.footprint(bootstrap, topology);
         footprint.foundationCells().forEach(position -> {
-            if (!cells.containsKey(position)) add(cells, position, FrontierRouteNetwork.OWNER, GrayboxMaterial.ROUTE_FOUNDATION, GrayboxSemanticPart.ROUTE_FOUNDATION);
+            if (!cells.containsKey(position)) add(cells, position, PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER, GrayboxMaterial.ROUTE_FOUNDATION, GrayboxSemanticPart.ROUTE_FOUNDATION);
         });
         for (Settlement settlement : bootstrap.settlements()) {
             SettlementResidentIngressPlan.Plan ingress = SettlementResidentIngressPlan.compile(bootstrap.bounds(), bootstrap.terrain(), settlement,
                     bootstrap.ruleset().facilityCapacity().intactHousingBeds());
             for (BlockPosition foundation : ingress.foundationCells()) {
                 if (cells.containsKey(foundation)) continue;
-                add(cells, foundation, settlement.id(), GrayboxMaterial.ROUTE_FOUNDATION, GrayboxSemanticPart.FOUNDATION);
+                add(cells, foundation, PhysicalDeltaSemanticTargetKind.SETTLEMENT_INFRASTRUCTURE, settlement.id(), GrayboxMaterial.ROUTE_FOUNDATION, GrayboxSemanticPart.FOUNDATION);
             }
             for (BlockPosition foundation : SettlementLocalCirculation.foundationCells(bootstrap.terrain(), settlement)) {
                 if (cells.containsKey(foundation)) continue;
-                add(cells, foundation, settlement.id(), GrayboxMaterial.ROUTE_FOUNDATION, GrayboxSemanticPart.FOUNDATION);
+                add(cells, foundation, PhysicalDeltaSemanticTargetKind.SETTLEMENT_INFRASTRUCTURE, settlement.id(), GrayboxMaterial.ROUTE_FOUNDATION, GrayboxSemanticPart.FOUNDATION);
             }
         }
         footprint.surfaceCells().forEach(position -> {
@@ -703,7 +703,7 @@ public final class FrontierGrayboxPlan {
             // route topology can still require the physical support.  Any other overlap is an
             // invalid compiler layout, never an arbitrary ownership winner.
             if (existing != null && existing.semanticPart() == GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE) return;
-            add(cells, position, FrontierRouteNetwork.OWNER, GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
+            add(cells, position, PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER, GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
         });
         for (Settlement settlement : bootstrap.settlements()) {
             SettlementResidentIngressPlan.Plan ingress = SettlementResidentIngressPlan.compile(bootstrap.bounds(), bootstrap.terrain(), settlement,
@@ -711,21 +711,21 @@ public final class FrontierGrayboxPlan {
             for (SurfaceAnchor surface : ingress.ownedSurfaces()) {
                 BlockPosition position = surface.support();
                 if (cells.containsKey(position)) continue;
-                add(cells, position, settlement.id(), GrayboxMaterial.ROUTE, GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE);
+                add(cells, position, PhysicalDeltaSemanticTargetKind.SETTLEMENT_INFRASTRUCTURE, settlement.id(), GrayboxMaterial.ROUTE, GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE);
             }
             for (BlockPosition surface : SettlementLocalCirculation.surfaceCells(settlement)) {
                 // The Hall route node is deliberately already route-network owned. Every other
                 // compiled sidewalk cell belongs to the settlement's public circulation plan;
                 // an audit/materializer may observe loss but never replace it opportunistically.
                 if (cells.containsKey(surface)) continue;
-                add(cells, surface, settlement.id(), GrayboxMaterial.ROUTE, GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE);
+                add(cells, surface, PhysicalDeltaSemanticTargetKind.SETTLEMENT_INFRASTRUCTURE, settlement.id(), GrayboxMaterial.ROUTE, GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE);
             }
         }
     }
 
     private static void addActiveWorksiteStaging(Map<BlockPosition, GrayboxCell> cells, FrontierWorldState state) {
         activeWorksiteStaging(state).forEach((projectId, positions) -> positions.forEach(position ->
-                add(cells, position, projectId, GrayboxMaterial.WORKSITE, GrayboxSemanticPart.WORKSITE_STAGING)));
+                add(cells, position, PhysicalDeltaSemanticTargetKind.ROUTE_CONSTRUCTION, projectId, GrayboxMaterial.WORKSITE, GrayboxSemanticPart.WORKSITE_STAGING)));
     }
 
     private static Map<SubjectId, java.util.List<BlockPosition>> activeWorksiteStaging(FrontierWorldState state) {
@@ -737,12 +737,15 @@ public final class FrontierGrayboxPlan {
         return Map.copyOf(staging);
     }
 
-    private static void add(Map<BlockPosition, GrayboxCell> cells, BlockPosition position, SubjectId owner, GrayboxMaterial material,
+    private static void add(Map<BlockPosition, GrayboxCell> cells, BlockPosition position, PhysicalDeltaSemanticTargetKind targetKind, SubjectId owner, GrayboxMaterial material,
                             GrayboxSemanticPart part) {
-        GrayboxCell cell = new GrayboxCell(position, owner, material, part);
+        GrayboxCell cell = new GrayboxCell(position, target(targetKind, owner), material, part);
         GrayboxCell prior = cells.putIfAbsent(position, cell);
         if (prior != null && !prior.equals(cell)) throw new IllegalArgumentException("overlapping graybox cells at " + position);
         if (cells.size() > MAX_CELLS) throw new IllegalArgumentException("graybox plan cell limit exceeded");
+    }
+    private static PhysicalDeltaSemanticTarget target(PhysicalDeltaSemanticTargetKind kind, SubjectId owner) {
+        return new PhysicalDeltaSemanticTarget(kind, owner);
     }
 
     @FunctionalInterface

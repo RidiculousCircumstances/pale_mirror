@@ -111,7 +111,7 @@ class TraversalTopologyTest {
         assertEquals(GrayboxSemanticPart.ROUTE_FOUNDATION,
                 FrontierGrayboxPlan.intactSemanticCell(bootstrap, state.hiveColony(), routes, FrontierRouteNetwork.OWNER, footing).semanticPart());
         FrontierWorldState damaged = state.recordPhysicalDelta(new PhysicalDelta(footing, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
-                java.util.Optional.of(FrontierRouteNetwork.OWNER), java.util.Optional.of(GrayboxSemanticPart.ROUTE_FOUNDATION), "explosion:test"));
+                java.util.Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)), java.util.Optional.of(GrayboxSemanticPart.ROUTE_FOUNDATION), "explosion:test"));
 
         assertFalse(damaged.routeTopology().supplyPassable(bootstrap, settlement),
                 "a destroyed raised footing blocks the retained route graph; no hidden flat bypass exists");
@@ -191,9 +191,9 @@ class TraversalTopologyTest {
 
         assertEquals(68, settlement.anchor().y(), "the surveyed settlement selects its datum from its declared structures and public approaches");
         assertEquals(64, surveyed.settlements().get(1).anchor().y(), "one settlement survey never shifts another site");
-        assertEquals(new GrayboxCell(structureFooting, housing.id(), GrayboxMaterial.HOUSING, GrayboxSemanticPart.FOUNDATION),
+        assertEquals(new GrayboxCell(structureFooting, new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, housing.id()), GrayboxMaterial.HOUSING, GrayboxSemanticPart.FOUNDATION),
                 plan.cells().get(structureFooting), "a lower declared column has a structure-owned vertical foundation");
-        assertEquals(new GrayboxCell(publicFooting, settlement.id(), GrayboxMaterial.ROUTE_FOUNDATION, GrayboxSemanticPart.FOUNDATION),
+        assertEquals(new GrayboxCell(publicFooting, new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.SETTLEMENT_INFRASTRUCTURE, settlement.id()), GrayboxMaterial.ROUTE_FOUNDATION, GrayboxSemanticPart.FOUNDATION),
                 plan.cells().get(publicFooting), "the same immutable site plan supports its public approach instead of floating it");
         SettlementStructure infirmary = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.INFIRMARY).findFirst().orElseThrow();
         assertEquals(68, SettlementInfirmaryTreatmentPort.forInfirmary(infirmary).exteriorApproachSurface().y(),
@@ -202,7 +202,7 @@ class TraversalTopologyTest {
                 "the terrain-aware facility remains bound to its one canonical public topology");
 
         FrontierWorldState damaged = state.recordPhysicalDelta(new PhysicalDelta(structureFooting, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
-                java.util.Optional.of(housing.id()), java.util.Optional.of(GrayboxSemanticPart.FOUNDATION), "player:test"));
+                java.util.Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, housing.id())), java.util.Optional.of(GrayboxSemanticPart.FOUNDATION), "player:test"));
         assertEquals(StructureCondition.DAMAGED, damaged.structureConditions().get(housing.id()),
                 "foundation loss is a structural consequence, not a materializer-local hole");
         assertEquals(damaged, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(damaged)),
@@ -231,10 +231,10 @@ class TraversalTopologyTest {
 
         assertEquals(68, raisedWest.anchor().y(), "a seed nest derives its datum from all declared organ supports");
         assertEquals(64, surveyed.hive().seedNests().get(1).anchor().y(), "one nest survey never shifts the other hive territory");
-        assertEquals(new GrayboxCell(firstRoot, raisedGanglion.id(), GrayboxMaterial.HIVE_GANGLION, GrayboxSemanticPart.FOUNDATION),
+        assertEquals(new GrayboxCell(firstRoot, new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.HIVE_ORGAN, raisedGanglion.id()), GrayboxMaterial.HIVE_GANGLION, GrayboxSemanticPart.FOUNDATION),
                 plan.cells().get(firstRoot), "lower terrain receives organ-owned hiveroot instead of a floating graybox organ");
         FrontierWorldState damaged = initial.recordPhysicalDelta(new PhysicalDelta(firstRoot, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
-                java.util.Optional.of(raisedGanglion.id()), java.util.Optional.of(GrayboxSemanticPart.FOUNDATION), "player:test"));
+                java.util.Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.HIVE_ORGAN, raisedGanglion.id())), java.util.Optional.of(GrayboxSemanticPart.FOUNDATION), "player:test"));
         assertTrue(damaged.physicalDeltas().containsKey(firstRoot), "a broken hiveroot is an exact organ-owned physical consequence, not unowned terrain");
         FrontierWorldState restored = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(damaged));
         assertEquals(surveyed.canonicalSha256(), restored.bootstrap().canonicalSha256(),
@@ -268,9 +268,9 @@ class TraversalTopologyTest {
         assertTrue(ingress.topology().edges().stream().anyMatch(edge -> edge.grade() == 1),
                 "the external ingress retains actual one-block grade edges to its surveyed natural endpoint");
         BlockPosition homeFooting = ingress.homeSlots().getFirst().offset(0, -4, 0);
-        assertEquals(new GrayboxCell(homeFooting, settlement.id(), GrayboxMaterial.ROUTE_FOUNDATION, GrayboxSemanticPart.FOUNDATION),
+        assertEquals(new GrayboxCell(homeFooting, new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.SETTLEMENT_INFRASTRUCTURE, settlement.id()), GrayboxMaterial.ROUTE_FOUNDATION, GrayboxSemanticPart.FOUNDATION),
                 graybox.cells().get(homeFooting), "the raised resident apron owns its complete lower support fill");
-        assertEquals(new GrayboxCell(ingress.homeSlots().getFirst(), settlement.id(), GrayboxMaterial.ROUTE,
+        assertEquals(new GrayboxCell(ingress.homeSlots().getFirst(), new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.SETTLEMENT_INFRASTRUCTURE, settlement.id()), GrayboxMaterial.ROUTE,
                         GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE), graybox.cells().get(ingress.homeSlots().getFirst()),
                 "home surfaces are materialized public support, not abstract actor coordinates");
         assertTrue(FrontierTraversalPlan.compile(state).topologies().containsKey(ingress.topology().id()),

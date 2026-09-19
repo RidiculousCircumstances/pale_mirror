@@ -72,7 +72,8 @@ public final class FrontierWorldPhysicalObservationProcess {
     }
 
     private static boolean isKnownRouteLoss(PhysicalDelta delta) {
-        return delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS && delta.ownerId().filter(FrontierRouteNetwork.OWNER::equals).isPresent()
+        return delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS && delta.semanticTarget().filter(target -> target.kind() == PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK
+                && FrontierRouteNetwork.OWNER.equals(target.subjectId())).isPresent()
                 && delta.semanticPart().filter(part -> part == GrayboxSemanticPart.ROUTE_SURFACE || part == GrayboxSemanticPart.ROUTE_FOUNDATION).isPresent();
     }
 
@@ -93,7 +94,8 @@ public final class FrontierWorldPhysicalObservationProcess {
     /** One physical observation may damage several graybox cells, but each named workshop job is blocked once. */
     private static void appendProductionFacilityFailures(FrontierWorldState after, List<PhysicalDelta> deltas, List<ProposedEvent> events) {
         deltas.stream().filter(delta -> delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS)
-                .map(delta -> delta.ownerId().orElse(null)).filter(owner -> owner != null && owner.value().startsWith("structure:"))
+                .map(PhysicalDelta::semanticTarget).flatMap(java.util.Optional::stream)
+                .filter(target -> target.kind() == PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE).map(PhysicalDeltaSemanticTarget::subjectId)
                 .distinct().sorted().filter(structure -> after.structureConditions().get(structure) != StructureCondition.INTACT)
                 .forEach(structure -> events.addAll(ProductionProcess.planFacilityUnavailable(after, structure)));
     }

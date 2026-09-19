@@ -23,14 +23,16 @@ public final class FrontierWorldPhysicalDeltaSupport {
             if (!position.equals(delta.position())) throw new IllegalArgumentException("physical delta key differs from position evidence");
             FrontierWorldStateSupport.requirePosition(bootstrap.bounds(), position);
             if (delta.kind() != PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS) continue;
-            if (FrontierRouteNetwork.OWNER.equals(delta.ownerId().orElseThrow())) {
+            PhysicalDeltaSemanticTarget target = delta.semanticTarget().orElseThrow();
+            if (target.kind() == PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK) {
+                if (!FrontierRouteNetwork.OWNER.equals(target.subjectId())) throw new IllegalArgumentException("route loss names a foreign target");
                 GrayboxSemanticPart part = delta.semanticPart().orElseThrow();
                 if (part != GrayboxSemanticPart.ROUTE_SURFACE && part != GrayboxSemanticPart.ROUTE_FOUNDATION) {
                     throw new IllegalArgumentException("route loss must name a route surface or foundation");
                 }
                 continue;
             }
-            GrayboxCell expected = FrontierGrayboxPlan.intactSemanticCell(bootstrap, colony, topology, constructions, delta.ownerId().orElseThrow(), position);
+            GrayboxCell expected = FrontierGrayboxPlan.intactSemanticCell(bootstrap, colony, topology, constructions, target.subjectId(), position);
             if (expected == null || expected.semanticPart() != delta.semanticPart().orElseThrow()) {
                 throw new IllegalArgumentException("known physical delta is not an exact semantic cell");
             }
@@ -70,7 +72,7 @@ public final class FrontierWorldPhysicalDeltaSupport {
         }
         for (PhysicalDelta delta : deltas) {
             if (!isKnownWorksiteStagingLoss(delta)) continue;
-            SubjectId projectId = delta.ownerId().orElseThrow();
+            SubjectId projectId = delta.semanticTarget().orElseThrow().subjectId();
             RouteConstruction project = changed.routeConstructions().get(projectId);
             if (project != null && project.status() == RouteConstructionStatus.BUILDING) {
                 Map<SubjectId, RouteConstruction> projects = new LinkedHashMap<>(changed.routeConstructions());
@@ -83,8 +85,9 @@ public final class FrontierWorldPhysicalDeltaSupport {
             }
         }
         for (PhysicalDelta delta : deltas) {
-            if (delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS && delta.ownerId().orElseThrow().value().startsWith("structure:")) {
-                changed = changed.recordStructureDamage(new StructureDamaged(delta.ownerId().orElseThrow(), delta.position(), delta.semanticPart().orElseThrow(), delta.cause()));
+            if (delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS
+                    && delta.semanticTarget().orElseThrow().kind() == PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE) {
+                changed = changed.recordStructureDamage(new StructureDamaged(delta.semanticTarget().orElseThrow().subjectId(), delta.position(), delta.semanticPart().orElseThrow(), delta.cause()));
             }
         }
         for (PhysicalDelta delta : deltas) {
@@ -95,17 +98,20 @@ public final class FrontierWorldPhysicalDeltaSupport {
 
     private static boolean isKnownRouteLoss(PhysicalDelta delta) {
         return delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS
-                && delta.ownerId().filter(FrontierRouteNetwork.OWNER::equals).isPresent()
+                && delta.semanticTarget().filter(target -> target.kind() == PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK
+                && FrontierRouteNetwork.OWNER.equals(target.subjectId())).isPresent()
                 && delta.semanticPart().filter(part -> part == GrayboxSemanticPart.ROUTE_SURFACE || part == GrayboxSemanticPart.ROUTE_FOUNDATION).isPresent();
     }
 
     private static boolean isKnownWorksiteStagingLoss(PhysicalDelta delta) {
         return delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS
+                && delta.semanticTarget().filter(target -> target.kind() == PhysicalDeltaSemanticTargetKind.ROUTE_CONSTRUCTION).isPresent()
                 && delta.semanticPart().filter(GrayboxSemanticPart.WORKSITE_STAGING::equals).isPresent();
     }
 
     private static boolean isCocoonLoss(PhysicalDelta delta) {
         return delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS
+                && delta.semanticTarget().filter(target -> target.kind() == PhysicalDeltaSemanticTargetKind.HIVE_COCOON).isPresent()
                 && delta.semanticPart().filter(GrayboxSemanticPart.COCOON::equals).isPresent();
     }
 
@@ -118,7 +124,7 @@ public final class FrontierWorldPhysicalDeltaSupport {
      * materialization remains the executor's boundary.
      */
     private static FrontierWorldState releaseCocoonOccupant(FrontierWorldState state, PhysicalDelta loss) {
-        SubjectId bioformId = loss.ownerId().orElseThrow();
+        SubjectId bioformId = loss.semanticTarget().orElseThrow().subjectId();
         BioformLifecycle lifecycle = state.hiveColony().bioformLifecycles().get(bioformId);
         if (lifecycle == null || !cocoonCanStillBePhysicallyPresent(lifecycle)) {
             throw new IllegalArgumentException("cocoon loss does not retain an exact physical occupant");
@@ -165,16 +171,38 @@ public final class FrontierWorldPhysicalDeltaSupport {
 
     private static void validateCurrent(FrontierWorldState state, PhysicalDelta delta) {
         if (delta.kind() != PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS) return;
+        PhysicalDeltaSemanticTarget target = delta.semanticTarget().orElseThrow();
         GrayboxCell expected = FrontierGrayboxPlan.intactSemanticCell(state.bootstrap(), state.hiveColony(), state.routeTopology(),
-                state.routeConstructions(), delta.ownerId().orElseThrow(), delta.position());
+                state.routeConstructions(), target.subjectId(), delta.position());
         if (expected == null || expected.semanticPart() != delta.semanticPart().orElseThrow()) {
             throw new IllegalArgumentException("known physical delta is not an exact current semantic cell");
         }
-        if (expected.semanticPart() == GrayboxSemanticPart.COCOON) {
+        validateSemanticTarget(state, target, expected);
+        if (target.kind() == PhysicalDeltaSemanticTargetKind.HIVE_COCOON) {
             BioformLifecycle lifecycle = state.hiveColony().bioformLifecycles().get(expected.ownerId());
             if (lifecycle == null || !cocoonCanStillBePhysicallyPresent(lifecycle)) {
                 throw new IllegalArgumentException("only an exact physically retained cocoon may become a new physical loss");
             }
+        }
+    }
+
+    private static void validateSemanticTarget(FrontierWorldState state, PhysicalDeltaSemanticTarget target, GrayboxCell expected) {
+        if (!target.subjectId().equals(expected.ownerId())) throw new IllegalArgumentException("physical delta target differs from exact semantic subject");
+        switch (target.kind()) {
+            case SETTLEMENT_STRUCTURE -> FrontierWorldStateSupport.structureById(state.bootstrap(), target.subjectId());
+            case HIVE_ORGAN -> {
+                if (hiveOrganOrNull(state, target.subjectId()) == null) throw new IllegalArgumentException("physical delta names an absent hive organ");
+            }
+            case HIVE_COCOON -> {
+                if (!state.hiveColony().bioformLifecycles().containsKey(target.subjectId())) throw new IllegalArgumentException("physical delta names an absent cocoon occupant");
+            }
+            case ROUTE_NETWORK -> {
+                if (!FrontierRouteNetwork.OWNER.equals(target.subjectId())) throw new IllegalArgumentException("physical delta route target is invalid");
+            }
+            case ROUTE_CONSTRUCTION -> {
+                if (!state.routeConstructions().containsKey(target.subjectId())) throw new IllegalArgumentException("physical delta names an absent route construction");
+            }
+            case SETTLEMENT_INFRASTRUCTURE -> FrontierWorldStateSupport.settlement(state.bootstrap(), target.subjectId());
         }
     }
 
@@ -199,7 +227,13 @@ public final class FrontierWorldPhysicalDeltaSupport {
         HiveOrgan organ = bootstrap.hive().organs().stream().filter(value -> value.id().equals(organId)).findFirst().orElse(colony.addedOrgans().get(organId));
         if (organ == null) throw new IllegalArgumentException("unknown hive organ: " + organId.value());
         long lost = deltas.values().stream().filter(delta -> delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS
-                && delta.ownerId().orElseThrow().equals(organId)).count();
+                && delta.semanticTarget().filter(target -> target.kind() == PhysicalDeltaSemanticTargetKind.HIVE_ORGAN
+                && target.subjectId().equals(organId)).isPresent()).count();
         return lost < (FrontierGrayboxPlan.intactOrganCellCount(bootstrap.terrain(), organ) + 2L) / 3L;
+    }
+
+    private static HiveOrgan hiveOrganOrNull(FrontierWorldState state, SubjectId organId) {
+        return java.util.stream.Stream.concat(state.bootstrap().hive().organs().stream(), state.hiveColony().addedOrgans().values().stream())
+                .filter(organ -> organ.id().equals(organId)).findFirst().orElse(null);
     }
 }

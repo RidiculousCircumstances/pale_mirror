@@ -18,7 +18,7 @@ class DeferredAftermathStateCodecTest {
         SubjectId hive = new SubjectId("hive:codec");
         DeferredAftermath aftermath = new DeferredAftermath(new SubjectId("aftermath:codec"), hive, new SubjectId("bioform:codec"), 10L,
                 OptionalLong.empty(), "codec-test", DeferredAftermathKnowledge.KNOWN_CLEAR, 4L, List.of(
-                new DeferredAftermathCell(new BlockPosition(0, 64, 0), hive, GrayboxMaterial.HALL, GrayboxSemanticPart.FOUNDATION, DeferredAftermathCellStatus.PENDING)), 0);
+                new DeferredAftermathCell(new BlockPosition(0, 64, 0), new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.HIVE_ORGAN, hive), GrayboxMaterial.HALL, GrayboxSemanticPart.FOUNDATION, DeferredAftermathCellStatus.PENDING)), 0);
         DeferredAftermathState original = DeferredAftermathState.empty().prepare(aftermath)
                 .resolve(aftermath.id(), aftermath.expectedEpoch(), 11L, 0, DeferredAftermathCellStatus.RUNNING);
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();

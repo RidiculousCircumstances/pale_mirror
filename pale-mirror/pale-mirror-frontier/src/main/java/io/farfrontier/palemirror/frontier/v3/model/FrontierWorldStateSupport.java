@@ -60,13 +60,6 @@ public final class FrontierWorldStateSupport {
         return bootstrap.hive().organs().stream().anyMatch(organ -> organ.id().equals(ownerId)) || colony.addedOrgans().containsKey(ownerId);
     }
 
-    public static SubjectId semanticOwner(FrontierBootstrap bootstrap, HiveColony colony, SubjectId ownerId) {
-        if (ownerId.value().startsWith("structure:")) return structureSettlement(bootstrap, ownerId);
-        if (isHiveOrgan(bootstrap, colony, ownerId)) return bootstrap.hive().id();
-        if (FrontierRouteNetwork.OWNER.equals(ownerId)) return ownerId;
-        throw new IllegalArgumentException("unknown repairable semantic owner: " + ownerId.value());
-    }
-
     public static SubjectId actorOwner(FrontierWorldState state, SubjectId actorId) {
         ResidentProfile resident = state.humanPopulation().resident(actorId);
         if (resident != null) return resident.settlementId();

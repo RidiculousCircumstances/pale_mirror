@@ -72,7 +72,8 @@ final class FrontierV3PhysicalObservationExecutor {
         if (state.physicalDeltas().containsKey(canonicalPosition)) return;
         Optional<FrontierV3PhysicalObservationLedger.Semantic> semantic = candidate.semantic();
         PhysicalDelta delta = semantic.isEmpty() ? new PhysicalDelta(canonicalPosition, PhysicalDeltaKind.UNKNOWN_SCAR, Optional.empty(), Optional.empty(), "explosion:" + intentId.value())
-                : new PhysicalDelta(canonicalPosition, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, Optional.of(new SubjectId(semantic.orElseThrow().owner())),
+                : new PhysicalDelta(canonicalPosition, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, Optional.of(new io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTarget(
+                io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.fromWireTag(semantic.orElseThrow().targetTag()), new SubjectId(semantic.orElseThrow().owner()))),
                 Optional.of(GrayboxSemanticPart.valueOf(semantic.orElseThrow().semanticPart())), "explosion:" + intentId.value());
         CommandId id = FrontierV3CommandIds.managedExplosionObservation(intentId, position.asLong());
         CommandResult result = runtime.submit(new FrontierCommand(1, id, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
@@ -86,7 +87,8 @@ final class FrontierV3PhysicalObservationExecutor {
         Optional<FrontierV3PhysicalObservationLedger.Semantic> semantic = ready.candidate().semantic();
         if (semantic.isEmpty()) return new PhysicalDelta(position, PhysicalDeltaKind.UNKNOWN_SCAR, Optional.empty(), Optional.empty(), cause);
         FrontierV3PhysicalObservationLedger.Semantic known = semantic.orElseThrow();
-        return new PhysicalDelta(position, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, Optional.of(new SubjectId(known.owner())),
+        return new PhysicalDelta(position, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, Optional.of(new io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTarget(
+                io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.fromWireTag(known.targetTag()), new SubjectId(known.owner()))),
                 Optional.of(GrayboxSemanticPart.valueOf(known.semanticPart())), cause);
     }
 }

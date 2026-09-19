@@ -50,8 +50,8 @@ class DeferredAftermathStateTest {
     @Test void rejectsOversizedAndNonChunkOrderedFootprintsBeforeTheyBecomeDurable() {
         SubjectId owner = new SubjectId("hive:1");
         List<DeferredAftermathCell> reversed = List.of(
-                new DeferredAftermathCell(new BlockPosition(32, 64, 0), owner, GrayboxMaterial.HALL, GrayboxSemanticPart.FOUNDATION, DeferredAftermathCellStatus.PENDING),
-                new DeferredAftermathCell(new BlockPosition(0, 64, 0), owner, GrayboxMaterial.HALL, GrayboxSemanticPart.FOUNDATION, DeferredAftermathCellStatus.PENDING));
+                new DeferredAftermathCell(new BlockPosition(32, 64, 0), new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.HIVE_ORGAN, owner), GrayboxMaterial.HALL, GrayboxSemanticPart.FOUNDATION, DeferredAftermathCellStatus.PENDING),
+                new DeferredAftermathCell(new BlockPosition(0, 64, 0), new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.HIVE_ORGAN, owner), GrayboxMaterial.HALL, GrayboxSemanticPart.FOUNDATION, DeferredAftermathCellStatus.PENDING));
         assertThrows(IllegalArgumentException.class, () -> new DeferredAftermath(new SubjectId("aftermath:reversed"), owner, new SubjectId("bioform:1"),
                 1L, OptionalLong.empty(), "test", DeferredAftermathKnowledge.KNOWN_CLEAR, 0L, reversed, 0));
     }
@@ -76,7 +76,7 @@ class DeferredAftermathStateTest {
         SubjectId owner = new SubjectId("hive:1");
         return new DeferredAftermath(id, owner, new SubjectId("bioform:1"), 100L, OptionalLong.empty(), "test",
                 DeferredAftermathKnowledge.KNOWN_CLEAR, 7L, List.of(
-                        new DeferredAftermathCell(new BlockPosition(0, 64, 0), owner, GrayboxMaterial.HALL, GrayboxSemanticPart.FOUNDATION, DeferredAftermathCellStatus.PENDING),
-                        new DeferredAftermathCell(new BlockPosition(16, 64, 0), owner, GrayboxMaterial.HALL, GrayboxSemanticPart.FOUNDATION, DeferredAftermathCellStatus.PENDING)), 0);
+                        new DeferredAftermathCell(new BlockPosition(0, 64, 0), new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.HIVE_ORGAN, owner), GrayboxMaterial.HALL, GrayboxSemanticPart.FOUNDATION, DeferredAftermathCellStatus.PENDING),
+                        new DeferredAftermathCell(new BlockPosition(16, 64, 0), new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.HIVE_ORGAN, owner), GrayboxMaterial.HALL, GrayboxSemanticPart.FOUNDATION, DeferredAftermathCellStatus.PENDING)), 0);
     }
 }

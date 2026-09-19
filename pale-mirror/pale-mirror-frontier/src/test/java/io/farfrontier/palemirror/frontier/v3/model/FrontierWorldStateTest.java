@@ -305,7 +305,7 @@ class FrontierWorldStateTest {
         GrayboxCell cell = FrontierGrayboxPlan.compile(baseline).cells().values().stream()
                 .filter(value -> value.ownerId().equals(organ.id())).findFirst().orElseThrow();
         PhysicalDelta known = new PhysicalDelta(cell.position(), PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
-                java.util.Optional.of(organ.id()), java.util.Optional.of(cell.semanticPart()), "player:test");
+                java.util.Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.HIVE_ORGAN, organ.id())), java.util.Optional.of(cell.semanticPart()), "player:test");
         PhysicalDelta scar = new PhysicalDelta(new BlockPosition(1, 64, 1), PhysicalDeltaKind.UNKNOWN_SCAR,
                 java.util.Optional.empty(), java.util.Optional.empty(), "explosion:test");
 
@@ -317,7 +317,7 @@ class FrontierWorldStateTest {
         assertEquals(changed, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(changed)));
         assertThrows(IllegalArgumentException.class, () -> changed.recordPhysicalDelta(known));
         assertThrows(IllegalArgumentException.class, () -> baseline.recordPhysicalDelta(new PhysicalDelta(new BlockPosition(1, 64, 1),
-                PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, java.util.Optional.of(organ.id()), java.util.Optional.of(GrayboxSemanticPart.WALL), "bad")));
+                PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, java.util.Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.HIVE_ORGAN, organ.id())), java.util.Optional.of(GrayboxSemanticPart.WALL), "bad")));
     }
 
     @Test
@@ -333,13 +333,13 @@ class FrontierWorldStateTest {
         GrayboxCell deck = plan.cells().get(deckPosition);
         assertEquals(GrayboxSemanticPart.ROUTE_SURFACE, deck.semanticPart());
         PhysicalDelta foundationLoss = new PhysicalDelta(foundation.position(), PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
-                java.util.Optional.of(FrontierRouteNetwork.OWNER), java.util.Optional.of(GrayboxSemanticPart.ROUTE_FOUNDATION), "player:test");
+                java.util.Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)), java.util.Optional.of(GrayboxSemanticPart.ROUTE_FOUNDATION), "player:test");
         PhysicalDelta deckLoss = new PhysicalDelta(deckPosition, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
-                java.util.Optional.of(FrontierRouteNetwork.OWNER), java.util.Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:test:survival-after");
+                java.util.Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)), java.util.Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:test:survival-after");
 
         assertThrows(IllegalArgumentException.class, () -> FrontierWorldPhysicalDeltaSupport.recordAll(baseline, List.of(foundationLoss,
                 new PhysicalDelta(new BlockPosition(0, 64, 0), PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
-                        java.util.Optional.of(FrontierRouteNetwork.OWNER), java.util.Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "forged"))));
+                        java.util.Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)), java.util.Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "forged"))));
         assertTrue(baseline.physicalDeltas().isEmpty(), "the first member cannot escape from a rejected atomic observation");
 
         FrontierWorldState changed = FrontierWorldPhysicalDeltaSupport.recordAll(baseline, List.of(foundationLoss, deckLoss));
@@ -357,7 +357,7 @@ class FrontierWorldStateTest {
         SettlementStructure hall = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.HALL).findFirst().orElseThrow();
         SettlementAccessPort port = SettlementAccessPort.forHall(hall);
         PhysicalDelta loss = new PhysicalDelta(port.assemblyFloor(), PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
-                java.util.Optional.of(hall.id()), java.util.Optional.of(GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE), "player:test");
+                java.util.Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, hall.id())), java.util.Optional.of(GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE), "player:test");
 
         FrontierWorldState changed = baseline.recordPhysicalDelta(loss);
 

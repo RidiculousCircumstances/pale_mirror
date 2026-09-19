@@ -338,7 +338,7 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
         // the causal consequence happened.
         return FrontierWorldPhysicalDeltaSupport.recordAll(preparedState, aftermath.cells().stream().map(cell ->
                 new PhysicalDelta(cell.position(), PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
-                        java.util.Optional.of(cell.expectedOwner()), java.util.Optional.of(cell.expectedPart()), aftermath.causeId().value())).toList());
+                        java.util.Optional.of(cell.semanticTarget()), java.util.Optional.of(cell.expectedPart()), aftermath.causeId().value())).toList());
     }
     private static FrontierWorldState reduceAftermathResolved(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId subject,
                                                                DeferredAftermathResolved resolved) {

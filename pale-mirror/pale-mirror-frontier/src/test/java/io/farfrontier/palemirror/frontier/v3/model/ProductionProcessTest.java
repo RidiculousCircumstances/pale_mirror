@@ -309,7 +309,7 @@ class ProductionProcessTest {
         FrontierWorldState hot = withWork.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         BlockPosition lostStation = SettlementWorkshopServicePort.forWorkshop(workshop).workStation().support();
         FrontierWorldState damaged = hot.recordPhysicalDelta(new PhysicalDelta(lostStation, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
-                Optional.of(workshop.id()), Optional.of(GrayboxSemanticPart.WORKSHOP_PROCESS_STATION), "player:test-workshop-loss"));
+                Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, workshop.id())), Optional.of(GrayboxSemanticPart.WORKSHOP_PROCESS_STATION), "player:test-workshop-loss"));
 
         List<ProposedEvent> planned = ProductionProcess.planFacilityUnavailable(damaged, workshop.id());
 
@@ -340,7 +340,7 @@ class ProductionProcessTest {
         var engine = FrontierEngines.create(new FrontierEngineConfiguration<>(world, hot, SimInstant.ZERO,
                 base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(), base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter()));
         BlockPosition station = SettlementWorkshopServicePort.forWorkshop(workshop).workStation().support();
-        PhysicalDelta loss = new PhysicalDelta(station, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, Optional.of(workshop.id()),
+        PhysicalDelta loss = new PhysicalDelta(station, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, workshop.id())),
                 Optional.of(GrayboxSemanticPart.WORKSHOP_PROCESS_STATION), "player:test-observed-workshop-loss");
         var checkpoint = engine.checkpoint(); CommandId command = new CommandId("command:production-observed-workshop-loss");
 

@@ -66,7 +66,7 @@ class FrontierV3AmbientActorLocalTargetsTest {
     void naturallyLoadedPlanChunkIsRetainedBeforeAnyPlayerIngress() {
         var planCell = new io.farfrontier.palemirror.frontier.v3.model.GrayboxCell(
                 new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(32, 64, 48),
-                new SubjectId("route:natural-arrival"),
+                new io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTarget(io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, new SubjectId("route:natural-arrival")),
                 io.farfrontier.palemirror.frontier.v3.model.GrayboxMaterial.ROUTE,
                 io.farfrontier.palemirror.frontier.v3.model.GrayboxSemanticPart.ROUTE_SURFACE);
         var cursor = FrontierV3GrayboxExecutor.Cursor.fromCells(java.util.List.of(planCell), null);

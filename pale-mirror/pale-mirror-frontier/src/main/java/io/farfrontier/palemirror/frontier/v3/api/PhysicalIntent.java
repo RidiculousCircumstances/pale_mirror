@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.api;
 
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTarget;
+
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -19,6 +21,7 @@ public record PhysicalIntent(
         PhysicalPostcondition postcondition,
         Optional<PhysicalObservationId> postconditionObservationId,
         Optional<PhysicalContainerSlot> targetSlot,
+        Optional<PhysicalDeltaSemanticTarget> semanticTarget,
         PhysicalIntentLifecycleOwner lifecycleOwner
 ) {
     public PhysicalIntent {
@@ -31,6 +34,7 @@ public record PhysicalIntent(
         Objects.requireNonNull(postcondition, "physical intent postcondition");
         postconditionObservationId = Objects.requireNonNull(postconditionObservationId, "physical intent postcondition observation");
         targetSlot = Objects.requireNonNull(targetSlot, "physical intent target slot");
+        semanticTarget = Objects.requireNonNull(semanticTarget, "physical intent semantic target");
         lifecycleOwner = Objects.requireNonNull(lifecycleOwner, "physical intent lifecycle owner");
         if (subjectIds.isEmpty() || subjectIds.size() > 32 || subjectIds.stream().distinct().count() != subjectIds.size()) {
             throw new IllegalArgumentException("physical intent must name one to thirty-two distinct subjects");
@@ -43,7 +47,7 @@ public record PhysicalIntent(
                 }
             }
             case STRUCTURAL_REPAIR -> {
-                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.STRUCTURAL_REPAIR_OBSERVED) {
+                if (radiusBlocks != 0 || postcondition != PhysicalPostcondition.STRUCTURAL_REPAIR_OBSERVED || semanticTarget.isEmpty()) {
                     throw new IllegalArgumentException("structural repair must use zero radius and repair postcondition");
                 }
             }
@@ -126,6 +130,9 @@ public record PhysicalIntent(
         if (kind != PhysicalIntentKind.EQUIPMENT_RETURN && targetSlot.isPresent()) {
             throw new IllegalArgumentException("only equipment return may retain a typed target slot");
         }
+        if (kind != PhysicalIntentKind.STRUCTURAL_REPAIR && semanticTarget.isPresent()) {
+            throw new IllegalArgumentException("only structural repair may retain a physical-delta semantic target");
+        }
         if (status == PhysicalIntentStatus.CONFIRMED != postconditionObservationId.isPresent()) {
             throw new IllegalArgumentException("only confirmed physical intent has an observed postcondition");
         }
@@ -137,16 +144,30 @@ public record PhysicalIntent(
     public PhysicalIntent(PhysicalIntentId id, PhysicalIntentKind kind, PhysicalIntentStatus status, SubjectId causeSubjectId,
                           List<SubjectId> subjectIds, FixedPosition origin, int radiusBlocks, PhysicalPostcondition postcondition,
                           PhysicalIntentLifecycleOwner lifecycleOwner) {
-        this(id, kind, status, causeSubjectId, subjectIds, origin, radiusBlocks, postcondition, Optional.empty(), Optional.empty(), lifecycleOwner);
+        this(id, kind, status, causeSubjectId, subjectIds, origin, radiusBlocks, postcondition, Optional.empty(), Optional.empty(), Optional.empty(), lifecycleOwner);
+    }
+
+    /** Legacy non-repair shape remains non-authoritative; structural repair must use the typed-target constructor. */
+    public PhysicalIntent(PhysicalIntentId id, PhysicalIntentKind kind, PhysicalIntentStatus status, SubjectId causeSubjectId,
+                          List<SubjectId> subjectIds, FixedPosition origin, int radiusBlocks, PhysicalPostcondition postcondition,
+                          Optional<PhysicalObservationId> postconditionObservationId, Optional<PhysicalContainerSlot> targetSlot,
+                          PhysicalIntentLifecycleOwner lifecycleOwner) {
+        this(id, kind, status, causeSubjectId, subjectIds, origin, radiusBlocks, postcondition, postconditionObservationId, targetSlot, Optional.empty(), lifecycleOwner);
     }
 
     public PhysicalIntent(PhysicalIntentId id, PhysicalIntentKind kind, PhysicalIntentStatus status, SubjectId causeSubjectId,
                           List<SubjectId> subjectIds, FixedPosition origin, int radiusBlocks, PhysicalPostcondition postcondition,
                           PhysicalContainerSlot targetSlot, PhysicalIntentLifecycleOwner lifecycleOwner) {
-        this(id, kind, status, causeSubjectId, subjectIds, origin, radiusBlocks, postcondition, Optional.empty(), Optional.of(targetSlot), lifecycleOwner);
+        this(id, kind, status, causeSubjectId, subjectIds, origin, radiusBlocks, postcondition, Optional.empty(), Optional.of(targetSlot), Optional.empty(), lifecycleOwner);
+    }
+
+    public PhysicalIntent(PhysicalIntentId id, PhysicalIntentKind kind, PhysicalIntentStatus status, SubjectId causeSubjectId,
+                          List<SubjectId> subjectIds, FixedPosition origin, int radiusBlocks, PhysicalPostcondition postcondition,
+                          PhysicalDeltaSemanticTarget semanticTarget, PhysicalIntentLifecycleOwner lifecycleOwner) {
+        this(id, kind, status, causeSubjectId, subjectIds, origin, radiusBlocks, postcondition, Optional.empty(), Optional.empty(), Optional.of(semanticTarget), lifecycleOwner);
     }
 
     public PhysicalIntent withStatus(PhysicalIntentStatus nextStatus, Optional<PhysicalObservationId> observationId) {
-        return new PhysicalIntent(id, kind, nextStatus, causeSubjectId, subjectIds, origin, radiusBlocks, postcondition, observationId, targetSlot, lifecycleOwner);
+        return new PhysicalIntent(id, kind, nextStatus, causeSubjectId, subjectIds, origin, radiusBlocks, postcondition, observationId, targetSlot, semanticTarget, lifecycleOwner);
     }
 }

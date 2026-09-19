@@ -25,11 +25,13 @@ final class StructuralRepairStateSupport {
     static FrontierWorldState complete(FrontierWorldState state, PhysicalIntent current, StructuralRepairObservation repair,
                                        Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, PhysicalIntent> nextIntents) {
         validateReceipt(current, repair);
-        if (FrontierRouteNetwork.OWNER.equals(current.causeSubjectId())) {
+        PhysicalDeltaSemanticTarget target = current.semanticTarget().orElseThrow();
+        if (!target.subjectId().equals(current.causeSubjectId())) throw new IllegalArgumentException("repair intent target differs from its cause subject");
+        if (target.kind() == PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK) {
             throw new IllegalArgumentException("route loss belongs exclusively to route construction recovery");
         }
         PhysicalDelta delta = state.physicalDeltas().get(repair.position());
-        if (delta == null || delta.kind() != PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS || !delta.ownerId().equals(java.util.Optional.of(current.causeSubjectId()))) {
+        if (delta == null || delta.kind() != PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS || !delta.semanticTarget().equals(java.util.Optional.of(target))) {
             throw new IllegalArgumentException("repair has no matching known physical loss");
         }
         GrayboxCell expected = FrontierGrayboxPlan.intactSemanticCell(state.bootstrap(), state.hiveColony(), state.routeTopology(), current.causeSubjectId(), repair.position());
@@ -38,10 +40,11 @@ final class StructuralRepairStateSupport {
             throw new IllegalArgumentException("repair material does not match its lost semantic cell");
         }
         if (!(material.custody() instanceof InventoryCustody.ContainerSlot slot)
-                || !state.inventory().containers().get(slot.containerId()).ownerId().equals(FrontierWorldStateSupport.semanticOwner(state.bootstrap(), state.hiveColony(), current.causeSubjectId()))) {
+                || !state.inventory().containers().get(slot.containerId()).ownerId().equals(repairOwner(state, target))) {
             throw new IllegalArgumentException("repair material is not in its semantic owner's container");
         }
-        if (!current.causeSubjectId().value().startsWith("structure:")) return completeHiveOrgan(state, current, repair, nextIntents);
+        if (target.kind() == PhysicalDeltaSemanticTargetKind.HIVE_ORGAN) return completeHiveOrgan(state, current, repair, nextIntents);
+        if (target.kind() != PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE) throw new IllegalArgumentException("repair target is not structurally repairable");
         StructureDamage damage = state.structureDamage().get(current.causeSubjectId());
         StructureDamage repairedDamage = damage == null ? null : damage.repair(repair.position(), delta.semanticPart().orElseThrow());
         Map<BlockPosition, PhysicalDelta> nextDeltas = new LinkedHashMap<>(state.physicalDeltas()); nextDeltas.remove(repair.position());
@@ -57,6 +60,14 @@ final class StructuralRepairStateSupport {
         Map<PhysicalObservationId, PhysicalEffectObservation> nextObservations = new LinkedHashMap<>(state.physicalObservations()); nextObservations.put(repair.id(), repair);
         return state.withChanges(FrontierWorldStateUpdate.begin().structureConditions(nextConditions).inventory(state.inventory().consumeOne(repair.itemId()))
                 .physicalIntents(nextIntents).physicalObservations(nextObservations).structureDamage(nextDamage).physicalDeltas(nextDeltas));
+    }
+
+    private static SubjectId repairOwner(FrontierWorldState state, PhysicalDeltaSemanticTarget target) {
+        return switch (target.kind()) {
+            case SETTLEMENT_STRUCTURE -> FrontierWorldStateSupport.structureSettlement(state.bootstrap(), target.subjectId());
+            case HIVE_ORGAN -> state.bootstrap().hive().id();
+            default -> throw new IllegalArgumentException("repair target has no semantic owner");
+        };
     }
 
     private static FrontierWorldState completeHiveOrgan(FrontierWorldState state, PhysicalIntent current, StructuralRepairObservation repair,

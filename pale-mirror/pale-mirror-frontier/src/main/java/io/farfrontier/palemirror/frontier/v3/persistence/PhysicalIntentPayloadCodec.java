@@ -12,6 +12,7 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWireTags;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTarget;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -31,6 +32,8 @@ final class PhysicalIntentPayloadCodec {
         if (intent.postconditionObservationId().isPresent()) FrontierWorldPayloadCodecs.writeString(output, intent.postconditionObservationId().orElseThrow().value());
         output.writeBoolean(intent.targetSlot().isPresent());
         if (intent.targetSlot().isPresent()) { FrontierWorldPayloadCodecs.writeSubject(output, intent.targetSlot().orElseThrow().containerId()); output.writeByte(intent.targetSlot().orElseThrow().slot()); }
+        output.writeBoolean(intent.semanticTarget().isPresent());
+        if (intent.semanticTarget().isPresent()) PhysicalDeltaPayloadCodecs.writeTarget(output, intent.semanticTarget().orElseThrow());
         output.writeByte(PhysicalIntentLifecycleOwner.CODEC_VERSION); FrontierWorldPayloadCodecs.writeString(output, intent.lifecycleOwner().stableId());
     }
 
@@ -44,11 +47,12 @@ final class PhysicalIntentPayloadCodec {
         Optional<PhysicalObservationId> observation = observed ? Optional.of(new PhysicalObservationId(FrontierWorldPayloadCodecs.readString(input))) : Optional.empty();
         Optional<PhysicalContainerSlot> target = input.readBoolean()
                 ? Optional.of(new PhysicalContainerSlot(FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedByte())) : Optional.empty();
+        Optional<PhysicalDeltaSemanticTarget> semanticTarget = input.readBoolean() ? Optional.of(PhysicalDeltaPayloadCodecs.readTarget(input)) : Optional.empty();
         if (kind >= PhysicalIntentKind.values().length || status >= PhysicalIntentStatus.values().length || postcondition >= PhysicalPostcondition.values().length) {
             throw new IllegalArgumentException("unknown physical intent enum value");
         }
         return new PhysicalIntent(id, FrontierWireTags.require(PhysicalIntentKind.class, kind), FrontierWireTags.require(PhysicalIntentStatus.class, status),
-                cause.value(), subjects, origin, radius, FrontierWireTags.require(PhysicalPostcondition.class, postcondition), observation, target,
+                cause.value(), subjects, origin, radius, FrontierWireTags.require(PhysicalPostcondition.class, postcondition), observation, target, semanticTarget,
                 PhysicalIntentLifecycleOwner.fromWire(input.readUnsignedByte(), FrontierWorldPayloadCodecs.readString(input)));
     }
 }

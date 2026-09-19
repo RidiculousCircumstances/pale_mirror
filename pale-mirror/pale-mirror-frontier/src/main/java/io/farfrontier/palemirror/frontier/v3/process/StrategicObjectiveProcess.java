@@ -481,7 +481,8 @@ public final class StrategicObjectiveProcess {
     }
     private static boolean isOwnedRouteLoss(PhysicalDelta delta) {
         return delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS
-                && delta.ownerId().filter(FrontierRouteNetwork.OWNER::equals).isPresent()
+                && delta.semanticTarget().filter(target -> target.kind() == PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK
+                && FrontierRouteNetwork.OWNER.equals(target.subjectId())).isPresent()
                 && delta.semanticPart().filter(part -> part == GrayboxSemanticPart.ROUTE_SURFACE
                 || part == GrayboxSemanticPart.ROUTE_FOUNDATION).isPresent();
     }

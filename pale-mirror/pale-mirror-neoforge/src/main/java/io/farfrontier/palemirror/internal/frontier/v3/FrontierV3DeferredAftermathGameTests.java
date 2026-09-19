@@ -35,7 +35,8 @@ public final class FrontierV3DeferredAftermathGameTests {
         for (BlockPos position : List.of(first, second)) {
             level.setBlock(position, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
             DeferredAftermathCell cell = aftermath.cells().get(position.equals(first) ? 0 : 1);
-            FrontierV3GrayboxLedger.get(level).applied(position, cell.expectedOwner().value(), GrayboxMaterial.HALL.name(), cell.expectedPart().name());
+            FrontierV3GrayboxLedger.get(level).applied(position, cell.semanticTarget().subjectId().value(), cell.semanticTarget().kind().wireTag(),
+                    GrayboxMaterial.HALL.name(), cell.expectedPart().name());
         }
 
         FrontierV3DeferredAftermathExecutor.tick(level, runtime);
@@ -58,7 +59,7 @@ public final class FrontierV3DeferredAftermathGameTests {
         DeferredAftermath aftermath = runtime.decodedState().orElseThrow().deferredAftermath().entries().values().iterator().next();
         DeferredAftermathCell cell = aftermath.cells().getFirst();
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
-        ledger.damaged(first, cell.expectedOwner().value(), cell.expectedMaterial().name(), cell.expectedPart().name());
+        ledger.damaged(first, cell.semanticTarget().subjectId().value(), cell.semanticTarget().kind().wireTag(), cell.expectedMaterial().name(), cell.expectedPart().name());
 
         FrontierV3DeferredAftermathExecutor.tick(level, runtime);
         helper.assertValueEqual(runtime.decodedState().orElseThrow().deferredAftermath().entries().get(aftermath.id()).cellAt(0).status(),
@@ -100,7 +101,7 @@ public final class FrontierV3DeferredAftermathGameTests {
         DeferredAftermathCell cell = aftermath.cells().getFirst();
         level.setBlock(first, FrontierV3GrayboxExecutor.material(cell.expectedMaterial()), 3);
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
-        ledger.applied(first, cell.expectedOwner().value(), cell.expectedMaterial().name(), cell.expectedPart().name());
+        ledger.applied(first, cell.semanticTarget().subjectId().value(), cell.semanticTarget().kind().wireTag(), cell.expectedMaterial().name(), cell.expectedPart().name());
 
         FrontierV3DeferredAftermathExecutor.tick(level, runtime);
         DeferredAftermath realized = runtime.decodedState().orElseThrow().deferredAftermath().entries().get(aftermath.id());
@@ -117,8 +118,10 @@ public final class FrontierV3DeferredAftermathGameTests {
         FrontierWorldState initial = base.initialState(); SubjectId owner = initial.bootstrap().hive().id(); SubjectId id = new SubjectId("aftermath:game-test");
         DeferredAftermath aftermath = new DeferredAftermath(id, owner, new SubjectId("bioform:east-3"), 0L, OptionalLong.empty(), "test:foreign-fence",
                 DeferredAftermathKnowledge.KNOWN_CLEAR, 0L, List.of(
-                new DeferredAftermathCell(new BlockPosition(first.getX(), first.getY(), first.getZ()), owner, GrayboxMaterial.HALL, GrayboxSemanticPart.FOUNDATION, DeferredAftermathCellStatus.PENDING),
-                new DeferredAftermathCell(new BlockPosition(second.getX(), second.getY(), second.getZ()), owner, GrayboxMaterial.HALL, GrayboxSemanticPart.FOUNDATION, DeferredAftermathCellStatus.PENDING)), 0);
+                new DeferredAftermathCell(new BlockPosition(first.getX(), first.getY(), first.getZ()),
+                        new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.HIVE_ORGAN, owner), GrayboxMaterial.HALL, GrayboxSemanticPart.FOUNDATION, DeferredAftermathCellStatus.PENDING),
+                new DeferredAftermathCell(new BlockPosition(second.getX(), second.getY(), second.getZ()),
+                        new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.HIVE_ORGAN, owner), GrayboxMaterial.HALL, GrayboxSemanticPart.FOUNDATION, DeferredAftermathCellStatus.PENDING)), 0);
         FrontierWorldState prepared = initial.withChanges(FrontierWorldStateUpdate.begin().deferredAftermath(initial.deferredAftermath().prepare(aftermath)));
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration = new FrontierEngineConfiguration<>(base.worldId(), prepared,
                 base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(),

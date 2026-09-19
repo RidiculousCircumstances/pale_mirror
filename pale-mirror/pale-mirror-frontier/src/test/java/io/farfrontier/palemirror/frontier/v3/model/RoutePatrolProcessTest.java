@@ -84,7 +84,7 @@ class RoutePatrolProcessTest {
         SubjectId settlement = state.operations().get(new SubjectId("operation:supply-1-2")).settlementId();
         BlockPosition obstruction = new BlockPosition(-380, 64, -304);
         state = state.recordPhysicalDelta(new PhysicalDelta(obstruction, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
-                Optional.of(FrontierRouteNetwork.OWNER), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:test"));
+                Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:test"));
 
         var action = StrategicObjectiveProcess.routeReconsideration(settlement, obstruction, "loss", 100L);
         assertTrue(StrategicObjectiveProcess.planReconsideration(state, action).isEmpty(),
@@ -122,7 +122,7 @@ class RoutePatrolProcessTest {
         FrontierWorldState initial = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         SubjectId settlement = initial.bootstrap().settlements().getFirst().id();
         BlockPosition obstruction = initial.routeTopology().supplyWaypoints(initial.bootstrap(), settlement).get(1);
-        PhysicalDelta delta = new PhysicalDelta(obstruction, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, Optional.of(FrontierRouteNetwork.OWNER),
+        PhysicalDelta delta = new PhysicalDelta(obstruction, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)),
                 Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:blast");
         CommandId id = new CommandId("command:route-patrol-observation");
         CommandResult result = engine.submit(new FrontierCommand(1, id, world, engine.checkpoint().revision(), engine.checkpoint().instant(),

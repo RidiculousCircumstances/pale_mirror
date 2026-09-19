@@ -45,7 +45,8 @@ public final class RouteMaintenanceStateSupport {
             PhysicalDelta loss = deltas.get(maintenance.repairCell());
             if (maintenance.status() != RouteMaintenanceStatus.READY
                     && (loss == null || loss.kind() != PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS
-                    || !loss.ownerId().equals(java.util.Optional.of(FrontierRouteNetwork.OWNER))
+                    || !loss.semanticTarget().filter(target -> target.kind() == PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK
+                    && FrontierRouteNetwork.OWNER.equals(target.subjectId())).isPresent()
                     || !loss.semanticPart().equals(java.util.Optional.of(maintenance.semanticPart())))) {
                 throw new IllegalArgumentException("active route maintenance must retain its exact route-loss evidence");
             }
@@ -198,7 +199,8 @@ public final class RouteMaintenanceStateSupport {
                 || item == null || !item.itemKind().equals(maintenance.expectedMaterial().repairItemKind())
                 || !item.custody().equals(new InventoryCustody.Cargo(cargoId))
                 || loss == null || loss.kind() != PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS
-                || !loss.ownerId().equals(Optional.of(FrontierRouteNetwork.OWNER))
+                || !loss.semanticTarget().filter(target -> target.kind() == PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK
+                && FrontierRouteNetwork.OWNER.equals(target.subjectId())).isPresent()
                 || !loss.semanticPart().equals(Optional.of(maintenance.semanticPart()))
                 || !wholeBlock(intent).equals(maintenance.repairCell())) {
             throw new IllegalArgumentException("route maintenance work intent lacks exact loss/cargo preconditions");

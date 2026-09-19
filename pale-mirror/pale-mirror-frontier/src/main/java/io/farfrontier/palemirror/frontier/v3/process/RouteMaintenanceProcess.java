@@ -175,7 +175,8 @@ public final class RouteMaintenanceProcess {
         if (state.routeMaintenances().size() >= RouteMaintenanceStateSupport.MAX_MAINTENANCE) return Optional.empty();
         HumanAssignmentProjection assignments = HumanAssignmentProjection.compile(state);
         return state.physicalDeltas().values().stream().filter(loss -> loss.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS)
-                .filter(loss -> loss.ownerId().equals(Optional.of(FrontierRouteNetwork.OWNER)))
+                .filter(loss -> loss.semanticTarget().filter(target -> target.kind() == io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK
+                        && FrontierRouteNetwork.OWNER.equals(target.subjectId())).isPresent())
                 .filter(loss -> loss.semanticPart().filter(RouteMaintenanceProcess::repairable).isPresent())
                 .sorted(Comparator.comparingInt((PhysicalDelta loss) -> loss.position().x()).thenComparingInt(loss -> loss.position().y())
                         .thenComparingInt(loss -> loss.position().z())).filter(loss -> state.routeMaintenances().values().stream()
@@ -196,7 +197,8 @@ public final class RouteMaintenanceProcess {
     static boolean blocksBypassConstruction(FrontierWorldState state, SubjectId settlementId) {
         List<PhysicalDelta> retainedBaselineLosses = state.physicalDeltas().values().stream()
                 .filter(loss -> loss.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS)
-                .filter(loss -> loss.ownerId().equals(Optional.of(FrontierRouteNetwork.OWNER)))
+                .filter(loss -> loss.semanticTarget().filter(target -> target.kind() == io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK
+                        && FrontierRouteNetwork.OWNER.equals(target.subjectId())).isPresent())
                 .filter(loss -> loss.semanticPart().filter(RouteMaintenanceProcess::repairable).isPresent())
                 .filter(loss -> FrontierRouteNetwork.containsOperationSurfaceCell(
                         state.routeTopology().supplyWaypoints(state.bootstrap(), settlementId), loss.position())).toList();

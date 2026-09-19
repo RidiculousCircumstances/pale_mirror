@@ -470,9 +470,11 @@ final class FrontierV3GrayboxExecutor {
         if (claim == null || claim.conflicted()) return Optional.empty();
         GrayboxMaterial material;
         GrayboxSemanticPart part;
+        io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind targetKind;
         try {
             material = GrayboxMaterial.valueOf(claim.material());
             part = GrayboxSemanticPart.valueOf(claim.semanticPart());
+            targetKind = io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.fromWireTag(claim.targetTag());
         } catch (IllegalArgumentException malformed) {
             ledger.conflict(position);
             return Optional.empty();
@@ -483,7 +485,8 @@ final class FrontierV3GrayboxExecutor {
         }
         return Optional.of(new PhysicalDeltaObserved(new PhysicalDelta(
                 new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(position.getX(), position.getY(), position.getZ()),
-                PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, Optional.of(new io.farfrontier.palemirror.frontier.v3.api.SubjectId(claim.owner())),
+                PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, Optional.of(new io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTarget(
+                targetKind, new io.farfrontier.palemirror.frontier.v3.api.SubjectId(claim.owner()))),
                 Optional.of(part), cause)));
     }
     static Optional<List<PhysicalDelta>> preparePhysicalDeltas(ServerLevel level, FrontierV3GrayboxLedger ledger,
@@ -497,10 +500,11 @@ final class FrontierV3GrayboxExecutor {
     static Optional<StructureDamaged> prepareStructureDamage(ServerLevel level, FrontierV3GrayboxLedger ledger,
                                                               BlockPos position, String cause) {
         Optional<PhysicalDeltaObserved> observed = preparePhysicalDelta(level, ledger, position, cause);
-        if (observed.isEmpty() || !observed.orElseThrow().delta().ownerId().orElseThrow().value().startsWith("structure:")) return Optional.empty();
+        if (observed.isEmpty() || observed.orElseThrow().delta().semanticTarget().filter(target -> target.kind()
+                == io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE).isEmpty()) return Optional.empty();
         PhysicalDelta delta = observed.orElseThrow().delta();
         return Optional.of(new StructureDamaged(
-                delta.ownerId().orElseThrow(), delta.position(), delta.semanticPart().orElseThrow(), cause));
+                delta.semanticTarget().orElseThrow().subjectId(), delta.position(), delta.semanticPart().orElseThrow(), cause));
     }
     static ProjectionResult project(ServerLevel level, FrontierV3GrayboxLedger ledger, GrayboxCell cell) {
         return project(FrontierV3AftermathPhysicalWorld.minecraft(level), cell);
@@ -517,13 +521,13 @@ final class FrontierV3GrayboxExecutor {
             return ProjectionResult.CONFLICT;
         }
         if (!world.isAir(position)) {
-            ledger.obstructed(toMinecraft(cell), cell.ownerId().value(), cell.material().name(), cell.semanticPart().name());
+            ledger.obstructed(toMinecraft(cell), cell.ownerId().value(), cell.semanticTarget().kind().wireTag(), cell.material().name(), cell.semanticPart().name());
             return ProjectionResult.CONFLICT;
         }
         if (requiresSupport(cell.semanticPart()) && world.isAir(cell.position().offset(0, -1, 0))) return ProjectionResult.DEFERRED;
         ledger.ensureCapacityFor(toMinecraft(cell));
         if (!world.placeMaterial(position, cell.material())) return ProjectionResult.DEFERRED;
-        ledger.applied(toMinecraft(cell), cell.ownerId().value(), cell.material().name(), cell.semanticPart().name());
+        ledger.applied(toMinecraft(cell), cell.ownerId().value(), cell.semanticTarget().kind().wireTag(), cell.material().name(), cell.semanticPart().name());
         return ProjectionResult.APPLIED;
     }
     static void retainKnownLoss(ServerLevel level, FrontierV3GrayboxLedger ledger, GrayboxCell cell) {
@@ -531,11 +535,11 @@ final class FrontierV3GrayboxExecutor {
     }
     static void retainKnownLoss(FrontierV3AftermathPhysicalWorld world, GrayboxCell cell) {
         if (!world.naturallyLoaded(cell.position()) || !world.isAir(cell.position())) return;
-        world.ledger().damaged(toMinecraft(cell), cell.ownerId().value(), cell.material().name(), cell.semanticPart().name());
+        world.ledger().damaged(toMinecraft(cell), cell.ownerId().value(), cell.semanticTarget().kind().wireTag(), cell.material().name(), cell.semanticPart().name());
     }
     static boolean matchesKnownLoss(PhysicalDelta delta, GrayboxCell cell) {
         return delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS
-                && delta.ownerId().equals(Optional.of(cell.ownerId()))
+                && delta.semanticTarget().equals(Optional.of(cell.semanticTarget()))
                 && delta.semanticPart().equals(Optional.of(cell.semanticPart()));
     }
     static BlockState material(GrayboxMaterial material) {
@@ -580,7 +584,7 @@ final class FrontierV3GrayboxExecutor {
                 ledger.conflict(position); continue;
             }
             if (!level.setBlock(position, Blocks.AIR.defaultBlockState(), 3) || !level.getBlockState(position).isAir()) continue;
-            ledger.retire(position, claim.owner(), claim.material(), claim.semanticPart());
+            ledger.retire(position, claim.owner(), claim.targetTag(), claim.material(), claim.semanticPart());
         }
     }
     private static boolean requiresSupport(GrayboxSemanticPart part) {
@@ -588,7 +592,7 @@ final class FrontierV3GrayboxExecutor {
                 || part == GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE || part == GrayboxSemanticPart.WORKSITE_STAGING;
     }
     private static boolean matches(FrontierV3GrayboxLedger.Claim claim, GrayboxCell cell) {
-        return claim.owner().equals(cell.ownerId().value()) && claim.material().equals(cell.material().name())
+        return claim.owner().equals(cell.ownerId().value()) && claim.targetTag() == cell.semanticTarget().kind().wireTag() && claim.material().equals(cell.material().name())
                 && claim.semanticPart().equals(cell.semanticPart().name());
     }
     private static BlockPos toMinecraft(GrayboxCell cell) {
@@ -665,7 +669,8 @@ final class FrontierV3GrayboxExecutor {
                                                       FrontierGrayboxPlan dynamicOverlay) {
             return input.activeWorksiteStaging().entrySet().stream().flatMap(entry -> entry.getValue().stream()
                     .filter(position -> !baseline.cells().containsKey(position) && !dynamicOverlay.cells().containsKey(position))
-                    .map(position -> new GrayboxCell(position, entry.getKey(), GrayboxMaterial.WORKSITE, GrayboxSemanticPart.WORKSITE_STAGING)))
+                    .map(position -> new GrayboxCell(position, new io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTarget(
+                            io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.ROUTE_CONSTRUCTION, entry.getKey()), GrayboxMaterial.WORKSITE, GrayboxSemanticPart.WORKSITE_STAGING)))
                     .sorted(Comparator
                     .comparingInt((GrayboxCell cell) -> cell.position().y())
                     .thenComparingInt(cell -> cell.position().x()).thenComparingInt(cell -> cell.position().z())).toList();

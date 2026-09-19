@@ -43,7 +43,7 @@ final class FrontierInfrastructureProcessModule implements FrontierWorldProcessM
         try {
             return switch (intent.kind()) {
                 case STRUCTURAL_REPAIR -> new CommandPlan.Accepted(List.of(new ProposedEvent(
-                        FrontierWorldStateSupport.semanticOwner(state.bootstrap(), state.hiveColony(), intent.causeSubjectId()), prepared)));
+                        StructuralRepairProcess.repairOwner(state, intent.semanticTarget().orElseThrow()), prepared)));
                 case ROUTE_CONSTRUCTION -> {
                     RouteConstructionStateSupport.validateIntent(state, intent);
                     if (!FrontierEngineeringWorkSceneSupport.permitsCurrentWorkIntent(state, intent)) {
@@ -86,7 +86,7 @@ final class FrontierInfrastructureProcessModule implements FrontierWorldProcessM
         try {
             return switch (intent.kind()) {
                 case STRUCTURAL_REPAIR -> new CommandPlan.Accepted(List.of(new ProposedEvent(
-                        FrontierWorldStateSupport.semanticOwner(state.bootstrap(), state.hiveColony(), intent.causeSubjectId()), transition)));
+                        StructuralRepairProcess.repairOwner(state, intent.semanticTarget().orElseThrow()), transition)));
                 case ROUTE_CONSTRUCTION -> new CommandPlan.Accepted(RouteConstructionProcess.planTransition(state, intent, transition, now));
                 case ROUTE_CONSTRUCTION_MATERIAL_LOADING -> new CommandPlan.Accepted(RouteConstructionProcess.planMaterialLoadingTransition(state, intent, transition, now));
                 case ROUTE_MAINTENANCE -> new CommandPlan.Accepted(RouteMaintenanceProcess.planTransition(state, intent, transition, now));
@@ -135,12 +135,12 @@ final class FrontierInfrastructureProcessModule implements FrontierWorldProcessM
                                                                    io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
                                                                    PhysicalIntentTransition transition) {
         switch (intent.kind()) {
-            case STRUCTURAL_REPAIR, ROUTE_CONSTRUCTION -> {
-                if (!subject.equals(FrontierWorldStateSupport.semanticOwner(state.bootstrap(), state.hiveColony(), intent.causeSubjectId()))) {
+            case STRUCTURAL_REPAIR -> {
+                if (!subject.equals(StructuralRepairProcess.repairOwner(state, intent.semanticTarget().orElseThrow()))) {
                     throw new IllegalArgumentException("engineering transition lacks its semantic owner");
                 }
             }
-            case ROUTE_CONSTRUCTION_MATERIAL_LOADING, ROUTE_MAINTENANCE, ROUTE_MAINTENANCE_MATERIAL_LOADING -> {
+            case ROUTE_CONSTRUCTION, ROUTE_CONSTRUCTION_MATERIAL_LOADING, ROUTE_MAINTENANCE, ROUTE_MAINTENANCE_MATERIAL_LOADING -> {
                 if (!subject.equals(FrontierRouteNetwork.OWNER)) throw new IllegalArgumentException("engineering transition lacks route-network ownership");
             }
             case EQUIPMENT_ISSUE -> {

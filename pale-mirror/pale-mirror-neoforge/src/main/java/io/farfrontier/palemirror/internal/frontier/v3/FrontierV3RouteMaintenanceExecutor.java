@@ -150,7 +150,8 @@ final class FrontierV3RouteMaintenanceExecutor {
         if (material == null || !material.custody().equals(new InventoryCustody.Cargo(cargoId))
                 || FrontierGrayboxPlan.intactSemanticCell(state.bootstrap(), state.hiveColony(), state.routeTopology(), state.routeConstructions(),
                 FrontierRouteNetwork.OWNER, raw) == null) return null;
-        return new Target(new BlockPos(raw.x(), raw.y(), raw.z()), new GrayboxCell(raw, FrontierRouteNetwork.OWNER, maintenance.expectedMaterial(),
+        return new Target(new BlockPos(raw.x(), raw.y(), raw.z()), new GrayboxCell(raw, new io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTarget(
+                io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER), maintenance.expectedMaterial(),
                 maintenance.semanticPart()), maintenance, material);
     }
 
@@ -162,10 +163,10 @@ final class FrontierV3RouteMaintenanceExecutor {
     static boolean repairOne(ServerLevel level, FrontierV3GrayboxLedger ledger, BlockPos position, GrayboxCell cell) {
         FrontierV3GrayboxLedger.Claim claim = ledger.claim(position);
         if (claim == null || !claim.conflicted() || !claim.owner().equals(cell.ownerId().value())
-                || !claim.material().equals(cell.material().name()) || !claim.semanticPart().equals(cell.semanticPart().name())
+                || claim.targetTag() != cell.semanticTarget().kind().wireTag() || !claim.material().equals(cell.material().name()) || !claim.semanticPart().equals(cell.semanticPart().name())
                 || !level.getBlockState(position).isAir()) return false;
         if (!level.setBlock(position, FrontierV3GrayboxExecutor.material(cell.material()), 3)) return false;
-        ledger.repaired(position, cell.ownerId().value(), cell.material().name(), cell.semanticPart().name());
+        ledger.repaired(position, cell.ownerId().value(), cell.semanticTarget().kind().wireTag(), cell.material().name(), cell.semanticPart().name());
         return true;
     }
 

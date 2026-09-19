@@ -112,7 +112,8 @@ public record RouteTopology(Map<SubjectId, List<BlockPosition>> replacementSuppl
             Map<TraversalEdgeId, TraversalAvailability> edges = new LinkedHashMap<>();
             deltas.values().stream()
                     .filter(delta -> delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS)
-                    .filter(delta -> delta.ownerId().filter(FrontierRouteNetwork.OWNER::equals).isPresent())
+                    .filter(delta -> delta.semanticTarget().filter(target -> target.kind() == PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK
+                            && FrontierRouteNetwork.OWNER.equals(target.subjectId())).isPresent())
                     .filter(delta -> delta.semanticPart().filter(part -> part == GrayboxSemanticPart.ROUTE_SURFACE
                             || part == GrayboxSemanticPart.ROUTE_FOUNDATION).isPresent())
                     .forEach(delta -> FrontierRouteNetwork.affectedTraversalEdges(topology, delta.position())

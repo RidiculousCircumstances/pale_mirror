@@ -765,7 +765,7 @@ class FrontierV3AmbientAdmissionPolicyTest {
                                                             GrayboxCell provider) {
         Map<io.farfrontier.palemirror.frontier.v3.model.BlockPosition, PhysicalDelta> losses = new LinkedHashMap<>(state.physicalDeltas());
         losses.put(lostSupport, new PhysicalDelta(lostSupport, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
-                Optional.of(provider.ownerId()), Optional.of(provider.semanticPart()), "test:admission-policy-named-attacker-loss"));
+                Optional.of(provider.semanticTarget()), Optional.of(provider.semanticPart()), "test:admission-policy-named-attacker-loss"));
         return state.withChanges(FrontierWorldStateUpdate.begin().physicalDeltas(losses));
     }
 

@@ -200,7 +200,7 @@ public final class FrontierV3CargoHandoffGameTests {
     public static void grayboxProvenanceDoesNotForgetAConflict(GameTestHelper helper) {
         BlockPos position = helper.absolutePos(new BlockPos(20, 8, 0));
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(helper.getLevel());
-        ledger.applied(position, "structure:test", "DEPOT", "FOUNDATION"); ledger.conflict(position);
+        ledger.applied(position, "structure:test", 1, "DEPOT", "FOUNDATION"); ledger.conflict(position);
         helper.assertTrue(ledger.claim(position).conflicted(), "a changed applied cell remains conflict evidence, not an invitation to rewrite it");
         helper.succeed();
     }
@@ -213,8 +213,8 @@ public final class FrontierV3CargoHandoffGameTests {
         ExactItemStack concrete = new ExactItemStack(new SubjectId("item:repair-game-test"), new SubjectId("route:frontier-network"), "minecraft:gray_concrete", 2,
                 new InventoryCustody.ContainerSlot(new SubjectId("container:repair-game-test"), 0));
         chest.setItem(0, FrontierV3CargoHandoffExecutor.materializedStack(concrete));
-        GrayboxCell cell = grayboxCell(target, "route:frontier-network", GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
-        FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level); ledger.applied(target, cell.ownerId().value(), cell.material().name(), cell.semanticPart().name()); ledger.conflict(target);
+        GrayboxCell cell = grayboxCell(target, 4, "route:frontier-network", GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
+        FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level); ledger.applied(target, cell.ownerId().value(), cell.semanticTarget().kind().wireTag(), cell.material().name(), cell.semanticPart().name()); ledger.conflict(target);
         helper.assertTrue(FrontierV3StructuralRepairExecutor.applyOne(level, ledger, target, cell, chest, 0, concrete), "an empty owned loss consumes exactly one matching concrete item");
         helper.assertTrue(level.getBlockState(target).is(Blocks.GRAY_CONCRETE) && chest.getItem(0).getCount() == 1 && !ledger.claim(target).conflicted(),
                 "the live block, exact stack and provenance claim converge together");
@@ -227,9 +227,9 @@ public final class FrontierV3CargoHandoffGameTests {
     @GameTest(batch = "pm-frontier-v3-route-maintenance", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void routeMaintenanceRestoresOnlyItsRecordedOwnedLoss(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); BlockPos target = helper.absolutePos(new BlockPos(23, 8, 0));
-        GrayboxCell cell = grayboxCell(target, "route:frontier-network", GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
+        GrayboxCell cell = grayboxCell(target, 4, "route:frontier-network", GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
-        ledger.applied(target, cell.ownerId().value(), cell.material().name(), cell.semanticPart().name()); ledger.conflict(target);
+        ledger.applied(target, cell.ownerId().value(), cell.semanticTarget().kind().wireTag(), cell.material().name(), cell.semanticPart().name()); ledger.conflict(target);
 
         helper.assertTrue(FrontierV3RouteMaintenanceExecutor.repairOne(level, ledger, target, cell),
                 "maintenance restores its exact empty conflicted route claim rather than treating it as fresh construction");
@@ -247,7 +247,7 @@ public final class FrontierV3CargoHandoffGameTests {
     @GameTest(batch = "pm-frontier-v3-route-maintenance", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void coldCanonicalRouteLossRetainsARepairableProvenanceTombstoneOnFirstVisit(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); BlockPos target = helper.absolutePos(new BlockPos(24, 8, 0));
-        GrayboxCell cell = grayboxCell(target, "route:frontier-network", GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
+        GrayboxCell cell = grayboxCell(target, 4, "route:frontier-network", GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
 
         helper.assertValueEqual(FrontierV3RouteMaintenanceExecutor.naturalDemandReadiness(level, target),
@@ -269,7 +269,7 @@ public final class FrontierV3CargoHandoffGameTests {
                 "repair alone clears the tombstone and restores the matching claimed route cell");
 
         BlockPos foreign = target.east(); level.setBlock(foreign, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
-        FrontierV3GrayboxExecutor.retainKnownLoss(level, ledger, grayboxCell(foreign, "route:frontier-network",
+        FrontierV3GrayboxExecutor.retainKnownLoss(level, ledger, grayboxCell(foreign, 4, "route:frontier-network",
                 GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE));
         helper.assertTrue(level.getBlockState(foreign).is(Blocks.DIAMOND_BLOCK) && ledger.claim(foreign) == null,
                 "a COLD-loss visit never adopts, erases, or tombstones foreign non-air geometry");
@@ -283,14 +283,14 @@ public final class FrontierV3CargoHandoffGameTests {
     @GameTest(batch = "pm-frontier-v3-route-construction", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void inactiveRouteConstructionUsesPriorCargoAndNeverAdoptsWorldGeometry(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); BlockPos target = helper.absolutePos(new BlockPos(23, 8, 0));
-        GrayboxCell cell = grayboxCell(target, "route:frontier-network", GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
+        GrayboxCell cell = grayboxCell(target, 4, "route:frontier-network", GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
         helper.assertTrue(FrontierV3RouteConstructionExecutor.applyOne(level, ledger, target, cell),
                 "one fresh inactive corridor cell accepts the separately-confirmed COLD cargo work");
         helper.assertTrue(level.getBlockState(target).is(Blocks.GRAY_CONCRETE) && ledger.claim(target) != null,
                 "the exact live block and newly claimed route provenance must converge without a remote chest");
         BlockPos foreign = target.south(); level.setBlock(foreign, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
-        helper.assertFalse(FrontierV3RouteConstructionExecutor.applyOne(level, ledger, foreign, grayboxCell(foreign, "route:frontier-network",
+        helper.assertFalse(FrontierV3RouteConstructionExecutor.applyOne(level, ledger, foreign, grayboxCell(foreign, 4, "route:frontier-network",
                 GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE)),
                 "construction must never adopt or overwrite a player/world block");
         helper.assertTrue(level.getBlockState(foreign).is(Blocks.DIAMOND_BLOCK),
@@ -323,7 +323,7 @@ public final class FrontierV3CargoHandoffGameTests {
         ServerLevel level = helper.getLevel();
         BlockPos position = interior(helper);
         level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
-        GrayboxCell cell = grayboxCell(position, "structure:graybox-fresh", GrayboxMaterial.DEPOT, GrayboxSemanticPart.FOUNDATION);
+        GrayboxCell cell = grayboxCell(position, 1, "structure:graybox-fresh", GrayboxMaterial.DEPOT, GrayboxSemanticPart.FOUNDATION);
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
 
         helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, cell), FrontierV3GrayboxExecutor.ProjectionResult.APPLIED,
@@ -342,7 +342,7 @@ public final class FrontierV3CargoHandoffGameTests {
         ServerLevel level = helper.getLevel();
         BlockPos position = interior(helper);
         level.setBlock(position, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
-        GrayboxCell cell = grayboxCell(position, "structure:graybox-obstructed", GrayboxMaterial.HALL, GrayboxSemanticPart.WALL);
+        GrayboxCell cell = grayboxCell(position, 1, "structure:graybox-obstructed", GrayboxMaterial.HALL, GrayboxSemanticPart.WALL);
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
 
         helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, cell), FrontierV3GrayboxExecutor.ProjectionResult.CONFLICT,
@@ -357,7 +357,7 @@ public final class FrontierV3CargoHandoffGameTests {
     public static void grayboxDriftBecomesTerminalConflictInsteadOfTemplateRepair(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos position = interior(helper);
-        GrayboxCell cell = grayboxCell(position, "structure:graybox-drift", GrayboxMaterial.HOUSING, GrayboxSemanticPart.WALL);
+        GrayboxCell cell = grayboxCell(position, 1, "structure:graybox-drift", GrayboxMaterial.HOUSING, GrayboxSemanticPart.WALL);
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
         helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, cell), FrontierV3GrayboxExecutor.ProjectionResult.APPLIED,
                 "the test begins from an owned cell");
@@ -376,7 +376,7 @@ public final class FrontierV3CargoHandoffGameTests {
         ServerLevel level = helper.getLevel();
         BlockPos position = helper.absolutePos(new BlockPos(36, 8, 0));
         level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
-        GrayboxCell cell = grayboxCell(position, "structure:1-hall", GrayboxMaterial.HALL, GrayboxSemanticPart.FOUNDATION);
+        GrayboxCell cell = grayboxCell(position, 1, "structure:1-hall", GrayboxMaterial.HALL, GrayboxSemanticPart.FOUNDATION);
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
         helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, cell), FrontierV3GrayboxExecutor.ProjectionResult.APPLIED,
                 "the causality test begins from a known owned structural cell");
@@ -399,7 +399,7 @@ public final class FrontierV3CargoHandoffGameTests {
         BlockPos unknown = helper.absolutePos(new BlockPos(41, 8, 0));
         level.setBlock(known.below(), Blocks.STONE.defaultBlockState(), 3);
         FrontierV3GrayboxLedger provenance = FrontierV3GrayboxLedger.get(level);
-        GrayboxCell organ = grayboxCell(known, "organ:explosion-test", GrayboxMaterial.HIVE_GANGLION, GrayboxSemanticPart.HIVE_TISSUE);
+        GrayboxCell organ = grayboxCell(known, 2, "organ:explosion-test", GrayboxMaterial.HIVE_GANGLION, GrayboxSemanticPart.HIVE_TISSUE);
         helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, provenance, organ), FrontierV3GrayboxExecutor.ProjectionResult.APPLIED,
                 "the observation begins with an exact owned organ cell");
         level.setBlock(unknown, Blocks.STONE.defaultBlockState(), 3);
@@ -423,8 +423,10 @@ public final class FrontierV3CargoHandoffGameTests {
         helper.succeed();
     }
 
-    private static GrayboxCell grayboxCell(BlockPos position, String owner, GrayboxMaterial material, GrayboxSemanticPart part) {
-        return new GrayboxCell(new BlockPosition(position.getX(), position.getY(), position.getZ()), new SubjectId(owner), material, part);
+    private static GrayboxCell grayboxCell(BlockPos position, int targetTag, String owner, GrayboxMaterial material, GrayboxSemanticPart part) {
+        return new GrayboxCell(new BlockPosition(position.getX(), position.getY(), position.getZ()),
+                new io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTarget(
+                        io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.fromWireTag(targetTag), new SubjectId(owner)), material, part);
     }
 
     @GameTest(batch = "pm-frontier-v3-player-custody", templateNamespace = "minecraft",

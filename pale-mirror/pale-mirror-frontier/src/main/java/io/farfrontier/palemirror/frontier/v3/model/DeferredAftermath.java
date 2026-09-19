@@ -64,7 +64,7 @@ public record DeferredAftermath(SubjectId id, SubjectId ownerId, SubjectId cause
             return new DeferredAftermath(id, ownerId, causeId, eventAt, observedAt, provenance, knowledge, expectedEpoch, next, firstUnresolved(next));
         }
         if (pendingConflict) {
-            next.set(expectedCursor, new DeferredAftermathCell(current.position(), current.expectedOwner(), current.expectedMaterial(), current.expectedPart(),
+            next.set(expectedCursor, new DeferredAftermathCell(current.position(), current.semanticTarget(), current.expectedMaterial(), current.expectedPart(),
                     -1L, DeferredAftermathCellStatus.CONFLICTED));
         } else next.set(expectedCursor, current.resolved(result));
         return new DeferredAftermath(id, ownerId, causeId, eventAt, OptionalLong.of(observationAt), provenance, knowledge, expectedEpoch,

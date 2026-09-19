@@ -38,7 +38,7 @@ final class DeferredAftermathPayloadCodecs {
         output.writeByte(value.cells().size()); output.writeByte(value.resolutionCursor());
         for (DeferredAftermathCell cell : value.cells()) {
             output.writeInt(cell.position().x()); output.writeInt(cell.position().y()); output.writeInt(cell.position().z());
-            subject(output, cell.expectedOwner()); FrontierWorldPayloadCodecs.writeString(output, cell.expectedMaterial().name()); output.writeByte(FrontierWireTags.tag(cell.expectedPart())); output.writeLong(cell.authorityRevision());
+            PhysicalDeltaPayloadCodecs.writeTarget(output, cell.semanticTarget()); FrontierWorldPayloadCodecs.writeString(output, cell.expectedMaterial().name()); output.writeByte(FrontierWireTags.tag(cell.expectedPart())); output.writeLong(cell.authorityRevision());
             output.writeByte(FrontierWireTags.tag(cell.status()));
         }
     }
@@ -48,7 +48,7 @@ final class DeferredAftermathPayloadCodecs {
         DeferredAftermathKnowledge knowledge = FrontierWireTags.require(DeferredAftermathKnowledge.class, input.readUnsignedByte()); long epoch = input.readLong();
         int count = input.readUnsignedByte(), cursor = input.readUnsignedByte(); ArrayList<DeferredAftermathCell> cells = new ArrayList<>();
         for (int index = 0; index < count; index++) cells.add(new DeferredAftermathCell(
-                new BlockPosition(input.readInt(), input.readInt(), input.readInt()), subject(input),
+                new BlockPosition(input.readInt(), input.readInt(), input.readInt()), PhysicalDeltaPayloadCodecs.readTarget(input),
                 GrayboxMaterial.valueOf(FrontierWorldPayloadCodecs.readString(input)),
                 FrontierWireTags.require(GrayboxSemanticPart.class, input.readUnsignedByte()), input.readLong(),
                 FrontierWireTags.require(DeferredAftermathCellStatus.class, input.readUnsignedByte())));

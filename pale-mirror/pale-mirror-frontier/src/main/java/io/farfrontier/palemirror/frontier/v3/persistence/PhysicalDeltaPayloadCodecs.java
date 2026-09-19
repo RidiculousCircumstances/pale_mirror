@@ -6,6 +6,8 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWireTags;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxSemanticPart;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDelta;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaKind;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTarget;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaObserved;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltasObserved;
 import io.farfrontier.palemirror.frontier.v3.kernel.PayloadCodec;
@@ -58,8 +60,8 @@ final class PhysicalDeltaPayloadCodecs {
 
     private static void write(DataOutputStream output, PhysicalDelta delta) throws IOException {
         FrontierWorldPayloadCodecs.writePosition(output, delta.position()); output.writeByte(delta.kind().wireTag());
-        FrontierWorldPayloadCodecs.writeString(output, delta.cause()); output.writeBoolean(delta.ownerId().isPresent());
-        if (delta.ownerId().isPresent()) FrontierWorldPayloadCodecs.writeSubject(output, delta.ownerId().orElseThrow());
+        FrontierWorldPayloadCodecs.writeString(output, delta.cause()); output.writeBoolean(delta.semanticTarget().isPresent());
+        if (delta.semanticTarget().isPresent()) writeTarget(output, delta.semanticTarget().orElseThrow());
         output.writeBoolean(delta.semanticPart().isPresent());
         if (delta.semanticPart().isPresent()) output.writeByte(delta.semanticPart().orElseThrow().wireTag());
     }
@@ -67,14 +69,21 @@ final class PhysicalDeltaPayloadCodecs {
     private static PhysicalDelta read(DataInputStream input) throws IOException {
         BlockPosition position = FrontierWorldPayloadCodecs.readPosition(input); int kind = input.readUnsignedByte();
         String cause = FrontierWorldPayloadCodecs.readString(input);
-        Optional<io.farfrontier.palemirror.frontier.v3.api.SubjectId> owner = input.readBoolean()
-                ? Optional.of(FrontierWorldPayloadCodecs.readSubject(input).value()) : Optional.empty();
+        Optional<PhysicalDeltaSemanticTarget> target = input.readBoolean() ? Optional.of(readTarget(input)) : Optional.empty();
         int part = input.readBoolean() ? input.readUnsignedByte() : -1;
         if (kind >= PhysicalDeltaKind.values().length || part >= GrayboxSemanticPart.values().length) {
             throw new IllegalArgumentException("unknown physical delta value");
         }
         Optional<GrayboxSemanticPart> semantic = part < 0 ? Optional.empty()
                 : Optional.of(FrontierWireTags.require(GrayboxSemanticPart.class, part));
-        return new PhysicalDelta(position, FrontierWireTags.require(PhysicalDeltaKind.class, kind), owner, semantic, cause);
+        return new PhysicalDelta(position, FrontierWireTags.require(PhysicalDeltaKind.class, kind), target, semantic, cause);
+    }
+
+    static void writeTarget(DataOutputStream output, PhysicalDeltaSemanticTarget target) throws IOException {
+        output.writeByte(target.kind().wireTag()); FrontierWorldPayloadCodecs.writeSubject(output, target.subjectId());
+    }
+    static PhysicalDeltaSemanticTarget readTarget(DataInputStream input) throws IOException {
+        return new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.fromWireTag(input.readUnsignedByte()),
+                FrontierWorldPayloadCodecs.readSubject(input).value());
     }
 }

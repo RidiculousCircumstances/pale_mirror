@@ -253,7 +253,8 @@ public final class SupplyOperationProcess {
     private static Optional<BlockPosition> firstObservedRouteLoss(FrontierWorldState state, RouteOperation operation) {
         return state.physicalDeltas().values().stream()
                 .filter(delta -> delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS)
-                .filter(delta -> delta.ownerId().filter(FrontierRouteNetwork.OWNER::equals).isPresent())
+                .filter(delta -> delta.semanticTarget().filter(target -> target.kind() == io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK
+                        && FrontierRouteNetwork.OWNER.equals(target.subjectId())).isPresent())
                 .filter(delta -> delta.semanticPart().filter(part -> part == GrayboxSemanticPart.ROUTE_SURFACE
                         || part == GrayboxSemanticPart.ROUTE_FOUNDATION).isPresent())
                 .map(PhysicalDelta::position)

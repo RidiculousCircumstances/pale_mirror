@@ -107,7 +107,7 @@ final class FrontierV3DeferredAftermathExecutor {
         if (!world.clear(cell.position())) {
             conflicted(runtime, aftermath, cursor, ledger, claim, cell); return;
         }
-        ledger.damaged(block(cell), claim.owner(), claim.material(), claim.semanticPart());
+        ledger.damaged(block(cell), claim.owner(), claim.targetTag(), claim.material(), claim.semanticPart());
         FrontierV3GrayboxLedger.Claim damaged = ledger.claim(block(cell));
         if (damaged == null || !damaged.conflicted() || !exactClaim(damaged, cell) || damaged.revision() != cell.authorityRevision()) {
             conflicted(runtime, aftermath, cursor, ledger, damaged, cell); return;
@@ -116,7 +116,7 @@ final class FrontierV3DeferredAftermathExecutor {
     }
 
     private static boolean exactClaim(FrontierV3GrayboxLedger.Claim claim, DeferredAftermathCell cell) {
-        return claim.owner().equals(cell.expectedOwner().value()) && claim.material().equals(cell.expectedMaterial().name())
+        return claim.owner().equals(cell.expectedOwner().value()) && claim.targetTag() == cell.semanticTarget().kind().wireTag() && claim.material().equals(cell.expectedMaterial().name())
                 && claim.semanticPart().equals(cell.expectedPart().name());
     }
     private static boolean conflicted(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, DeferredAftermath aftermath, int cursor,

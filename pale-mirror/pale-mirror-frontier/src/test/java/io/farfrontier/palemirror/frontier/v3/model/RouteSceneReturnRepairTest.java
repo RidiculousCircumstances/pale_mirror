@@ -42,7 +42,7 @@ class RouteSceneReturnRepairTest {
         // travel cursor; COLD is not allowed to reconstruct a fresh open segment on release.
         BlockPosition obstruction = new BlockPosition(-367, 64, -320);
         submit(engine, world, new PhysicalDeltaObserved(new PhysicalDelta(obstruction, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
-                Optional.of(FrontierRouteNetwork.OWNER), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:test")));
+                Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:test")));
         RouteOperation obstructed = state(engine).operations().get(operation.id());
         OperationTravel travel = obstructed.activeTravel().orElseThrow();
         assertTrue(travel.canAdvanceNextEdge());
@@ -90,7 +90,7 @@ class RouteSceneReturnRepairTest {
 
         BlockPosition obstruction = new BlockPosition(-380, 64, -304);
         submit(engine, world, new PhysicalDeltaObserved(new PhysicalDelta(obstruction, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
-                Optional.of(FrontierRouteNetwork.OWNER), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:test")));
+                Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:test")));
         RouteOperation obstructed = state(engine).operations().get(operation.id());
         assertFalse(state(engine).routeTopology().supplyPassable(state(engine).bootstrap(), operation.settlementId()));
         // The retained HOT segment ends before this later loss.  It remains traversable only

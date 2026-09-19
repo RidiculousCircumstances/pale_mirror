@@ -409,9 +409,9 @@ final class FrontierDevelopmentScenarios {
         BlockPosition firstLoss = new BlockPosition(-380, 64, -304);
         BlockPosition secondLoss = new BlockPosition(-140, 64, -304);
         state = state.recordPhysicalDelta(new PhysicalDelta(firstLoss, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
-                Optional.of(FrontierRouteNetwork.OWNER), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "fixture:cold-source"));
+                Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "fixture:cold-source"));
         state = state.recordPhysicalDelta(new PhysicalDelta(secondLoss, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
-                Optional.of(FrontierRouteNetwork.OWNER), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "fixture:loaded-repair"));
+                Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "fixture:loaded-repair"));
 
         RouteMaintenance first = maintenanceStarted(state, 1, 100L, firstLoss);
         state = RouteMaintenanceStateSupport.reduceStarted(state, FrontierRouteNetwork.OWNER, new RouteMaintenanceStarted(first));

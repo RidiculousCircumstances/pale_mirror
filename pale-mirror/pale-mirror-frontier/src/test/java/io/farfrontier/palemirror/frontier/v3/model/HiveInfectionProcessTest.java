@@ -53,7 +53,7 @@ class HiveInfectionProcessTest {
             for (int index = 0; index < threshold; index++) {
                 GrayboxCell cell = cells.get(index);
                 state = state.recordPhysicalDelta(new PhysicalDelta(cell.position(), PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
-                        Optional.of(ganglion.id()), Optional.of(cell.semanticPart()), "test:ganglion-loss"));
+                        Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.HIVE_ORGAN, ganglion.id())), Optional.of(cell.semanticPart()), "test:ganglion-loss"));
             }
         }
         state = withTask(state, target);

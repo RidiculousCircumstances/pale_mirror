@@ -131,7 +131,7 @@ final class FrontierV3HiveMobilizationExecutor {
         if (!level.setBlock(position, Blocks.AIR.defaultBlockState(), 3) || !level.getBlockState(position).isAir()) return;
         boolean accepted = submit(level, runtime, state, "hive-mobilization-cocoon-released", mobilization.id(),
                 new HiveMobilizationCocoonReleased(mobilization.id(), bioformId));
-        if (accepted) ledger.retire(position, claim.owner(), claim.material(), claim.semanticPart());
+        if (accepted) ledger.retire(position, claim.owner(), claim.targetTag(), claim.material(), claim.semanticPart());
     }
 
     /**
@@ -141,6 +141,7 @@ final class FrontierV3HiveMobilizationExecutor {
     static CocoonProjection cocoonProjection(FrontierV3GrayboxLedger.Claim claim, SubjectId bioformId, boolean expectedBlock) {
         if (claim == null) return CocoonProjection.PENDING;
         if (!claim.conflicted() && claim.owner().equals(bioformId.value())
+                && claim.targetTag() == io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.HIVE_COCOON.wireTag()
                 && claim.material().equals(GrayboxMaterial.HIVE_COCOON.name())
                 && claim.semanticPart().equals(GrayboxSemanticPart.COCOON.name()) && expectedBlock) {
             return CocoonProjection.PRESENT;

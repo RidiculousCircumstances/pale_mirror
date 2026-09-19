@@ -196,7 +196,7 @@ class HiveSettlementAssaultProcessTest {
         GrayboxCell provider = FrontierGrayboxPlan.compile(fixture.state()).cells().get(unavailable);
         java.util.Map<BlockPosition, PhysicalDelta> losses = new java.util.LinkedHashMap<>(fixture.state().physicalDeltas());
         losses.put(unavailable, new PhysicalDelta(unavailable, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
-                Optional.of(provider.ownerId()), Optional.of(provider.semanticPart()), "test:assault-provider-unavailable"));
+                Optional.of(provider.semanticTarget()), Optional.of(provider.semanticPart()), "test:assault-provider-unavailable"));
         FrontierWorldState unavailableState = fixture.state().withChanges(FrontierWorldStateUpdate.begin().physicalDeltas(losses));
         assertFalse(FrontierSettlementAssaultBattlefield.serviceableFloor(unavailableState, unavailable),
                 "a missing declared provider surface must fail admission instead of becoming an opportunistic floor");

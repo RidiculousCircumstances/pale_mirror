@@ -44,7 +44,7 @@ class BioformLifecycleTest {
         BlockPosition cocoon = HiveCocoonPlan.cocoonCell(hibernaculum, slot);
 
         FrontierWorldState released = state.recordPhysicalDelta(new PhysicalDelta(cocoon, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
-                Optional.of(dormant.id()), Optional.of(GrayboxSemanticPart.COCOON), "player:test"));
+                Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.HIVE_COCOON, dormant.id())), Optional.of(GrayboxSemanticPart.COCOON), "player:test"));
 
         assertEquals(BioformLifecyclePhase.WAKING, released.hiveColony().bioformLifecycles().get(dormant.id()).phase());
         assertEquals(BodyPosition.above(HiveCocoonPlan.wakingSurface(hibernaculum, slot)), released.actorLocations().get(dormant.id()).body());

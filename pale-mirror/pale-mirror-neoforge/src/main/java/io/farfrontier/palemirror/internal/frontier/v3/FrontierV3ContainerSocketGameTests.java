@@ -6,6 +6,8 @@ import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxCell;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxMaterial;
 import io.farfrontier.palemirror.frontier.v3.model.GrayboxSemanticPart;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTarget;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -24,7 +26,7 @@ public final class FrontierV3ContainerSocketGameTests {
     public static void ownedSocketDefersBeforeProjectionThenAcceptsOnlyItsExactClaim(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); BlockPos target = helper.absolutePos(new BlockPos(8, 8, 0));
         GrayboxCell support = new GrayboxCell(new BlockPosition(target.getX(), target.getY() - 1, target.getZ()),
-                new SubjectId("structure:socket-test"), GrayboxMaterial.DEPOT, GrayboxSemanticPart.FOUNDATION);
+                new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, new SubjectId("structure:socket-test")), GrayboxMaterial.DEPOT, GrayboxSemanticPart.FOUNDATION);
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
 
         helper.assertValueEqual(FrontierV3ContainerSurfaceExecutor.socketReadiness(level, ledger, target, support),
@@ -48,7 +50,7 @@ public final class FrontierV3ContainerSocketGameTests {
     public static void changedOwnedSupportIsConflictRatherThanAValidSocket(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); BlockPos target = helper.absolutePos(new BlockPos(16, 8, 0));
         GrayboxCell support = new GrayboxCell(new BlockPosition(target.getX(), target.getY() - 1, target.getZ()),
-                new SubjectId("structure:socket-test-drift"), GrayboxMaterial.DEPOT, GrayboxSemanticPart.FOUNDATION);
+                new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, new SubjectId("structure:socket-test-drift")), GrayboxMaterial.DEPOT, GrayboxSemanticPart.FOUNDATION);
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
         level.setBlock(target.below().below(), Blocks.STONE.defaultBlockState(), 3);
         FrontierV3GrayboxExecutor.project(level, ledger, support);
@@ -67,7 +69,7 @@ public final class FrontierV3ContainerSocketGameTests {
         ServerLevel level = helper.getLevel(); BlockPos target = helper.absolutePos(new BlockPos(24, 8, 0));
         SubjectId container = new SubjectId("container:prepared-recovery");
         GrayboxCell support = new GrayboxCell(new BlockPosition(target.getX(), target.getY() - 1, target.getZ()),
-                new SubjectId("organ:prepared-recovery"), GrayboxMaterial.HIVE_STORE, GrayboxSemanticPart.HIVE_TISSUE);
+                new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.HIVE_ORGAN, new SubjectId("organ:prepared-recovery")), GrayboxMaterial.HIVE_STORE, GrayboxSemanticPart.HIVE_TISSUE);
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
         FrontierV3GrayboxExecutor.project(level, ledger, support);
 

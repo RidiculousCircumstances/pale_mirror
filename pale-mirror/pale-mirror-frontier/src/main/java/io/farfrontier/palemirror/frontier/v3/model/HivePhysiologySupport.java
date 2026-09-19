@@ -38,7 +38,8 @@ public final class HivePhysiologySupport {
         // A player/world loss is already canonical physical evidence; an automatic release
         // advances to ASSEMBLING only after its own loaded-world confirmation.
         return state.physicalDeltas().values().stream().anyMatch(delta -> delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS
-                && delta.ownerId().filter(actorId::equals).isPresent()
+                && delta.semanticTarget().filter(target -> target.kind() == PhysicalDeltaSemanticTargetKind.HIVE_COCOON
+                && target.subjectId().equals(actorId)).isPresent()
                 && delta.semanticPart().filter(GrayboxSemanticPart.COCOON::equals).isPresent());
     }
 

@@ -546,7 +546,7 @@ class HiveMobilizationProcessTest {
         BlockPosition position = HiveCocoonPlan.cocoonCell(hibernaculum, slot);
 
         state = state.recordPhysicalDelta(new PhysicalDelta(position, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
-                Optional.of(broken), Optional.of(GrayboxSemanticPart.COCOON), "player:test"));
+                Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.HIVE_COCOON, broken)), Optional.of(GrayboxSemanticPart.COCOON), "player:test"));
 
         HiveMobilization conflicted = state.hiveColony().mobilizations().get(mobilization.id());
         assertEquals(HiveMobilizationStatus.CONFLICT, conflicted.status());

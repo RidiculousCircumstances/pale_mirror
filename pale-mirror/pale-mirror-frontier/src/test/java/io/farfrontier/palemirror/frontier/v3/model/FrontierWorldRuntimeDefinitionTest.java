@@ -190,13 +190,13 @@ class FrontierWorldRuntimeDefinitionTest {
         GrayboxCell organCell = FrontierGrayboxPlan.compile(initial).cells().values().stream()
                 .filter(value -> value.ownerId().equals(organ.id())).findFirst().orElseThrow();
         FrontierWorldState organDamaged = initial.recordPhysicalDelta(new PhysicalDelta(organCell.position(), PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
-                java.util.Optional.of(organ.id()), java.util.Optional.of(organCell.semanticPart()), "explosion:test"));
+                java.util.Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.HIVE_ORGAN, organ.id())), java.util.Optional.of(organCell.semanticPart()), "explosion:test"));
         assertTrue(!FrontierGrayboxPlan.compile(organDamaged).cells().containsKey(organCell.position()));
 
         List<BlockPosition> supplyRoute = FrontierRouteNetwork.supplyWaypoints(initial.bootstrap(), initial.bootstrap().settlements().getFirst().id());
         BlockPosition routePosition = supplyRoute.get(2);
         PhysicalDelta routeLoss = new PhysicalDelta(routePosition, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
-                java.util.Optional.of(FrontierRouteNetwork.OWNER), java.util.Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:test");
+                java.util.Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)), java.util.Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:test");
         FrontierWorldState routeDamaged = initial.recordPhysicalDelta(routeLoss);
         PhysicalDeltaObserved observed = (PhysicalDeltaObserved) FrontierWorldRuntimeDefinition.payloadCodecs().decode("frontier.physical_delta_observed",
                 FrontierWorldRuntimeDefinition.payloadCodecs().encode(new PhysicalDeltaObserved(routeLoss)));

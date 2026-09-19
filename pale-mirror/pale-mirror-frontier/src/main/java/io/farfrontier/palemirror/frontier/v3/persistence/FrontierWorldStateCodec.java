@@ -9,7 +9,7 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 162; private static final int MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 163; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -238,8 +238,8 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         for (PhysicalDelta delta : values.values().stream().sorted(Comparator.comparingInt((PhysicalDelta value) -> value.position().x())
                 .thenComparingInt(value -> value.position().y()).thenComparingInt(value -> value.position().z())).toList()) {
             writePosition(output, delta.position()); output.writeByte(delta.kind().wireTag()); writeString(output, delta.cause());
-            output.writeBoolean(delta.ownerId().isPresent());
-            if (delta.ownerId().isPresent()) writeString(output, delta.ownerId().orElseThrow().value());
+            output.writeBoolean(delta.semanticTarget().isPresent());
+            if (delta.semanticTarget().isPresent()) writePhysicalDeltaTarget(output, delta.semanticTarget().orElseThrow());
             output.writeBoolean(delta.semanticPart().isPresent());
             if (delta.semanticPart().isPresent()) output.writeByte(delta.semanticPart().orElseThrow().wireTag());
         }
@@ -248,16 +248,22 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         Map<BlockPosition, PhysicalDelta> values = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
             BlockPosition position = readPosition(input); int kind = input.readUnsignedByte(); String cause = readString(input);
-            boolean ownerPresent = input.readBoolean(); java.util.Optional<SubjectId> owner = ownerPresent
-                    ? java.util.Optional.of(new SubjectId(readString(input))) : java.util.Optional.empty();
+            boolean targetPresent = input.readBoolean(); java.util.Optional<PhysicalDeltaSemanticTarget> target = targetPresent
+                    ? java.util.Optional.of(readPhysicalDeltaTarget(input)) : java.util.Optional.empty();
             boolean partPresent = input.readBoolean(); java.util.Optional<GrayboxSemanticPart> part = partPresent
                     ? java.util.Optional.of(readSemanticPart(input)) : java.util.Optional.empty();
             if (kind >= PhysicalDeltaKind.values().length || values.put(position,
-                    new PhysicalDelta(position, FrontierWireTags.require(PhysicalDeltaKind.class, kind), owner, part, cause)) != null) {
+                    new PhysicalDelta(position, FrontierWireTags.require(PhysicalDeltaKind.class, kind), target, part, cause)) != null) {
                 throw new IllegalArgumentException("invalid or duplicate physical delta");
             }
         }
         return values;
+    }
+    private static void writePhysicalDeltaTarget(DataOutputStream output, PhysicalDeltaSemanticTarget target) throws IOException {
+        output.writeByte(target.kind().wireTag()); writeString(output, target.subjectId().value());
+    }
+    private static PhysicalDeltaSemanticTarget readPhysicalDeltaTarget(DataInputStream input) throws IOException {
+        return new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.fromWireTag(input.readUnsignedByte()), new SubjectId(readString(input)));
     }
     private static GrayboxSemanticPart readSemanticPart(DataInputStream input) throws IOException {
         int ordinal = input.readUnsignedByte();

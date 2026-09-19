@@ -29,7 +29,7 @@ import java.util.Optional;
  */
 final class FrontierV3PhysicalObservationLedger extends SavedData {
     private static final String NAME = "pale_mirror_frontier_v3_physical_observations";
-    private static final int FORMAT = 1;
+    private static final int FORMAT = 2;
     private static final int MAX_PENDING_EFFECTS = 64;
     private static final int MAX_PENDING_CELLS = 65_536;
     private final LinkedHashMap<String, Pending> pending;
@@ -89,7 +89,8 @@ final class FrontierV3PhysicalObservationLedger extends SavedData {
         try {
             var material = io.farfrontier.palemirror.frontier.v3.model.GrayboxMaterial.valueOf(claim.material());
             var part = io.farfrontier.palemirror.frontier.v3.model.GrayboxSemanticPart.valueOf(claim.semanticPart());
-            if (baseline.equals(FrontierV3GrayboxExecutor.material(material))) return Optional.of(new Semantic(claim.owner(), part.name()));
+            io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.fromWireTag(claim.targetTag());
+            if (baseline.equals(FrontierV3GrayboxExecutor.material(material))) return Optional.of(new Semantic(claim.owner(), claim.targetTag(), part.name()));
         } catch (IllegalArgumentException ignored) {
             // The ledger is provenance only; malformed or drifted claims never become semantic fact.
         }
@@ -117,9 +118,10 @@ final class FrontierV3PhysicalObservationLedger extends SavedData {
     }
 
     record Ready(String effectId, Candidate candidate) { }
-    record Semantic(String owner, String semanticPart) {
+    record Semantic(String owner, int targetTag, String semanticPart) {
         Semantic {
             if (owner == null || owner.isBlank() || semanticPart == null || semanticPart.isBlank()) throw new IllegalArgumentException("invalid v3 semantic observation");
+            io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.fromWireTag(targetTag);
         }
     }
     record Candidate(long position, CompoundTag baseline, Optional<Semantic> semantic) {
@@ -132,16 +134,16 @@ final class FrontierV3PhysicalObservationLedger extends SavedData {
         }
         CompoundTag save() {
             CompoundTag value = new CompoundTag(); value.putLong("pos", position); value.put("baseline", baseline.copy());
-            semantic.ifPresent(known -> { value.putString("owner", known.owner()); value.putString("part", known.semanticPart()); });
+            semantic.ifPresent(known -> { value.putString("owner", known.owner()); value.putInt("targetTag", known.targetTag()); value.putString("part", known.semanticPart()); });
             return value;
         }
         static Candidate load(CompoundTag value) {
             if (!value.contains("pos", Tag.TAG_LONG) || !value.contains("baseline", Tag.TAG_COMPOUND)) throw new IllegalStateException("incomplete v3 physical observation candidate");
-            boolean hasOwner = value.contains("owner", Tag.TAG_STRING), hasPart = value.contains("part", Tag.TAG_STRING);
-            if (hasOwner != hasPart) throw new IllegalStateException("partial v3 physical observation semantic");
+            boolean hasOwner = value.contains("owner", Tag.TAG_STRING), hasTarget = value.contains("targetTag", Tag.TAG_INT), hasPart = value.contains("part", Tag.TAG_STRING);
+            if (hasOwner != hasPart || hasOwner != hasTarget) throw new IllegalStateException("partial v3 physical observation semantic");
             try {
                 return new Candidate(value.getLong("pos"), value.getCompound("baseline"), hasOwner
-                        ? Optional.of(new Semantic(value.getString("owner"), value.getString("part"))) : Optional.empty());
+                        ? Optional.of(new Semantic(value.getString("owner"), value.getInt("targetTag"), value.getString("part"))) : Optional.empty());
             } catch (IllegalArgumentException invalid) { throw new IllegalStateException("invalid v3 physical observation candidate", invalid); }
         }
     }
