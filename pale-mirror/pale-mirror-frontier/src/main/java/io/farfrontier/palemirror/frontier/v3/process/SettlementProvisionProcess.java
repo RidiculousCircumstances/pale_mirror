@@ -118,12 +118,12 @@ public final class SettlementProvisionProcess {
         SettlementRationAllocation allocation = provision.currentAllocation(); ExactItemStack item = state.inventory().items().get(allocation.itemId());
         SubjectId depot = FrontierWorldState.depotId(provision.settlementId());
         if (ReferenceContainerCustody.blocksCanonicalUse(state, depot)) {
-            return List.of(new ProposedEvent(provision.settlementId(), new SettlementProvisionResolved(provision.settlementId(), SettlementProvisionStatus.CONFLICT)));
+            return List.of(new ProposedEvent(provision.settlementId(), TerminalDiagnosticProducer.provisionConflict(provision.settlementId())));
         }
         if (allocation.fungible()) return planFungibleProgress(state, action, provision, allocation, depot);
         if (item == null || !BREAD.equals(item.itemKind()) || item.count() < allocation.count()
                 || !(item.custody() instanceof InventoryCustody.ContainerSlot slot) || !slot.containerId().equals(depot)) {
-            return List.of(new ProposedEvent(provision.settlementId(), new SettlementProvisionResolved(provision.settlementId(), SettlementProvisionStatus.CONFLICT)));
+            return List.of(new ProposedEvent(provision.settlementId(), TerminalDiagnosticProducer.provisionConflict(provision.settlementId())));
         }
         ContainerSurface surface = state.inventory().surfaces().get(depot);
         // The converted depot's visible surface is only a locator.  Its exact current
@@ -143,7 +143,7 @@ public final class SettlementProvisionProcess {
             return List.copyOf(events);
         }
         if (surface.status() != ContainerSurfaceStatus.ACTIVE) {
-            return List.of(new ProposedEvent(provision.settlementId(), new SettlementProvisionResolved(provision.settlementId(), SettlementProvisionStatus.CONFLICT)));
+            return List.of(new ProposedEvent(provision.settlementId(), TerminalDiagnosticProducer.provisionConflict(provision.settlementId())));
         }
         PhysicalIntent intent = intent(state.bootstrap(), provision, allocation);
         return List.of(new ProposedEvent(provision.settlementId(), new PhysicalIntentPrepared(intent)));
@@ -159,7 +159,7 @@ public final class SettlementProvisionProcess {
             events.add(schedule(StrategicObjectiveProcess.provisionReconsideration(provision, now + 1L)));
         }
         if (transition.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) {
-            events.add(new ProposedEvent(provision.settlementId(), new SettlementProvisionResolved(provision.settlementId(), SettlementProvisionStatus.CONFLICT)));
+            events.add(new ProposedEvent(provision.settlementId(), TerminalDiagnosticProducer.provisionConflict(provision.settlementId())));
         }
         return List.copyOf(events);
     }
@@ -331,7 +331,7 @@ public final class SettlementProvisionProcess {
         ClaimAllocation claim = state.inventory().fungibleResources().claims().get(source.claimId());
         if (account == null || claim == null || !account.lotQuantities().containsKey(allocation.itemId()) || claim.quantity() != allocation.count()
                 || account.claimQuantities().getOrDefault(claim.id(), 0) != allocation.count()) {
-            return List.of(new ProposedEvent(provision.settlementId(), new SettlementProvisionResolved(provision.settlementId(), SettlementProvisionStatus.CONFLICT)));
+            return List.of(new ProposedEvent(provision.settlementId(), TerminalDiagnosticProducer.provisionConflict(provision.settlementId())));
         }
         if (state.inventory().fungibleResources().bindings().values().stream().anyMatch(binding -> binding.accountId().equals(account.id()))) {
             return List.of(schedule(progressAfter(provision, Math.addExact(action.dueAt().ticks(), 100L))));

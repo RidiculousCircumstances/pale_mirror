@@ -64,12 +64,12 @@ final class SettlementProvisionPayloadCodecs {
         @Override public String type() { return "frontier.settlement_provision_resolved"; }
         @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
             SettlementProvisionResolved resolved = (SettlementProvisionResolved) payload;
-            FrontierWorldPayloadCodecs.writeSubject(output, resolved.settlementId()); output.writeByte(resolved.status().wireTag());
+            FrontierWorldPayloadCodecs.writeSubject(output, resolved.settlementId()); output.writeByte(resolved.status().wireTag()); output.writeBoolean(resolved.diagnostic().isPresent()); if (resolved.diagnostic().isPresent()) FrontierWorldPayloadCodecs.writeDiagnosticTuple(output, resolved.diagnostic().orElseThrow());
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
             SubjectId settlement = FrontierWorldPayloadCodecs.readSubject(input).value(); int status = input.readUnsignedByte();
             if (status >= SettlementProvisionStatus.values().length) throw new IllegalArgumentException("unknown settlement provision resolution status");
-            return new SettlementProvisionResolved(settlement, FrontierWireTags.require(SettlementProvisionStatus.class, status));
+            return new SettlementProvisionResolved(settlement, FrontierWireTags.require(SettlementProvisionStatus.class, status), input.readBoolean() ? java.util.Optional.of(FrontierWorldPayloadCodecs.readDiagnosticTuple(input)) : java.util.Optional.empty());
         }); }
     }; }
 

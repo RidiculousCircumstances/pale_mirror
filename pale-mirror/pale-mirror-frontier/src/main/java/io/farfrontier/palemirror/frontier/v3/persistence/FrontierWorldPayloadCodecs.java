@@ -413,8 +413,8 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     }
     private static final class OperationFailedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.operation_failed"; }
-        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> { OperationFailed failed = (OperationFailed) payload; writeSubject(output, failed.operationId()); writeString(output, failed.reason()); }); }
-        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new OperationFailed(readSubject(input).value(), readString(input))); }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> { OperationFailed failed = (OperationFailed) payload; writeSubject(output, failed.operationId()); writeString(output, failed.reason()); writeDiagnosticTuple(output, failed.diagnostic()); }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new OperationFailed(readSubject(input).value(), readString(input), readDiagnosticTuple(input))); }
     }
     private static final class TerminalLogisticsCompactedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.terminal_logistics_compacted"; }

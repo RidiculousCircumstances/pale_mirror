@@ -229,7 +229,7 @@ public final class SupplyOperationProcess {
     }
 
     public static List<ProposedEvent> failed(FrontierWorldState state, RouteOperation operation, String reason) {
-        return List.of(new ProposedEvent(operation.settlementId(), new OperationFailed(operation.id(), reason)),
+        return List.of(new ProposedEvent(operation.settlementId(), TerminalDiagnosticProducer.operationFailed(operation.id(), reason)),
                 transition(deliveryTaskForOperation(state, operation, StrategicTaskStatus.ACTIVE), StrategicTaskStatus.BLOCKED));
     }
 

@@ -85,7 +85,7 @@ class SupplyOperationProcessTest {
         List<ProposedEvent> planned = SupplyOperationProcess.planProgress(unresolved,
                 SupplyOperationProcess.operationProgress(operation, engine.checkpoint().instant().ticks() + 1L));
 
-        assertEquals(List.of(new OperationFailed(operation.id(), "scene-recovery-unresolved"),
+        assertEquals(List.of(TerminalDiagnosticProducer.operationFailed(operation.id(), "scene-recovery-unresolved"),
                 new StrategicTaskTransition(new SubjectId("task:settlement-1-settlement_deliver_bread_to_hive-2-deliver"), StrategicTaskStatus.BLOCKED)),
                 planned.stream().map(ProposedEvent::payload).toList());
         assertEquals(unresolved, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(unresolved)));

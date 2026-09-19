@@ -49,13 +49,13 @@ final class SettlementAssaultPayloadCodecs {
         @Override public byte[] encode(FrontierPayload payload) {
             return FrontierWorldPayloadCodecs.encodeProduction(output -> {
                 SettlementAssaultTransition value = (SettlementAssaultTransition) payload;
-                subject(output, value.assaultId()); output.writeByte(value.status().wireTag());
+                subject(output, value.assaultId()); output.writeByte(value.status().wireTag()); output.writeBoolean(value.diagnostic().isPresent()); if (value.diagnostic().isPresent()) FrontierWorldPayloadCodecs.writeDiagnosticTuple(output, value.diagnostic().orElseThrow());
             });
         }
         @Override public FrontierPayload decode(byte[] bytes) {
             return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
                 SubjectId assault = subject(input); int status = input.readUnsignedByte();
-                return new SettlementAssaultTransition(assault, FrontierWireTags.require(SettlementAssaultStatus.class, status));
+                return new SettlementAssaultTransition(assault, FrontierWireTags.require(SettlementAssaultStatus.class, status), input.readBoolean() ? java.util.Optional.of(FrontierWorldPayloadCodecs.readDiagnosticTuple(input)) : java.util.Optional.empty());
             });
         }
     }; }

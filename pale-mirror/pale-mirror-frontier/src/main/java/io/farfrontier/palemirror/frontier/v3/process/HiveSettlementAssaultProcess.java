@@ -104,7 +104,7 @@ public final class HiveSettlementAssaultProcess {
             List<SubjectId> attackers = livingCombatantAttackers(state, assault), defenders = livingDefenders(state, assault);
             if (attackers.isEmpty() || defenders.isEmpty()) return terminal(state, assault, attackers, defenders, action.dueAt().ticks());
             if (FrontierSettlementAssaultBattlefield.candidate(state, assault).isEmpty()) {
-                return List.of(new ProposedEvent(assault.hiveId(), new SettlementAssaultTransition(assault.id(), SettlementAssaultStatus.CONFLICT)));
+                return List.of(new ProposedEvent(assault.hiveId(), TerminalDiagnosticProducer.assaultConflict(assault.id())));
             }
             if (!coldAvailable(state, assault)) return List.of(schedule(progress(assault, action.dueAt().ticks()
                     + state.bootstrap().ruleset().cadence().hiveSettlementAssaultStepInterval())));
@@ -135,7 +135,7 @@ public final class HiveSettlementAssaultProcess {
         List<SubjectId> attackers = livingCombatantAttackers(state, assault), defenders = livingDefenders(state, assault);
         if (attackers.isEmpty() || defenders.isEmpty()) return terminal(state, assault, attackers, defenders, action.dueAt().ticks());
         if (FrontierSettlementAssaultBattlefield.candidate(state, assault).isEmpty()) {
-            return List.of(new ProposedEvent(assault.hiveId(), new SettlementAssaultTransition(assault.id(), SettlementAssaultStatus.CONFLICT)));
+            return List.of(new ProposedEvent(assault.hiveId(), TerminalDiagnosticProducer.assaultConflict(assault.id())));
         }
         if (!coldAvailable(state, assault)) return List.of(schedule(combat(assault, action.dueAt().ticks()
                 + state.bootstrap().ruleset().cadence().hiveSettlementAssaultCombatInterval())));
