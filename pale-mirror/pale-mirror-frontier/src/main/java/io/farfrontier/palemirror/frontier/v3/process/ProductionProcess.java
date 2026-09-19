@@ -189,7 +189,8 @@ public final class ProductionProcess {
         }
         PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:production-transform-" + job.id().value().substring("job:".length())),
                 PhysicalIntentKind.PRODUCTION_TRANSFORMATION, PhysicalIntentStatus.PREPARED, job.id(), List.of(job.id(), job.consumedItemId(), job.outputItemId()),
-                fixed(state.actorLocations().get(job.workerId()).supportingSurface().support()), 0, PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED);
+                fixed(state.actorLocations().get(job.workerId()).supportingSurface().support()), 0, PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.PRODUCTION_WORK);
         return List.of(new ProposedEvent(settlement.id(), new PhysicalIntentPrepared(intent)));
     }
 

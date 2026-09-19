@@ -18,7 +18,8 @@ public record PhysicalIntent(
         int radiusBlocks,
         PhysicalPostcondition postcondition,
         Optional<PhysicalObservationId> postconditionObservationId,
-        Optional<PhysicalContainerSlot> targetSlot
+        Optional<PhysicalContainerSlot> targetSlot,
+        PhysicalIntentLifecycleOwner lifecycleOwner
 ) {
     public PhysicalIntent {
         Objects.requireNonNull(id, "physical intent id");
@@ -30,6 +31,7 @@ public record PhysicalIntent(
         Objects.requireNonNull(postcondition, "physical intent postcondition");
         postconditionObservationId = Objects.requireNonNull(postconditionObservationId, "physical intent postcondition observation");
         targetSlot = Objects.requireNonNull(targetSlot, "physical intent target slot");
+        lifecycleOwner = Objects.requireNonNull(lifecycleOwner, "physical intent lifecycle owner");
         if (subjectIds.isEmpty() || subjectIds.size() > 32 || subjectIds.stream().distinct().count() != subjectIds.size()) {
             throw new IllegalArgumentException("physical intent must name one to thirty-two distinct subjects");
         }
@@ -127,20 +129,47 @@ public record PhysicalIntent(
         if (status == PhysicalIntentStatus.CONFIRMED != postconditionObservationId.isPresent()) {
             throw new IllegalArgumentException("only confirmed physical intent has an observed postcondition");
         }
+        if (!lifecycleOwner.supports(kind)) {
+            throw new IllegalArgumentException("physical intent lifecycle owner " + lifecycleOwner.stableId() + " cannot own " + kind);
+        }
     }
 
     public PhysicalIntent(PhysicalIntentId id, PhysicalIntentKind kind, PhysicalIntentStatus status, SubjectId causeSubjectId,
                           List<SubjectId> subjectIds, FixedPosition origin, int radiusBlocks, PhysicalPostcondition postcondition) {
-        this(id, kind, status, causeSubjectId, subjectIds, origin, radiusBlocks, postcondition, Optional.empty(), Optional.empty());
+        this(id, kind, status, causeSubjectId, subjectIds, origin, radiusBlocks, postcondition, Optional.empty(), Optional.empty(), PhysicalIntentLifecycleOwner.fixtureDefault(kind));
     }
 
     public PhysicalIntent(PhysicalIntentId id, PhysicalIntentKind kind, PhysicalIntentStatus status, SubjectId causeSubjectId,
                           List<SubjectId> subjectIds, FixedPosition origin, int radiusBlocks, PhysicalPostcondition postcondition,
                           PhysicalContainerSlot targetSlot) {
-        this(id, kind, status, causeSubjectId, subjectIds, origin, radiusBlocks, postcondition, Optional.empty(), Optional.of(targetSlot));
+        this(id, kind, status, causeSubjectId, subjectIds, origin, radiusBlocks, postcondition, Optional.empty(), Optional.of(targetSlot), PhysicalIntentLifecycleOwner.fixtureDefault(kind));
+    }
+
+    public PhysicalIntent(PhysicalIntentId id, PhysicalIntentKind kind, PhysicalIntentStatus status, SubjectId causeSubjectId,
+                          List<SubjectId> subjectIds, FixedPosition origin, int radiusBlocks, PhysicalPostcondition postcondition,
+                          PhysicalIntentLifecycleOwner lifecycleOwner) {
+        this(id, kind, status, causeSubjectId, subjectIds, origin, radiusBlocks, postcondition, Optional.empty(), Optional.empty(), lifecycleOwner);
+    }
+
+    /**
+     * Source compatibility for isolated fixtures predating the durable owner field.  Runtime
+     * producers use an explicit owner and persistence never synthesizes one during recovery.
+     */
+    @Deprecated(forRemoval = false)
+    public PhysicalIntent(PhysicalIntentId id, PhysicalIntentKind kind, PhysicalIntentStatus status, SubjectId causeSubjectId,
+                          List<SubjectId> subjectIds, FixedPosition origin, int radiusBlocks, PhysicalPostcondition postcondition,
+                          Optional<PhysicalObservationId> observationId, Optional<PhysicalContainerSlot> targetSlot) {
+        this(id, kind, status, causeSubjectId, subjectIds, origin, radiusBlocks, postcondition, observationId, targetSlot,
+                PhysicalIntentLifecycleOwner.fixtureDefault(kind));
+    }
+
+    public PhysicalIntent(PhysicalIntentId id, PhysicalIntentKind kind, PhysicalIntentStatus status, SubjectId causeSubjectId,
+                          List<SubjectId> subjectIds, FixedPosition origin, int radiusBlocks, PhysicalPostcondition postcondition,
+                          PhysicalContainerSlot targetSlot, PhysicalIntentLifecycleOwner lifecycleOwner) {
+        this(id, kind, status, causeSubjectId, subjectIds, origin, radiusBlocks, postcondition, Optional.empty(), Optional.of(targetSlot), lifecycleOwner);
     }
 
     public PhysicalIntent withStatus(PhysicalIntentStatus nextStatus, Optional<PhysicalObservationId> observationId) {
-        return new PhysicalIntent(id, kind, nextStatus, causeSubjectId, subjectIds, origin, radiusBlocks, postcondition, observationId, targetSlot);
+        return new PhysicalIntent(id, kind, nextStatus, causeSubjectId, subjectIds, origin, radiusBlocks, postcondition, observationId, targetSlot, lifecycleOwner);
     }
 }

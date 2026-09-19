@@ -301,7 +301,7 @@ public final class RouteConstructionProcess {
                 PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING, PhysicalIntentStatus.PREPARED, project.id(),
                 List.of(FrontierRouteNetwork.OWNER, project.id(), cargo, cargoItemId(project), material.id()),
                 new FixedPosition(FixedScalar.whole(position.x()), FixedScalar.whole(position.y()), FixedScalar.whole(position.z())), 0,
-                PhysicalPostcondition.ROUTE_CONSTRUCTION_MATERIAL_LOADED_OBSERVED);
+                PhysicalPostcondition.ROUTE_CONSTRUCTION_MATERIAL_LOADED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE);
     }
     public static SubjectId cargoId(RouteConstruction project) {
         return new SubjectId("cargo:route-build-" + project.id().value().substring("construction:".length()) + "-" + project.confirmedCells());
@@ -317,7 +317,7 @@ public final class RouteConstructionProcess {
                 PhysicalIntentKind.ROUTE_CONSTRUCTION, PhysicalIntentStatus.PREPARED, FrontierRouteNetwork.OWNER,
                 List.of(FrontierRouteNetwork.OWNER, project.id(), cargoId, materialId),
                 new FixedPosition(FixedScalar.whole(position.x()), FixedScalar.whole(position.y()), FixedScalar.whole(position.z())), 0,
-                PhysicalPostcondition.ROUTE_CONSTRUCTION_OBSERVED);
+                PhysicalPostcondition.ROUTE_CONSTRUCTION_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE);
     }
 
     private static Optional<List<BlockPosition>> acceptedWorkCells(FrontierWorldState state, SubjectId settlementId, List<BlockPosition> route) {

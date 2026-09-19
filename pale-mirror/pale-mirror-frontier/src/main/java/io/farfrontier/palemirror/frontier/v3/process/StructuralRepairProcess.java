@@ -56,7 +56,7 @@ public final class StructuralRepairProcess {
         PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:repair-" + loss.position().x() + "-" + loss.position().y() + "-" + loss.position().z()),
                 PhysicalIntentKind.STRUCTURAL_REPAIR, PhysicalIntentStatus.PREPARED, structureId, List.of(structureId, material.orElseThrow().id()),
                 new FixedPosition(FixedScalar.whole(loss.position().x()), FixedScalar.whole(loss.position().y()), FixedScalar.whole(loss.position().z())),
-                0, PhysicalPostcondition.STRUCTURAL_REPAIR_OBSERVED);
+                0, PhysicalPostcondition.STRUCTURAL_REPAIR_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE);
         return List.of(new ProposedEvent(settlementId, new PhysicalIntentPrepared(intent)), next);
     }
 

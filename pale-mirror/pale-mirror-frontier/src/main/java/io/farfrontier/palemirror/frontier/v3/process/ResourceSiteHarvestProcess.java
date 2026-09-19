@@ -624,7 +624,7 @@ public final class ResourceSiteHarvestProcess {
         return new PhysicalIntent(job.intentId(), PhysicalIntentKind.RESOURCE_SITE_HARVEST, PhysicalIntentStatus.PREPARED, job.siteId(),
                 List.of(job.siteId(), job.id(), job.workerId(), job.outputItemId()),
                 new FixedPosition(FixedScalar.whole(origin.x()), FixedScalar.whole(origin.y()), FixedScalar.whole(origin.z())), 0,
-                PhysicalPostcondition.RESOURCE_SITE_HARVESTED_OBSERVED);
+                PhysicalPostcondition.RESOURCE_SITE_HARVESTED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.RESOURCE_SITE_HARVEST);
     }
 
     private static StrategicTask task(FrontierWorldState state, SubjectId taskId, StrategicTaskStatus status) {

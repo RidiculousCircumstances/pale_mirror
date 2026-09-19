@@ -80,7 +80,7 @@ public final class HiveGrowthProcess {
         PhysicalIntent intent = new PhysicalIntent(job.consumptionIntentId(), PhysicalIntentKind.EXACT_ITEM_CONSUMPTION,
                 PhysicalIntentStatus.PREPARED, job.id(), List.of(job.id(), job.consumedItemId()),
                 new FixedPosition(FixedScalar.whole(nest.anchor().x()), FixedScalar.whole(nest.anchor().y()), FixedScalar.whole(nest.anchor().z())), 0,
-                PhysicalPostcondition.EXACT_ITEM_CONSUMED_OBSERVED);
+                PhysicalPostcondition.EXACT_ITEM_CONSUMED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.HIVE_GROWTH);
         return List.of(transition(task, StrategicTaskStatus.ACTIVE), new ProposedEvent(hive, new HiveGrowthStarted(job)),
                 new ProposedEvent(hive, new PhysicalIntentPrepared(intent)));
     }

@@ -66,6 +66,6 @@ public final class DefenderEquipmentProcess {
         return java.util.Optional.of(new PhysicalIntent(new PhysicalIntentId("intent:equipment-issue-" + suffix), PhysicalIntentKind.EQUIPMENT_ISSUE,
                 PhysicalIntentStatus.PREPARED, assault.settlementId(), List.of(assault.id(), resident, item.id()),
                 new FixedPosition(FixedScalar.whole(assault.settlementAnchor().x()), FixedScalar.whole(assault.settlementAnchor().y()), FixedScalar.whole(assault.settlementAnchor().z())),
-                0, PhysicalPostcondition.EQUIPMENT_ISSUED_OBSERVED));
+                0, PhysicalPostcondition.EQUIPMENT_ISSUED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT));
     }
 }

@@ -348,7 +348,7 @@ public final class SupplyOperationProcess {
         return new PhysicalIntent(new PhysicalIntentId("intent:cargo-load-" + contract.id().value().substring("contract:".length())),
                 PhysicalIntentKind.CARGO_LOADING, PhysicalIntentStatus.PREPARED, contract.id(), List.of(contract.id(), contract.cargoId(), item.id()),
                 new FixedPosition(FixedScalar.whole(position.x()), FixedScalar.whole(position.y()), FixedScalar.whole(position.z())), 0,
-                PhysicalPostcondition.CARGO_LOADED_FROM_DEPOT_OBSERVED);
+                PhysicalPostcondition.CARGO_LOADED_FROM_DEPOT_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ROUTE_OPERATION);
     }
     private static ProposedEvent transition(StrategicTask task, StrategicTaskStatus status) {
         return new ProposedEvent(task.ownerId(), new StrategicTaskTransition(task.id(), status));
@@ -452,6 +452,7 @@ public final class SupplyOperationProcess {
     private static PhysicalIntent cargoHandoffIntent(RouteOperation operation) {
         BlockPosition target = operation.route().getLast(); FixedPosition origin = new FixedPosition(FixedScalar.whole(target.x()), FixedScalar.whole(target.y()), FixedScalar.whole(target.z()));
         return new PhysicalIntent(new PhysicalIntentId("intent:cargo-handoff-" + operation.id().value().substring("operation:".length())), PhysicalIntentKind.CARGO_HANDOFF,
-                PhysicalIntentStatus.PREPARED, operation.id(), List.of(operation.id(), operation.cargoId()), origin, 0, PhysicalPostcondition.CARGO_HANDOFF_OBSERVED);
+                PhysicalIntentStatus.PREPARED, operation.id(), List.of(operation.id(), operation.cargoId()), origin, 0, PhysicalPostcondition.CARGO_HANDOFF_OBSERVED,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ROUTE_OPERATION);
     }
 }

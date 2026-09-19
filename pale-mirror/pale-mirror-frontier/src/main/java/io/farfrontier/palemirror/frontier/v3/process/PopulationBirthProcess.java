@@ -65,7 +65,7 @@ public final class PopulationBirthProcess {
                 action.dueAt().ticks() + state.bootstrap().ruleset().cadence().populationBirthCompletionDelay());
         PhysicalIntent intent = new PhysicalIntent(job.consumptionIntentId(), PhysicalIntentKind.EXACT_ITEM_CONSUMPTION,
                 PhysicalIntentStatus.PREPARED, job.id(), List.of(job.id(), job.foodItemId()), fixed(job.position()), 0,
-                PhysicalPostcondition.EXACT_ITEM_CONSUMED_OBSERVED);
+                PhysicalPostcondition.EXACT_ITEM_CONSUMED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.POPULATION_MIGRATION);
         events.add(new ProposedEvent(settlement.id(), new ResidentBirthStarted(job)));
         events.add(new ProposedEvent(settlement.id(), new PhysicalIntentPrepared(intent)));
         return List.copyOf(events);

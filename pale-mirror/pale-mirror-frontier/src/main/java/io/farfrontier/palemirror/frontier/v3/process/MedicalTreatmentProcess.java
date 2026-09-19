@@ -52,7 +52,7 @@ public final class MedicalTreatmentProcess {
         PhysicalIntent intent = new PhysicalIntent(operation.consumptionIntentId(), PhysicalIntentKind.EXACT_ITEM_CONSUMPTION, PhysicalIntentStatus.PREPARED,
                 id, List.of(id, operation.supplyItemId()), new FixedPosition(FixedScalar.whole(infirmary.orElseThrow().anchor().x()),
                 FixedScalar.whole(infirmary.orElseThrow().anchor().y()), FixedScalar.whole(infirmary.orElseThrow().anchor().z())), 0,
-                PhysicalPostcondition.EXACT_ITEM_CONSUMED_OBSERVED);
+                PhysicalPostcondition.EXACT_ITEM_CONSUMED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.MEDICAL_TREATMENT);
         return List.of(new ProposedEvent(settlementId, new MedicalTreatmentStarted(operation)), new ProposedEvent(settlementId, new PhysicalIntentPrepared(intent)));
     }
 

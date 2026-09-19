@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalContainerSlot;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
@@ -30,6 +31,7 @@ final class PhysicalIntentPayloadCodec {
         if (intent.postconditionObservationId().isPresent()) FrontierWorldPayloadCodecs.writeString(output, intent.postconditionObservationId().orElseThrow().value());
         output.writeBoolean(intent.targetSlot().isPresent());
         if (intent.targetSlot().isPresent()) { FrontierWorldPayloadCodecs.writeSubject(output, intent.targetSlot().orElseThrow().containerId()); output.writeByte(intent.targetSlot().orElseThrow().slot()); }
+        output.writeByte(PhysicalIntentLifecycleOwner.CODEC_VERSION); FrontierWorldPayloadCodecs.writeString(output, intent.lifecycleOwner().stableId());
     }
 
     static PhysicalIntent read(DataInputStream input) throws IOException {
@@ -40,12 +42,13 @@ final class PhysicalIntentPayloadCodec {
         FixedPosition origin = new FixedPosition(new FixedScalar(input.readLong()), new FixedScalar(input.readLong()), new FixedScalar(input.readLong()));
         int radius = input.readUnsignedByte(); int postcondition = input.readUnsignedByte(); boolean observed = input.readBoolean();
         Optional<PhysicalObservationId> observation = observed ? Optional.of(new PhysicalObservationId(FrontierWorldPayloadCodecs.readString(input))) : Optional.empty();
-        Optional<PhysicalContainerSlot> target = input.available() > 0 && input.readBoolean()
+        Optional<PhysicalContainerSlot> target = input.readBoolean()
                 ? Optional.of(new PhysicalContainerSlot(FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedByte())) : Optional.empty();
         if (kind >= PhysicalIntentKind.values().length || status >= PhysicalIntentStatus.values().length || postcondition >= PhysicalPostcondition.values().length) {
             throw new IllegalArgumentException("unknown physical intent enum value");
         }
         return new PhysicalIntent(id, FrontierWireTags.require(PhysicalIntentKind.class, kind), FrontierWireTags.require(PhysicalIntentStatus.class, status),
-                cause.value(), subjects, origin, radius, FrontierWireTags.require(PhysicalPostcondition.class, postcondition), observation, target);
+                cause.value(), subjects, origin, radius, FrontierWireTags.require(PhysicalPostcondition.class, postcondition), observation, target,
+                PhysicalIntentLifecycleOwner.fromWire(input.readUnsignedByte(), FrontierWorldPayloadCodecs.readString(input)));
     }
 }

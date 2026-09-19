@@ -71,7 +71,7 @@ public final class DefenderEquipmentReturnProcess {
                 PhysicalIntentStatus.PREPARED, assault.settlementId(), List.of(assault.id(), actor.actorId(), item.id()),
                 new FixedPosition(FixedScalar.whole(assault.settlementAnchor().x()), FixedScalar.whole(assault.settlementAnchor().y()),
                         FixedScalar.whole(assault.settlementAnchor().z())), 0, PhysicalPostcondition.EQUIPMENT_RETURNED_OBSERVED,
-                new PhysicalContainerSlot(depot, slot)));
+                new PhysicalContainerSlot(depot, slot), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT));
     }
 
     private static boolean hasPendingOrReturnable(FrontierWorldState state, SettlementAssault assault) {

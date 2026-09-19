@@ -196,10 +196,10 @@ public final class SettlementServiceWorkProcess {
                         ? SettlementServiceWorkPhase.INPUT_ISSUE_PENDING : SettlementServiceWorkPhase.PREPARED, 0);
         PhysicalIntent inputIssue = new PhysicalIntent(inputIssueId, PhysicalIntentKind.SETTLEMENT_SERVICE_INPUT_ISSUE, PhysicalIntentStatus.PREPARED,
                 work.id(), List.of(work.id(), work.workerId(), work.inputItemId()), fixed(work.inputStation().support()), 0,
-                PhysicalPostcondition.SETTLEMENT_SERVICE_INPUT_ISSUED_OBSERVED);
+                PhysicalPostcondition.SETTLEMENT_SERVICE_INPUT_ISSUED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_SERVICE_WORK);
         PhysicalIntent endpoint = new PhysicalIntent(endpointId, PhysicalIntentKind.DECONTAMINATION, PhysicalIntentStatus.PREPARED,
                 work.id(), List.of(work.id(), work.workerId(), work.inputItemId()), fixed(cell.originAtY(0)), 0,
-                PhysicalPostcondition.DECONTAMINATION_OBSERVED);
+                PhysicalPostcondition.DECONTAMINATION_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_SERVICE_WORK);
         return Optional.of(new Candidate(task, settlement, work, inputIssue, endpoint));
     }
 

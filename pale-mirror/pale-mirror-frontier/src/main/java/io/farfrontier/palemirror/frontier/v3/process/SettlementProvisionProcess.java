@@ -278,7 +278,7 @@ public final class SettlementProvisionProcess {
         return new PhysicalIntent(new PhysicalIntentId("intent:settlement-provision-" + suffix), PhysicalIntentKind.EXACT_ITEM_CONSUMPTION,
                 PhysicalIntentStatus.PREPARED, provision.settlementId(), List.of(provision.settlementId(), allocation.itemId()),
                 new FixedPosition(FixedScalar.whole(settlement.anchor().x()), FixedScalar.whole(settlement.anchor().y()), FixedScalar.whole(settlement.anchor().z())),
-                0, PhysicalPostcondition.EXACT_ITEM_CONSUMED_OBSERVED);
+                0, PhysicalPostcondition.EXACT_ITEM_CONSUMED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_PROVISION);
     }
 
     private static List<SettlementRationAllocation> allocations(FrontierWorldState state, SubjectId settlementId, List<SubjectId> recipients, int cycleOrdinal) {

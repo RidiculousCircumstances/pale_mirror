@@ -243,7 +243,7 @@ public final class RouteMaintenanceProcess {
                 PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING, PhysicalIntentStatus.PREPARED, maintenance.id(),
                 List.of(FrontierRouteNetwork.OWNER, maintenance.id(), maintenance.plannedCargoId(), maintenance.plannedCargoItemId(), source.id()),
                 new FixedPosition(FixedScalar.whole(surface.position().x()), FixedScalar.whole(surface.position().y()), FixedScalar.whole(surface.position().z())), 0,
-                PhysicalPostcondition.ROUTE_MAINTENANCE_MATERIAL_LOADED_OBSERVED);
+                PhysicalPostcondition.ROUTE_MAINTENANCE_MATERIAL_LOADED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE);
     }
 
     public static PhysicalIntent workIntent(RouteMaintenance maintenance, SubjectId cargoId, SubjectId itemId) {
@@ -252,7 +252,7 @@ public final class RouteMaintenanceProcess {
                 PhysicalIntentKind.ROUTE_MAINTENANCE, PhysicalIntentStatus.PREPARED, FrontierRouteNetwork.OWNER,
                 List.of(FrontierRouteNetwork.OWNER, maintenance.id(), cargoId, itemId),
                 new FixedPosition(FixedScalar.whole(position.x()), FixedScalar.whole(position.y()), FixedScalar.whole(position.z())), 0,
-                PhysicalPostcondition.ROUTE_MAINTENANCE_OBSERVED);
+                PhysicalPostcondition.ROUTE_MAINTENANCE_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE);
     }
 
     private static Optional<ExactItemStack> material(FrontierWorldState state, RouteMaintenance maintenance) {

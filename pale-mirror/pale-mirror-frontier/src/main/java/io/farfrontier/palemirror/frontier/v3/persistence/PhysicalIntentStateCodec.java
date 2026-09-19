@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalContainerSlot;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
@@ -35,6 +36,7 @@ final class PhysicalIntentStateCodec {
             if (intent.postconditionObservationId().isPresent()) FrontierWorldStateCodec.writeString(output, intent.postconditionObservationId().orElseThrow().value());
             output.writeBoolean(intent.targetSlot().isPresent());
             if (intent.targetSlot().isPresent()) { FrontierWorldStateCodec.writeString(output, intent.targetSlot().orElseThrow().containerId().value()); output.writeByte(intent.targetSlot().orElseThrow().slot()); }
+            output.writeByte(PhysicalIntentLifecycleOwner.CODEC_VERSION); FrontierWorldStateCodec.writeString(output, intent.lifecycleOwner().stableId());
         }
     }
 
@@ -49,8 +51,9 @@ final class PhysicalIntentStateCodec {
             Optional<PhysicalObservationId> observation = observed ? Optional.of(new PhysicalObservationId(FrontierWorldStateCodec.readString(input))) : Optional.empty();
             Optional<PhysicalContainerSlot> target = hasTypedTargetSlot && input.readBoolean()
                     ? Optional.of(new PhysicalContainerSlot(new SubjectId(FrontierWorldStateCodec.readString(input)), input.readUnsignedByte())) : Optional.empty();
+            PhysicalIntentLifecycleOwner lifecycleOwner = PhysicalIntentLifecycleOwner.fromWire(input.readUnsignedByte(), FrontierWorldStateCodec.readString(input));
             PhysicalIntent intent = new PhysicalIntent(id, FrontierWireTags.require(PhysicalIntentKind.class, kind), FrontierWireTags.require(PhysicalIntentStatus.class, status), cause,
-                    subjects, origin, radius, FrontierWireTags.require(PhysicalPostcondition.class, postcondition), observation, target);
+                    subjects, origin, radius, FrontierWireTags.require(PhysicalPostcondition.class, postcondition), observation, target, lifecycleOwner);
             if (kind >= PhysicalIntentKind.values().length || status >= PhysicalIntentStatus.values().length || postcondition >= PhysicalPostcondition.values().length || intents.put(id, intent) != null) {
                 throw new IllegalArgumentException("invalid or duplicate physical intent");
             }

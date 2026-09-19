@@ -50,7 +50,7 @@ public final class EngineeringEquipmentProcess {
         return Optional.of(new PhysicalIntent(new PhysicalIntentId("intent:engineering-tool-issue-" + suffix), PhysicalIntentKind.EQUIPMENT_ISSUE,
                 PhysicalIntentStatus.PREPARED, project.settlementId(), List.of(project.id(), resident, item.id()),
                 new FixedPosition(FixedScalar.whole(anchor.x()), FixedScalar.whole(anchor.y()), FixedScalar.whole(anchor.z())), 0,
-                PhysicalPostcondition.EQUIPMENT_ISSUED_OBSERVED));
+                PhysicalPostcondition.EQUIPMENT_ISSUED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE));
     }
 
     public static Optional<PhysicalIntent> returnOne(FrontierWorldState state, EngineeringWorkOrder project) {
@@ -65,7 +65,7 @@ public final class EngineeringEquipmentProcess {
         return Optional.of(new PhysicalIntent(new PhysicalIntentId("intent:engineering-tool-return-" + suffix), PhysicalIntentKind.EQUIPMENT_RETURN,
                 PhysicalIntentStatus.PREPARED, project.settlementId(), List.of(project.id(), actorId, item.id()),
                 new FixedPosition(FixedScalar.whole(anchor.x()), FixedScalar.whole(anchor.y()), FixedScalar.whole(anchor.z())), 0,
-                PhysicalPostcondition.EQUIPMENT_RETURNED_OBSERVED, targetSlot));
+                PhysicalPostcondition.EQUIPMENT_RETURNED_OBSERVED, targetSlot, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE));
     }
 
     /**

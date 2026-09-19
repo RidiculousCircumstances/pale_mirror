@@ -9,7 +9,7 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 161; private static final int MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 162; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -61,7 +61,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         try (DataInputStream input = new DataInputStream(new ByteArrayInputStream(encoded))) {
             if (input.readInt() != MAGIC) throw new IllegalArgumentException("unknown Frontier v3 state magic");
             int version = input.readUnsignedByte();
-            if (version != VERSION) throw new IllegalArgumentException("Frontier v3 state requires a fresh current-schema world");
+            if (version != VERSION) throw new IllegalArgumentException("Frontier v3 state has no compatible physical-intent lifecycle-owner codec; fresh current-schema world required");
             if (!FrontierDurationProcessDriverRegistry.inventoryFingerprint().equals(readString(input))) {
                 throw new IllegalArgumentException("Frontier v3 state has an incompatible process/scene descriptor inventory");
             }
