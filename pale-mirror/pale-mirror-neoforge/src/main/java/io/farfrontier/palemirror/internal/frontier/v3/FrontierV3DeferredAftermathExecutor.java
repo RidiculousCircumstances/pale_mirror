@@ -63,10 +63,10 @@ final class FrontierV3DeferredAftermathExecutor {
             // physical postcondition.  A materialized RUNNING effect instead retains the one
             // preclaim -> damage revision transition: the durable boundary stores the expected
             // post-damage revision, never an unretained pre-write sentinel.
-            if (claim != null && claim.conflicted() && exactClaim(claim, cell)
+            if (claim != null && claim.deferred() && exactClaim(claim, cell)
                     && claim.revision() == cell.authorityRevision() && world.isAir(cell.position())) {
                 resolve(runtime, aftermath, cursor, cell.authorityRevision(), DeferredAftermathCellStatus.REALIZED);
-            } else if (claim != null && !claim.conflicted() && exactClaim(claim, cell)
+            } else if (claim != null && !claim.deferred() && exactClaim(claim, cell)
                     && claim.revision() + 1L == cell.authorityRevision() && world.hasMaterial(cell.position(), cell.expectedMaterial())) {
                 applyDamage(world, runtime, aftermath, cursor, cell, ledger, claim);
             } else conflicted(runtime, aftermath, cursor, ledger, claim, cell);
@@ -80,13 +80,13 @@ final class FrontierV3DeferredAftermathExecutor {
         // real world evidence.  A non-air unclaimed block is already positive foreign evidence
         // and remains an isolated conflict below.
         if (claim == null && world.isAir(cell.position())) return;
-        if (claim != null && claim.conflicted() && exactClaim(claim, cell) && world.isAir(cell.position())) {
+        if (claim != null && claim.deferred() && exactClaim(claim, cell) && world.isAir(cell.position())) {
             // Cause-time projection has already retained this exact loss; make that observed
             // completion durable without writing the world or reclassifying it as a conflict.
             resolve(runtime, aftermath, cursor, claim.revision(), DeferredAftermathCellStatus.RUNNING);
             return;
         }
-        if (claim == null || claim.conflicted() || !exactClaim(claim, cell) || !world.hasMaterial(cell.position(), cell.expectedMaterial())) {
+        if (claim == null || claim.deferred() || !exactClaim(claim, cell) || !world.hasMaterial(cell.position(), cell.expectedMaterial())) {
             conflicted(runtime, aftermath, cursor, ledger, claim, cell);
             return;
         }
@@ -109,7 +109,7 @@ final class FrontierV3DeferredAftermathExecutor {
         }
         ledger.damaged(block(cell), claim.owner(), claim.targetTag(), claim.material(), claim.semanticPart());
         FrontierV3GrayboxLedger.Claim damaged = ledger.claim(block(cell));
-        if (damaged == null || !damaged.conflicted() || !exactClaim(damaged, cell) || damaged.revision() != cell.authorityRevision()) {
+        if (damaged == null || !damaged.deferred() || !exactClaim(damaged, cell) || damaged.revision() != cell.authorityRevision()) {
             conflicted(runtime, aftermath, cursor, ledger, damaged, cell); return;
         }
         resolve(runtime, aftermath, cursor, cell.authorityRevision(), DeferredAftermathCellStatus.REALIZED);
@@ -121,7 +121,7 @@ final class FrontierV3DeferredAftermathExecutor {
     }
     private static boolean conflicted(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, DeferredAftermath aftermath, int cursor,
                                       FrontierV3GrayboxLedger ledger, FrontierV3GrayboxLedger.Claim claim, DeferredAftermathCell cell) {
-        if (claim != null && exactClaim(claim, cell)) ledger.conflict(block(cell));
+        if (claim != null && exactClaim(claim, cell)) ledger.defer(block(cell));
         return resolve(runtime, aftermath, cursor, cell.authorityRevision(), DeferredAftermathCellStatus.CONFLICTED);
     }
     private static boolean resolve(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, DeferredAftermath aftermath, int cursor, long authorityRevision,

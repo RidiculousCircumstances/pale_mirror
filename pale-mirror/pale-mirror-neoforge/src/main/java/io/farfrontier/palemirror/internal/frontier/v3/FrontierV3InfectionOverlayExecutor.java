@@ -103,7 +103,7 @@ final class FrontierV3InfectionOverlayExecutor {
         if (cell == null) return BlockBreakObservation.UNMANAGED;
         FrontierV3InfectionOverlayLedger.Claim claim = ledger.claim(cell);
         if (claim == null || !claim.active() || !level.getBlockState(position).equals(material(claim.stage()))) {
-            if (claim != null) ledger.conflict(cell);
+            if (claim != null) ledger.defer(cell);
             return BlockBreakObservation.UNMANAGED;
         }
         try {
@@ -115,7 +115,7 @@ final class FrontierV3InfectionOverlayExecutor {
                     FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id), observed))
                     .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
             if (!(result instanceof CommandResult.Accepted)) return BlockBreakObservation.REJECTED;
-            ledger.conflict(cell); // only after WAL acknowledgement, immediately before Minecraft breaks the marker
+            ledger.defer(cell); // mirror preserves the physical block; canonical reduction owns any terminal incident
             return BlockBreakObservation.ACCEPTED;
         } catch (RuntimeException failed) {
             return BlockBreakObservation.REJECTED;
@@ -160,19 +160,19 @@ final class FrontierV3InfectionOverlayExecutor {
 
     private static ProjectionResult projectClaim(ServerLevel level, FrontierV3InfectionOverlayLedger ledger, InfectionOverlayCell desired,
                                                  FrontierWorldState state, FrontierV3InfectionOverlayLedger.Claim claim) {
-        if (claim.conflicted()) return ProjectionResult.CONFLICT;
+        if (claim.deferred()) return ProjectionResult.CONFLICT;
         List<BlockPos> positions = claim.blockPositions();
         if (positions.stream().anyMatch(position -> !level.hasChunkAt(position))) return ProjectionResult.DEFERRED;
         if (claim.prepared()) return reconcilePrepared(level, ledger, desired, state, claim, positions);
         if (claim.cleared()) {
-            if (positions.stream().anyMatch(position -> !level.getBlockState(position).isAir())) { ledger.conflict(desired.cell()); return ProjectionResult.CONFLICT; }
+            if (positions.stream().anyMatch(position -> !level.getBlockState(position).isAir())) { ledger.defer(desired.cell()); return ProjectionResult.CONFLICT; }
             BlockState expected = material(desired.stage());
             if (!replace(level, positions, expected)) return ProjectionResult.DEFERRED;
             ledger.updateStage(desired.cell(), desired.stage()); return ProjectionResult.UPDATED;
         }
         if (positions.stream().anyMatch(position -> state.physicalDeltas().containsKey(canonical(position))
                 || !level.getBlockState(position).equals(material(claim.stage())))) {
-            ledger.conflict(desired.cell()); return ProjectionResult.CONFLICT;
+            ledger.defer(desired.cell()); return ProjectionResult.CONFLICT;
         }
         if (claim.stage() == desired.stage()) return ProjectionResult.CURRENT;
         BlockState expected = material(desired.stage());
@@ -190,7 +190,7 @@ final class FrontierV3InfectionOverlayExecutor {
                                                       FrontierV3InfectionOverlayLedger.Claim claim,
                                                       List<BlockPos> positions) {
         if (positions.stream().anyMatch(position -> state.physicalDeltas().containsKey(canonical(position)))) {
-            ledger.conflict(desired.cell()); return ProjectionResult.CONFLICT;
+            ledger.defer(desired.cell()); return ProjectionResult.CONFLICT;
         }
         BlockState preparedMaterial = material(claim.stage());
         if (positions.stream().allMatch(position -> level.getBlockState(position).equals(preparedMaterial))) {
@@ -202,23 +202,23 @@ final class FrontierV3InfectionOverlayExecutor {
             if (!replace(level, positions, expected)) return ProjectionResult.DEFERRED;
             ledger.activate(desired.cell()); return ProjectionResult.APPLIED;
         }
-        ledger.conflict(desired.cell()); return ProjectionResult.CONFLICT;
+        ledger.defer(desired.cell()); return ProjectionResult.CONFLICT;
     }
 
     static ProjectionResult reconcileRetraction(ServerLevel level, FrontierV3InfectionOverlayLedger ledger,
                                                 Map.Entry<InfectionCell, FrontierV3InfectionOverlayLedger.Claim> entry,
                                                 FrontierWorldState state) {
         InfectionCell cell = entry.getKey(); FrontierV3InfectionOverlayLedger.Claim claim = entry.getValue();
-        if (claim.conflicted()) return ProjectionResult.CONFLICT;
+        if (claim.deferred()) return ProjectionResult.CONFLICT;
         List<BlockPos> positions = claim.blockPositions();
         if (positions.stream().anyMatch(position -> !level.hasChunkAt(position))) return ProjectionResult.DEFERRED;
         if (claim.cleared()) {
-            if (positions.stream().anyMatch(position -> !level.getBlockState(position).isAir())) { ledger.conflict(cell); return ProjectionResult.CONFLICT; }
+            if (positions.stream().anyMatch(position -> !level.getBlockState(position).isAir())) { ledger.defer(cell); return ProjectionResult.CONFLICT; }
             ledger.forgetRetracted(cell); return ProjectionResult.RETRACTED;
         }
         if (positions.stream().anyMatch(position -> state.physicalDeltas().containsKey(canonical(position))
                 || !level.getBlockState(position).equals(material(claim.stage())))) {
-            ledger.conflict(cell); return ProjectionResult.CONFLICT;
+            ledger.defer(cell); return ProjectionResult.CONFLICT;
         }
         if (!replace(level, positions, Blocks.AIR.defaultBlockState())) return ProjectionResult.DEFERRED;
         ledger.forgetRetracted(cell); return ProjectionResult.RETRACTED;
@@ -263,7 +263,7 @@ final class FrontierV3InfectionOverlayExecutor {
 
     private static boolean isStructuralCell(FrontierV3GrayboxLedger structural, FrontierGrayboxPlan structuralBaseline, BlockPos position) {
         FrontierV3GrayboxLedger.Claim claim = structural.claim(position);
-        return claim != null && !claim.conflicted()
+        return claim != null && !claim.deferred()
                 || structuralBaseline != null && structuralBaseline.cells().containsKey(canonical(position));
     }
 

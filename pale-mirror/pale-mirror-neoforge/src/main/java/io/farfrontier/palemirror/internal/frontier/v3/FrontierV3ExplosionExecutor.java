@@ -125,7 +125,7 @@ final class FrontierV3ExplosionExecutor {
             boolean changed = !level.getBlockState(position).equals(value.candidate().baseline(level.registryAccess()));
             if (changed) {
                 FrontierV3PhysicalObservationExecutor.recordManagedExplosionDelta(level, runtime, intentId, value.candidate());
-                value.candidate().infectionCell().ifPresent(cell -> FrontierV3InfectionOverlayLedger.get(level).conflict(cell));
+                value.candidate().infectionCell().ifPresent(cell -> FrontierV3InfectionOverlayLedger.get(level).defer(cell));
             }
             ledger.resolveBlock(value, changed);
         }

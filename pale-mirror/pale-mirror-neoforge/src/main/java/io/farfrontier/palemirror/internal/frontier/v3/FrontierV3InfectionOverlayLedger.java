@@ -27,7 +27,11 @@ import java.util.Optional;
  */
 final class FrontierV3InfectionOverlayLedger extends SavedData {
     private static final String NAME = "pale_mirror_frontier_v3_infection_overlay";
-    private static final int FORMAT = 4;
+    /*
+     * Format 5 deliberately distinguishes a physical adapter block from a canonical conflict.
+     * This ledger has no command/cause identity, so it cannot author terminal diagnostic truth.
+     */
+    private static final int FORMAT = 5;
     static final int MAX_CELLS = 65_536;
     static final int PATCH_COLUMNS = InfectionCell.BLOCKS * InfectionCell.BLOCKS;
     private final Map<InfectionCell, Claim> claims;
@@ -75,19 +79,23 @@ final class FrontierV3InfectionOverlayLedger extends SavedData {
         setDirty();
     }
     /** Records a failed whole-patch baseline without changing any observed world block. */
-    void blocked(InfectionCell cell, List<BlockPos> positions, InfectionOverlayStage stage) { put(cell, positions, stage, Phase.CONFLICTED); }
+    void blocked(InfectionCell cell, List<BlockPos> positions, InfectionOverlayStage stage) { put(cell, positions, stage, Phase.DEFERRED); }
 
     void updateStage(InfectionCell cell, InfectionOverlayStage stage) {
         Claim prior = required(cell);
-        if (prior.conflicted() || prior.phase() != Phase.ACTIVE) throw new IllegalStateException("infection patch is not active");
+        if (prior.deferred() || prior.phase() != Phase.ACTIVE) throw new IllegalStateException("infection patch is not active");
         if (prior.stage() == stage) return;
         claims.put(cell, new Claim(prior.positions(), stage, Phase.ACTIVE));
         setDirty();
     }
-    void conflict(InfectionCell cell) {
+    /**
+     * A mirror can preserve that its own exact patch is blocked, but cannot label that fact a
+     * terminal conflict: it lacks the producer-stamped canonical tuple required for one.
+     */
+    void defer(InfectionCell cell) {
         Claim prior = claims.get(cell);
-        if (prior == null || prior.conflicted()) return;
-        claims.put(cell, new Claim(prior.positions(), prior.stage(), Phase.CONFLICTED));
+        if (prior == null || prior.deferred()) return;
+        claims.put(cell, new Claim(prior.positions(), prior.stage(), Phase.DEFERRED));
         setDirty();
     }
     /** Retains exact owned patch positions through durable canonical confirmation of a clear effect. */
@@ -99,7 +107,7 @@ final class FrontierV3InfectionOverlayLedger extends SavedData {
     }
     void forgetRetracted(InfectionCell cell) {
         Claim prior = required(cell);
-        if (prior.conflicted()) throw new IllegalStateException("cannot forget conflicted infection overlay evidence");
+        if (prior.deferred()) throw new IllegalStateException("cannot forget deferred infection overlay evidence");
         claims.remove(cell);
         prior.positions().forEach(cellsByPosition::remove);
         setDirty();
@@ -177,7 +185,7 @@ final class FrontierV3InfectionOverlayLedger extends SavedData {
         return claim;
     }
 
-    enum Phase { PREPARED, ACTIVE, CONFLICTED, CLEARED }
+    enum Phase { PREPARED, ACTIVE, DEFERRED, CLEARED }
 
     record Claim(List<Long> positions, InfectionOverlayStage stage, Phase phase) {
         Claim {
@@ -187,7 +195,10 @@ final class FrontierV3InfectionOverlayLedger extends SavedData {
                 throw new IllegalArgumentException("infection patch must retain every exact surface position once");
             }
         }
-        boolean conflicted() { return phase == Phase.CONFLICTED; }
+        boolean deferred() { return phase == Phase.DEFERRED; }
+        /** Compatibility query for callers that only need a non-writable mirror claim. */
+        @Deprecated(forRemoval = true)
+        boolean conflicted() { return deferred(); }
         boolean cleared() { return phase == Phase.CLEARED; }
         boolean prepared() { return phase == Phase.PREPARED; }
         boolean active() { return phase == Phase.ACTIVE; }

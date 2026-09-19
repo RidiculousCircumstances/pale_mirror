@@ -19,7 +19,8 @@ import java.util.TreeSet;
 /** Durable, bounded provenance for v3 graybox cells; it never grants overwrite authority. */
 final class FrontierV3GrayboxLedger extends SavedData {
     private static final String NAME = "pale_mirror_frontier_v3_graybox";
-    private static final int FORMAT = 4;
+    /* Format 5 removes adapter-authored terminal conflict from mirror persistence. */
+    private static final int FORMAT = 5;
     private static final int MAX_CELLS = 65_536;
     private final Map<Long, Claim> claims;
     /**
@@ -75,9 +76,10 @@ final class FrontierV3GrayboxLedger extends SavedData {
             setDirty();
         }
     }
-    void conflict(BlockPos position) {
+    /** A physical mirror may defer its exact claim, never manufacture a terminal conflict. */
+    void defer(BlockPos position) {
         Claim prior = claims.get(position.asLong());
-        if (prior == null || prior.conflicted()) return;
+        if (prior == null || prior.deferred()) return;
         claims.put(position.asLong(), new Claim(prior.owner(), prior.targetTag(), prior.material(), prior.semanticPart(), Math.addExact(prior.revision(), 1L), true)); setDirty();
     }
     /**
@@ -98,7 +100,7 @@ final class FrontierV3GrayboxLedger extends SavedData {
         }
         if (prior == null) {
             index(tombstone, position.asLong()); setDirty();
-        } else if (!prior.conflicted()) {
+        } else if (!prior.deferred()) {
             claims.put(position.asLong(), new Claim(tombstone.owner(), tombstone.targetTag(), tombstone.material(), tombstone.semanticPart(), Math.addExact(prior.revision(), 1L), true)); setDirty();
         }
     }
@@ -117,7 +119,7 @@ final class FrontierV3GrayboxLedger extends SavedData {
     /** Removes one exact temporary claim only after its owned world block has been cleared. */
     void retire(BlockPos position, String owner, int targetTag, String material, String semanticPart) {
         Claim claim = claims.get(position.asLong());
-        if (claim == null || claim.conflicted() || !claim.owner().equals(owner) || claim.targetTag() != requireTargetTag(targetTag) || !claim.material().equals(material)
+        if (claim == null || claim.deferred() || !claim.owner().equals(owner) || claim.targetTag() != requireTargetTag(targetTag) || !claim.material().equals(material)
                 || !claim.semanticPart().equals(semanticPart)) {
             throw new IllegalStateException("v3 graybox retirement does not match its exact claim");
         }
@@ -141,7 +143,7 @@ final class FrontierV3GrayboxLedger extends SavedData {
         if (entries.size() > MAX_CELLS) throw new IllegalStateException("v3 graybox claim limit exceeded");
         for (Tag value : entries) { CompoundTag entry = (CompoundTag) value; long position = entry.getLong("pos");
             Claim claim = new Claim(requireText(entry.getString("owner"), "owner"), requireTargetTag(entry.getInt("targetTag")), requireText(entry.getString("material"), "material"),
-                    requireText(entry.getString("part"), "semantic part"), entry.getLong("revision"), entry.getBoolean("conflict"));
+                    requireText(entry.getString("part"), "semantic part"), entry.getLong("revision"), entry.getBoolean("deferred"));
             if (claims.put(position, claim) != null) throw new IllegalStateException("duplicate v3 graybox claim"); }
         return new FrontierV3GrayboxLedger(claims);
     }
@@ -159,7 +161,7 @@ final class FrontierV3GrayboxLedger extends SavedData {
             value.putString("material", entry.getValue().material());
             value.putString("part", entry.getValue().semanticPart());
             value.putLong("revision", entry.getValue().revision());
-            value.putBoolean("conflict", entry.getValue().conflicted());
+            value.putBoolean("deferred", entry.getValue().deferred());
             entries.add(value);
         });
         tag.put("claims", entries); return tag;
@@ -171,7 +173,7 @@ final class FrontierV3GrayboxLedger extends SavedData {
     private static int requireTargetTag(int value) {
         return io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.fromWireTag(value).wireTag();
     }
-    record Claim(String owner, int targetTag, String material, String semanticPart, long revision, boolean conflicted) {
+    record Claim(String owner, int targetTag, String material, String semanticPart, long revision, boolean deferred) {
         Claim {
             owner = requireText(owner, "owner");
             targetTag = requireTargetTag(targetTag);
@@ -179,9 +181,12 @@ final class FrontierV3GrayboxLedger extends SavedData {
             semanticPart = requireText(semanticPart, "semantic part");
             if (revision < 0L) throw new IllegalStateException("v3 graybox claim revision is negative");
         }
-        Claim(String owner, int targetTag, String material, String semanticPart, boolean conflicted) {
-            this(owner, targetTag, material, semanticPart, 0L, conflicted);
+        Claim(String owner, int targetTag, String material, String semanticPart, boolean deferred) {
+            this(owner, targetTag, material, semanticPart, 0L, deferred);
         }
+        /** Compatibility query for non-writable mirror claims; this is not a diagnostic conflict. */
+        @Deprecated(forRemoval = true)
+        boolean conflicted() { return deferred; }
     }
     record ClaimAt(BlockPos position, Claim claim) { }
 }

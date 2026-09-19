@@ -8,6 +8,7 @@ public final class FrontierV3GameTestSlice {
     private static final String SCENE = "scene";
     private static final String ECONOMY = "economy";
     private static final String AMBIENT_PHYSICS = "ambient-physics";
+    private static final String ADAPTER_MIRRORS = "adapter-mirrors";
 
     private FrontierV3GameTestSlice() { }
 
@@ -31,6 +32,8 @@ public final class FrontierV3GameTestSlice {
                     || batchName.equals("pm-frontier-v3-equipment-return") || batchName.equals("pm-frontier-v3-equipment-death")
                     || batchName.equals("pm-frontier-v3-resource-recovery") || batchName.equals("pm-frontier-v3-reference-custody");
             case AMBIENT_PHYSICS -> batchName.equals("pm-frontier-v3-ambient-physics");
+            case ADAPTER_MIRRORS -> batchName.equals("pm-frontier-v3-graybox")
+                    || batchName.equals("pm-frontier-v3-infection-overlay");
             case "reference-depot-never-visited" -> batchName.equals("pm-frontier-v3-reference-depot-never-visited");
             case "reference-depot-visited-unloaded" -> batchName.equals("pm-frontier-v3-reference-depot-visited-unloaded");
             case "reference-hive-zero-player" -> batchName.equals("pm-frontier-v3-reference-hive-zero-player");

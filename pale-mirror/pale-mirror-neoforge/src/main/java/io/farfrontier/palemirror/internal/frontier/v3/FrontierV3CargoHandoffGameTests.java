@@ -200,7 +200,7 @@ public final class FrontierV3CargoHandoffGameTests {
     public static void grayboxProvenanceDoesNotForgetAConflict(GameTestHelper helper) {
         BlockPos position = helper.absolutePos(new BlockPos(20, 8, 0));
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(helper.getLevel());
-        ledger.applied(position, "structure:test", 1, "DEPOT", "FOUNDATION"); ledger.conflict(position);
+        ledger.applied(position, "structure:test", 1, "DEPOT", "FOUNDATION"); ledger.defer(position);
         helper.assertTrue(ledger.claim(position).conflicted(), "a changed applied cell remains conflict evidence, not an invitation to rewrite it");
         helper.succeed();
     }
@@ -214,7 +214,7 @@ public final class FrontierV3CargoHandoffGameTests {
                 new InventoryCustody.ContainerSlot(new SubjectId("container:repair-game-test"), 0));
         chest.setItem(0, FrontierV3CargoHandoffExecutor.materializedStack(concrete));
         GrayboxCell cell = grayboxCell(target, 4, "route:frontier-network", GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
-        FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level); ledger.applied(target, cell.ownerId().value(), cell.semanticTarget().kind().wireTag(), cell.material().name(), cell.semanticPart().name()); ledger.conflict(target);
+        FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level); ledger.applied(target, cell.ownerId().value(), cell.semanticTarget().kind().wireTag(), cell.material().name(), cell.semanticPart().name()); ledger.defer(target);
         helper.assertTrue(FrontierV3StructuralRepairExecutor.applyOne(level, ledger, target, cell, chest, 0, concrete), "an empty owned loss consumes exactly one matching concrete item");
         helper.assertTrue(level.getBlockState(target).is(Blocks.GRAY_CONCRETE) && chest.getItem(0).getCount() == 1 && !ledger.claim(target).conflicted(),
                 "the live block, exact stack and provenance claim converge together");
@@ -229,14 +229,14 @@ public final class FrontierV3CargoHandoffGameTests {
         ServerLevel level = helper.getLevel(); BlockPos target = helper.absolutePos(new BlockPos(23, 8, 0));
         GrayboxCell cell = grayboxCell(target, 4, "route:frontier-network", GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
-        ledger.applied(target, cell.ownerId().value(), cell.semanticTarget().kind().wireTag(), cell.material().name(), cell.semanticPart().name()); ledger.conflict(target);
+        ledger.applied(target, cell.ownerId().value(), cell.semanticTarget().kind().wireTag(), cell.material().name(), cell.semanticPart().name()); ledger.defer(target);
 
         helper.assertTrue(FrontierV3RouteMaintenanceExecutor.repairOne(level, ledger, target, cell),
                 "maintenance restores its exact empty conflicted route claim rather than treating it as fresh construction");
         helper.assertTrue(level.getBlockState(target).is(Blocks.GRAY_CONCRETE) && !ledger.claim(target).conflicted(),
                 "one restored route cell clears only its own durable conflict claim");
 
-        ledger.conflict(target); level.setBlock(target, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
+        ledger.defer(target); level.setBlock(target, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
         helper.assertFalse(FrontierV3RouteMaintenanceExecutor.repairOne(level, ledger, target, cell),
                 "maintenance never overwrites foreign post-loss geometry");
         helper.assertTrue(level.getBlockState(target).is(Blocks.DIAMOND_BLOCK) && ledger.claim(target).conflicted(),
