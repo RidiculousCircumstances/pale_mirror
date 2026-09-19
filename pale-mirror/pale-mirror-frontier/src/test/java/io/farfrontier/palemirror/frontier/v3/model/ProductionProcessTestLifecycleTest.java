@@ -352,7 +352,8 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         MaterializedProduction prepared = activeMaterializedProduction();
         PhysicalIntent early = new PhysicalIntent(new PhysicalIntentId("intent:production-transform-too-early"), PhysicalIntentKind.PRODUCTION_TRANSFORMATION,
                 PhysicalIntentStatus.PREPARED, prepared.job().id(), List.of(prepared.job().id(), prepared.job().consumedItemId(), prepared.job().outputItemId()),
-                new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0, PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED);
+                new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0, PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.PRODUCTION_WORK);
         assertThrows(IllegalArgumentException.class, () -> prepared.state().preparePhysicalIntent(early));
     }
 
@@ -674,7 +675,7 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
                 PhysicalIntentKind.PRODUCTION_TRANSFORMATION, PhysicalIntentStatus.PREPARED, prepared.job().id(),
                 List.of(prepared.job().id(), prepared.job().consumedItemId(), prepared.job().outputItemId()),
                 new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0,
-                PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED);
+                PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.PRODUCTION_WORK);
 
         assertThrows(IllegalArgumentException.class, () -> ProductionTransformationStateSupport.validateIntent(prepared.state(), premature));
         assertTrue(prepared.state().productionJobs().containsKey(prepared.job().id()));

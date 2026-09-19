@@ -23,6 +23,7 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.util.List;
 import java.util.Map;
+import java.util.Arrays;
 import org.junit.jupiter.api.Test;
 
 class PhysicalIntentLifecycleOwnerCodecTest {
@@ -44,6 +45,9 @@ class PhysicalIntentLifecycleOwnerCodecTest {
 
     @Test
     void rejectsMissingUnknownStaleAndKindMismatchedOwnerIdentity() {
+        assertTrue(Arrays.stream(PhysicalIntent.class.getConstructors()).allMatch(constructor ->
+                Arrays.asList(constructor.getParameterTypes()).contains(PhysicalIntentLifecycleOwner.class)),
+                "every public physical-intent construction path must require an explicit lifecycle owner");
         assertThrows(NullPointerException.class, () -> new PhysicalIntent(new PhysicalIntentId("intent:missing-owner"),
                 PhysicalIntentKind.PRODUCTION_TRANSFORMATION, PhysicalIntentStatus.PREPARED, new SubjectId("job:one"),
                 List.of(new SubjectId("job:one"), new SubjectId("item:input"), new SubjectId("item:output")), origin(), 0,

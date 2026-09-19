@@ -90,7 +90,7 @@ class SettlementServiceWorkProcessTest {
         var forgedEndpoint = new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent(planned.endpointIntent().id(), planned.endpointIntent().kind(),
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING, planned.endpointIntent().causeSubjectId(),
                 planned.endpointIntent().subjectIds(), planned.endpointIntent().origin(), planned.endpointIntent().radiusBlocks(),
-                planned.endpointIntent().postcondition());
+                planned.endpointIntent().postcondition(), planned.endpointIntent().lifecycleOwner());
 
         assertThrows(IllegalArgumentException.class, () -> SettlementServiceWorkProcess.reduceStarted(active, settlement.id(),
                 new SettlementServiceWorkStarted(planned.taskId(), planned.work(), planned.inputIssueIntent(), forgedEndpoint)));

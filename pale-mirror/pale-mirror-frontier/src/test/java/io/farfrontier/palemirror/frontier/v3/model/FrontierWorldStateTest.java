@@ -93,10 +93,10 @@ class FrontierWorldStateTest {
         PhysicalIntent inputIssue = new PhysicalIntent(work.inputIssueIntentId(), PhysicalIntentKind.SETTLEMENT_SERVICE_INPUT_ISSUE,
                 PhysicalIntentStatus.PREPARED, work.id(), List.of(work.id(), medic.id(), work.inputItemId()),
                 new FixedPosition(FixedScalar.whole(plan.inputStation().x()), FixedScalar.whole(plan.inputStation().y()), FixedScalar.whole(plan.inputStation().z())),
-                0, PhysicalPostcondition.SETTLEMENT_SERVICE_INPUT_ISSUED_OBSERVED);
+                0, PhysicalPostcondition.SETTLEMENT_SERVICE_INPUT_ISSUED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_SERVICE_WORK);
         PhysicalIntent endpoint = new PhysicalIntent(work.endpointIntentId(), PhysicalIntentKind.DECONTAMINATION, PhysicalIntentStatus.PREPARED, work.id(),
                 List.of(work.id(), medic.id(), work.inputItemId()), new FixedPosition(FixedScalar.whole(selectedCell.originAtY(0).x()), FixedScalar.whole(0), FixedScalar.whole(selectedCell.originAtY(0).z())),
-                0, PhysicalPostcondition.DECONTAMINATION_OBSERVED);
+                0, PhysicalPostcondition.DECONTAMINATION_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_SERVICE_WORK);
         ExactInventory inventory = baseline.inventory().store(new ExactItemStack(work.inputItemId(), work.settlementId(), "minecraft:glowstone_dust", 1,
                         new InventoryCustody.ContainerSlot(new SubjectId("container:1-depot"), 1)))
                 .withSurfaceStatus(new SubjectId("container:1-depot"), ContainerSurfaceStatus.PREPARED)
@@ -391,7 +391,8 @@ class FrontierWorldStateTest {
         FrontierWorldState state = initial();
         PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:cargo-handoff-foreign"), PhysicalIntentKind.CARGO_HANDOFF,
                 PhysicalIntentStatus.PREPARED, new SubjectId("operation:foreign"), List.of(new SubjectId("resident:1-1")),
-                new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0, PhysicalPostcondition.CARGO_HANDOFF_OBSERVED);
+                new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0, PhysicalPostcondition.CARGO_HANDOFF_OBSERVED,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ROUTE_OPERATION);
 
         assertThrows(IllegalArgumentException.class, () -> new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(),
                 state.infection(), state.inventory(), state.productionJobs(), state.contracts(), state.operations(), state.logisticsHistory(), Map.of(intent.id(), intent), state.physicalObservations(),
@@ -435,7 +436,7 @@ class FrontierWorldStateTest {
         assertEquals(job, active.hiveColony().growthJobs().get(job.id()));
         PhysicalIntent intent = new PhysicalIntent(job.consumptionIntentId(), PhysicalIntentKind.EXACT_ITEM_CONSUMPTION, PhysicalIntentStatus.PREPARED,
                 job.id(), List.of(job.id(), job.consumedItemId()), new FixedPosition(FixedScalar.whole(420), FixedScalar.whole(64), FixedScalar.whole(420)), 0,
-                PhysicalPostcondition.EXACT_ITEM_CONSUMED_OBSERVED);
+                PhysicalPostcondition.EXACT_ITEM_CONSUMED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.HIVE_GROWTH);
         FrontierWorldState prepared = HiveGrowthProcess.reducePrepared(active, hive, intent);
         FrontierWorldState running = prepared.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, java.util.Optional.empty());
         FrontierWorldState consumed = running.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(
@@ -472,7 +473,7 @@ class FrontierWorldStateTest {
                 .withSurfaceStatus(store, ContainerSurfaceStatus.ACTIVE)), store).startHiveGrowth(job);
         PhysicalIntent intent = new PhysicalIntent(job.consumptionIntentId(), PhysicalIntentKind.EXACT_ITEM_CONSUMPTION, PhysicalIntentStatus.PREPARED,
                 job.id(), List.of(job.id(), job.consumedItemId()), new FixedPosition(FixedScalar.whole(420), FixedScalar.whole(64), FixedScalar.whole(420)), 0,
-                PhysicalPostcondition.EXACT_ITEM_CONSUMED_OBSERVED);
+                PhysicalPostcondition.EXACT_ITEM_CONSUMED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.HIVE_GROWTH);
         FrontierWorldState running = HiveGrowthProcess.reducePrepared(active, hive, intent)
                 .transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, java.util.Optional.empty());
         FrontierWorldState unknown = running.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, java.util.Optional.empty());

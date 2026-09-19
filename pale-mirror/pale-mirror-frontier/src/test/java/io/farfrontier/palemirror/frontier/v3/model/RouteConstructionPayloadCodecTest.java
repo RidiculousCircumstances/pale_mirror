@@ -24,7 +24,8 @@ class RouteConstructionPayloadCodecTest {
                 item = new SubjectId("item:codec-concrete"), cargoItem = new SubjectId("item:route-build-codec");
         PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:route-build-codec"), PhysicalIntentKind.ROUTE_CONSTRUCTION,
                 PhysicalIntentStatus.PREPARED, FrontierRouteNetwork.OWNER, List.of(FrontierRouteNetwork.OWNER, project, cargo, cargoItem),
-                new FixedPosition(FixedScalar.whole(12), FixedScalar.whole(64), FixedScalar.whole(18)), 0, PhysicalPostcondition.ROUTE_CONSTRUCTION_OBSERVED);
+                new FixedPosition(FixedScalar.whole(12), FixedScalar.whole(64), FixedScalar.whole(18)), 0, PhysicalPostcondition.ROUTE_CONSTRUCTION_OBSERVED,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE);
         RouteConstructionObservation observation = new RouteConstructionObservation(new PhysicalObservationId("observation:route-build-codec"), intent.id(),
                 project, cargoItem, new BlockPosition(12, 64, 18));
         PhysicalIntentTransition transition = new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation));
@@ -33,7 +34,7 @@ class RouteConstructionPayloadCodecTest {
         PhysicalIntent loadIntent = new PhysicalIntent(new PhysicalIntentId("intent:route-load-codec"), PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING,
                 PhysicalIntentStatus.PREPARED, project, List.of(FrontierRouteNetwork.OWNER, project, cargo, cargoItem, item),
                 new FixedPosition(FixedScalar.whole(12), FixedScalar.whole(64), FixedScalar.whole(18)), 0,
-                PhysicalPostcondition.ROUTE_CONSTRUCTION_MATERIAL_LOADED_OBSERVED);
+                PhysicalPostcondition.ROUTE_CONSTRUCTION_MATERIAL_LOADED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE);
         RouteConstructionMaterialLoadObservation load = new RouteConstructionMaterialLoadObservation(new PhysicalObservationId("observation:route-load-codec"),
                 loadIntent.id(), project, cargo, item, cargoItem, 63);
         PhysicalIntentTransition loadTransition = new PhysicalIntentTransition(loadIntent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(load));
@@ -49,7 +50,8 @@ class RouteConstructionPayloadCodecTest {
                 maintenanceItem = new SubjectId("item:route-maintenance-codec");
         PhysicalIntent maintenanceIntent = new PhysicalIntent(new PhysicalIntentId("intent:route-maintenance-codec"), PhysicalIntentKind.ROUTE_MAINTENANCE,
                 PhysicalIntentStatus.PREPARED, FrontierRouteNetwork.OWNER, List.of(FrontierRouteNetwork.OWNER, maintenance, maintenanceCargo, maintenanceItem),
-                new FixedPosition(FixedScalar.whole(12), FixedScalar.whole(64), FixedScalar.whole(18)), 0, PhysicalPostcondition.ROUTE_MAINTENANCE_OBSERVED);
+                new FixedPosition(FixedScalar.whole(12), FixedScalar.whole(64), FixedScalar.whole(18)), 0, PhysicalPostcondition.ROUTE_MAINTENANCE_OBSERVED,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE);
         RouteMaintenanceObservation repair = new RouteMaintenanceObservation(new PhysicalObservationId("observation:route-maintenance-codec"), maintenanceIntent.id(),
                 maintenance, maintenanceItem, new BlockPosition(12, 64, 18));
         PhysicalIntentTransition repairTransition = new PhysicalIntentTransition(maintenanceIntent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(repair));
@@ -58,7 +60,7 @@ class RouteConstructionPayloadCodecTest {
                 PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING, PhysicalIntentStatus.PREPARED, maintenance,
                 List.of(FrontierRouteNetwork.OWNER, maintenance, maintenanceCargo, maintenanceItem, item),
                 new FixedPosition(FixedScalar.whole(12), FixedScalar.whole(64), FixedScalar.whole(18)), 0,
-                PhysicalPostcondition.ROUTE_MAINTENANCE_MATERIAL_LOADED_OBSERVED);
+                PhysicalPostcondition.ROUTE_MAINTENANCE_MATERIAL_LOADED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE);
         RouteMaintenanceMaterialLoadObservation maintenanceLoad = new RouteMaintenanceMaterialLoadObservation(
                 new PhysicalObservationId("observation:route-maintenance-load-codec"), maintenanceLoadIntent.id(), maintenance, maintenanceCargo, item, maintenanceItem, 63);
         PhysicalIntentTransition maintenanceLoadTransition = new PhysicalIntentTransition(maintenanceLoadIntent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(maintenanceLoad));
@@ -69,7 +71,7 @@ class RouteConstructionPayloadCodecTest {
         PhysicalIntent serviceInputIntent = new PhysicalIntent(new PhysicalIntentId("intent:service-input-codec"),
                 PhysicalIntentKind.SETTLEMENT_SERVICE_INPUT_ISSUE, PhysicalIntentStatus.PREPARED, service,
                 List.of(service, worker, reagent), new FixedPosition(FixedScalar.whole(12), FixedScalar.whole(64), FixedScalar.whole(18)), 0,
-                PhysicalPostcondition.SETTLEMENT_SERVICE_INPUT_ISSUED_OBSERVED);
+                PhysicalPostcondition.SETTLEMENT_SERVICE_INPUT_ISSUED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_SERVICE_WORK);
         SettlementServiceInputIssueObservation serviceInput = new SettlementServiceInputIssueObservation(
                 new PhysicalObservationId("observation:service-input-codec"), serviceInputIntent.id(), service, worker, reagent,
                 new InventoryCustody.ContainerSlot(depot, 3));

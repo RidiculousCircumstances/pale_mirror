@@ -245,12 +245,15 @@ class HiveRouteEngagementProcessTest {
         SubjectId target = candidate.actorIds().stream().filter(actor -> !actor.equals(attacker) && !hot.strategicPlans().routeEngagements().get(engagementId).attackerIds().contains(actor)).findFirst().orElseThrow();
         FixedPosition strikeOrigin = new FixedPosition(FixedScalar.whole(candidate.handoffPosition().x()), FixedScalar.whole(candidate.handoffPosition().y()), FixedScalar.whole(candidate.handoffPosition().z()));
         PhysicalIntent strikeIntent = new PhysicalIntent(new PhysicalIntentId("intent:scene-strike-test"), PhysicalIntentKind.SCENE_STRIKE, PhysicalIntentStatus.PREPARED,
-                operation.id(), List.of(attacker, target), strikeOrigin, 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED);
+                operation.id(), List.of(attacker, target), strikeOrigin, 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ROUTE_ENGAGEMENT);
         PhysicalIntent foreignTarget = new PhysicalIntent(new PhysicalIntentId("intent:scene-strike-foreign"), PhysicalIntentKind.SCENE_STRIKE, PhysicalIntentStatus.PREPARED,
-                operation.id(), List.of(attacker, new SubjectId("resident:12-1")), strikeOrigin, 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED);
+                operation.id(), List.of(attacker, new SubjectId("resident:12-1")), strikeOrigin, 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ROUTE_ENGAGEMENT);
         assertThrows(IllegalArgumentException.class, () -> hot.preparePhysicalIntent(foreignTarget));
         PhysicalIntent unknownTarget = new PhysicalIntent(new PhysicalIntentId("intent:scene-strike-unknown"), PhysicalIntentKind.SCENE_STRIKE, PhysicalIntentStatus.PREPARED,
-                operation.id(), List.of(attacker, new SubjectId("actor:unknown")), strikeOrigin, 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED);
+                operation.id(), List.of(attacker, new SubjectId("actor:unknown")), strikeOrigin, 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ROUTE_ENGAGEMENT);
         assertThrows(IllegalArgumentException.class, () -> hot.preparePhysicalIntent(unknownTarget));
         SceneStrikeObservation strikeReceipt = new SceneStrikeObservation(new PhysicalObservationId("observation:scene-strike-test"), strikeIntent.id(), attacker, target,
                 FixedScalar.whole(20), FixedScalar.ZERO);

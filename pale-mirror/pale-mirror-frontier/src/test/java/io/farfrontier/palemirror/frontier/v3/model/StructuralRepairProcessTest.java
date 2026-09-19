@@ -36,7 +36,7 @@ class StructuralRepairProcessTest {
         assertTrue(StructuralRepairProcess.plan(state, StructuralRepairProcess.scan(1, 800L)).stream().anyMatch(event -> event.payload() instanceof PhysicalIntentPrepared));
         PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:repair-runtime-definition"), PhysicalIntentKind.STRUCTURAL_REPAIR,
                 PhysicalIntentStatus.PREPARED, structure.id(), List.of(structure.id(), materialId), new FixedPosition(FixedScalar.whole(cell.position().x()), FixedScalar.whole(cell.position().y()), FixedScalar.whole(cell.position().z())),
-                0, PhysicalPostcondition.STRUCTURAL_REPAIR_OBSERVED);
+                0, PhysicalPostcondition.STRUCTURAL_REPAIR_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE);
         state = state.preparePhysicalIntent(intent).transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
         StructuralRepairObservation observation = new StructuralRepairObservation(new PhysicalObservationId("observation:repair-runtime-definition"), intent.id(), materialId, cell.position());
         FrontierWorldState repaired = state.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation));
@@ -64,7 +64,7 @@ class StructuralRepairProcessTest {
                 .store(new ExactItemStack(materialId, state.bootstrap().hive().id(), cell.material().repairItemKind(), 1, new InventoryCustody.ContainerSlot(store, 4))));
         PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:hive-organ-repair"), PhysicalIntentKind.STRUCTURAL_REPAIR, PhysicalIntentStatus.PREPARED,
                 organ.id(), List.of(organ.id(), materialId), new FixedPosition(FixedScalar.whole(cell.position().x()), FixedScalar.whole(cell.position().y()), FixedScalar.whole(cell.position().z())),
-                0, PhysicalPostcondition.STRUCTURAL_REPAIR_OBSERVED);
+                0, PhysicalPostcondition.STRUCTURAL_REPAIR_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE);
         state = state.preparePhysicalIntent(intent).transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
         FrontierWorldState repaired = state.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED,
                 Optional.of(new StructuralRepairObservation(new PhysicalObservationId("observation:hive-organ-repair"), intent.id(), materialId, cell.position())));
@@ -88,7 +88,7 @@ class StructuralRepairProcessTest {
                 .noneMatch(event -> event.payload() instanceof PhysicalIntentPrepared));
         PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:route-repair"), PhysicalIntentKind.STRUCTURAL_REPAIR, PhysicalIntentStatus.PREPARED,
                 FrontierRouteNetwork.OWNER, List.of(FrontierRouteNetwork.OWNER, materialId), new FixedPosition(FixedScalar.whole(routeCell.x()), FixedScalar.whole(routeCell.y()), FixedScalar.whole(routeCell.z())),
-                0, PhysicalPostcondition.STRUCTURAL_REPAIR_OBSERVED);
+                0, PhysicalPostcondition.STRUCTURAL_REPAIR_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE);
         FrontierWorldState routeState = state;
         assertThrows(IllegalArgumentException.class, () -> StructuralRepairProcess.reducePrepared(routeState, FrontierRouteNetwork.OWNER, intent));
         FrontierWorldState running = state.preparePhysicalIntent(intent).transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty());

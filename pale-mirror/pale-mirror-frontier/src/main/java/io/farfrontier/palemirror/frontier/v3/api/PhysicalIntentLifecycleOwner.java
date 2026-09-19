@@ -46,24 +46,6 @@ public enum PhysicalIntentLifecycleOwner {
                 .orElseThrow(() -> new IllegalArgumentException("unknown physical intent lifecycle owner: " + stableId));
     }
 
-    /** Compatibility constructor only for direct unit fixtures; production producers must stamp explicitly. */
-    public static PhysicalIntentLifecycleOwner fixtureDefault(PhysicalIntentKind kind) {
-        return switch (Objects.requireNonNull(kind, "physical intent kind")) {
-            case RESOURCE_SITE_PREPARATION -> RESOURCE_SITE_PREPARATION;
-            case RESOURCE_SITE_HARVEST -> RESOURCE_SITE_HARVEST;
-            case PRODUCTION_TRANSFORMATION -> PRODUCTION_WORK;
-            case CARGO_LOADING, CARGO_HANDOFF -> ROUTE_OPERATION;
-            case ROUTE_CONSTRUCTION, ROUTE_CONSTRUCTION_MATERIAL_LOADING, ROUTE_MAINTENANCE,
-                    ROUTE_MAINTENANCE_MATERIAL_LOADING, STRUCTURAL_REPAIR -> ENGINEERING_WORKSITE;
-            case HIVE_NUTRIENT_DEPARTURE, HIVE_NUTRIENT_ARRIVAL -> HIVE_NUTRIENT_TRANSFER;
-            case EQUIPMENT_ISSUE, EQUIPMENT_RETURN -> SETTLEMENT_ASSAULT;
-            case SETTLEMENT_SERVICE_INPUT_ISSUE, DECONTAMINATION -> SETTLEMENT_SERVICE_WORK;
-            case EXPLOSION -> HIVE_MOBILIZATION;
-            case SCENE_STRIKE -> ROUTE_ENGAGEMENT;
-            case EXACT_ITEM_CONSUMPTION -> SETTLEMENT_PROVISION;
-        };
-    }
-
     public boolean supports(PhysicalIntentKind kind) {
         return switch (this) {
             case RESOURCE_SITE_PREPARATION -> kind == PhysicalIntentKind.RESOURCE_SITE_PREPARATION;

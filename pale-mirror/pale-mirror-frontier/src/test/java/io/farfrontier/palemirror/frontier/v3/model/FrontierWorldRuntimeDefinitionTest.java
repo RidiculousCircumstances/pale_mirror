@@ -493,7 +493,7 @@ class FrontierWorldRuntimeDefinitionTest {
         assertEquals(travelAdvanced, codecs.decode(travelAdvanced.type(), codecs.encode(travelAdvanced)));
         PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:cargo-handoff-supply-1-1"), PhysicalIntentKind.CARGO_HANDOFF,
                 PhysicalIntentStatus.PREPARED, operation.id(), List.of(operation.id(), operation.cargoId()), new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO),
-                0, PhysicalPostcondition.CARGO_HANDOFF_OBSERVED);
+                0, PhysicalPostcondition.CARGO_HANDOFF_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ROUTE_OPERATION);
         PhysicalIntentPrepared prepared = new PhysicalIntentPrepared(intent);
         assertEquals(prepared, codecs.decode(prepared.type(), codecs.encode(prepared)));
         PhysicalIntentTransition transition = new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty());

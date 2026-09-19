@@ -129,7 +129,8 @@ class TerminalLogisticsProcessTest {
                         new InventoryCustody.ContainerSlot(new SubjectId("container:hive-west-store"), 0)), "minecraft:bread", 64)));
         PhysicalIntent intent = new PhysicalIntent(intentId, PhysicalIntentKind.CARGO_HANDOFF, PhysicalIntentStatus.PREPARED,
                 operationId, List.of(operationId, cargoId), new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO),
-                0, PhysicalPostcondition.CARGO_HANDOFF_OBSERVED).withStatus(PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(observationId));
+                0, PhysicalPostcondition.CARGO_HANDOFF_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ROUTE_OPERATION)
+                .withStatus(PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(observationId));
         Map<PhysicalIntentId, PhysicalIntent> intents = new LinkedHashMap<>(delivered.physicalIntents()); intents.put(intentId, intent);
         Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(delivered.physicalObservations()); observations.put(observationId, observation);
         PhysicalIntentId loadingIntentId = new PhysicalIntentId("intent:cargo-loading-supply-1-2");
@@ -137,7 +138,8 @@ class TerminalLogisticsProcessTest {
         CargoLoadObservation loading = new CargoLoadObservation(loadingObservationId, loadingIntentId, new SubjectId("contract:supply-1-2"), cargoId, itemId, 1);
         intents.put(loadingIntentId, new PhysicalIntent(loadingIntentId, PhysicalIntentKind.CARGO_LOADING, PhysicalIntentStatus.PREPARED,
                 new SubjectId("contract:supply-1-2"), List.of(new SubjectId("contract:supply-1-2"), cargoId, itemId),
-                new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0, PhysicalPostcondition.CARGO_LOADED_FROM_DEPOT_OBSERVED)
+                new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0, PhysicalPostcondition.CARGO_LOADED_FROM_DEPOT_OBSERVED,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ROUTE_OPERATION)
                 .withStatus(PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(loadingObservationId)));
         observations.put(loadingObservationId, loading);
         return new FrontierWorldState(delivered.bootstrap(), delivered.actorLocations(), delivered.structureConditions(), delivered.infection(), delivered.inventory(),
