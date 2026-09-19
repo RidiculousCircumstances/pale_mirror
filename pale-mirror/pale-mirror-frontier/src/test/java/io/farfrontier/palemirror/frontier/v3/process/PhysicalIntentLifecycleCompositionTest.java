@@ -15,7 +15,15 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.CommandId;
+import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
+import io.farfrontier.palemirror.frontier.v3.api.EngineScheduleBinding;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
+import io.farfrontier.palemirror.frontier.v3.api.Revision;
+import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
+import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
+import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;
 import java.util.Arrays;
 import java.util.List;
@@ -133,6 +141,30 @@ class PhysicalIntentLifecycleCompositionTest {
         NoPhysicalIntentLifecyclePolicy policy = new NoPhysicalIntentLifecyclePolicy(PhysicalIntentLifecycleOwner.ROUTE_PATROL);
         assertInstanceOf(CommandPlan.Rejected.class, policy.retirementPolicy().plan(null, null, null, null));
         assertThrows(IllegalArgumentException.class, () -> policy.retirementPolicy().reduce(null, null, null, null));
+    }
+
+    @Test
+    void checkedNoneScheduleCannotHideTheEngineBoundActionAtPlanPublication() {
+        PhysicalIntentLifecycleOwner owner = PhysicalIntentLifecycleOwner.RESOURCE_SITE_PREPARATION;
+        PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:none-schedule"),
+                PhysicalIntentKind.RESOURCE_SITE_PREPARATION, PhysicalIntentStatus.RUNNING,
+                new SubjectId("site:none-schedule"), List.of(new SubjectId("site:none-schedule"), new SubjectId("job:none-schedule")),
+                new FixedPosition(FixedScalar.ZERO, FixedScalar.whole(64), FixedScalar.ZERO), 0,
+                PhysicalPostcondition.RESOURCE_SITE_PREPARED_OBSERVED, owner);
+        PhysicalIntentTransition terminal = new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, java.util.Optional.empty());
+        CommandId id = new CommandId("command:none-schedule");
+        FrontierCommand command = new FrontierCommand(FrontierCommand.SCHEMA_VERSION, id, new WorldId("world:none-schedule"), Revision.ZERO,
+                SimInstant.ZERO, intent.causeSubjectId(), CauseChain.root(id), terminal, java.util.Optional.of(new EngineScheduleBinding(Revision.ZERO,
+                new ScheduledAction(new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:none-schedule"), SimInstant.ZERO, 0,
+                        intent.causeSubjectId(), "frontier.test.none-schedule", 1))));
+        PhysicalIntentRetirementAccount dishonest = PhysicalIntentRetirementAccount.declared(owner,
+                java.util.EnumSet.allOf(PhysicalIntentRetirementAccount.Dimension.class),
+                (before, ignored, candidate, transition) -> PhysicalIntentRetirementAccount.checkedNone(owner, null, candidate, transition),
+                (before, candidate, transition, binding) -> PhysicalIntentRetirementAccount.requireSameDeclaredAccount(binding,
+                        PhysicalIntentRetirementAccount.checkedNone(owner, null, candidate, transition)),
+                (before, after, candidate, transition, binding) -> { });
+        assertThrows(IllegalArgumentException.class, () -> dishonest.verifyPlan(null, command, intent, terminal,
+                new CommandPlan.Accepted(List.of(new io.farfrontier.palemirror.frontier.v3.api.ProposedEvent(intent.causeSubjectId(), terminal)))));
     }
 
     private static FrontierWorldProcessModule module(List<PhysicalIntentLifecycleCapability> capabilities) {
