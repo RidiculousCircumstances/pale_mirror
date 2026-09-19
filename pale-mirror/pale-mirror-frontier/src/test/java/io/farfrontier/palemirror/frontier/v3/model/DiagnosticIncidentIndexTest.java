@@ -12,8 +12,14 @@ import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import java.util.EnumSet;
 
 class DiagnosticIncidentIndexTest {
+    @Test void currentProducerInventoryHasNoUnretainedReason() {
+        EnumSet<DiagnosticReason> expected = EnumSet.allOf(DiagnosticReason.class);
+        expected.remove(DiagnosticReason.FRONTIER_QUARANTINE);
+        assertEquals(expected, DiagnosticIncidentExtractor.retainedReasons());
+    }
     @Test void reducerAtomicallyRetainsExactOwnerLinkAndSnapshotRoundTripsIt() {
         WorldId world = new WorldId("frontier:diagnostic-index");
         var configuration = FrontierWorldRuntimeDefinition.configuration(world, 93L);

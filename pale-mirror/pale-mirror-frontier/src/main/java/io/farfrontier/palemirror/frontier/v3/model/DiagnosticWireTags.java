@@ -5,7 +5,7 @@ public final class DiagnosticWireTags {
     private DiagnosticWireTags() { }
     public static DiagnosticReason reason(int tag) { return switch (tag) {
         case 101 -> DiagnosticReason.RESOURCE_SITE_PLAYER_REMOVED; case 102 -> DiagnosticReason.RESOURCE_SITE_EXPLOSION_DAMAGE;
-        case 103 -> DiagnosticReason.RESOURCE_SITE_OBSERVATION_MISMATCH; case 104 -> DiagnosticReason.RESOURCE_SITE_WORKER_DEATH;
+        case 104 -> DiagnosticReason.RESOURCE_SITE_WORKER_DEATH;
         case 105 -> DiagnosticReason.RESOURCE_SITE_RECOVERY_UNRESOLVED; case 106 -> DiagnosticReason.RESOURCE_SITE_CARRIER_FENCE_UNRESOLVED;
         case 107 -> DiagnosticReason.RESOURCE_SITE_LIFECYCLE_RECONCILIATION; case 108 -> DiagnosticReason.RESOURCE_SITE_ADAPTER_WRITE_FAILURE;
         case 109 -> DiagnosticReason.RESOURCE_SITE_LAWFUL_LAG; case 201 -> DiagnosticReason.HIVE_GROWTH_BLOCKED;
@@ -14,7 +14,7 @@ public final class DiagnosticWireTags {
         case 303 -> DiagnosticReason.RESIDENT_MIGRATION_BLOCKED; case 304 -> DiagnosticReason.OPERATION_FAILED;
         case 305 -> DiagnosticReason.SETTLEMENT_PROVISION_CONFLICT; case 306 -> DiagnosticReason.SETTLEMENT_ASSAULT_CONFLICT; case 401 -> DiagnosticReason.INVENTORY_CONFLICT;
         case 402 -> DiagnosticReason.REPLICA_CUSTODY_CONFLICT; case 403 -> DiagnosticReason.PHYSICAL_CUSTODY_UNRESOLVED;
-        case 501 -> DiagnosticReason.FRONTIER_QUARANTINE; case 601 -> DiagnosticReason.ADAPTER_FAILURE;
+        case 501 -> DiagnosticReason.FRONTIER_QUARANTINE;
         default -> throw new IllegalArgumentException("unknown diagnostic reason tag: " + tag); }; }
     public static DiagnosticCategory category(int tag) { return switch (tag) {
         case 1 -> DiagnosticCategory.WAIT_OR_BLOCKED; case 2 -> DiagnosticCategory.DOMAIN_DISRUPTION;

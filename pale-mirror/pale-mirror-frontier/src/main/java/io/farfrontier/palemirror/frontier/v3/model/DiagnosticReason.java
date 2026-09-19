@@ -7,7 +7,6 @@ package io.farfrontier.palemirror.frontier.v3.model;
 public enum DiagnosticReason {
     RESOURCE_SITE_PLAYER_REMOVED(101, DiagnosticCategory.DOMAIN_DISRUPTION, DiagnosticOwnerKind.RESOURCE_SITE, DiagnosticSubjectKind.RESOURCE_SITE_CELL, DiagnosticDisposition.REPAIR),
     RESOURCE_SITE_EXPLOSION_DAMAGE(102, DiagnosticCategory.DOMAIN_DISRUPTION, DiagnosticOwnerKind.RESOURCE_SITE, DiagnosticSubjectKind.RESOURCE_SITE_CELL, DiagnosticDisposition.REPAIR),
-    RESOURCE_SITE_OBSERVATION_MISMATCH(103, DiagnosticCategory.RECONCILIATION_CONFLICT, DiagnosticOwnerKind.RESOURCE_SITE, DiagnosticSubjectKind.RESOURCE_SITE_CELL, DiagnosticDisposition.REPAIR),
     RESOURCE_SITE_WORKER_DEATH(104, DiagnosticCategory.DOMAIN_DISRUPTION, DiagnosticOwnerKind.RESOURCE_SITE, DiagnosticSubjectKind.HARVEST_WORKER, DiagnosticDisposition.REPAIR),
     RESOURCE_SITE_RECOVERY_UNRESOLVED(105, DiagnosticCategory.RECOVERY_UNKNOWN, DiagnosticOwnerKind.RESOURCE_SITE, DiagnosticSubjectKind.PHYSICAL_EFFECT, DiagnosticDisposition.INSPECT),
     RESOURCE_SITE_CARRIER_FENCE_UNRESOLVED(106, DiagnosticCategory.RECOVERY_UNKNOWN, DiagnosticOwnerKind.RESOURCE_SITE, DiagnosticSubjectKind.SCENE_CARRIER, DiagnosticDisposition.INSPECT),
@@ -26,8 +25,7 @@ public enum DiagnosticReason {
     INVENTORY_CONFLICT(401, DiagnosticCategory.RECONCILIATION_CONFLICT, DiagnosticOwnerKind.INVENTORY_CUSTODY, DiagnosticSubjectKind.INVENTORY_SLOT, DiagnosticDisposition.INSPECT),
     REPLICA_CUSTODY_CONFLICT(402, DiagnosticCategory.RECONCILIATION_CONFLICT, DiagnosticOwnerKind.REPLICA_CUSTODY, DiagnosticSubjectKind.REPLICA, DiagnosticDisposition.INSPECT),
     PHYSICAL_CUSTODY_UNRESOLVED(403, DiagnosticCategory.RECOVERY_UNKNOWN, DiagnosticOwnerKind.PHYSICAL_INTENT, DiagnosticSubjectKind.PHYSICAL_EFFECT, DiagnosticDisposition.INSPECT),
-    FRONTIER_QUARANTINE(501, DiagnosticCategory.CANONICAL_INVARIANT_FAILURE, DiagnosticOwnerKind.FRONTIER_INSTANCE, DiagnosticSubjectKind.FRONTIER_INSTANCE, DiagnosticDisposition.QUARANTINE),
-    ADAPTER_FAILURE(601, DiagnosticCategory.ADAPTER_OR_INFRASTRUCTURE_ERROR, DiagnosticOwnerKind.ADAPTER, DiagnosticSubjectKind.ADAPTER_BOUNDARY, DiagnosticDisposition.RETRY);
+    FRONTIER_QUARANTINE(501, DiagnosticCategory.CANONICAL_INVARIANT_FAILURE, DiagnosticOwnerKind.FRONTIER_INSTANCE, DiagnosticSubjectKind.FRONTIER_INSTANCE, DiagnosticDisposition.QUARANTINE);
 
     private final int wireTag;
     private final DiagnosticCategory category;
