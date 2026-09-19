@@ -16,7 +16,7 @@ public final class DiagnosticIncidentExtractor {
                 DiagnosticReason.HIVE_NUTRIENT_BLOCKED, DiagnosticReason.ROUTE_PATROL_BLOCKED, DiagnosticReason.PRODUCTION_BLOCKED,
                 DiagnosticReason.RESIDENT_MIGRATION_BLOCKED, DiagnosticReason.OPERATION_FAILED, DiagnosticReason.SETTLEMENT_PROVISION_CONFLICT,
                 DiagnosticReason.SETTLEMENT_ASSAULT_CONFLICT, DiagnosticReason.INVENTORY_CONFLICT, DiagnosticReason.REPLICA_CUSTODY_CONFLICT,
-                DiagnosticReason.PHYSICAL_CUSTODY_UNRESOLVED, DiagnosticReason.FRONTIER_KERNEL_COMMAND_FAILURE,
+                DiagnosticReason.PHYSICAL_CUSTODY_UNRESOLVED, DiagnosticReason.SCENE_LEASE_RECOVERY_UNRESOLVED, DiagnosticReason.ROUTE_PATROL_MEMBER_LOST, DiagnosticReason.FRONTIER_KERNEL_COMMAND_FAILURE,
                 DiagnosticReason.FRONTIER_KERNEL_TRANSACTION_CAPACITY, DiagnosticReason.FRONTIER_KERNEL_DUE_FAILURE,
                 DiagnosticReason.FRONTIER_QUARANTINE));
         return Set.copyOf(values);
@@ -37,6 +37,8 @@ public final class DiagnosticIncidentExtractor {
             case PhysicalReplicaCustodyPayloads.ReplicaConflictObserved value -> Optional.of(value.diagnostic());
             case PhysicalReplicaCustodyPayloads.CustodyUnresolved value -> Optional.of(value.diagnostic());
             case PhysicalIntentTransition value -> value.diagnostic();
+            case SceneLeaseRecoveryUnresolved value -> Optional.of(value.diagnostic());
+            case RoutePatrolFailed value -> Optional.of(value.diagnostic());
             case KernelQuarantineObserved value -> Optional.of(value.diagnostic());
             default -> Optional.empty();
         };

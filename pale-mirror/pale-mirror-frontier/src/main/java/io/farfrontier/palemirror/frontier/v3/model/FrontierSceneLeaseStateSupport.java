@@ -179,7 +179,11 @@ public final class FrontierSceneLeaseStateSupport {
     /** Stable physical-body key used by runtime stale-load guards as well as canonical recovery. */
     public static SubjectId bodyRecoveryBindingId(SubjectId actorId) { return new SubjectId("recovery:body_" + actorId.value().replace(':', '_')); }
     /** Stable owner identity for an exact scene epoch; it is deliberately not an ambient roster. */
-    public static SubjectId recoveryOwner(SceneLease lease) { return new SubjectId("scene:" + lease.id().value().replace(':', '_')); }
+    public static SubjectId recoveryOwner(SceneLease lease) { return recoveryOwner(lease.id()); }
+    /** Stable persisted recovery binding for one exact lease; this is identity translation, never owner discovery. */
+    public static SubjectId recoveryOwner(io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId leaseId) {
+        return new SubjectId("scene:" + leaseId.value().replace(':', '_'));
+    }
     /** Stable physical-cargo key shared with the naturally loaded stale-carrier guard. */
     public static SubjectId cargoRecoveryBindingId(SubjectId cargoId) { return new SubjectId("recovery:cargo_" + cargoId.value().replace(':', '_')); }
     private static FencedRecoveryState prepareRecovery(FencedRecoveryState recovery, SceneLease lease) {

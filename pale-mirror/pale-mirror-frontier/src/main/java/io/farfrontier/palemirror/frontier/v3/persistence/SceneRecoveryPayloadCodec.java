@@ -18,14 +18,14 @@ final class SceneRecoveryPayloadCodec implements PayloadCodec {
             SceneLeaseRecoveryUnresolved unresolved = (SceneLeaseRecoveryUnresolved) payload;
             FrontierWorldPayloadCodecs.writeString(output, unresolved.leaseId().value()); output.writeByte(unresolved.missingActorIds().size());
             for (SubjectId actor : unresolved.missingActorIds().stream().sorted().toList()) FrontierWorldPayloadCodecs.writeSubject(output, actor);
-            output.writeBoolean(unresolved.missingCargoCarrier());
+            output.writeBoolean(unresolved.missingCargoCarrier()); FrontierWorldPayloadCodecs.writeDiagnosticTuple(output, unresolved.diagnostic());
         });
     }
     @Override public FrontierPayload decode(byte[] bytes) {
         return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
             SceneLeaseId lease = new SceneLeaseId(FrontierWorldPayloadCodecs.readString(input)); Set<SubjectId> missing = new LinkedHashSet<>();
             for (int index = 0, count = input.readUnsignedByte(); index < count; index++) missing.add(FrontierWorldPayloadCodecs.readSubject(input).value());
-            return new SceneLeaseRecoveryUnresolved(lease, missing, input.readBoolean());
+            return new SceneLeaseRecoveryUnresolved(lease, missing, input.readBoolean(), FrontierWorldPayloadCodecs.readDiagnosticTuple(input));
         });
     }
 }

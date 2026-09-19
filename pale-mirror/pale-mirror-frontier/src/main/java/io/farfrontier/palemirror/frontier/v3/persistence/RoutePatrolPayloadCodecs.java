@@ -39,8 +39,8 @@ final class RoutePatrolPayloadCodecs {
     }; }
     static PayloadCodec failed() { return new PayloadCodec() {
         @Override public String type() { return "frontier.route_patrol_failed"; }
-        @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> subject(output, ((RoutePatrolFailed) payload).taskId())); }
-        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new RoutePatrolFailed(subject(input))); }
+        @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> { RoutePatrolFailed failed = (RoutePatrolFailed) payload; subject(output, failed.taskId()); FrontierWorldPayloadCodecs.writeDiagnosticTuple(output, failed.diagnostic()); }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new RoutePatrolFailed(subject(input), FrontierWorldPayloadCodecs.readDiagnosticTuple(input))); }
     }; }
     static PayloadCodec blocked() { return new PayloadCodec() {
         @Override public String type() { return "frontier.route_patrol_blocked"; }

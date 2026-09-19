@@ -58,7 +58,7 @@ public final class RoutePatrolProcess {
         // known loss.
         for (int advance = 0; advance < PatrolAssembly.MAX_COLD_ADVANCES; advance++) {
             if (current.memberIds().stream().anyMatch(member -> state.actorLocations().get(member).condition().status() != ActorLifeStatus.ALIVE)) {
-                events.add(new ProposedEvent(current.settlementId(), new RoutePatrolFailed(current.taskId())));
+                events.add(new ProposedEvent(current.settlementId(), RoutePatrolFailureDiagnosticProducer.memberLost(current.taskId())));
                 events.add(transition(task, StrategicTaskStatus.BLOCKED));
                 return List.copyOf(events);
             }

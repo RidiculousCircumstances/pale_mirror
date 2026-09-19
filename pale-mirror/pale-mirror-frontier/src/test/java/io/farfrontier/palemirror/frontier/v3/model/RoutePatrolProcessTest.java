@@ -53,12 +53,12 @@ class RoutePatrolProcessTest {
         locations.put(lost, new ActorLocation(before.body(), ActorCondition.dead()));
         FrontierWorldState withLoss = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(locations));
 
-        FrontierWorldState failed = RoutePatrolProcess.reduceFailed(withLoss, patrol.settlementId(), new RoutePatrolFailed(patrol.taskId()));
+        FrontierWorldState failed = RoutePatrolProcess.reduceFailed(withLoss, patrol.settlementId(), RoutePatrolFailureDiagnosticProducer.memberLost(patrol.taskId()));
 
         assertEquals(RoutePatrolStatus.FAILED, failed.strategicPlans().routePatrols().get(patrol.taskId()).status());
         assertEquals(patrol.memberIds(), failed.strategicPlans().routePatrols().get(patrol.taskId()).memberIds());
         assertThrows(IllegalArgumentException.class,
-                () -> RoutePatrolProcess.reduceFailed(state, patrol.settlementId(), new RoutePatrolFailed(patrol.taskId())));
+                () -> RoutePatrolProcess.reduceFailed(state, patrol.settlementId(), RoutePatrolFailureDiagnosticProducer.memberLost(patrol.taskId())));
     }
 
     @Test

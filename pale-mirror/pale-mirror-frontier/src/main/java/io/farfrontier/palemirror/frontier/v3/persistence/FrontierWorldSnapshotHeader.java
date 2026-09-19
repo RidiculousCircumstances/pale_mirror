@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierRuleset;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierRulesets;
 import io.farfrontier.palemirror.frontier.v3.process.FrontierDurationProcessDriverRegistry;
+import io.farfrontier.palemirror.frontier.v3.process.FrontierWorldProcessCatalog;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
@@ -32,6 +33,9 @@ public record FrontierWorldSnapshotHeader(WorldId worldId, long seed, FrontierRu
             // perfectly valid snapshot.
             if (!FrontierDurationProcessDriverRegistry.inventoryFingerprint().equals(readString(input))) {
                 throw new IllegalArgumentException("Frontier v3 header has an incompatible process/scene descriptor inventory");
+            }
+            if (!FrontierWorldProcessCatalog.physicalLifecycleFingerprint().equals(readString(input))) {
+                throw new IllegalArgumentException("Frontier v3 header has an incompatible physical lifecycle capability composition");
             }
             WorldId worldId = new WorldId(readString(input));
             long seed = input.readLong();

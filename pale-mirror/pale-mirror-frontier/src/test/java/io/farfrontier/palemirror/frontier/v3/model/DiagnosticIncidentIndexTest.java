@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
 import io.farfrontier.palemirror.frontier.v3.api.CommandId;
 import io.farfrontier.palemirror.frontier.v3.api.EventId;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
 import io.farfrontier.palemirror.frontier.v3.api.Revision;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.TransactionId;
@@ -69,6 +70,26 @@ class DiagnosticIncidentIndexTest {
         assertEquals("restart:fresh", context.restartIdentity());
     }
 
+    @Test void ordinaryRoutePatrolLossRetainsItsProducerStampedTerminalIncidentAcrossRestart() {
+        WorldId world = new WorldId("frontier:diagnostic-patrol-loss");
+        var fixture = FrontierDevelopmentScenarios.routePatrolFixture(world, 713L);
+        FrontierWorldState initial = fixture.state();
+        RoutePatrol patrol = initial.strategicPlans().routePatrols().get(fixture.taskId());
+        var locations = new java.util.LinkedHashMap<>(initial.actorLocations());
+        var lost = patrol.memberIds().getFirst();
+        locations.put(lost, new ActorLocation(locations.get(lost).body(), ActorCondition.dead()));
+        FrontierWorldState withLoss = initial.withChanges(FrontierWorldStateUpdate.begin().actorLocations(locations));
+        RoutePatrolFailed payload = RoutePatrolFailureDiagnosticProducer.memberLost(patrol.taskId());
+
+        FrontierWorldState reduced = FrontierWorldRuntimeDefinition.configuration(world, 713L).reducer().apply(withLoss,
+                event(world, patrol.settlementId(), payload, 1, 7));
+        DiagnosticIncident incident = reduced.diagnosticIncidents().why(payload.diagnostic().subject()).orElseThrow();
+        assertEquals(payload.diagnostic(), incident.diagnostic());
+        assertEquals(RoutePatrolStatus.FAILED, reduced.strategicPlans().routePatrols().get(patrol.taskId()).status());
+        FrontierWorldState restarted = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(reduced));
+        assertEquals(incident, restarted.diagnosticIncidents().incident(incident.id()).orElseThrow());
+    }
+
     @Test void oneIdentityProducesOneBoundedBundleEvenWhenTheSameFactIsRepeated() {
         DiagnosticTuple tuple = tuple(7);
         DiagnosticIncidentIndex retained = DiagnosticIncidentIndex.empty().retain(tuple, "event:first", "cause:first", 3, 5)
@@ -92,7 +113,7 @@ class DiagnosticIncidentIndexTest {
     }
 
     private static FrontierEvent event(WorldId world, io.farfrontier.palemirror.frontier.v3.api.SubjectId site,
-                                       ResourceSiteConflictObserved payload, long revision, long instant) {
+                                       FrontierPayload payload, long revision, long instant) {
         return new FrontierEvent(1, new EventId("event:diagnostic-" + revision), new TransactionId("transaction:diagnostic-" + revision),
                 world, new Revision(revision), new SimInstant(instant), site, CauseChain.root(new CommandId("command:diagnostic")), payload);
     }
