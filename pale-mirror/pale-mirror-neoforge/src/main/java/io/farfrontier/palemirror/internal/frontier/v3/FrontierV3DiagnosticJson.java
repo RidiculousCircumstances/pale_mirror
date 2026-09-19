@@ -53,6 +53,8 @@ import io.farfrontier.palemirror.frontier.v3.model.StrategicTask;
 import io.farfrontier.palemirror.frontier.v3.model.StrategicTaskKind;
 import io.farfrontier.palemirror.frontier.v3.model.MedicalEvacuationOperation;
 import io.farfrontier.palemirror.frontier.v3.process.EngineeringEquipmentProcess;
+import io.farfrontier.palemirror.frontier.v3.process.FrontierWorldProcessCatalog;
+import io.farfrontier.palemirror.frontier.v3.process.PhysicalIntentLifecycleCompositionDiagnostic;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -131,6 +133,7 @@ final class FrontierV3DiagnosticJson {
         Objects.requireNonNull(equipmentReturnReadiness, "equipmentReturnReadiness");
         String value = switch (kind) {
             case "summary" -> summary(checkpoint, state);
+            case "physical_lifecycle" -> physicalLifecycle(checkpoint, state);
             case "process" -> process(id, checkpoint, state);
             case "process_inventory" -> FrontierV3ProcessInventoryDiagnostic.render(id, checkpoint, state);
             case "site" -> site(id, checkpoint, state);
@@ -233,6 +236,19 @@ final class FrontierV3DiagnosticJson {
                 + ",\"sceneLeases\":" + state.sceneLeases().size()
                 + ",\"items\":" + state.inventory().items().size()
                 + ",\"inventoryConflicts\":" + state.inventory().conflicts().size() + "}";
+    }
+
+    /** One bounded composition account; all counts are derived from canonical state. */
+    private static String physicalLifecycle(CheckpointImage checkpoint, FrontierWorldState state) {
+        PhysicalIntentLifecycleCompositionDiagnostic diagnostic = FrontierWorldProcessCatalog.physicalLifecycleDiagnostic(state);
+        String owners = diagnostic.owners().stream().map(owner -> "{\"owner\":\"" + quote(owner.owner().stableId())
+                + "\",\"version\":" + owner.declarationVersion() + ",\"schemaTags\":" + owner.schemaTags()
+                + ",\"unresolved\":" + owner.unresolved() + ",\"resolvedRetained\":" + owner.resolvedRetained()
+                + ",\"recoveryBindings\":" + owner.currentRecoveryBindings() + ",\"maxUnresolved\":" + owner.maxUnresolved()
+                + ",\"maxResolvedRetention\":" + owner.maxResolvedRetention() + ",\"pressure\":\"" + owner.pressure() + "\"}")
+                .reduce((left, right) -> left + "," + right).orElse("");
+        return base("physical_lifecycle", "", checkpoint) + ",\"status\":\"ok\",\"fingerprint\":\""
+                + diagnostic.fingerprint() + "\",\"owners\":[" + owners + "]}";
     }
 
     /** One exact durable recovery fence, rendered read-only for a crash/reconciliation receipt. */

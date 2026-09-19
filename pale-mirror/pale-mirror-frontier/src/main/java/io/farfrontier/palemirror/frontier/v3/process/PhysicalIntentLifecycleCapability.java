@@ -22,6 +22,9 @@ interface PhysicalIntentLifecycleCapability {
 
     Set<PhysicalIntentKind> compatibleKinds();
 
+    /** Closed owner/kind/nominal-schema and retention declaration for this capability. */
+    PhysicalIntentLifecycleDeclaration declaration();
+
     /** Explicit executable terminal/late-input policy supplied by this owner's family. */
     PhysicalIntentLifecycleRetirementPolicy retirementPolicy();
 

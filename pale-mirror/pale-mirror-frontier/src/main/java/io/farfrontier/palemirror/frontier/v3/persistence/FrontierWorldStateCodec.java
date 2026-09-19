@@ -4,12 +4,13 @@ import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.kernel.StateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.process.FrontierDurationProcessDriverRegistry;
+import io.farfrontier.palemirror.frontier.v3.process.FrontierWorldProcessCatalog;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 166; private static final int MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 167; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -24,6 +25,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
             try (DataOutputStream output = new DataOutputStream(bytes)) {
                 output.writeInt(MAGIC); output.writeByte(VERSION); writeString(output, FrontierDurationProcessDriverRegistry.inventoryFingerprint());
+                writeString(output, FrontierWorldProcessCatalog.physicalLifecycleFingerprint());
                 writeString(output, state.bootstrap().worldId().value()); output.writeLong(state.bootstrap().seed()); writeRuleset(output, state.bootstrap().ruleset());
                 TerrainSurfacePlanCodec.write(output, state.bootstrap().terrain());
                 writeActors(output, state.actorLocations());
@@ -65,6 +67,9 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             if (!FrontierDurationProcessDriverRegistry.inventoryFingerprint().equals(readString(input))) {
                 throw new IllegalArgumentException("Frontier v3 state has an incompatible process/scene descriptor inventory");
             }
+            if (!FrontierWorldProcessCatalog.physicalLifecycleFingerprint().equals(readString(input))) {
+                throw new IllegalArgumentException("Frontier v3 state has an incompatible physical lifecycle capability composition");
+            }
             WorldId worldId = new WorldId(readString(input)); long seed = input.readLong();
             FrontierRuleset ruleset = readRuleset(input); TerrainSurfacePlan terrain = TerrainSurfacePlanCodec.read(input);
             FrontierBootstrap bootstrap = bootstrapFor(worldId, seed, ruleset, terrain);
@@ -94,6 +99,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, inventory, jobs, serviceWorks, contracts, operations, history,
                     intents, observations, scenes, colony, structureDamage, physicalDeltas, ambient, constructions, maintenances, topology, plans, population, companies, sites, replicaCustody, deferredAftermath, fencedRecovery);
             if (input.available() != 0) throw new IllegalArgumentException("trailing Frontier v3 state bytes");
+            FrontierWorldProcessCatalog.requirePhysicalLifecycleState(state);
             FrontierDomainRelationships.validate(state);
             FrontierDurationProcessDriverRegistry.requireRetainedSceneLeases(state.sceneLeases().values());
             return state;

@@ -21,6 +21,7 @@ abstract class AbstractPhysicalIntentLifecycleCapability implements PhysicalInte
     private final Set<PhysicalIntentKind> kinds;
     private final PhysicalIntentLifecycleRetirementPolicy retirementPolicy;
     private final PhysicalIntentRetirementAccount retirementAccount;
+    private final PhysicalIntentLifecycleDeclaration declaration;
 
     AbstractPhysicalIntentLifecycleCapability(PhysicalIntentLifecycleOwner owner, Set<PhysicalIntentKind> kinds,
                                               PhysicalIntentLifecycleRetirementPolicy retirementPolicy,
@@ -29,12 +30,14 @@ abstract class AbstractPhysicalIntentLifecycleCapability implements PhysicalInte
         this.kinds = Set.copyOf(kinds);
         this.retirementPolicy = retirementPolicy;
         this.retirementAccount = retirementAccount;
+        this.declaration = PhysicalIntentLifecycleDeclaration.declared(owner, this.kinds);
     }
 
     @Override public final PhysicalIntentLifecycleOwner owner() { return owner; }
     @Override public final Set<PhysicalIntentKind> compatibleKinds() { return kinds; }
     @Override public final PhysicalIntentLifecycleRetirementPolicy retirementPolicy() { return retirementPolicy; }
     @Override public final PhysicalIntentRetirementAccount retirementAccount() { return retirementAccount; }
+    @Override public PhysicalIntentLifecycleDeclaration declaration() { return declaration; }
     @Override public FencedRecoveryAsset recoveryAsset(PhysicalIntent intent) {
         throw new IllegalArgumentException("physical lifecycle owner has no declared recovery asset: " + owner.stableId());
     }

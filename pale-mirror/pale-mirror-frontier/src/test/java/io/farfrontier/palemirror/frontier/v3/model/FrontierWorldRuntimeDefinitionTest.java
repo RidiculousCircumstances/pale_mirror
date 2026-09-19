@@ -584,16 +584,17 @@ class FrontierWorldRuntimeDefinitionTest {
         FrontierWorldState prepared = advanceUntil(engine, 12_000L, candidate -> candidate.physicalIntents()
                 .containsKey(new PhysicalIntentId("intent:cargo-handoff-supply-1-2")));
         PhysicalIntentId id = new PhysicalIntentId("intent:cargo-handoff-supply-1-2");
+        SubjectId owner = prepared.operations().get(new SubjectId("operation:supply-1-2")).settlementId();
         FungibleCargoHandoffObservation observation = fungibleCargoObservation("observation:cargo-handoff-supply-1-1", id,
                 new SubjectId("cargo:supply-1-2"), new SubjectId("container:hive-west-store"));
 
-        assertThrows(IllegalArgumentException.class, () -> prepared.transitionPhysicalIntent(id, PhysicalIntentStatus.CONFIRMED,
+        assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleFixture.transition(prepared, owner, prepared.physicalIntents().get(id), PhysicalIntentStatus.CONFIRMED,
                 Optional.of(observation)));
-        FrontierWorldState running = prepared.transitionPhysicalIntent(id, PhysicalIntentStatus.RUNNING, Optional.empty());
+        FrontierWorldState running = PhysicalIntentLifecycleFixture.transition(prepared, owner, prepared.physicalIntents().get(id), PhysicalIntentStatus.RUNNING, Optional.empty());
         FungibleCargoHandoffObservation foreignStore = fungibleCargoObservation("observation:cargo-handoff-foreign-store", id,
                 new SubjectId("cargo:supply-1-2"), new SubjectId("container:hive-east-store"));
-        assertThrows(IllegalArgumentException.class, () -> running.transitionPhysicalIntent(id, PhysicalIntentStatus.CONFIRMED, Optional.of(foreignStore)));
-        FrontierWorldState confirmed = running.transitionPhysicalIntent(id, PhysicalIntentStatus.CONFIRMED,
+        assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleFixture.transition(running, owner, running.physicalIntents().get(id), PhysicalIntentStatus.CONFIRMED, Optional.of(foreignStore)));
+        FrontierWorldState confirmed = PhysicalIntentLifecycleFixture.transition(running, owner, running.physicalIntents().get(id), PhysicalIntentStatus.CONFIRMED,
                 Optional.of(observation));
         assertEquals(PhysicalIntentStatus.CONFIRMED, confirmed.physicalIntents().get(id).status());
         assertEquals(Optional.of(new PhysicalObservationId("observation:cargo-handoff-supply-1-1")), confirmed.physicalIntents().get(id).postconditionObservationId());

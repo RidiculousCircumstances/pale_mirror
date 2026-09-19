@@ -19,6 +19,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.Revision;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
+import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
@@ -26,6 +27,7 @@ import java.io.DataOutputStream;
 import java.util.List;
 import java.util.Map;
 import java.util.Arrays;
+import java.nio.ByteBuffer;
 import org.junit.jupiter.api.Test;
 
 class PhysicalIntentLifecycleOwnerCodecTest {
@@ -97,6 +99,19 @@ class PhysicalIntentLifecycleOwnerCodecTest {
                 Revision.ZERO, SimInstant.ZERO, new byte[0], List.of(), List.of()), 0L));
         snapshot[4] = 66; // The immediately preceding envelope version had typed roles but no closed role-schema bytes.
         assertMessage(() -> FrontierPersistenceCodec.decodeSnapshot(snapshot), "typed-role codec");
+    }
+
+    @Test
+    void forgedSnapshotLifecycleCompositionFingerprintFailsBeforeRecoveredStateCanDispatch() {
+        FrontierWorldStateCodec codec = new FrontierWorldStateCodec();
+        byte[] encoded = codec.encode(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:composition-fingerprint"), 91L).initialState());
+        int durationLength = ByteBuffer.wrap(encoded, 5, Short.BYTES).getShort() & 0xffff;
+        int compositionLengthOffset = 5 + Short.BYTES + durationLength;
+        int compositionLength = ByteBuffer.wrap(encoded, compositionLengthOffset, Short.BYTES).getShort() & 0xffff;
+        int compositionStart = compositionLengthOffset + Short.BYTES;
+        assertTrue(compositionLength > 0, "the snapshot must retain one closed lifecycle composition fingerprint");
+        encoded[compositionStart] ^= 1;
+        assertMessage(() -> codec.decode(encoded), "physical lifecycle capability composition");
     }
 
     private static PhysicalIntent productionIntent() {

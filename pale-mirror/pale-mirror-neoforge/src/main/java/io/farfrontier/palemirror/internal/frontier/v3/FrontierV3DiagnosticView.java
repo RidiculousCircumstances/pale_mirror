@@ -15,6 +15,8 @@ public enum FrontierV3DiagnosticView {
     /** One permission-gated operator status cut with the recoverable command receipt history. */
     STATUS("status", false),
     PERFORMANCE("performance", false),
+    /** Closed owner/schema/retention composition and derived pressure; read-only. */
+    PHYSICAL_LIFECYCLE("physical_lifecycle", false),
     /** One read-only whole-path counter snapshot for retained structural and infection projection work. */
     PROJECTION_WORK("projection_work", false),
     AFTERMATH("aftermath", true),

@@ -218,6 +218,26 @@ public final class FrontierWorldProcessCatalog {
 
     public static Set<String> scheduledKinds() { return SCHEDULED_PLANNERS.keySet(); }
 
+    /** Startup/recovery fence for the exact owner/kind/role-schema capability composition. */
+    public static void requirePhysicalLifecycleComposition() {
+        // Touching the closed composition is intentional: static construction has already
+        // rejected absence, duplicates and declaration drift.  Keeping this explicit lets
+        // hydration establish the same fence before any recovered record can be dispatched.
+        PHYSICAL_LIFECYCLES.fingerprint();
+    }
+
+    /** Recovery validates each durable intent against the currently installed closed declaration. */
+    public static void requirePhysicalLifecycleState(FrontierWorldState state) {
+        PHYSICAL_LIFECYCLES.requireRetainedState(state);
+    }
+
+    /** Read-only composition/pressure account; it never influences admission or mutation. */
+    public static PhysicalIntentLifecycleCompositionDiagnostic physicalLifecycleDiagnostic(FrontierWorldState state) {
+        return PHYSICAL_LIFECYCLES.diagnostic(state);
+    }
+
+    public static String physicalLifecycleFingerprint() { return PHYSICAL_LIFECYCLES.fingerprint(); }
+
     /** Routes only through the module selected by the registry's exact command-type owner. */
     public static CommandPlan planCommand(String processId, FrontierWorldState state, FrontierCommand command) {
         return module(processId).planCommand(state, command);

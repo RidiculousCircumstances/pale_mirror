@@ -13,6 +13,7 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleSchema;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.CommandId;
@@ -80,6 +81,11 @@ class PhysicalIntentLifecycleCompositionTest {
         FrontierWorldProcessModule incompleteAccount = module(Arrays.stream(PhysicalIntentLifecycleOwner.values())
                 .map(owner -> capability(owner, supported(owner), PhysicalIntentLifecycleRetirementPolicy.noPhysical(owner),
                         owner == first ? incomplete : account(owner))).toList());
+        FrontierWorldProcessModule mismatchedSchema = module(Arrays.stream(PhysicalIntentLifecycleOwner.values())
+                .map(owner -> owner == first ? capabilityWithDeclaration(owner, supported(owner),
+                        new PhysicalIntentLifecycleDeclaration(owner, PhysicalIntentLifecycleDeclaration.VERSION,
+                                Set.of(PhysicalIntentRoleSchema.RESOURCE_SITE_PREPARATION), 256, 256))
+                        : capability(owner, supported(owner))).toList());
         assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleCapabilities.compose(List.of(missing)));
         assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleCapabilities.compose(List.of(duplicate)));
         assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleCapabilities.compose(List.of(mismatch)));
@@ -88,6 +94,10 @@ class PhysicalIntentLifecycleCompositionTest {
         assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleCapabilities.compose(List.of(missingAccount)));
         assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleCapabilities.compose(List.of(mismatchedAccount)));
         assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleCapabilities.compose(List.of(incompleteAccount)));
+        assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleCapabilities.compose(List.of(mismatchedSchema)));
+        assertThrows(IllegalArgumentException.class, () -> new PhysicalIntentLifecycleDeclaration(first,
+                PhysicalIntentLifecycleDeclaration.VERSION + 1, Set.of(PhysicalIntentRoleSchema.RESOURCE_SITE_HARVEST), 256, 256),
+                "a stale declaration version must fail before the capability can compose");
     }
 
     @Test
@@ -277,6 +287,13 @@ class PhysicalIntentLifecycleCompositionTest {
                                                                  PhysicalIntentLifecycleRetirementPolicy retirementPolicy,
                                                                  PhysicalIntentRetirementAccount account) {
         return new AbstractPhysicalIntentLifecycleCapability(owner, kinds, retirementPolicy, account) { };
+    }
+
+    private static PhysicalIntentLifecycleCapability capabilityWithDeclaration(PhysicalIntentLifecycleOwner owner, Set<PhysicalIntentKind> kinds,
+                                                                                PhysicalIntentLifecycleDeclaration declaration) {
+        return new AbstractPhysicalIntentLifecycleCapability(owner, kinds, PhysicalIntentLifecycleRetirementPolicy.noPhysical(owner), account(owner)) {
+            @Override public PhysicalIntentLifecycleDeclaration declaration() { return declaration; }
+        };
     }
 
     private static PhysicalIntentRetirementAccount account(PhysicalIntentLifecycleOwner owner) {

@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
 
 import java.util.LinkedHashMap;
@@ -23,8 +24,18 @@ public final class ExplosionStateSupport {
     }
 
     public static void validateIntent(FrontierWorldState state, PhysicalIntent intent) {
-        if (intent.kind() != PhysicalIntentKind.EXPLOSION || intent.status() != PhysicalIntentStatus.PREPARED) {
+        if (intent.status() != PhysicalIntentStatus.PREPARED) {
             throw new IllegalArgumentException("explosion intent has invalid physical lifecycle");
+        }
+        validateRetainedIntent(state, intent);
+    }
+
+    /** Recovery validates the same producer-stamped effect identity without treating RUNNING as a new prepare. */
+    public static void validateRetainedIntent(FrontierWorldState state, PhysicalIntent intent) {
+        if (intent.kind() != PhysicalIntentKind.EXPLOSION || intent.lifecycleOwner() != PhysicalIntentLifecycleOwner.HIVE_MOBILIZATION
+                || (intent.status() != PhysicalIntentStatus.PREPARED && intent.status() != PhysicalIntentStatus.RUNNING
+                && intent.status() != PhysicalIntentStatus.UNKNOWN_AFTER_RESTART)) {
+            throw new IllegalArgumentException("explosion intent has invalid retained physical lifecycle");
         }
         Bioform bomber = java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
                 .filter(value -> value.id().equals(intent.causeSubjectId())).findFirst().orElseThrow(() -> new IllegalArgumentException("explosion cause is not one hive bioform"));

@@ -318,6 +318,7 @@ class FrontierV3DiagnosticJsonTest {
         SubjectId resource = state.inventory().fungibleResources().accounts().keySet().stream().sorted().findFirst().orElseThrow();
 
         String summary = FrontierV3DiagnosticJson.render("summary", "", checkpoint, state, Optional.empty());
+        String physicalLifecycle = FrontierV3DiagnosticJson.render("physical_lifecycle", "", checkpoint, state, Optional.empty());
         String inventoryJson = FrontierV3DiagnosticJson.render("process_inventory", "settlements", checkpoint, state, Optional.empty());
         String siteJson = FrontierV3DiagnosticJson.render("site", site.value(), checkpoint, state, Optional.empty());
         String actorJson = FrontierV3DiagnosticJson.render("actor", actor.value(), checkpoint, state, Optional.empty());
@@ -331,6 +332,10 @@ class FrontierV3DiagnosticJsonTest {
 
         assertTrue(summary.startsWith(FrontierV3DiagnosticJson.PREFIX + "{\"schema\":1,\"kind\":\"summary\""));
         assertTrue(summary.contains("\"settlements\":12"));
+        assertTrue(physicalLifecycle.contains("\"kind\":\"physical_lifecycle\"")
+                        && physicalLifecycle.contains("\"owner\":\"frontier.resource-site-harvest\"")
+                        && physicalLifecycle.contains("\"pressure\":\"OPEN\""),
+                "composition diagnostics must expose the installed owner/schema declaration and derived retention pressure");
         assertTrue(inventoryJson.contains("\"kind\":\"process_inventory\"") && inventoryJson.contains("\"count\":12")
                         && inventoryJson.contains("\"site\":\"site:1-wheat-field\"") && inventoryJson.contains("\"waitReason\":\"AWAITING_PREPARATION\""),
                 "the all-current-process inventory must be bounded, read-only, and say why an ineligible site is waiting");
@@ -364,7 +369,7 @@ class FrontierV3DiagnosticJsonTest {
                         && resourceJson.contains("\"bindings\":[]"),
                 "one exact resource account exposes its canonical quantity and no invented physical binding");
         assertTrue(missing.contains("\"status\":\"not_found\""));
-        assertTrue(summary.length() < 8_192 && inventoryJson.length() < 8_192 && siteJson.length() < 8_192 && actorJson.length() < 8_192 && itemJson.length() < 8_192
+        assertTrue(summary.length() < 8_192 && physicalLifecycle.length() < 8_192 && inventoryJson.length() < 8_192 && siteJson.length() < 8_192 && actorJson.length() < 8_192 && itemJson.length() < 8_192
                 && settlementJson.length() < 8_192 && hiveJson.length() < 8_192 && containerJson.length() < 8_192 && resourceJson.length() < 8_192);
     }
 

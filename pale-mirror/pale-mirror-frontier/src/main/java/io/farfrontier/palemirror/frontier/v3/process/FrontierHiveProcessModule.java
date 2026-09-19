@@ -210,7 +210,7 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
             case HIVE_MOBILIZATION -> {
                 if (intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXPLOSION) throw new IllegalArgumentException("hive mobilization has foreign intent kind");
                 // An explosion is an effect-only endpoint, but it is still pinned to the one hive.
-                ExplosionStateSupport.validateIntent(state, intent);
+                ExplosionStateSupport.validateRetainedIntent(state, intent);
                 carrier = new PhysicalIntentRetirementAccount.Exact<>(state.bootstrap().hive().id());
             }
             case HIVE_NUTRIENT_TRANSFER -> {

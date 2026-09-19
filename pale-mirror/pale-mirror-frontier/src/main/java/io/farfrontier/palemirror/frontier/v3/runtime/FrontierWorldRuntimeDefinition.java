@@ -57,6 +57,7 @@ public final class FrontierWorldRuntimeDefinition {
                 new EngineLimits(4_096, 1_200L, 4_096, 4_096), FrontierWorldProcessCatalog.initialSchedule(bootstrap), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE); }
     public static PayloadCodecs payloadCodecs() { return PAYLOAD_CODECS; }
     public static DeterministicProcessRegistry processRegistry() {
+        FrontierWorldProcessCatalog.requirePhysicalLifecycleComposition();
         List<io.farfrontier.palemirror.frontier.v3.kernel.DeterministicProcessDescriptor> descriptors = FrontierWorldProcessCatalog.descriptors();
         DeterministicProcessRegistry registry = new DeterministicProcessRegistry(descriptors, PAYLOAD_CODECS,
                 FrontierWorldProcessCodecs.typesByProcess());

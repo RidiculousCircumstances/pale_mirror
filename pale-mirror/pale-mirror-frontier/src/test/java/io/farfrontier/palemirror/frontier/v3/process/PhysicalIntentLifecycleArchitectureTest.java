@@ -27,6 +27,11 @@ class PhysicalIntentLifecycleArchitectureTest {
                 "composition validates declared compatibility but must not choose behavior by kind or owner switch");
         assertTrue(composition.contains("intent.lifecycleOwner()") && composition.contains("missing physical lifecycle capability"),
                 "composition must resolve only the durable explicit owner and fail closed");
+        assertTrue(composition.contains("declaration().admits(intent)") && composition.contains("requirePreparationCapacity"),
+                "owner/kind/schema admission and visible bounded backpressure must come from the closed capability declaration");
+        assertTrue(Files.readString(process.resolve("PhysicalIntentLifecycleDeclaration.java")).contains("canonicalMaterial")
+                        && Files.readString(process.resolve("FrontierWorldProcessCatalog.java")).contains("physicalLifecycleFingerprint"),
+                "recovery must fence the exact installed lifecycle declaration rather than infer a compatible capability");
         assertTrue(composition.contains("retirementPolicy().plan") && composition.contains("retirementPolicy().reduce"),
                 "terminal and late input must execute the owner-supplied retirement boundary");
         assertTrue(Files.readString(process.resolve("PhysicalIntentLifecycleCapability.java")).contains("retirementPolicy()"),
