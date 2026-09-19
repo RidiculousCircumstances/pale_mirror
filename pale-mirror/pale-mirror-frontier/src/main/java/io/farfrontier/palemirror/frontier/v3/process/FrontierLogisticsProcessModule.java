@@ -69,10 +69,7 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
                                                                             PhysicalIntentTransition transition) {
         RouteOperation operation = before == null ? null : before.operations().get(intent.causeSubjectId());
         if (operation == null) throw new IllegalArgumentException("route retirement account has no exact operation");
-        List<FrontierDomainRelationships.Edge> relations = FrontierDomainRelationships.view(before).edges().stream()
-                .filter(edge -> edge.kind() == FrontierDomainRelationships.Kind.CONTRACT_ROUTE_OPERATION
-                        || edge.kind() == FrontierDomainRelationships.Kind.CONTRACT_CARGO || edge.kind() == FrontierDomainRelationships.Kind.ROUTE_CARRIER)
-                .filter(edge -> edge.correlation().equals(operation.id().value()) || edge.correlation().equals(operation.contractId().value())).toList();
+        List<FrontierDomainRelationships.Edge> relations = retirementRelations(before, operation);
         if (relations.size() != 3) throw new IllegalArgumentException("route retirement account does not bind its exact contract/cargo/carrier relations");
         var continuation = command == null ? new PhysicalIntentRetirementAccount.CheckedNone<io.farfrontier.palemirror.frontier.v3.api.ScheduleId>(io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentRetirementProof.Absence.NO_ENGINE_CONTINUATION)
                 : command.scheduleBinding().<PhysicalIntentRetirementAccount.Obligation<io.farfrontier.palemirror.frontier.v3.api.ScheduleId>>map(binding -> new PhysicalIntentRetirementAccount.Exact<>(binding.action().id()))
@@ -88,15 +85,29 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
                                                 PhysicalIntentTransition transition, PhysicalIntentRetirementAccount.Binding binding) {
         RouteOperation operation = before.operations().get(intent.causeSubjectId());
         if (operation == null) throw new IllegalArgumentException("route retirement account has no exact operation");
-        List<FrontierDomainRelationships.Edge> relations = FrontierDomainRelationships.view(before).edges().stream()
-                .filter(edge -> edge.kind() == FrontierDomainRelationships.Kind.CONTRACT_ROUTE_OPERATION
-                        || edge.kind() == FrontierDomainRelationships.Kind.CONTRACT_CARGO || edge.kind() == FrontierDomainRelationships.Kind.ROUTE_CARRIER)
-                .filter(edge -> edge.correlation().equals(operation.id().value()) || edge.correlation().equals(operation.contractId().value())).toList();
+        List<FrontierDomainRelationships.Edge> relations = retirementRelations(before, operation);
         PhysicalIntentRetirementAccount.requireSameDeclaredAccount(binding, new PhysicalIntentRetirementAccount.Binding(
                 intent.lifecycleOwner(), intent.id(), new PhysicalIntentRetirementAccount.Exact<>(relations), binding.continuation(),
                 new PhysicalIntentRetirementAccount.Exact<>(operation.cargoCarrierId()), new PhysicalIntentRetirementAccount.Exact<>(operation.cargoId()),
                 transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
                         ? PhysicalIntentRetirementAccount.LateDisposition.RETAIN_AMBIGUOUS_RECOVERY : PhysicalIntentRetirementAccount.LateDisposition.REJECT_STALE_ONCE));
+    }
+
+    /** Exact authoritative owners, never correlation-string discovery, bind route retirement. */
+    private static List<FrontierDomainRelationships.Edge> retirementRelations(FrontierWorldState state, RouteOperation operation) {
+        FrontierDomainRelationships.SubjectEndpoint contract = new FrontierDomainRelationships.SubjectEndpoint(
+                FrontierDomainRelationships.EntityKind.SUPPLY_CONTRACT, operation.contractId());
+        FrontierDomainRelationships.SubjectEndpoint route = new FrontierDomainRelationships.SubjectEndpoint(
+                FrontierDomainRelationships.EntityKind.ROUTE_OPERATION, operation.id());
+        List<FrontierDomainRelationships.Edge> relations = FrontierDomainRelationships.view(state).edges().stream()
+                .filter(edge -> ((edge.kind() == FrontierDomainRelationships.Kind.CONTRACT_ROUTE_OPERATION
+                        || edge.kind() == FrontierDomainRelationships.Kind.CONTRACT_CARGO) && edge.owner().equals(contract))
+                        || (edge.kind() == FrontierDomainRelationships.Kind.ROUTE_CARRIER && edge.owner().equals(route)))
+                .toList();
+        if (relations.size() != 3) {
+            throw new IllegalArgumentException("route retirement account does not bind its exact contract/cargo/carrier relations");
+        }
+        return relations;
     }
 
     private static CommandPlan planPhysicalTransition(FrontierWorldState state, FrontierCommand command,

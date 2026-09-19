@@ -51,6 +51,22 @@ final class FrontierSettlementServiceWorkProcessModule implements FrontierWorldP
                             new FrontierDomainRelationships.SubjectEndpoint(FrontierDomainRelationships.EntityKind.SERVICE_WORK, work.id())))) {
                         throw new IllegalArgumentException("service retirement account lacks exact worker relation");
                     }
+                    if (after != before && transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED) {
+                        SettlementServiceWork retained = after.serviceWorks().get(work.id());
+                        if (retained == null) throw new IllegalArgumentException("service retirement account lost its exact work outcome");
+                        ExactItemStack retainedItem = after.inventory().items().get(work.inputItemId());
+                        if (owner == PhysicalIntentLifecycleOwner.SETTLEMENT_SERVICE_WORK
+                                && (retained.phase() == SettlementServiceWorkPhase.INPUT_ISSUE_PENDING
+                                || retainedItem == null || !(retainedItem.custody() instanceof InventoryCustody.Actor actor)
+                                || !actor.actorId().equals(work.workerId()))) {
+                            throw new IllegalArgumentException("service retirement account did not prove its exact input hand-off outcome");
+                        }
+                        if (owner == PhysicalIntentLifecycleOwner.SETTLEMENT_SERVICE_DECONTAMINATION
+                                && (retained.phase() != SettlementServiceWorkPhase.COMPLETED
+                                || after.inventory().items().containsKey(work.inputItemId()))) {
+                            throw new IllegalArgumentException("service retirement account did not prove its exact endpoint outcome");
+                        }
+                    }
                 });
     }
 

@@ -20,11 +20,14 @@ import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
 import io.farfrontier.palemirror.frontier.v3.api.EngineScheduleBinding;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.Revision;
+import io.farfrontier.palemirror.frontier.v3.api.ScheduleId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentRetirementProof;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;
+import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
@@ -161,16 +164,86 @@ class PhysicalIntentLifecycleCompositionTest {
                 java.util.EnumSet.allOf(PhysicalIntentRetirementAccount.Dimension.class),
                 (before, ignored, candidate, transition) -> PhysicalIntentRetirementAccount.checkedNone(owner, null, candidate, transition),
                 (before, candidate, transition, binding) -> PhysicalIntentRetirementAccount.requireSameDeclaredAccount(binding,
-                        PhysicalIntentRetirementAccount.checkedNone(owner, null, candidate, transition)),
+                        PhysicalIntentRetirementAccount.checkedNoneWithContinuation(owner, binding.continuation(), candidate, transition)),
                 (before, after, candidate, transition, binding) -> { });
         assertThrows(IllegalArgumentException.class, () -> dishonest.verifyPlan(null, command, intent, terminal,
                 new CommandPlan.Accepted(List.of(new io.farfrontier.palemirror.frontier.v3.api.ProposedEvent(intent.causeSubjectId(), terminal)))));
+    }
+
+    @Test
+    void replayAccountEqualityRejectsAChangedEngineScheduleDisposition() {
+        PhysicalIntentLifecycleOwner owner = PhysicalIntentLifecycleOwner.RESOURCE_SITE_PREPARATION;
+        PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:replay-schedule"),
+                PhysicalIntentKind.RESOURCE_SITE_PREPARATION, PhysicalIntentStatus.RUNNING,
+                new SubjectId("site:replay-schedule"), List.of(new SubjectId("site:replay-schedule"), new SubjectId("job:replay-schedule")),
+                new FixedPosition(FixedScalar.ZERO, FixedScalar.whole(64), FixedScalar.ZERO), 0,
+                PhysicalPostcondition.RESOURCE_SITE_PREPARED_OBSERVED, owner);
+        PhysicalIntentTransition terminal = new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, java.util.Optional.empty());
+        var scheduled = PhysicalIntentRetirementAccount.checkedNoneWithContinuation(owner,
+                new PhysicalIntentRetirementAccount.Exact<>(new ScheduleId("schedule:replay-schedule")), intent, terminal);
+        var absent = PhysicalIntentRetirementAccount.checkedNone(owner, null, intent, terminal);
+        assertThrows(IllegalArgumentException.class,
+                () -> PhysicalIntentRetirementAccount.requireSameDeclaredAccount(scheduled, absent),
+                "reduction/replay must not substitute checked-none for the durable schedule account");
+    }
+
+    @Test
+    void exactScheduleAccountRejectsMissingWrongAndDuplicateDispositions() {
+        PhysicalIntentLifecycleOwner owner = PhysicalIntentLifecycleOwner.RESOURCE_SITE_PREPARATION;
+        PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:exact-schedule"),
+                PhysicalIntentKind.RESOURCE_SITE_PREPARATION, PhysicalIntentStatus.RUNNING,
+                new SubjectId("site:exact-schedule"), List.of(new SubjectId("site:exact-schedule"), new SubjectId("job:exact-schedule")),
+                new FixedPosition(FixedScalar.ZERO, FixedScalar.whole(64), FixedScalar.ZERO), 0,
+                PhysicalPostcondition.RESOURCE_SITE_PREPARED_OBSERVED, owner);
+        PhysicalIntentTransition terminal = new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, java.util.Optional.empty());
+        ScheduleId schedule = new ScheduleId("schedule:exact-schedule");
+        FrontierCommand command = boundTerminalCommand(intent, terminal, schedule);
+        PhysicalIntentRetirementAccount account = PhysicalIntentRetirementAccount.declared(owner,
+                java.util.EnumSet.allOf(PhysicalIntentRetirementAccount.Dimension.class),
+                (before, bound, candidate, transition) -> PhysicalIntentRetirementAccount.checkedNoneWithContinuation(owner,
+                        new PhysicalIntentRetirementAccount.Exact<>(bound.scheduleBinding().orElseThrow().action().id()), candidate, transition),
+                (before, candidate, transition, binding) -> PhysicalIntentRetirementAccount.requireSameDeclaredAccount(binding,
+                        PhysicalIntentRetirementAccount.checkedNoneWithContinuation(owner, binding.continuation(), candidate, transition)),
+                (before, after, candidate, transition, binding) -> { });
+        var terminalEvent = new io.farfrontier.palemirror.frontier.v3.api.ProposedEvent(intent.causeSubjectId(), terminal);
+        assertThrows(IllegalArgumentException.class, () -> account.verifyPlan(null, command, intent, terminal,
+                new CommandPlan.Accepted(List.of(terminalEvent))));
+        assertThrows(IllegalArgumentException.class, () -> account.verifyPlan(null, command, intent, terminal,
+                new CommandPlan.Accepted(List.of(terminalEvent, new io.farfrontier.palemirror.frontier.v3.api.ProposedEvent(intent.causeSubjectId(),
+                        new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Consumed(new ScheduleId("schedule:wrong")))))));
+        var disposition = new io.farfrontier.palemirror.frontier.v3.api.ProposedEvent(intent.causeSubjectId(),
+                new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Consumed(schedule));
+        assertThrows(IllegalArgumentException.class, () -> account.verifyPlan(null, command, intent, terminal,
+                new CommandPlan.Accepted(List.of(terminalEvent, disposition, disposition))));
+    }
+
+    @Test
+    void terminalProofCodecPreservesTheExactScheduleForReplayValidation() {
+        PhysicalIntentLifecycleOwner owner = PhysicalIntentLifecycleOwner.RESOURCE_SITE_PREPARATION;
+        PhysicalIntentId intentId = new PhysicalIntentId("intent:proof-codec");
+        PhysicalIntentRetirementProof proof = new PhysicalIntentRetirementProof(owner, intentId,
+                new PhysicalIntentRetirementProof.CheckedNoRelations(PhysicalIntentRetirementProof.Absence.NO_APPLICABLE_RELATION),
+                new PhysicalIntentRetirementProof.ExactSchedule(new ScheduleId("schedule:proof-codec")),
+                new PhysicalIntentRetirementProof.CheckedNoSubject(PhysicalIntentRetirementProof.Absence.NO_LEASE_OR_CARRIER),
+                new PhysicalIntentRetirementProof.CheckedNoSubject(PhysicalIntentRetirementProof.Absence.NO_RESOURCE_COMMITMENT),
+                PhysicalIntentRetirementProof.LateDisposition.RETAIN_AMBIGUOUS_RECOVERY);
+        PhysicalIntentTransition payload = new PhysicalIntentTransition(intentId, PhysicalIntentStatus.UNKNOWN_AFTER_RESTART,
+                java.util.Optional.empty(), java.util.Optional.of(proof));
+        assertEquals(payload, FrontierWorldRuntimeDefinition.payloadCodecs().decode(payload.type(),
+                FrontierWorldRuntimeDefinition.payloadCodecs().encode(payload)));
     }
 
     private static FrontierWorldProcessModule module(List<PhysicalIntentLifecycleCapability> capabilities) {
         return new FrontierWorldProcessModule() {
             @Override public List<PhysicalIntentLifecycleCapability> physicalIntentLifecycleCapabilities() { return capabilities; }
         };
+    }
+
+    private static FrontierCommand boundTerminalCommand(PhysicalIntent intent, PhysicalIntentTransition terminal, ScheduleId schedule) {
+        CommandId command = new CommandId("command:exact-schedule");
+        return new FrontierCommand(FrontierCommand.SCHEMA_VERSION, command, new WorldId("world:exact-schedule"), Revision.ZERO,
+                SimInstant.ZERO, intent.causeSubjectId(), CauseChain.root(command), terminal, java.util.Optional.of(new EngineScheduleBinding(Revision.ZERO,
+                new ScheduledAction(schedule, SimInstant.ZERO, 0, intent.causeSubjectId(), "frontier.test.exact-schedule", 1))));
     }
 
     private static PhysicalIntentLifecycleCapability capability(PhysicalIntentLifecycleOwner owner, Set<PhysicalIntentKind> kinds) {
@@ -193,7 +266,7 @@ class PhysicalIntentLifecycleCompositionTest {
                 java.util.EnumSet.allOf(PhysicalIntentRetirementAccount.Dimension.class),
                 (before, command, intent, transition) -> PhysicalIntentRetirementAccount.checkedNone(owner, command, intent, transition),
                 (before, intent, transition, binding) -> PhysicalIntentRetirementAccount.requireSameDeclaredAccount(binding,
-                        PhysicalIntentRetirementAccount.checkedNone(owner, null, intent, transition)),
+                        PhysicalIntentRetirementAccount.checkedNoneWithContinuation(owner, binding.continuation(), intent, transition)),
                 (before, after, intent, transition, binding) -> {
                     if (intent.lifecycleOwner() != owner) throw new IllegalArgumentException("test owner mismatch");
                 });

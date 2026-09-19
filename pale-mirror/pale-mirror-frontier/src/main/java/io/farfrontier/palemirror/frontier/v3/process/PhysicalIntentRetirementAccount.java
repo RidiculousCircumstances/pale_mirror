@@ -185,8 +185,19 @@ interface PhysicalIntentRetirementAccount {
     static Binding checkedNone(PhysicalIntentLifecycleOwner owner, FrontierCommand command, PhysicalIntent intent,
                                PhysicalIntentTransition transition) {
         Optional<ScheduleId> schedule = command == null ? Optional.empty() : command.scheduleBinding().map(binding -> binding.action().id());
-        return new Binding(owner, intent.id(), new CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_APPLICABLE_RELATION), schedule.<Obligation<ScheduleId>>map(Exact::new)
-                .orElseGet(() -> new CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_ENGINE_CONTINUATION)),
+        return checkedNoneWithContinuation(owner, schedule.<Obligation<ScheduleId>>map(Exact::new)
+                .orElseGet(() -> new CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_ENGINE_CONTINUATION)), intent, transition);
+    }
+
+    /**
+     * Retains an already-declared engine disposition while a simple family revalidates its
+     * otherwise checked-none account during reduction or WAL replay.  The engine still owns
+     * the queue; this merely prevents replay from silently substituting a schedule absence.
+     */
+    static Binding checkedNoneWithContinuation(PhysicalIntentLifecycleOwner owner, Obligation<ScheduleId> continuation,
+                                               PhysicalIntent intent, PhysicalIntentTransition transition) {
+        return new Binding(owner, intent.id(), new CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_APPLICABLE_RELATION),
+                Objects.requireNonNull(continuation, "checked-none retirement continuation"),
                 new CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_LEASE_OR_CARRIER),
                 new CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_RESOURCE_COMMITMENT), lateDisposition(transition));
     }
@@ -247,6 +258,7 @@ interface PhysicalIntentRetirementAccount {
     static void requireSameDeclaredAccount(Binding actual, Binding expected) {
         if (actual.owner() != expected.owner() || !actual.intentId().equals(expected.intentId())
                 || !sameObligation(actual.relations(), expected.relations())
+                || !sameObligation(actual.continuation(), expected.continuation())
                 || !sameObligation(actual.leaseOrCarrier(), expected.leaseOrCarrier())
                 || !sameObligation(actual.commitment(), expected.commitment())
                 || actual.lateDisposition() != expected.lateDisposition()) {
