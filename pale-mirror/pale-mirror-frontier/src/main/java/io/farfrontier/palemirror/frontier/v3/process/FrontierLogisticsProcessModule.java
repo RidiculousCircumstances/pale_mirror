@@ -37,6 +37,12 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
                 java.util.EnumSet.allOf(PhysicalIntentRetirementAccount.Dimension.class),
                 (before, after, intent, transition) -> {
                     if (intent.lifecycleOwner() != owner) throw new IllegalArgumentException("route retirement account owner mismatch");
+                    RouteOperation operation = before.operations().get(intent.causeSubjectId());
+                    if (operation == null || FrontierDomainRelationships.view(before).edges().stream().noneMatch(edge -> edge.kind()
+                            == FrontierDomainRelationships.Kind.CONTRACT_ROUTE_OPERATION && edge.target().stableKey()
+                            .equals(FrontierDomainRelationships.EntityKind.ROUTE_OPERATION + ":" + operation.id().value()))) {
+                        throw new IllegalArgumentException("route retirement account lacks exact contract relation");
+                    }
                     if (!after.operations().containsKey(intent.causeSubjectId()) && transition.status()
                             == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) {
                         throw new IllegalArgumentException("route retirement account lost ambiguous operation authority");
