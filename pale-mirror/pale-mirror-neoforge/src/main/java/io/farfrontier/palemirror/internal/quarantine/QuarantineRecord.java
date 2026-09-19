@@ -1,5 +1,6 @@
 package io.farfrontier.palemirror.internal.quarantine;
 
+import io.farfrontier.palemirror.frontier.v3.model.DiagnosticTuple;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -14,9 +15,10 @@ public final class QuarantineRecord {
     private long lastSeenGameTick;
     private int observations;
     private String diagnostic;
+    private final DiagnosticTuple cause;
 
     public QuarantineRecord(String id, String sourceId, QuarantineKind kind, String fingerprint, UUID ownerId,
-                            long firstSeenGameTick, long lastSeenGameTick, int observations, String diagnostic) {
+                            long firstSeenGameTick, long lastSeenGameTick, int observations, String diagnostic, DiagnosticTuple cause) {
         this.id = requireText(id, "id");
         this.sourceId = requireText(sourceId, "sourceId");
         this.kind = Objects.requireNonNull(kind, "kind");
@@ -26,6 +28,7 @@ public final class QuarantineRecord {
         this.lastSeenGameTick = lastSeenGameTick;
         this.observations = Math.max(1, observations);
         this.diagnostic = diagnostic == null ? "" : diagnostic;
+        this.cause = Objects.requireNonNull(cause, "quarantine cause");
     }
 
     public String id() { return id; }
@@ -37,6 +40,7 @@ public final class QuarantineRecord {
     public long lastSeenGameTick() { return lastSeenGameTick; }
     public int observations() { return observations; }
     public String diagnostic() { return diagnostic; }
+    public DiagnosticTuple cause() { return cause; }
 
     void observe(long gameTick, String reason) {
         lastSeenGameTick = Math.max(lastSeenGameTick, gameTick);

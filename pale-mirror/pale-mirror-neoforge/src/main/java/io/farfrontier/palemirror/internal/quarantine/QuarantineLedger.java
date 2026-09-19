@@ -32,7 +32,8 @@ public final class QuarantineLedger {
             existing.observe(gameTick, reason);
             return false;
         }
-        records.put(id, new QuarantineRecord(id, sourceId, kind, fingerprint, ownerId, gameTick, gameTick, 1, reason));
+        records.put(id, new QuarantineRecord(id, sourceId, kind, fingerprint, ownerId, gameTick, gameTick, 1, reason,
+                QuarantineDiagnosticProducer.stamp(id)));
         compact();
         return true;
     }
