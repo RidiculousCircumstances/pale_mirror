@@ -9,6 +9,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.process.SettlementServiceWorkProcess;
+import io.farfrontier.palemirror.frontier.v3.process.PhysicalIntentLifecycleFixture;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import org.junit.jupiter.api.Test;
 
@@ -144,13 +145,13 @@ class SettlementServiceWorkProcessTest {
     void medicHeldEndpointConsumesOnlyAfterWorkAndConfirmsTheExactCell() {
         ReadyEndpoint ready = readyEndpoint(215L);
         long prior = ready.state().infection().get(ready.cell()).value().raw();
-        FrontierWorldState running = ready.state().transitionPhysicalIntent(ready.intent().id(),
+        FrontierWorldState running = transition(ready.state(), ready.work().settlementId(), ready.intent(),
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING, Optional.empty());
         DecontaminationObservation observation = new DecontaminationObservation(new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId("observation:service-complete"),
                 ready.intent().id(), ready.item(), ready.cell(), prior,
                 Math.max(0L, prior - ready.state().bootstrap().ruleset().rates().decontaminationReduction().raw()));
 
-        FrontierWorldState complete = running.transitionPhysicalIntent(ready.intent().id(),
+        FrontierWorldState complete = transition(running, ready.work().settlementId(), ready.intent(),
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED, Optional.of(observation));
 
         assertEquals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED,
@@ -163,7 +164,7 @@ class SettlementServiceWorkProcessTest {
     @Test
     void unknownEndpointRetainsTheExactMedicAndRecoversOnlyByObservedPostcondition() {
         ReadyEndpoint ready = readyEndpoint(216L);
-        FrontierWorldState unknown = ready.state().transitionPhysicalIntent(ready.intent().id(),
+        FrontierWorldState unknown = transition(ready.state(), ready.work().settlementId(), ready.intent(),
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty());
         FrontierWorldState recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(unknown));
         assertEquals(SettlementServiceWorkPhase.UNKNOWN_AFTER_RESTART, recovered.serviceWorks().get(ready.work().id()).phase());
@@ -178,7 +179,7 @@ class SettlementServiceWorkProcessTest {
         DecontaminationObservation observation = new DecontaminationObservation(new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId("observation:service-recovered"),
                 ready.intent().id(), ready.item(), ready.cell(), prior,
                 Math.max(0L, prior - recovered.bootstrap().ruleset().rates().decontaminationReduction().raw()));
-        FrontierWorldState complete = recovered.transitionPhysicalIntent(ready.intent().id(),
+        FrontierWorldState complete = transition(recovered, ready.work().settlementId(), ready.intent(),
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED, Optional.of(observation));
 
         assertEquals(SettlementServiceWorkPhase.COMPLETED, complete.serviceWorks().get(ready.work().id()).phase());
@@ -232,7 +233,17 @@ class SettlementServiceWorkProcessTest {
         SettlementServiceWork effectReady = work.withPhase(SettlementServiceWorkPhase.EFFECT_READY, 0);
         Map<SubjectId, SettlementServiceWork> effectReadyWorks = new LinkedHashMap<>(ready.serviceWorks()); effectReadyWorks.put(effectReady.id(), effectReady);
         ready = ready.withChanges(FrontierWorldStateUpdate.begin().serviceWorks(effectReadyWorks));
-        return new ReadyEndpoint(ready, effectReady, ready.physicalIntents().get(effectReady.endpointIntentId()), item, cell);
+        var endpoint = ready.physicalIntents().get(effectReady.endpointIntentId());
+        ready = ready.withChanges(FrontierWorldStateUpdate.begin().fencedRecovery(
+                FencedRecoveryPhysicalIntentSupport.prepared(ready.fencedRecovery(), endpoint, FencedRecoveryAsset.EFFECT)));
+        return new ReadyEndpoint(ready, effectReady, endpoint, item, cell);
+    }
+
+    private static FrontierWorldState transition(FrontierWorldState state, SubjectId settlement,
+                                                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus status,
+                                                 Optional<PhysicalEffectObservation> observation) {
+        return PhysicalIntentLifecycleFixture.transition(state, settlement, intent, status, observation);
     }
 
     private record ReadyEndpoint(FrontierWorldState state, SettlementServiceWork work,

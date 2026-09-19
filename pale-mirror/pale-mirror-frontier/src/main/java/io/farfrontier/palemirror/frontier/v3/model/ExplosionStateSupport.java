@@ -38,7 +38,7 @@ public final class ExplosionStateSupport {
         }
     }
 
-    static FrontierWorldState complete(FrontierWorldState state, PhysicalIntent intent, ExplosionObservation observation,
+    public static FrontierWorldState complete(FrontierWorldState state, PhysicalIntent intent, ExplosionObservation observation,
                                        Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, PhysicalIntent> intents) {
         validateReceipt(intent, observation);
         intents.put(intent.id(), intent.withStatus(PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(observation.id())));

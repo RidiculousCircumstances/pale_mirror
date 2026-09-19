@@ -80,7 +80,9 @@ public final class CargoLoadingStateSupport {
         if (contract == null || !subject.equals(contract.settlementId())) {
             throw new IllegalArgumentException("cargo loading transition lacks contract settlement ownership");
         }
-        return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+        return PhysicalIntentTransitionStorage.reduce(state, intent, transition,
+                (currentState, current, evidence, intents) -> complete(currentState, current, evidence, intents),
+                PhysicalIntentTransitionStorage::recordUnknown);
     }
 
     /** Pure loaded-world target; adapters must still inspect the exact tagged stack before removal. */

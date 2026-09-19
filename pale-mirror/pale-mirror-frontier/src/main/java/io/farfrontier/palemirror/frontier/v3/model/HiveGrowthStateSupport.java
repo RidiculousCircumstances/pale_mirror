@@ -7,7 +7,7 @@ import java.util.Map;
 import java.util.Objects;
 
 /** Canonical state mutations for a hive job; physical consumption itself remains an intent receipt. */
-final class HiveGrowthStateSupport {
+public final class HiveGrowthStateSupport {
     private HiveGrowthStateSupport() { }
 
     static FrontierWorldState start(FrontierWorldState state, HiveGrowthJob job) {
@@ -59,7 +59,7 @@ final class HiveGrowthStateSupport {
                 state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony().consumeTransferredNutrient(jobId, held.itemId()), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
     }
 
-    static FungibleConsumption consumeObservedFungible(FrontierWorldState state, SubjectId jobId, FungibleResourceConsumedObservation observed) {
+    public static FungibleConsumption consumeObservedFungible(FrontierWorldState state, SubjectId jobId, FungibleResourceConsumedObservation observed) {
         HiveGrowthJob job = state.hiveColony().growthJobs().get(Objects.requireNonNull(jobId, "fungible observed growth job id"));
         if (job == null || !(job.inputHold() instanceof HiveGrowthInputHold.FungibleCold held)
                 || !held.accountId().equals(observed.accountId()) || !held.itemId().equals(observed.lotId()) || !held.claimId().equals(observed.claimId())
@@ -74,5 +74,5 @@ final class HiveGrowthStateSupport {
                 state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony().cancelGrowth(jobId), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
     }
 
-    record FungibleConsumption(ExactInventory inventory, HiveColony colony) { }
+    public record FungibleConsumption(ExactInventory inventory, HiveColony colony) { }
 }

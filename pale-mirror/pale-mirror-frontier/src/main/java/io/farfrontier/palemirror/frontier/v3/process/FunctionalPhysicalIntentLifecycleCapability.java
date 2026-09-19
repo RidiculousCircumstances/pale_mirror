@@ -7,6 +7,7 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryAsset;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentPrepared;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;
 
@@ -18,21 +19,25 @@ final class FunctionalPhysicalIntentLifecycleCapability extends AbstractPhysical
     @FunctionalInterface interface TransitionPlanner { CommandPlan apply(FrontierWorldState state, FrontierCommand command, PhysicalIntent intent, PhysicalIntentTransition transition); }
     @FunctionalInterface interface PreparedReducer { FrontierWorldState apply(FrontierWorldState state, SubjectId subject, PhysicalIntent intent); }
     @FunctionalInterface interface TransitionReducer { FrontierWorldState apply(FrontierWorldState state, SubjectId subject, PhysicalIntent intent, PhysicalIntentTransition transition); }
+    @FunctionalInterface interface RecoveryAssetResolver { FencedRecoveryAsset apply(PhysicalIntent intent); }
 
     private final PreparedPlanner preparedPlanner;
     private final TransitionPlanner transitionPlanner;
     private final PreparedReducer preparedReducer;
     private final TransitionReducer transitionReducer;
+    private final RecoveryAssetResolver recoveryAssetResolver;
 
     FunctionalPhysicalIntentLifecycleCapability(PhysicalIntentLifecycleOwner owner, Set<PhysicalIntentKind> kinds,
                                                 PreparedPlanner preparedPlanner, TransitionPlanner transitionPlanner,
                                                 PreparedReducer preparedReducer, TransitionReducer transitionReducer,
-                                                PhysicalIntentLifecycleRetirementPolicy retirementPolicy) {
+                                                PhysicalIntentLifecycleRetirementPolicy retirementPolicy,
+                                                RecoveryAssetResolver recoveryAssetResolver) {
         super(owner, kinds, retirementPolicy);
         this.preparedPlanner = preparedPlanner;
         this.transitionPlanner = transitionPlanner;
         this.preparedReducer = preparedReducer;
         this.transitionReducer = transitionReducer;
+        this.recoveryAssetResolver = recoveryAssetResolver;
     }
 
     @Override public CommandPlan planPrepared(FrontierWorldState state, FrontierCommand command, PhysicalIntentPrepared prepared) {
@@ -49,4 +54,5 @@ final class FunctionalPhysicalIntentLifecycleCapability extends AbstractPhysical
                                                          PhysicalIntentTransition transition) {
         return transitionReducer.apply(state, subject, intent, transition);
     }
+    @Override public FencedRecoveryAsset recoveryAsset(PhysicalIntent intent) { return recoveryAssetResolver.apply(intent); }
 }

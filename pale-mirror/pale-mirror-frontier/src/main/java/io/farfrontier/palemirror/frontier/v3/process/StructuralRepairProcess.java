@@ -76,7 +76,7 @@ public final class StructuralRepairProcess {
         return state.preparePhysicalIntent(intent);
     }
 
-    static SubjectId repairOwner(FrontierWorldState state, PhysicalDeltaSemanticTarget target) {
+    public static SubjectId repairOwner(FrontierWorldState state, PhysicalDeltaSemanticTarget target) {
         return switch (target.kind()) {
             case SETTLEMENT_STRUCTURE -> FrontierWorldStateSupport.structureSettlement(state.bootstrap(), target.subjectId());
             case HIVE_ORGAN -> state.bootstrap().hive().id();

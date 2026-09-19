@@ -23,7 +23,7 @@ final class FrontierSettlementServiceWorkProcessModule implements FrontierWorldP
                 FrontierSettlementServiceWorkProcessModule::reducePhysicalTransition,
                 PhysicalIntentLifecycleRetirementPolicy.of(
                         FrontierSettlementServiceWorkProcessModule::planPhysicalTransition,
-                        FrontierSettlementServiceWorkProcessModule::reducePhysicalTransition)),
+                        FrontierSettlementServiceWorkProcessModule::reducePhysicalTransition), intent -> FencedRecoveryAsset.EFFECT),
                 new FunctionalPhysicalIntentLifecycleCapability(
                         PhysicalIntentLifecycleOwner.SETTLEMENT_SERVICE_DECONTAMINATION,
                         Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.DECONTAMINATION),
@@ -33,7 +33,7 @@ final class FrontierSettlementServiceWorkProcessModule implements FrontierWorldP
                         FrontierSettlementServiceWorkProcessModule::reduceServiceDecontaminationTransition,
                         PhysicalIntentLifecycleRetirementPolicy.of(
                                 FrontierSettlementServiceWorkProcessModule::planServiceDecontaminationTransition,
-                                FrontierSettlementServiceWorkProcessModule::reduceServiceDecontaminationTransition)));
+                                FrontierSettlementServiceWorkProcessModule::reduceServiceDecontaminationTransition), intent -> FencedRecoveryAsset.EFFECT));
     }
 
     private static CommandPlan planServiceDecontaminationTransition(FrontierWorldState state, FrontierCommand command,
@@ -75,7 +75,9 @@ final class FrontierSettlementServiceWorkProcessModule implements FrontierWorldP
                 || transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED) {
             SettlementServiceDecontaminationStateSupport.validateIntent(state, intent);
         }
-        return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+        return PhysicalIntentTransitionStorage.reduce(state, intent, transition,
+                (currentState, current, evidence, intents) -> SettlementServiceDecontaminationStateSupport.complete(currentState, current, evidence, new java.util.LinkedHashMap<>(intents)),
+                (currentState, current, intents) -> SettlementServiceDecontaminationStateSupport.unknown(currentState, current, new java.util.LinkedHashMap<>(intents)));
     }
 
     private static CommandPlan planPhysicalTransition(FrontierWorldState state, FrontierCommand command,
@@ -103,7 +105,10 @@ final class FrontierSettlementServiceWorkProcessModule implements FrontierWorldP
         SettlementServiceWork work = state.serviceWorks().get(intent.causeSubjectId());
         if (work == null || !subject.equals(work.settlementId())) throw new IllegalArgumentException("service work transition lacks its retained settlement owner");
         SettlementServiceInputIssueStateSupport.validateIntent(state, intent);
-        return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+        return PhysicalIntentTransitionStorage.reduce(state, intent, transition,
+                (currentState, current, evidence, intents) -> SettlementServiceInputIssueStateSupport.complete(currentState, current,
+                        SettlementServiceInputIssueStateSupport.requireReceipt(evidence), new java.util.LinkedHashMap<>(intents)),
+                PhysicalIntentTransitionStorage::recordUnknown);
     }
     @Override public CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
         if (command.payload() instanceof SettlementServiceWorkSceneLeasePrepared prepared) {

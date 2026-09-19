@@ -30,7 +30,7 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
                     if (birth == null || !subject.equals(birth.settlementId())) {
                         throw new IllegalArgumentException("resident birth consumption transition lacks settlement ownership");
                     }
-                    return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+                    return reducePopulationConsumption(state, intent, transition);
                 }, PhysicalIntentLifecycleRetirementPolicy.of(
                         (state, command, intent, transition) -> new CommandPlan.Accepted(
                                 PopulationBirthProcess.planTransition(state, intent, transition, command.submittedAt().ticks())),
@@ -39,8 +39,8 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
                             if (birth == null || !subject.equals(birth.settlementId())) {
                                 throw new IllegalArgumentException("resident birth consumption retirement lacks settlement ownership");
                             }
-                            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
-                        }));
+                            return reducePopulationConsumption(state, intent, transition);
+                        }), intent -> FencedRecoveryAsset.EFFECT);
     }
 
     private static PhysicalIntentLifecycleCapability medicalConsumptionCapability() {
@@ -69,7 +69,7 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
                         throw new IllegalArgumentException("medical treatment consumption transition lacks settlement ownership");
                     }
                     MedicalTreatmentProcess.operationForIntent(state, intent);
-                    return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+                    return reducePopulationConsumption(state, intent, transition);
                 }, PhysicalIntentLifecycleRetirementPolicy.of(
                         (state, command, intent, transition) -> {
                             if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED
@@ -84,8 +84,8 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
                                 throw new IllegalArgumentException("medical treatment consumption retirement lacks settlement ownership");
                             }
                             MedicalTreatmentProcess.operationForIntent(state, intent);
-                            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
-                        }));
+                            return reducePopulationConsumption(state, intent, transition);
+                        }), intent -> FencedRecoveryAsset.EFFECT);
     }
 
     private static PhysicalIntentLifecycleCapability provisionConsumptionCapability() {
@@ -99,7 +99,7 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
                     if (!state.humanPopulation().provisions().containsKey(intent.causeSubjectId()) || !subject.equals(intent.causeSubjectId())) {
                         throw new IllegalArgumentException("settlement provision consumption transition lacks settlement ownership");
                     }
-                    return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+                    return reducePopulationConsumption(state, intent, transition);
                 }, PhysicalIntentLifecycleRetirementPolicy.of(
                         (state, command, intent, transition) -> new CommandPlan.Accepted(
                                 SettlementProvisionProcess.planTransition(state, intent, transition, command.submittedAt().ticks())),
@@ -107,8 +107,49 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
                             if (!state.humanPopulation().provisions().containsKey(intent.causeSubjectId()) || !subject.equals(intent.causeSubjectId())) {
                                 throw new IllegalArgumentException("settlement provision consumption retirement lacks settlement ownership");
                             }
-                            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
-                        }));
+                            return reducePopulationConsumption(state, intent, transition);
+                }), intent -> FencedRecoveryAsset.EFFECT);
+    }
+
+    /** Population-owned exact-consumption terminal reduction; no aggregate kind dispatch participates. */
+    private static FrontierWorldState reducePopulationConsumption(FrontierWorldState state,
+                                                                   io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                                   PhysicalIntentTransition transition) {
+        return PhysicalIntentTransitionStorage.reduce(state, intent, transition,
+                FrontierPopulationProcessModule::confirmPopulationConsumption,
+                PhysicalIntentTransitionStorage::recordUnknown);
+    }
+
+    private static FrontierWorldState confirmPopulationConsumption(FrontierWorldState state,
+                                                                    io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                                    PhysicalEffectObservation evidence,
+                                                                    java.util.Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId,
+                                                                            io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent> intents) {
+        if (!(evidence instanceof ExactItemConsumedObservation consumed)) {
+            throw new IllegalArgumentException("population consumption requires item observation evidence");
+        }
+        io.farfrontier.palemirror.frontier.v3.api.SubjectId itemId = intent.subjectIds().stream()
+                .filter(id -> !id.equals(intent.causeSubjectId())).findFirst().orElseThrow();
+        ExactItemStack item = state.inventory().items().get(itemId);
+        if (!itemId.equals(consumed.itemId()) || item == null || item.count() != consumed.countBefore()
+                || !(item.custody() instanceof InventoryCustody.ContainerSlot slot)) {
+            throw new IllegalArgumentException("population consumption receipt does not match current stack");
+        }
+        ExactItemConsumptionStateSupport.Claim claim = ExactItemConsumptionStateSupport.claim(state, intent);
+        if (!claim.item().equals(item) || !claim.containerId().equals(slot.containerId()) || claim.slot() != slot.slot()
+                || claim.count() != consumed.consumedCount()) {
+            throw new IllegalArgumentException("population consumption stack is not in an active owner container");
+        }
+        java.util.Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId, PhysicalEffectObservation> observations =
+                new java.util.LinkedHashMap<>(state.physicalObservations());
+        observations.put(consumed.id(), consumed);
+        FrontierWorldState consumedState = state.withChanges(FrontierWorldStateUpdate.begin().physicalIntents(intents)
+                .physicalObservations(observations).inventory(state.inventory().consume(itemId, consumed.consumedCount())));
+        if (state.humanPopulation().provisions().values().stream()
+                .anyMatch(provision -> provision.activeIntentId().filter(intent.id()::equals).isPresent())) {
+            return SettlementProvisionStateSupport.reducePhysicalConsumptionAfterInventory(consumedState, intent, consumed);
+        }
+        return consumedState;
     }
     @Override public CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
         if (command.payload() instanceof ResidentBorn) {

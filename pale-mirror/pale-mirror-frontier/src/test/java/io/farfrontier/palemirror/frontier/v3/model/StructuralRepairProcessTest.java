@@ -14,6 +14,7 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import org.junit.jupiter.api.Test;
+import io.farfrontier.palemirror.frontier.v3.process.PhysicalIntentLifecycleFixture;
 
 import java.util.List;
 import java.util.Optional;
@@ -58,9 +59,11 @@ class StructuralRepairProcessTest {
         PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:repair-runtime-definition"), PhysicalIntentKind.STRUCTURAL_REPAIR,
                 PhysicalIntentStatus.PREPARED, structure.id(), List.of(structure.id(), materialId), new FixedPosition(FixedScalar.whole(cell.position().x()), FixedScalar.whole(cell.position().y()), FixedScalar.whole(cell.position().z())),
                 0, PhysicalPostcondition.STRUCTURAL_REPAIR_OBSERVED, cell.semanticTarget(), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE);
-        state = state.preparePhysicalIntent(intent).transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
+        SubjectId repairOwner = StructuralRepairProcess.repairOwner(state, cell.semanticTarget());
+        state = PhysicalIntentLifecycleFixture.prepare(state, repairOwner, intent);
+        state = PhysicalIntentLifecycleFixture.transition(state, repairOwner, intent, PhysicalIntentStatus.RUNNING, Optional.empty());
         StructuralRepairObservation observation = new StructuralRepairObservation(new PhysicalObservationId("observation:repair-runtime-definition"), intent.id(), materialId, cell.position());
-        FrontierWorldState repaired = state.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation));
+        FrontierWorldState repaired = PhysicalIntentLifecycleFixture.transition(state, repairOwner, intent, PhysicalIntentStatus.CONFIRMED, Optional.of(observation));
         assertEquals(1, repaired.inventory().items().get(materialId).count()); assertTrue(!repaired.physicalDeltas().containsKey(cell.position()));
         assertTrue(!repaired.structureDamage().containsKey(structure.id())); assertEquals(StructureCondition.INTACT, repaired.structureConditions().get(structure.id()));
         assertEquals(repaired, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(repaired)));
@@ -69,9 +72,9 @@ class StructuralRepairProcessTest {
         ExactItemStack diamond = new ExactItemStack(materialId, state.bootstrap().settlements().getFirst().id(), "minecraft:diamond", 2,
                 new InventoryCustody.ContainerSlot(depot, 4));
         FrontierWorldState wrongMaterial = state.withInventory(state.inventory().withoutItem(materialId).store(diamond));
-        assertThrows(IllegalArgumentException.class, () -> wrongMaterial.preparePhysicalIntent(intent)
-                .transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty())
-                .transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation)));
+        assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleFixture.transition(
+                PhysicalIntentLifecycleFixture.prepare(wrongMaterial, repairOwner, intent), repairOwner, intent,
+                PhysicalIntentStatus.RUNNING, Optional.empty()));
     }
 
     @Test
@@ -86,8 +89,10 @@ class StructuralRepairProcessTest {
         PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:hive-organ-repair"), PhysicalIntentKind.STRUCTURAL_REPAIR, PhysicalIntentStatus.PREPARED,
                 organ.id(), List.of(organ.id(), materialId), new FixedPosition(FixedScalar.whole(cell.position().x()), FixedScalar.whole(cell.position().y()), FixedScalar.whole(cell.position().z())),
                 0, PhysicalPostcondition.STRUCTURAL_REPAIR_OBSERVED, cell.semanticTarget(), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE);
-        state = state.preparePhysicalIntent(intent).transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
-        FrontierWorldState repaired = state.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED,
+        SubjectId repairOwner = StructuralRepairProcess.repairOwner(state, cell.semanticTarget());
+        state = PhysicalIntentLifecycleFixture.prepare(state, repairOwner, intent);
+        state = PhysicalIntentLifecycleFixture.transition(state, repairOwner, intent, PhysicalIntentStatus.RUNNING, Optional.empty());
+        FrontierWorldState repaired = PhysicalIntentLifecycleFixture.transition(state, repairOwner, intent, PhysicalIntentStatus.CONFIRMED,
                 Optional.of(new StructuralRepairObservation(new PhysicalObservationId("observation:hive-organ-repair"), intent.id(), materialId, cell.position())));
         assertTrue(!repaired.physicalDeltas().containsKey(cell.position()) && repaired.isHiveOrganOperational(organ.id()));
         assertTrue(!repaired.inventory().items().containsKey(materialId), "the final real concrete item is consumed exactly once");
@@ -112,8 +117,7 @@ class StructuralRepairProcessTest {
                 0, PhysicalPostcondition.STRUCTURAL_REPAIR_OBSERVED, new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE);
         FrontierWorldState routeState = state;
         assertThrows(IllegalArgumentException.class, () -> StructuralRepairProcess.reducePrepared(routeState, FrontierRouteNetwork.OWNER, intent));
-        FrontierWorldState running = state.preparePhysicalIntent(intent).transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
-        assertThrows(IllegalArgumentException.class, () -> running.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED,
-                Optional.of(new StructuralRepairObservation(new PhysicalObservationId("observation:route-repair"), intent.id(), materialId, routeCell))));
+        FrontierWorldState invalidRouteRepairState = state;
+        assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleFixture.prepare(invalidRouteRepairState, FrontierRouteNetwork.OWNER, intent));
     }
 }

@@ -304,7 +304,7 @@ public final class ResourceSiteHarvestProcess {
                 .resourceSites(state.resourceSites().replace(next))
                 .inventory(state.inventory().store(output))
                 .physicalIntents(intents)
-                .fencedRecovery(FencedRecoveryPhysicalIntentSupport.composed(recovery, intent)));
+                .fencedRecovery(FencedRecoveryPhysicalIntentSupport.composed(recovery, intent, FencedRecoveryAsset.EFFECT)));
     }
 
     /**
@@ -326,7 +326,8 @@ public final class ResourceSiteHarvestProcess {
                 || !prior.causeSubjectId().equals(lifecycle.siteId())) {
             throw new IllegalArgumentException("resource-site successor terminal lacks its exact pending predecessor receipt");
         }
-        return FencedRecoveryPhysicalIntentSupport.transition(state.fencedRecovery(), prior, PhysicalIntentStatus.CONFLICTED);
+        return FencedRecoveryPhysicalIntentSupport.transition(state.fencedRecovery(), prior, PhysicalIntentStatus.CONFLICTED,
+                FencedRecoveryAsset.EFFECT);
     }
 
     private static ResourceSiteLifecycle terminalLifecycle(FrontierWorldState state, ResourceSiteLifecycle advanced,
@@ -445,7 +446,8 @@ public final class ResourceSiteHarvestProcess {
         if (lifecycle.harvestLineage().filter(ResourceSiteHarvestLineage::receiptPending)
                 .filter(lineage -> lineage.predecessorIntentId().equals(intent.id())).isPresent()) {
             if (transition.status() == PhysicalIntentStatus.RUNNING) {
-                FencedRecoveryPhysicalIntentSupport.requirePreparedExecutionAuthority(state.fencedRecovery(), intent);
+                FencedRecoveryPhysicalIntentSupport.requirePreparedExecutionAuthority(state.fencedRecovery(), intent,
+                        FencedRecoveryAsset.EFFECT);
                 validateRunningTransition(state, intent); return List.of(new ProposedEvent(lifecycle.siteId(), transition));
             }
             if (transition.status() == PhysicalIntentStatus.CONFIRMED && intent.status() == PhysicalIntentStatus.RUNNING) {

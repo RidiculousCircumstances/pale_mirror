@@ -35,13 +35,7 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
                     ProductionTransformationStateSupport.validateIntent(state, intent);
                     return state.preparePhysicalIntent(intent);
                 },
-                (state, subject, intent, transition) -> {
-                    ProductionJob job = state.productionJobs().get(intent.causeSubjectId());
-                    if (job == null || !subject.equals(job.settlementId())) {
-                        throw new IllegalArgumentException("production transformation transition lacks settlement ownership");
-                    }
-                    return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
-                }, PhysicalIntentLifecycleRetirementPolicy.of(
+                FrontierEconomyProcessModule::reduceProductionTransition, PhysicalIntentLifecycleRetirementPolicy.of(
                         (state, command, intent, transition) -> {
                             ProductionJob job = state.productionJobs().get(intent.causeSubjectId());
                             if (job == null) return FrontierWorldCommandPlanner.rejected("production transformation has no active job");
@@ -50,13 +44,24 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
                                 return new CommandPlan.Accepted(List.of(new ProposedEvent(job.settlementId(), transition)));
                             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
                         },
-                        (state, subject, intent, transition) -> {
-                            ProductionJob job = state.productionJobs().get(intent.causeSubjectId());
-                            if (job == null || !subject.equals(job.settlementId())) {
-                                throw new IllegalArgumentException("production transformation retirement lacks settlement ownership");
-                            }
-                            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
-                        })));
+                        FrontierEconomyProcessModule::reduceProductionTransition), intent -> FencedRecoveryAsset.EFFECT));
+    }
+
+    private static FrontierWorldState reduceProductionTransition(FrontierWorldState state, SubjectId subject,
+                                                                   io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                                   PhysicalIntentTransition transition) {
+        ProductionJob job = state.productionJobs().get(intent.causeSubjectId());
+        if (job == null || !subject.equals(job.settlementId())) {
+            throw new IllegalArgumentException("production transformation transition lacks settlement ownership");
+        }
+        return PhysicalIntentTransitionStorage.reduce(state, intent, transition,
+                (currentState, current, evidence, intents) -> {
+                    if (!(evidence instanceof ProductionTransformationObservation production)) {
+                        throw new IllegalArgumentException("production transformation requires exact physical receipt");
+                    }
+                    return ProductionTransformationStateSupport.complete(currentState, current, production, intents);
+                },
+                (currentState, current, intents) -> ProductionTransformationStateSupport.unknown(currentState, current, intents));
     }
     @Override public CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
         if (command.payload() instanceof ProductionWorkSceneLeasePrepared prepared) {

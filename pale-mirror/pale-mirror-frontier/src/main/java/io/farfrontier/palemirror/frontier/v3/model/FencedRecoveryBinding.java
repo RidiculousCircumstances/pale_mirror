@@ -47,6 +47,13 @@ public record FencedRecoveryBinding(SubjectId bindingId, FencedRecoveryAsset ass
         return new FencedRecoveryBinding(bindingId, asset, ownerId, ownerRevision, authorityEpoch,
                 FencedRecoveryPhase.OBSERVED, false, 0, FencedRecoveryDisposition.RECLAIM, "physical-observed");
     }
+    FencedRecoveryBinding inspectedObserved() {
+        if (phase != FencedRecoveryPhase.AMBIGUOUS || nextAction != FencedRecoveryDisposition.INSPECT) {
+            throw new IllegalArgumentException("recovery inspection is not current");
+        }
+        return new FencedRecoveryBinding(bindingId, asset, ownerId, ownerRevision, authorityEpoch,
+                FencedRecoveryPhase.OBSERVED, false, 0, FencedRecoveryDisposition.RECLAIM, "physical-observed-after-inspection");
+    }
     FencedRecoveryBinding confirmed() {
         if (phase != FencedRecoveryPhase.OBSERVED) throw new IllegalArgumentException("only observed recovery evidence can confirm a consequence");
         return new FencedRecoveryBinding(bindingId, asset, ownerId, ownerRevision, authorityEpoch,

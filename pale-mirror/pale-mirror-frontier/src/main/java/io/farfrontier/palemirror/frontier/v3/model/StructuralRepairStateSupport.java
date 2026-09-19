@@ -9,7 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /** Pure confirmation rules for one exact settlement structural-repair physical intent. */
-final class StructuralRepairStateSupport {
+public final class StructuralRepairStateSupport {
     private StructuralRepairStateSupport() { }
 
     static void validateReceipt(PhysicalIntent intent, StructuralRepairObservation repair) {
@@ -22,7 +22,7 @@ final class StructuralRepairStateSupport {
         if (!repair.position().equals(blockPosition(intent.origin()))) throw new IllegalArgumentException("repair receipt position differs from intent origin");
     }
 
-    static FrontierWorldState complete(FrontierWorldState state, PhysicalIntent current, StructuralRepairObservation repair,
+    public static FrontierWorldState complete(FrontierWorldState state, PhysicalIntent current, StructuralRepairObservation repair,
                                        Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, PhysicalIntent> nextIntents) {
         validateReceipt(current, repair);
         PhysicalDeltaSemanticTarget target = current.semanticTarget().orElseThrow();

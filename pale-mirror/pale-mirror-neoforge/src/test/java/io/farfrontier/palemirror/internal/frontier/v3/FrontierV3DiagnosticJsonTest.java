@@ -46,6 +46,7 @@ import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 import io.farfrontier.palemirror.frontier.v3.process.RouteMaintenanceProcess;
+import io.farfrontier.palemirror.frontier.v3.process.PhysicalIntentLifecycleFixture;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -755,8 +756,12 @@ class FrontierV3DiagnosticJsonTest {
                 io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO, io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO,
                 io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO), 0, io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition.SCENE_STRIKE_OBSERVED,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
-        state = state.preparePhysicalIntent(firstIntent).transitionPhysicalIntent(firstIntent.id(), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING, Optional.empty())
-                .transitionPhysicalIntent(firstIntent.id(), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED, Optional.of(
+        SubjectId firstOwner = io.farfrontier.palemirror.frontier.v3.model.SceneStrikeStateSupport.owner(state, firstIntent);
+        state = PhysicalIntentLifecycleFixture.prepare(state, firstOwner, firstIntent);
+        state = PhysicalIntentLifecycleFixture.transition(state, firstOwner, firstIntent,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING, Optional.empty());
+        state = PhysicalIntentLifecycleFixture.transition(state, firstOwner, firstIntent,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED, Optional.of(
                         new io.farfrontier.palemirror.frontier.v3.model.SceneStrikeObservation(new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId("observation:diagnostic-assault-old"),
                                 firstIntent.id(), firstAttacker, firstTarget, io.farfrontier.palemirror.frontier.v3.api.FixedScalar.whole(20),
                                 io.farfrontier.palemirror.frontier.v3.api.FixedScalar.whole(18))));

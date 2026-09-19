@@ -47,7 +47,7 @@ public final class ProductionTransformationStateSupport {
         }
     }
 
-    static FrontierWorldState complete(FrontierWorldState state, PhysicalIntent intent, ProductionTransformationObservation observation,
+    public static FrontierWorldState complete(FrontierWorldState state, PhysicalIntent intent, ProductionTransformationObservation observation,
                                        Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, PhysicalIntent> intents) {
         validateIntent(state, intent);
         ProductionJob job = state.productionJobs().get(intent.causeSubjectId());
@@ -82,7 +82,7 @@ public final class ProductionTransformationStateSupport {
         }
     }
 
-    static FrontierWorldState unknown(FrontierWorldState state, PhysicalIntent intent,
+    public static FrontierWorldState unknown(FrontierWorldState state, PhysicalIntent intent,
                                       Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, PhysicalIntent> intents) {
         ProductionJob job = state.productionJobs().get(intent.causeSubjectId());
         if (job == null) throw new IllegalArgumentException("production failure has no active job");

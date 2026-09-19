@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Map;
 
 /** Validates and atomically completes the one-time owned-field preparation boundary. */
-final class ResourceSitePhysicalIntentStateSupport {
+public final class ResourceSitePhysicalIntentStateSupport {
     private ResourceSitePhysicalIntentStateSupport() { }
 
     /** Traversal borrows a PREPARED effect request but never begins that effect before F0.2. */
@@ -66,7 +66,7 @@ final class ResourceSitePhysicalIntentStateSupport {
         }
     }
 
-    static FrontierWorldState complete(FrontierWorldState state, PhysicalIntent intent, ResourceSitePreparationObservation receipt,
+    public static FrontierWorldState complete(FrontierWorldState state, PhysicalIntent intent, ResourceSitePreparationObservation receipt,
                                        Map<PhysicalIntentId, PhysicalIntent> nextIntents) {
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(intent.causeSubjectId());
         ResourceSitePreparationJob job = preparation(lifecycle, intent.id());
@@ -77,7 +77,7 @@ final class ResourceSitePhysicalIntentStateSupport {
         return replace(state, state.resourceSites().replace(lifecycle.prepared()), nextIntents, observations);
     }
 
-    static FrontierWorldState completeHarvest(FrontierWorldState state, PhysicalIntent intent, ResourceSiteHarvestObservation receipt,
+    public static FrontierWorldState completeHarvest(FrontierWorldState state, PhysicalIntent intent, ResourceSiteHarvestObservation receipt,
                                               Map<PhysicalIntentId, PhysicalIntent> nextIntents) {
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(intent.causeSubjectId());
         ResourceSiteHarvestLineage deferred = lifecycle.harvestLineage().filter(ResourceSiteHarvestLineage::receiptPending)
@@ -118,7 +118,7 @@ final class ResourceSitePhysicalIntentStateSupport {
                 state.inventory(), nextIntents, observations);
     }
 
-    static FrontierWorldState conflict(FrontierWorldState state, PhysicalIntent intent, Map<PhysicalIntentId, PhysicalIntent> nextIntents) {
+    public static FrontierWorldState conflict(FrontierWorldState state, PhysicalIntent intent, Map<PhysicalIntentId, PhysicalIntent> nextIntents) {
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(intent.causeSubjectId());
         if (lifecycle.phase() == ResourceSitePhase.DESTROYED) return replace(state, state.resourceSites(), nextIntents, state.physicalObservations());
         if (intent.kind() == PhysicalIntentKind.RESOURCE_SITE_PREPARATION) preparation(lifecycle, intent.id());

@@ -9,6 +9,7 @@ import io.farfrontier.palemirror.frontier.v3.api.RejectionCode;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryAsset;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentPrepared;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;
 
@@ -30,6 +31,9 @@ abstract class AbstractPhysicalIntentLifecycleCapability implements PhysicalInte
     @Override public final PhysicalIntentLifecycleOwner owner() { return owner; }
     @Override public final Set<PhysicalIntentKind> compatibleKinds() { return kinds; }
     @Override public final PhysicalIntentLifecycleRetirementPolicy retirementPolicy() { return retirementPolicy; }
+    @Override public FencedRecoveryAsset recoveryAsset(PhysicalIntent intent) {
+        throw new IllegalArgumentException("physical lifecycle owner has no declared recovery asset: " + owner.stableId());
+    }
 
     @Override public CommandPlan planPrepared(FrontierWorldState state, FrontierCommand command, PhysicalIntentPrepared prepared) {
         return rejected("physical executor cannot prepare " + owner.stableId());

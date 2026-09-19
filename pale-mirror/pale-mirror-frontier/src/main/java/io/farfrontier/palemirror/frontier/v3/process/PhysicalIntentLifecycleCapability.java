@@ -7,6 +7,7 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryAsset;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentPrepared;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;
 
@@ -23,6 +24,9 @@ interface PhysicalIntentLifecycleCapability {
 
     /** Explicit executable terminal/late-input policy supplied by this owner's family. */
     PhysicalIntentLifecycleRetirementPolicy retirementPolicy();
+
+    /** Family-supplied fence asset; common lifecycle storage may validate it but never infer it from kind. */
+    FencedRecoveryAsset recoveryAsset(PhysicalIntent intent);
 
     CommandPlan planPrepared(FrontierWorldState state, FrontierCommand command, PhysicalIntentPrepared prepared);
 

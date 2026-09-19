@@ -63,7 +63,7 @@ public final class SettlementServiceInputIssueStateSupport {
         }
     }
 
-    static FrontierWorldState complete(FrontierWorldState state, PhysicalIntent intent,
+    public static FrontierWorldState complete(FrontierWorldState state, PhysicalIntent intent,
                                        SettlementServiceInputIssueObservation receipt,
                                        Map<PhysicalIntentId, PhysicalIntent> nextIntents) {
         validateIntent(state, intent);
@@ -84,7 +84,7 @@ public final class SettlementServiceInputIssueStateSupport {
                 .serviceWorks(works).physicalIntents(nextIntents).physicalObservations(observations));
     }
 
-    static SettlementServiceInputIssueObservation requireReceipt(PhysicalEffectObservation evidence) {
+    public static SettlementServiceInputIssueObservation requireReceipt(PhysicalEffectObservation evidence) {
         if (evidence instanceof SettlementServiceInputIssueObservation issue) return issue;
         throw new IllegalArgumentException("service input issue requires exact hand-off evidence");
     }

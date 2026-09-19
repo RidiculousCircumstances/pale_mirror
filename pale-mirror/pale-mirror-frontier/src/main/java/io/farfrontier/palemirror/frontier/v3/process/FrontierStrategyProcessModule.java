@@ -26,7 +26,10 @@ final class FrontierStrategyProcessModule implements FrontierWorldProcessModule 
                         throw new IllegalArgumentException("strategic decontamination transition lacks its owning settlement");
                     }
                     DecontaminationProcess.taskForIntent(state, intent, StrategicTaskStatus.ACTIVE);
-                    return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+                    return PhysicalIntentTransitionStorage.reduce(state, intent, transition,
+                            (currentState, current, evidence, intents) -> SettlementServiceDecontaminationStateSupport.complete(currentState, current,
+                                    evidence, new java.util.LinkedHashMap<>(intents)),
+                            PhysicalIntentTransitionStorage::recordUnknown);
                 }, PhysicalIntentLifecycleRetirementPolicy.of(
                         (state, command, intent, transition) -> new CommandPlan.Accepted(
                                 DecontaminationProcess.planTransition(state, intent, transition)),
@@ -35,8 +38,11 @@ final class FrontierStrategyProcessModule implements FrontierWorldProcessModule 
                                 throw new IllegalArgumentException("strategic decontamination retirement lacks its owning settlement");
                             }
                             DecontaminationProcess.taskForIntent(state, intent, StrategicTaskStatus.ACTIVE);
-                            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
-                        })));
+                            return PhysicalIntentTransitionStorage.reduce(state, intent, transition,
+                                    (currentState, current, evidence, intents) -> SettlementServiceDecontaminationStateSupport.complete(currentState, current,
+                                            evidence, new java.util.LinkedHashMap<>(intents)),
+                                    PhysicalIntentTransitionStorage::recordUnknown);
+                        }), intent -> FencedRecoveryAsset.EFFECT));
     }
     @Override public FrontierWorldState reduce(FrontierWorldState state, FrontierEvent event) {
         return switch (event.payload()) {

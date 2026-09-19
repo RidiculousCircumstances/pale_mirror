@@ -44,7 +44,7 @@ public final class SceneStrikeStateSupport {
         }
     }
 
-    static void validateObservation(FrontierWorldState state, PhysicalIntent intent, SceneStrikeObservation observation) {
+    public static void validateObservation(FrontierWorldState state, PhysicalIntent intent, SceneStrikeObservation observation) {
         SceneLease lease = matchingLease(state, intent);
         if (!lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet()).containsAll(intent.subjectIds())) {
             throw new IllegalArgumentException("scene strike receipt has no matching exact scene lease");

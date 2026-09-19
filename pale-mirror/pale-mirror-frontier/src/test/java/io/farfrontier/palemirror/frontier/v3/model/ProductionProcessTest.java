@@ -446,7 +446,7 @@ class ProductionProcessTest {
     void unknownPhysicalProductionRetainsTheExactActiveJobWithoutDiscardingCanonicalClaim() {
         PreparedProduction prepared = activePhysicalProduction();
 
-        FrontierWorldState blocked = prepared.state().transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty());
+        FrontierWorldState blocked = transition(prepared.state(), prepared.settlementId(), prepared.intent(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty());
 
         assertEquals(PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, blocked.physicalIntents().get(prepared.intent().id()).status());
         assertTrue(blocked.inventory().items().containsKey(new SubjectId("item:bootstrap-1-wheat")));
@@ -457,20 +457,22 @@ class ProductionProcessTest {
     @Test
     void exactOutputObservedAfterRestartQuarantineCompletesTheSameRetainedProductionJob() {
         PreparedProduction prepared = activePhysicalProduction();
-        FrontierWorldState unknown = prepared.state()
-                .transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.RUNNING, Optional.empty())
-                .transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty());
+        FrontierWorldState unknown = transition(transition(prepared.state(), prepared.settlementId(), prepared.intent(), PhysicalIntentStatus.RUNNING, Optional.empty()),
+                prepared.settlementId(), prepared.intent(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty());
         ExactItemStack input = unknown.inventory().items().get(prepared.job().consumedItemId());
         ProductionTransformationObservation receipt = new ProductionTransformationObservation(
                 new PhysicalObservationId("observation:production-restart-output"), prepared.intent().id(), input.id(),
                 prepared.job().outputItemId(), input.count(), prepared.job().outputCount());
 
-        FrontierWorldState completed = unknown.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
+        FrontierWorldState completed = transition(unknown, prepared.settlementId(), prepared.intent(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
 
         assertTrue(completed.productionJobs().isEmpty());
         assertEquals("minecraft:bread", completed.inventory().items().get(prepared.job().outputItemId()).itemKind());
         assertEquals(StrategicTaskStatus.COMPLETED, completed.strategicPlans().tasks().values().stream()
                 .filter(task -> task.kind() == StrategicTaskKind.PRODUCE_BREAD).findFirst().orElseThrow().status());
+        assertThrows(IllegalArgumentException.class, () -> transition(completed, prepared.settlementId(), prepared.intent(),
+                PhysicalIntentStatus.CONFIRMED, Optional.of(receipt)),
+                "the bounded recovery observation is consumed by its first terminal confirmation");
     }
 
     @Test
@@ -679,7 +681,8 @@ class ProductionProcessTest {
                 PhysicalIntentStatus.PREPARED, materialized.job().id(), List.of(materialized.job().id(), materialized.job().consumedItemId(), materialized.job().outputItemId()),
                 new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0, PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.PRODUCTION_WORK);
-        return new PreparedProduction(materialized.state().preparePhysicalIntent(intent), materialized.job(), intent, materialized.order(), materialized.settlementId(), materialized.taskId());
+        return new PreparedProduction(PhysicalIntentLifecycleFixture.prepare(materialized.state(), materialized.settlementId(), intent), materialized.job(), intent,
+                materialized.order(), materialized.settlementId(), materialized.taskId());
     }
 
     static MaterializedProduction activeMaterializedProduction() {
@@ -846,6 +849,11 @@ class ProductionProcessTest {
             current = ResourceSiteHarvestProcess.reduceProgressed(current, siteId, new ResourceSiteHarvestProgressed(jobId, crop + 1));
         }
         return current;
+    }
+
+    private static FrontierWorldState transition(FrontierWorldState state, SubjectId settlement, PhysicalIntent intent,
+                                                 PhysicalIntentStatus status, Optional<PhysicalEffectObservation> observation) {
+        return PhysicalIntentLifecycleFixture.transition(state, settlement, intent, status, observation);
     }
 
     record PreparedProduction(FrontierWorldState state, ProductionJob job, PhysicalIntent intent, MarketWorkOrder order, SubjectId settlementId, SubjectId taskId) { }

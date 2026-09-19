@@ -181,7 +181,7 @@ public final class RouteConstructionStateSupport {
         return surface != null && surface.status() == ContainerSurfaceStatus.ACTIVE;
     }
 
-    static FrontierWorldState complete(FrontierWorldState state, PhysicalIntent intent, RouteConstructionObservation observation,
+    public static FrontierWorldState complete(FrontierWorldState state, PhysicalIntent intent, RouteConstructionObservation observation,
                                        Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, PhysicalIntent> intents) {
         validateIntent(state, intent);
         RouteConstruction project = state.routeConstructions().get(observation.projectId());
@@ -202,7 +202,7 @@ public final class RouteConstructionStateSupport {
                 .physicalIntents(intents).physicalObservations(observations).routeConstructions(projects).sceneLeases(leases));
     }
 
-    static FrontierWorldState conflict(FrontierWorldState state, PhysicalIntent intent,
+    public static FrontierWorldState conflict(FrontierWorldState state, PhysicalIntent intent,
                                        Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, PhysicalIntent> intents) {
         RouteConstruction project = intent.subjectIds().stream().map(state.routeConstructions()::get).filter(java.util.Objects::nonNull)
                 .findFirst().orElseThrow(() -> new IllegalArgumentException("route construction conflict lacks its project"));

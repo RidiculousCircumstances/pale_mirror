@@ -27,7 +27,8 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
                 FrontierLogisticsProcessModule::reducePhysicalTransition,
                 PhysicalIntentLifecycleRetirementPolicy.of(
                         FrontierLogisticsProcessModule::planPhysicalTransition,
-                        FrontierLogisticsProcessModule::reducePhysicalTransition)));
+                        FrontierLogisticsProcessModule::reducePhysicalTransition),
+                intent -> FencedRecoveryAsset.CARGO));
     }
 
     private static CommandPlan planPhysicalTransition(FrontierWorldState state, FrontierCommand command,
@@ -68,7 +69,11 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
         if (operation == null || !subject.equals(operation.settlementId())) {
             throw new IllegalArgumentException("physical intent transition subject does not own operation");
         }
-        return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+        return PhysicalIntentTransitionStorage.reduce(state, intent, transition,
+                (currentState, current, evidence, intents) -> CargoHandoffConfirmationStateSupport.complete(currentState, current,
+                        evidence, new java.util.LinkedHashMap<>(intents), current.id(),
+                        io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED),
+                PhysicalIntentTransitionStorage::recordUnknown);
     }
     @Override public CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
         if (command.payload() instanceof OperationAssemblyAdvanced advanced) {

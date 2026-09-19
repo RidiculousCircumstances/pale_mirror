@@ -71,7 +71,10 @@ final class PhysicalIntentLifecycleCapabilities {
     }
 
     FrontierWorldState reducePrepared(FrontierWorldState state, SubjectId subject, PhysicalIntent intent) {
-        return capability(intent).reducePrepared(state, subject, intent);
+        PhysicalIntentLifecycleCapability capability = capability(intent);
+        FrontierWorldState reduced = capability.reducePrepared(state, subject, intent);
+        return reduced.withChanges(FrontierWorldStateUpdate.begin().fencedRecovery(
+                FencedRecoveryPhysicalIntentSupport.prepared(reduced.fencedRecovery(), intent, capability.recoveryAsset(intent))));
     }
 
     FrontierWorldState reduceTransition(FrontierWorldState state, SubjectId subject, PhysicalIntent intent,
@@ -81,8 +84,9 @@ final class PhysicalIntentLifecycleCapabilities {
                 ? capability.retirementPolicy().reduce(state, subject, intent, transition)
                 : capability.reduceTransition(state, subject, intent, transition);
         return reduced.withChanges(FrontierWorldStateUpdate.begin().fencedRecovery(
-                FencedRecoveryPhysicalIntentSupport.transition(state.fencedRecovery(), intent, transition.status())));
+                FencedRecoveryPhysicalIntentSupport.transition(state.fencedRecovery(), intent, transition.status(), capability.recoveryAsset(intent))));
     }
+
 
     private PhysicalIntentLifecycleCapability capability(PhysicalIntent intent) {
         Objects.requireNonNull(intent, "physical lifecycle intent");

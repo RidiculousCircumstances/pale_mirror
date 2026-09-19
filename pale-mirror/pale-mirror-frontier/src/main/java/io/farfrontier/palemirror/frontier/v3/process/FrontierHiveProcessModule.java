@@ -37,14 +37,14 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
                 },
                 (state, subject, intent, transition) -> {
                     if (!subject.equals(state.bootstrap().hive().id())) throw new IllegalArgumentException("explosion transition lacks hive ownership");
-                    return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+                    return reduceExplosionTransition(state, intent, transition);
                 }, PhysicalIntentLifecycleRetirementPolicy.of(
                         (state, command, intent, transition) -> new CommandPlan.Accepted(List.of(
                                 new ProposedEvent(state.bootstrap().hive().id(), transition))),
                         (state, subject, intent, transition) -> {
                             if (!subject.equals(state.bootstrap().hive().id())) throw new IllegalArgumentException("explosion retirement lacks hive ownership");
-                            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
-                        }));
+                            return reduceExplosionTransition(state, intent, transition);
+                        }), intent -> FencedRecoveryAsset.EFFECT);
     }
 
     private static PhysicalIntentLifecycleCapability nutrientTransferCapability() {
@@ -66,14 +66,14 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
                 },
                 (state, subject, intent, transition) -> {
                     if (!subject.equals(state.bootstrap().hive().id())) throw new IllegalArgumentException("hive nutrient endpoint transition lacks hive ownership");
-                    return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+                    return reduceNutrientTransition(state, intent, transition);
                 }, PhysicalIntentLifecycleRetirementPolicy.of(
                         (state, command, intent, transition) -> new CommandPlan.Accepted(HiveNutrientTransferProcess.planTransition(
                                 state, intent, transition, command.submittedAt().ticks())),
                         (state, subject, intent, transition) -> {
                             if (!subject.equals(state.bootstrap().hive().id())) throw new IllegalArgumentException("hive nutrient endpoint retirement lacks hive ownership");
-                            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
-                        }));
+                            return reduceNutrientTransition(state, intent, transition);
+                        }), intent -> FencedRecoveryAsset.CARGO);
     }
 
     private static PhysicalIntentLifecycleCapability hiveGrowthCapability() {
@@ -86,15 +86,15 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
                 (state, subject, intent, transition) -> {
                     HiveGrowthJob job = state.hiveColony().growthJobs().get(intent.causeSubjectId());
                     if (job == null || !subject.equals(job.hiveId())) throw new IllegalArgumentException("hive growth consumption transition lacks hive ownership");
-                    return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+                    return reduceHiveGrowthConsumption(state, intent, transition);
                 }, PhysicalIntentLifecycleRetirementPolicy.of(
                         (state, command, intent, transition) -> new CommandPlan.Accepted(HiveGrowthProcess.planTransition(
                                 state, intent, transition, command.submittedAt().ticks())),
                         (state, subject, intent, transition) -> {
                             HiveGrowthJob job = state.hiveColony().growthJobs().get(intent.causeSubjectId());
                             if (job == null || !subject.equals(job.hiveId())) throw new IllegalArgumentException("hive growth consumption retirement lacks hive ownership");
-                            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
-                        }));
+                            return reduceHiveGrowthConsumption(state, intent, transition);
+                        }), intent -> FencedRecoveryAsset.EFFECT);
     }
 
     private static PhysicalIntentLifecycleCapability sceneStrikeCapability(PhysicalIntentLifecycleOwner owner) {
@@ -114,14 +114,14 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
                 },
                 (state, subject, intent, transition) -> {
                     if (!subject.equals(SceneStrikeStateSupport.owner(state, intent))) throw new IllegalArgumentException("scene strike transition lacks exact scene ownership");
-                    return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+                    return reduceSceneStrikeTransition(state, intent, transition);
                 }, PhysicalIntentLifecycleRetirementPolicy.of(
                         (state, command, intent, transition) -> new CommandPlan.Accepted(List.of(
                                 new ProposedEvent(SceneStrikeStateSupport.owner(state, intent), transition))),
                         (state, subject, intent, transition) -> {
                             if (!subject.equals(SceneStrikeStateSupport.owner(state, intent))) throw new IllegalArgumentException("scene strike retirement lacks exact scene ownership");
-                            return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
-                        }));
+                            return reduceSceneStrikeTransition(state, intent, transition);
+                        }), intent -> FencedRecoveryAsset.EFFECT);
     }
 
     private static PhysicalIntentLifecycleCapability settlementAssaultCapability() {
@@ -135,7 +135,7 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
                 FrontierHiveProcessModule::reduceAssaultTransition,
                 PhysicalIntentLifecycleRetirementPolicy.of(
                         (state, command, intent, transition) -> planAssaultTransition(state, intent, transition),
-                        FrontierHiveProcessModule::reduceAssaultTransition));
+                        FrontierHiveProcessModule::reduceAssaultTransition), intent -> FencedRecoveryAsset.EFFECT);
     }
 
     private static CommandPlan planAssaultPreparation(FrontierWorldState state, PhysicalIntentPrepared prepared) {
@@ -183,7 +183,94 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
         } else if (!subject.equals(intent.causeSubjectId())) {
             throw new IllegalArgumentException("settlement-assault equipment transition lacks settlement ownership");
         }
-        return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+        return intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE
+                ? reduceSceneStrikeTransition(state, intent, transition)
+                : PhysicalIntentTransitionStorage.reduce(state, intent, transition,
+                (currentState, current, evidence, intents) -> HumanEquipmentStateSupport.complete(currentState, current, evidence,
+                        new java.util.LinkedHashMap<>(intents)), PhysicalIntentTransitionStorage::recordUnknown);
+    }
+
+    private static FrontierWorldState reduceExplosionTransition(FrontierWorldState state,
+                                                                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                                 PhysicalIntentTransition transition) {
+        return PhysicalIntentTransitionStorage.reduce(state, intent, transition,
+                (currentState, current, evidence, intents) -> {
+                    if (!(evidence instanceof ExplosionObservation explosion)) {
+                        throw new IllegalArgumentException("explosion requires post-impact observation evidence");
+                    }
+                    return ExplosionStateSupport.complete(currentState, current, explosion, new java.util.LinkedHashMap<>(intents));
+                }, PhysicalIntentTransitionStorage::recordUnknown);
+    }
+
+    private static FrontierWorldState reduceNutrientTransition(FrontierWorldState state,
+                                                                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                                PhysicalIntentTransition transition) {
+        return PhysicalIntentTransitionStorage.reduce(state, intent, transition,
+                (currentState, current, evidence, intents) -> HiveNutrientTransferStateSupport.completeEndpoint(currentState, current,
+                        evidence, new java.util.LinkedHashMap<>(intents)),
+                (currentState, current, intents) -> HiveNutrientTransferStateSupport.unknownEndpoint(currentState, current,
+                        new java.util.LinkedHashMap<>(intents)));
+    }
+
+    private static FrontierWorldState reduceHiveGrowthConsumption(FrontierWorldState state,
+                                                                   io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                                   PhysicalIntentTransition transition) {
+        return PhysicalIntentTransitionStorage.reduce(state, intent, transition,
+                (currentState, current, evidence, intents) -> {
+                    if (evidence instanceof FungibleResourceConsumedObservation consumed) {
+                        HiveGrowthStateSupport.FungibleConsumption consumedState = HiveGrowthStateSupport.consumeObservedFungible(
+                                currentState, current.causeSubjectId(), consumed);
+                        java.util.Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId, PhysicalEffectObservation> observations =
+                                new java.util.LinkedHashMap<>(currentState.physicalObservations());
+                        observations.put(consumed.id(), consumed);
+                        return currentState.withChanges(FrontierWorldStateUpdate.begin().physicalIntents(intents)
+                                .physicalObservations(observations).inventory(consumedState.inventory()).hiveColony(consumedState.colony()));
+                    }
+                    if (!(evidence instanceof ExactItemConsumedObservation consumed)) {
+                        throw new IllegalArgumentException("hive growth consumption requires exact or fungible item observation evidence");
+                    }
+                    io.farfrontier.palemirror.frontier.v3.api.SubjectId itemId = current.subjectIds().stream()
+                            .filter(id -> !id.equals(current.causeSubjectId())).findFirst().orElseThrow();
+                    ExactItemStack item = currentState.inventory().items().get(itemId);
+                    if (!itemId.equals(consumed.itemId()) || item == null || item.count() != consumed.countBefore()
+                            || !(item.custody() instanceof InventoryCustody.ContainerSlot slot)) {
+                        throw new IllegalArgumentException("hive growth consumption receipt does not match current stack");
+                    }
+                    ExactItemConsumptionStateSupport.Claim claim = ExactItemConsumptionStateSupport.claim(currentState, current);
+                    if (!claim.item().equals(item) || !claim.containerId().equals(slot.containerId()) || claim.slot() != slot.slot()
+                            || claim.count() != consumed.consumedCount()) {
+                        throw new IllegalArgumentException("hive growth consumption stack is not in an active owner container");
+                    }
+                    java.util.Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId, PhysicalEffectObservation> observations =
+                            new java.util.LinkedHashMap<>(currentState.physicalObservations());
+                    observations.put(consumed.id(), consumed);
+                    return currentState.withChanges(FrontierWorldStateUpdate.begin().physicalIntents(intents).physicalObservations(observations)
+                            .inventory(currentState.inventory().consume(itemId, consumed.consumedCount()))
+                            .hiveColony(currentState.hiveColony().consumeTransferredNutrient(current.causeSubjectId(), itemId)));
+                }, PhysicalIntentTransitionStorage::recordUnknown);
+    }
+
+    private static FrontierWorldState reduceSceneStrikeTransition(FrontierWorldState state,
+                                                                   io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                                   PhysicalIntentTransition transition) {
+        return PhysicalIntentTransitionStorage.reduce(state, intent, transition,
+                (currentState, current, evidence, intents) -> {
+                    if (!(evidence instanceof SceneStrikeObservation strike)) {
+                        throw new IllegalArgumentException("scene strike requires exact hit evidence");
+                    }
+                    SceneStrikeStateSupport.validateObservation(currentState, current, strike);
+                    java.util.Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId, PhysicalEffectObservation> observations =
+                            new java.util.LinkedHashMap<>(currentState.physicalObservations());
+                    observations.put(strike.id(), strike);
+                    java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, ActorLocation> actors =
+                            new java.util.LinkedHashMap<>(currentState.actorLocations());
+                    if (strike.targetHealthAfter().compareTo(io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO) > 0) {
+                        ActorLocation target = actors.get(strike.targetId());
+                        actors.put(strike.targetId(), new ActorLocation(target.body(), target.condition().withHealth(strike.targetHealthAfter())));
+                    }
+                    return currentState.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).physicalIntents(intents)
+                            .physicalObservations(observations)).withStrategicPlans(currentState.strategicPlans().afterConfirmedHotStrike(current));
+                }, PhysicalIntentTransitionStorage::recordUnknown);
     }
     @Override public CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
         if (command.payload() instanceof ScoutPatrolAdvanced advanced) {

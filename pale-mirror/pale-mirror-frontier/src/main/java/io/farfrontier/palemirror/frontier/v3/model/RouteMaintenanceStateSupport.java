@@ -333,7 +333,7 @@ public final class RouteMaintenanceStateSupport {
                 .routeTopology(state.routeTopology().reconcileSupplyAvailability(state.bootstrap(), deltas)));
     }
 
-    static FrontierWorldState conflict(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+    public static FrontierWorldState conflict(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
                                        Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent> intents) {
         RouteMaintenance maintenance = intent.subjectIds().stream().map(state.routeMaintenances()::get).filter(java.util.Objects::nonNull)
                 .findFirst().orElseThrow(() -> new IllegalArgumentException("route maintenance conflict has no active operation"));
@@ -343,7 +343,7 @@ public final class RouteMaintenanceStateSupport {
                 .sceneLeases(FrontierEngineeringWorkSceneSupport.drainProjectWorksites(state, maintenance.id())));
     }
 
-    static FrontierWorldState confirm(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+    public static FrontierWorldState confirm(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
                                       PhysicalEffectObservation evidence,
                                       Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent> intents) {
         if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_MAINTENANCE) {

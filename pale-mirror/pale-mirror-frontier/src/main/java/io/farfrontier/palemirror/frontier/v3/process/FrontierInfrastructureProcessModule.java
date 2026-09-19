@@ -35,7 +35,8 @@ final class FrontierInfrastructureProcessModule implements FrontierWorldProcessM
                 FrontierInfrastructureProcessModule::reduceEngineeringTransition,
                 PhysicalIntentLifecycleRetirementPolicy.of(
                         FrontierInfrastructureProcessModule::planEngineeringTransition,
-                        FrontierInfrastructureProcessModule::reduceEngineeringTransition));
+                        FrontierInfrastructureProcessModule::reduceEngineeringTransition),
+                FrontierInfrastructureProcessModule::engineeringRecoveryAsset);
     }
 
     private static CommandPlan planEngineeringPreparation(FrontierWorldState state, FrontierCommand command, PhysicalIntentPrepared prepared) {
@@ -77,6 +78,15 @@ final class FrontierInfrastructureProcessModule implements FrontierWorldProcessM
                 default -> throw new IllegalArgumentException("engineering capability received undeclared kind");
             };
         } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+    }
+
+    private static FencedRecoveryAsset engineeringRecoveryAsset(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent) {
+        return switch (intent.kind()) {
+            case ROUTE_CONSTRUCTION_MATERIAL_LOADING, ROUTE_MAINTENANCE_MATERIAL_LOADING -> FencedRecoveryAsset.CARGO;
+            case EQUIPMENT_RETURN -> FencedRecoveryAsset.CONTAINER;
+            case STRUCTURAL_REPAIR, ROUTE_CONSTRUCTION, ROUTE_MAINTENANCE, EQUIPMENT_ISSUE -> FencedRecoveryAsset.EFFECT;
+            default -> throw new IllegalArgumentException("engineering capability received undeclared recovery kind");
+        };
     }
 
     private static CommandPlan planEngineeringTransition(FrontierWorldState state, FrontierCommand command,
@@ -153,7 +163,53 @@ final class FrontierInfrastructureProcessModule implements FrontierWorldProcessM
             }
             default -> throw new IllegalArgumentException("engineering capability received undeclared kind");
         }
-        return state.transitionPhysicalIntent(transition.intentId(), transition.status(), transition.observation());
+        return PhysicalIntentTransitionStorage.reduce(state, intent, transition,
+                FrontierInfrastructureProcessModule::confirmEngineeringTransition,
+                FrontierInfrastructureProcessModule::unknownEngineeringTransition);
+    }
+
+    private static FrontierWorldState confirmEngineeringTransition(FrontierWorldState state,
+                                                                    io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                                    PhysicalEffectObservation evidence,
+                                                                    java.util.Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId,
+                                                                            io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent> intents) {
+        return switch (intent.kind()) {
+            case STRUCTURAL_REPAIR -> {
+                if (!(evidence instanceof StructuralRepairObservation repair)) throw new IllegalArgumentException("structural repair requires repair observation evidence");
+                yield StructuralRepairStateSupport.complete(state, intent, repair, new java.util.LinkedHashMap<>(intents));
+            }
+            case ROUTE_CONSTRUCTION -> {
+                if (!(evidence instanceof RouteConstructionObservation construction)) throw new IllegalArgumentException("route construction requires construction observation evidence");
+                yield RouteConstructionStateSupport.complete(state, intent, construction, new java.util.LinkedHashMap<>(intents));
+            }
+            case ROUTE_CONSTRUCTION_MATERIAL_LOADING -> {
+                if (!(evidence instanceof RouteConstructionMaterialLoadObservation loading)) {
+                    throw new IllegalArgumentException("route construction material loading requires exact pickup evidence");
+                }
+                RouteConstructionStateSupport.validateMaterialLoadingReceipt(state, intent, loading);
+                yield PhysicalIntentTransitionStorage.recordConfirmed(state, intent, loading, intents);
+            }
+            case ROUTE_MAINTENANCE, ROUTE_MAINTENANCE_MATERIAL_LOADING ->
+                    RouteMaintenanceStateSupport.confirm(state, intent, evidence, new java.util.LinkedHashMap<>(intents));
+            case EQUIPMENT_ISSUE, EQUIPMENT_RETURN -> HumanEquipmentStateSupport.complete(state, intent, evidence,
+                    new java.util.LinkedHashMap<>(intents));
+            default -> throw new IllegalArgumentException("engineering capability received undeclared kind");
+        };
+    }
+
+    private static FrontierWorldState unknownEngineeringTransition(FrontierWorldState state,
+                                                                    io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                                    java.util.Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId,
+                                                                            io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent> intents) {
+        return switch (intent.kind()) {
+            case ROUTE_CONSTRUCTION, ROUTE_CONSTRUCTION_MATERIAL_LOADING ->
+                    RouteConstructionStateSupport.conflict(state, intent, new java.util.LinkedHashMap<>(intents));
+            case ROUTE_MAINTENANCE, ROUTE_MAINTENANCE_MATERIAL_LOADING ->
+                    RouteMaintenanceStateSupport.conflict(state, intent, new java.util.LinkedHashMap<>(intents));
+            case STRUCTURAL_REPAIR, EQUIPMENT_ISSUE, EQUIPMENT_RETURN ->
+                    PhysicalIntentTransitionStorage.recordUnknown(state, intent, intents);
+            default -> throw new IllegalArgumentException("engineering capability received undeclared kind");
+        };
     }
 
     private static List<ProposedEvent> withEngineeringContinuation(FrontierWorldState state,

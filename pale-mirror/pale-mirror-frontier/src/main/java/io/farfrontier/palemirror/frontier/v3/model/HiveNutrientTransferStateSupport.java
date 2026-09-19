@@ -223,7 +223,7 @@ public final class HiveNutrientTransferStateSupport {
                 observations, state.sceneLeases(), state.hiveColony().completeNutrientTransfer(receipt), state.structureDamage(), state.physicalDeltas(), state.ambientLeases());
     }
 
-    static FrontierWorldState completeEndpoint(FrontierWorldState state, PhysicalIntent intent, PhysicalEffectObservation evidence,
+    public static FrontierWorldState completeEndpoint(FrontierWorldState state, PhysicalIntent intent, PhysicalEffectObservation evidence,
                                                Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, PhysicalIntent> intents) {
         if (intent.kind() == PhysicalIntentKind.HIVE_NUTRIENT_DEPARTURE) {
             if (evidence instanceof FungibleNutrientDepartureObservation departure) return completeFungiblePhysicalDeparture(state, intent, departure, intents);
@@ -238,7 +238,7 @@ public final class HiveNutrientTransferStateSupport {
         throw new IllegalArgumentException("physical intent is not a hive nutrient endpoint");
     }
 
-    static FrontierWorldState unknownEndpoint(FrontierWorldState state, PhysicalIntent intent,
+    public static FrontierWorldState unknownEndpoint(FrontierWorldState state, PhysicalIntent intent,
                                               Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, PhysicalIntent> intents) {
         HiveNutrientTransfer transfer = state.hiveColony().nutrientTransfers().values().stream()
                 .filter(value -> value.endpointIntentId().equals(java.util.Optional.of(intent.id()))).findFirst()

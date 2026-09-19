@@ -72,10 +72,10 @@ class HiveNutrientTransferProcessTest {
         HiveNutrientTransfer waiting = targetHeld.hiveColony().nutrientTransfers().get(transfer.id()).awaitArrival(new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:hive-nutrient-arrival-task-hive-nutrient"));
         FrontierWorldState pending = HiveNutrientTransferProcess.reduceEndpointPrepared(targetHeld, hive, new HiveNutrientTransferEndpointPrepared(waiting));
         var arrival = HiveNutrientTransferStateSupport.arrivalIntent(pending, waiting);
-        FrontierWorldState running = pending.preparePhysicalIntent(arrival).transitionPhysicalIntent(arrival.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
+        FrontierWorldState running = transition(prepare(pending, hive, arrival), hive, arrival, PhysicalIntentStatus.RUNNING, Optional.empty());
         FungibleCargoHandoffObservation observed = new FungibleCargoHandoffObservation(new PhysicalObservationId("observation:fungible-hive-nutrient-arrival"), arrival.id(),
                 transfer.cargoId(), 1L, List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(west, 0)), biomass.itemKind(), 64)));
-        FrontierWorldState arrived = running.transitionPhysicalIntent(arrival.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observed));
+        FrontierWorldState arrived = transition(running, hive, arrival, PhysicalIntentStatus.CONFIRMED, Optional.of(observed));
 
         assertTrue(arrived.inventory().cargo().isEmpty());
         assertEquals(HiveNutrientReceiptStatus.STORED, arrived.hiveColony().nutrientReceipts().get(transfer.id()).status());
@@ -107,11 +107,11 @@ class HiveNutrientTransferProcessTest {
         assertEquals(7L, pending.inventory().fungibleResources().bindings().values().iterator().next().authorityEpoch());
 
         var departure = HiveNutrientTransferStateSupport.departureIntent(pending, transfer);
-        FrontierWorldState running = pending.preparePhysicalIntent(departure).transitionPhysicalIntent(departure.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
+        FrontierWorldState running = transition(prepare(pending, hive, departure), hive, departure, PhysicalIntentStatus.RUNNING, Optional.empty());
         FungibleNutrientDepartureObservation observed = new FungibleNutrientDepartureObservation(
                 new PhysicalObservationId("observation:fungible-hive-nutrient-departure"), departure.id(), transfer.id(), transfer.cargoId(),
                 accountId, lotId, 64, 7L, List.of());
-        FrontierWorldState departed = running.transitionPhysicalIntent(departure.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observed));
+        FrontierWorldState departed = transition(running, hive, departure, PhysicalIntentStatus.CONFIRMED, Optional.of(observed));
 
         assertEquals(HiveNutrientTransferPhase.IN_TRANSIT, departed.hiveColony().nutrientTransfers().get(transfer.id()).phase());
         assertTrue(departed.inventory().cargo().get(transfer.cargoId()).fungibleContents());
@@ -168,11 +168,11 @@ class HiveNutrientTransferProcessTest {
         assertEquals(64, started.inventory().fungibleResources().claims().get(hold.claimId()).quantity());
         assertEquals(Map.of(hold.claimId(), 64), started.inventory().fungibleResources().bindings().values().iterator().next().claimQuantities());
 
-        FrontierWorldState prepared = HiveGrowthProcess.reducePrepared(started, hive, intent);
-        FrontierWorldState running = prepared.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
+        FrontierWorldState prepared = prepare(started, hive, intent);
+        FrontierWorldState running = transition(prepared, hive, intent, PhysicalIntentStatus.RUNNING, Optional.empty());
         FungibleResourceConsumedObservation observed = new FungibleResourceConsumedObservation(new PhysicalObservationId("observation:fungible-hive-growth"),
                 intent.id(), accountId, lotId, hold.claimId(), 64, 11L, List.of());
-        FrontierWorldState consumed = running.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observed));
+        FrontierWorldState consumed = transition(running, hive, intent, PhysicalIntentStatus.CONFIRMED, Optional.of(observed));
 
         assertTrue(consumed.inventory().fungibleResources().lots().isEmpty());
         assertTrue(consumed.inventory().fungibleResources().claims().isEmpty());
@@ -240,11 +240,11 @@ class HiveNutrientTransferProcessTest {
         assertEquals(new InventoryCustody.Cargo(transfer.cargoId()), pending.inventory().items().get(biomass.id()).custody());
         assertTrue(pending.inventory().itemAt(transfer.targetStoreId(), transfer.targetSlot().slot()).isEmpty());
         var arrival = HiveNutrientTransferStateSupport.arrivalIntent(pending, waiting);
-        FrontierWorldState prepared = pending.preparePhysicalIntent(arrival);
-        FrontierWorldState running = prepared.transitionPhysicalIntent(arrival.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
+        FrontierWorldState prepared = prepare(pending, transfer.hiveId(), arrival);
+        FrontierWorldState running = transition(prepared, transfer.hiveId(), arrival, PhysicalIntentStatus.RUNNING, Optional.empty());
         HiveNutrientArrivalObservation observed = new HiveNutrientArrivalObservation(new PhysicalObservationId("observation:hive-nutrient-arrival"), arrival.id(),
                 transfer.id(), transfer.cargoId(), transfer.itemId(), biomass.count());
-        FrontierWorldState terminal = running.transitionPhysicalIntent(arrival.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observed));
+        FrontierWorldState terminal = transition(running, transfer.hiveId(), arrival, PhysicalIntentStatus.CONFIRMED, Optional.of(observed));
         assertEquals(transfer.targetSlot(), terminal.inventory().items().get(biomass.id()).custody());
         assertEquals(HiveNutrientReceiptStatus.STORED, terminal.hiveColony().nutrientReceipts().get(transfer.id()).status());
     }
@@ -263,10 +263,10 @@ class HiveNutrientTransferProcessTest {
         assertEquals(transfer.sourceSlot(), pending.inventory().items().get(transfer.itemId()).custody());
         assertTrue(!pending.inventory().cargo().containsKey(transfer.cargoId()));
         var departure = HiveNutrientTransferStateSupport.departureIntent(pending, transfer);
-        FrontierWorldState running = pending.preparePhysicalIntent(departure).transitionPhysicalIntent(departure.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
+        FrontierWorldState running = transition(prepare(pending, transfer.hiveId(), departure), transfer.hiveId(), departure, PhysicalIntentStatus.RUNNING, Optional.empty());
         HiveNutrientDepartureObservation observed = new HiveNutrientDepartureObservation(new PhysicalObservationId("observation:hive-nutrient-departure"), departure.id(),
                 transfer.id(), transfer.cargoId(), transfer.itemId(), biomass.count());
-        FrontierWorldState departed = running.transitionPhysicalIntent(departure.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observed));
+        FrontierWorldState departed = transition(running, transfer.hiveId(), departure, PhysicalIntentStatus.CONFIRMED, Optional.of(observed));
         assertEquals(HiveNutrientTransferPhase.IN_TRANSIT, departed.hiveColony().nutrientTransfers().get(transfer.id()).phase());
         assertEquals(new InventoryCustody.Cargo(transfer.cargoId()), departed.inventory().items().get(transfer.itemId()).custody());
         assertEquals(departed, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(departed)));
@@ -323,6 +323,16 @@ class HiveNutrientTransferProcessTest {
                 "an already admitted transfer visibly stops at its exact conflicted endpoint");
         assertTrue(!ReferenceContainerCustody.blocksCanonicalUse(targetConflict, east),
                 "the endpoint fence remains local while another store stays eligible");
+    }
+
+    private static FrontierWorldState prepare(FrontierWorldState state, SubjectId hive, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent) {
+        return PhysicalIntentLifecycleFixture.prepare(state, hive, intent);
+    }
+
+    private static FrontierWorldState transition(FrontierWorldState state, SubjectId hive,
+                                                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                 PhysicalIntentStatus status, Optional<PhysicalEffectObservation> observation) {
+        return PhysicalIntentLifecycleFixture.transition(state, hive, intent, status, observation);
     }
 
     private static FrontierWorldState withReplicaConflict(FrontierWorldState state, SubjectId store) {

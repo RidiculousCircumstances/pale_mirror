@@ -83,6 +83,9 @@ public record FencedRecoveryState(Map<SubjectId, FencedRecoveryBinding> current,
     public FencedRecoveryState observed(SubjectId bindingId, long epoch) {
         FencedRecoveryBinding binding = requireCurrent(bindingId, epoch); return replace(binding.observed());
     }
+    public FencedRecoveryState inspectedObserved(SubjectId bindingId, long epoch) {
+        FencedRecoveryBinding binding = requireCurrent(bindingId, epoch); return replace(binding.inspectedObserved());
+    }
     public FencedRecoveryState confirm(SubjectId bindingId, long epoch) {
         FencedRecoveryBinding binding = requireCurrent(bindingId, epoch).confirmed();
         return retire(binding, FencedRecoveryDisposition.REJECT_STALE, "confirmed");

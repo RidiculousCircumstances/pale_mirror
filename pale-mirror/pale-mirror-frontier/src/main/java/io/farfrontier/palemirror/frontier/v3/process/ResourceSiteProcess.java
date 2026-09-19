@@ -162,7 +162,8 @@ public final class ResourceSiteProcess {
                 .strategicPlans(state.strategicPlans().transitionTask(job.taskId(), StrategicTaskStatus.BLOCKED))
                 .physicalIntents(intents)
                 .sceneLeases(leases)
-                .fencedRecovery(FencedRecoveryPhysicalIntentSupport.transition(state.fencedRecovery(), intent, PhysicalIntentStatus.CONFLICTED)));
+                .fencedRecovery(FencedRecoveryPhysicalIntentSupport.transition(state.fencedRecovery(), intent, PhysicalIntentStatus.CONFLICTED,
+                        FencedRecoveryAsset.EFFECT)));
     }
 
     public static List<ProposedEvent> planConflict(FrontierWorldState state, ResourceSiteConflictObserved conflict) {
