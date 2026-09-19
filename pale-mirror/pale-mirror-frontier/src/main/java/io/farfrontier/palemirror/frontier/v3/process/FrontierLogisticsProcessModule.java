@@ -28,7 +28,20 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
                 PhysicalIntentLifecycleRetirementPolicy.of(
                         FrontierLogisticsProcessModule::planPhysicalTransition,
                         FrontierLogisticsProcessModule::reducePhysicalTransition),
-                intent -> FencedRecoveryAsset.CARGO));
+                intent -> FencedRecoveryAsset.CARGO,
+                retirementAccount(PhysicalIntentLifecycleOwner.ROUTE_OPERATION)));
+    }
+
+    private static PhysicalIntentRetirementAccount retirementAccount(PhysicalIntentLifecycleOwner owner) {
+        return PhysicalIntentRetirementAccount.declared(owner,
+                java.util.EnumSet.allOf(PhysicalIntentRetirementAccount.Dimension.class),
+                (before, after, intent, transition) -> {
+                    if (intent.lifecycleOwner() != owner) throw new IllegalArgumentException("route retirement account owner mismatch");
+                    if (!after.operations().containsKey(intent.causeSubjectId()) && transition.status()
+                            == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) {
+                        throw new IllegalArgumentException("route retirement account lost ambiguous operation authority");
+                    }
+                });
     }
 
     private static CommandPlan planPhysicalTransition(FrontierWorldState state, FrontierCommand command,

@@ -36,7 +36,16 @@ final class FrontierInfrastructureProcessModule implements FrontierWorldProcessM
                 PhysicalIntentLifecycleRetirementPolicy.of(
                         FrontierInfrastructureProcessModule::planEngineeringTransition,
                         FrontierInfrastructureProcessModule::reduceEngineeringTransition),
-                FrontierInfrastructureProcessModule::engineeringRecoveryAsset);
+                FrontierInfrastructureProcessModule::engineeringRecoveryAsset,
+                retirementAccount(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE));
+    }
+
+    private static PhysicalIntentRetirementAccount retirementAccount(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner owner) {
+        return PhysicalIntentRetirementAccount.declared(owner,
+                java.util.EnumSet.allOf(PhysicalIntentRetirementAccount.Dimension.class),
+                (before, after, intent, transition) -> {
+                    if (intent.lifecycleOwner() != owner) throw new IllegalArgumentException("engineering retirement account owner mismatch");
+                });
     }
 
     private static CommandPlan planEngineeringPreparation(FrontierWorldState state, FrontierCommand command, PhysicalIntentPrepared prepared) {

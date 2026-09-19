@@ -23,7 +23,8 @@ final class FrontierSettlementServiceWorkProcessModule implements FrontierWorldP
                 FrontierSettlementServiceWorkProcessModule::reducePhysicalTransition,
                 PhysicalIntentLifecycleRetirementPolicy.of(
                         FrontierSettlementServiceWorkProcessModule::planPhysicalTransition,
-                        FrontierSettlementServiceWorkProcessModule::reducePhysicalTransition), intent -> FencedRecoveryAsset.EFFECT),
+                        FrontierSettlementServiceWorkProcessModule::reducePhysicalTransition), intent -> FencedRecoveryAsset.EFFECT,
+                retirementAccount(PhysicalIntentLifecycleOwner.SETTLEMENT_SERVICE_WORK)),
                 new FunctionalPhysicalIntentLifecycleCapability(
                         PhysicalIntentLifecycleOwner.SETTLEMENT_SERVICE_DECONTAMINATION,
                         Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.DECONTAMINATION),
@@ -33,7 +34,16 @@ final class FrontierSettlementServiceWorkProcessModule implements FrontierWorldP
                         FrontierSettlementServiceWorkProcessModule::reduceServiceDecontaminationTransition,
                         PhysicalIntentLifecycleRetirementPolicy.of(
                                 FrontierSettlementServiceWorkProcessModule::planServiceDecontaminationTransition,
-                                FrontierSettlementServiceWorkProcessModule::reduceServiceDecontaminationTransition), intent -> FencedRecoveryAsset.EFFECT));
+                                FrontierSettlementServiceWorkProcessModule::reduceServiceDecontaminationTransition), intent -> FencedRecoveryAsset.EFFECT,
+                        retirementAccount(PhysicalIntentLifecycleOwner.SETTLEMENT_SERVICE_DECONTAMINATION)));
+    }
+
+    private static PhysicalIntentRetirementAccount retirementAccount(PhysicalIntentLifecycleOwner owner) {
+        return PhysicalIntentRetirementAccount.declared(owner,
+                java.util.EnumSet.allOf(PhysicalIntentRetirementAccount.Dimension.class),
+                (before, after, intent, transition) -> {
+                    if (intent.lifecycleOwner() != owner) throw new IllegalArgumentException("settlement-service retirement account owner mismatch");
+                });
     }
 
     private static CommandPlan planServiceDecontaminationTransition(FrontierWorldState state, FrontierCommand command,

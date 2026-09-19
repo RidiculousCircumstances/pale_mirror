@@ -44,7 +44,18 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
                                 return new CommandPlan.Accepted(List.of(new ProposedEvent(job.settlementId(), transition)));
                             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
                         },
-                        FrontierEconomyProcessModule::reduceProductionTransition), intent -> FencedRecoveryAsset.EFFECT));
+                        FrontierEconomyProcessModule::reduceProductionTransition), intent -> FencedRecoveryAsset.EFFECT,
+                retirementAccount(PhysicalIntentLifecycleOwner.PRODUCTION_WORK)));
+    }
+
+    private static PhysicalIntentRetirementAccount retirementAccount(PhysicalIntentLifecycleOwner owner) {
+        return PhysicalIntentRetirementAccount.declared(owner,
+                java.util.EnumSet.allOf(PhysicalIntentRetirementAccount.Dimension.class),
+                (before, after, intent, transition) -> {
+                    if (intent.lifecycleOwner() != owner || !before.productionJobs().containsKey(intent.causeSubjectId())) {
+                        throw new IllegalArgumentException("production retirement account lacks its exact pre-state job");
+                    }
+                });
     }
 
     private static FrontierWorldState reduceProductionTransition(FrontierWorldState state, SubjectId subject,

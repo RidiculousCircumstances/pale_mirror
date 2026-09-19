@@ -42,7 +42,16 @@ final class FrontierStrategyProcessModule implements FrontierWorldProcessModule 
                                     (currentState, current, evidence, intents) -> SettlementServiceDecontaminationStateSupport.complete(currentState, current,
                                             evidence, new java.util.LinkedHashMap<>(intents)),
                                     PhysicalIntentTransitionStorage::recordUnknown);
-                        }), intent -> FencedRecoveryAsset.EFFECT));
+                        }), intent -> FencedRecoveryAsset.EFFECT,
+                retirementAccount(PhysicalIntentLifecycleOwner.DECONTAMINATION)));
+    }
+
+    private static PhysicalIntentRetirementAccount retirementAccount(PhysicalIntentLifecycleOwner owner) {
+        return PhysicalIntentRetirementAccount.declared(owner,
+                java.util.EnumSet.allOf(PhysicalIntentRetirementAccount.Dimension.class),
+                (before, after, intent, transition) -> {
+                    if (intent.lifecycleOwner() != owner) throw new IllegalArgumentException("strategy retirement account owner mismatch");
+                });
     }
     @Override public FrontierWorldState reduce(FrontierWorldState state, FrontierEvent event) {
         return switch (event.payload()) {

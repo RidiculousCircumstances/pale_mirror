@@ -44,7 +44,8 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
                         (state, subject, intent, transition) -> {
                             if (!subject.equals(state.bootstrap().hive().id())) throw new IllegalArgumentException("explosion retirement lacks hive ownership");
                             return reduceExplosionTransition(state, intent, transition);
-                        }), intent -> FencedRecoveryAsset.EFFECT);
+                        }), intent -> FencedRecoveryAsset.EFFECT,
+                retirementAccount(PhysicalIntentLifecycleOwner.HIVE_MOBILIZATION));
     }
 
     private static PhysicalIntentLifecycleCapability nutrientTransferCapability() {
@@ -73,7 +74,8 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
                         (state, subject, intent, transition) -> {
                             if (!subject.equals(state.bootstrap().hive().id())) throw new IllegalArgumentException("hive nutrient endpoint retirement lacks hive ownership");
                             return reduceNutrientTransition(state, intent, transition);
-                        }), intent -> FencedRecoveryAsset.CARGO);
+                        }), intent -> FencedRecoveryAsset.CARGO,
+                retirementAccount(PhysicalIntentLifecycleOwner.HIVE_NUTRIENT_TRANSFER));
     }
 
     private static PhysicalIntentLifecycleCapability hiveGrowthCapability() {
@@ -94,7 +96,8 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
                             HiveGrowthJob job = state.hiveColony().growthJobs().get(intent.causeSubjectId());
                             if (job == null || !subject.equals(job.hiveId())) throw new IllegalArgumentException("hive growth consumption retirement lacks hive ownership");
                             return reduceHiveGrowthConsumption(state, intent, transition);
-                        }), intent -> FencedRecoveryAsset.EFFECT);
+                        }), intent -> FencedRecoveryAsset.EFFECT,
+                retirementAccount(PhysicalIntentLifecycleOwner.HIVE_GROWTH));
     }
 
     private static PhysicalIntentLifecycleCapability sceneStrikeCapability(PhysicalIntentLifecycleOwner owner) {
@@ -121,7 +124,8 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
                         (state, subject, intent, transition) -> {
                             if (!subject.equals(SceneStrikeStateSupport.owner(state, intent))) throw new IllegalArgumentException("scene strike retirement lacks exact scene ownership");
                             return reduceSceneStrikeTransition(state, intent, transition);
-                        }), intent -> FencedRecoveryAsset.EFFECT);
+                        }), intent -> FencedRecoveryAsset.EFFECT,
+                retirementAccount(owner));
     }
 
     private static PhysicalIntentLifecycleCapability settlementAssaultCapability() {
@@ -135,7 +139,16 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
                 FrontierHiveProcessModule::reduceAssaultTransition,
                 PhysicalIntentLifecycleRetirementPolicy.of(
                         (state, command, intent, transition) -> planAssaultTransition(state, intent, transition),
-                        FrontierHiveProcessModule::reduceAssaultTransition), intent -> FencedRecoveryAsset.EFFECT);
+                        FrontierHiveProcessModule::reduceAssaultTransition), intent -> FencedRecoveryAsset.EFFECT,
+                retirementAccount(PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT));
+    }
+
+    private static PhysicalIntentRetirementAccount retirementAccount(PhysicalIntentLifecycleOwner owner) {
+        return PhysicalIntentRetirementAccount.declared(owner,
+                java.util.EnumSet.allOf(PhysicalIntentRetirementAccount.Dimension.class),
+                (before, after, intent, transition) -> {
+                    if (intent.lifecycleOwner() != owner) throw new IllegalArgumentException("hive retirement account owner mismatch");
+                });
     }
 
     private static CommandPlan planAssaultPreparation(FrontierWorldState state, PhysicalIntentPrepared prepared) {

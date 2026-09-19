@@ -25,7 +25,8 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
                 FrontierResourceSiteProcessModule::reducePreparationTransition, PhysicalIntentLifecycleRetirementPolicy.of(
                         (state, command, intent, transition) -> new CommandPlan.Accepted(
                                 ResourceSiteProcess.planPreparationTransition(state, intent, transition, command.submittedAt().ticks())),
-                        FrontierResourceSiteProcessModule::reducePreparationTransition), intent -> FencedRecoveryAsset.EFFECT),
+                        FrontierResourceSiteProcessModule::reducePreparationTransition), intent -> FencedRecoveryAsset.EFFECT,
+                retirementAccount(PhysicalIntentLifecycleOwner.RESOURCE_SITE_PREPARATION)),
                 new FunctionalPhysicalIntentLifecycleCapability(
                 PhysicalIntentLifecycleOwner.RESOURCE_SITE_HARVEST,
                 Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.RESOURCE_SITE_HARVEST),
@@ -35,7 +36,16 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
                 ResourceSiteHarvestProcess::reducePrepared,
                 FrontierResourceSiteProcessModule::reduceHarvestTransition, PhysicalIntentLifecycleRetirementPolicy.of(
                         FrontierResourceSiteProcessModule::planHarvestRetirement,
-                        FrontierResourceSiteProcessModule::reduceHarvestTransition), intent -> FencedRecoveryAsset.EFFECT));
+                        FrontierResourceSiteProcessModule::reduceHarvestTransition), intent -> FencedRecoveryAsset.EFFECT,
+                retirementAccount(PhysicalIntentLifecycleOwner.RESOURCE_SITE_HARVEST)));
+    }
+
+    private static PhysicalIntentRetirementAccount retirementAccount(PhysicalIntentLifecycleOwner owner) {
+        return PhysicalIntentRetirementAccount.declared(owner,
+                java.util.EnumSet.allOf(PhysicalIntentRetirementAccount.Dimension.class),
+                (before, after, intent, transition) -> {
+                    if (intent.lifecycleOwner() != owner) throw new IllegalArgumentException("resource-site retirement account owner mismatch");
+                });
     }
 
     private static FrontierWorldState reducePreparationTransition(FrontierWorldState state,

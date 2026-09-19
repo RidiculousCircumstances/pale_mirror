@@ -34,7 +34,10 @@ final class PhysicalIntentLifecycleCapabilities {
         for (FrontierWorldProcessModule module : modules) {
             for (PhysicalIntentLifecycleCapability capability : module.physicalIntentLifecycleCapabilities()) {
                 if (capability == null || capability.owner() == null || capability.compatibleKinds() == null
-                        || capability.retirementPolicy() == null) {
+                        || capability.retirementPolicy() == null || capability.retirementAccount() == null
+                        || capability.retirementAccount().owner() != capability.owner()
+                        || !capability.retirementAccount().checkedDimensions()
+                        .containsAll(EnumSet.allOf(PhysicalIntentRetirementAccount.Dimension.class))) {
                     throw new IllegalArgumentException("physical lifecycle composition contains an undeclared capability");
                 }
                 if (capabilities.putIfAbsent(capability.owner(), capability) != null) {
@@ -63,8 +66,10 @@ final class PhysicalIntentLifecycleCapabilities {
                                PhysicalIntentTransition transition) {
         PhysicalIntentLifecycleCapability capability = capability(intent);
         try {
-            return retires(transition) ? capability.retirementPolicy().plan(state, command, intent, transition)
+            CommandPlan plan = retires(transition) ? capability.retirementPolicy().plan(state, command, intent, transition)
                     : capability.planTransition(state, command, intent, transition);
+            if (retires(transition)) capability.retirementAccount().verifyPlan(command, intent, transition, plan);
+            return plan;
         } catch (IllegalArgumentException invalid) {
             return new CommandPlan.Rejected(new CommandRejection(RejectionCode.REJECTED_BY_POLICY, invalid.getMessage()));
         }
@@ -83,8 +88,10 @@ final class PhysicalIntentLifecycleCapabilities {
         FrontierWorldState reduced = retires(transition)
                 ? capability.retirementPolicy().reduce(state, subject, intent, transition)
                 : capability.reduceTransition(state, subject, intent, transition);
-        return reduced.withChanges(FrontierWorldStateUpdate.begin().fencedRecovery(
+        FrontierWorldState fenced = reduced.withChanges(FrontierWorldStateUpdate.begin().fencedRecovery(
                 FencedRecoveryPhysicalIntentSupport.transition(state.fencedRecovery(), intent, transition.status(), capability.recoveryAsset(intent))));
+        if (retires(transition)) capability.retirementAccount().verifyReduced(state, fenced, intent, transition);
+        return fenced;
     }
 
 

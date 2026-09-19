@@ -40,7 +40,8 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
                                 throw new IllegalArgumentException("resident birth consumption retirement lacks settlement ownership");
                             }
                             return reducePopulationConsumption(state, intent, transition);
-                        }), intent -> FencedRecoveryAsset.EFFECT);
+                        }), intent -> FencedRecoveryAsset.EFFECT,
+                retirementAccount(PhysicalIntentLifecycleOwner.POPULATION_MIGRATION));
     }
 
     private static PhysicalIntentLifecycleCapability medicalConsumptionCapability() {
@@ -85,7 +86,8 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
                             }
                             MedicalTreatmentProcess.operationForIntent(state, intent);
                             return reducePopulationConsumption(state, intent, transition);
-                        }), intent -> FencedRecoveryAsset.EFFECT);
+                        }), intent -> FencedRecoveryAsset.EFFECT,
+                retirementAccount(PhysicalIntentLifecycleOwner.MEDICAL_TREATMENT));
     }
 
     private static PhysicalIntentLifecycleCapability provisionConsumptionCapability() {
@@ -108,7 +110,16 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
                                 throw new IllegalArgumentException("settlement provision consumption retirement lacks settlement ownership");
                             }
                             return reducePopulationConsumption(state, intent, transition);
-                }), intent -> FencedRecoveryAsset.EFFECT);
+                }), intent -> FencedRecoveryAsset.EFFECT,
+                retirementAccount(PhysicalIntentLifecycleOwner.SETTLEMENT_PROVISION));
+    }
+
+    private static PhysicalIntentRetirementAccount retirementAccount(PhysicalIntentLifecycleOwner owner) {
+        return PhysicalIntentRetirementAccount.declared(owner,
+                java.util.EnumSet.allOf(PhysicalIntentRetirementAccount.Dimension.class),
+                (before, after, intent, transition) -> {
+                    if (intent.lifecycleOwner() != owner) throw new IllegalArgumentException("population retirement account owner mismatch");
+                });
     }
 
     /** Population-owned exact-consumption terminal reduction; no aggregate kind dispatch participates. */

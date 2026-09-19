@@ -45,11 +45,30 @@ class PhysicalIntentLifecycleCompositionTest {
         FrontierWorldProcessModule missingRetirement = module(Arrays.stream(PhysicalIntentLifecycleOwner.values())
                 .map(owner -> capability(owner, supported(owner), owner == first ? null
                         : PhysicalIntentLifecycleRetirementPolicy.noPhysical(owner))).toList());
+        FrontierWorldProcessModule missingAccount = module(Arrays.stream(PhysicalIntentLifecycleOwner.values())
+                .map(owner -> capability(owner, supported(owner), PhysicalIntentLifecycleRetirementPolicy.noPhysical(owner),
+                        owner == first ? null : account(owner))).toList());
+        FrontierWorldProcessModule mismatchedAccount = module(Arrays.stream(PhysicalIntentLifecycleOwner.values())
+                .map(owner -> capability(owner, supported(owner), PhysicalIntentLifecycleRetirementPolicy.noPhysical(owner),
+                        owner == first ? account(PhysicalIntentLifecycleOwner.RESOURCE_SITE_PREPARATION) : account(owner))).toList());
+        PhysicalIntentRetirementAccount incomplete = new PhysicalIntentRetirementAccount() {
+            @Override public PhysicalIntentLifecycleOwner owner() { return first; }
+            @Override public java.util.EnumSet<Dimension> checkedDimensions() { return java.util.EnumSet.noneOf(Dimension.class); }
+            @Override public void verifyOwnerState(io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState before,
+                                                   io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState after,
+                                                   PhysicalIntent intent, PhysicalIntentTransition transition) { }
+        };
+        FrontierWorldProcessModule incompleteAccount = module(Arrays.stream(PhysicalIntentLifecycleOwner.values())
+                .map(owner -> capability(owner, supported(owner), PhysicalIntentLifecycleRetirementPolicy.noPhysical(owner),
+                        owner == first ? incomplete : account(owner))).toList());
         assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleCapabilities.compose(List.of(missing)));
         assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleCapabilities.compose(List.of(duplicate)));
         assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleCapabilities.compose(List.of(mismatch)));
         assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleCapabilities.compose(List.of(undeclared)));
         assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleCapabilities.compose(List.of(missingRetirement)));
+        assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleCapabilities.compose(List.of(missingAccount)));
+        assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleCapabilities.compose(List.of(mismatchedAccount)));
+        assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleCapabilities.compose(List.of(incompleteAccount)));
     }
 
     @Test
@@ -96,7 +115,21 @@ class PhysicalIntentLifecycleCompositionTest {
 
     private static PhysicalIntentLifecycleCapability capability(PhysicalIntentLifecycleOwner owner, Set<PhysicalIntentKind> kinds,
                                                                  PhysicalIntentLifecycleRetirementPolicy retirementPolicy) {
-        return new AbstractPhysicalIntentLifecycleCapability(owner, kinds, retirementPolicy) { };
+        return capability(owner, kinds, retirementPolicy, account(owner));
+    }
+
+    private static PhysicalIntentLifecycleCapability capability(PhysicalIntentLifecycleOwner owner, Set<PhysicalIntentKind> kinds,
+                                                                 PhysicalIntentLifecycleRetirementPolicy retirementPolicy,
+                                                                 PhysicalIntentRetirementAccount account) {
+        return new AbstractPhysicalIntentLifecycleCapability(owner, kinds, retirementPolicy, account) { };
+    }
+
+    private static PhysicalIntentRetirementAccount account(PhysicalIntentLifecycleOwner owner) {
+        return PhysicalIntentRetirementAccount.declared(owner,
+                java.util.EnumSet.allOf(PhysicalIntentRetirementAccount.Dimension.class),
+                (before, after, intent, transition) -> {
+                    if (intent.lifecycleOwner() != owner) throw new IllegalArgumentException("test owner mismatch");
+                });
     }
 
     private static Set<PhysicalIntentKind> supported(PhysicalIntentLifecycleOwner owner) {

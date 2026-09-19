@@ -25,6 +25,8 @@ interface PhysicalIntentLifecycleCapability {
     /** Explicit executable terminal/late-input policy supplied by this owner's family. */
     PhysicalIntentLifecycleRetirementPolicy retirementPolicy();
 
+    PhysicalIntentRetirementAccount retirementAccount();
+
     /** Family-supplied fence asset; common lifecycle storage may validate it but never infer it from kind. */
     FencedRecoveryAsset recoveryAsset(PhysicalIntent intent);
 
