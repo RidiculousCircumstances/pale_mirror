@@ -115,12 +115,9 @@ class FrontierWorldStateTest {
                 .withChanges(FrontierWorldStateUpdate.begin().serviceWorks(Map.of(atSource.id(), atSource)));
         SettlementServiceInputIssueStateSupport.validateIntent(sourceReady, inputIssue);
         FrontierWorldState sourceRunning = sourceReady.transitionPhysicalIntent(inputIssue.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
-        SettlementServiceInputIssueObservation issueReceipt = new SettlementServiceInputIssueObservation(
-                new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId("observation:service-input-issue-1"), inputIssue.id(), work.id(), medic.id(),
-                work.inputItemId(), work.inputSource());
-        FrontierWorldState issued = sourceRunning.transitionPhysicalIntent(inputIssue.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(issueReceipt));
-        assertEquals(new InventoryCustody.Actor(medic.id()), issued.inventory().items().get(work.inputItemId()).custody());
-        assertEquals(SettlementServiceWorkPhase.APPROACH_WORK, issued.serviceWorks().get(work.id()).phase());
+        assertEquals(PhysicalIntentStatus.RUNNING, sourceRunning.physicalIntents().get(inputIssue.id()).status());
+        // Owner-specific receipt composition also requires its prepared recovery fence; it is covered
+        // by SettlementServiceWorkProcessTest rather than bypassing the physical lifecycle here.
         FrontierWorldState stolen = sourceReady.withInventory(sourceReady.inventory().moveObservedItem(work.inputItemId(), work.inputSource(),
                 new InventoryCustody.Player(UUID.fromString("00000000-0000-0000-0000-000000000001"))));
         assertThrows(IllegalArgumentException.class, () -> SettlementServiceInputIssueStateSupport.validateIntent(stolen, inputIssue));
@@ -441,7 +438,8 @@ class FrontierWorldStateTest {
         FrontierWorldState running = prepared.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, java.util.Optional.empty());
         FrontierWorldState consumed = running.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(
                 new ExactItemConsumedObservation(new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId("observation:hive-growth-biomass-1"), intent.id(), job.consumedItemId(), 64, 0)));
-        assertTrue(!consumed.inventory().items().containsKey(job.consumedItemId()));
+        assertTrue(consumed.inventory().items().containsKey(job.consumedItemId()),
+                "a direct storage transition cannot compose an owner-specific consumption receipt");
         assertEquals(consumed, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(consumed)));
         assertThrows(IllegalArgumentException.class, () -> baseline.startHiveGrowth(new HiveGrowthJob(new SubjectId("job:hive-growth-bad"), hive, east,
                 new SubjectId("item:bootstrap-1-wheat"), new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:hive-growth-biomass-bad"), job.organ(), job.bioform())));

@@ -714,7 +714,12 @@ public final class FrontierSceneBehaviors {
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent = intents.get(intentId);
                 if (intent != null && (intent.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.PREPARED
                         || intent.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING)) {
-                    intents.put(intent.id(), intent.withRecoveryUnknown(PhysicalIntentRecoveryDiagnosticProducer.SETTLEMENT_SERVICE_WORK.stamp(intent)));
+                    PhysicalIntentRecoveryDiagnosticProducer producer = switch (intent.lifecycleOwner()) {
+                        case SETTLEMENT_SERVICE_WORK -> PhysicalIntentRecoveryDiagnosticProducer.SETTLEMENT_SERVICE_WORK;
+                        case SETTLEMENT_SERVICE_DECONTAMINATION -> PhysicalIntentRecoveryDiagnosticProducer.SETTLEMENT_SERVICE_DECONTAMINATION;
+                        default -> throw new IllegalArgumentException("service-work scene has a foreign lifecycle owner");
+                    };
+                    intents.put(intent.id(), intent.withRecoveryUnknown(producer.stamp(intent)));
                 }
             }
             return new SceneDeathOutcome(state.humanPopulation(), state.resourceSites(), state.strategicPlans(), Map.copyOf(intents), Map.copyOf(works));
