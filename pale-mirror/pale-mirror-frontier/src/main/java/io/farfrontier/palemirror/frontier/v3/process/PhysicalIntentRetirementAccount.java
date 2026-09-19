@@ -35,17 +35,16 @@ interface PhysicalIntentRetirementAccount {
      * pre-state and the engine command that is already crossing this transaction boundary.
      */
     record Binding(PhysicalIntentLifecycleOwner owner, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId intentId,
-                   List<FrontierDomainRelationships.Edge> relations, Obligation<ScheduleId> continuation,
+                   Obligation<List<FrontierDomainRelationships.Edge>> relations, Obligation<ScheduleId> continuation,
                    Obligation<SubjectId> leaseOrCarrier, Obligation<SubjectId> commitment,
                    LateDisposition lateDisposition) {
         public Binding {
             Objects.requireNonNull(owner, "retirement binding owner"); Objects.requireNonNull(intentId, "retirement binding intent");
-            relations = List.copyOf(Objects.requireNonNull(relations, "retirement binding relations"));
+            Objects.requireNonNull(relations, "retirement binding relations");
             Objects.requireNonNull(continuation, "retirement binding continuation");
             Objects.requireNonNull(leaseOrCarrier, "retirement binding lease/carrier");
             Objects.requireNonNull(commitment, "retirement binding commitment");
             Objects.requireNonNull(lateDisposition, "retirement binding late disposition");
-            if (relations.stream().distinct().count() != relations.size()) throw new IllegalArgumentException("retirement binding duplicates exact relation");
         }
     }
 
@@ -60,7 +59,7 @@ interface PhysicalIntentRetirementAccount {
     default Binding bind(FrontierWorldState before, FrontierCommand command, PhysicalIntent intent,
                          PhysicalIntentTransition transition) {
         Optional<ScheduleId> schedule = command == null ? Optional.empty() : command.scheduleBinding().map(binding -> binding.action().id());
-        return new Binding(owner(), intent.id(), List.of(), schedule.<Obligation<ScheduleId>>map(Exact::new)
+        return new Binding(owner(), intent.id(), new CheckedNone<>(owner().stableId() + " has no current REL-001 retirement edge"), schedule.<Obligation<ScheduleId>>map(Exact::new)
                 .orElseGet(() -> new CheckedNone<>("no engine continuation bound to this terminal command")),
                 new CheckedNone<>("owner declares no lease/carrier obligation"),
                 new CheckedNone<>("owner declares no resource commitment obligation"), lateDisposition(transition));
@@ -77,14 +76,14 @@ interface PhysicalIntentRetirementAccount {
         if (binding.owner() != owner() || !binding.intentId().equals(intent.id())) {
             throw new IllegalArgumentException("retirement account does not bind its exact owner intent");
         }
-        for (FrontierDomainRelationships.Edge relation : binding.relations()) {
+        for (FrontierDomainRelationships.Edge relation : exactRelations(binding.relations())) {
             if (relation == null) throw new IllegalArgumentException("retirement account has a null relation binding");
             if (!FrontierDomainRelationships.view(before).edges().contains(relation)) {
                 throw new IllegalArgumentException("retirement account binds a relation absent from authoritative pre-state");
             }
         }
-        validateObligation(binding.leaseOrCarrier(), binding.relations(), "lease/carrier");
-        validateObligation(binding.commitment(), binding.relations(), "resource commitment");
+        validateObligation(binding.leaseOrCarrier(), exactRelations(binding.relations()), "lease/carrier");
+        validateObligation(binding.commitment(), exactRelations(binding.relations()), "resource commitment");
         if (binding.continuation() instanceof Exact<ScheduleId> expected) {
             long matching = accepted.events().stream().map(event -> event.payload()).filter(ScheduleEffect.class::isInstance)
                     .map(ScheduleEffect.class::cast).filter(effect -> affects(effect, expected.value())).count();
@@ -107,13 +106,13 @@ interface PhysicalIntentRetirementAccount {
         if (binding.owner() != owner() || !binding.intentId().equals(intent.id()) || binding.lateDisposition() != lateDisposition(transition)) {
             throw new IllegalArgumentException("retirement account does not retain its terminal owner/intent/disposition binding");
         }
-        for (FrontierDomainRelationships.Edge relation : binding.relations()) {
+        for (FrontierDomainRelationships.Edge relation : exactRelations(binding.relations())) {
             if (!FrontierDomainRelationships.view(before).edges().contains(relation)) {
                 throw new IllegalArgumentException("retirement account relation is not an authoritative pre-state edge");
             }
         }
-        validateObligation(binding.leaseOrCarrier(), binding.relations(), "lease/carrier");
-        validateObligation(binding.commitment(), binding.relations(), "resource commitment");
+        validateObligation(binding.leaseOrCarrier(), exactRelations(binding.relations()), "lease/carrier");
+        validateObligation(binding.commitment(), exactRelations(binding.relations()), "resource commitment");
         PhysicalIntent terminal = after.physicalIntents().get(intent.id());
         if (terminal == null || terminal.status() != transition.status()) throw new IllegalArgumentException("retirement account lost its exact terminal intent");
         var bindingId = FencedRecoveryPhysicalIntentSupport.bindingId(intent);
@@ -174,7 +173,7 @@ interface PhysicalIntentRetirementAccount {
     private static Binding defaultBinding(PhysicalIntentLifecycleOwner owner, FrontierCommand command, PhysicalIntent intent,
                                           PhysicalIntentTransition transition) {
         Optional<ScheduleId> schedule = command == null ? Optional.empty() : command.scheduleBinding().map(binding -> binding.action().id());
-        return new Binding(owner, intent.id(), List.of(), schedule.<Obligation<ScheduleId>>map(Exact::new)
+        return new Binding(owner, intent.id(), new CheckedNone<>(owner.stableId() + " has no current REL-001 retirement edge"), schedule.<Obligation<ScheduleId>>map(Exact::new)
                 .orElseGet(() -> new CheckedNone<>("no engine continuation bound to this terminal command")),
                 new CheckedNone<>(owner.stableId() + " has no retained lease/carrier obligation in the current owner contract"),
                 new CheckedNone<>(owner.stableId() + " has no retained resource commitment in the current owner contract"), lateDisposition(transition));
@@ -188,6 +187,17 @@ interface PhysicalIntentRetirementAccount {
         if (obligation instanceof Exact<SubjectId> exact && relations.stream().noneMatch(edge -> endpointIs(edge, exact.value()))) {
             throw new IllegalArgumentException("retirement account " + dimension + " is not bound by one of its exact relations");
         }
+    }
+
+    private static List<FrontierDomainRelationships.Edge> exactRelations(Obligation<List<FrontierDomainRelationships.Edge>> relations) {
+        if (relations instanceof Exact<List<FrontierDomainRelationships.Edge>> exact) {
+            List<FrontierDomainRelationships.Edge> value = List.copyOf(exact.value());
+            if (value.isEmpty() || value.stream().distinct().count() != value.size()) {
+                throw new IllegalArgumentException("exact retirement relation binding must be nonempty and duplicate-free");
+            }
+            return value;
+        }
+        return List.of();
     }
 
     private static boolean endpointIs(FrontierDomainRelationships.Edge edge, SubjectId id) {

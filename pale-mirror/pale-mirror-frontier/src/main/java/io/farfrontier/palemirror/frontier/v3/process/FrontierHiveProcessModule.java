@@ -160,7 +160,9 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
                 .orElseGet(() -> new PhysicalIntentRetirementAccount.CheckedNone<>("hive terminal command has no engine continuation"));
         boolean mobilizationExplosion = intent.lifecycleOwner() == PhysicalIntentLifecycleOwner.HIVE_MOBILIZATION
                 && intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXPLOSION;
-        return new PhysicalIntentRetirementAccount.Binding(intent.lifecycleOwner(), intent.id(), List.of(), continuation,
+        return new PhysicalIntentRetirementAccount.Binding(intent.lifecycleOwner(), intent.id(), new PhysicalIntentRetirementAccount.CheckedNone<>(mobilizationExplosion
+                        ? "hive mobilization roster is unaffected by its physical explosion retirement"
+                        : "hive owner has no current REL-001 retirement edge"), continuation,
                 new PhysicalIntentRetirementAccount.CheckedNone<>(mobilizationExplosion
                         ? "hive mobilization roster is unaffected by its physical explosion retirement"
                         : "hive owner has no lease/carrier on this physical endpoint"),
