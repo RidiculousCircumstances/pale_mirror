@@ -2,8 +2,6 @@ package io.farfrontier.palemirror.frontier.v3.process;
 
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
@@ -11,7 +9,6 @@ import io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryAsset;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentPrepared;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;
 
-import java.util.Set;
 
 /** Wiring adapter only; every callback is supplied by the owning family module. */
 final class FunctionalPhysicalIntentLifecycleCapability extends AbstractPhysicalIntentLifecycleCapability {
@@ -27,13 +24,13 @@ final class FunctionalPhysicalIntentLifecycleCapability extends AbstractPhysical
     private final TransitionReducer transitionReducer;
     private final RecoveryAssetResolver recoveryAssetResolver;
 
-    FunctionalPhysicalIntentLifecycleCapability(PhysicalIntentLifecycleOwner owner, Set<PhysicalIntentKind> kinds,
+    FunctionalPhysicalIntentLifecycleCapability(PhysicalIntentLifecycleDeclaration declaration,
                                                 PreparedPlanner preparedPlanner, TransitionPlanner transitionPlanner,
                                                 PreparedReducer preparedReducer, TransitionReducer transitionReducer,
                                                 PhysicalIntentLifecycleRetirementPolicy retirementPolicy,
                                                 RecoveryAssetResolver recoveryAssetResolver,
                                                 PhysicalIntentRetirementAccount retirementAccount) {
-        super(owner, kinds, retirementPolicy, retirementAccount);
+        super(declaration, retirementPolicy, retirementAccount);
         this.preparedPlanner = preparedPlanner;
         this.transitionPlanner = transitionPlanner;
         this.preparedReducer = preparedReducer;

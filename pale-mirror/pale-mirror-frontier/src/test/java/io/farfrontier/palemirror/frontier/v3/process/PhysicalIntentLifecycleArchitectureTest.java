@@ -29,9 +29,26 @@ class PhysicalIntentLifecycleArchitectureTest {
                 "composition must resolve only the durable explicit owner and fail closed");
         assertTrue(composition.contains("declaration().admits(intent)") && composition.contains("requirePreparationCapacity"),
                 "owner/kind/schema admission and visible bounded backpressure must come from the closed capability declaration");
-        assertTrue(Files.readString(process.resolve("PhysicalIntentLifecycleDeclaration.java")).contains("canonicalMaterial")
+        String declaration = Files.readString(process.resolve("PhysicalIntentLifecycleDeclaration.java"));
+        assertTrue(declaration.contains("canonicalMaterial")
                         && Files.readString(process.resolve("FrontierWorldProcessCatalog.java")).contains("physicalLifecycleFingerprint"),
                 "recovery must fence the exact installed lifecycle declaration rather than infer a compatible capability");
+        assertFalse(declaration.contains("PhysicalIntentRoleSchema.values") || declaration.contains("expectedSchemas")
+                        || composition.contains("expectedSchemas") || composition.contains("::supports")
+                        || Files.readString(repositoryRoot().resolve("pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/api/PhysicalIntentLifecycleOwner.java")).contains(" supports("),
+                "composition may validate submitted tuples and global completeness, never discover schemas or compatible kinds");
+        assertTrue(Files.readString(process.resolve("FunctionalPhysicalIntentLifecycleCapability.java"))
+                        .contains("FunctionalPhysicalIntentLifecycleCapability(PhysicalIntentLifecycleDeclaration declaration")
+                        && !Files.readString(process.resolve("AbstractPhysicalIntentLifecycleCapability.java"))
+                        .contains("PhysicalIntentLifecycleDeclaration.declared"),
+                "family construction must require one complete declaration instead of an owner-and-kind bridge");
+        try (Stream<Path> paths = Files.walk(process)) {
+            assertFalse(paths.filter(path -> path.toString().endsWith(".java"))
+                            .map(PhysicalIntentLifecycleArchitectureTest::readUnchecked)
+                            .anyMatch(source -> source.contains("new FunctionalPhysicalIntentLifecycleCapability(PhysicalIntentLifecycleOwner")
+                                    || source.contains("new FunctionalPhysicalIntentLifecycleCapability(\n                PhysicalIntentLifecycleOwner")),
+                    "every executable family must pass a complete declaration at its first lifecycle-capability boundary");
+        }
         assertTrue(composition.contains("retirementPolicy().plan") && composition.contains("retirementPolicy().reduce"),
                 "terminal and late input must execute the owner-supplied retirement boundary");
         assertTrue(Files.readString(process.resolve("PhysicalIntentLifecycleCapability.java")).contains("retirementPolicy()"),

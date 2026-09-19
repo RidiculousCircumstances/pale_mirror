@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.process;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleSchema;
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
@@ -16,8 +17,9 @@ import java.util.Set;
 final class FrontierStrategyProcessModule implements FrontierWorldProcessModule {
     @Override public List<PhysicalIntentLifecycleCapability> physicalIntentLifecycleCapabilities() {
         return List.of(new FunctionalPhysicalIntentLifecycleCapability(
-                PhysicalIntentLifecycleOwner.DECONTAMINATION,
-                Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.DECONTAMINATION),
+                PhysicalIntentLifecycleDeclaration.physical(PhysicalIntentLifecycleOwner.DECONTAMINATION,
+                        Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.DECONTAMINATION),
+                        Set.of(PhysicalIntentRoleSchema.DECONTAMINATION)),
                 (state, command, prepared) -> FrontierWorldCommandPlanner.rejected("physical executor cannot prepare strategic decontamination"),
                 (state, command, intent, transition) -> new CommandPlan.Accepted(
                         DecontaminationProcess.planTransition(state, intent, transition)),

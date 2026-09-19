@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
 import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleSchema;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 
@@ -15,8 +16,9 @@ import java.util.Set;
 final class FrontierSettlementServiceWorkProcessModule implements FrontierWorldProcessModule {
     @Override public List<PhysicalIntentLifecycleCapability> physicalIntentLifecycleCapabilities() {
         return List.of(new FunctionalPhysicalIntentLifecycleCapability(
-                PhysicalIntentLifecycleOwner.SETTLEMENT_SERVICE_WORK,
-                Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SETTLEMENT_SERVICE_INPUT_ISSUE),
+                PhysicalIntentLifecycleDeclaration.physical(PhysicalIntentLifecycleOwner.SETTLEMENT_SERVICE_WORK,
+                        Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SETTLEMENT_SERVICE_INPUT_ISSUE),
+                        Set.of(PhysicalIntentRoleSchema.SERVICE_INPUT_ISSUE)),
                 (state, command, prepared) -> FrontierWorldCommandPlanner.rejected("physical executor cannot prepare settlement service work"),
                 FrontierSettlementServiceWorkProcessModule::planPhysicalTransition,
                 FrontierSettlementServiceWorkProcessModule::reducePhysicalPrepared,
@@ -26,8 +28,9 @@ final class FrontierSettlementServiceWorkProcessModule implements FrontierWorldP
                         FrontierSettlementServiceWorkProcessModule::reducePhysicalTransition), intent -> FencedRecoveryAsset.EFFECT,
                 retirementAccount(PhysicalIntentLifecycleOwner.SETTLEMENT_SERVICE_WORK)),
                 new FunctionalPhysicalIntentLifecycleCapability(
-                        PhysicalIntentLifecycleOwner.SETTLEMENT_SERVICE_DECONTAMINATION,
-                        Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.DECONTAMINATION),
+                        PhysicalIntentLifecycleDeclaration.physical(PhysicalIntentLifecycleOwner.SETTLEMENT_SERVICE_DECONTAMINATION,
+                                Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.DECONTAMINATION),
+                                Set.of(PhysicalIntentRoleSchema.SERVICE_DECONTAMINATION)),
                         (state, command, prepared) -> FrontierWorldCommandPlanner.rejected("physical executor cannot prepare settlement service decontamination"),
                         FrontierSettlementServiceWorkProcessModule::planServiceDecontaminationTransition,
                         FrontierSettlementServiceWorkProcessModule::reduceServiceDecontaminationPreparation,

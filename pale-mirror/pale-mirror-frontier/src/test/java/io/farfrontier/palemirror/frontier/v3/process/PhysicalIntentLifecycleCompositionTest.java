@@ -48,8 +48,6 @@ class PhysicalIntentLifecycleCompositionTest {
         PhysicalIntentLifecycleOwner first = PhysicalIntentLifecycleOwner.RESOURCE_SITE_HARVEST;
         FrontierWorldProcessModule missing = module(List.of(capability(first, supported(first))));
         FrontierWorldProcessModule duplicate = module(List.of(capability(first, supported(first)), capability(first, supported(first))));
-        FrontierWorldProcessModule mismatch = module(List.of(capability(PhysicalIntentLifecycleOwner.RESOURCE_SITE_HARVEST,
-                Set.of(PhysicalIntentKind.SCENE_STRIKE))));
         FrontierWorldProcessModule undeclared = new FrontierWorldProcessModule() {
             @Override public List<PhysicalIntentLifecycleCapability> physicalIntentLifecycleCapabilities() {
                 return java.util.Collections.singletonList(null);
@@ -81,23 +79,32 @@ class PhysicalIntentLifecycleCompositionTest {
         FrontierWorldProcessModule incompleteAccount = module(Arrays.stream(PhysicalIntentLifecycleOwner.values())
                 .map(owner -> capability(owner, supported(owner), PhysicalIntentLifecycleRetirementPolicy.noPhysical(owner),
                         owner == first ? incomplete : account(owner))).toList());
-        FrontierWorldProcessModule mismatchedSchema = module(Arrays.stream(PhysicalIntentLifecycleOwner.values())
-                .map(owner -> owner == first ? capabilityWithDeclaration(owner, supported(owner),
-                        new PhysicalIntentLifecycleDeclaration(owner, PhysicalIntentLifecycleDeclaration.VERSION,
-                                Set.of(PhysicalIntentRoleSchema.RESOURCE_SITE_PREPARATION), 256, 256))
-                        : capability(owner, supported(owner))).toList());
         assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleCapabilities.compose(List.of(missing)));
         assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleCapabilities.compose(List.of(duplicate)));
-        assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleCapabilities.compose(List.of(mismatch)));
         assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleCapabilities.compose(List.of(undeclared)));
         assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleCapabilities.compose(List.of(missingRetirement)));
         assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleCapabilities.compose(List.of(missingAccount)));
         assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleCapabilities.compose(List.of(mismatchedAccount)));
         assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleCapabilities.compose(List.of(incompleteAccount)));
-        assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleCapabilities.compose(List.of(mismatchedSchema)));
         assertThrows(IllegalArgumentException.class, () -> new PhysicalIntentLifecycleDeclaration(first,
-                PhysicalIntentLifecycleDeclaration.VERSION + 1, Set.of(PhysicalIntentRoleSchema.RESOURCE_SITE_HARVEST), 256, 256),
+                PhysicalIntentLifecycleDeclaration.VERSION + 1, supported(first), Set.of(PhysicalIntentRoleSchema.RESOURCE_SITE_HARVEST), 256, 256),
                 "a stale declaration version must fail before the capability can compose");
+        assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleDeclaration.physical(first, supported(first), Set.of()),
+                "owner-and-kind construction without an exact role schema must fail before composition");
+        assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleDeclaration.physical(first, supported(first),
+                        Set.of(PhysicalIntentRoleSchema.RESOURCE_SITE_PREPARATION)),
+                "a foreign owner/kind/schema tuple must fail at declaration construction, not be repaired by discovery");
+        assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleDeclaration.physical(first,
+                        Set.of(PhysicalIntentKind.SCENE_STRIKE), Set.of(PhysicalIntentRoleSchema.RESOURCE_SITE_HARVEST)),
+                "a mismatched supplied kind must fail at declaration construction, not select a compatible capability");
+        assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleDeclaration.physical(first,
+                        Set.of(PhysicalIntentKind.RESOURCE_SITE_HARVEST, PhysicalIntentKind.SCENE_STRIKE),
+                        Set.of(PhysicalIntentRoleSchema.RESOURCE_SITE_HARVEST)),
+                "an extra kind without an exact schema must fail rather than becoming a partial compatible declaration");
+        assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleDeclaration.physical(
+                        PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE,
+                        supported(PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE), Set.of(PhysicalIntentRoleSchema.STRUCTURAL_REPAIR)),
+                "a partial owner declaration must fail at its boundary before composition can discover missing schemas");
     }
 
     @Test
@@ -286,14 +293,7 @@ class PhysicalIntentLifecycleCompositionTest {
     private static PhysicalIntentLifecycleCapability capability(PhysicalIntentLifecycleOwner owner, Set<PhysicalIntentKind> kinds,
                                                                  PhysicalIntentLifecycleRetirementPolicy retirementPolicy,
                                                                  PhysicalIntentRetirementAccount account) {
-        return new AbstractPhysicalIntentLifecycleCapability(owner, kinds, retirementPolicy, account) { };
-    }
-
-    private static PhysicalIntentLifecycleCapability capabilityWithDeclaration(PhysicalIntentLifecycleOwner owner, Set<PhysicalIntentKind> kinds,
-                                                                                PhysicalIntentLifecycleDeclaration declaration) {
-        return new AbstractPhysicalIntentLifecycleCapability(owner, kinds, PhysicalIntentLifecycleRetirementPolicy.noPhysical(owner), account(owner)) {
-            @Override public PhysicalIntentLifecycleDeclaration declaration() { return declaration; }
-        };
+        return new AbstractPhysicalIntentLifecycleCapability(declaration(owner, kinds), retirementPolicy, account) { };
     }
 
     private static PhysicalIntentRetirementAccount account(PhysicalIntentLifecycleOwner owner) {
@@ -321,6 +321,16 @@ class PhysicalIntentLifecycleCompositionTest {
     }
 
     private static Set<PhysicalIntentKind> supported(PhysicalIntentLifecycleOwner owner) {
-        return Arrays.stream(PhysicalIntentKind.values()).filter(owner::supports).collect(java.util.stream.Collectors.toUnmodifiableSet());
+        return Arrays.stream(PhysicalIntentRoleSchema.values()).filter(schema -> schema.owner() == owner)
+                .map(PhysicalIntentRoleSchema::kind).collect(java.util.stream.Collectors.toUnmodifiableSet());
+    }
+
+    /** Test-only complete fixture; production must supply these sets at each family boundary. */
+    private static PhysicalIntentLifecycleDeclaration declaration(PhysicalIntentLifecycleOwner owner, Set<PhysicalIntentKind> kinds) {
+        Set<PhysicalIntentRoleSchema> schemas = Arrays.stream(PhysicalIntentRoleSchema.values())
+                .filter(schema -> schema.owner() == owner && kinds.contains(schema.kind()))
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        return kinds.isEmpty() ? new PhysicalIntentLifecycleDeclaration(owner, PhysicalIntentLifecycleDeclaration.VERSION, Set.of(), Set.of(), 0, 0)
+                : PhysicalIntentLifecycleDeclaration.physical(owner, kinds, schemas);
     }
 }

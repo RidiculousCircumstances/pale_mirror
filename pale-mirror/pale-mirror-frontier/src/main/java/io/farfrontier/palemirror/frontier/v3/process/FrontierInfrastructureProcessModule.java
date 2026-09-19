@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleSchema;
 import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
@@ -21,7 +22,7 @@ final class FrontierInfrastructureProcessModule implements FrontierWorldProcessM
 
     private static PhysicalIntentLifecycleCapability engineeringCapability() {
         return new FunctionalPhysicalIntentLifecycleCapability(
-                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE,
+                PhysicalIntentLifecycleDeclaration.physical(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE,
                 Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.STRUCTURAL_REPAIR,
                         io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_CONSTRUCTION,
                         io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING,
@@ -29,6 +30,10 @@ final class FrontierInfrastructureProcessModule implements FrontierWorldProcessM
                         io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING,
                         io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_ISSUE,
                         io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_RETURN),
+                        Set.of(PhysicalIntentRoleSchema.STRUCTURAL_REPAIR, PhysicalIntentRoleSchema.ROUTE_CONSTRUCTION,
+                                PhysicalIntentRoleSchema.ROUTE_CONSTRUCTION_LOADING, PhysicalIntentRoleSchema.ROUTE_MAINTENANCE,
+                                PhysicalIntentRoleSchema.ROUTE_MAINTENANCE_LOADING, PhysicalIntentRoleSchema.ENGINEERING_EQUIPMENT_ISSUE,
+                                PhysicalIntentRoleSchema.ENGINEERING_EQUIPMENT_RETURN)),
                 FrontierInfrastructureProcessModule::planEngineeringPreparation,
                 FrontierInfrastructureProcessModule::planEngineeringTransition,
                 FrontierInfrastructureProcessModule::reduceEngineeringPreparation,

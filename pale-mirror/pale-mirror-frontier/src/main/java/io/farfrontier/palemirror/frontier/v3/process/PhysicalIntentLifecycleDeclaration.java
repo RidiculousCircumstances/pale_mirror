@@ -6,7 +6,6 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleSchema;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 
-import java.util.EnumSet;
 import java.util.Objects;
 import java.util.Set;
 
@@ -19,6 +18,7 @@ import java.util.Set;
  * operators may inspect before a producer admits another obligation.</p>
  */
 record PhysicalIntentLifecycleDeclaration(PhysicalIntentLifecycleOwner owner, int version,
+                                          Set<PhysicalIntentKind> kinds,
                                           Set<PhysicalIntentRoleSchema> schemas,
                                           int maxUnresolved, int maxResolvedRetention) {
     static final int VERSION = 1;
@@ -27,35 +27,40 @@ record PhysicalIntentLifecycleDeclaration(PhysicalIntentLifecycleOwner owner, in
 
     PhysicalIntentLifecycleDeclaration {
         owner = Objects.requireNonNull(owner, "physical lifecycle declaration owner");
+        kinds = Set.copyOf(Objects.requireNonNull(kinds, "physical lifecycle declaration kinds"));
         schemas = Set.copyOf(Objects.requireNonNull(schemas, "physical lifecycle declaration schemas"));
         if (version != VERSION) throw new IllegalArgumentException("unsupported physical lifecycle declaration version: " + version);
         if (maxUnresolved < 0 || maxResolvedRetention < 0) {
             throw new IllegalArgumentException("physical lifecycle retention limits cannot be negative");
         }
+        if (kinds.isEmpty() != schemas.isEmpty() || (kinds.isEmpty() && (maxUnresolved != 0 || maxResolvedRetention != 0))
+                || (!kinds.isEmpty() && (maxUnresolved == 0 || maxResolvedRetention == 0))) {
+            throw new IllegalArgumentException("physical lifecycle declaration has partial physical dimensions");
+        }
+        for (PhysicalIntentRoleSchema schema : schemas) {
+            if (schema.owner() != owner || !kinds.contains(schema.kind())) {
+                throw new IllegalArgumentException("physical lifecycle declaration has foreign owner/kind/schema tuple");
+            }
+        }
+        for (PhysicalIntentKind kind : kinds) {
+            boolean represented = false;
+            for (PhysicalIntentRoleSchema schema : schemas) {
+                if (schema.kind() == kind) { represented = true; break; }
+            }
+            if (!represented) {
+                throw new IllegalArgumentException("physical lifecycle declaration has a kind without an exact role schema");
+            }
+        }
     }
 
-    static PhysicalIntentLifecycleDeclaration declared(PhysicalIntentLifecycleOwner owner,
-                                                        Set<PhysicalIntentKind> kinds) {
-        Objects.requireNonNull(owner, "physical lifecycle declaration owner");
-        kinds = Set.copyOf(Objects.requireNonNull(kinds, "physical lifecycle declaration kinds"));
-        Set<PhysicalIntentRoleSchema> schemas = EnumSet.noneOf(PhysicalIntentRoleSchema.class);
-        for (PhysicalIntentRoleSchema schema : PhysicalIntentRoleSchema.values()) {
-            if (schema.owner() == owner && kinds.contains(schema.kind())) schemas.add(schema);
-        }
-        return new PhysicalIntentLifecycleDeclaration(owner, VERSION, schemas,
-                kinds.isEmpty() ? 0 : MAX_PER_OWNER, kinds.isEmpty() ? 0 : MAX_PER_OWNER);
-    }
-
-    static Set<PhysicalIntentRoleSchema> expectedSchemas(PhysicalIntentLifecycleOwner owner) {
-        Set<PhysicalIntentRoleSchema> schemas = EnumSet.noneOf(PhysicalIntentRoleSchema.class);
-        for (PhysicalIntentRoleSchema schema : PhysicalIntentRoleSchema.values()) {
-            if (schema.owner() == owner) schemas.add(schema);
-        }
-        return Set.copyOf(schemas);
+    /** Family construction supplies every identity dimension; this factory never discovers one. */
+    static PhysicalIntentLifecycleDeclaration physical(PhysicalIntentLifecycleOwner owner, Set<PhysicalIntentKind> kinds,
+                                                        Set<PhysicalIntentRoleSchema> schemas) {
+        return new PhysicalIntentLifecycleDeclaration(owner, VERSION, kinds, schemas, MAX_PER_OWNER, MAX_PER_OWNER);
     }
 
     boolean admits(PhysicalIntent intent) {
-        return intent.lifecycleOwner() == owner && schemas.contains(intent.roles().schema())
+        return intent.lifecycleOwner() == owner && kinds.contains(intent.kind()) && schemas.contains(intent.roles().schema())
                 && intent.roles().schema().kind() == intent.kind();
     }
 
@@ -65,7 +70,8 @@ record PhysicalIntentLifecycleDeclaration(PhysicalIntentLifecycleOwner owner, in
     }
 
     String canonicalMaterial() {
-        return owner.stableId() + ':' + version + ':' + maxUnresolved + ':' + maxResolvedRetention + ':'
+        return owner.stableId() + ':' + version + ':' + kinds.stream().map(Enum::name).sorted()
+                .collect(java.util.stream.Collectors.joining(",")) + ':' + maxUnresolved + ':' + maxResolvedRetention + ':'
                 + schemas.stream().map(PhysicalIntentRoleSchema::wireTag).sorted()
                 .map(String::valueOf).collect(java.util.stream.Collectors.joining(","));
     }

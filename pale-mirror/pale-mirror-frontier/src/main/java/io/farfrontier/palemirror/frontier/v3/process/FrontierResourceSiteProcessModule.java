@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleSchema;
 import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
@@ -16,8 +17,9 @@ import java.util.Set;
 final class FrontierResourceSiteProcessModule implements FrontierWorldProcessModule {
     @Override public List<PhysicalIntentLifecycleCapability> physicalIntentLifecycleCapabilities() {
         return List.of(new FunctionalPhysicalIntentLifecycleCapability(
-                PhysicalIntentLifecycleOwner.RESOURCE_SITE_PREPARATION,
-                Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.RESOURCE_SITE_PREPARATION),
+                PhysicalIntentLifecycleDeclaration.physical(PhysicalIntentLifecycleOwner.RESOURCE_SITE_PREPARATION,
+                        Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.RESOURCE_SITE_PREPARATION),
+                        Set.of(PhysicalIntentRoleSchema.RESOURCE_SITE_PREPARATION)),
                 (state, command, prepared) -> new CommandPlan.Accepted(List.of(new ProposedEvent(prepared.intent().causeSubjectId(), prepared))),
                 (state, command, intent, transition) -> new CommandPlan.Accepted(
                         ResourceSiteProcess.planPreparationTransition(state, intent, transition, command.submittedAt().ticks())),
@@ -28,8 +30,9 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
                         FrontierResourceSiteProcessModule::reducePreparationTransition), intent -> FencedRecoveryAsset.EFFECT,
                 retirementAccount(PhysicalIntentLifecycleOwner.RESOURCE_SITE_PREPARATION)),
                 new FunctionalPhysicalIntentLifecycleCapability(
-                PhysicalIntentLifecycleOwner.RESOURCE_SITE_HARVEST,
-                Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.RESOURCE_SITE_HARVEST),
+                PhysicalIntentLifecycleDeclaration.physical(PhysicalIntentLifecycleOwner.RESOURCE_SITE_HARVEST,
+                        Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.RESOURCE_SITE_HARVEST),
+                        Set.of(PhysicalIntentRoleSchema.RESOURCE_SITE_HARVEST)),
                 (state, command, prepared) -> FrontierWorldCommandPlanner.rejected("physical executor cannot prepare resource-site harvest"),
                 (state, command, intent, transition) -> new CommandPlan.Accepted(
                         ResourceSiteHarvestProcess.planTransition(state, intent, transition, command.submittedAt().ticks())),

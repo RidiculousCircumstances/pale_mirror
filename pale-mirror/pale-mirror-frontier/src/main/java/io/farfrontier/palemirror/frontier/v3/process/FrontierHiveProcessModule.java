@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleSchema;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
@@ -17,13 +18,13 @@ import java.util.Set;
 final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
     @Override public List<PhysicalIntentLifecycleCapability> physicalIntentLifecycleCapabilities() {
         return List.of(explosionCapability(), nutrientTransferCapability(), hiveGrowthCapability(),
-                sceneStrikeCapability(PhysicalIntentLifecycleOwner.ROUTE_ENGAGEMENT),
+                routeSceneStrikeCapability(),
                 settlementAssaultCapability());
     }
 
     private static PhysicalIntentLifecycleCapability explosionCapability() {
-        return new FunctionalPhysicalIntentLifecycleCapability(PhysicalIntentLifecycleOwner.HIVE_MOBILIZATION,
-                Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXPLOSION),
+        return new FunctionalPhysicalIntentLifecycleCapability(PhysicalIntentLifecycleDeclaration.physical(PhysicalIntentLifecycleOwner.HIVE_MOBILIZATION,
+                Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXPLOSION), Set.of(PhysicalIntentRoleSchema.EXPLOSION)),
                 (state, command, prepared) -> {
                     try {
                         ExplosionStateSupport.validateIntent(state, prepared.intent());
@@ -50,9 +51,10 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
     }
 
     private static PhysicalIntentLifecycleCapability nutrientTransferCapability() {
-        return new FunctionalPhysicalIntentLifecycleCapability(PhysicalIntentLifecycleOwner.HIVE_NUTRIENT_TRANSFER,
+        return new FunctionalPhysicalIntentLifecycleCapability(PhysicalIntentLifecycleDeclaration.physical(PhysicalIntentLifecycleOwner.HIVE_NUTRIENT_TRANSFER,
                 Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.HIVE_NUTRIENT_DEPARTURE,
                         io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.HIVE_NUTRIENT_ARRIVAL),
+                Set.of(PhysicalIntentRoleSchema.NUTRIENT_DEPARTURE, PhysicalIntentRoleSchema.NUTRIENT_ARRIVAL)),
                 (state, command, prepared) -> {
                     var intent = prepared.intent();
                     boolean owns = state.bootstrap().hive().id().equals(intent.causeSubjectId())
@@ -80,8 +82,9 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
     }
 
     private static PhysicalIntentLifecycleCapability hiveGrowthCapability() {
-        return new FunctionalPhysicalIntentLifecycleCapability(PhysicalIntentLifecycleOwner.HIVE_GROWTH,
+        return new FunctionalPhysicalIntentLifecycleCapability(PhysicalIntentLifecycleDeclaration.physical(PhysicalIntentLifecycleOwner.HIVE_GROWTH,
                 Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXACT_ITEM_CONSUMPTION),
+                Set.of(PhysicalIntentRoleSchema.HIVE_GROWTH_CONSUMPTION)),
                 (state, command, prepared) -> FrontierWorldCommandPlanner.rejected("physical executor cannot prepare hive growth consumption"),
                 (state, command, intent, transition) -> new CommandPlan.Accepted(HiveGrowthProcess.planTransition(
                         state, intent, transition, command.submittedAt().ticks())),
@@ -101,9 +104,10 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
                 retirementAccount(PhysicalIntentLifecycleOwner.HIVE_GROWTH));
     }
 
-    private static PhysicalIntentLifecycleCapability sceneStrikeCapability(PhysicalIntentLifecycleOwner owner) {
-        return new FunctionalPhysicalIntentLifecycleCapability(owner,
+    private static PhysicalIntentLifecycleCapability routeSceneStrikeCapability() {
+        return new FunctionalPhysicalIntentLifecycleCapability(PhysicalIntentLifecycleDeclaration.physical(PhysicalIntentLifecycleOwner.ROUTE_ENGAGEMENT,
                 Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE),
+                Set.of(PhysicalIntentRoleSchema.ROUTE_SCENE_STRIKE)),
                 (state, command, prepared) -> {
                     try {
                         SceneStrikeStateSupport.validateIntent(state, prepared.intent());
@@ -126,14 +130,16 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
                             if (!subject.equals(SceneStrikeStateSupport.owner(state, intent))) throw new IllegalArgumentException("scene strike retirement lacks exact scene ownership");
                             return reduceSceneStrikeTransition(state, intent, transition);
                         }), intent -> FencedRecoveryAsset.EFFECT,
-                retirementAccount(owner));
+                retirementAccount(PhysicalIntentLifecycleOwner.ROUTE_ENGAGEMENT));
     }
 
     private static PhysicalIntentLifecycleCapability settlementAssaultCapability() {
-        return new FunctionalPhysicalIntentLifecycleCapability(PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT,
+        return new FunctionalPhysicalIntentLifecycleCapability(PhysicalIntentLifecycleDeclaration.physical(PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT,
                 Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE,
                         io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_ISSUE,
                         io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_RETURN),
+                Set.of(PhysicalIntentRoleSchema.ASSAULT_SCENE_STRIKE, PhysicalIntentRoleSchema.ASSAULT_EQUIPMENT_ISSUE,
+                        PhysicalIntentRoleSchema.ASSAULT_EQUIPMENT_RETURN)),
                 (state, command, prepared) -> planAssaultPreparation(state, prepared),
                 (state, command, intent, transition) -> planAssaultTransition(state, intent, transition),
                 FrontierHiveProcessModule::reduceAssaultPreparation,

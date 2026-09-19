@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleSchema;
 import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
@@ -18,9 +19,10 @@ import java.util.Set;
 final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule {
     @Override public List<PhysicalIntentLifecycleCapability> physicalIntentLifecycleCapabilities() {
         return List.of(new FunctionalPhysicalIntentLifecycleCapability(
-                PhysicalIntentLifecycleOwner.ROUTE_OPERATION,
+                PhysicalIntentLifecycleDeclaration.physical(PhysicalIntentLifecycleOwner.ROUTE_OPERATION,
                 Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_LOADING,
                         io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_HANDOFF),
+                        Set.of(PhysicalIntentRoleSchema.CARGO_LOADING, PhysicalIntentRoleSchema.CARGO_HANDOFF)),
                 (state, command, prepared) -> FrontierWorldCommandPlanner.rejected("physical executor cannot prepare route operation work"),
                 FrontierLogisticsProcessModule::planPhysicalTransition,
                 FrontierLogisticsProcessModule::reducePhysicalPrepared,

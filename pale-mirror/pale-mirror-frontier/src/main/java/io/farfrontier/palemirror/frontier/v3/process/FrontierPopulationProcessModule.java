@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleSchema;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
@@ -19,8 +20,9 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
     }
 
     private static PhysicalIntentLifecycleCapability birthConsumptionCapability() {
-        return new FunctionalPhysicalIntentLifecycleCapability(PhysicalIntentLifecycleOwner.POPULATION_MIGRATION,
+        return new FunctionalPhysicalIntentLifecycleCapability(PhysicalIntentLifecycleDeclaration.physical(PhysicalIntentLifecycleOwner.POPULATION_MIGRATION,
                 Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXACT_ITEM_CONSUMPTION),
+                Set.of(PhysicalIntentRoleSchema.POPULATION_BIRTH_CONSUMPTION)),
                 (state, command, prepared) -> FrontierWorldCommandPlanner.rejected("physical executor cannot prepare population consumption"),
                 (state, command, intent, transition) -> new CommandPlan.Accepted(
                         PopulationBirthProcess.planTransition(state, intent, transition, command.submittedAt().ticks())),
@@ -45,8 +47,9 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
     }
 
     private static PhysicalIntentLifecycleCapability medicalConsumptionCapability() {
-        return new FunctionalPhysicalIntentLifecycleCapability(PhysicalIntentLifecycleOwner.MEDICAL_TREATMENT,
+        return new FunctionalPhysicalIntentLifecycleCapability(PhysicalIntentLifecycleDeclaration.physical(PhysicalIntentLifecycleOwner.MEDICAL_TREATMENT,
                 Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXACT_ITEM_CONSUMPTION),
+                Set.of(PhysicalIntentRoleSchema.MEDICAL_TREATMENT_CONSUMPTION)),
                 (state, command, prepared) -> FrontierWorldCommandPlanner.rejected("physical executor cannot prepare medical consumption"),
                 (state, command, intent, transition) -> {
                     if ((transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING
@@ -91,8 +94,9 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
     }
 
     private static PhysicalIntentLifecycleCapability provisionConsumptionCapability() {
-        return new FunctionalPhysicalIntentLifecycleCapability(PhysicalIntentLifecycleOwner.SETTLEMENT_PROVISION,
+        return new FunctionalPhysicalIntentLifecycleCapability(PhysicalIntentLifecycleDeclaration.physical(PhysicalIntentLifecycleOwner.SETTLEMENT_PROVISION,
                 Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXACT_ITEM_CONSUMPTION),
+                Set.of(PhysicalIntentRoleSchema.SETTLEMENT_PROVISION_CONSUMPTION)),
                 (state, command, prepared) -> FrontierWorldCommandPlanner.rejected("physical executor cannot prepare settlement provision"),
                 (state, command, intent, transition) -> new CommandPlan.Accepted(
                         SettlementProvisionProcess.planTransition(state, intent, transition, command.submittedAt().ticks())),

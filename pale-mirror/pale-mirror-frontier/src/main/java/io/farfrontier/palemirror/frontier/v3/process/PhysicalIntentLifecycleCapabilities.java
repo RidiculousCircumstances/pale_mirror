@@ -4,7 +4,6 @@ import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.CommandRejection;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleSchema;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.RejectionCode;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
@@ -49,16 +48,9 @@ final class PhysicalIntentLifecycleCapabilities {
                 if (capabilities.putIfAbsent(capability.owner(), capability) != null) {
                     throw new IllegalArgumentException("duplicate physical lifecycle capability: " + capability.owner().stableId());
                 }
-                if (!capability.compatibleKinds().stream().allMatch(capability.owner()::supports)
-                        || EnumSet.allOf(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.class).stream()
-                        .filter(capability.owner()::supports).anyMatch(kind -> !capability.compatibleKinds().contains(kind))) {
-                    throw new IllegalArgumentException("physical lifecycle capability has mismatched declared kinds: " + capability.owner().stableId());
-                }
                 PhysicalIntentLifecycleDeclaration declaration = capability.declaration();
                 if (declaration.owner() != capability.owner()
-                        || !declaration.schemas().equals(PhysicalIntentLifecycleDeclaration.expectedSchemas(capability.owner()))
-                        || !declaration.schemas().stream().map(PhysicalIntentRoleSchema::kind).collect(java.util.stream.Collectors.toSet())
-                        .equals(capability.compatibleKinds())) {
+                        || !declaration.kinds().equals(capability.compatibleKinds())) {
                     throw new IllegalArgumentException("physical lifecycle capability has mismatched declared role schemas: "
                             + capability.owner().stableId());
                 }
@@ -68,6 +60,18 @@ final class PhysicalIntentLifecycleCapabilities {
             if (!capabilities.containsKey(owner)) {
                 throw new IllegalArgumentException("missing physical lifecycle capability: " + owner.stableId());
             }
+        }
+        java.util.Set<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleSchema> suppliedSchemas =
+                java.util.EnumSet.noneOf(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleSchema.class);
+        for (PhysicalIntentLifecycleCapability capability : capabilities.values()) {
+            for (io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleSchema schema : capability.declaration().schemas()) {
+                if (!suppliedSchemas.add(schema)) {
+                    throw new IllegalArgumentException("physical lifecycle role schema is declared more than once: " + schema.wireTag());
+                }
+            }
+        }
+        if (!suppliedSchemas.equals(java.util.EnumSet.allOf(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleSchema.class))) {
+            throw new IllegalArgumentException("physical lifecycle composition is missing an exact role-schema declaration");
         }
         return new PhysicalIntentLifecycleCapabilities(capabilities);
     }
@@ -168,7 +172,7 @@ final class PhysicalIntentLifecycleCapabilities {
                     ? PhysicalIntentLifecycleCompositionDiagnostic.Pressure.COMPACTION_REQUIRED
                     : PhysicalIntentLifecycleCompositionDiagnostic.Pressure.OPEN;
             owners.add(new PhysicalIntentLifecycleCompositionDiagnostic.Owner(owner, declaration.version(),
-                    declaration.schemas().stream().map(PhysicalIntentRoleSchema::wireTag).sorted().toList(), unresolved, resolved, recovery,
+                    declaration.schemas().stream().map(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleSchema::wireTag).sorted().toList(), unresolved, resolved, recovery,
                     declaration.maxUnresolved(), declaration.maxResolvedRetention(), pressure));
         }
         return new PhysicalIntentLifecycleCompositionDiagnostic(fingerprint, owners);

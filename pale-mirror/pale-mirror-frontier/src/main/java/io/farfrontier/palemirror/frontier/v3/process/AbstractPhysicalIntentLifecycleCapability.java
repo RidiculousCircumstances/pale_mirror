@@ -23,14 +23,14 @@ abstract class AbstractPhysicalIntentLifecycleCapability implements PhysicalInte
     private final PhysicalIntentRetirementAccount retirementAccount;
     private final PhysicalIntentLifecycleDeclaration declaration;
 
-    AbstractPhysicalIntentLifecycleCapability(PhysicalIntentLifecycleOwner owner, Set<PhysicalIntentKind> kinds,
+    AbstractPhysicalIntentLifecycleCapability(PhysicalIntentLifecycleDeclaration declaration,
                                               PhysicalIntentLifecycleRetirementPolicy retirementPolicy,
                                               PhysicalIntentRetirementAccount retirementAccount) {
-        this.owner = owner;
-        this.kinds = Set.copyOf(kinds);
+        this.declaration = java.util.Objects.requireNonNull(declaration, "physical lifecycle declaration");
+        this.owner = declaration.owner();
+        this.kinds = declaration.kinds();
         this.retirementPolicy = retirementPolicy;
         this.retirementAccount = retirementAccount;
-        this.declaration = PhysicalIntentLifecycleDeclaration.declared(owner, this.kinds);
     }
 
     @Override public final PhysicalIntentLifecycleOwner owner() { return owner; }

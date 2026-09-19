@@ -48,25 +48,4 @@ public enum PhysicalIntentLifecycleOwner {
                 .orElseThrow(() -> new IllegalArgumentException("unknown physical intent lifecycle owner: " + stableId));
     }
 
-    public boolean supports(PhysicalIntentKind kind) {
-        return switch (this) {
-            case RESOURCE_SITE_PREPARATION -> kind == PhysicalIntentKind.RESOURCE_SITE_PREPARATION;
-            case RESOURCE_SITE_HARVEST -> kind == PhysicalIntentKind.RESOURCE_SITE_HARVEST;
-            case PRODUCTION_WORK -> kind == PhysicalIntentKind.PRODUCTION_TRANSFORMATION;
-            case ROUTE_OPERATION -> kind == PhysicalIntentKind.CARGO_LOADING || kind == PhysicalIntentKind.CARGO_HANDOFF;
-            case ENGINEERING_WORKSITE -> kind == PhysicalIntentKind.ROUTE_CONSTRUCTION || kind == PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING
-                    || kind == PhysicalIntentKind.ROUTE_MAINTENANCE || kind == PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING
-                    || kind == PhysicalIntentKind.STRUCTURAL_REPAIR || kind == PhysicalIntentKind.EQUIPMENT_ISSUE || kind == PhysicalIntentKind.EQUIPMENT_RETURN;
-            case HIVE_NUTRIENT_TRANSFER -> kind == PhysicalIntentKind.HIVE_NUTRIENT_DEPARTURE || kind == PhysicalIntentKind.HIVE_NUTRIENT_ARRIVAL;
-            case SETTLEMENT_SERVICE_WORK -> kind == PhysicalIntentKind.SETTLEMENT_SERVICE_INPUT_ISSUE;
-            case DECONTAMINATION -> kind == PhysicalIntentKind.DECONTAMINATION;
-            case SETTLEMENT_SERVICE_DECONTAMINATION -> kind == PhysicalIntentKind.DECONTAMINATION;
-            case HIVE_MOBILIZATION -> kind == PhysicalIntentKind.EXPLOSION;
-            case ROUTE_ENGAGEMENT -> kind == PhysicalIntentKind.SCENE_STRIKE;
-            case SETTLEMENT_ASSAULT -> kind == PhysicalIntentKind.SCENE_STRIKE || kind == PhysicalIntentKind.EQUIPMENT_ISSUE
-                    || kind == PhysicalIntentKind.EQUIPMENT_RETURN;
-            case POPULATION_MIGRATION, MEDICAL_TREATMENT, HIVE_GROWTH, SETTLEMENT_PROVISION -> kind == PhysicalIntentKind.EXACT_ITEM_CONSUMPTION;
-            case ROUTE_PATROL, AMBIENT_ACTOR_CUSTODY -> false;
-        };
-    }
 }
