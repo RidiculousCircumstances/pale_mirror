@@ -68,6 +68,9 @@ class FrontierWorldProcessCatalogTest {
         FrontierDurationProcessDriverRegistry.requireExecutionBoundaryComposition();
         assertEquals(FrontierDurationProcessDriverRegistry.Family.values().length,
                 FrontierDurationProcessDriverRegistry.executionBoundaries().size());
+        assertThrows(IllegalStateException.class, () -> FrontierPhysicalIntentLifecycle.requireComposition(
+                java.util.EnumSet.of(FrontierDurationProcessDriverRegistry.Family.RESOURCE_SITE_HARVEST)),
+                "metadata alone cannot claim an all-family lifecycle composition");
     }
 
     @Test

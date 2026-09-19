@@ -8,18 +8,19 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.process.FrontierDurationProcessDriverRegistry;
 
-import java.util.EnumMap;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Closed physical-intent lifecycle dispatch.  The world aggregate owns immutable state only;
- * this registry selects one already-existing family owner for preparation, ambiguity and
- * confirmation semantics.  It is deliberately not a second world database or executor.
+ * Closed physical-intent lifecycle composition.  The world aggregate owns immutable state only;
+ * this registry selects exactly one declared family owner.  It deliberately contains no
+ * intent-kind routing table: a family owner owns its own predicates and transition semantics.
  */
-final class FrontierPhysicalIntentLifecycle {
+public final class FrontierPhysicalIntentLifecycle {
     private FrontierPhysicalIntentLifecycle() { }
 
     @FunctionalInterface private interface Preparation { void validate(FrontierWorldState state, PhysicalIntent intent); }
@@ -28,12 +29,31 @@ final class FrontierPhysicalIntentLifecycle {
                                  Optional<PhysicalEffectObservation> observation, Map<PhysicalIntentId, PhysicalIntent> next);
     }
 
-    private static final Map<PhysicalIntentKind, Preparation> PREPARATIONS = preparations();
-    private static final Map<PhysicalIntentKind, Transition> TRANSITIONS = transitions();
+    private record Owner(FrontierDurationProcessDriverRegistry.Family family,
+                         java.util.function.BiPredicate<FrontierWorldState, PhysicalIntent> owns,
+                         Preparation preparation, Transition transition) {
+        private Owner {
+            family = Objects.requireNonNull(family, "physical lifecycle owner family");
+            owns = Objects.requireNonNull(owns, "physical lifecycle owner predicate");
+            preparation = Objects.requireNonNull(preparation, "physical lifecycle owner preparation");
+            transition = Objects.requireNonNull(transition, "physical lifecycle owner transition");
+        }
+    }
+
+    private static final List<Owner> OWNERS = owners();
+
+    /** Runtime composition fence: a descriptor cannot claim lifecycle ownership without one executable owner registration. */
+    public static void requireComposition(java.util.Set<FrontierDurationProcessDriverRegistry.Family> families) {
+        java.util.Set<FrontierDurationProcessDriverRegistry.Family> registered = OWNERS.stream().map(Owner::family)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        if (!registered.equals(java.util.Set.copyOf(families))) {
+            throw new IllegalStateException("physical lifecycle owner inventory differs from execution-boundary inventory");
+        }
+    }
 
     static FrontierWorldState prepare(FrontierWorldState state, PhysicalIntent intent) {
-        requireBoundary(state, intent);
-        PREPARATIONS.get(intent.kind()).validate(state, intent);
+        Owner owner = owner(state, intent);
+        owner.preparation().validate(state, intent);
         Map<PhysicalIntentId, PhysicalIntent> next = new LinkedHashMap<>(state.physicalIntents());
         next.put(intent.id(), intent);
         FrontierWorldState prepared = basic(state, next, state.physicalObservations());
@@ -45,11 +65,11 @@ final class FrontierPhysicalIntentLifecycle {
                                          Optional<PhysicalEffectObservation> observation) {
         PhysicalIntent current = state.physicalIntents().get(Objects.requireNonNull(intentId, "physical intent id"));
         if (current == null) throw new IllegalArgumentException("unknown physical intent: " + intentId.value());
-        requireBoundary(state, current);
+        Owner owner = owner(state, current);
         if (!allowed(current.status(), nextStatus)) throw new IllegalArgumentException("physical intent transition is not allowed: "
                 + current.id().value() + " kind=" + current.kind() + " " + current.status() + "->" + nextStatus);
         Map<PhysicalIntentId, PhysicalIntent> next = new LinkedHashMap<>(state.physicalIntents());
-        return TRANSITIONS.get(current.kind()).apply(state, current, nextStatus, observation, next);
+        return owner.transition().apply(state, current, nextStatus, observation, next);
     }
 
     private static boolean allowed(PhysicalIntentStatus current, PhysicalIntentStatus next) {
@@ -60,47 +80,6 @@ final class FrontierPhysicalIntentLifecycle {
                 || current == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART && next == PhysicalIntentStatus.CONFIRMED;
     }
 
-    private static Map<PhysicalIntentKind, Preparation> preparations() {
-        EnumMap<PhysicalIntentKind, Preparation> values = defaults((state, intent) -> { });
-        values.put(PhysicalIntentKind.SCENE_STRIKE, SceneStrikeStateSupport::validateIntent);
-        values.put(PhysicalIntentKind.RESOURCE_SITE_PREPARATION, ResourceSitePhysicalIntentStateSupport::validateIntent);
-        values.put(PhysicalIntentKind.RESOURCE_SITE_HARVEST, ResourceSitePhysicalIntentStateSupport::validateIntent);
-        values.put(PhysicalIntentKind.PRODUCTION_TRANSFORMATION, ProductionTransformationStateSupport::validateIntent);
-        values.put(PhysicalIntentKind.CARGO_LOADING, CargoLoadingStateSupport::validateIntent);
-        values.put(PhysicalIntentKind.SETTLEMENT_SERVICE_INPUT_ISSUE, SettlementServiceInputIssueStateSupport::validateIntent);
-        values.put(PhysicalIntentKind.EQUIPMENT_ISSUE, HumanEquipmentStateSupport::validateIntent);
-        values.put(PhysicalIntentKind.EQUIPMENT_RETURN, HumanEquipmentStateSupport::validateIntent);
-        return Map.copyOf(values);
-    }
-
-    private static Map<PhysicalIntentKind, Transition> transitions() {
-        EnumMap<PhysicalIntentKind, Transition> values = defaults(FrontierPhysicalIntentLifecycle::plainTransition);
-        values.put(PhysicalIntentKind.PRODUCTION_TRANSFORMATION, FrontierPhysicalIntentLifecycle::productionTransition);
-        values.put(PhysicalIntentKind.RESOURCE_SITE_PREPARATION, FrontierPhysicalIntentLifecycle::resourceSiteTransition);
-        values.put(PhysicalIntentKind.RESOURCE_SITE_HARVEST, FrontierPhysicalIntentLifecycle::resourceSiteTransition);
-        values.put(PhysicalIntentKind.ROUTE_CONSTRUCTION, FrontierPhysicalIntentLifecycle::routeConstructionTransition);
-        values.put(PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING, FrontierPhysicalIntentLifecycle::routeConstructionTransition);
-        values.put(PhysicalIntentKind.ROUTE_MAINTENANCE, FrontierPhysicalIntentLifecycle::routeMaintenanceTransition);
-        values.put(PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING, FrontierPhysicalIntentLifecycle::routeMaintenanceTransition);
-        values.put(PhysicalIntentKind.HIVE_NUTRIENT_DEPARTURE, FrontierPhysicalIntentLifecycle::hiveEndpointTransition);
-        values.put(PhysicalIntentKind.HIVE_NUTRIENT_ARRIVAL, FrontierPhysicalIntentLifecycle::hiveEndpointTransition);
-        values.put(PhysicalIntentKind.DECONTAMINATION, FrontierPhysicalIntentLifecycle::decontaminationTransition);
-        values.put(PhysicalIntentKind.STRUCTURAL_REPAIR, FrontierPhysicalIntentLifecycle::structuralRepairTransition);
-        values.put(PhysicalIntentKind.SCENE_STRIKE, FrontierPhysicalIntentLifecycle::sceneStrikeTransition);
-        values.put(PhysicalIntentKind.EXPLOSION, FrontierPhysicalIntentLifecycle::explosionTransition);
-        values.put(PhysicalIntentKind.EXACT_ITEM_CONSUMPTION, FrontierPhysicalIntentLifecycle::exactConsumptionTransition);
-        values.put(PhysicalIntentKind.CARGO_LOADING, FrontierPhysicalIntentLifecycle::cargoLoadingTransition);
-        values.put(PhysicalIntentKind.SETTLEMENT_SERVICE_INPUT_ISSUE, FrontierPhysicalIntentLifecycle::serviceInputTransition);
-        values.put(PhysicalIntentKind.EQUIPMENT_ISSUE, FrontierPhysicalIntentLifecycle::equipmentTransition);
-        values.put(PhysicalIntentKind.EQUIPMENT_RETURN, FrontierPhysicalIntentLifecycle::equipmentTransition);
-        return Map.copyOf(values);
-    }
-
-    private static <T> EnumMap<PhysicalIntentKind, T> defaults(T value) {
-        EnumMap<PhysicalIntentKind, T> values = new EnumMap<>(PhysicalIntentKind.class);
-        for (PhysicalIntentKind kind : PhysicalIntentKind.values()) values.put(kind, value);
-        return values;
-    }
 
     private static FrontierWorldState plainTransition(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentStatus status,
                                                        Optional<PhysicalEffectObservation> observation, Map<PhysicalIntentId, PhysicalIntent> next) {
@@ -289,30 +268,76 @@ final class FrontierPhysicalIntentLifecycle {
                 state.physicalDeltas(), state.ambientLeases());
     }
 
-    private static void requireBoundary(FrontierWorldState state, PhysicalIntent intent) {
-        FrontierDurationProcessDriverRegistry.executionBoundary(ownerFamily(state, intent));
+    private static Owner owner(FrontierWorldState state, PhysicalIntent intent) {
+        List<Owner> matches = OWNERS.stream().filter(candidate -> candidate.owns().test(state, intent)).toList();
+        if (matches.size() != 1) throw new IllegalArgumentException("physical intent must have exactly one registered family owner: "
+                + intent.id().value() + " matches=" + matches.stream().map(Owner::family).toList());
+        Owner owner = matches.getFirst();
+        FrontierDurationProcessDriverRegistry.executionBoundary(owner.family());
+        return owner;
     }
 
-    private static FrontierDurationProcessDriverRegistry.Family ownerFamily(FrontierWorldState state, PhysicalIntent intent) {
-        return switch (intent.kind()) {
-            case RESOURCE_SITE_PREPARATION -> FrontierDurationProcessDriverRegistry.Family.RESOURCE_SITE_PREPARATION;
-            case RESOURCE_SITE_HARVEST -> FrontierDurationProcessDriverRegistry.Family.RESOURCE_SITE_HARVEST;
-            case PRODUCTION_TRANSFORMATION -> FrontierDurationProcessDriverRegistry.Family.PRODUCTION_WORK;
-            case SETTLEMENT_SERVICE_INPUT_ISSUE, DECONTAMINATION -> FrontierDurationProcessDriverRegistry.Family.SETTLEMENT_SERVICE_WORK;
-            case ROUTE_CONSTRUCTION, ROUTE_CONSTRUCTION_MATERIAL_LOADING, ROUTE_MAINTENANCE, ROUTE_MAINTENANCE_MATERIAL_LOADING, STRUCTURAL_REPAIR -> FrontierDurationProcessDriverRegistry.Family.ENGINEERING_WORKSITE;
-            case HIVE_NUTRIENT_DEPARTURE, HIVE_NUTRIENT_ARRIVAL -> FrontierDurationProcessDriverRegistry.Family.HIVE_NUTRIENT_TRANSFER;
-            case CARGO_LOADING, CARGO_HANDOFF -> FrontierDurationProcessDriverRegistry.Family.ROUTE_OPERATION;
-            case EXPLOSION -> FrontierDurationProcessDriverRegistry.Family.HIVE_MOBILIZATION;
-            case SCENE_STRIKE -> FrontierDurationProcessDriverRegistry.Family.ROUTE_ENGAGEMENT;
-            case EQUIPMENT_ISSUE, EQUIPMENT_RETURN -> FrontierDurationProcessDriverRegistry.Family.SETTLEMENT_ASSAULT;
-            case EXACT_ITEM_CONSUMPTION -> exactConsumptionOwner(state, intent);
-        };
+    /** These are executable registrations.  A no-physical family remains visible but cannot claim an intent. */
+    private static List<Owner> owners() {
+        List<Owner> values = new ArrayList<>();
+        values.add(owner(FrontierDurationProcessDriverRegistry.Family.RESOURCE_SITE_PREPARATION,
+                kind(PhysicalIntentKind.RESOURCE_SITE_PREPARATION), ResourceSitePhysicalIntentStateSupport::validateIntent,
+                FrontierPhysicalIntentLifecycle::resourceSiteTransition));
+        values.add(owner(FrontierDurationProcessDriverRegistry.Family.RESOURCE_SITE_HARVEST,
+                kind(PhysicalIntentKind.RESOURCE_SITE_HARVEST), ResourceSitePhysicalIntentStateSupport::validateIntent,
+                FrontierPhysicalIntentLifecycle::resourceSiteTransition));
+        values.add(owner(FrontierDurationProcessDriverRegistry.Family.PRODUCTION_WORK,
+                kind(PhysicalIntentKind.PRODUCTION_TRANSFORMATION), ProductionTransformationStateSupport::validateIntent,
+                FrontierPhysicalIntentLifecycle::productionTransition));
+        values.add(owner(FrontierDurationProcessDriverRegistry.Family.SETTLEMENT_SERVICE_WORK,
+                any(PhysicalIntentKind.DECONTAMINATION, PhysicalIntentKind.SETTLEMENT_SERVICE_INPUT_ISSUE),
+                (state, intent) -> { if (intent.kind() == PhysicalIntentKind.DECONTAMINATION) SettlementServiceDecontaminationStateSupport.owns(state, intent); else SettlementServiceInputIssueStateSupport.validateIntent(state, intent); },
+                (state, intent, status, observation, next) -> intent.kind() == PhysicalIntentKind.DECONTAMINATION
+                        ? decontaminationTransition(state, intent, status, observation, next) : serviceInputTransition(state, intent, status, observation, next)));
+        values.add(owner(FrontierDurationProcessDriverRegistry.Family.ROUTE_OPERATION,
+                any(PhysicalIntentKind.CARGO_LOADING, PhysicalIntentKind.CARGO_HANDOFF), (state, intent) -> { if (intent.kind() == PhysicalIntentKind.CARGO_LOADING) CargoLoadingStateSupport.validateIntent(state, intent); },
+                (state, intent, status, observation, next) -> intent.kind() == PhysicalIntentKind.CARGO_LOADING
+                        ? cargoLoadingTransition(state, intent, status, observation, next) : plainTransition(state, intent, status, observation, next)));
+        values.add(owner(FrontierDurationProcessDriverRegistry.Family.ROUTE_PATROL, never(), noop(), FrontierPhysicalIntentLifecycle::plainTransition));
+        values.add(owner(FrontierDurationProcessDriverRegistry.Family.HIVE_MOBILIZATION,
+                kind(PhysicalIntentKind.EXPLOSION), (state, intent) -> ExplosionStateSupport.validateIntent(state, intent), FrontierPhysicalIntentLifecycle::explosionTransition));
+        values.add(owner(FrontierDurationProcessDriverRegistry.Family.ROUTE_ENGAGEMENT,
+                (state, intent) -> intent.kind() == PhysicalIntentKind.SCENE_STRIKE && !SceneStrikeStateSupport.isSettlementAssaultCause(state.strategicPlans(), intent),
+                SceneStrikeStateSupport::validateIntent, FrontierPhysicalIntentLifecycle::sceneStrikeTransition));
+        values.add(owner(FrontierDurationProcessDriverRegistry.Family.SETTLEMENT_ASSAULT,
+                (state, intent) -> intent.kind() == PhysicalIntentKind.SCENE_STRIKE && SceneStrikeStateSupport.isSettlementAssaultCause(state.strategicPlans(), intent)
+                        || (intent.kind() == PhysicalIntentKind.EQUIPMENT_ISSUE || intent.kind() == PhysicalIntentKind.EQUIPMENT_RETURN)
+                        && !state.routeConstructions().containsKey(intent.causeSubjectId()) && !state.routeMaintenances().containsKey(intent.causeSubjectId()),
+                (state, intent) -> { if (intent.kind() == PhysicalIntentKind.SCENE_STRIKE) SceneStrikeStateSupport.validateIntent(state, intent); else HumanEquipmentStateSupport.validateIntent(state, intent); },
+                (state, intent, status, observation, next) -> intent.kind() == PhysicalIntentKind.SCENE_STRIKE ? sceneStrikeTransition(state, intent, status, observation, next) : equipmentTransition(state, intent, status, observation, next)));
+        values.add(owner(FrontierDurationProcessDriverRegistry.Family.POPULATION_MIGRATION,
+                (state, intent) -> intent.kind() == PhysicalIntentKind.EXACT_ITEM_CONSUMPTION && state.humanPopulation().birthJobs().containsKey(intent.causeSubjectId()), noop(), FrontierPhysicalIntentLifecycle::exactConsumptionTransition));
+        values.add(owner(FrontierDurationProcessDriverRegistry.Family.MEDICAL_TREATMENT,
+                (state, intent) -> intent.kind() == PhysicalIntentKind.EXACT_ITEM_CONSUMPTION && state.humanPopulation().medicalOperations().containsKey(intent.causeSubjectId()), noop(), FrontierPhysicalIntentLifecycle::exactConsumptionTransition));
+        values.add(owner(FrontierDurationProcessDriverRegistry.Family.ENGINEERING_WORKSITE,
+                (state, intent) -> any(PhysicalIntentKind.ROUTE_CONSTRUCTION, PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING,
+                        PhysicalIntentKind.ROUTE_MAINTENANCE, PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING, PhysicalIntentKind.STRUCTURAL_REPAIR).test(state, intent)
+                        || (intent.kind() == PhysicalIntentKind.EQUIPMENT_ISSUE || intent.kind() == PhysicalIntentKind.EQUIPMENT_RETURN)
+                        && (state.routeConstructions().containsKey(intent.causeSubjectId()) || state.routeMaintenances().containsKey(intent.causeSubjectId())),
+                (state, intent) -> { if (intent.kind() == PhysicalIntentKind.STRUCTURAL_REPAIR) return; if (intent.kind() == PhysicalIntentKind.ROUTE_CONSTRUCTION_MATERIAL_LOADING) RouteConstructionStateSupport.validateMaterialLoadingIntent(state, intent); else if (intent.kind() == PhysicalIntentKind.EQUIPMENT_ISSUE || intent.kind() == PhysicalIntentKind.EQUIPMENT_RETURN) HumanEquipmentStateSupport.validateIntent(state, intent); },
+                (state, intent, status, observation, next) -> switch (intent.kind()) { case ROUTE_CONSTRUCTION, ROUTE_CONSTRUCTION_MATERIAL_LOADING -> routeConstructionTransition(state, intent, status, observation, next); case ROUTE_MAINTENANCE, ROUTE_MAINTENANCE_MATERIAL_LOADING -> routeMaintenanceTransition(state, intent, status, observation, next); case STRUCTURAL_REPAIR -> structuralRepairTransition(state, intent, status, observation, next); default -> equipmentTransition(state, intent, status, observation, next); }));
+        values.add(owner(FrontierDurationProcessDriverRegistry.Family.HIVE_GROWTH,
+                (state, intent) -> intent.kind() == PhysicalIntentKind.EXACT_ITEM_CONSUMPTION && state.hiveColony().growthJobs().containsKey(intent.causeSubjectId()), noop(), FrontierPhysicalIntentLifecycle::exactConsumptionTransition));
+        values.add(owner(FrontierDurationProcessDriverRegistry.Family.HIVE_NUTRIENT_TRANSFER,
+                any(PhysicalIntentKind.HIVE_NUTRIENT_DEPARTURE, PhysicalIntentKind.HIVE_NUTRIENT_ARRIVAL), noop(), FrontierPhysicalIntentLifecycle::hiveEndpointTransition));
+        values.add(owner(FrontierDurationProcessDriverRegistry.Family.SETTLEMENT_PROVISION,
+                (state, intent) -> intent.kind() == PhysicalIntentKind.EXACT_ITEM_CONSUMPTION && state.humanPopulation().provisions().containsKey(intent.causeSubjectId()), noop(), FrontierPhysicalIntentLifecycle::exactConsumptionTransition));
+        values.add(owner(FrontierDurationProcessDriverRegistry.Family.AMBIENT_ACTOR_CUSTODY, never(), noop(), FrontierPhysicalIntentLifecycle::plainTransition));
+        if (values.stream().map(Owner::family).collect(java.util.stream.Collectors.toSet()).size() != FrontierDurationProcessDriverRegistry.Family.values().length) {
+            throw new IllegalStateException("duplicate or missing physical lifecycle family registration");
+        }
+        return List.copyOf(values);
     }
 
-    private static FrontierDurationProcessDriverRegistry.Family exactConsumptionOwner(FrontierWorldState state, PhysicalIntent intent) {
-        if (state.hiveColony().growthJobs().containsKey(intent.causeSubjectId())) return FrontierDurationProcessDriverRegistry.Family.HIVE_GROWTH;
-        if (state.humanPopulation().medicalOperations().containsKey(intent.causeSubjectId())) return FrontierDurationProcessDriverRegistry.Family.MEDICAL_TREATMENT;
-        if (state.humanPopulation().birthJobs().containsKey(intent.causeSubjectId())) return FrontierDurationProcessDriverRegistry.Family.POPULATION_MIGRATION;
-        return FrontierDurationProcessDriverRegistry.Family.SETTLEMENT_PROVISION;
-    }
+    private static Owner owner(FrontierDurationProcessDriverRegistry.Family family, java.util.function.BiPredicate<FrontierWorldState, PhysicalIntent> owns,
+                               Preparation preparation, Transition transition) { return new Owner(family, owns, preparation, transition); }
+    private static java.util.function.BiPredicate<FrontierWorldState, PhysicalIntent> kind(PhysicalIntentKind kind) { return (state, intent) -> intent.kind() == kind; }
+    private static java.util.function.BiPredicate<FrontierWorldState, PhysicalIntent> any(PhysicalIntentKind... kinds) { return (state, intent) -> java.util.Set.of(kinds).contains(intent.kind()); }
+    private static java.util.function.BiPredicate<FrontierWorldState, PhysicalIntent> never() { return (state, intent) -> false; }
+    private static Preparation noop() { return (state, intent) -> { }; }
 }
