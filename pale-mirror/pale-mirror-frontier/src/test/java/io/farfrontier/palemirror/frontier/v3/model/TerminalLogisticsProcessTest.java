@@ -154,7 +154,7 @@ class TerminalLogisticsProcessTest {
         SubjectId receiver = FrontierCargoValidation.receiverStore(state.bootstrap(), operation);
         ExactInventory inventory = state.inventory().completeFungibleCargoHandoff(operation.cargoId(), receiver);
         Map<SubjectId, SupplyContract> contracts = new LinkedHashMap<>(state.contracts()); contracts.put(contract.id(), contract.withStatus(ContractStatus.DELIVERED));
-        RouteOperation completed = new RouteOperation(operation.id(), operation.settlementId(), operation.cargoId(), operation.destinationId(),
+        RouteOperation completed = new RouteOperation(operation.id(), operation.contractId(), operation.settlementId(), operation.cargoId(), operation.destinationId(),
                 operation.unit(), operation.route(), 0, OperationStage.COMPLETED, java.util.Optional.empty(), java.util.Optional.empty());
         Map<SubjectId, RouteOperation> operations = new LinkedHashMap<>(state.operations()); operations.put(completed.id(), completed);
         return new FrontierWorldState(state.bootstrap(), state.actorLocations(), state.structureConditions(), state.infection(), inventory,

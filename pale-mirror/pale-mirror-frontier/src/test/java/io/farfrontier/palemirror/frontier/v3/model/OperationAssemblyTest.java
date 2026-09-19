@@ -44,7 +44,7 @@ class OperationAssemblyTest {
     @Test
     void routeOperationStartsTravelOnlyFromTheCompleteExactAssembly() {
         OperationAssembly complete = new OperationAssembly(Map.of(HAULER, member(1, 0), GUARD, member(1, 1)), HAULER);
-        RouteOperation operation = new RouteOperation(new SubjectId("operation:supply-1"), new SubjectId("settlement:1"), new SubjectId("cargo:supply-1"),
+        RouteOperation operation = new RouteOperation(new SubjectId("operation:supply-1"), new SubjectId("contract:supply-1"), new SubjectId("settlement:1"), new SubjectId("cargo:supply-1"),
                 new SubjectId("hive:frontier"), List.of(HAULER, GUARD), List.of(new BlockPosition(0, 64, 0), new BlockPosition(1, 64, 0)), 0,
                 OperationStage.ASSEMBLING, java.util.Optional.of(complete), java.util.Optional.empty());
         OperationTravel travel = new OperationTravel(topology(), 0, bodies(complete.positions()), complete.cargoAnchor());

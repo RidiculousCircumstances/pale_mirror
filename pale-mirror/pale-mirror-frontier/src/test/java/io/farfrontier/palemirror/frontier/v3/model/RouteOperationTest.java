@@ -39,7 +39,7 @@ class RouteOperationTest {
     private static RouteOperation operation(List<SubjectId> participants, int routeIndex, OperationStage stage) {
         java.util.Optional<OperationAssembly> assembly = stage == OperationStage.ASSEMBLING ? java.util.Optional.of(assembly(participants)) : java.util.Optional.empty();
         SubjectId operationId = new SubjectId("operation:supply-1");
-        return new RouteOperation(operationId, new SubjectId("settlement:1"), new SubjectId("cargo:supply-1-1"),
+        return new RouteOperation(operationId, new SubjectId("contract:supply-1"), new SubjectId("settlement:1"), new SubjectId("cargo:supply-1-1"),
                 new SubjectId("hive:frontier"), RouteUnitManifest.cargoEscort(operationId, participants.getFirst(), participants.get(1), participants.subList(1, participants.size())),
                 List.of(new BlockPosition(0, 64, 0), new BlockPosition(1, 64, 0)), routeIndex, stage, assembly, java.util.Optional.empty());
     }

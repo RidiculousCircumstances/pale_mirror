@@ -9,7 +9,7 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 163; private static final int MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 164; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -619,7 +619,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     private static void writeOperations(DataOutputStream output, Map<SubjectId, RouteOperation> operations) throws IOException {
         writeCount(output, operations.size());
         for (RouteOperation operation : operations.values().stream().sorted(Comparator.comparing(RouteOperation::id)).toList()) {
-            writeString(output, operation.id().value()); writeString(output, operation.settlementId().value()); writeString(output, operation.cargoId().value());
+            writeString(output, operation.id().value()); writeString(output, operation.contractId().value()); writeString(output, operation.settlementId().value()); writeString(output, operation.cargoId().value());
             writeString(output, operation.destinationId().value()); RouteUnitManifestCodec.write(output, operation.unit());
             writeCount(output, operation.route().size());
             for (BlockPosition point : operation.route()) writePosition(output, point);
@@ -636,7 +636,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                                                                    boolean hasTypedTravelAnchors) throws IOException {
         Map<SubjectId, RouteOperation> operations = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
-            SubjectId id = new SubjectId(readString(input)); SubjectId settlement = new SubjectId(readString(input)); SubjectId cargo = new SubjectId(readString(input));
+            SubjectId id = new SubjectId(readString(input)); SubjectId contract = new SubjectId(readString(input)); SubjectId settlement = new SubjectId(readString(input)); SubjectId cargo = new SubjectId(readString(input));
             SubjectId destination = new SubjectId(readString(input));
             RouteUnitManifest unit = RouteUnitManifestCodec.read(input);
             java.util.ArrayList<BlockPosition> route = new java.util.ArrayList<>();
@@ -645,7 +645,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             java.util.Optional<OperationAssembly> assembly = input.readBoolean() ? java.util.Optional.of(readAssembly(input, true, true)) : java.util.Optional.empty();
             java.util.Optional<OperationTravel> travel = input.readBoolean() ? java.util.Optional.of(readTravel(input, true, true)) : java.util.Optional.empty();
             TacticalPlan tacticalPlan = TacticalPlanStateCodec.read(input);
-            if (operations.put(id, new RouteOperation(id, settlement, cargo, destination, unit, route, routeIndex, OperationStage.fromWireCode(stage), assembly, travel, tacticalPlan)) != null) {
+            if (operations.put(id, new RouteOperation(id, contract, settlement, cargo, destination, unit, route, routeIndex, OperationStage.fromWireCode(stage), assembly, travel, tacticalPlan)) != null) {
                 throw new IllegalArgumentException("invalid or duplicate route operation");
             }
         }

@@ -421,7 +421,7 @@ public final class SupplyOperationProcess {
         OperationAssembly assembly = OperationAssemblyCorridor.compileJoint(state, operationId, hauler, destinations);
         List<BlockPosition> route = state.routeTopology().supplyWaypoints(state.bootstrap(), settlement.id());
         TacticalPlan tacticalPlan = TacticalPlan.cargoEscort(operationId, delivery.authorityId(), delivery.authorityEpoch(), unit, route);
-        return new RouteOperation(operationId, settlement.id(), contract.cargoId(), contract.recipientId(), unit,
+        return new RouteOperation(operationId, contract.id(), settlement.id(), contract.cargoId(), contract.recipientId(), unit,
                 route, 0, OperationStage.ASSEMBLING, java.util.Optional.of(assembly), java.util.Optional.empty(), tacticalPlan);
     }
     private static SupplyContract contract(FrontierWorldState state, StrategicTask task, Settlement settlement, BreadSource bread) {
@@ -440,15 +440,11 @@ public final class SupplyOperationProcess {
                 new SubjectId("cargo:supply-" + suffix), "minecraft:bread", 1, ContractStatus.ORDERED);
     }
 
-    /** Normal supply IDs form one stable exact pair; fixtures may retain an arbitrary pair. */
     private static SupplyContract contractForOperation(FrontierWorldState state, RouteOperation operation) {
-        String cargo = operation.cargoId().value();
-        if (cargo.startsWith("cargo:supply-")) {
-            SupplyContract direct = state.contracts().get(new SubjectId("contract:" + cargo.substring("cargo:".length())));
-            if (direct != null && direct.cargoId().equals(operation.cargoId())) return direct;
-        }
-        return state.contracts().values().stream().filter(contract -> contract.cargoId().equals(operation.cargoId())).findFirst()
-                .orElseThrow(() -> new IllegalStateException("route operation has no matching supply contract"));
+        SupplyContract contract = state.contracts().get(operation.contractId());
+        if (contract == null || !contract.cargoId().equals(operation.cargoId()) || !contract.settlementId().equals(operation.settlementId())
+                || !contract.recipientId().equals(operation.destinationId())) throw new IllegalStateException("route operation has no exact supply contract");
+        return contract;
     }
     private static PhysicalIntent cargoHandoffIntent(RouteOperation operation) {
         BlockPosition target = operation.route().getLast(); FixedPosition origin = new FixedPosition(FixedScalar.whole(target.x()), FixedScalar.whole(target.y()), FixedScalar.whole(target.z()));

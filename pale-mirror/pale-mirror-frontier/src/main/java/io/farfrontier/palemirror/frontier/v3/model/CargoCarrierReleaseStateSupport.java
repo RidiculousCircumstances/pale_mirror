@@ -36,7 +36,7 @@ final class CargoCarrierReleaseStateSupport {
         if (!releasedClaims.isEmpty()) inventory = inventory.withFungibleResources(inventory.fungibleResources().releaseClaims(releasedClaims));
         Map<SubjectId, SupplyContract> contracts = new LinkedHashMap<>(state.contracts()); contracts.put(contract.id(), contract.withStatus(ContractStatus.INTERRUPTED));
         Map<SubjectId, RouteOperation> operations = new LinkedHashMap<>(state.operations());
-        operations.put(operation.id(), new RouteOperation(operation.id(), operation.settlementId(), operation.cargoId(), operation.destinationId(),
+        operations.put(operation.id(), new RouteOperation(operation.id(), operation.contractId(), operation.settlementId(), operation.cargoId(), operation.destinationId(),
                 operation.unit(), operation.route(), operation.routeIndex(), OperationStage.INTERRUPTED, java.util.Optional.empty(), java.util.Optional.empty(),
                 operation.tacticalPlan().withPhase(TacticalPlanPhase.ABORTED)));
         Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases()); leases.put(lease.id(), lease.withStatus(SceneLeaseStatus.DRAINING));

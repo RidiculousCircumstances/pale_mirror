@@ -472,7 +472,7 @@ class FrontierWorldRuntimeDefinitionTest {
         assertEquals(abandoned, codecs.decode(abandoned.type(), codecs.encode(abandoned)));
         CargoLoaded loaded = new CargoLoaded(contract.id(), new CargoBatch(contract.cargoId(), contract.settlementId(), List.of(job.outputItemId())));
         assertEquals(loaded, codecs.decode(loaded.type(), codecs.encode(loaded)));
-        RouteOperation operation = new RouteOperation(new SubjectId("operation:supply-1-1"), contract.settlementId(), contract.cargoId(), contract.recipientId(),
+        RouteOperation operation = new RouteOperation(new SubjectId("operation:supply-1-1"), contract.id(), contract.settlementId(), contract.cargoId(), contract.recipientId(),
                 List.of(new SubjectId("resident:1-6"), new SubjectId("resident:1-4")), List.of(new BlockPosition(-360, 64, -340), new BlockPosition(-420, 64, 420)), 0, OperationStage.EN_ROUTE);
         OperationCreated operationCreated = new OperationCreated(operation);
         OperationAdvanced operationAdvanced = new OperationAdvanced(operation.id(), 1, OperationStage.ARRIVED);

@@ -640,7 +640,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         return new SupplyContract(id.value(), settlement.value(), recipient.value(), cargo.value(), kind, count, FrontierWireTags.require(ContractStatus.class, status));
     }
     private static void writeOperation(DataOutputStream output, RouteOperation operation) throws IOException {
-        writeSubject(output, operation.id()); writeSubject(output, operation.settlementId()); writeSubject(output, operation.cargoId()); writeSubject(output, operation.destinationId());
+        writeSubject(output, operation.id()); writeSubject(output, operation.contractId()); writeSubject(output, operation.settlementId()); writeSubject(output, operation.cargoId()); writeSubject(output, operation.destinationId());
         // 0xFF cannot be a historical participant count (the old route owner capped at eight).
         output.writeByte(0xFF); RouteUnitManifestCodec.write(output, operation.unit());
         output.writeByte(operation.route().size());
@@ -654,7 +654,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         TacticalPlanStateCodec.write(output, operation.tacticalPlan());
     }
     private static RouteOperation readOperation(DataInputStream input) throws IOException {
-        SubjectIdHolder id = readSubject(input); SubjectIdHolder settlement = readSubject(input); SubjectIdHolder cargo = readSubject(input); SubjectIdHolder destination = readSubject(input);
+        SubjectIdHolder id = readSubject(input); SubjectIdHolder contract = readSubject(input); SubjectIdHolder settlement = readSubject(input); SubjectIdHolder cargo = readSubject(input); SubjectIdHolder destination = readSubject(input);
         int participantEnvelope = input.readUnsignedByte();
         RouteUnitManifest unit;
         if (participantEnvelope != 0xFF) throw new IllegalArgumentException("route operation payload requires the current unit-manifest envelope");
@@ -669,7 +669,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         assembly = input.readBoolean() ? java.util.Optional.of(readOperationAssembly(input)) : java.util.Optional.empty();
         travel = input.readBoolean() ? java.util.Optional.of(readOperationTravel(input)) : java.util.Optional.empty();
         TacticalPlan tacticalPlan = TacticalPlanStateCodec.read(input);
-        return new RouteOperation(id.value(), settlement.value(), cargo.value(), destination.value(), unit, route, routeIndex, OperationStage.fromWireCode(stage), assembly, travel, tacticalPlan);
+        return new RouteOperation(id.value(), contract.value(), settlement.value(), cargo.value(), destination.value(), unit, route, routeIndex, OperationStage.fromWireCode(stage), assembly, travel, tacticalPlan);
     }
     private static void writeOperationTravel(DataOutputStream output, OperationTravel travel) throws IOException {
         // This envelope is mandatory for every current-schema operation cursor.
