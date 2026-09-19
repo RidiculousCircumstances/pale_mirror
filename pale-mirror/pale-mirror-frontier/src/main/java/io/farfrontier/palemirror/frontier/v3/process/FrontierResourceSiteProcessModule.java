@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.process;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleSchema;
 import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
@@ -52,9 +53,9 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
                 (before, after, intent, transition, binding) -> {
                     if (intent.lifecycleOwner() != owner) throw new IllegalArgumentException("resource-site retirement account owner mismatch");
                     if (owner == PhysicalIntentLifecycleOwner.RESOURCE_SITE_HARVEST) {
-                        ResourceSiteHarvestJob job = harvestJob(before, intent);
+                        SubjectId outputId = harvestOutputId(before, intent);
                         if (after != before && transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED
-                                && after.inventory().items().get(job.outputItemId()) == null) {
+                                && after.inventory().items().get(outputId) == null) {
                             throw new IllegalArgumentException("harvest retirement account did not retain its exact output outcome");
                         }
                     } else {
@@ -83,6 +84,16 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
                     new PhysicalIntentRetirementAccount.Exact<>(job.id()),
                     new PhysicalIntentRetirementAccount.CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_RESOURCE_COMMITMENT), lateDisposition(transition));
         }
+        ResourceSiteHarvestLineage lineage = deferredReceipt(state, intent);
+        if (lineage != null) {
+            // COLD has already completed the job and released its declared relationship edges,
+            // but the lifecycle retains this one exact physical receipt authority.  It is not a
+            // new inferred relationship: the lineage names both authoritative endpoints.
+            return new PhysicalIntentRetirementAccount.Binding(owner, intent.id(),
+                    new PhysicalIntentRetirementAccount.CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_APPLICABLE_RELATION), continuation,
+                    new PhysicalIntentRetirementAccount.Exact<>(lineage.workerId()),
+                    new PhysicalIntentRetirementAccount.Exact<>(lineage.outputItemId()), lateDisposition(transition));
+        }
         ResourceSiteHarvestJob job = harvestJob(state, intent);
         FrontierDomainRelationships.SubjectEndpoint site = new FrontierDomainRelationships.SubjectEndpoint(FrontierDomainRelationships.EntityKind.RESOURCE_SITE, job.siteId());
         FrontierDomainRelationships.SubjectEndpoint harvest = new FrontierDomainRelationships.SubjectEndpoint(FrontierDomainRelationships.EntityKind.RESOURCE_HARVEST_JOB, job.id());
@@ -105,6 +116,19 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
                 .map(ResourceSiteHarvestJob.class::cast).orElse(null);
         if (job == null || !job.intentId().equals(intent.id())) throw new IllegalArgumentException("harvest retirement account has no exact retained harvest job");
         return job;
+    }
+
+    private static SubjectId harvestOutputId(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent) {
+        ResourceSiteHarvestLineage lineage = deferredReceipt(state, intent);
+        return lineage == null ? harvestJob(state, intent).outputItemId() : lineage.outputItemId();
+    }
+
+    private static ResourceSiteHarvestLineage deferredReceipt(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent) {
+        ResourceSiteLifecycle lifecycle = state.resourceSites().sites().get(intent.causeSubjectId());
+        return lifecycle == null ? null : lifecycle.harvestLineage()
+                .filter(ResourceSiteHarvestLineage::receiptPending)
+                .filter(value -> value.predecessorIntentId().equals(intent.id()))
+                .orElse(null);
     }
 
     private static ResourceSitePreparationJob preparation(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent) {

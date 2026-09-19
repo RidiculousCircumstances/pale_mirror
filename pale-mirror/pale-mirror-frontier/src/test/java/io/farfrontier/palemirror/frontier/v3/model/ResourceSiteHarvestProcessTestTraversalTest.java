@@ -352,28 +352,33 @@ class ResourceSiteHarvestTraversalTest extends ResourceSiteHarvestProcessTest {
     }
 
     @Test
-    void hotStartedHarvestMayReleaseToColdTerminalWithoutDiscardingItsExactReceiptAuthority() {
+    void scheduledColdHotLeaseIntentObservationReconciliationAndRestartRetainOneExactReceiptAuthority() {
         HotHarvest hot = hotHarvestAfterColdSteps(0);
         ResourceSiteHarvestJob job = hot.job();
-        FrontierWorldState released = hot.state()
-                .transitionPhysicalIntent(job.intentId(), PhysicalIntentStatus.RUNNING, Optional.empty())
+        CommandId runningCommandId = new CommandId("command:site-harvest-running");
+        PhysicalIntentTransition runningTransition = new PhysicalIntentTransition(job.intentId(), PhysicalIntentStatus.RUNNING, Optional.empty());
+        FrontierCommand runningCommand = new FrontierCommand(1, runningCommandId, hot.state().bootstrap().worldId(), new Revision(1L),
+                new SimInstant(22_300L), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(runningCommandId), runningTransition);
+        CommandPlan.Accepted runningPlan = assertInstanceOf(CommandPlan.Accepted.class,
+                FrontierWorldRuntimeDefinition.planCommand(hot.state(), runningCommand),
+                "the scheduled HOT lease admits its exact physical intent through the canonical planner");
+        assertEquals(1, runningPlan.events().size());
+        FrontierWorldState released = reduceCanonical(hot.state(), "running", 1L, runningCommandId, runningPlan.events().getFirst())
                 .transitionSceneLease(hot.lease().id(), SceneLeaseStatus.DRAINING)
                 .releaseSceneLease(hot.lease().id(), List.of(new SceneMemberPosition(job.workerId(),
                         hot.state().actorLocations().get(job.workerId()).body(),
                         hot.state().actorLocations().get(job.workerId()).condition().health())));
         ScheduledAction action = ResourceSiteHarvestProcess.coldProgress(job, 22_301L);
+        long coldRevision = 2L;
 
         for (int step = 0; step < 256 && released.resourceSites().site(hot.site()).phase() == ResourceSitePhase.HARVESTING; step++) {
             for (io.farfrontier.palemirror.frontier.v3.api.ProposedEvent event : ResourceSiteHarvestProcess.planColdProgress(released, action)) {
-                switch (event.payload()) {
-                    case ResourceSiteHarvestColdTraversalAdvanced advanced -> released = ResourceSiteHarvestProcess.reduceColdTraversalAdvanced(released, hot.site(), advanced);
-                    case ResourceSiteHarvestCropPrepared prepared -> released = ResourceSiteHarvestProcess.reduceCropPrepared(released, hot.site(), prepared);
-                    case ResourceSiteHarvestProgressed progressed -> released = ResourceSiteHarvestProcess.reduceProgressed(released, hot.site(), progressed);
-                    case StrategicTaskTransition transition -> released = StrategicObjectiveProcess.reduceTaskTransition(released, new SubjectId("settlement:1"), transition);
-                    case ScheduleEffect.Rescheduled rescheduled -> action = rescheduled.replacement();
-                    case ScheduleEffect.Cancelled ignored -> { }
-                    case ScheduleEffect.Created ignored -> { }
-                    default -> throw new AssertionError("unexpected HOT-release COLD terminal event: " + event.payload().type());
+                if (event.payload() instanceof ScheduleEffect.Rescheduled rescheduled) {
+                    action = rescheduled.replacement();
+                } else if (!(event.payload() instanceof ScheduleEffect.Cancelled) && !(event.payload() instanceof ScheduleEffect.Created)) {
+                    released = reduceCanonical(released, "cold-" + step + "-" + coldRevision, coldRevision,
+                            new CommandId("command:site-harvest-cold-" + coldRevision), event);
+                    coldRevision++;
                 }
             }
         }
@@ -388,12 +393,29 @@ class ResourceSiteHarvestTraversalTest extends ResourceSiteHarvestProcessTest {
                 "restart retains the pending exact HOT receipt rather than replaying or dropping it");
         PhysicalIntent running = restored.physicalIntents().get(job.intentId());
         ExactItemStack output = restored.inventory().items().get(job.outputItemId());
-        FrontierWorldState confirmed = restored.transitionPhysicalIntent(running.id(), PhysicalIntentStatus.CONFIRMED,
+        CommandId receiptCommandId = new CommandId("command:site-harvest-reconciled-receipt");
+        PhysicalIntentTransition receiptTransition = new PhysicalIntentTransition(running.id(), PhysicalIntentStatus.CONFIRMED,
                 Optional.of(receipt(running, job, output)));
+        FrontierCommand receiptCommand = new FrontierCommand(1, receiptCommandId, restored.bootstrap().worldId(), new Revision(400L),
+                new SimInstant(22_700L), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(receiptCommandId), receiptTransition);
+        CommandPlan receiptCandidate = FrontierWorldRuntimeDefinition.planCommand(restored, receiptCommand);
+        assertTrue(receiptCandidate instanceof CommandPlan.Accepted,
+                () -> "the retained restart receipt is reconciled only by its exact owner-local transition: " + receiptCandidate);
+        CommandPlan.Accepted receiptPlan = (CommandPlan.Accepted) receiptCandidate;
+        assertEquals(1, receiptPlan.events().size());
+        FrontierWorldState confirmed = reduceCanonical(restored, "reconciled-receipt", 400L, receiptCommandId, receiptPlan.events().getFirst());
         assertFalse(confirmed.resourceSites().site(hot.site()).harvestLineage().orElseThrow().receiptPending(),
                 "the exact late receipt resolves only its retained HOT-started lineage");
         assertEquals(output, confirmed.inventory().items().get(output.id()),
                 "late physical evidence confirms canonical custody without replaying wheat");
+    }
+
+    private static FrontierWorldState reduceCanonical(FrontierWorldState state, String phase, long revision,
+                                                       CommandId commandId, io.farfrontier.palemirror.frontier.v3.api.ProposedEvent proposed) {
+        return FrontierWorldRuntimeDefinition.reduce(state, new FrontierEvent(1,
+                new EventId("event:site-harvest-" + phase + "-r" + revision),
+                new TransactionId("transaction:site-harvest-" + phase + "-r" + revision), state.bootstrap().worldId(),
+                new Revision(revision), new SimInstant(22_300L + revision), proposed.subject(), CauseChain.root(commandId), proposed.payload()));
     }
 
     @Test
