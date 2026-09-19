@@ -36,17 +36,30 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
         return PhysicalIntentRetirementAccount.declared(owner,
                 java.util.EnumSet.allOf(PhysicalIntentRetirementAccount.Dimension.class),
                 FrontierLogisticsProcessModule::bindRetirement,
+                FrontierLogisticsProcessModule::verifyRetirementBinding,
                 (before, after, intent, transition, binding) -> {
                     if (intent.lifecycleOwner() != owner) throw new IllegalArgumentException("route retirement account owner mismatch");
                     RouteOperation operation = before.operations().get(intent.causeSubjectId());
                     if (operation == null || FrontierDomainRelationships.view(before).edges().stream().noneMatch(edge -> edge.kind()
-                            == FrontierDomainRelationships.Kind.CONTRACT_ROUTE_OPERATION && edge.target().stableKey()
-                            .equals(FrontierDomainRelationships.EntityKind.ROUTE_OPERATION + ":" + operation.id().value()))) {
+                            == FrontierDomainRelationships.Kind.CONTRACT_ROUTE_OPERATION && edge.target().equals(
+                            new FrontierDomainRelationships.SubjectEndpoint(FrontierDomainRelationships.EntityKind.ROUTE_OPERATION, operation.id())))) {
                         throw new IllegalArgumentException("route retirement account lacks exact contract relation");
                     }
                     if (!after.operations().containsKey(intent.causeSubjectId()) && transition.status()
                             == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) {
                         throw new IllegalArgumentException("route retirement account lost ambiguous operation authority");
+                    }
+                    if (binding.leaseOrCarrier() instanceof PhysicalIntentRetirementAccount.Exact<io.farfrontier.palemirror.frontier.v3.api.SubjectId> carrier
+                            && !carrier.value().equals(operation.cargoCarrierId())
+                            || binding.commitment() instanceof PhysicalIntentRetirementAccount.Exact<io.farfrontier.palemirror.frontier.v3.api.SubjectId> commitment
+                            && !commitment.value().equals(operation.cargoId())) {
+                        throw new IllegalArgumentException("route retirement account has a foreign carrier or cargo commitment");
+                    }
+                    if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED
+                            && intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_HANDOFF
+                            && before.contracts().values().stream().filter(contract -> contract.id().equals(operation.contractId()))
+                            .findFirst().map(contract -> after.contracts().get(contract.id()).status() != ContractStatus.DELIVERED).orElse(true)) {
+                        throw new IllegalArgumentException("route retirement account did not prove the committed cargo hand-off");
                     }
                 });
     }
@@ -69,6 +82,21 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
                 transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
                         ? PhysicalIntentRetirementAccount.LateDisposition.RETAIN_AMBIGUOUS_RECOVERY
                         : PhysicalIntentRetirementAccount.LateDisposition.REJECT_STALE_ONCE);
+    }
+
+    private static void verifyRetirementBinding(FrontierWorldState before, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                PhysicalIntentTransition transition, PhysicalIntentRetirementAccount.Binding binding) {
+        RouteOperation operation = before.operations().get(intent.causeSubjectId());
+        if (operation == null) throw new IllegalArgumentException("route retirement account has no exact operation");
+        List<FrontierDomainRelationships.Edge> relations = FrontierDomainRelationships.view(before).edges().stream()
+                .filter(edge -> edge.kind() == FrontierDomainRelationships.Kind.CONTRACT_ROUTE_OPERATION
+                        || edge.kind() == FrontierDomainRelationships.Kind.CONTRACT_CARGO || edge.kind() == FrontierDomainRelationships.Kind.ROUTE_CARRIER)
+                .filter(edge -> edge.correlation().equals(operation.id().value()) || edge.correlation().equals(operation.contractId().value())).toList();
+        PhysicalIntentRetirementAccount.requireSameDeclaredAccount(binding, new PhysicalIntentRetirementAccount.Binding(
+                intent.lifecycleOwner(), intent.id(), new PhysicalIntentRetirementAccount.Exact<>(relations), binding.continuation(),
+                new PhysicalIntentRetirementAccount.Exact<>(operation.cargoCarrierId()), new PhysicalIntentRetirementAccount.Exact<>(operation.cargoId()),
+                transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
+                        ? PhysicalIntentRetirementAccount.LateDisposition.RETAIN_AMBIGUOUS_RECOVERY : PhysicalIntentRetirementAccount.LateDisposition.REJECT_STALE_ONCE));
     }
 
     private static CommandPlan planPhysicalTransition(FrontierWorldState state, FrontierCommand command,

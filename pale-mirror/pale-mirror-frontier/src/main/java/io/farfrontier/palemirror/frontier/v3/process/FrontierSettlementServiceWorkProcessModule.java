@@ -42,12 +42,13 @@ final class FrontierSettlementServiceWorkProcessModule implements FrontierWorldP
         return PhysicalIntentRetirementAccount.declared(owner,
                 java.util.EnumSet.allOf(PhysicalIntentRetirementAccount.Dimension.class),
                 FrontierSettlementServiceWorkProcessModule::bindRetirement,
+                FrontierSettlementServiceWorkProcessModule::verifyRetirementBinding,
                 (before, after, intent, transition, binding) -> {
                     if (intent.lifecycleOwner() != owner) throw new IllegalArgumentException("settlement-service retirement account owner mismatch");
                     SettlementServiceWork work = before.serviceWorks().get(intent.causeSubjectId());
                     if (work == null || FrontierDomainRelationships.view(before).edges().stream().noneMatch(edge -> edge.kind()
-                            == FrontierDomainRelationships.Kind.SERVICE_WORKER && edge.owner().stableKey()
-                            .equals(FrontierDomainRelationships.EntityKind.SERVICE_WORK + ":" + work.id().value()))) {
+                            == FrontierDomainRelationships.Kind.SERVICE_WORKER && edge.owner().equals(
+                            new FrontierDomainRelationships.SubjectEndpoint(FrontierDomainRelationships.EntityKind.SERVICE_WORK, work.id())))) {
                         throw new IllegalArgumentException("service retirement account lacks exact worker relation");
                     }
                 });
@@ -58,9 +59,10 @@ final class FrontierSettlementServiceWorkProcessModule implements FrontierWorldP
                                                                             PhysicalIntentTransition transition) {
         SettlementServiceWork work = before == null ? null : before.serviceWorks().get(intent.causeSubjectId());
         if (work == null) throw new IllegalArgumentException("service retirement account has no exact work");
-        String workKey = FrontierDomainRelationships.EntityKind.SERVICE_WORK + ":" + work.id().value();
+        FrontierDomainRelationships.SubjectEndpoint workOwner = new FrontierDomainRelationships.SubjectEndpoint(
+                FrontierDomainRelationships.EntityKind.SERVICE_WORK, work.id());
         List<FrontierDomainRelationships.Edge> relations = FrontierDomainRelationships.view(before).edges().stream()
-                .filter(edge -> edge.owner().stableKey().equals(workKey)).filter(edge -> edge.kind() == FrontierDomainRelationships.Kind.SERVICE_TASK
+                .filter(edge -> edge.owner().equals(workOwner)).filter(edge -> edge.kind() == FrontierDomainRelationships.Kind.SERVICE_TASK
                         || edge.kind() == FrontierDomainRelationships.Kind.SERVICE_WORKER || edge.kind() == FrontierDomainRelationships.Kind.SERVICE_FACILITY
                         || edge.kind() == FrontierDomainRelationships.Kind.SERVICE_INPUT).toList();
         if (relations.size() != 4) throw new IllegalArgumentException("service retirement account does not bind its exact task/worker/facility/input relations");
@@ -72,6 +74,23 @@ final class FrontierSettlementServiceWorkProcessModule implements FrontierWorldP
                 transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
                         ? PhysicalIntentRetirementAccount.LateDisposition.RETAIN_AMBIGUOUS_RECOVERY
                         : PhysicalIntentRetirementAccount.LateDisposition.REJECT_STALE_ONCE);
+    }
+
+    private static void verifyRetirementBinding(FrontierWorldState before, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                PhysicalIntentTransition transition, PhysicalIntentRetirementAccount.Binding binding) {
+        SettlementServiceWork work = before.serviceWorks().get(intent.causeSubjectId());
+        if (work == null) throw new IllegalArgumentException("service retirement account has no exact work");
+        FrontierDomainRelationships.SubjectEndpoint workOwner = new FrontierDomainRelationships.SubjectEndpoint(
+                FrontierDomainRelationships.EntityKind.SERVICE_WORK, work.id());
+        List<FrontierDomainRelationships.Edge> relations = FrontierDomainRelationships.view(before).edges().stream()
+                .filter(edge -> edge.owner().equals(workOwner)).filter(edge -> edge.kind() == FrontierDomainRelationships.Kind.SERVICE_TASK
+                        || edge.kind() == FrontierDomainRelationships.Kind.SERVICE_WORKER || edge.kind() == FrontierDomainRelationships.Kind.SERVICE_FACILITY
+                        || edge.kind() == FrontierDomainRelationships.Kind.SERVICE_INPUT).toList();
+        PhysicalIntentRetirementAccount.requireSameDeclaredAccount(binding, new PhysicalIntentRetirementAccount.Binding(
+                intent.lifecycleOwner(), intent.id(), new PhysicalIntentRetirementAccount.Exact<>(relations), binding.continuation(),
+                new PhysicalIntentRetirementAccount.Exact<>(work.workerId()), new PhysicalIntentRetirementAccount.Exact<>(work.inputItemId()),
+                transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
+                        ? PhysicalIntentRetirementAccount.LateDisposition.RETAIN_AMBIGUOUS_RECOVERY : PhysicalIntentRetirementAccount.LateDisposition.REJECT_STALE_ONCE));
     }
 
     private static CommandPlan planServiceDecontaminationTransition(FrontierWorldState state, FrontierCommand command,

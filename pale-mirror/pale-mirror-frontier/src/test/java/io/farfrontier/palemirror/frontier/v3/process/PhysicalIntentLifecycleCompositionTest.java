@@ -60,6 +60,8 @@ class PhysicalIntentLifecycleCompositionTest {
                                           PhysicalIntent intent, PhysicalIntentTransition transition) {
                 return PhysicalIntentRetirementAccount.checkedNone(first, command, intent, transition);
             }
+            @Override public void verifyDeclaredBinding(io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState before,
+                                                        PhysicalIntent intent, PhysicalIntentTransition transition, Binding binding) { }
             @Override public void verifyOwnerState(io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState before,
                                                    io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState after,
                                                    PhysicalIntent intent, PhysicalIntentTransition transition, Binding binding) { }
@@ -158,6 +160,8 @@ class PhysicalIntentLifecycleCompositionTest {
         return PhysicalIntentRetirementAccount.declared(owner,
                 java.util.EnumSet.allOf(PhysicalIntentRetirementAccount.Dimension.class),
                 (before, command, intent, transition) -> PhysicalIntentRetirementAccount.checkedNone(owner, command, intent, transition),
+                (before, intent, transition, binding) -> PhysicalIntentRetirementAccount.requireSameDeclaredAccount(binding,
+                        PhysicalIntentRetirementAccount.checkedNone(owner, null, intent, transition)),
                 (before, after, intent, transition, binding) -> {
                     if (intent.lifecycleOwner() != owner) throw new IllegalArgumentException("test owner mismatch");
                 });

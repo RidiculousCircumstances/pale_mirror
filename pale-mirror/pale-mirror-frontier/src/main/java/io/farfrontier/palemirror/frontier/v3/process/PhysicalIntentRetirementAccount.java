@@ -29,6 +29,8 @@ interface PhysicalIntentRetirementAccount {
     EnumSet<Dimension> checkedDimensions();
     void verifyOwnerState(FrontierWorldState before, FrontierWorldState after, PhysicalIntent intent,
                           PhysicalIntentTransition transition, Binding binding);
+    void verifyDeclaredBinding(FrontierWorldState before, PhysicalIntent intent,
+                               PhysicalIntentTransition transition, Binding binding);
 
     /**
      * The owner-supplied transaction-local facts for one terminal transition.  These are not a
@@ -79,6 +81,7 @@ interface PhysicalIntentRetirementAccount {
         }
         validateObligation(binding.leaseOrCarrier(), exactRelations(binding.relations()), "lease/carrier");
         validateObligation(binding.commitment(), exactRelations(binding.relations()), "resource commitment");
+        verifyDeclaredBinding(before, intent, transition, binding);
         verifyOwnerState(before, before, intent, transition, binding);
         if (binding.continuation() instanceof Exact<ScheduleId> expected) {
             long matching = accepted.events().stream().map(event -> event.payload()).filter(ScheduleEffect.class::isInstance)
@@ -87,6 +90,10 @@ interface PhysicalIntentRetirementAccount {
             // boundary rather than represent it as a domain proposed event.  The account binds
             // that exact ID; a proposed schedule effect is permitted once, never duplicated.
             if (matching != 1L) throw new IllegalArgumentException("retirement account must emit exactly one disposition for its exact bound engine schedule effect");
+        }
+        if (binding.continuation() instanceof CheckedNone<ScheduleId>
+                && command != null && command.scheduleBinding().isPresent()) {
+            throw new IllegalArgumentException("retirement account falsely declares no engine continuation for a bound command");
         }
         if (command != null) command.scheduleBinding().ifPresent(scheduleBinding -> {
             ScheduleId id = scheduleBinding.action().id();
@@ -112,6 +119,7 @@ interface PhysicalIntentRetirementAccount {
         }
         validateObligation(binding.leaseOrCarrier(), exactRelations(binding.relations()), "lease/carrier");
         validateObligation(binding.commitment(), exactRelations(binding.relations()), "resource commitment");
+        verifyDeclaredBinding(before, intent, transition, binding);
         PhysicalIntent terminal = after.physicalIntents().get(intent.id());
         if (terminal == null || terminal.status() != transition.status()) throw new IllegalArgumentException("retirement account lost its exact terminal intent");
         var bindingId = FencedRecoveryPhysicalIntentSupport.bindingId(intent);
@@ -138,23 +146,31 @@ interface PhysicalIntentRetirementAccount {
     static PhysicalIntentRetirementAccount noPhysical(PhysicalIntentLifecycleOwner owner) {
         return declared(owner, EnumSet.allOf(Dimension.class),
                 (before, command, intent, transition) -> checkedNone(owner, command, intent, transition),
+                (before, intent, transition, binding) -> {
+                    throw new IllegalArgumentException("no-physical owner cannot declare a retirement account");
+                },
                 (before, after, intent, transition, binding) -> {
             throw new IllegalArgumentException("no-physical owner cannot retire an intent");
         });
     }
 
     static PhysicalIntentRetirementAccount declared(PhysicalIntentLifecycleOwner owner, EnumSet<Dimension> dimensions,
-                                                     BindingFactory bindings, OwnerStateCheck check) {
+                                                     BindingFactory bindings, BindingCheck bindingCheck, OwnerStateCheck check) {
         Objects.requireNonNull(owner, "retirement account owner");
         EnumSet<Dimension> checked = EnumSet.copyOf(Objects.requireNonNull(dimensions, "retirement account dimensions"));
         if (!checked.containsAll(EnumSet.allOf(Dimension.class))) throw new IllegalArgumentException("retirement account omits a checked dimension");
         Objects.requireNonNull(check, "retirement account owner-state check");
         Objects.requireNonNull(bindings, "retirement account binding factory");
+        Objects.requireNonNull(bindingCheck, "retirement account binding check");
         return new PhysicalIntentRetirementAccount() {
             @Override public PhysicalIntentLifecycleOwner owner() { return owner; }
             @Override public EnumSet<Dimension> checkedDimensions() { return EnumSet.copyOf(checked); }
             @Override public void verifyOwnerState(FrontierWorldState before, FrontierWorldState after, PhysicalIntent intent,
                                                    PhysicalIntentTransition transition, Binding binding) { check.verify(before, after, intent, transition, binding); }
+            @Override public void verifyDeclaredBinding(FrontierWorldState before, PhysicalIntent intent,
+                                                        PhysicalIntentTransition transition, Binding binding) {
+                bindingCheck.verify(before, intent, transition, binding);
+            }
             @Override public Binding bind(FrontierWorldState before, FrontierCommand command, PhysicalIntent intent,
                                           PhysicalIntentTransition transition) {
                 Binding binding = bindings.bind(before, command, intent, transition);
@@ -216,6 +232,35 @@ interface PhysicalIntentRetirementAccount {
 
     @FunctionalInterface interface BindingFactory {
         Binding bind(FrontierWorldState before, FrontierCommand command, PhysicalIntent intent, PhysicalIntentTransition transition);
+    }
+
+    /**
+     * Re-executes the owner-declared account against pre-state during reduction and WAL replay.
+     * It must compare the complete applicable relation/subject account, not discover an account
+     * by searching for an ID in arbitrary relationship endpoints.  The schedule is deliberately
+     * excluded here: its exact engine disposition is checked at the transaction boundary.
+     */
+    @FunctionalInterface interface BindingCheck {
+        void verify(FrontierWorldState before, PhysicalIntent intent, PhysicalIntentTransition transition, Binding binding);
+    }
+
+    static void requireSameDeclaredAccount(Binding actual, Binding expected) {
+        if (actual.owner() != expected.owner() || !actual.intentId().equals(expected.intentId())
+                || !sameObligation(actual.relations(), expected.relations())
+                || !sameObligation(actual.leaseOrCarrier(), expected.leaseOrCarrier())
+                || !sameObligation(actual.commitment(), expected.commitment())
+                || actual.lateDisposition() != expected.lateDisposition()) {
+            throw new IllegalArgumentException("retirement proof does not equal the owner's complete declared account");
+        }
+    }
+
+    private static boolean sameObligation(Obligation<?> left, Obligation<?> right) {
+        if (left instanceof Exact<?> exactLeft && right instanceof Exact<?> exactRight) {
+            Object a = exactLeft.value(); Object b = exactRight.value();
+            if (a instanceof List<?> la && b instanceof List<?> lb) return java.util.Set.copyOf(la).equals(java.util.Set.copyOf(lb)) && la.size() == lb.size();
+            return Objects.equals(a, b);
+        }
+        return left instanceof CheckedNone<?> l && right instanceof CheckedNone<?> r && l.absence() == r.absence();
     }
 
     private static void validateObligation(Obligation<SubjectId> obligation, List<FrontierDomainRelationships.Edge> relations, String dimension) {

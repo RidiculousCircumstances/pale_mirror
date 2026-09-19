@@ -147,6 +147,7 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
         return PhysicalIntentRetirementAccount.declared(owner,
                 java.util.EnumSet.allOf(PhysicalIntentRetirementAccount.Dimension.class),
                 FrontierHiveProcessModule::bindRetirement,
+                FrontierHiveProcessModule::verifyRetirementBinding,
                 (before, after, intent, transition, binding) -> {
                     if (intent.lifecycleOwner() != owner) throw new IllegalArgumentException("hive retirement account owner mismatch");
                 });
@@ -166,6 +167,16 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
                 transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
                         ? PhysicalIntentRetirementAccount.LateDisposition.RETAIN_AMBIGUOUS_RECOVERY
                         : PhysicalIntentRetirementAccount.LateDisposition.REJECT_STALE_ONCE);
+    }
+
+    private static void verifyRetirementBinding(FrontierWorldState before, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                PhysicalIntentTransition transition, PhysicalIntentRetirementAccount.Binding binding) {
+        PhysicalIntentRetirementAccount.requireSameDeclaredAccount(binding, new PhysicalIntentRetirementAccount.Binding(
+                intent.lifecycleOwner(), intent.id(), new PhysicalIntentRetirementAccount.CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_APPLICABLE_RELATION),
+                binding.continuation(), new PhysicalIntentRetirementAccount.CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_LEASE_OR_CARRIER),
+                new PhysicalIntentRetirementAccount.CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_RESOURCE_COMMITMENT),
+                transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
+                        ? PhysicalIntentRetirementAccount.LateDisposition.RETAIN_AMBIGUOUS_RECOVERY : PhysicalIntentRetirementAccount.LateDisposition.REJECT_STALE_ONCE));
     }
 
     private static CommandPlan planAssaultPreparation(FrontierWorldState state, PhysicalIntentPrepared prepared) {

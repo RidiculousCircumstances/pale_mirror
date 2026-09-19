@@ -45,6 +45,11 @@ public final class FrontierWorldStateTransitionValidator implements StateValidat
                 if (dispositions != 1L || schedulesAfter.stream().anyMatch(action -> action.id().equals(exact.value()))) {
                     throw new IllegalArgumentException("retirement proof schedule does not have one engine-owned disposition");
                 }
+            } else if (events.stream().map(FrontierEvent::payload).anyMatch(ScheduleEffect.class::isInstance)) {
+                // A checked-none continuation means this terminal account owns no engine action
+                // in this atomic transaction.  A transaction carrying a schedule disposition
+                // must name that action exactly; it cannot hide it behind a none claim.
+                throw new IllegalArgumentException("retirement proof falsely declares no engine continuation for a scheduled transaction");
             }
             long duplicates = events.stream().map(FrontierEvent::payload).filter(PhysicalIntentTransition.class::isInstance)
                     .map(PhysicalIntentTransition.class::cast).filter(other -> terminal(other.status()) && other.intentId().equals(transition.intentId())).count();

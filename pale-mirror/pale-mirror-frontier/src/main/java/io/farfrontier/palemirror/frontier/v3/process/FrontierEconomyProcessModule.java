@@ -52,6 +52,7 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
         return PhysicalIntentRetirementAccount.declared(owner,
                 java.util.EnumSet.allOf(PhysicalIntentRetirementAccount.Dimension.class),
                 FrontierEconomyProcessModule::bindRetirement,
+                FrontierEconomyProcessModule::verifyRetirementBinding,
                 (before, after, intent, transition, binding) -> {
                     if (intent.lifecycleOwner() != owner || !before.productionJobs().containsKey(intent.causeSubjectId())) {
                         throw new IllegalArgumentException("production retirement account lacks its exact pre-state job");
@@ -63,12 +64,35 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
                             || !commitment.value().equals(job.consumedItemId())) {
                         throw new IllegalArgumentException("production retirement account does not retain its exact declared relations, worker and input commitment");
                     }
+                    if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED
+                            && (after.productionJobs().containsKey(job.id()) || after.inventory().items().containsKey(job.consumedItemId())
+                            || !after.inventory().items().containsKey(job.outputItemId()))) {
+                        throw new IllegalArgumentException("production retirement account did not prove the committed input-to-output disposition");
+                    }
+                    if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
+                            && (!after.productionJobs().containsKey(job.id()) || !after.inventory().items().containsKey(job.consumedItemId()))) {
+                        throw new IllegalArgumentException("production retirement account lost its ambiguous worker/input commitment");
+                    }
                 });
     }
 
     private static PhysicalIntentRetirementAccount.Binding bindRetirement(FrontierWorldState before, FrontierCommand command,
                                                                             io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
                                                                             PhysicalIntentTransition transition) {
+        var continuation = (command == null ? java.util.Optional.<io.farfrontier.palemirror.frontier.v3.api.EngineScheduleBinding>empty() : command.scheduleBinding()).<PhysicalIntentRetirementAccount.Obligation<io.farfrontier.palemirror.frontier.v3.api.ScheduleId>>map(value -> new PhysicalIntentRetirementAccount.Exact<>(value.action().id()))
+                .orElseGet(() -> new PhysicalIntentRetirementAccount.CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_ENGINE_CONTINUATION));
+        return retirementFacts(before, intent, transition, continuation);
+    }
+
+    private static void verifyRetirementBinding(FrontierWorldState before, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                PhysicalIntentTransition transition, PhysicalIntentRetirementAccount.Binding binding) {
+        PhysicalIntentRetirementAccount.requireSameDeclaredAccount(binding, retirementFacts(before, intent, transition, binding.continuation()));
+    }
+
+    private static PhysicalIntentRetirementAccount.Binding retirementFacts(FrontierWorldState before,
+                                                                            io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                                            PhysicalIntentTransition transition,
+                                                                            PhysicalIntentRetirementAccount.Obligation<io.farfrontier.palemirror.frontier.v3.api.ScheduleId> continuation) {
         ProductionJob job = before.productionJobs().get(intent.causeSubjectId());
         if (job == null) throw new IllegalArgumentException("production retirement account has no exact job");
         FrontierDomainRelationships.SubjectEndpoint owner = new FrontierDomainRelationships.SubjectEndpoint(FrontierDomainRelationships.EntityKind.PRODUCTION_JOB, job.id());
@@ -76,8 +100,6 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
                 .filter(edge -> edge.owner().equals(owner)).filter(edge -> edge.kind() == FrontierDomainRelationships.Kind.JOB_WORKER
                         || edge.kind() == FrontierDomainRelationships.Kind.JOB_INPUT || edge.kind() == FrontierDomainRelationships.Kind.JOB_OUTPUT).toList();
         if (relations.size() != 3) throw new IllegalArgumentException("production retirement account lacks its declared worker/input/output relations");
-        var continuation = command.scheduleBinding().<PhysicalIntentRetirementAccount.Obligation<io.farfrontier.palemirror.frontier.v3.api.ScheduleId>>map(value -> new PhysicalIntentRetirementAccount.Exact<>(value.action().id()))
-                .orElseGet(() -> new PhysicalIntentRetirementAccount.CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_ENGINE_CONTINUATION));
         return new PhysicalIntentRetirementAccount.Binding(intent.lifecycleOwner(), intent.id(), new PhysicalIntentRetirementAccount.Exact<>(relations), continuation,
                 new PhysicalIntentRetirementAccount.Exact<>(job.workerId()), new PhysicalIntentRetirementAccount.Exact<>(job.consumedItemId()),
                 transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART

@@ -50,6 +50,8 @@ final class FrontierStrategyProcessModule implements FrontierWorldProcessModule 
         return PhysicalIntentRetirementAccount.declared(owner,
                 java.util.EnumSet.allOf(PhysicalIntentRetirementAccount.Dimension.class),
                 (before, command, intent, transition) -> PhysicalIntentRetirementAccount.checkedNone(owner, command, intent, transition),
+                (before, intent, transition, binding) -> PhysicalIntentRetirementAccount.requireSameDeclaredAccount(binding,
+                        PhysicalIntentRetirementAccount.checkedNone(owner, null, intent, transition)),
                 (before, after, intent, transition, binding) -> {
                     if (intent.lifecycleOwner() != owner) throw new IllegalArgumentException("strategy retirement account owner mismatch");
                 });
