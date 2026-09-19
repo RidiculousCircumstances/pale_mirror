@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "id": "disposable_f06r3_hot_release_cold_terminal",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "resource-site-harvest", "viewDistance": 6 },
+  "restart": { "mode": "graceful", "afterAction": 7, "zeroPlayerAdvanceTicks": 24000, "zeroPlayerTimeoutMs": 180000, "zeroPlayerSettleMs": 35000 },
+  "pilot": { "username": "PMTestPilot" },
+  "assertNoServerTickStallDuringIngress": true,
+  "setup": [{ "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+    { "view": "summary", "id": "", "expect": { "status": "ok", "settlements": 12, "sites": 12 } },
+    { "view": "process", "id": "job:site-harvest-1-wheat-field-1", "expect": {
+      "status": "ok", "conservation": { "completedCropSlots": 0, "pendingCropSlot": -1 },
+      "result": { "sitePhase": "HARVESTING", "intentStatus": "PREPARED", "complete": false }
+    } }
+  ] }],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "diagnostic": { "view": "site", "id": "site:1-wheat-field", "field": "firstCrop" } }, "settleMs": 0, "causalMilestone": "ordinary_first_crop_hot_demand" },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-1-wheat-field-1", "expect": {
+      "status": "ok", "claims": { "lease": { "status": "HOT", "members": 1 } },
+      "result": { "sitePhase": "HARVESTING", "intentStatus": "PREPARED", "complete": false }
+    }, "timeoutMs": 30000, "causalMilestone": "held_hot_lease_before_canonical_release" },
+    { "type": "release_fast_forward_hold" },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-1-wheat-field-1", "expect": {
+      "status": "ok", "claims": { "lease": { "status": "HOT", "members": 1 } },
+      "result": { "sitePhase": "HARVESTING", "intentStatus": "RUNNING", "complete": false }
+    }, "timeoutMs": 30000, "causalMilestone": "physical_hot_running_receipt_before_departure" },
+    { "type": "inspect", "view": "process", "id": "job:site-harvest-1-wheat-field-1", "causalMilestone": "exact_hot_running_receipt_before_release" },
+    { "type": "visit", "dimension": "minecraft:overworld", "position": { "x": 24, "y": 64, "z": -132 }, "settleMs": 0, "causalMilestone": "ordinary_hot_demand_loss" },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-1-wheat-field-1", "expect": {
+      "status": "ok", "claims": { "lease": null },
+      "result": { "sitePhase": "HARVESTING", "intentStatus": "RUNNING", "complete": false }
+    }, "timeoutMs": 30000, "causalMilestone": "hot_release_retains_exact_running_receipt" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "diagnostic": { "view": "site", "id": "site:1-wheat-field", "field": "firstCrop" } }, "settleMs": 5000, "causalMilestone": "ordinary_first_ingress_after_cold_terminal_restart" },
+    { "type": "inspect", "view": "site", "id": "site:1-wheat-field", "causalMilestone": "cold_terminal_growing_state_after_restart" },
+    { "type": "inspect", "view": "recovery", "id": "recovery:intent_ecf2d4203d8387d3b971f13d8a72c83768e135885ff45d3dda535aaf5b6dd6e0", "causalMilestone": "superseded_running_receipt_is_bounded_by_exact_fence" },
+    { "type": "inspect", "view": "summary", "id": "", "causalMilestone": "no_global_quarantine_after_running_receipt_terminal" }
+  ],
+  "assertions": [
+    { "after": 4, "view": "process", "id": "job:site-harvest-1-wheat-field-1", "expect": { "status": "ok", "claims": { "lease": { "status": "HOT" } }, "result": { "sitePhase": "HARVESTING", "intentStatus": "RUNNING" } } },
+    { "after": 7, "view": "process", "id": "job:site-harvest-1-wheat-field-1", "expect": { "status": "ok", "claims": { "lease": null }, "result": { "sitePhase": "HARVESTING", "intentStatus": "RUNNING" } } },
+    { "after": 9, "view": "site", "id": "site:1-wheat-field", "expect": { "status": "ok", "phase": "GROWING", "growthEpoch": 3, "growthStage": 2, "activeWork": "", "conflictDisposition": null } },
+    { "after": 10, "view": "recovery", "id": "recovery:intent_ecf2d4203d8387d3b971f13d8a72c83768e135885ff45d3dda535aaf5b6dd6e0", "expect": { "status": "retired", "asset": "EFFECT", "owner": "site:1-wheat-field", "disposition": "ABANDON", "reason": "terminal-physical-conflict" } },
+    { "after": 11, "view": "summary", "id": "", "expect": { "status": "ok", "inventoryConflicts": 0 } }
+  ],
+  "frames": []
+}

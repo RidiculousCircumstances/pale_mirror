@@ -376,9 +376,18 @@ public final class FrontierV3ServerLifecycle {
         Objects.requireNonNull(server, "server");
         if (!ownsPhysicalWorld(server) || stopping(server) || FAST_FORWARD_REMAINING.containsKey(server)) return false;
         Long target = FAST_FORWARD_TARGETS.remove(server);
-        if (target == null) return false;
         FastForwardTargetOutcome prior = FAST_FORWARD_OUTCOMES.get(server);
         Long checkpoint = RUNTIMES.containsKey(server) ? RUNTIMES.get(server).checkpointImage().map(image -> image.instant().ticks()).orElse(null) : null;
+        if (target == null) {
+            // A pilot initial hold protects fixture construction from ordinary ticks before the
+            // first real client can establish HOT ownership.  Its release is a control-only
+            // hand-off at the current checkpoint, not a synthetic advance; publish the same
+            // monotonic receipt shape so the client can prove that hand-off before continuing.
+            if (INITIAL_CANONICAL_HOLDS.remove(server) == null || checkpoint == null) return false;
+            FAST_FORWARD_OUTCOMES.put(server, nextFastForwardTargetOutcome(prior, checkpoint, checkpoint, checkpoint, "RELEASED", null));
+            recordFastForwardRequest(server, "ABSOLUTE", 0, checkpoint, checkpoint, checkpoint, "RELEASED", null);
+            return true;
+        }
         FAST_FORWARD_OUTCOMES.put(server, nextFastForwardTargetOutcome(prior, target,
                 prior == null ? checkpoint : prior.admittedCheckpointInstant(), checkpoint, "RELEASED", null));
         // Releasing a completed hold is itself an operator action. Retain a distinct receipt

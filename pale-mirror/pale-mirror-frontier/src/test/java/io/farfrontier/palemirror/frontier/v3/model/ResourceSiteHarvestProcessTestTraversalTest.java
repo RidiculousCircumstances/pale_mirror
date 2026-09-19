@@ -352,6 +352,119 @@ class ResourceSiteHarvestTraversalTest extends ResourceSiteHarvestProcessTest {
     }
 
     @Test
+    void hotStartedHarvestMayReleaseToColdTerminalWithoutDiscardingItsExactReceiptAuthority() {
+        HotHarvest hot = hotHarvestAfterColdSteps(0);
+        ResourceSiteHarvestJob job = hot.job();
+        FrontierWorldState released = hot.state()
+                .transitionPhysicalIntent(job.intentId(), PhysicalIntentStatus.RUNNING, Optional.empty())
+                .transitionSceneLease(hot.lease().id(), SceneLeaseStatus.DRAINING)
+                .releaseSceneLease(hot.lease().id(), List.of(new SceneMemberPosition(job.workerId(),
+                        hot.state().actorLocations().get(job.workerId()).body(),
+                        hot.state().actorLocations().get(job.workerId()).condition().health())));
+        ScheduledAction action = ResourceSiteHarvestProcess.coldProgress(job, 22_301L);
+
+        for (int step = 0; step < 256 && released.resourceSites().site(hot.site()).phase() == ResourceSitePhase.HARVESTING; step++) {
+            for (io.farfrontier.palemirror.frontier.v3.api.ProposedEvent event : ResourceSiteHarvestProcess.planColdProgress(released, action)) {
+                switch (event.payload()) {
+                    case ResourceSiteHarvestColdTraversalAdvanced advanced -> released = ResourceSiteHarvestProcess.reduceColdTraversalAdvanced(released, hot.site(), advanced);
+                    case ResourceSiteHarvestCropPrepared prepared -> released = ResourceSiteHarvestProcess.reduceCropPrepared(released, hot.site(), prepared);
+                    case ResourceSiteHarvestProgressed progressed -> released = ResourceSiteHarvestProcess.reduceProgressed(released, hot.site(), progressed);
+                    case StrategicTaskTransition transition -> released = StrategicObjectiveProcess.reduceTaskTransition(released, new SubjectId("settlement:1"), transition);
+                    case ScheduleEffect.Rescheduled rescheduled -> action = rescheduled.replacement();
+                    case ScheduleEffect.Cancelled ignored -> { }
+                    case ScheduleEffect.Created ignored -> { }
+                    default -> throw new AssertionError("unexpected HOT-release COLD terminal event: " + event.payload().type());
+                }
+            }
+        }
+
+        ResourceSiteHarvestLineage lineage = released.resourceSites().site(hot.site()).harvestLineage().orElseThrow();
+        assertEquals(ResourceSitePhase.GROWING, released.resourceSites().site(hot.site()).phase());
+        assertTrue(lineage.receiptPending(), "a HOT-started physical effect remains one exact receipt owner after COLD closes semantic work");
+        assertEquals(PhysicalIntentStatus.RUNNING, released.physicalIntents().get(job.intentId()).status());
+        assertEquals(64, released.inventory().items().get(job.outputItemId()).count());
+        FrontierWorldState restored = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(released));
+        assertEquals(lineage, restored.resourceSites().site(hot.site()).harvestLineage().orElseThrow(),
+                "restart retains the pending exact HOT receipt rather than replaying or dropping it");
+        PhysicalIntent running = restored.physicalIntents().get(job.intentId());
+        ExactItemStack output = restored.inventory().items().get(job.outputItemId());
+        FrontierWorldState confirmed = restored.transitionPhysicalIntent(running.id(), PhysicalIntentStatus.CONFIRMED,
+                Optional.of(receipt(running, job, output)));
+        assertFalse(confirmed.resourceSites().site(hot.site()).harvestLineage().orElseThrow().receiptPending(),
+                "the exact late receipt resolves only its retained HOT-started lineage");
+        assertEquals(output, confirmed.inventory().items().get(output.id()),
+                "late physical evidence confirms canonical custody without replaying wheat");
+    }
+
+    @Test
+    void successorTerminalBoundsAnOlderUnobservedHotReceiptWithoutOrphaningIt() {
+        HotHarvest hot = hotHarvestAfterColdSteps(0);
+        ResourceSiteHarvestJob first = hot.job();
+        FrontierWorldState state = hot.state()
+                .transitionPhysicalIntent(first.intentId(), PhysicalIntentStatus.RUNNING, Optional.empty())
+                .transitionSceneLease(hot.lease().id(), SceneLeaseStatus.DRAINING)
+                .releaseSceneLease(hot.lease().id(), List.of(new SceneMemberPosition(first.workerId(),
+                        hot.state().actorLocations().get(first.workerId()).body(),
+                        hot.state().actorLocations().get(first.workerId()).condition().health())));
+        ScheduledAction action = ResourceSiteHarvestProcess.coldProgress(first, 22_301L);
+        state = completeColdTerminal(state, hot.site(), action);
+        ResourceSiteHarvestLineage firstTerminal = state.resourceSites().site(hot.site()).harvestLineage().orElseThrow();
+        assertTrue(firstTerminal.receiptPending());
+
+        for (int stage = 0; stage < ResourceSiteLifecycle.MATURE_STAGE; stage++) {
+            ResourceSiteLifecycle lifecycle = state.resourceSites().site(hot.site());
+            state = ResourceSiteProcess.reduceGrowth(state, hot.site(),
+                    new ResourceSiteGrowthAdvanced(hot.site(), lifecycle.growthEpoch(), lifecycle.growthStage()));
+        }
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> opportunity = StrategicObjectiveProcess.planResourceHarvestOpportunity(state,
+                StrategicObjectiveProcess.resourceHarvestOpportunity(state, state.resourceSites().site(hot.site()), 40_000L));
+        state = StrategicObjectiveProcess.reduceObjective(state, new SubjectId("settlement:1"), (StrategicObjectiveSelected) opportunity.getFirst().payload());
+        state = StrategicObjectiveProcess.reduceTask(state, new SubjectId("settlement:1"), (StrategicTaskPlanned) opportunity.get(1).payload());
+        StrategicTask successorTask = state.strategicPlans().tasks().values().stream().filter(candidate -> candidate.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE
+                && candidate.status() == StrategicTaskStatus.PENDING).findFirst().orElseThrow();
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> successorPlan = ResourceSiteHarvestProcess.plan(state,
+                ResourceSiteHarvestProcess.start(successorTask, 40_100L));
+        ResourceSiteHarvestStarted successor = successorPlan.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                .filter(ResourceSiteHarvestStarted.class::isInstance).map(ResourceSiteHarvestStarted.class::cast).findFirst().orElseThrow();
+        state = StrategicObjectiveProcess.reduceTaskTransition(state, new SubjectId("settlement:1"),
+                (StrategicTaskTransition) successorPlan.getFirst().payload());
+        state = ResourceSiteHarvestProcess.reduceStarted(state, hot.site(), successor);
+        state = ResourceSiteHarvestProcess.reducePrepared(state, hot.site(), successorPlan.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                .filter(PhysicalIntentPrepared.class::isInstance).map(PhysicalIntentPrepared.class::cast).findFirst().orElseThrow().intent());
+        ScheduledAction successorAction = successorPlan.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                .filter(ScheduleEffect.Created.class::isInstance).map(ScheduleEffect.Created.class::cast).findFirst().orElseThrow().action();
+        state = completeColdTerminal(state, hot.site(), successorAction);
+
+        assertFalse(state.physicalIntents().containsKey(first.intentId()),
+                "a later renewable terminal cannot leave the old RUNNING receipt as an orphan");
+        assertEquals(FencedRecoveryDisposition.ABANDON, state.fencedRecovery().tombstones().get(
+                FencedRecoveryPhysicalIntentSupport.bindingId(hot.state().physicalIntents().get(first.intentId()))).disposition(),
+                "the old physical replica is isolated as a bounded local disposition, not replay authority");
+        assertFalse(state.resourceSites().site(hot.site()).harvestLineage().orElseThrow().receiptPending(),
+                "the untouched successor composes only its own physical request");
+        assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)),
+                "the bounded rollover survives restart without reintroducing the old receipt");
+    }
+
+    private static FrontierWorldState completeColdTerminal(FrontierWorldState state, SubjectId site, ScheduledAction action) {
+        for (int step = 0; step < 256 && state.resourceSites().site(site).phase() == ResourceSitePhase.HARVESTING; step++) {
+            for (io.farfrontier.palemirror.frontier.v3.api.ProposedEvent event : ResourceSiteHarvestProcess.planColdProgress(state, action)) {
+                switch (event.payload()) {
+                    case ResourceSiteHarvestColdTraversalAdvanced advanced -> state = ResourceSiteHarvestProcess.reduceColdTraversalAdvanced(state, site, advanced);
+                    case ResourceSiteHarvestCropPrepared prepared -> state = ResourceSiteHarvestProcess.reduceCropPrepared(state, site, prepared);
+                    case ResourceSiteHarvestProgressed progressed -> state = ResourceSiteHarvestProcess.reduceProgressed(state, site, progressed);
+                    case StrategicTaskTransition transition -> state = StrategicObjectiveProcess.reduceTaskTransition(state, new SubjectId("settlement:1"), transition);
+                    case ScheduleEffect.Rescheduled rescheduled -> action = rescheduled.replacement();
+                    case ScheduleEffect.Cancelled ignored -> { }
+                    case ScheduleEffect.Created ignored -> { }
+                    default -> throw new AssertionError("unexpected renewable COLD terminal event: " + event.payload().type());
+                }
+            }
+        }
+        return state;
+    }
+
+    @Test
     void terminalColdCompositionCancelsItsExactContinuationAndARecoveredObsoleteActionIsConsumed() {
         ColdHarvest cold = coldHarvestAfterSteps(125L, 0);
         ResourceSiteHarvestJob job = cold.job();

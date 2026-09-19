@@ -9,7 +9,10 @@ import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
+import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
+import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSite;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestLineage;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteLifecycle;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSitePhase;
@@ -109,6 +112,28 @@ class FrontierV3ResourceSiteExecutorTest {
                 "a restart may route an exact active stage-zero successor through its bounded canonical catch-up");
         assertFalse(FrontierV3ResourceSiteExecutor.allowsOwnedStageCatchUp(terminal, ResourceSiteLifecycle.MATURE_STAGE, 0),
                 "a completed predecessor cannot be relabelled as an ordinary stage catch-up");
+    }
+
+    @Test
+    void composedColdTerminalAllowsOnlyItsExactOwnedHotPrefixToRegrowAfterRestart() {
+        SubjectId siteId = new SubjectId("site:1-wheat-field");
+        FrontierV3ResourceSiteLedger.Claim hotPrefix = new FrontierV3ResourceSiteLedger.Claim(
+                new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:site-projection-1-wheat-field"),
+                FrontierV3ResourceSiteLedger.Status.ACTIVE, ResourceSiteLifecycle.MATURE_STAGE, 1);
+        ResourceSiteHarvestLineage composed = new ResourceSiteHarvestLineage(
+                new SubjectId("job:site-harvest-1-wheat-field-2"), new SubjectId("task:settlement-1-harvest"),
+                new SubjectId("resident:1-31"), new SubjectId("item:site-harvest-1-wheat-field-2-wheat"), 2L,
+                new BodyPosition(0, 64, 0), new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:site-harvest-1-wheat-field-2"),
+                new InventoryCustody.ContainerSlot(new SubjectId("container:1"), 1), true, Optional.empty(), Optional.empty());
+        ResourceSiteLifecycle regrowth = new ResourceSiteLifecycle(siteId, ResourceSitePhase.GROWING, 3L, 2,
+                Optional.empty(), Optional.empty(), Optional.of(composed));
+
+        assertTrue(FrontierV3ResourceSiteExecutor.isExactComposedTerminalRegrowth(
+                regrowth, 2, 0, hotPrefix),
+                "a COLD-composed terminal may advance only its exact retained HOT prefix into the current growth epoch");
+        assertFalse(FrontierV3ResourceSiteExecutor.isExactComposedTerminalRegrowth(
+                regrowth, 2, 1, hotPrefix),
+                "a live harvest cursor is never relabelled as terminal regrowth");
     }
 
     @Test

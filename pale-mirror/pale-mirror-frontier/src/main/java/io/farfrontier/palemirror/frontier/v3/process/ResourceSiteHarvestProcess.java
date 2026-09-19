@@ -227,19 +227,20 @@ public final class ResourceSiteHarvestProcess {
         events.add(new ProposedEvent(job.siteId(), new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex())));
         events.add(new ProposedEvent(job.siteId(), new ResourceSiteHarvestProgressed(job.id(), progressed.completedCropSlots())));
         if (progressed.complete()) {
-            // COLD owns the last retained crop just as it owns every preceding crop.  The exact
-            // output is placed in canonical depot custody by the matching reducer, but no
-            // loaded-world effect has begun here.  Keep the exact intent PREPARED: RUNNING is
-            // reserved for the registered physical executor after it has admitted the actual
-            // effect.  The retained deferred lineage is the one bounded composition owner
-            // until either that effect is observed or the current successor makes the old
-            // wheat materialization inapplicable.
+            // COLD owns the last retained crop just as it owns every preceding crop.  Its exact
+            // output becomes canonical in the matching reducer.  An untouched PREPARED effect
+            // can be composed and fenced there; a HOT-started RUNNING effect is an actual
+            // physical fact and must instead retain its exact deferred-receipt owner.  Treating
+            // the latter as an inadmissible COLD terminal state quarantines the lawful
+            // HOT-release -> COLD continuation path.
             PhysicalIntent terminalIntent = state.physicalIntents().get(job.intentId());
-            if (terminalIntent == null || terminalIntent.status() != PhysicalIntentStatus.PREPARED) {
+            if (terminalIntent == null || (terminalIntent.status() != PhysicalIntentStatus.PREPARED
+                    && terminalIntent.status() != PhysicalIntentStatus.RUNNING)) {
                 throw new IllegalArgumentException("resource-site COLD terminal output has no admissible physical receipt state");
             }
             StrategicTask task = task(state, job.taskId(), StrategicTaskStatus.ACTIVE);
-            ResourceSiteLifecycle terminal = state.resourceSites().site(job.siteId()).harvestedDeferred(replacement);
+            ResourceSiteLifecycle terminal = state.resourceSites().site(job.siteId()).harvestedDeferred(replacement,
+                    terminalIntent.status() == PhysicalIntentStatus.PREPARED);
             events.add(transition(task, StrategicTaskStatus.COMPLETED));
             events.add(new ProposedEvent(job.siteId(), new ScheduleEffect.Cancelled(coldProgress(job, action.dueAt().ticks()).id())));
             events.add(new ProposedEvent(job.siteId(), new ScheduleEffect.Created(ResourceSiteProcess.nextGrowth(terminal, Math.addExact(action.dueAt().ticks(),
@@ -274,7 +275,7 @@ public final class ResourceSiteHarvestProcess {
         ResourceSiteLifecycle advanced = lifecycle.advanceHarvest(job, progressed.completedCropSlots());
         ResourceSiteLifecycle next = progressed.completedCropSlots() == ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS
                 && !FrontierResourceSiteHarvestSceneSupport.hasNonClosedScene(state, job.id())
-                ? advanced.harvestedDeferred()
+                ? terminalLifecycle(state, advanced, job)
                 : advanced;
         if (next.phase() != ResourceSitePhase.GROWING || progressed.completedCropSlots() != ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS) {
             return state.withResourceSites(state.resourceSites().replace(next));
@@ -282,21 +283,59 @@ public final class ResourceSiteHarvestProcess {
         ExactItemStack output = new ExactItemStack(job.outputItemId(), site(state, job.siteId()).settlementId(),
                 "minecraft:wheat", 64, job.outputSlot());
         PhysicalIntent intent = state.physicalIntents().get(job.intentId());
-        if (intent == null || intent.status() != PhysicalIntentStatus.PREPARED) {
-            throw new IllegalArgumentException("resource-site COLD completion lacks its exact unstarted physical intent");
+        if (intent == null || (intent.status() != PhysicalIntentStatus.PREPARED && intent.status() != PhysicalIntentStatus.RUNNING)) {
+            throw new IllegalArgumentException("resource-site COLD completion lacks its exact admissible physical intent");
         }
-        // COLD has atomically made the exact output canonical and retired this effect's
-        // execution authority.  Keeping the PREPARED request after that composition leaves a
-        // dead subject set behind; a later field epoch can then overwrite the one bounded
-        // lineage that used to validate it.  Remove the request in this same transaction so a
-        // late replica can only be rejected by the recovery tombstone, never replayed.
+        // Only an untouched request can be composed away.  A running effect already has a
+        // physical history, so its terminal lineage stays pending until that exact receipt is
+        // observed or its local recovery disposition resolves it; neither COLD nor a successor
+        // may erase that fact.
         java.util.Map<PhysicalIntentId, PhysicalIntent> intents = new java.util.LinkedHashMap<>(state.physicalIntents());
+        FencedRecoveryState recovery = retireSupersededPendingReceipt(state, lifecycle, intents);
+        if (intent.status() == PhysicalIntentStatus.RUNNING) {
+            return state.withChanges(FrontierWorldStateUpdate.begin()
+                    .resourceSites(state.resourceSites().replace(next))
+                    .inventory(state.inventory().store(output))
+                    .physicalIntents(intents)
+                    .fencedRecovery(recovery));
+        }
         intents.remove(intent.id());
         return state.withChanges(FrontierWorldStateUpdate.begin()
                 .resourceSites(state.resourceSites().replace(next))
                 .inventory(state.inventory().store(output))
                 .physicalIntents(intents)
-                .fencedRecovery(FencedRecoveryPhysicalIntentSupport.composed(state.fencedRecovery(), intent)));
+                .fencedRecovery(FencedRecoveryPhysicalIntentSupport.composed(recovery, intent)));
+    }
+
+    /**
+     * A renewable site can begin its exact successor while the preceding HOT effect remains
+     * physically unresolved.  If that successor reaches its own COLD terminal boundary first,
+     * the one retained lineage slot must not silently orphan the older RUNNING intent.  Retire
+     * that older effect as one bounded local ambiguity: its immutable recovery tombstone rejects
+     * a later stale replica without replaying either wheat result, while the new terminal keeps
+     * its own exact receipt authority.
+     */
+    private static FencedRecoveryState retireSupersededPendingReceipt(FrontierWorldState state,
+                                                                        ResourceSiteLifecycle lifecycle,
+                                                                        java.util.Map<PhysicalIntentId, PhysicalIntent> intents) {
+        ResourceSiteHarvestLineage predecessor = lifecycle.harvestLineage()
+                .filter(ResourceSiteHarvestLineage::receiptPending).orElse(null);
+        if (predecessor == null) return state.fencedRecovery();
+        PhysicalIntent prior = intents.remove(predecessor.predecessorIntentId());
+        if (prior == null || prior.status() != PhysicalIntentStatus.RUNNING
+                || !prior.causeSubjectId().equals(lifecycle.siteId())) {
+            throw new IllegalArgumentException("resource-site successor terminal lacks its exact pending predecessor receipt");
+        }
+        return FencedRecoveryPhysicalIntentSupport.transition(state.fencedRecovery(), prior, PhysicalIntentStatus.CONFLICTED);
+    }
+
+    private static ResourceSiteLifecycle terminalLifecycle(FrontierWorldState state, ResourceSiteLifecycle advanced,
+                                                            ResourceSiteHarvestJob job) {
+        PhysicalIntent intent = state.physicalIntents().get(job.intentId());
+        if (intent == null || (intent.status() != PhysicalIntentStatus.PREPARED && intent.status() != PhysicalIntentStatus.RUNNING)) {
+            throw new IllegalArgumentException("resource-site COLD terminal lifecycle lacks its exact admissible physical intent");
+        }
+        return advanced.harvestedDeferred(intent.status() == PhysicalIntentStatus.PREPARED);
     }
 
     public static FrontierWorldState reduceCropPrepared(FrontierWorldState state, SubjectId subject, ResourceSiteHarvestCropPrepared prepared) {

@@ -81,10 +81,10 @@ final class PaleMirrorCommandRegistrar {
                 })));
         v3.then(Commands.literal("release_advance_hold").requires(source -> source.hasPermission(4)).executes(context -> {
             if (!FrontierV3ServerLifecycle.releaseFastForwardHold(context.getSource().getServer())) {
-                context.getSource().sendFailure(Component.literal("Frontier v3 has no held absolute fast-forward target to release."));
+                context.getSource().sendFailure(Component.literal("Frontier v3 has no held canonical control boundary to release."));
                 return 0;
             }
-            context.getSource().sendSuccess(() -> Component.literal("Released Frontier v3 absolute fast-forward hold "
+            context.getSource().sendSuccess(() -> Component.literal("Released Frontier v3 held canonical control boundary "
                     + FrontierV3ServerLifecycle.latestFastForwardReceipt(context.getSource().getServer())
                     + "; inspect performance for the bounded receipt history."), true);
             return 1;

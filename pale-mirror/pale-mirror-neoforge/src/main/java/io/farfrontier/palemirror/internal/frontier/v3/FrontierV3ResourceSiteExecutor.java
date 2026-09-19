@@ -224,11 +224,13 @@ final class FrontierV3ResourceSiteExecutor {
                 boolean deferredTerminalReceipt = isExactDeferredHarvestReceipt(level, state, site, desiredStage, completedCropSlots, claim);
                 boolean confirmedHarvestRegrowth = isExactConfirmedHarvestRegrowth(level, state, site,
                         desiredStage, completedCropSlots, claim);
+                boolean composedTerminalRegrowth = isExactComposedTerminalRegrowth(state.resourceSites().site(site.id()),
+                        desiredStage, completedCropSlots, claim);
                 boolean interruptedStageZero = isExactInterruptedStageZeroProjection(level, state, site, desiredStage, completedCropSlots, claim);
                 boolean uncommittedCurrentHarvest = isExactUncommittedCurrentHarvest(level, state, site, desiredStage, completedCropSlots, claim);
                 if (claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE
                         || (!successorRegrowth && !terminalPredecessor && !deferredTerminalReceipt && !confirmedHarvestRegrowth
-                        && !interruptedStageZero && !uncommittedCurrentHarvest
+                        && !composedTerminalRegrowth && !interruptedStageZero && !uncommittedCurrentHarvest
                         && !matchesClaim(level, site, claim))) return StageProjectionResult.CONFLICT;
                 if (claim.stage() == desiredStage && claim.harvestedCropSlots() == completedCropSlots) return StageProjectionResult.CURRENT;
                 // COLD has completed the semantic predecessor but a naturally loaded owner
@@ -237,7 +239,7 @@ final class FrontierV3ResourceSiteExecutor {
                 // demand, or a restart turn turn that bounded lag into drift or regrowth.
                 if (deferredTerminalReceipt) return StageProjectionResult.DEFERRED;
                 boolean lawfulRegrowthReset = resetsTerminalHarvestClaim(claim, completedCropSlots,
-                        successorRegrowth, confirmedHarvestRegrowth);
+                        successorRegrowth, confirmedHarvestRegrowth) || composedTerminalRegrowth;
                 if (claim.stage() == ResourceSiteLifecycle.MATURE_STAGE && claim.harvestedCropSlots() > completedCropSlots && !lawfulRegrowthReset) {
                     if (!successorRegrowth) return StageProjectionResult.CONFLICT;
                 }
@@ -428,6 +430,20 @@ final class FrontierV3ResourceSiteExecutor {
                                                            FrontierV3ResourceSiteLedger.Claim claim) {
         return confirmedHarvestRegrowthAdmission(level, state, site, desiredStage, completedCropSlots, claim)
                 == ConfirmedHarvestRegrowthAdmission.ADMITTED;
+    }
+    /**
+     * A COLD terminal has already atomically composed its exact output and retired its
+     * PREPARED intent.  The durable owned field can still be the older HOT prefix: after a
+     * restart it is lawful to replace that exact prefix with the current growth stage, but only
+     * when the immediately preceding lineage proves that canonical terminal hand-off.
+     */
+    static boolean isExactComposedTerminalRegrowth(ResourceSiteLifecycle lifecycle, int desiredStage,
+                                                    int completedCropSlots, FrontierV3ResourceSiteLedger.Claim claim) {
+        if (claim == null || claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE
+                || claim.stage() != ResourceSiteLifecycle.MATURE_STAGE || claim.harvestedCropSlots() <= 0
+                || completedCropSlots != 0) return false;
+        return lifecycle.phase() == ResourceSitePhase.GROWING && desiredStage == lifecycle.growthStage()
+                && lifecycle.harvestLineage().map(ResourceSiteHarvestLineage::outputReceiptResolved).orElse(false);
     }
     private static boolean isExactDeferredHarvestReceipt(ServerLevel level, FrontierWorldState state, ResourceSite site,
                                                           int desiredStage, int completedCropSlots,
@@ -631,6 +647,10 @@ final class FrontierV3ResourceSiteExecutor {
                 result = RestartReconciliation.DEFERRED;
             } else if (isExactConfirmedHarvestRegrowth(level, state, site, lifecycle.growthStage(), 0,
                     FrontierV3ResourceSiteLedger.get(level).claim(site.id()))) {
+                result = boundedRestartProjection(level, runtime, state, site, lifecycle.growthStage(), 0);
+            } else if (isExactComposedTerminalRegrowth(lifecycle, lifecycle.growthStage(), 0,
+                    FrontierV3ResourceSiteLedger.get(level).claim(site.id())
+                    ) && matchesClaim(level, site, FrontierV3ResourceSiteLedger.get(level).claim(site.id()))) {
                 result = boundedRestartProjection(level, runtime, state, site, lifecycle.growthStage(), 0);
             } else if (allowsOwnedStageCatchUp(FrontierV3ResourceSiteLedger.get(level).claim(site.id()),
                     lifecycle.growthStage(), 0)

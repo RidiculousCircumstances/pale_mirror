@@ -151,11 +151,20 @@ public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, l
         if (phase != ResourceSitePhase.HARVESTING || completed == null) {
             throw new IllegalStateException("resource site has no complete COLD harvest");
         }
+        return harvestedDeferred(completed, true);
+    }
+    /** Retains a started exact physical effect as the one pending terminal receipt owner. */
+    public ResourceSiteLifecycle harvestedDeferred(boolean outputReceiptResolved) {
+        ResourceSiteHarvestJob completed = activeWork.filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
+                .filter(job -> job.progress().complete()).orElse(null);
+        if (phase != ResourceSitePhase.HARVESTING || completed == null) {
+            throw new IllegalStateException("resource site has no complete COLD harvest");
+        }
         return next(ResourceSitePhase.GROWING, Math.addExact(growthEpoch, 1L), 0, Optional.empty(),
-                Optional.of(ResourceSiteHarvestLineage.completed(completed, growthEpoch)));
+                Optional.of(ResourceSiteHarvestLineage.completed(completed, growthEpoch, outputReceiptResolved)));
     }
     /** Plans the post-final-crop epoch before its crop events are reduced. */
-    public ResourceSiteLifecycle harvestedDeferred(ResourceSiteHarvestJob completed) {
+    public ResourceSiteLifecycle harvestedDeferred(ResourceSiteHarvestJob completed, boolean outputReceiptResolved) {
         ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
                 .orElseThrow(() -> new IllegalStateException("resource site has no active harvest"));
         if (phase != ResourceSitePhase.HARVESTING || !active.id().equals(completed.id()) || !completed.progress().complete()
@@ -163,7 +172,7 @@ public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, l
             throw new IllegalArgumentException("resource site has no exact next complete COLD harvest");
         }
         return new ResourceSiteLifecycle(siteId, ResourceSitePhase.GROWING, Math.addExact(growthEpoch, 1L), 0, Optional.empty(), Optional.empty(),
-                Optional.of(ResourceSiteHarvestLineage.completed(completed, growthEpoch)));
+                Optional.of(ResourceSiteHarvestLineage.completed(completed, growthEpoch, outputReceiptResolved)));
     }
     public ResourceSiteLifecycle confirmDeferredHarvestReceipt(PhysicalIntentId intentId) {
         ResourceSiteHarvestLineage lineage = harvestLineage.filter(ResourceSiteHarvestLineage::receiptPending)
