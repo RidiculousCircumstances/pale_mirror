@@ -11,13 +11,15 @@ import java.util.Objects;
  * It deliberately stores no stock, reservation, process progress, demand, or scene membership.
  */
 public record PhysicalReplicaCustodyState(Map<SubjectId, PhysicalReplicaRecord> replicas,
-                                          Map<SubjectId, PhysicalCustodyLease> custodyByScope) {
+                                          Map<SubjectId, PhysicalCustodyLease> custodyByScope,
+                                          Map<SubjectId, DiagnosticTuple> diagnostics) {
     private static final int MAX_RECORDS = 4_096;
 
     public PhysicalReplicaCustodyState {
         replicas = Map.copyOf(Objects.requireNonNull(replicas, "replicas"));
         custodyByScope = Map.copyOf(Objects.requireNonNull(custodyByScope, "custody by scope"));
-        if (replicas.size() > MAX_RECORDS || custodyByScope.size() > MAX_RECORDS) throw new IllegalArgumentException("replica custody retention limit exceeded");
+        diagnostics = Map.copyOf(Objects.requireNonNull(diagnostics, "replica custody diagnostics"));
+        if (replicas.size() > MAX_RECORDS || custodyByScope.size() > MAX_RECORDS || diagnostics.size() > MAX_RECORDS) throw new IllegalArgumentException("replica custody retention limit exceeded");
         for (Map.Entry<SubjectId, PhysicalReplicaRecord> entry : replicas.entrySet()) {
             if (!entry.getKey().equals(entry.getValue().objectId())) throw new IllegalArgumentException("replica index must use its exact object identity");
         }
@@ -40,6 +42,10 @@ public record PhysicalReplicaCustodyState(Map<SubjectId, PhysicalReplicaRecord> 
         }
     }
 
+    public PhysicalReplicaCustodyState(Map<SubjectId, PhysicalReplicaRecord> replicas, Map<SubjectId, PhysicalCustodyLease> custodyByScope) {
+        this(replicas, custodyByScope, Map.of());
+    }
+
     public static PhysicalReplicaCustodyState empty() { return new PhysicalReplicaCustodyState(Map.of(), Map.of()); }
     public PhysicalReplicaCustodyState declare(PhysicalReplicaRecord replica) {
         Objects.requireNonNull(replica, "replica");
@@ -49,7 +55,7 @@ public record PhysicalReplicaCustodyState(Map<SubjectId, PhysicalReplicaRecord> 
         }
         if (replicas.containsKey(replica.objectId())) throw new IllegalArgumentException("replica identity already exists");
         Map<SubjectId, PhysicalReplicaRecord> next = new LinkedHashMap<>(replicas); next.put(replica.objectId(), replica);
-        return new PhysicalReplicaCustodyState(next, custodyByScope);
+        return new PhysicalReplicaCustodyState(next, custodyByScope, diagnostics);
     }
     public PhysicalReplicaCustodyState emit(SubjectId objectId, long expectedCanonicalRevision, long expectedReplicaRevision,
                                             long emittedCanonicalRevision, String fingerprint, String provenance) {
@@ -61,7 +67,7 @@ public record PhysicalReplicaCustodyState(Map<SubjectId, PhysicalReplicaRecord> 
         }
         Map<SubjectId, PhysicalReplicaRecord> next = new LinkedHashMap<>(replicas);
         next.put(objectId, current.reemit(emittedCanonicalRevision, fingerprint, provenance));
-        return new PhysicalReplicaCustodyState(next, custodyByScope);
+        return new PhysicalReplicaCustodyState(next, custodyByScope, withoutDiagnostic(objectId));
     }
     public PhysicalReplicaCustodyState observe(SubjectId objectId, long expectedCanonicalRevision, long expectedReplicaRevision,
                                                String fingerprint, String provenance, long observedRevision) {
@@ -72,19 +78,20 @@ public record PhysicalReplicaCustodyState(Map<SubjectId, PhysicalReplicaRecord> 
         }
         Map<SubjectId, PhysicalReplicaRecord> next = new LinkedHashMap<>(replicas);
         next.put(objectId, current.observe(expectedCanonicalRevision, fingerprint, provenance, observedRevision));
-        return new PhysicalReplicaCustodyState(next, custodyByScope);
+        return new PhysicalReplicaCustodyState(next, custodyByScope, withoutDiagnostic(objectId));
     }
     public PhysicalReplicaCustodyState conflict(SubjectId objectId, long expectedCanonicalRevision, long expectedReplicaRevision,
-                                                String fingerprint, String provenance) {
+                                                String fingerprint, String provenance, DiagnosticTuple diagnostic) {
         PhysicalReplicaRecord current = requireReplica(objectId);
         if (current.state() != PhysicalReplicaState.OBSERVED_CURRENT || current.emittedCanonicalRevision() != expectedCanonicalRevision
                 || current.replicaRevision() != expectedReplicaRevision
                 || custodyByScope.values().stream().anyMatch(lease -> lease.live() && lease.objectId().equals(objectId))) {
             throw new IllegalArgumentException("released replica conflict fence is stale or custody is live");
         }
-        Map<SubjectId, PhysicalReplicaRecord> next = new LinkedHashMap<>(replicas);
+        requireConflictDiagnostic(objectId, diagnostic);
+        Map<SubjectId, PhysicalReplicaRecord> next = new LinkedHashMap<>(replicas); Map<SubjectId, DiagnosticTuple> causes = new LinkedHashMap<>(diagnostics); causes.put(objectId, diagnostic);
         next.put(objectId, current.conflict(expectedCanonicalRevision, expectedReplicaRevision, fingerprint, provenance));
-        return new PhysicalReplicaCustodyState(next, custodyByScope);
+        return new PhysicalReplicaCustodyState(next, custodyByScope, causes);
     }
     public PhysicalReplicaCustodyState acquire(PhysicalCustodyLease requested) {
         Objects.requireNonNull(requested, "custody lease");
@@ -100,31 +107,43 @@ public record PhysicalReplicaCustodyState(Map<SubjectId, PhysicalReplicaRecord> 
                 && requested.authorityEpoch() <= lease.authorityEpoch())) throw new IllegalArgumentException("custody object reuses its epoch");
         if (custodyByScope.values().stream().anyMatch(lease -> lease.live() && lease.objectId().equals(requested.objectId()))) throw new IllegalArgumentException("custody scope overlaps a live object scope");
         Map<SubjectId, PhysicalCustodyLease> next = new LinkedHashMap<>(custodyByScope); next.put(requested.scopeId(), requested);
-        return new PhysicalReplicaCustodyState(replicas, next);
+        return new PhysicalReplicaCustodyState(replicas, next, diagnostics);
     }
     public PhysicalReplicaCustodyState checkpoint(SubjectId scopeId, long expectedEpoch, long canonicalRevision, long replicaRevision) {
         PhysicalCustodyLease lease = requireLive(scopeId, expectedEpoch);
         requireExactEvidence(lease, canonicalRevision, replicaRevision);
         Map<SubjectId, PhysicalCustodyLease> next = new LinkedHashMap<>(custodyByScope); next.put(scopeId, lease.checkpoint(canonicalRevision, replicaRevision));
-        return new PhysicalReplicaCustodyState(replicas, next);
+        return new PhysicalReplicaCustodyState(replicas, next, diagnostics);
     }
     public PhysicalReplicaCustodyState unresolved(SubjectId scopeId, long expectedEpoch, long expectedCanonicalRevision,
-                                                  long expectedReplicaRevision, PhysicalCustodyUnresolvedReason reason) {
+                                                  long expectedReplicaRevision, PhysicalCustodyUnresolvedReason reason, DiagnosticTuple diagnostic) {
         PhysicalCustodyLease lease = requireLive(scopeId, expectedEpoch);
         requireExactEvidence(lease, expectedCanonicalRevision, expectedReplicaRevision);
-        Map<SubjectId, PhysicalCustodyLease> next = new LinkedHashMap<>(custodyByScope); next.put(scopeId, lease.unresolved(reason));
-        return new PhysicalReplicaCustodyState(replicas, next);
+        requireUnresolvedDiagnostic(scopeId, diagnostic);
+        Map<SubjectId, PhysicalCustodyLease> next = new LinkedHashMap<>(custodyByScope); Map<SubjectId, DiagnosticTuple> causes = new LinkedHashMap<>(diagnostics); causes.put(scopeId, diagnostic); next.put(scopeId, lease.unresolved(reason));
+        return new PhysicalReplicaCustodyState(replicas, next, causes);
     }
     public PhysicalReplicaCustodyState release(SubjectId scopeId, long expectedEpoch, long canonicalRevision, long replicaRevision) {
         PhysicalCustodyLease lease = requireLive(scopeId, expectedEpoch);
         requireExactEvidence(lease, canonicalRevision, replicaRevision);
         Map<SubjectId, PhysicalCustodyLease> next = new LinkedHashMap<>(custodyByScope); next.put(scopeId, lease.release(canonicalRevision, replicaRevision));
-        return new PhysicalReplicaCustodyState(replicas, next);
+        return new PhysicalReplicaCustodyState(replicas, next, withoutDiagnostic(scopeId));
     }
     private PhysicalReplicaRecord requireReplica(SubjectId objectId) {
         PhysicalReplicaRecord replica = replicas.get(Objects.requireNonNull(objectId, "object id"));
         if (replica == null) throw new IllegalArgumentException("replica is unknown");
         return replica;
+    }
+    private Map<SubjectId, DiagnosticTuple> withoutDiagnostic(SubjectId id) {
+        Map<SubjectId, DiagnosticTuple> next = new LinkedHashMap<>(diagnostics); next.remove(id); return next;
+    }
+    private static void requireConflictDiagnostic(SubjectId id, DiagnosticTuple diagnostic) {
+        if (diagnostic == null || diagnostic.reason() != DiagnosticReason.REPLICA_CUSTODY_CONFLICT
+                || !diagnostic.owner().id().equals(id) || !diagnostic.subject().id().equals(id)) throw new IllegalArgumentException("replica conflict requires its exact diagnostic tuple");
+    }
+    private static void requireUnresolvedDiagnostic(SubjectId id, DiagnosticTuple diagnostic) {
+        if (diagnostic == null || diagnostic.reason() != DiagnosticReason.PHYSICAL_CUSTODY_UNRESOLVED
+                || !diagnostic.owner().id().equals(id) || !diagnostic.subject().id().equals(id)) throw new IllegalArgumentException("custody unresolved requires its exact diagnostic tuple");
     }
     private PhysicalCustodyLease requireLive(SubjectId scopeId, long expectedEpoch) {
         PhysicalCustodyLease lease = custodyByScope.get(Objects.requireNonNull(scopeId, "scope id"));

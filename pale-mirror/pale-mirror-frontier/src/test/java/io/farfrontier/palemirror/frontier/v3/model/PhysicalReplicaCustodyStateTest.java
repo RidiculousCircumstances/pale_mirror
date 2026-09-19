@@ -48,7 +48,8 @@ class PhysicalReplicaCustodyStateTest {
         assertThrows(IllegalArgumentException.class, () -> conflicted.acquire(lease(SCOPE_A, OBJECT_A, 1L, 10L, 2L)));
 
         PhysicalReplicaCustodyState other = state.observe(OBJECT_B, 10L, 1L, "sha256:a", "owned:genesis", 10L)
-                .acquire(lease(SCOPE_B, OBJECT_B, 1L, 10L, 2L)).unresolved(SCOPE_B, 1L, 10L, 2L, PhysicalCustodyUnresolvedReason.RESTART_AMBIGUITY);
+                .acquire(lease(SCOPE_B, OBJECT_B, 1L, 10L, 2L)).unresolved(SCOPE_B, 1L, 10L, 2L, PhysicalCustodyUnresolvedReason.RESTART_AMBIGUITY,
+                        ReplicaCustodyDiagnosticProducer.unresolved(SCOPE_B, 1L, 10L, 2L, PhysicalCustodyUnresolvedReason.RESTART_AMBIGUITY).diagnostic());
         assertThrows(IllegalArgumentException.class, () -> other.release(SCOPE_B, 1L, 10L, 2L));
         assertEquals(PhysicalReplicaState.CONFLICT, other.replicas().get(OBJECT_A).state());
         assertEquals(PhysicalCustodyLeaseStatus.UNRESOLVED, other.custodyByScope().get(SCOPE_B).status());
@@ -89,7 +90,8 @@ class PhysicalReplicaCustodyStateTest {
         PhysicalReplicaCustodyState released = PhysicalReplicaCustodyState.empty().declare(replica(OBJECT_A)).declare(replica(OBJECT_B))
                 .observe(OBJECT_A, 10L, 1L, "sha256:a", "owned:genesis", 10L)
                 .acquire(lease(SCOPE_A, OBJECT_A, 1L, 10L, 2L)).release(SCOPE_A, 1L, 10L, 2L);
-        PhysicalReplicaCustodyState conflicted = released.conflict(OBJECT_A, 10L, 2L, "sha256:foreign", "foreign:player");
+        PhysicalReplicaCustodyState conflicted = released.conflict(OBJECT_A, 10L, 2L, "sha256:foreign", "foreign:player",
+                ReplicaCustodyDiagnosticProducer.conflict(OBJECT_A, 10L, 2L, "sha256:foreign", "foreign:player").diagnostic());
         PhysicalReplicaRecord retained = conflicted.replicas().get(OBJECT_A);
         assertEquals(PhysicalReplicaState.CONFLICT, retained.state());
         assertEquals(10L, retained.emittedCanonicalRevision(), "actual evidence does not fabricate a newer expected projection");
@@ -108,8 +110,10 @@ class PhysicalReplicaCustodyStateTest {
         assertThrows(IllegalArgumentException.class, () -> PhysicalReplicaCustodyState.empty().declare(forgedInitial));
         PhysicalReplicaCustodyState held = PhysicalReplicaCustodyState.empty().declare(replica(OBJECT_A))
                 .observe(OBJECT_A, 10L, 1L, "sha256:a", "owned:genesis", 10L).acquire(lease(SCOPE_A, OBJECT_A, 1L, 10L, 2L))
-                .unresolved(SCOPE_A, 1L, 10L, 2L, PhysicalCustodyUnresolvedReason.PROVIDER_LOST);
-        assertThrows(IllegalArgumentException.class, () -> held.unresolved(SCOPE_A, 1L, 10L, 2L, PhysicalCustodyUnresolvedReason.PROVIDER_LOST));
+                .unresolved(SCOPE_A, 1L, 10L, 2L, PhysicalCustodyUnresolvedReason.PROVIDER_LOST,
+                        ReplicaCustodyDiagnosticProducer.unresolved(SCOPE_A, 1L, 10L, 2L, PhysicalCustodyUnresolvedReason.PROVIDER_LOST).diagnostic());
+        assertThrows(IllegalArgumentException.class, () -> held.unresolved(SCOPE_A, 1L, 10L, 2L, PhysicalCustodyUnresolvedReason.PROVIDER_LOST,
+                ReplicaCustodyDiagnosticProducer.unresolved(SCOPE_A, 1L, 10L, 2L, PhysicalCustodyUnresolvedReason.PROVIDER_LOST).diagnostic()));
         assertThrows(IllegalArgumentException.class, () -> held.release(SCOPE_A, 1L, 10L, 2L));
         assertThrows(IllegalArgumentException.class, () -> held.checkpoint(SCOPE_A, 1L, 10L, 2L));
     }
@@ -125,7 +129,8 @@ class PhysicalReplicaCustodyStateTest {
         PhysicalReplicaCustodyState held = ready.acquire(lease(SCOPE_A, OBJECT_A, 1L, 10L, 2L));
         assertThrows(IllegalArgumentException.class, () -> held.checkpoint(SCOPE_A, 1L, 11L, 2L));
         assertThrows(IllegalArgumentException.class, () -> held.release(SCOPE_A, 1L, 10L, 3L));
-        assertThrows(IllegalArgumentException.class, () -> held.unresolved(SCOPE_A, 1L, 11L, 2L, PhysicalCustodyUnresolvedReason.PROVIDER_LOST));
+        assertThrows(IllegalArgumentException.class, () -> held.unresolved(SCOPE_A, 1L, 11L, 2L, PhysicalCustodyUnresolvedReason.PROVIDER_LOST,
+                ReplicaCustodyDiagnosticProducer.unresolved(SCOPE_A, 1L, 11L, 2L, PhysicalCustodyUnresolvedReason.PROVIDER_LOST).diagnostic()));
 
         PhysicalReplicaCustodyState unrelated = held.observe(OBJECT_B, 10L, 1L, "sha256:a", "owned:genesis", 10L)
                 .acquire(lease(SCOPE_B, OBJECT_B, 1L, 10L, 2L));

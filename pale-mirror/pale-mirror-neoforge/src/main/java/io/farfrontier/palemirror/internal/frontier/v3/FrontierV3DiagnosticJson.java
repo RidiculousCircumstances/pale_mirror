@@ -229,7 +229,8 @@ final class FrontierV3DiagnosticJson {
     private static String summary(CheckpointImage checkpoint, FrontierWorldState state) {
         long retainedConflicts = state.resourceSites().sites().values().stream()
                 .filter(site -> site.conflictDisposition().isPresent()).count();
-        String verdict = retainedConflicts == 0 && state.inventory().conflicts().isEmpty() ? "green" : "blocked";
+        long custodyDiagnostics = state.replicaCustody().diagnostics().size();
+        String verdict = retainedConflicts == 0 && state.inventory().conflicts().isEmpty() && custodyDiagnostics == 0 ? "green" : "blocked";
         return base("summary", "", checkpoint)
                 + ",\"status\":\"ok\",\"diagnosticVerdict\":\"" + verdict + "\",\"requiredConflicts\":" + retainedConflicts
                 + ",\"settlements\":" + state.bootstrap().settlements().size()
@@ -241,7 +242,8 @@ final class FrontierV3DiagnosticJson {
                 + ",\"ambientLeases\":" + state.ambientLeases().size()
                 + ",\"sceneLeases\":" + state.sceneLeases().size()
                 + ",\"items\":" + state.inventory().items().size()
-                + ",\"inventoryConflicts\":" + state.inventory().conflicts().size() + "}";
+                + ",\"inventoryConflicts\":" + state.inventory().conflicts().size()
+                + ",\"replicaCustodyDiagnostics\":" + custodyDiagnostics + "}";
     }
 
     /** One bounded composition account; all counts are derived from canonical state. */
@@ -416,9 +418,12 @@ final class FrontierV3DiagnosticJson {
                     + "\",\"state\":\"" + lifecycle.phase() + "\",\"cause\":" + cause + "}";
         }
         var inventory = subject == null ? null : state.inventory().conflicts().get(subject);
-        if (inventory == null) return unavailable("why", id, checkpoint, "not_found");
-        return base("why", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(inventory.containerId().value())
+        if (inventory != null) return base("why", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(inventory.containerId().value())
                 + "\",\"state\":\"RECONCILIATION_CONFLICT\",\"cause\":" + diagnostic(inventory.diagnostic()) + "}";
+        var custody = subject == null ? null : state.replicaCustody().diagnostics().get(subject);
+        if (custody == null) return unavailable("why", id, checkpoint, "not_found");
+        return base("why", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(custody.owner().id().value())
+                + "\",\"state\":\"" + custody.category() + "\",\"cause\":" + diagnostic(custody) + "}";
     }
 
     /** Incident identity is retained by its canonical owner; this bounded lookup reads no chunks or mutable state. */
@@ -427,8 +432,10 @@ final class FrontierV3DiagnosticJson {
                 .filter(disposition -> disposition.incident().id().equals(id)).findFirst();
         if (value.isPresent()) return base("incident", id, checkpoint) + ",\"status\":\"ok\",\"cause\":" + conflict(value.orElseThrow()) + "}";
         var inventory = subject(id).map(state.inventory().conflicts()::get).orElse(null);
-        if (inventory == null) return unavailable("incident", id, checkpoint, "not_found");
-        return base("incident", id, checkpoint) + ",\"status\":\"ok\",\"cause\":" + diagnostic(inventory.diagnostic()) + "}";
+        if (inventory != null) return base("incident", id, checkpoint) + ",\"status\":\"ok\",\"cause\":" + diagnostic(inventory.diagnostic()) + "}";
+        var custody = subject(id).map(state.replicaCustody().diagnostics()::get).orElse(null);
+        if (custody == null) return unavailable("incident", id, checkpoint, "not_found");
+        return base("incident", id, checkpoint) + ",\"status\":\"ok\",\"cause\":" + diagnostic(custody) + "}";
     }
 
     private static String diagnostic(io.farfrontier.palemirror.frontier.v3.model.DiagnosticTuple value) {

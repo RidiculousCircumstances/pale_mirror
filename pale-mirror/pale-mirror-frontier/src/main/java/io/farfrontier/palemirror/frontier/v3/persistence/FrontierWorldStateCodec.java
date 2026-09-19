@@ -10,7 +10,7 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 170; private static final int MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 171; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -143,6 +143,10 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             output.writeLong(lease.authorityEpoch()); output.writeLong(lease.expectedCanonicalRevision()); output.writeLong(lease.expectedReplicaRevision());
             output.writeByte(lease.status().wireTag()); output.writeBoolean(lease.unresolvedReason() != null);
             if (lease.unresolvedReason() != null) output.writeByte(lease.unresolvedReason().wireTag());
+        }
+        writeCount(output, state.diagnostics().size());
+        for (Map.Entry<SubjectId, DiagnosticTuple> entry : state.diagnostics().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
+            writeString(output, entry.getKey().value()); writeDiagnosticTuple(output, entry.getValue());
         } }
     private static PhysicalReplicaCustodyState readReplicaCustody(DataInputStream input) throws IOException {
         Map<SubjectId, PhysicalReplicaRecord> replicas = new LinkedHashMap<>();
@@ -165,7 +169,12 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             if (leases.put(scope, new PhysicalCustodyLease(scope, object, provider, epoch, canonicalRevision, replicaRevision, status, reason)) != null) {
                 throw new IllegalArgumentException("duplicate physical custody scope");
             } }
-        return new PhysicalReplicaCustodyState(replicas, leases); }
+        Map<SubjectId, DiagnosticTuple> diagnostics = new LinkedHashMap<>();
+        for (int index = 0, count = readCount(input); index < count; index++) {
+            SubjectId id = new SubjectId(readString(input));
+            if (diagnostics.put(id, readDiagnosticTuple(input)) != null) throw new IllegalArgumentException("duplicate replica custody diagnostic identity");
+        }
+        return new PhysicalReplicaCustodyState(replicas, leases, diagnostics); }
     private static PhysicalReplicaState replicaState(int tag) { return switch (tag) { case 1 -> PhysicalReplicaState.EXPECTED; case 2 -> PhysicalReplicaState.OBSERVED_CURRENT; case 3 -> PhysicalReplicaState.CONFLICT;
         default -> throw new IllegalArgumentException("unknown physical replica lifecycle tag"); }; }
     private static PhysicalCustodyLeaseStatus custodyStatus(int tag) { return switch (tag) { case 1 -> PhysicalCustodyLeaseStatus.ACQUIRED; case 2 -> PhysicalCustodyLeaseStatus.CHECKPOINTED;

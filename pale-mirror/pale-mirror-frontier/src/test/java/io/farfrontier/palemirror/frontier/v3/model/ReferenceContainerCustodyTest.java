@@ -116,7 +116,8 @@ class ReferenceContainerCustodyTest {
                 .observe(depot, 7L, 1L, record.fingerprint(), record.provenance(), 7L)
                 .acquire(new PhysicalCustodyLease(ReferenceContainerCustody.scopeId(depot), depot, ReferenceContainerCustody.PROVIDER_ID,
                         1L, 7L, 2L, PhysicalCustodyLeaseStatus.ACQUIRED, null))
-                .unresolved(ReferenceContainerCustody.scopeId(depot), 1L, 7L, 2L, PhysicalCustodyUnresolvedReason.RESTART_AMBIGUITY);
+                .unresolved(ReferenceContainerCustody.scopeId(depot), 1L, 7L, 2L, PhysicalCustodyUnresolvedReason.RESTART_AMBIGUITY,
+                        ReplicaCustodyDiagnosticProducer.unresolved(ReferenceContainerCustody.scopeId(depot), 1L, 7L, 2L, PhysicalCustodyUnresolvedReason.RESTART_AMBIGUITY).diagnostic());
         FrontierWorldState unresolved = baseline.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(custody));
         assertTrue(ReferenceContainerCustody.hasLiveCustody(unresolved, depot), "the retained epoch locally blocks cold reuse");
         assertFalse(ReferenceContainerCustody.hasOperationalCustody(unresolved, depot), "unresolved recovery cannot write the chest");

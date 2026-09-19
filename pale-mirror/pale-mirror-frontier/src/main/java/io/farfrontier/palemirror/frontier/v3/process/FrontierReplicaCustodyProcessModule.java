@@ -22,13 +22,13 @@ final class FrontierReplicaCustodyProcessModule implements FrontierWorldProcessM
                 case ReplicaObserved observed -> { state.replicaCustody().observe(observed.objectId(), observed.expectedCanonicalRevision(), observed.expectedReplicaRevision(),
                         observed.fingerprint(), observed.provenance(), observed.observedCanonicalRevision()); yield accepted(observed.objectId(), observed); }
                 case ReplicaConflictObserved conflict -> { state.replicaCustody().conflict(conflict.objectId(), conflict.expectedCanonicalRevision(), conflict.expectedReplicaRevision(),
-                        conflict.fingerprint(), conflict.provenance()); yield accepted(conflict.objectId(), conflict); }
+                        conflict.fingerprint(), conflict.provenance(), conflict.diagnostic()); yield accepted(conflict.objectId(), conflict); }
                 case CustodyAcquired acquired -> { state.replicaCustody().acquire(acquired.lease()); yield accepted(acquired.lease().scopeId(), acquired); }
                 case CustodyCheckpointed checkpointed -> { state.replicaCustody().checkpoint(checkpointed.scopeId(), checkpointed.expectedEpoch(),
                         checkpointed.expectedCanonicalRevision(), checkpointed.expectedReplicaRevision()); yield accepted(checkpointed.scopeId(), checkpointed); }
                 case CustodyUnresolved unresolved -> {
                     state.replicaCustody().unresolved(unresolved.scopeId(), unresolved.expectedEpoch(),
-                            unresolved.expectedCanonicalRevision(), unresolved.expectedReplicaRevision(), unresolved.reason());
+                            unresolved.expectedCanonicalRevision(), unresolved.expectedReplicaRevision(), unresolved.reason(), unresolved.diagnostic());
                     yield accepted(unresolved.scopeId(), unresolved);
                 }
                 case CustodyReleased released -> { state.replicaCustody().release(released.scopeId(), released.expectedEpoch(),
@@ -53,11 +53,11 @@ final class FrontierReplicaCustodyProcessModule implements FrontierWorldProcessM
                 case ReplicaObserved observed -> replace(state, state.replicaCustody().observe(observed.objectId(), observed.expectedCanonicalRevision(),
                         observed.expectedReplicaRevision(), observed.fingerprint(), observed.provenance(), observed.observedCanonicalRevision()));
                 case ReplicaConflictObserved conflict -> replace(state, state.replicaCustody().conflict(conflict.objectId(), conflict.expectedCanonicalRevision(),
-                        conflict.expectedReplicaRevision(), conflict.fingerprint(), conflict.provenance()));
+                        conflict.expectedReplicaRevision(), conflict.fingerprint(), conflict.provenance(), conflict.diagnostic()));
                 case CustodyAcquired acquired -> replace(state, state.replicaCustody().acquire(acquired.lease()));
                 case CustodyCheckpointed checkpointed -> replace(state, state.replicaCustody().checkpoint(checkpointed.scopeId(), checkpointed.expectedEpoch(), checkpointed.expectedCanonicalRevision(), checkpointed.expectedReplicaRevision()));
                 case CustodyUnresolved unresolved -> replace(state, state.replicaCustody().unresolved(unresolved.scopeId(), unresolved.expectedEpoch(),
-                        unresolved.expectedCanonicalRevision(), unresolved.expectedReplicaRevision(), unresolved.reason()));
+                        unresolved.expectedCanonicalRevision(), unresolved.expectedReplicaRevision(), unresolved.reason(), unresolved.diagnostic()));
                 case CustodyReleased released -> replace(state, state.replicaCustody().release(released.scopeId(), released.expectedEpoch(), released.expectedCanonicalRevision(), released.expectedReplicaRevision()));
                 case Prepared prepared -> replaceRecovery(state, state.fencedRecovery().prepare(prepared.binding()));
                 case Running running -> replaceRecovery(state, state.fencedRecovery().running(running.bindingId(), running.expectedEpoch()));
