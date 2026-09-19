@@ -16,9 +16,13 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
+import io.farfrontier.palemirror.frontier.v3.api.EventId;
+import io.farfrontier.palemirror.frontier.v3.api.TransactionId;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
 import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
+import io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord;
 import io.farfrontier.palemirror.frontier.v3.persistence.RecoveryImage;
 import io.farfrontier.palemirror.frontier.v3.persistence.SnapshotRecord;
 import org.junit.jupiter.api.Test;
@@ -26,11 +30,14 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.ArrayList;
+import java.util.function.UnaryOperator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
 class SettlementProvisionProcessTest {
     @Test
@@ -249,6 +256,45 @@ class SettlementProvisionProcessTest {
     }
 
     @Test
+    void recoveryRejectsTamperedRetirementCommitmentAndLateAuthorityFromTheActualWal() {
+        WorldId world = new WorldId("frontier:provision-retirement-wal");
+        FrontierWorldState initial = withBread(base(world).initialState(), true);
+        List<TransactionRecord> wal = new ArrayList<>();
+        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration = configuration(world, initial)
+                .withTransactionCommitter((transaction, durability) -> wal.add(transaction));
+        var engine = FrontierEngines.create(configuration); advance(engine, 101L);
+        PhysicalIntent intent = state(engine).physicalIntents().get(state(engine).humanPopulation().provision(
+                state(engine).bootstrap().settlements().getFirst().id()).activeIntentId().orElseThrow());
+        assertInstanceOf(CommandResult.Accepted.class, submit(engine, world, "wal-running",
+                new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty())));
+        assertInstanceOf(CommandResult.Accepted.class, submit(engine, world, "wal-unknown",
+                new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty())));
+
+        RecoveryImage image = new RecoveryImage(world, Optional.empty(), List.copyOf(wal));
+        assertDoesNotThrow(() -> FrontierEngines.recover(configuration, image));
+        assertThrows(IllegalArgumentException.class, () -> FrontierEngines.recover(configuration,
+                new RecoveryImage(world, Optional.empty(), replaceTerminalProof(wal, proof -> new PhysicalIntentRetirementProof(
+                        proof.owner(), proof.intentId(), proof.relations(), proof.continuation(), proof.leaseOrCarrier(),
+                        new PhysicalIntentRetirementProof.ExactSubject(new SubjectId("item:forged-provision-commitment")), proof.lateDisposition())))));
+        assertThrows(IllegalArgumentException.class, () -> FrontierEngines.recover(configuration,
+                new RecoveryImage(world, Optional.empty(), replaceTerminalProof(wal, proof -> new PhysicalIntentRetirementProof(
+                        proof.owner(), proof.intentId(), new PhysicalIntentRetirementProof.ExactRelations(List.of(forgedRelation())), proof.continuation(),
+                        proof.leaseOrCarrier(), proof.commitment(), proof.lateDisposition())))));
+        assertThrows(IllegalArgumentException.class, () -> FrontierEngines.recover(configuration,
+                new RecoveryImage(world, Optional.empty(), replaceTerminalProof(wal, proof -> new PhysicalIntentRetirementProof(
+                        proof.owner(), proof.intentId(), proof.relations(), new PhysicalIntentRetirementProof.ExactSchedule(
+                        new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:forged-provision-disposition")), proof.leaseOrCarrier(),
+                        proof.commitment(), proof.lateDisposition())))));
+        assertThrows(IllegalArgumentException.class, () -> FrontierEngines.recover(configuration,
+                new RecoveryImage(world, Optional.empty(), replaceTerminalProof(wal, proof -> new PhysicalIntentRetirementProof(
+                        proof.owner(), proof.intentId(), proof.relations(), proof.continuation(), proof.leaseOrCarrier(), proof.commitment(),
+                        PhysicalIntentRetirementProof.LateDisposition.REJECT_STALE_ONCE)))));
+        assertThrows(IllegalArgumentException.class, () -> FrontierEngines.recover(configuration,
+                new RecoveryImage(world, Optional.empty(), duplicateTerminalLateInput(wal))),
+                "WAL replay must reject a second terminal authority after the retained ambiguous fence");
+    }
+
+    @Test
     void nativeProvisionFixtureStartsWithOneNamedPendingPhysicalRation() {
         var configuration = FrontierV3FixtureCatalog.settlementProvisionConfiguration(new WorldId("frontier:provision-fixture"), 41L);
         FrontierWorldState state = configuration.initialState(); Settlement settlement = state.bootstrap().settlements().getFirst();
@@ -309,7 +355,8 @@ class SettlementProvisionProcessTest {
     private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(WorldId world, FrontierWorldState initial, int cycle) {
         var base = base(world); SubjectId settlement = initial.bootstrap().settlements().getFirst().id();
         return new FrontierEngineConfiguration<>(world, initial, base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(), base.reducer(),
-                base.stateCodec(), base.projectionMapper(), base.limits(), List.of(SettlementProvisionProcess.review(settlement, cycle, 100L)), base.transactionCommitter());
+                base.stateCodec(), base.projectionMapper(), base.limits(), List.of(SettlementProvisionProcess.review(settlement, cycle, 100L)), base.transactionCommitter(),
+                base.stateValidator(), base.executionMetrics());
     }
 
     private static FrontierWorldState withBread(FrontierWorldState state, boolean active) {
@@ -345,6 +392,44 @@ class SettlementProvisionProcessTest {
         HumanPopulation population = state.humanPopulation();
         for (SubjectId residentId : population.residents().keySet()) population = population.resolveNutrition(residentId, 1, false);
         return state.withHumanPopulation(population);
+    }
+
+    private static List<TransactionRecord> replaceTerminalProof(List<TransactionRecord> source,
+                                                                  UnaryOperator<PhysicalIntentRetirementProof> replacement) {
+        boolean[] changed = {false};
+        List<TransactionRecord> rewritten = new ArrayList<>();
+        for (TransactionRecord transaction : source) {
+            List<FrontierEvent> events = transaction.events().stream().map(event -> {
+                if (!(event.payload() instanceof PhysicalIntentTransition transition) || transition.retirementProof().isEmpty()) return event;
+                changed[0] = true;
+                return new FrontierEvent(event.schemaVersion(), event.id(), event.transactionId(), event.worldId(), event.revision(), event.instant(),
+                        event.subject(), event.causes(), transition.withRetirementProof(replacement.apply(transition.retirementProof().orElseThrow())));
+            }).toList();
+            rewritten.add(new TransactionRecord(transaction.id(), transaction.worldId(), transaction.revision(), transaction.instant(), events,
+                    transaction.acceptedCommandReceipt()));
+        }
+        assertTrue(changed[0], "fixture must retain a real terminal physical event in its WAL");
+        return List.copyOf(rewritten);
+    }
+
+    private static List<TransactionRecord> duplicateTerminalLateInput(List<TransactionRecord> source) {
+        TransactionRecord original = source.stream().filter(transaction -> transaction.events().stream().anyMatch(event -> event.payload() instanceof PhysicalIntentTransition transition
+                && transition.retirementProof().isPresent())).reduce((first, second) -> second).orElseThrow();
+        TransactionId duplicateId = new TransactionId("transaction:provision-duplicate-late");
+        List<FrontierEvent> duplicateEvents = original.events().stream().map(event -> new FrontierEvent(event.schemaVersion(),
+                new EventId(event.id().value() + "-duplicate"), duplicateId, event.worldId(), original.revision().next(), event.instant(),
+                event.subject(), event.causes(), event.payload())).toList();
+        List<TransactionRecord> duplicate = new ArrayList<>(source);
+        duplicate.add(new TransactionRecord(duplicateId, original.worldId(), original.revision().next(), original.instant(), duplicateEvents));
+        return List.copyOf(duplicate);
+    }
+
+    private static FrontierDomainRelationships.Edge forgedRelation() {
+        var cycle = new FrontierDomainRelationships.SubjectEndpoint(FrontierDomainRelationships.EntityKind.PROVISION_CYCLE,
+                new SubjectId("provision-cycle:forged"));
+        var allocation = new FrontierDomainRelationships.ProvisionAllocationEndpoint(new SubjectId("settlement:forged"), 1, 1);
+        return new FrontierDomainRelationships.Edge(FrontierDomainRelationships.Kind.PROVISION_ALLOCATION, cycle, cycle, allocation,
+                FrontierDomainRelationships.Lifecycle.ACTIVE, "forged-retirement-relation");
     }
 
     private static CommandResult submit(io.farfrontier.palemirror.frontier.v3.api.FrontierEngine<FrontierWorldProjection> engine, WorldId world,
