@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { appendFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { correlation, diagnosticForAssertion, diagnosticFromPilotLine, hasDiagnosticResponses, loadScenario, newManifest, pilotDiagnosticActionStep, saveManifest, scenarioDeadlineMs, traceRecord } from './scenario.mjs';
 import { PhaseTiming } from './timing.mjs';
@@ -20,6 +20,16 @@ if (!scenarioPath) throw new Error('usage: npm run scenario -- <scenario.json> [
 if (!process.env.DISPLAY) throw new Error('a native visible pilot requires DISPLAY=:0');
 
 const project = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
+const packPilot = process.env.FRONTIER_V3_PILOT_PROFILE === 'pack';
+const PACK_PILOT_REQUIRED_MOD_IDS = Object.freeze(['bettercombat', 'ezactions', 'pale_mirror', 'simplytooltips']);
+const configuredPackPilotDirectory = process.env.FRONTIER_V3_PILOT_PACK_DIRECTORY;
+if (packPilot && (configuredPackPilotDirectory === undefined || !isAbsolute(configuredPackPilotDirectory))) {
+  throw new Error('FRONTIER_V3_PILOT_PACK_DIRECTORY must name an absolute materialized full-pack directory');
+}
+const packPilotDirectory = packPilot ? resolve(configuredPackPilotDirectory) : undefined;
+if (packPilot && !existsSync(join(packPilotDirectory, 'mods'))) {
+  throw new Error('FRONTIER_V3_PILOT_PACK_DIRECTORY must contain mods/');
+}
 // Polling state changes must not register one `exit` listener per poll. Native scenarios can
 // legitimately wait through many diagnostic revisions; process termination is one shared
 // lifecycle fact, not a fresh subscription for every wait iteration.
@@ -95,7 +105,6 @@ function lifecycleBarrier(barrier, signal = undefined, suffix = undefined, detai
 timing.begin('client.launch_preparation');
 trace('run_started', { scenarioId: scenario.id, scenarioSha256: sha256, profile: process.env.FRONTIER_V3_PILOT_PROFILE ?? 'lite' });
 const gradle = process.env.FRONTIER_V3_GRADLE ?? resolve(project, 'gradlew');
-const packPilot = process.env.FRONTIER_V3_PILOT_PROFILE === 'pack';
 const preparedIdentityPath = process.env.FRONTIER_V3_PREPARED_BUILD_IDENTITY;
 const preparedIdentity = preparedIdentityPath === undefined || preparedIdentityPath === '' ? undefined
   : JSON.parse(await readFile(resolve(project, preparedIdentityPath), 'utf8'));
@@ -138,6 +147,7 @@ let fixtureStarted = false;
 let actionTimingName = null;
 let recoveryBarrierScheduled = false;
 let terminalSegmentBarrierScheduled = false;
+let loadedModInventory = null;
 let beforeRestartSnapshot = Promise.resolve();
 let beforeRestartSnapshotScheduled = false;
 const buffers = new Map();
@@ -165,6 +175,23 @@ for (const stream of [child.stdout, child.stderr]) stream.setEncoding('utf8').on
         diagnostics.push(diagnostic); trace('diagnostic_received', { correlation: actionStep == null ? null : correlation(runId, actionStep), diagnostic: diagnostic.value });
       }
       catch { failure ??= `malformed diagnostic line: ${line}`; }
+    }
+    const inventory = line.match(/PMV3_PILOT_LOADED_MODS\s+(\{.*\})\s*$/);
+    if (inventory) {
+      try {
+        const value = JSON.parse(inventory[1]);
+        const actual = Array.isArray(value.loaded) ? value.loaded : [];
+        const required = Array.isArray(value.required) ? value.required : [];
+        const missing = Array.isArray(value.missing) ? value.missing : [];
+        if (!packPilot || value.status !== 'PASS'
+            || JSON.stringify(required) !== JSON.stringify(PACK_PILOT_REQUIRED_MOD_IDS)
+            || missing.length !== 0 || !PACK_PILOT_REQUIRED_MOD_IDS.every((id) => actual.includes(id))) {
+          throw new Error('runtime full-pack loaded-mod inventory does not prove the required client closure');
+        }
+        loadedModInventory = value;
+        manifest.loadedModInventory = value;
+        trace('loaded_mod_inventory', { value });
+      } catch (error) { failure ??= `invalid full-pack loaded-mod inventory: ${String(error?.message ?? error)}`; }
     }
     if (line.includes('PMV3_PILOT completed scenario')) complete = true;
     if (line.includes('PMV3_PILOT completed scenario') && !terminalSegmentBarrierScheduled) {
@@ -239,7 +266,8 @@ for (const stream of [child.stdout, child.stderr]) stream.setEncoding('utf8').on
 });
 
 try {
-  await waitForPilot(child, () => failure || ((complete || completedActionStep === (scenario.actions ?? []).length)
+  await waitForPilot(child, () => failure || ((!packPilot || loadedModInventory !== null)
+    && (complete || completedActionStep === (scenario.actions ?? []).length)
     && hasDiagnosticResponses(diagnostics, scenario.assertions ?? [])
     && manifest.frames.length === (scenario.frames ?? []).length), () => pilotStartedAt,
     300_000, scenarioDeadlineMs(scenario));
@@ -377,6 +405,10 @@ function launchViaGradle() {
   if (lifecycleControlDirectory !== undefined) {
     args.push(`-PfrontierV3PilotLifecycleControlDirectory=${lifecycleControlDirectory}`,
       `-PfrontierV3PilotLifecycleSegment=${lifecycleSegment()}`);
+  }
+  if (packPilot) {
+    args.push(`-PfrontierV3PilotPackSource=${packPilotDirectory}`,
+      `-PfrontierV3PilotRequiredMods=${PACK_PILOT_REQUIRED_MOD_IDS.join(',')}`);
   }
   return spawn(gradle, args, { cwd: project, env: auditEnvironment, stdio: ['ignore', 'pipe', 'pipe'] });
 }

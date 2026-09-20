@@ -22,7 +22,9 @@ import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.ModList;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.ClientChatReceivedEvent;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
@@ -33,6 +35,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.TreeSet;
 import static io.farfrontier.palemirror.internal.frontier.v3.client.FrontierV3PilotDiagnosticMatcher.containerContains;
 import static io.farfrontier.palemirror.internal.frontier.v3.client.FrontierV3PilotDiagnosticMatcher.harvestComplete;
 import static io.farfrontier.palemirror.internal.frontier.v3.client.FrontierV3PilotDiagnosticMatcher.increasedAtPath;
@@ -43,6 +47,7 @@ public final class FrontierV3TestPilotClient {
     private static final String SCENARIO_PROPERTY = "pale_mirror.frontier_v3.test_pilot.scenario";
     private static final String CAPTURE_CONTROL_PROPERTY = "pale_mirror.frontier_v3.test_pilot.capture_control_directory";
     private static final String SERVER_PROPERTY = "pale_mirror.frontier_v3.test_pilot.server";
+    private static final String REQUIRED_MODS_PROPERTY = "pale_mirror.frontier_v3.test_pilot.required_mods";
     private static final long CAPTURE_SETTLE_TICKS = 10L;
     private static JsonArray actions, setup, frames;
     private static boolean runningSetup;
@@ -77,6 +82,45 @@ public final class FrontierV3TestPilotClient {
     private static Vec3 captureFocus;
     static final Map<DiagnosticIdentity, ObservedDiagnostic> diagnostics = new HashMap<>();
     private FrontierV3TestPilotClient() { }
+    /**
+     * Full-pack acceptance is allowed to connect only after the loader has published the
+     * actual active IDs.  This is intentionally opt-in: production and ordinary source pilots
+     * never set REQUIRED_MODS_PROPERTY.
+     */
+    @EventBusSubscriber(modid = PaleMirrorMod.MOD_ID, value = Dist.CLIENT, bus = EventBusSubscriber.Bus.MOD)
+    public static final class FullPackPreflight {
+        private FullPackPreflight() { }
+        @SubscribeEvent
+        public static void verifyRequiredModsBeforeQuickPlay(FMLClientSetupEvent event) {
+            String configured = System.getProperty(REQUIRED_MODS_PROPERTY, "");
+            if (configured.isBlank()) return;
+            Set<String> required = new TreeSet<>();
+            for (String id : configured.split(",")) {
+                String trimmed = id.trim();
+                if (trimmed.isEmpty() || !trimmed.matches("[a-z][a-z0-9_-]*")) {
+                    throw new IllegalStateException("Malformed full-pack required mod ID " + id);
+                }
+                required.add(trimmed);
+            }
+            if (required.isEmpty()) throw new IllegalStateException("Full-pack required mod inventory is empty");
+            Set<String> loaded = new TreeSet<>();
+            ModList.get().getMods().forEach(info -> loaded.add(info.getModId()));
+            Set<String> missing = new TreeSet<>(required);
+            missing.removeAll(loaded);
+            JsonObject inventory = new JsonObject();
+            inventory.addProperty("status", missing.isEmpty() ? "PASS" : "REJECTED");
+            inventory.add("required", stringArray(required));
+            inventory.add("loaded", stringArray(loaded));
+            inventory.add("missing", stringArray(missing));
+            PaleMirrorMod.LOGGER.info("PMV3_PILOT_LOADED_MODS {}", inventory);
+            if (!missing.isEmpty()) throw new IllegalStateException("Full-pack client is missing required mods " + missing);
+        }
+    }
+    private static JsonArray stringArray(Iterable<String> values) {
+        JsonArray result = new JsonArray();
+        values.forEach(result::add);
+        return result;
+    }
     @SubscribeEvent
     public static void login(ClientPlayerNetworkEvent.LoggingIn event) {
         String configured = System.getProperty(SCENARIO_PROPERTY, "");

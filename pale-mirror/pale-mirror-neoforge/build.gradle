@@ -59,6 +59,13 @@ def railwayManagedConfig = layout.buildDirectory.file('runs/railway-game-test/co
 def railwayClientManagedConfig = layout.buildDirectory.file('runs/railway-client/config/railways-untold/config.toml')
 def frontierV3PilotClientDirectory = layout.buildDirectory.dir('runs/frontier-v3-pilot-client')
 def frontierV3PilotPackClientDirectory = layout.buildDirectory.dir('runs/frontier-v3-pilot-pack-client')
+// The pack-backed client must consume a real materialized pack directory.  A directory
+// symlink looks valid to the old preflight but Gradle's Sync deliberately does not recurse
+// through it, leaving ModDev to start a narrow source-only classpath.
+def frontierV3PilotPackSource = providers.gradleProperty('frontierV3PilotPackSource')
+        .orElse(layout.buildDirectory.dir('runs/railway-client').map { it.asFile.absolutePath }).get()
+def frontierV3PilotPackSourceDirectory = file(frontierV3PilotPackSource)
+def frontierV3PilotRequiredMods = providers.gradleProperty('frontierV3PilotRequiredMods').orElse('').get()
 def frontierV3PilotServerDirectory = layout.buildDirectory.dir('runs/frontier-v3-pilot-server')
 // Resolve isolated-run inputs during Gradle configuration so the RunGame task remains
 // configuration-cache safe while it prepares a disposable game directory.
@@ -368,6 +375,10 @@ neoForge {
             systemProperty 'pale_mirror.frontier_v3.test_pilot.lifecycle_segment', frontierV3PilotLifecycleSegment
             systemProperty 'pale_mirror.frontier_v3.test_pilot.server',
                     providers.gradleProperty('frontierV3PilotServer').orElse('127.0.0.1:25565').get()
+            // An opt-in full-pack preflight emits the loader's actual mod inventory before
+            // Quick Play is eligible to connect.  Ordinary source-only development runs leave
+            // this blank and retain their existing composition.
+            systemProperty 'pale_mirror.frontier_v3.test_pilot.required_mods', frontierV3PilotRequiredMods
             programArgument '--fullscreen'
             programArgument '--username'
             programArgument providers.gradleProperty('frontierV3PilotUsername').orElse('PMTestPilot').get()
@@ -1009,8 +1020,7 @@ tasks.named('runMillenaireClient') { dependsOn prepareMillenaireClientMods }
 
 def syncFrontierV3PilotPackClient = tasks.register('syncFrontierV3PilotPackClient', Sync) {
     dependsOn tasks.named('classes')
-    def installedClient = layout.buildDirectory.dir('runs/railway-client')
-    from(installedClient) {
+    from(frontierV3PilotPackSourceDirectory) {
         // NeoForge ModDev contributes the current Pale Mirror source set to the
         // run. Leaving this pack artifact beside it silently wins class lookup.
         exclude 'mods/pale_mirror-hosted.jar'
@@ -1021,9 +1031,14 @@ def syncFrontierV3PilotPackClient = tasks.register('syncFrontierV3PilotPackClien
         frontierV3GrayboxDisabledMods.each { exclude "mods/${it}" }
     }
     into(frontierV3PilotPackClientDirectory)
+    inputs.dir(frontierV3PilotPackSourceDirectory)
+    inputs.property('frontierV3PilotPackSource', frontierV3PilotPackSourceDirectory.absolutePath)
     doFirst {
-        if (!new File(installedClient.get().asFile, 'mods').isDirectory()) {
+        if (!new File(frontierV3PilotPackSourceDirectory, 'mods').isDirectory()) {
             throw new GradleException('Frontier v3 pilot requires the installed railway-client pack; run scripts/install-client.sh first')
+        }
+        if (java.nio.file.Files.isSymbolicLink(frontierV3PilotPackSourceDirectory.toPath())) {
+            throw new GradleException('Frontier v3 pilot pack source must be a materialized directory, not a symbolic link')
         }
     }
     doLast {
