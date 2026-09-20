@@ -19,6 +19,9 @@ test('the pack pilot binds one materialized pack source and records the loader i
   assert.match(build, /frontierV3PilotPackSource/);
   assert.match(build, /pack source must be a materialized directory, not a symbolic link/);
   assert.match(build, /pale_mirror\.frontier_v3\.test_pilot\.required_mods/);
+  assert.match(build, /materialized pack is immutable release input/);
+  assert.match(build, /onboardAccessibility:b:true\\n/);
+  assert.match(build, /skipMultiplayerWarning:b:true\\n/);
   assert.match(client, /verifyRequiredModsBeforeQuickPlay\(FMLClientSetupEvent event\)/);
   assert.match(client, /PMV3_PILOT_LOADED_MODS/);
 });

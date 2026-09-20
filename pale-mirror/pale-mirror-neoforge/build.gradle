@@ -1051,6 +1051,15 @@ def syncFrontierV3PilotPackClient = tasks.register('syncFrontierV3PilotPackClien
         if (leakedDisabledMod != null) {
             throw new GradleException("Frontier v3 pack-pilot retained graybox-disabled mod ${leakedDisabledMod}")
         }
+        // The materialized pack is immutable release input.  Its generated
+        // pilot view is nevertheless a new Minecraft profile, and therefore
+        // needs the two ordinary first-run acknowledgements before its
+        // declared Quick Play connection can begin.  Keep that state beside
+        // the disposable run only; never write it back to the pack source.
+        def options = new File(frontierV3PilotPackClientDirectory.get().asFile, 'options.txt')
+        options.text = 'onboardAccessibility:b:true\n' +
+                'skipMultiplayerWarning:b:true\n' +
+                'narrator:0\n'
     }
 }
 tasks.named('prepareFrontierV3PilotPackClientRun') { dependsOn syncFrontierV3PilotPackClient }
