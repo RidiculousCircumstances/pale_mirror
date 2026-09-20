@@ -58,7 +58,7 @@ public final class FrontierV3SceneDeathGameTests {
         SceneLease lease = FrontierV3GameTestSceneLeases.exact(state(runtime), checkpoint, candidate, leaseId);
         FrontierV3CommandSubmission.submit(runtime, "scene-deaths-prepare", leaseId.value(), new SceneLeasePrepared(lease));
         FrontierV3CommandSubmission.submit(runtime, "scene-deaths-hot", leaseId.value(), new SceneLeaseTransition(leaseId, SceneLeaseStatus.HOT));
-        for (int index = 0; index < lease.members().size(); index++) addOwnedBody(helper, level, lease, lease.members().get(index), origin.offset(index & 1, 0, index / 2));
+        for (int index = 0; index < lease.members().size(); index++) addOwnedBody(helper, level, state(runtime), lease, lease.members().get(index), origin.offset(index & 1, 0, index / 2));
 
         helper.runAfterDelay(1L, () -> {
             List<Entity> bodies = lease.members().stream().map(member -> level.getEntity(member.entityId())).toList();
@@ -94,14 +94,20 @@ public final class FrontierV3SceneDeathGameTests {
         return new FrontierWorldStateCodec().decode(runtime.checkpointImage().orElseThrow().canonicalState());
     }
 
-    private static void addOwnedBody(GameTestHelper helper, ServerLevel level, SceneLease lease, SceneMember member, BlockPos position) {
+    private static void addOwnedBody(GameTestHelper helper, ServerLevel level, FrontierWorldState state, SceneLease lease, SceneMember member, BlockPos position) {
         level.setBlock(position.below(), Blocks.STONE.defaultBlockState(), 3);
-        Mob body = member.actorId().value().startsWith("bioform:") ? EntityType.ZOMBIE.create(level) : EntityType.VILLAGER.create(level);
+        boolean bioform = state.bootstrap().hive().bioforms().stream().anyMatch(candidate -> candidate.id().equals(member.actorId()))
+                || state.hiveColony().spawnedBioforms().containsKey(member.actorId());
+        Mob body = bioform ? EntityType.ZOMBIE.create(level) : EntityType.VILLAGER.create(level);
         helper.assertTrue(body != null, "the exact HOT body fixture must be constructible");
         body.setUUID(member.entityId()); body.setPos(position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D); body.setNoAi(true);
         body.getPersistentData().putString(FrontierV3SceneExecutor.LEASE_KEY, lease.id().value());
         body.getPersistentData().putString(FrontierV3SceneExecutor.ACTOR_KEY, member.actorId().value());
         body.getPersistentData().putLong(FrontierV3SceneExecutor.REVISION_KEY, lease.revision());
+        body.getPersistentData().putLong(FrontierV3AmbientActorExecutor.CUSTODY_EPOCH_KEY, 1L);
+        FrontierV3ActorCarrierComposition.stamp(body, FrontierV3AmbientActorExecutor.carrierDeclaration(state, member.actorId(),
+                FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, member.entityId(),
+                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, lease.revision(), 1L));
         helper.assertTrue(level.addFreshEntity(body), "the exact HOT body fixture must enter the loaded world");
     }
 

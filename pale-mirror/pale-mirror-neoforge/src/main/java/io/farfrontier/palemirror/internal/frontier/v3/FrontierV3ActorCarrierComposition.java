@@ -36,19 +36,19 @@ final class FrontierV3ActorCarrierComposition {
 
     /** Closed XACT-001 inventory; every exact body executor must be represented here. */
     enum InventoryEntry {
-        AMBIENT_BODY("FrontierV3AmbientActorExecutor", Role.PRODUCER),
-        SCENE_BODY("FrontierV3SceneExecutor", Role.PRODUCER),
-        RESOURCE_HARVEST("FrontierV3ResourceSiteHarvestSceneExecutor", Role.ADOPTER),
-        PRODUCTION_WORK("FrontierV3ProductionWorkSceneExecutor", Role.ADOPTER),
-        SETTLEMENT_SERVICE("FrontierV3SettlementServiceWorkSceneExecutor", Role.ADOPTER),
-        SETTLEMENT_ASSAULT("FrontierV3SettlementAssaultSceneExecutor", Role.ADOPTER),
-        ENGINEERING_WORK("FrontierV3EngineeringWorkSceneExecutor", Role.ADOPTER),
-        MEDICAL_TREATMENT("FrontierV3MedicalTreatmentSceneExecutor", Role.ADOPTER),
-        ROUTE_PATROL("FrontierV3RoutePatrolSceneExecutor", Role.ADOPTER);
-        private final String sourceType;
+        AMBIENT_BODY(FrontierV3AmbientActorExecutor.class, Role.PRODUCER),
+        SCENE_BODY(FrontierV3SceneExecutor.class, Role.PRODUCER),
+        RESOURCE_HARVEST(FrontierV3ResourceSiteHarvestSceneExecutor.class, Role.ADOPTER),
+        PRODUCTION_WORK(FrontierV3ProductionWorkSceneExecutor.class, Role.ADOPTER),
+        SETTLEMENT_SERVICE(FrontierV3SettlementServiceWorkSceneExecutor.class, Role.ADOPTER),
+        SETTLEMENT_ASSAULT(FrontierV3SettlementAssaultSceneExecutor.class, Role.ADOPTER),
+        ENGINEERING_WORK(FrontierV3EngineeringWorkSceneExecutor.class, Role.ADOPTER),
+        MEDICAL_TREATMENT(FrontierV3MedicalTreatmentSceneExecutor.class, Role.ADOPTER),
+        ROUTE_PATROL(FrontierV3RoutePatrolSceneExecutor.class, Role.ADOPTER);
+        private final Class<?> boundaryType;
         private final Role role;
-        InventoryEntry(String sourceType, Role role) { this.sourceType = sourceType; this.role = role; }
-        String sourceType() { return sourceType; }
+        InventoryEntry(Class<?> boundaryType, Role role) { this.boundaryType = boundaryType; this.role = role; }
+        Class<?> boundaryType() { return boundaryType; }
         Role role() { return role; }
     }
 
@@ -60,14 +60,17 @@ final class FrontierV3ActorCarrierComposition {
         requireRegistered(entry);
         if (entry.role() != expected) throw new IllegalArgumentException("actor-carrier boundary role mismatch");
     }
-
     record Declaration(SubjectId actorId, ActorKind kind, Owner owner, UUID entityId,
                        Representation representation, long authorityRevision, long epoch) {
         Declaration {
             Objects.requireNonNull(actorId, "actor id"); Objects.requireNonNull(kind, "actor kind");
             Objects.requireNonNull(owner, "lifecycle owner"); Objects.requireNonNull(entityId, "entity id");
             Objects.requireNonNull(representation, "representation");
-            if (authorityRevision < 0L || epoch < 1L) throw new IllegalArgumentException("invalid actor carrier authority");
+            // The canonical bootstrap's first durable lease is revision -1 until its prepare
+            // transaction is committed.  It is still an explicit authority value, not an
+            // omitted tuple dimension; values below that sentinel are invalid.
+            if (authorityRevision < -1L || epoch < 1L) throw new IllegalArgumentException("invalid actor carrier authority revision="
+                    + authorityRevision + " epoch=" + epoch);
         }
         Declaration inactiveCarrier() { return new Declaration(actorId, kind, owner, entityId, Representation.INACTIVE_CARRIER, authorityRevision, epoch); }
         Declaration liveBody(Owner nextOwner, long nextRevision, long nextEpoch) {

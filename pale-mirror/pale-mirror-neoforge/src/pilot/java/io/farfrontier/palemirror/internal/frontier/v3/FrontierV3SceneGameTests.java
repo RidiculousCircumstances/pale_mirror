@@ -253,7 +253,8 @@ public final class FrontierV3SceneGameTests {
     @GameTest(batch = "pm-frontier-v3-scene-handoff", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void logisticsSceneNeverAcquiresCombatAuthorityWithoutAnEngagement(GameTestHelper helper) {
         BlockPos origin = helper.absolutePos(new BlockPos(8, 8, 0));
-        SceneLease logistics = lease(origin);
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:scene-combat-authority-game-test"), 91L));
+        SceneLease logistics = lease(state, origin);
         SceneLease engagement = fixtureLease(new SceneLeaseId("lease:scene-combat-authority-game-test"), logistics.worldId(),
                 FrontierSceneBehaviors.logistics(logistics).operationId(), FrontierSceneBehaviors.logistics(logistics).cargoId(),
                 logistics.handoffPosition(), logistics.handoffInstant(), logistics.revision(), logistics.status(), Optional.of(new SubjectId("engagement:scene-combat-authority-game-test")), logistics.members());
@@ -272,7 +273,9 @@ public final class FrontierV3SceneGameTests {
         // A route deck may physically occupy the strategic hand-off height.
         level.setBlock(origin, Blocks.GRAY_CARPET.defaultBlockState(), 3);
         WorldId world = new WorldId("frontier:scene-body-test");
-        List<SceneMember> members = List.of(member(world, "resident:frontier-v3-test-hauler"), member(world, "resident:frontier-v3-test-guard"));
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(world, 91L));
+        List<SceneMember> members = state.humanPopulation().residents().keySet().stream().sorted().limit(2)
+                .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(world, actor))).toList();
         SceneLease lease = SceneLease.atExactPositions(new SceneLeaseId("lease:frontier-v3-game-test"), world,
                 new SubjectId("operation:frontier-v3-game-test"), new SubjectId("cargo:frontier-v3-game-test"),
                 new BlockPosition(origin.getX(), origin.getY(), origin.getZ()), new BlockPosition(origin.getX() + 3, origin.getY() - 1, origin.getZ()),
@@ -280,7 +283,6 @@ public final class FrontierV3SceneGameTests {
                 java.util.Map.of(members.getFirst().actorId(), new BodyPosition(origin.getX(), origin.getY() + 1, origin.getZ()),
                         members.getLast().actorId(), new BodyPosition(origin.getX() + 2, origin.getY(), origin.getZ())));
 
-        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(world, 91L));
         helper.assertFalse(FrontierV3SceneExecutor.entityStorageReady(true, false),
                 "a production scene must wait for saved entity storage before admitting deterministic body UUIDs");
         helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodiesForFixture(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.COMPLETE,
@@ -364,14 +366,14 @@ public final class FrontierV3SceneGameTests {
     public static void preparedSceneRefusesForeignBodyWithItsExpectedUuid(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos origin = helper.absolutePos(new BlockPos(0, 8, 0));
-        SceneLease lease = lease(origin);
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:scene-conflict-test"), 91L));
+        SceneLease lease = lease(state, origin);
         Villager foreign = EntityType.VILLAGER.create(level);
         helper.assertTrue(foreign != null, "the foreign body fixture must be constructible");
         foreign.setUUID(lease.members().getFirst().entityId());
         foreign.setPos(origin.getX() + 0.5D, origin.getY(), origin.getZ() + 0.5D);
         helper.assertTrue(level.addFreshEntity(foreign), "the foreign body fixture must enter the loaded world");
 
-        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:scene-conflict-test"), 91L));
         helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodiesForFixture(level, state, lease), FrontierV3SceneExecutor.BodyMaterialization.CONFLICT,
                 "an unowned body with a leased UUID is a visible conflict, never a body the executor claims");
         helper.assertTrue(level.getEntity(foreign.getUUID()) == foreign, "the foreign body must remain untouched");
@@ -496,6 +498,10 @@ public final class FrontierV3SceneGameTests {
         restored.setNoAi(true);
         restored.getPersistentData().putString(FrontierV3AmbientActorExecutor.ACTOR_KEY, resident.value());
         restored.getPersistentData().putString(FrontierV3AmbientActorExecutor.KIND_KEY, "RESIDENT");
+        restored.getPersistentData().putLong(FrontierV3AmbientActorExecutor.CUSTODY_EPOCH_KEY, 1L);
+        FrontierV3ActorCarrierComposition.stamp(restored, FrontierV3AmbientActorExecutor.carrierDeclaration(state(runtime), resident,
+                FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, restored.getUUID(),
+                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, state(runtime).ambientLeases().get(resident).revision(), 1L));
 
         FrontierV3ServerLifecycle.JoinFirewallProof restoredProof = FrontierV3ServerLifecycle.observeSourceJoin(runtime, restored);
         helper.assertValueEqual(restoredProof.lifecycleAdmission(), FrontierV3ServerLifecycle.EntityJoinAdmission.RETAINED,
@@ -866,10 +872,11 @@ public final class FrontierV3SceneGameTests {
         });
     }
 
-    private static SceneLease lease(BlockPos origin) {
+    private static SceneLease lease(FrontierWorldState state, BlockPos origin) {
         SceneLeaseId id = new SceneLeaseId("lease:frontier-v3-game-test");
-        WorldId world = new WorldId("frontier:scene-game-test");
-        List<SceneMember> members = List.of(member(world, "resident:frontier-v3-test-hauler"), member(world, "resident:frontier-v3-test-guard"));
+        WorldId world = state.bootstrap().worldId();
+        List<SceneMember> members = state.humanPopulation().residents().keySet().stream().sorted().limit(2)
+                .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(world, actor))).toList();
         return fixtureLease(id, world, new SubjectId("operation:frontier-v3-game-test"), new SubjectId("cargo:frontier-v3-game-test"),
                 new BlockPosition(origin.getX(), origin.getY(), origin.getZ()), SimInstant.ZERO, 0L, SceneLeaseStatus.PREPARED, Optional.empty(), members);
     }
@@ -911,7 +918,8 @@ public final class FrontierV3SceneGameTests {
     }
     private static net.minecraft.world.entity.Mob addOwnedBody(GameTestHelper helper, ServerLevel level, FrontierWorldState state,
                                                                 SceneLease lease, SceneMember member, BlockPos position) {
-        boolean bioform = member.actorId().value().startsWith("bioform:");
+        boolean bioform = state.bootstrap().hive().bioforms().stream().anyMatch(candidate -> candidate.id().equals(member.actorId()))
+                || state.hiveColony().spawnedBioforms().containsKey(member.actorId());
         net.minecraft.world.entity.Mob body = bioform ? EntityType.ZOMBIE.create(level) : EntityType.VILLAGER.create(level);
         helper.assertTrue(body != null, "the exact HOT body fixture must be constructible");
         body.setUUID(member.entityId()); body.setPos(position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D); body.setPersistenceRequired(); body.setNoAi(true);
@@ -921,8 +929,7 @@ public final class FrontierV3SceneGameTests {
         body.getPersistentData().putString(FrontierV3SceneExecutor.ACTOR_KEY, member.actorId().value());
         body.getPersistentData().putLong(FrontierV3SceneExecutor.REVISION_KEY, lease.revision());
         body.getPersistentData().putLong(FrontierV3AmbientActorExecutor.CUSTODY_EPOCH_KEY, 1L);
-        FrontierV3ActorCarrierComposition.stamp(body, FrontierV3ActorCarrierComposition.fromCanonical(state, member.actorId(),
-                bioform ? FrontierV3ActorCarrierComposition.ActorKind.BIOFORM : FrontierV3ActorCarrierComposition.ActorKind.RESIDENT,
+        FrontierV3ActorCarrierComposition.stamp(body, FrontierV3AmbientActorExecutor.carrierDeclaration(state, member.actorId(),
                 FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, member.entityId(),
                 FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, lease.revision(), 1L));
         helper.assertTrue(level.addFreshEntity(body), "the exact HOT body fixture must enter the loaded world");

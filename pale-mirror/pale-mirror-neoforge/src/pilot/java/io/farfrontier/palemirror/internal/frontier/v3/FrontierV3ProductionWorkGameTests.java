@@ -111,6 +111,10 @@ public final class FrontierV3ProductionWorkGameTests {
             body.getPersistentData().putString(FrontierV3SceneExecutor.LEASE_KEY, leaseId.value());
             body.getPersistentData().putString(FrontierV3SceneExecutor.ACTOR_KEY, job.workerId().value());
             body.getPersistentData().putLong(FrontierV3SceneExecutor.REVISION_KEY, lease.revision());
+            body.getPersistentData().putLong(FrontierV3AmbientActorExecutor.CUSTODY_EPOCH_KEY, 1L);
+            FrontierV3ActorCarrierComposition.stamp(body, FrontierV3AmbientActorExecutor.carrierDeclaration(state(runtime), job.workerId(),
+                    FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, member.entityId(),
+                    FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, lease.revision(), 1L));
             helper.assertTrue(level.addFreshEntity(body), "the exact worker body must enter the already-loaded GameTest cell");
             helper.runAfterDelay(2L, () -> {
                 try {
@@ -196,6 +200,10 @@ public final class FrontierV3ProductionWorkGameTests {
             body.getPersistentData().putString(FrontierV3SceneExecutor.LEASE_KEY, leaseId.value());
             body.getPersistentData().putString(FrontierV3SceneExecutor.ACTOR_KEY, job.workerId().value());
             body.getPersistentData().putLong(FrontierV3SceneExecutor.REVISION_KEY, lease.revision());
+            body.getPersistentData().putLong(FrontierV3AmbientActorExecutor.CUSTODY_EPOCH_KEY, 1L);
+            FrontierV3ActorCarrierComposition.stamp(body, FrontierV3AmbientActorExecutor.carrierDeclaration(state(runtime), job.workerId(),
+                    FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, member.entityId(),
+                    FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, lease.revision(), 1L));
             helper.assertTrue(level.addFreshEntity(body), "the exact worker body must enter the loaded GameTest cell");
             helper.runAfterDelay(2L, () -> {
                 try {

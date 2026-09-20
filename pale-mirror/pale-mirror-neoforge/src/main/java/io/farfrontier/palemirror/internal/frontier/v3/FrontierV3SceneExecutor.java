@@ -239,8 +239,7 @@ final class FrontierV3SceneExecutor {
         }
     }
     private static void materializePrepared(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
-        BodyMaterialization result = materializeBodies(level, state, lease,
-                FrontierV3ActorCarrierComposition.InventoryEntry.SCENE_BODY);
+        BodyMaterialization result = FrontierV3ActorCarrierFactory.materializeSceneBodies(FrontierV3ActorCarrierComposition.InventoryEntry.SCENE_BODY, level, state, lease);
         BodyMaterialization carrier = result == BodyMaterialization.COMPLETE
                 ? FrontierV3CargoCarrierExecutor.materialize(level, state, lease) : BodyMaterialization.DEFERRED;
         if (result == BodyMaterialization.COMPLETE && carrier == BodyMaterialization.COMPLETE) {
@@ -334,11 +333,11 @@ final class FrontierV3SceneExecutor {
             return BodyMaterialization.DEFERRED;
         }
         return materializeBodiesInReadyColumns(level, state, lease,
-                FrontierV3SceneBehaviorRegistry.standingPositionProvider(lease), true);
+                FrontierV3SceneBehaviorRegistry.standingPositionProvider(lease));
     }
     /** Isolated GameTest fixture entry point; production code must use the inventory-bound overload. */
     static BodyMaterialization materializeBodiesForFixture(ServerLevel level, FrontierWorldState state, SceneLease lease) {
-        return materializeBodiesInReadyColumns(level, state, lease, FrontierV3StandingPosition::aboveExactFloor, false);
+        return materializeBodiesInReadyColumns(level, state, lease, FrontierV3StandingPosition::aboveExactFloor);
     }
     static boolean entityStorageReady(ServerLevel level, BlockPos position) {
         return entityStorageReady(level.hasChunkAt(position), level.areEntitiesLoaded(ChunkPos.asLong(position)));
@@ -348,8 +347,7 @@ final class FrontierV3SceneExecutor {
         return chunkLoaded && entitiesLoaded;
     }
     private static BodyMaterialization materializeBodiesInReadyColumns(ServerLevel level, FrontierWorldState state, SceneLease lease,
-                                                                        FrontierV3SceneBehaviorRegistry.StandingPositionProvider standingPosition,
-                                                                        boolean canonicalComposition) {
+                                                                        FrontierV3SceneBehaviorRegistry.StandingPositionProvider standingPosition) {
         for (int index = 0; index < lease.members().size(); index++) {
             SceneMember member = lease.members().get(index);
             Entity existing = level.getEntity(member.entityId());
@@ -370,7 +368,7 @@ final class FrontierV3SceneExecutor {
                     // claims the same UUID; changing a scene lease must never recreate or move
                     // that player-visible body.
                     FrontierV3ControlledMobMotion.stop(body);
-                    mark(body, state, lease, member, canonicalComposition);
+                    mark(body, state, lease, member);
                     continue;
                 }
                 if (!FrontierV3AmbientActorExecutor.owned(existing, member.actorId(), bioform(state, member.actorId()))) return BodyMaterialization.CONFLICT;
@@ -384,7 +382,7 @@ final class FrontierV3SceneExecutor {
                 body.setCustomName(FrontierV3ScenePresentation.actorName(state, member.actorId(), bioform(state, member.actorId()))); body.setCustomNameVisible(true);
                 if (body instanceof Zombie zombie) FrontierV3AmbientActorExecutor.configureBioform(zombie,
                         FrontierV3AmbientActorExecutor.bioformProfile(state, member.actorId()));
-                mark(body, state, lease, member, canonicalComposition);
+                mark(body, state, lease, member);
                 continue;
             }
             if (lease.ambientHandoffActorIds().contains(member.actorId())) return BodyMaterialization.DEFERRED;
@@ -393,12 +391,10 @@ final class FrontierV3SceneExecutor {
             // inactive UUID carrier at a newer physical revision.  This shared scene boundary
             // consumes the carrier after admission, so it cannot leave concurrent custody or
             // fall back to a newly selected worker.
-            FrontierV3AmbientCarrierLedger ledger = canonicalComposition
-                    ? FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId()) : null;
-            FrontierV3AmbientCarrierLedger.Reconciliation carrier = canonicalComposition
-                    ? ledger.reconciliation(FrontierV3AmbientActorExecutor.carrierDeclaration(state, member.actorId(),
+            FrontierV3AmbientCarrierLedger ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
+            FrontierV3AmbientCarrierLedger.Reconciliation carrier = ledger.reconciliation(FrontierV3AmbientActorExecutor.carrierDeclaration(state, member.actorId(),
                     FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, member.entityId(), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY,
-                    lease.revision(), 1L)) : FrontierV3AmbientCarrierLedger.Reconciliation.NO_FENCED_CARRIER;
+                    lease.revision(), 1L));
             if (carrier != FrontierV3AmbientCarrierLedger.Reconciliation.NO_FENCED_CARRIER
                     && carrier != FrontierV3AmbientCarrierLedger.Reconciliation.READY) return BodyMaterialization.CONFLICT;
             BodyPosition canonical = lease.memberPosition(member.actorId());
@@ -411,20 +407,20 @@ final class FrontierV3SceneExecutor {
             // player/world conflict before the owned projection has had a chance to run.
             if (position == null) return BodyMaterialization.DEFERRED;
             boolean bioform = bioform(state, member.actorId());
-            Mob body = bioform ? EntityType.ZOMBIE.create(level) : EntityType.VILLAGER.create(level);
-            if (body == null) throw new IllegalStateException("Minecraft could not create a Frontier v3 scene body");
-            body.setUUID(member.entityId());
             if (position.getY() != canonical.y()) return BodyMaterialization.CONFLICT;
+            long custodyEpoch = carrier == FrontierV3AmbientCarrierLedger.Reconciliation.READY ? ledger.reconstructionEpoch(member.actorId()) : 1L;
+            Mob body = FrontierV3ActorCarrierFactory.create(FrontierV3ActorCarrierComposition.InventoryEntry.SCENE_BODY, level, FrontierV3AmbientActorExecutor.carrierDeclaration(state, member.actorId(),
+                    FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, member.entityId(), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY,
+                    lease.revision(), custodyEpoch));
             body.setPos(canonical.x() + 0.5D, canonical.y(), canonical.z() + 0.5D);
             body.setPersistenceRequired();
-            long custodyEpoch = carrier == FrontierV3AmbientCarrierLedger.Reconciliation.READY ? ledger.reconstructionEpoch(member.actorId()) : 1L;
             body.getPersistentData().putLong(FrontierV3AmbientActorExecutor.CUSTODY_EPOCH_KEY, custodyEpoch);
             body.setNoAi(true);
             if (body instanceof Zombie zombie) FrontierV3AmbientActorExecutor.configureBioform(zombie,
                     FrontierV3AmbientActorExecutor.bioformProfile(state, member.actorId()));
             body.setCustomName(FrontierV3ScenePresentation.actorName(state, member.actorId(), bioform));
             body.setCustomNameVisible(true);
-            mark(body, state, lease, member, canonicalComposition);
+            mark(body, state, lease, member);
             if (!level.addFreshEntity(body)) {
                 PaleMirrorMod.LOGGER.warn("Frontier v3 scene body admission failed lease={} actor={} uuid={} body={}",
                         lease.id().value(), member.actorId().value(), member.entityId(), canonical);
@@ -951,7 +947,13 @@ final class FrontierV3SceneExecutor {
     }
     /** Exact scene-body provenance check shared by typed physical effects attached to a HOT scene. */
     static boolean owned(Entity entity, FrontierWorldState state, SceneLease lease, SceneMember member) {
-        long epoch = entity == null ? 0L : entity.getPersistentData().getLong(FrontierV3AmbientActorExecutor.CUSTODY_EPOCH_KEY);
+        // An observed entity is untrusted until it presents every physical authority field.
+        // In particular, NBT's absent-long default must be a boolean rejection, never an
+        // exception while inspecting a foreign body that happens to have this scene UUID.
+        if (entity == null || entity.isRemoved()
+                || !entity.getPersistentData().contains(FrontierV3AmbientActorExecutor.CUSTODY_EPOCH_KEY)
+                || entity.getPersistentData().getLong(FrontierV3AmbientActorExecutor.CUSTODY_EPOCH_KEY) < 1L) return false;
+        long epoch = entity.getPersistentData().getLong(FrontierV3AmbientActorExecutor.CUSTODY_EPOCH_KEY);
         FrontierV3ActorCarrierComposition.Declaration declaration = FrontierV3AmbientActorExecutor.carrierDeclaration(state, member.actorId(),
                 FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, member.entityId(), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY,
                 lease.revision(), epoch);
@@ -977,18 +979,16 @@ final class FrontierV3SceneExecutor {
         return java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
                 .anyMatch(bioform -> bioform.id().equals(actorId));
     }
-    private static void mark(Entity entity, FrontierWorldState state, SceneLease lease, SceneMember member, boolean canonicalComposition) {
+    private static void mark(Entity entity, FrontierWorldState state, SceneLease lease, SceneMember member) {
         entity.getPersistentData().remove(FrontierV3AmbientActorExecutor.ACTOR_KEY);
         entity.getPersistentData().remove(FrontierV3AmbientActorExecutor.KIND_KEY);
         entity.getPersistentData().putString(LEASE_KEY, lease.id().value());
         entity.getPersistentData().putString(ACTOR_KEY, member.actorId().value());
         entity.getPersistentData().putLong(REVISION_KEY, lease.revision());
-        if (!canonicalComposition) return;
         FrontierV3ActorCarrierComposition.requireRole(FrontierV3ActorCarrierComposition.InventoryEntry.SCENE_BODY,
                 FrontierV3ActorCarrierComposition.Role.PRODUCER);
         boolean bioform = bioform(state, member.actorId());
-        FrontierV3ActorCarrierComposition.stamp(entity, FrontierV3ActorCarrierComposition.fromCanonical(state, member.actorId(),
-                bioform ? FrontierV3ActorCarrierComposition.ActorKind.BIOFORM : FrontierV3ActorCarrierComposition.ActorKind.RESIDENT,
+        FrontierV3ActorCarrierComposition.stamp(entity, FrontierV3AmbientActorExecutor.carrierDeclaration(state, member.actorId(),
                 FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, member.entityId(),
                 FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, lease.revision(),
                 Math.max(1L, entity.getPersistentData().getLong(FrontierV3AmbientActorExecutor.CUSTODY_EPOCH_KEY))));

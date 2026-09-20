@@ -294,20 +294,18 @@ final class FrontierV3AmbientActorExecutor {
         }
         BlockPos position = standingPositionProvider.resolve(level, minecraftFloor(canonicalBody.supportingSurface().support()));
         if (position == null || !position.equals(minecraftBody(canonicalBody)) || !level.hasChunkAt(position)) return Result.DEFERRED;
-        Mob body = bioform ? EntityType.ZOMBIE.create(level) : EntityType.VILLAGER.create(level);
-        if (body == null) throw new IllegalStateException("Minecraft could not create a Frontier v3 ambient actor");
-        body.setUUID(entityId); body.setPos(position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D); body.setPersistenceRequired();
+        long ambientRevision = state.ambientLeases().containsKey(actorId) ? state.ambientLeases().get(actorId).revision() : 1L;
+        FrontierV3ActorCarrierComposition.Declaration declaration = carrierDeclaration(state, actorId,
+                FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, entityId,
+                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, ambientRevision, 1L);
+        Mob body = FrontierV3ActorCarrierFactory.create(FrontierV3ActorCarrierComposition.InventoryEntry.AMBIENT_BODY, level, declaration);
+        body.setPos(position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D); body.setPersistenceRequired();
         body.getPersistentData().putLong(CUSTODY_EPOCH_KEY, 1L);
         body.setNoAi(true);
         if (body instanceof Zombie zombie) configureBioform(zombie, bioformProfile(state, actorId));
         hydrateExactHeldEquipment(body, state, actorId);
         FrontierV3ScenePresentation.applyAmbientActorPresentation(body, state, actorId, bioform);
         body.getPersistentData().putString(ACTOR_KEY, actorId.value()); body.getPersistentData().putString(KIND_KEY, bioform ? "BIOFORM" : "RESIDENT");
-        long ambientRevision = state.ambientLeases().containsKey(actorId) ? state.ambientLeases().get(actorId).revision() : 1L;
-        FrontierV3ActorCarrierComposition.stamp(body, FrontierV3ActorCarrierComposition.fromCanonical(state, actorId,
-                bioform ? FrontierV3ActorCarrierComposition.ActorKind.BIOFORM : FrontierV3ActorCarrierComposition.ActorKind.RESIDENT,
-                FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, entityId,
-                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, ambientRevision, 1L));
         if (!level.noCollision(body, body.getBoundingBox()) || admissionColumnOccupied(level, body, body.getBoundingBox())) return Result.DEFERRED;
         return level.addFreshEntity(body) ? Result.APPLIED : Result.CONFLICT;
     }

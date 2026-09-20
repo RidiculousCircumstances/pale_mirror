@@ -105,8 +105,7 @@ final class FrontierV3RoutePatrolSceneExecutor {
 
     private static void materialize(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                     FrontierWorldState state, SceneLease lease) {
-        FrontierV3SceneExecutor.BodyMaterialization result = FrontierV3SceneExecutor.materializeBodies(level, state, lease,
-                FrontierV3ActorCarrierComposition.InventoryEntry.ROUTE_PATROL);
+        FrontierV3SceneExecutor.BodyMaterialization result = FrontierV3ActorCarrierFactory.materializeSceneBodies(FrontierV3ActorCarrierComposition.InventoryEntry.ROUTE_PATROL, level, state, lease);
         if (result == FrontierV3SceneExecutor.BodyMaterialization.CONFLICT) { conflict(level, runtime, lease, "prepared-body-conflict"); return; }
         if (result != FrontierV3SceneExecutor.BodyMaterialization.COMPLETE) return;
         FrontierV3SceneExecutor.rememberObserved(level, runtime, state, lease);

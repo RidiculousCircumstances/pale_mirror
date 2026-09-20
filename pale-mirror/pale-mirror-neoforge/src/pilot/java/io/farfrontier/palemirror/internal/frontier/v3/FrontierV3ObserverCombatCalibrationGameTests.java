@@ -130,7 +130,7 @@ public final class FrontierV3ObserverCombatCalibrationGameTests {
 
     private static void prepareHotStrike(GameTestHelper helper, Session session) {
         FrontierV3SceneExecutor.executeStrike(helper.getLevel(), session.runtime(), state(session.runtime()), session.lease(),
-                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ROUTE_ENGAGEMENT);
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
         PhysicalIntent intent = onlyStrike(state(session.runtime()));
         helper.assertTrue(intent.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.PREPARED,
                 "the independent HOT sample must first retain its canonical prepared strike");
@@ -139,14 +139,14 @@ public final class FrontierV3ObserverCombatCalibrationGameTests {
 
     private static void runHotStrike(GameTestHelper helper, Session session) {
         FrontierV3SceneExecutor.executeStrike(helper.getLevel(), session.runtime(), state(session.runtime()), session.lease(),
-                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ROUTE_ENGAGEMENT);
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
         helper.assertTrue(onlyStrike(state(session.runtime())).status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING,
                 "the physical HOT sample must durably enter RUNNING before vanilla damage");
     }
 
     private static Sample confirmAndRelease(GameTestHelper helper, Session session) {
         FrontierV3SceneExecutor.executeStrike(helper.getLevel(), session.runtime(), state(session.runtime()), session.lease(),
-                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ROUTE_ENGAGEMENT);
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
         FrontierWorldState confirmedState = state(session.runtime());
         PhysicalIntent intent = onlyStrike(confirmedState);
         SceneStrikeObservation receipt = (SceneStrikeObservation) confirmedState.physicalObservations()
@@ -236,7 +236,8 @@ public final class FrontierV3ObserverCombatCalibrationGameTests {
 
     private static Entity addOwnedBody(GameTestHelper helper, ServerLevel level, FrontierWorldState state, SceneLease lease,
                                        SceneMember member, BlockPos position) {
-        boolean bioform = member.actorId().value().startsWith("bioform:");
+        boolean bioform = state.bootstrap().hive().bioforms().stream().anyMatch(candidate -> candidate.id().equals(member.actorId()))
+                || state.hiveColony().spawnedBioforms().containsKey(member.actorId());
         net.minecraft.world.entity.Mob body = bioform ? net.minecraft.world.entity.EntityType.ZOMBIE.create(level)
                 : net.minecraft.world.entity.EntityType.VILLAGER.create(level);
         helper.assertTrue(body != null, "the exact HOT calibration body must be constructible");
@@ -246,6 +247,10 @@ public final class FrontierV3ObserverCombatCalibrationGameTests {
         body.getPersistentData().putString(FrontierV3SceneExecutor.LEASE_KEY, lease.id().value());
         body.getPersistentData().putString(FrontierV3SceneExecutor.ACTOR_KEY, member.actorId().value());
         body.getPersistentData().putLong(FrontierV3SceneExecutor.REVISION_KEY, lease.revision());
+        body.getPersistentData().putLong(FrontierV3AmbientActorExecutor.CUSTODY_EPOCH_KEY, 1L);
+        FrontierV3ActorCarrierComposition.stamp(body, FrontierV3AmbientActorExecutor.carrierDeclaration(state, member.actorId(),
+                FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, member.entityId(),
+                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, lease.revision(), 1L));
         helper.assertTrue(level.addFreshEntity(body), "the exact HOT calibration body must enter the physical level");
         return body;
     }

@@ -170,6 +170,10 @@ public final class FrontierV3AmbientActorGameTests {
         BlockPos observed = helper.absolutePos(new BlockPos(2, 8, 0)); joining.setPos(observed.getX() + 0.5D, observed.getY(), observed.getZ() + 0.5D);
         joining.setNoAi(true); joining.getPersistentData().putString(FrontierV3AmbientActorExecutor.ACTOR_KEY, resident.value());
         joining.getPersistentData().putString(FrontierV3AmbientActorExecutor.KIND_KEY, "RESIDENT");
+        joining.getPersistentData().putLong(FrontierV3AmbientActorExecutor.CUSTODY_EPOCH_KEY, 1L);
+        FrontierV3ActorCarrierComposition.stamp(joining, FrontierV3AmbientActorExecutor.carrierDeclaration(prepared, resident,
+                FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, joining.getUUID(),
+                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, prepared.ambientLeases().get(resident).revision(), 1L));
         FrontierV3ServerLifecycle.JoinFirewallProof joiningProof = FrontierV3ServerLifecycle.observeSourceJoin(runtime, joining);
         helper.assertValueEqual(joiningProof.lifecycleAdmission(), FrontierV3ServerLifecycle.EntityJoinAdmission.RETAINED,
                 "an exact PREPARED managed body must be retained while its UUID is not yet indexed");
@@ -188,6 +192,10 @@ public final class FrontierV3AmbientActorGameTests {
         duplicate.setUUID(joining.getUUID()); duplicate.setPos(joining.position()); duplicate.setNoAi(true);
         duplicate.getPersistentData().putString(FrontierV3AmbientActorExecutor.ACTOR_KEY, resident.value());
         duplicate.getPersistentData().putString(FrontierV3AmbientActorExecutor.KIND_KEY, "RESIDENT");
+        duplicate.getPersistentData().putLong(FrontierV3AmbientActorExecutor.CUSTODY_EPOCH_KEY, 1L);
+        FrontierV3ActorCarrierComposition.stamp(duplicate, FrontierV3AmbientActorExecutor.carrierDeclaration(prepared, resident,
+                FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, duplicate.getUUID(),
+                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, prepared.ambientLeases().get(resident).revision(), 1L));
         FrontierV3ServerLifecycle.JoinFirewallProof duplicateProof = FrontierV3ServerLifecycle.observeSourceJoin(runtime, duplicate);
         helper.assertValueEqual(duplicateProof.lifecycleAdmission(), FrontierV3ServerLifecycle.EntityJoinAdmission.DUPLICATE_UNINDEXED,
                 "a second unindexed body with the same exact UUID must be rejected before Minecraft admits it");
