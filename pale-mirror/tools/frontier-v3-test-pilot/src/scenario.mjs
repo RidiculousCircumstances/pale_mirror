@@ -145,6 +145,7 @@ export function validateScenario(scenario) {
       || (scenario.restart.zeroPlayerAdvanceTicks !== undefined
           && (!Number.isInteger(scenario.restart.zeroPlayerAdvanceTicks) || scenario.restart.zeroPlayerAdvanceTicks < 1
               || scenario.restart.zeroPlayerAdvanceTicks > 24_000
+              || !validZeroPlayerAdvanceBatches(scenario.restart.zeroPlayerAdvanceTicks, scenario.restart.zeroPlayerAdvanceBatches)
               || !Number.isInteger(scenario.restart.zeroPlayerTimeoutMs) || scenario.restart.zeroPlayerTimeoutMs < 1_000
               || scenario.restart.zeroPlayerTimeoutMs > 300_000
               || (scenario.restart.zeroPlayerSettleMs !== undefined
@@ -157,6 +158,7 @@ export function validateScenario(scenario) {
           || scenario.restart.secondary.afterAction >= (scenario.actions ?? []).length
           || !Number.isInteger(scenario.restart.secondary.zeroPlayerAdvanceTicks)
           || scenario.restart.secondary.zeroPlayerAdvanceTicks < 1 || scenario.restart.secondary.zeroPlayerAdvanceTicks > 24_000
+          || !validZeroPlayerAdvanceBatches(scenario.restart.secondary.zeroPlayerAdvanceTicks, scenario.restart.secondary.zeroPlayerAdvanceBatches)
           || !Number.isInteger(scenario.restart.secondary.zeroPlayerTimeoutMs)
           || scenario.restart.secondary.zeroPlayerTimeoutMs < 1_000 || scenario.restart.secondary.zeroPlayerTimeoutMs > 300_000
           || (scenario.restart.secondary.zeroPlayerSettleMs !== undefined
@@ -368,6 +370,12 @@ export function validateScenario(scenario) {
     }
   }
   scenarioDeadlineMs(scenario);
+}
+
+function validZeroPlayerAdvanceBatches(total, batches) {
+  return batches === undefined || (Array.isArray(batches) && batches.length > 0 && batches.length <= 8
+    && batches.every(value => Number.isInteger(value) && value >= 1 && value <= 24_000)
+    && batches.reduce((sum, value) => sum + value, 0) === total);
 }
 
 function validDemandHandshake(value) {

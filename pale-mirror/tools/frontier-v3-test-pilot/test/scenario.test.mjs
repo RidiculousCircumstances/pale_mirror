@@ -335,6 +335,14 @@ test('native pilot may advance only the bounded canonical v3 clock with an expli
   assert.throws(() => validateScenario({ ...advance, actions: [{ type: 'fast_forward', ticks: 24_000, timeoutMs: 180_001 }] }), /fast_forward/);
 });
 
+test('restart COLD batches retain the exact total and individually bounded command size', () => {
+  const restart = { ...scenario, restart: { mode: 'graceful', afterAction: 1, zeroPlayerAdvanceTicks: 24_000,
+    zeroPlayerAdvanceBatches: [12_000, 12_000], zeroPlayerTimeoutMs: 180_000 } };
+  assert.doesNotThrow(() => validateScenario(restart));
+  assert.throws(() => validateScenario({ ...restart, restart: { ...restart.restart, zeroPlayerAdvanceBatches: [12_000, 11_999] } }), /restart needs/);
+  assert.throws(() => validateScenario({ ...restart, restart: { ...restart.restart, zeroPlayerAdvanceBatches: [24_001] } }), /restart needs/);
+});
+
 test('runner reserves each declared action window and rejects aggregate overflow instead of truncating a later action', () => {
   const bounded = { ...scenario, setup: [], actions: [
     { type: 'fast_forward', ticks: 24_000, timeoutMs: 180_000 },

@@ -44,6 +44,8 @@ test('F0.6R3 successor assertions are scheduled after the COLD boundary that can
     { after: 7, view: 'projection_work', id: '' }
   ]);
   const successorAdmission = segments.after.actions[1];
+  assert.deepEqual(declaration.restart.zeroPlayerAdvanceBatches, [11900, 11900]);
+  assert.deepEqual(declaration.restart.secondary.zeroPlayerAdvanceBatches, [10550, 10550]);
   assert.equal(successorAdmission.timeoutMs, 100000);
   assert.equal(successorAdmission.pollIntervalMs, 50,
     'the transient terminal HOT lease needs bounded sub-second read-only observation');
@@ -132,6 +134,14 @@ test('F0.6R3 recovered-duty carrier rejects the exact pre-ingress COLD server st
   assert.throws(() => assertF06r3RecoveredDutyCarrier({ declaration, ...stalled }), /server-thread stall/);
 });
 
+test('F0.6R3 recovered-duty carrier rejects a stalled batch inside its declared bounded COLD interval', async () => {
+  const declaration = JSON.parse(await readFile(resolve(root, 'scenarios/disposable-f06r3-recovered-duty.json'), 'utf8'));
+  const stalled = receipt();
+  stalled.manifest.restartZeroPlayerInterlude.batches[1].boundedness = { status: 'STALL', noServerTickStall: false,
+    stallCount: 1, maxBehindMillis: 2263, maxBehindTicks: 45 };
+  assert.throws(() => assertF06r3RecoveredDutyCarrier({ declaration, ...stalled }), /server-thread stall/);
+});
+
 test('F0.6R3 recovered-duty carrier rejects a projection account without its bounded caller breakdown', async () => {
   const declaration = JSON.parse(await readFile(resolve(root, 'scenarios/disposable-f06r3-recovered-duty.json'), 'utf8'));
   const incomplete = receipt();
@@ -175,8 +185,8 @@ function receipt() {
       ] } }, { actionStep: 10, value: productionWorkerTrace() }] },
     manifest: { status: 'ok', scenarioId: 'disposable_f06r3_recovered_duty', recovery: { splitAfterAction: 6, secondarySplitAfterAction: 16 },
       zeroPlayerPrelude: coldInterval({ status: 'held', targetInstant: 21140, holdAtTarget: true }),
-      restartZeroPlayerInterlude: coldInterval({ status: 'completed', advanceTicks: 23800 }),
-      secondaryRestartZeroPlayerInterlude: coldInterval({ status: 'completed', advanceTicks: 21100 }),
+      restartZeroPlayerInterlude: coldInterval({ status: 'completed', advanceTicks: 23800, batches: [coldInterval({ status: 'completed', advanceTicks: 11900 }), coldInterval({ status: 'completed', advanceTicks: 11900 })] }),
+      secondaryRestartZeroPlayerInterlude: coldInterval({ status: 'completed', advanceTicks: 21100, batches: [coldInterval({ status: 'completed', advanceTicks: 10550 }), coldInterval({ status: 'completed', advanceTicks: 10550 })] }),
       lifecycle: ['client_normally_disconnected', 'normal_demand_loss_release', 'durable_server_save', 'recovery_server_ready', 'client_normally_disconnected', 'normal_demand_loss_release', 'durable_server_save', 'recovery_server_ready'].map(barrier => ({ barrier })),
       clientSegments: [{ ingressResponsiveness: [{ status: 'ok', ordinaryClientJoined: true, noServerTickStall: true },
         { status: 'ok', ordinaryClientJoined: true, noServerTickStall: true }, { status: 'ok', ordinaryClientJoined: true, noServerTickStall: true }] }],
