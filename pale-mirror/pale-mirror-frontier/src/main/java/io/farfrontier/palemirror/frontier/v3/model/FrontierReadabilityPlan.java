@@ -66,7 +66,7 @@ public final class FrontierReadabilityPlan {
     public Map<SubjectId, FrontierObjectBoard> boards() { return boards; }
 
     /**
-     * Exact canonical dependencies of the board projection.  Deliberately excludes ambient
+     * Exact canonical dependencies of the board projection. Deliberately excludes ambient
      * lease positions, actor body positions, checkpoint revision and other continuously changing
      * execution data: none of those facts changes a board's slot, text or tone.  Keeping those
      * motion-only revisions out of the NeoForge board cursor prevents a full player-facing plan
@@ -83,7 +83,14 @@ public final class FrontierReadabilityPlan {
                 .sorted(Comparator.comparing(RouteConstruction::id)).findFirst().orElse(null);
         return new ReadabilityInput(state.bootstrap(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(),
                 state.hiveColony().addedOrgans(), state.physicalDeltas(), state.resourceSites(), state.routeTopology(), state.humanPopulation(),
-                state.companies(), state.hiveColony().mobilizations(), new ActorConditionView(state.actorLocations()), routeDamaged, sceneConflict, caravan, construction);
+                state.companies(), state.hiveColony().mobilizations(), state.strategicPlans().objectives(), ambientLeaseStatuses(state),
+                new ActorConditionView(state.actorLocations()), routeDamaged, sceneConflict, caravan, construction);
+    }
+
+    private static Map<SubjectId, AmbientLeaseStatus> ambientLeaseStatuses(FrontierWorldState state) {
+        Map<SubjectId, AmbientLeaseStatus> statuses = new LinkedHashMap<>();
+        state.ambientLeases().forEach((actor, lease) -> statuses.put(actor, lease.status()));
+        return Map.copyOf(statuses);
     }
 
     /** Immutable equality key for the bounded physical board cursor. */
@@ -92,7 +99,9 @@ public final class FrontierReadabilityPlan {
                                    ExactInventory inventory, Map<SubjectId, ProductionJob> productionJobs,
                                    Map<SubjectId, HiveOrgan> addedOrgans, Map<BlockPosition, PhysicalDelta> physicalDeltas,
                                    ResourceSiteState resourceSites, RouteTopology routeTopology, HumanPopulation humanPopulation,
-                                   CompanyRegistry companies, Map<SubjectId, HiveMobilization> mobilizations, ActorConditionView actorConditions,
+                                   CompanyRegistry companies, Map<SubjectId, HiveMobilization> mobilizations,
+                                   Map<SubjectId, StrategicObjective> objectives, Map<SubjectId, AmbientLeaseStatus> ambientLeaseStatuses,
+                                   ActorConditionView actorConditions,
                                    boolean routeDamaged, boolean sceneConflict, boolean caravan, RouteConstruction construction) {
         public ReadabilityInput {
             Objects.requireNonNull(bootstrap, "bootstrap"); Objects.requireNonNull(structureConditions, "structure conditions");
@@ -100,7 +109,9 @@ public final class FrontierReadabilityPlan {
             Objects.requireNonNull(productionJobs, "production jobs"); Objects.requireNonNull(addedOrgans, "added organs");
             Objects.requireNonNull(physicalDeltas, "physical deltas"); Objects.requireNonNull(resourceSites, "resource sites");
             Objects.requireNonNull(routeTopology, "route topology"); Objects.requireNonNull(humanPopulation, "human population");
-            Objects.requireNonNull(companies, "companies"); Objects.requireNonNull(mobilizations, "hive mobilizations"); Objects.requireNonNull(actorConditions, "actor conditions");
+            Objects.requireNonNull(companies, "companies"); Objects.requireNonNull(mobilizations, "hive mobilizations");
+            Objects.requireNonNull(objectives, "objectives"); Objects.requireNonNull(ambientLeaseStatuses, "ambient lease statuses");
+            Objects.requireNonNull(actorConditions, "actor conditions");
         }
 
         /**
@@ -114,7 +125,8 @@ public final class FrontierReadabilityPlan {
             return bootstrap == other.bootstrap && structureConditions == other.structureConditions && infection == other.infection
                     && inventory == other.inventory && productionJobs == other.productionJobs && physicalDeltas == other.physicalDeltas
                     && resourceSites == other.resourceSites && routeTopology == other.routeTopology && humanPopulation == other.humanPopulation
-                    && companies == other.companies && mobilizations == other.mobilizations && actorConditions.equals(other.actorConditions)
+                    && companies == other.companies && mobilizations == other.mobilizations && objectives == other.objectives
+                    && ambientLeaseStatuses.equals(other.ambientLeaseStatuses) && actorConditions.equals(other.actorConditions)
                     && routeDamaged == other.routeDamaged && sceneConflict == other.sceneConflict && caravan == other.caravan
                     && construction == other.construction;
         }
@@ -201,7 +213,7 @@ public final class FrontierReadabilityPlan {
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), site.settlementId());
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(site.id());
         add(values, new FrontierObjectBoard(site.id(), fieldBoardPosition(site), fieldTone(lifecycle.phase()), FrontierObjectBoard.Scope.LOCAL,
-                settlement.displayName() + "\nWHEAT FIELD\n" + fieldStateText(lifecycle)));
+                settlement.displayName() + "\nWHEAT FIELD\n" + fieldStateText(state, site, lifecycle)));
     }
 
     private static void addRouteNetwork(Map<SubjectId, FrontierObjectBoard> values, FrontierWorldState state) {
@@ -295,15 +307,39 @@ public final class FrontierReadabilityPlan {
         };
     }
 
-    private static String fieldStateText(ResourceSiteLifecycle lifecycle) {
+    private static String fieldStateText(FrontierWorldState state, ResourceSite site, ResourceSiteLifecycle lifecycle) {
         return switch (lifecycle.phase()) {
             case UNPREPARED -> "PREPARING SOIL · KEEP CLEAR";
             case GROWING -> "GROWING · STAGE " + lifecycle.growthStage() + "/" + ResourceSiteLifecycle.MATURE_STAGE;
-            case READY -> "READY TO HARVEST · FARMERS NEEDED";
+            case READY -> readyFieldText(state, site);
             case HARVESTING -> "HARVEST IN PROGRESS";
             case CONFLICT -> "DAMAGED · REPAIR NEEDED";
             case DESTROYED -> "LOST · REBUILD NEEDED";
         };
+    }
+
+    /**
+     * A READY board is player-facing explanation, not a generic demand slogan.  A retained
+     * facility objective or a restart-unknown ambient lease is a real owned blocker and must
+     * not be misrepresented as the absence of a farmer who is already known to be eligible.
+     */
+    private static String readyFieldText(FrontierWorldState state, ResourceSite site) {
+        boolean unknownFarmer = state.humanPopulation().residents().values().stream()
+                .filter(resident -> resident.settlementId().equals(site.settlementId()))
+                .filter(resident -> resident.profession() == ResidentProfession.AGRICULTURAL_WORKER)
+                .filter(resident -> FrontierWorldStateSupport.workCapable(state, resident))
+                .filter(resident -> HumanAssignmentProjection.compile(state).idle(resident.id()))
+                .map(ResidentProfile::id).map(state.ambientLeases()::get)
+                .anyMatch(lease -> lease != null && lease.status() == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART);
+        if (unknownFarmer) return "READY TO HARVEST · FARMER RECOVERY IN PROGRESS";
+        boolean facilityLaneActive = state.strategicPlans().objectives().values().stream()
+                .anyMatch(objective -> objective.ownerId().equals(site.settlementId())
+                        && objective.lane() == StrategicObjectiveLane.FACILITY
+                        && objective.status() == StrategicObjectiveStatus.ACTIVE);
+        if (facilityLaneActive) return "READY TO HARVEST · HARVEST LANE ACTIVE";
+        return FrontierWorldStateSupport.availableFieldResident(state, site.settlementId(), ResidentProfession.AGRICULTURAL_WORKER).isPresent()
+                ? "READY TO HARVEST · FARMER ASSIGNMENT PENDING"
+                : "READY TO HARVEST · FARMERS NEEDED";
     }
 
     /** Pure semantic contact: a live infection column intersects one current object cell. */

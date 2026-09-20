@@ -105,6 +105,12 @@ class AmbientActorProcessTest {
         assertEquals(AmbientLeaseStatus.CLOSED, closed.ambientLeases().get(resident).status());
         assertEquals(initial.actorLocations().get(resident), closed.actorLocations().get(resident));
         assertEquals(absence, FrontierWorldRuntimeDefinition.payloadCodecs().decode(absence.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(absence)));
+        DiagnosticIncident incident = closed.diagnosticIncidents().why(new DiagnosticSubject(DiagnosticSubjectKind.AMBIENT_ACTOR, resident)).orElseThrow();
+        assertEquals(DiagnosticReason.AMBIENT_LEASE_RESTART_ABSENCE, incident.diagnostic().reason());
+        assertEquals(new DiagnosticOwner(DiagnosticOwnerKind.AMBIENT_LEASE, resident), incident.diagnostic().owner());
+        assertEquals("expected=ambient_lease:UNKNOWN_AFTER_RESTART;handoff=" + lease.handoffBody()
+                + ";observed=loaded_handoff_anchor_without_exact_body", incident.context().physical());
+        assertEquals("INSPECT", incident.diagnostic().disposition().name());
 
         AmbientLeaseRestartAbsenceObserved forged = new AmbientLeaseRestartAbsenceObserved(resident, lease.handoffBody().offset(1, 0, 0));
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Rejected.class,

@@ -46,9 +46,10 @@ final class AmbientLeasePayloadCodecs {
         @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
             AmbientLeaseRestartAbsenceObserved absence = (AmbientLeaseRestartAbsenceObserved) payload;
             FrontierWorldPayloadCodecs.writeSubject(output, absence.actorId()); writeBody(output, absence.body());
+            FrontierWorldPayloadCodecs.writeDiagnosticTuple(output, absence.diagnostic());
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new AmbientLeaseRestartAbsenceObserved(
-                FrontierWorldPayloadCodecs.readSubject(input).value(), readBody(input))); }
+                FrontierWorldPayloadCodecs.readSubject(input).value(), readBody(input), FrontierWorldPayloadCodecs.readDiagnosticTuple(input))); }
     }
     private static void writeLease(DataOutputStream output, AmbientActorLease lease) throws IOException {
         FrontierWorldPayloadCodecs.writeSubject(output, lease.actorId()); writeBody(output, lease.handoffBody()); output.writeLong(lease.handoffInstant().ticks());

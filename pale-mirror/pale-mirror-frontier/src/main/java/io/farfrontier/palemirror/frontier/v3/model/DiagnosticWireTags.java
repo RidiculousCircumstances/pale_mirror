@@ -15,7 +15,7 @@ public final class DiagnosticWireTags {
         case 305 -> DiagnosticReason.SETTLEMENT_PROVISION_CONFLICT; case 306 -> DiagnosticReason.SETTLEMENT_ASSAULT_CONFLICT; case 401 -> DiagnosticReason.INVENTORY_CONFLICT;
         case 402 -> DiagnosticReason.REPLICA_CUSTODY_CONFLICT; case 403 -> DiagnosticReason.PHYSICAL_CUSTODY_UNRESOLVED;
         case 404 -> DiagnosticReason.SCENE_LEASE_RECOVERY_UNRESOLVED; case 405 -> DiagnosticReason.ROUTE_PATROL_MEMBER_LOST;
-        case 406 -> DiagnosticReason.FENCED_RECOVERY_AMBIGUOUS;
+        case 406 -> DiagnosticReason.FENCED_RECOVERY_AMBIGUOUS; case 407 -> DiagnosticReason.AMBIENT_LEASE_RESTART_ABSENCE;
         case 501 -> DiagnosticReason.FRONTIER_QUARANTINE; case 502 -> DiagnosticReason.FRONTIER_KERNEL_COMMAND_FAILURE;
         case 503 -> DiagnosticReason.FRONTIER_KERNEL_TRANSACTION_CAPACITY; case 504 -> DiagnosticReason.FRONTIER_KERNEL_DUE_FAILURE;
         default -> throw new IllegalArgumentException("unknown diagnostic reason tag: " + tag); }; }
@@ -36,6 +36,7 @@ public final class DiagnosticWireTags {
         case 13 -> DiagnosticOwnerKind.REPLICA_CUSTODY; case 14 -> DiagnosticOwnerKind.FRONTIER_INSTANCE; case 15 -> DiagnosticOwnerKind.ADAPTER;
         case 16 -> DiagnosticOwnerKind.HIVE_GROWTH; case 17 -> DiagnosticOwnerKind.HIVE_NUTRIENT_TRANSFER; case 18 -> DiagnosticOwnerKind.RESIDENT_MIGRATION;
         case 19 -> DiagnosticOwnerKind.ROUTE_OPERATION; case 20 -> DiagnosticOwnerKind.SETTLEMENT_PROVISION; case 21 -> DiagnosticOwnerKind.SETTLEMENT_ASSAULT;
+        case 22 -> DiagnosticOwnerKind.AMBIENT_LEASE;
         default -> throw new IllegalArgumentException("unknown diagnostic owner kind tag: " + tag); }; }
     public static DiagnosticSubjectKind subjectKind(int tag) { return switch (tag) {
         case 1 -> DiagnosticSubjectKind.RESOURCE_SITE_CELL; case 2 -> DiagnosticSubjectKind.HARVEST_WORKER; case 3 -> DiagnosticSubjectKind.PHYSICAL_EFFECT;
@@ -44,17 +45,18 @@ public final class DiagnosticWireTags {
         case 10 -> DiagnosticSubjectKind.FACILITY; case 11 -> DiagnosticSubjectKind.RESIDENT_ASSIGNMENT; case 12 -> DiagnosticSubjectKind.MEDICAL_PATIENT;
         case 13 -> DiagnosticSubjectKind.INVENTORY_SLOT; case 14 -> DiagnosticSubjectKind.REPLICA; case 15 -> DiagnosticSubjectKind.FRONTIER_INSTANCE;
         case 16 -> DiagnosticSubjectKind.ADAPTER_BOUNDARY; case 17 -> DiagnosticSubjectKind.ROUTE_OPERATION; case 18 -> DiagnosticSubjectKind.SETTLEMENT_PROVISION;
-        case 19 -> DiagnosticSubjectKind.SETTLEMENT_ASSAULT; default -> throw new IllegalArgumentException("unknown diagnostic subject kind tag: " + tag); }; }
+        case 19 -> DiagnosticSubjectKind.SETTLEMENT_ASSAULT; case 20 -> DiagnosticSubjectKind.AMBIENT_ACTOR;
+        default -> throw new IllegalArgumentException("unknown diagnostic subject kind tag: " + tag); }; }
     public static int ownerTag(DiagnosticOwnerKind kind) { return switch (kind) {
         case RESOURCE_SITE -> 1; case HARVEST_JOB -> 2; case PHYSICAL_INTENT -> 3; case SCENE_LEASE -> 4; case HIVE_MOBILIZATION -> 5;
         case ROUTE_PATROL -> 6; case PRODUCTION_JOB -> 7; case SETTLEMENT_SERVICE_WORK -> 8; case ROUTE_MAINTENANCE -> 9;
         case ROUTE_CONSTRUCTION -> 10; case MEDICAL_EVACUATION -> 11; case INVENTORY_CUSTODY -> 12; case REPLICA_CUSTODY -> 13;
         case FRONTIER_INSTANCE -> 14; case ADAPTER -> 15; case HIVE_GROWTH -> 16; case HIVE_NUTRIENT_TRANSFER -> 17; case RESIDENT_MIGRATION -> 18;
-        case ROUTE_OPERATION -> 19; case SETTLEMENT_PROVISION -> 20; case SETTLEMENT_ASSAULT -> 21; }; }
+        case ROUTE_OPERATION -> 19; case SETTLEMENT_PROVISION -> 20; case SETTLEMENT_ASSAULT -> 21; case AMBIENT_LEASE -> 22; }; }
     public static int subjectTag(DiagnosticSubjectKind kind) { return switch (kind) {
         case RESOURCE_SITE_CELL -> 1; case HARVEST_WORKER -> 2; case PHYSICAL_EFFECT -> 3; case SCENE_CARRIER -> 4;
         case HIVE_COCOON -> 5; case HIVE_TRANSFER -> 6; case ROUTE_MEMBER -> 7; case ROUTE_CELL -> 8;
         case PRODUCTION_INPUT -> 9; case FACILITY -> 10; case RESIDENT_ASSIGNMENT -> 11; case MEDICAL_PATIENT -> 12;
         case INVENTORY_SLOT -> 13; case REPLICA -> 14; case FRONTIER_INSTANCE -> 15; case ADAPTER_BOUNDARY -> 16;
-        case ROUTE_OPERATION -> 17; case SETTLEMENT_PROVISION -> 18; case SETTLEMENT_ASSAULT -> 19; }; }
+        case ROUTE_OPERATION -> 17; case SETTLEMENT_PROVISION -> 18; case SETTLEMENT_ASSAULT -> 19; case AMBIENT_ACTOR -> 20; }; }
 }

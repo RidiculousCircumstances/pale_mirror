@@ -12,10 +12,17 @@ import java.util.Objects;
  * retaining the living canonical actor at its exact hand-off position; a later normal
  * demand may prepare and materialize that actor again.</p>
  */
-public record AmbientLeaseRestartAbsenceObserved(SubjectId actorId, BodyPosition body) implements FrontierPayload {
+public record AmbientLeaseRestartAbsenceObserved(SubjectId actorId, BodyPosition body, DiagnosticTuple diagnostic) implements FrontierPayload {
     public AmbientLeaseRestartAbsenceObserved {
         Objects.requireNonNull(actorId, "actor id");
         Objects.requireNonNull(body, "body");
+        diagnostic = Objects.requireNonNull(diagnostic, "diagnostic");
+        if (!diagnostic.equals(AmbientLeaseDiagnosticProducer.restartAbsence(actorId))) {
+            throw new IllegalArgumentException("restart absence diagnostic must name its exact ambient owner and actor subject");
+        }
+    }
+    public AmbientLeaseRestartAbsenceObserved(SubjectId actorId, BodyPosition body) {
+        this(actorId, body, AmbientLeaseDiagnosticProducer.restartAbsence(actorId));
     }
 
     @Override public String type() { return "frontier.ambient_lease_restart_absence_observed"; }

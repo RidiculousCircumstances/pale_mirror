@@ -31,6 +31,7 @@ public final class DiagnosticIncidentExtractor {
             case PhysicalIntentTransition value -> value.diagnostic();
             case SceneLeaseRecoveryUnresolved value -> Optional.of(value.diagnostic());
             case RoutePatrolFailed value -> Optional.of(value.diagnostic());
+            case AmbientLeaseRestartAbsenceObserved value -> Optional.of(value.diagnostic());
             case KernelQuarantineObserved value -> Optional.of(value.diagnostic());
             default -> Optional.empty();
         };

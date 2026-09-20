@@ -28,6 +28,11 @@ public record DiagnosticIncidentContext(String world, String runtime, String sou
             intent = "intent=" + transition.intentId().value() + ";status=" + transition.status();
             observation = transition.observation().map(value -> "observed=" + value.getClass().getSimpleName()).orElse("not_observed");
         }
+        if (event.payload() instanceof AmbientLeaseRestartAbsenceObserved absence) {
+            physical = "expected=ambient_lease:UNKNOWN_AFTER_RESTART;handoff=" + absence.body()
+                    + ";observed=loaded_handoff_anchor_without_exact_body";
+            observation = "loaded_anchor_absence:" + absence.body();
+        }
         boolean complete = identity.complete();
         String degradation = complete ? "complete" : "runtime_source_tree_jar_restart_identity_unavailable";
         return new DiagnosticIncidentContext(state.bootstrap().worldId().value(), identity.runtime(), identity.sourceTree(), identity.jar(), state.bootstrap().ruleset().id() + ":" + state.bootstrap().ruleset().schemaVersion() + ":" + state.bootstrap().ruleset().contentSha256(), identity.restartIdentity(), causes.isBlank() ? "root" : causes, physical, claim, intent, observation, reconciliation, state.bootstrap().canonicalSha256(), complete, degradation);

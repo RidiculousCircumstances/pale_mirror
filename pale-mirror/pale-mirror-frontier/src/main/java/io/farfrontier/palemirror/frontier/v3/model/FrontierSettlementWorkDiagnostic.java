@@ -58,7 +58,8 @@ public record FrontierSettlementWorkDiagnostic(
         String depotSurface = surface == null ? "MISSING" : surface.status().name();
         boolean depotHasFreeSlot = surface != null && surface.status() == ContainerSurfaceStatus.ACTIVE
                 && state.firstFreeContainerSlot(surface.containerId()).isPresent();
-        String admission = harvestAdmission(readySites, facility, farmStatus, livingFarmers, workCapableFarmer, availableFarmer, depotSurface, depotHasFreeSlot, pendingSchedules);
+        String admission = harvestAdmission(state, settlementId, readySites, facility, farmStatus, livingFarmers, workCapableFarmer,
+                availableFarmer, depotSurface, depotHasFreeSlot, pendingSchedules);
         return Optional.of(new FrontierSettlementWorkDiagnostic(settlementId.value(), strategic, facility, readySites, pendingSchedules, admission,
                 livingFarmers, availableFarmer, farmStatus, depotSurface, depotHasFreeSlot));
     }
@@ -70,10 +71,21 @@ public record FrontierSettlementWorkDiagnostic(
                 .map(value -> new Lane(value.id().value(), value.kind().name(), value.status().name())).orElseGet(Lane::none);
     }
 
-    private static String harvestAdmission(List<String> readySites, Lane facility, String farmStatus, int livingFarmers, boolean workCapableFarmer, String availableFarmer,
+    private static String harvestAdmission(FrontierWorldState state, SubjectId settlementId, List<String> readySites, Lane facility,
+                                           String farmStatus, int livingFarmers, boolean workCapableFarmer, String availableFarmer,
                                            String depotSurface, boolean depotHasFreeSlot, List<String> pendingSchedules) {
         if (readySites.isEmpty()) return "NO_READY_SITE";
-        if (!facility.status().equals("NONE")) return "FACILITY_LANE_BUSY";
+        String recoveringFarmer = state.humanPopulation().residents().values().stream()
+                .filter(value -> value.settlementId().equals(settlementId) && value.profession() == ResidentProfession.AGRICULTURAL_WORKER)
+                .filter(value -> FrontierWorldStateSupport.workCapable(state, value))
+                .filter(value -> HumanAssignmentProjection.compile(state).idle(value.id()))
+                .map(ResidentProfile::id).sorted()
+                .filter(actor -> {
+                    AmbientActorLease lease = state.ambientLeases().get(actor);
+                    return lease != null && lease.status() == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART;
+                }).map(SubjectId::value).findFirst().orElse("");
+        if (!recoveringFarmer.isEmpty()) return "AMBIENT_RECOVERY_UNKNOWN:" + recoveringFarmer;
+        if (!facility.status().equals("NONE")) return "FACILITY_LANE_BUSY:" + facility.objectiveId();
         if (!farmStatus.equals(StructureCondition.INTACT.name())) return "FARM_UNAVAILABLE";
         if (livingFarmers == 0) return "NO_LIVING_FARMER";
         if (!workCapableFarmer) return "FARMERS_STARVING";

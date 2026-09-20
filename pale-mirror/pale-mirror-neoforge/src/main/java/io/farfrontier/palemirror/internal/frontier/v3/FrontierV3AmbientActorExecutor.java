@@ -140,6 +140,28 @@ final class FrontierV3AmbientActorExecutor {
                 FrontierV3AmbientActorCaches.forgetObserved(runtime, actorId);
                 continue;
             }
+            // A restart-unknown lease remains the exact physical owner until its declared
+            // recovery owner has inspected the naturally loaded hand-off anchor.  In
+            // particular, a retained harvest candidate reserves this farmer for its later
+            // pre-lease scene hand-off; letting that reservation bypass recovery used to leave
+            // the actor both canonically idle and indefinitely unavailable.  Settle the old
+            // owner first, then let the next ordinary turn prepare/adopt the same farmer.
+            if (lease != null && lease.status() == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART) {
+                Entity body = level.getEntity(entityId(state, actorId));
+                if (body != null && owned(body, actorId, bioform(state, actorId))) {
+                    submit(runtime, "ambient-recovered", actorId.value(), new AmbientLeaseTransition(actorId, AmbientLeaseStatus.HOT));
+                    admitted++;
+                } else if (body == null && restartAbsenceIsObserved(level, runtime, state, actorId, lease)) {
+                    var result = submit(runtime, "ambient-restart-absence", actorId.value(),
+                            new AmbientLeaseRestartAbsenceObserved(actorId, lease.handoffBody()));
+                    FrontierV3DiagnosticTrace.record(level.getServer(), FrontierV3DiagnosticTrace.ambientLeaseRecoveryCorrelation(actorId),
+                            "ambient_restart_absence_observed", actorId, result);
+                    admitted++;
+                }
+                forgetColdDemand(runtime, actorId);
+                FrontierV3AmbientActorCaches.forgetObserved(runtime, actorId);
+                continue;
+            }
             FrontierV3AmbientAdmissionPolicy.Decision handoff = FrontierV3AmbientActorReservationHandoff.runOne(
                     level, runtime, state, actorId, admissionPolicy);
             if (handoff.reserved()) {
@@ -219,17 +241,6 @@ final class FrontierV3AmbientActorExecutor {
                 continue;
             }
             Entity body = level.getEntity(entityId(state, actorId));
-            if (lease.status() == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART) {
-                if (body != null && owned(body, actorId, bioform(state, actorId))) {
-                    submit(runtime, "ambient-recovered", actorId.value(), new AmbientLeaseTransition(actorId, AmbientLeaseStatus.HOT));
-                    admitted++;
-                } else if (body == null && restartAbsenceIsObserved(level, runtime, state, actorId, lease)) {
-                    submit(runtime, "ambient-restart-absence", actorId.value(),
-                            new AmbientLeaseRestartAbsenceObserved(actorId, lease.handoffBody()));
-                    admitted++;
-                }
-                continue;
-            }
             if (lease.status() == AmbientLeaseStatus.HOT && body instanceof Mob mob && owned(body, actorId, bioform(state, actorId))) {
                 FrontierV3AmbientActorCaches.rememberObserved(runtime, actorId, mob, FrontierV3AmbientPendingAdmissions.MAX_ENTRIES);
                 FrontierV3ControlledMobMotion.restoreOrdinaryPhysics(mob);

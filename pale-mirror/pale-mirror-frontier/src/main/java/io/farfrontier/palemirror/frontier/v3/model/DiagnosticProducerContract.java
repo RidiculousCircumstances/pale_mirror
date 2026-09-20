@@ -43,13 +43,14 @@ public final class DiagnosticProducerContract {
             diagnostic("frontier.fenced_recovery_ambiguous", DiagnosticReason.FENCED_RECOVERY_AMBIGUOUS, Admission.REQUIRED_TUPLE),
             diagnostic("frontier.kernel_quarantine_observed", kernelReasons(), Admission.REQUIRED_TUPLE),
             diagnostic("frontier.scene_lease_recovery_unresolved", DiagnosticReason.SCENE_LEASE_RECOVERY_UNRESOLVED, Admission.REQUIRED_TUPLE),
+            diagnostic("frontier.ambient_lease_restart_absence_observed", DiagnosticReason.AMBIENT_LEASE_RESTART_ABSENCE, Admission.REQUIRED_TUPLE),
             diagnostic("frontier.settlement_provision_resolved", DiagnosticReason.SETTLEMENT_PROVISION_CONFLICT, Admission.PAYLOAD_VALIDATES_CONDITIONAL_TUPLE),
             diagnostic("frontier.settlement_assault_transition", DiagnosticReason.SETTLEMENT_ASSAULT_CONFLICT, Admission.PAYLOAD_VALIDATES_CONDITIONAL_TUPLE),
             diagnostic("frontier.physical_intent_transition", DiagnosticReason.PHYSICAL_CUSTODY_UNRESOLVED, Admission.OWNER_STAMPS_TRANSITION));
 
     private static final Set<String> ORDINARY = Set.of(
         "frontier.actor_died", "frontier.ambient_actor_died", "frontier.ambient_actor_observed", "frontier.ambient_lease_prepared",
-        "frontier.ambient_lease_released", "frontier.ambient_lease_restart_absence_observed", "frontier.ambient_lease_transition",
+        "frontier.ambient_lease_released", "frontier.ambient_lease_transition",
         "frontier.cargo_carrier_released", "frontier.cargo_delivered", "frontier.cargo_loaded", "frontier.company_registered",
         "frontier.container_surface_transition", "frontier.deferred_aftermath_prepared", "frontier.deferred_aftermath_resolved",
         "frontier.employment_contract_opened", "frontier.employment_contract_terminated", "frontier.engineering_work_scene_lease_handoff",

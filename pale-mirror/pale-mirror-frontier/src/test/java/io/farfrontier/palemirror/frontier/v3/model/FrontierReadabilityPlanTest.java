@@ -3,6 +3,9 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
+import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
+import io.farfrontier.palemirror.frontier.v3.process.AmbientActorProcess;
+import io.farfrontier.palemirror.frontier.v3.process.AmbientLeaseStateProcess;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
@@ -123,6 +126,30 @@ class FrontierReadabilityPlanTest {
         assertEquals(FrontierObjectBoard.Tone.WARNING, board.tone());
         assertTrue(board.text().endsWith("DAMAGED · REPAIR NEEDED"));
         assertEquals(site.cropSlots().getFirst().offset(4, 3, -2), board.position());
+    }
+
+    @Test
+    void namesRestartRecoveryInsteadOfClaimingThatAnEligibleFarmerIsMissing() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:field-restart-recovery-board"), 91L));
+        Settlement settlement = state.bootstrap().settlements().getFirst();
+        ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).get(new SubjectId("site:1-wheat-field"));
+        SubjectId farmer = state.humanPopulation().residents().values().stream()
+                .filter(value -> value.settlementId().equals(settlement.id()) && value.profession() == ResidentProfession.AGRICULTURAL_WORKER)
+                .findFirst().orElseThrow().id();
+        ResourceSiteLifecycle ready = new ResourceSiteLifecycle(site.id(), ResourceSitePhase.READY, 2L,
+                ResourceSiteLifecycle.MATURE_STAGE, java.util.Optional.empty(), java.util.Optional.empty(), java.util.Optional.empty());
+        state = state.withResourceSites(state.resourceSites().replace(ready));
+        AmbientActorLease lease = AmbientActorProcess.nextLease(state, farmer, new SimInstant(22_000L));
+        state = AmbientLeaseStateProcess.prepare(state, lease);
+        state = AmbientLeaseStateProcess.transition(state, farmer, AmbientLeaseStatus.HOT);
+        FrontierWorldState unknown = AmbientLeaseStateProcess.transition(state, farmer, AmbientLeaseStatus.UNKNOWN_AFTER_RESTART);
+
+        FrontierObjectBoard board = FrontierReadabilityPlan.compile(unknown).boards().get(site.id());
+
+        assertTrue(board.text().endsWith("READY TO HARVEST · FARMER RECOVERY IN PROGRESS"));
+        assertTrue(!board.text().contains("FARMERS NEEDED"));
+        assertTrue(!FrontierReadabilityPlan.input(state).matchesStableBaseline(FrontierReadabilityPlan.input(unknown)),
+                "the restart recovery status is a player-facing board dependency but body motion remains excluded");
     }
 
     @Test

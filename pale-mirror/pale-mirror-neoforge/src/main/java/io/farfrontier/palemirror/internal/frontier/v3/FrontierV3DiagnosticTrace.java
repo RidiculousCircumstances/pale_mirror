@@ -94,6 +94,12 @@ final class FrontierV3DiagnosticTrace {
         return "production-input:" + inputItemId.value();
     }
 
+    /** One exact restart-unknown ambient owner and its bounded observed-absence resolution. */
+    static String ambientLeaseRecoveryCorrelation(SubjectId actorId) {
+        Objects.requireNonNull(actorId, "ambient actor");
+        return "ambient-lease-recovery:" + actorId.value();
+    }
+
     /**
      * Resolves the one bounded diagnostic identity owned by a registered scene family.
      * This is deliberately typed rather than treating an unknown cause as logistics.
