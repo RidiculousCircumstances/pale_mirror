@@ -31,7 +31,7 @@ async function main() {
   const beforePath = resolve(manifest.recovery?.beforeRestartManifest ?? '');
   const beforeSource = await readFile(beforePath);
   const facts = assertF06r3ColdTerminalCarrier({ declaration, beforeRestart: parse(beforeSource, 'before-restart manifest'), manifest,
-    topologyRevisionEvidence: { before: terminalReceiptTopologyRevision(beforeSource), after: terminalReceiptTopologyRevision(manifestSource) } });
+    topologyRevisionEvidence: { after: terminalReceiptTopologyRevision(manifestSource) } });
   const receipt = Object.freeze({ schema: 1, kind: 'f06r3-cold-terminal-native-carrier', status: 'passed',
     declaration: { scenario, sha256: digest(declarationSource) }, finalManifest: { file: relative(dirname(output), manifestPath), sha256: digest(manifestSource) },
     beforeRestartManifest: { file: relative(dirname(output), beforePath), sha256: digest(beforeSource) }, facts });
