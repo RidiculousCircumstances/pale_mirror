@@ -409,6 +409,7 @@ public final class FrontierV3ServerLifecycle {
                                                                           boolean fastForwardRemaining) {
         return initialHold || (absoluteTargetPresent && !fastForwardRemaining);
     }
+    static boolean advancesOnlyQueuedCanonicalTime(boolean fastForwardRemaining) { return fastForwardRemaining; }
     public static void tick(MinecraftServer server) {
         if (stopping(server)) return;
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(server);
@@ -420,6 +421,11 @@ public final class FrontierV3ServerLifecycle {
             boolean fastForwardRemaining = FAST_FORWARD_REMAINING.containsKey(server);
             if (active && runsObservedPhysicalTurnWhileCanonicalProgressIsHeld(initialHold, absoluteTargetPresent, fastForwardRemaining)) {
                 runObservedPhysicalTurn(FrontierV3PhysicalWorld.require(server), runtime);
+            } else if (active && advancesOnlyQueuedCanonicalTime(fastForwardRemaining)) {
+                // A relative request owns exactly its admitted canonical interval.  Advancing
+                // one ordinary tick beside each server slice would make wall-clock delivery
+                // latency silently add canonical time beyond the declared receipt.
+                advanceQueuedCanonicalTime(server, runtime);
             } else if (active && absoluteTargetPresent) {
                 advanceQueuedCanonicalTime(server, runtime);
             } else if (active) {

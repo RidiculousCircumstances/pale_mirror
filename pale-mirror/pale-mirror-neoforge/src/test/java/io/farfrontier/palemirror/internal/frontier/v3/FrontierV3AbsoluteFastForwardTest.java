@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Focused admission regression: client delivery cannot become an implicit relative advance. */
@@ -24,6 +25,13 @@ class FrontierV3AbsoluteFastForwardTest {
         assertTrue(FrontierV3ServerLifecycle.runsObservedPhysicalTurnWhileCanonicalProgressIsHeld(true, false, false));
         assertTrue(!FrontierV3ServerLifecycle.runsObservedPhysicalTurnWhileCanonicalProgressIsHeld(false, true, true));
         assertTrue(!FrontierV3ServerLifecycle.runsObservedPhysicalTurnWhileCanonicalProgressIsHeld(false, false, false));
+    }
+
+    @Test
+    void activeRelativeAdvanceDoesNotRunOneExtraOrdinaryPhysicalTurnAlongsideItsExactCanonicalSlice() {
+        assertFalse(FrontierV3ServerLifecycle.runsObservedPhysicalTurnWhileCanonicalProgressIsHeld(false, false, true));
+        assertTrue(FrontierV3ServerLifecycle.advancesOnlyQueuedCanonicalTime(true));
+        assertFalse(FrontierV3ServerLifecycle.advancesOnlyQueuedCanonicalTime(false));
     }
 
     @Test

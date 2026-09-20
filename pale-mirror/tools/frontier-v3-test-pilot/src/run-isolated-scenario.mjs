@@ -198,7 +198,10 @@ try {
       if (scenario.restart.zeroPlayerAdvanceTicks !== undefined) {
         await awaitNormalDemandLoss(server, 'before_restart');
         if (scenario.restart.zeroPlayerSettleMs !== undefined) await noPlayerSettle(scenario.restart.zeroPlayerSettleMs);
-        restartZeroPlayerInterlude = await runZeroPlayerInterlude(server, scenario.restart);
+        restartZeroPlayerInterlude = await runZeroPlayerPrelude(server, {
+          advanceTicks: scenario.restart.zeroPlayerAdvanceTicks,
+          timeoutMs: scenario.restart.zeroPlayerTimeoutMs
+        });
       }
     }
     console.log(`PMV3_ISOLATED recovery=before-complete mode=${recovery.mode}`);
@@ -231,7 +234,10 @@ try {
       await runPilot(middleRestartScenario, middleRestartManifest, server, clientSegments, 'middle_restart', { awaitNormalDemandLoss: false });
       await awaitNormalDemandLoss(server, 'middle_restart');
       if (recovery.secondary.zeroPlayerSettleMs !== undefined) await noPlayerSettle(recovery.secondary.zeroPlayerSettleMs);
-      secondaryRestartZeroPlayerInterlude = await runZeroPlayerInterlude(server, recovery.secondary);
+      secondaryRestartZeroPlayerInterlude = await runZeroPlayerPrelude(server, {
+        advanceTicks: recovery.secondary.zeroPlayerAdvanceTicks,
+        timeoutMs: recovery.secondary.zeroPlayerTimeoutMs
+      });
       await timedStop('secondary_graceful_save_and_port_close', () => stopServerSafely(server, port));
       await publishLifecycleBarrier(lifecycle, LifecycleBarrier.DURABLE_SERVER_SAVE, { serverRunId: server.serverRunId, boundary: 'secondary' });
       await publishLifecycleBarrier(lifecycle, LifecycleBarrier.GAME_PORT_CLOSED, { port, boundary: 'secondary' });
@@ -268,7 +274,10 @@ try {
     if (naturalDemandStop || scenario.restart.zeroPlayerAdvanceTicks !== undefined) await awaitNormalDemandLoss(server, 'before_restart');
     if (scenario.restart.zeroPlayerAdvanceTicks !== undefined) {
       if (scenario.restart.zeroPlayerSettleMs !== undefined) await noPlayerSettle(scenario.restart.zeroPlayerSettleMs);
-      restartZeroPlayerInterlude = await runZeroPlayerInterlude(server, scenario.restart);
+      restartZeroPlayerInterlude = await runZeroPlayerPrelude(server, {
+        advanceTicks: scenario.restart.zeroPlayerAdvanceTicks,
+        timeoutMs: scenario.restart.zeroPlayerTimeoutMs
+      });
     }
     console.log(`PMV3_ISOLATED recovery=before-complete mode=${recovery.mode} client=persistent`);
     if (recovery.mode === 'graceful') {
@@ -585,30 +594,6 @@ async function runZeroPlayerPrelude(server, declaration) {
     : { advanceTicks: declaration.advanceTicks }), command, clientSegmentsBeforeCompletion: clientSegments.length - clientSegmentsAtAdmission,
     clientSegmentsBeforeAdmission: clientSegmentsAtAdmission, serverPid: server.serverPid, terminalReceipt,
     boundedness: zeroPlayerBoundedness(server.output().slice(outputOffset)), performance }));
-}
-
-/**
- * One zero-player interval can retain several individually bounded server requests.  This is
- * not a retry: each request advances one declared portion of the same canonical interval, and
- * every portion must emit its own terminal/no-stall receipt before the next is admitted.
- */
-async function runZeroPlayerInterlude(server, declaration) {
-  const batches = declaration.zeroPlayerAdvanceBatches ?? [declaration.zeroPlayerAdvanceTicks];
-  const receipts = [];
-  for (const advanceTicks of batches) {
-    receipts.push(await runZeroPlayerPrelude(server, { advanceTicks, timeoutMs: declaration.zeroPlayerTimeoutMs }));
-  }
-  const boundedness = receipts.reduce((aggregate, receipt) => Object.freeze({
-    status: aggregate.status === 'NO_STALL' && receipt.boundedness.status === 'NO_STALL' ? 'NO_STALL' : 'STALL',
-    noServerTickStall: aggregate.noServerTickStall && receipt.boundedness.noServerTickStall,
-    stallCount: aggregate.stallCount + receipt.boundedness.stallCount,
-    maxBehindMillis: Math.max(aggregate.maxBehindMillis, receipt.boundedness.maxBehindMillis),
-    maxBehindTicks: Math.max(aggregate.maxBehindTicks, receipt.boundedness.maxBehindTicks)
-  }), Object.freeze({ status: 'NO_STALL', noServerTickStall: true, stallCount: 0, maxBehindMillis: 0, maxBehindTicks: 0 }));
-  return Object.freeze({ status: 'completed', advanceTicks: declaration.zeroPlayerAdvanceTicks,
-    batches: Object.freeze(receipts), clientSegmentsBeforeCompletion: 0,
-    clientSegmentsBeforeAdmission: receipts[0].clientSegmentsBeforeAdmission, serverPid: server.serverPid,
-    boundedness, performance: receipts.at(-1).performance });
 }
 
 class ZeroPlayerPreludeTimeout extends Error {

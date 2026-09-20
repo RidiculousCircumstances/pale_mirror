@@ -12,9 +12,8 @@ const PRODUCTION_TRACE = `production-input:${PRODUCTION_INPUT}`;
 export function assertF06r3RecoveredDutyCarrier({ declaration, beforeRestart, middleRestart, manifest }) {
   if (declaration?.id !== SCENARIO || declaration?.zeroPlayerPrelude?.targetInstant !== 21140 || declaration.zeroPlayerPrelude.holdAtTarget !== true
       || declaration?.restart?.mode !== 'graceful' || declaration.restart.afterAction !== 6
-      || declaration.restart.zeroPlayerAdvanceTicks !== 23800 || !sameBatches(declaration.restart.zeroPlayerAdvanceBatches, [11900, 11900])
-      || declaration.restart.secondary?.afterAction !== 16 || declaration.restart.secondary.zeroPlayerAdvanceTicks !== 21100
-      || !sameBatches(declaration.restart.secondary.zeroPlayerAdvanceBatches, [10550, 10550]) || manifest?.status !== 'ok'
+      || declaration.restart.zeroPlayerAdvanceTicks !== 23800 || declaration.restart.secondary?.afterAction !== 16
+      || declaration.restart.secondary.zeroPlayerAdvanceTicks !== 21100 || manifest?.status !== 'ok'
       || manifest?.scenarioId !== SCENARIO || manifest?.recovery?.splitAfterAction !== 6
       || manifest.recovery.secondarySplitAfterAction !== 16 || beforeRestart?.status !== 'ok' || middleRestart?.status !== 'ok') {
     throw new Error('F0.6R3 recovered-duty carrier lacks its declared two-boundary HOT-to-COLD recovery cycle');
@@ -23,20 +22,16 @@ export function assertF06r3RecoveredDutyCarrier({ declaration, beforeRestart, mi
   const firstInterlude = manifest.restartZeroPlayerInterlude;
   const secondInterlude = manifest.secondaryRestartZeroPlayerInterlude;
   if (prelude?.status !== 'held' || prelude.targetInstant !== 21140 || prelude.holdAtTarget !== true || prelude.clientSegmentsBeforeCompletion !== 0
-      || firstInterlude?.status !== 'completed' || firstInterlude.advanceTicks !== 23800 || !sameBatches(firstInterlude.batches?.map(batch => batch.advanceTicks), [11900, 11900])
-      || firstInterlude.clientSegmentsBeforeCompletion !== 0 || secondInterlude?.status !== 'completed' || secondInterlude.advanceTicks !== 21100
-      || !sameBatches(secondInterlude.batches?.map(batch => batch.advanceTicks), [10550, 10550]) || secondInterlude.clientSegmentsBeforeCompletion !== 0) {
+      || firstInterlude?.status !== 'completed' || firstInterlude.advanceTicks !== 23800 || firstInterlude.clientSegmentsBeforeCompletion !== 0
+      || secondInterlude?.status !== 'completed' || secondInterlude.advanceTicks !== 21100 || secondInterlude.clientSegmentsBeforeCompletion !== 0) {
     throw new Error('F0.6R3 recovered-duty carrier lacks isolated zero-player COLD intervals');
   }
   if (![prelude, firstInterlude, secondInterlude].every(interval => interval.boundedness?.status === 'NO_STALL'
       && interval.boundedness.noServerTickStall === true && interval.boundedness.stallCount === 0
-      && interval.boundedness.maxBehindMillis === 0 && interval.boundedness.maxBehindTicks === 0
-      && (interval.batches === undefined || interval.batches.every(batch => batch.boundedness?.status === 'NO_STALL'
-        && batch.boundedness.noServerTickStall === true && batch.boundedness.stallCount === 0)))) {
+      && interval.boundedness.maxBehindMillis === 0 && interval.boundedness.maxBehindTicks === 0)) {
     throw new Error('F0.6R3 recovered-duty carrier retained a server-thread stall in its exact zero-player COLD interval');
   }
-  if (![prelude, firstInterlude, secondInterlude].every(interval => hasFastForwardSlice(interval.performance?.fastForwardSlice)
-      && (interval.batches === undefined || interval.batches.every(batch => hasFastForwardSlice(batch.performance?.fastForwardSlice))))) {
+  if (![prelude, firstInterlude, secondInterlude].every(interval => hasFastForwardSlice(interval.performance?.fastForwardSlice))) {
     throw new Error('F0.6R3 recovered-duty carrier lacks bounded server-thread attribution for its exact zero-player COLD interval');
   }
   const before = exactly(observed(beforeRestart), 2, 'process', JOB);
@@ -122,10 +117,6 @@ export function assertF06r3RecoveredDutyCarrier({ declaration, beforeRestart, mi
   return Object.freeze({ job: before.identity.job, worker: before.identity.worker, releasedColdAdvance: [completed(before), completed(after)],
     successorColdAdvance, sitePhase: site.phase, completeFacility: true,
     motion: assertMotionDuty(motion), terminal: assertTerminalContinuity(motion, terminalMotion, terminalSite, postReleaseMotion, successor, successorMotion, before.identity.worker) });
-}
-
-function sameBatches(actual, expected) {
-  return Array.isArray(actual) && actual.length === expected.length && actual.every((value, index) => value === expected[index]);
 }
 
 function assertConflictIncident(disposition, site) {
