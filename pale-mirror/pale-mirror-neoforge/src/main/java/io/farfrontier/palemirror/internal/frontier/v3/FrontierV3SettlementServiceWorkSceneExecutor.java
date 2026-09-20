@@ -66,7 +66,8 @@ final class FrontierV3SettlementServiceWorkSceneExecutor {
     }
 
     private static void materialize(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
-        FrontierV3SceneExecutor.BodyMaterialization result = FrontierV3SceneExecutor.materializeBodies(level, state, lease);
+        FrontierV3SceneExecutor.BodyMaterialization result = FrontierV3SceneExecutor.materializeBodies(level, state, lease,
+                FrontierV3ActorCarrierComposition.InventoryEntry.SETTLEMENT_SERVICE);
         if (result == FrontierV3SceneExecutor.BodyMaterialization.CONFLICT) { conflict(level, runtime, lease, "prepared-body-conflict"); return; }
         if (result != FrontierV3SceneExecutor.BodyMaterialization.COMPLETE) return;
         FrontierV3SceneExecutor.rememberObserved(level, runtime, state, lease);

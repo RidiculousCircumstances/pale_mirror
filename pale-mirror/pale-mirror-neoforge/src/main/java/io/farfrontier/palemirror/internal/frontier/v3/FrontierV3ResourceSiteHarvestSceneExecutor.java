@@ -141,7 +141,8 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
 
     private static void materialize(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                     FrontierWorldState state, SceneLease lease) {
-        FrontierV3SceneExecutor.BodyMaterialization result = FrontierV3SceneExecutor.materializeBodies(level, state, lease);
+        FrontierV3SceneExecutor.BodyMaterialization result = FrontierV3SceneExecutor.materializeBodies(level, state, lease,
+                FrontierV3ActorCarrierComposition.InventoryEntry.RESOURCE_HARVEST);
         if (result == FrontierV3SceneExecutor.BodyMaterialization.CONFLICT) { conflict(level, runtime, lease, "prepared-body-conflict"); return; }
         if (result != FrontierV3SceneExecutor.BodyMaterialization.COMPLETE) return;
         // addFreshEntity publishes into Minecraft's UUID index after this executor turn.  A

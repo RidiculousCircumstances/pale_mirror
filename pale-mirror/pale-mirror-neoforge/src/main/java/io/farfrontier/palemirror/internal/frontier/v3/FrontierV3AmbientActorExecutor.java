@@ -279,6 +279,8 @@ final class FrontierV3AmbientActorExecutor {
     }
     private static Result materialize(ServerLevel level, FrontierWorldState state, SubjectId actorId, BodyPosition canonicalBody,
                                       FrontierV3SceneBehaviorRegistry.StandingPositionProvider standingPositionProvider) {
+        FrontierV3ActorCarrierComposition.requireRole(FrontierV3ActorCarrierComposition.InventoryEntry.AMBIENT_BODY,
+                FrontierV3ActorCarrierComposition.Role.PRODUCER);
         if (!state.actorLocations().containsKey(actorId)) return Result.CONFLICT;
         UUID entityId = entityId(state, actorId); Entity existing = level.getEntity(entityId); boolean bioform = bioform(state, actorId);
         if (existing != null) {
@@ -301,6 +303,11 @@ final class FrontierV3AmbientActorExecutor {
         hydrateExactHeldEquipment(body, state, actorId);
         FrontierV3ScenePresentation.applyAmbientActorPresentation(body, state, actorId, bioform);
         body.getPersistentData().putString(ACTOR_KEY, actorId.value()); body.getPersistentData().putString(KIND_KEY, bioform ? "BIOFORM" : "RESIDENT");
+        long ambientRevision = state.ambientLeases().containsKey(actorId) ? state.ambientLeases().get(actorId).revision() : 1L;
+        FrontierV3ActorCarrierComposition.stamp(body, FrontierV3ActorCarrierComposition.fromCanonical(state, actorId,
+                bioform ? FrontierV3ActorCarrierComposition.ActorKind.BIOFORM : FrontierV3ActorCarrierComposition.ActorKind.RESIDENT,
+                FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, entityId,
+                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, ambientRevision, 1L));
         if (!level.noCollision(body, body.getBoundingBox()) || admissionColumnOccupied(level, body, body.getBoundingBox())) return Result.DEFERRED;
         return level.addFreshEntity(body) ? Result.APPLIED : Result.CONFLICT;
     }
@@ -326,10 +333,11 @@ final class FrontierV3AmbientActorExecutor {
         if (pending != null && owned(pending, actorId, bioform(state, actorId))) return Result.PENDING;
         AmbientActorLease ambient = state.ambientLeases().get(actorId);
         if (ambient == null) return Result.CONFLICT;
-        FrontierV3AmbientCarrierLedger ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
-        FrontierV3AmbientCarrierLedger.Reconciliation carrier = ledger.reconciliation(actorId, entityId(state, actorId),
-                ambient.revision());
         Entity existing = level.getEntity(entityId(state, actorId));
+        FrontierV3AmbientCarrierLedger ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
+        FrontierV3AmbientCarrierLedger.Reconciliation carrier = ledger.reconciliation(carrierDeclaration(state, actorId,
+                FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, entityId(state, actorId), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY,
+                ambient.revision(), 1L), existing != null);
         if (existing != null) {
             if (carrier != FrontierV3AmbientCarrierLedger.Reconciliation.NO_FENCED_CARRIER) return Result.CONFLICT;
             if (!owned(existing, actorId, bioform(state, actorId))
@@ -347,14 +355,25 @@ final class FrontierV3AmbientActorExecutor {
         if (result != Result.APPLIED || carrier != FrontierV3AmbientCarrierLedger.Reconciliation.READY) return result;
         Entity reconstructed = level.getEntity(entityId(state, actorId));
         long reconstructionEpoch = ledger.reconstructionEpoch(actorId);
-        if (!(reconstructed instanceof Mob) || !ledger.adopt(actorId, reconstructed.getUUID(), ambient.revision())) {
+        if (!(reconstructed instanceof Mob) || !ledger.adopt(carrierDeclaration(state, actorId,
+                FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, reconstructed.getUUID(), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, ambient.revision(), reconstructionEpoch))) {
             if (reconstructed != null) reconstructed.discard();
             return Result.CONFLICT;
         }
         reconstructed.getPersistentData().putLong(CUSTODY_EPOCH_KEY, reconstructionEpoch);
+        FrontierV3ActorCarrierComposition.stamp(reconstructed, carrierDeclaration(state, actorId,
+                FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, reconstructed.getUUID(),
+                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, ambient.revision(), reconstructionEpoch));
         return result;
     }
     static UUID entityId(FrontierWorldState state, SubjectId actorId) { return io.farfrontier.palemirror.frontier.v3.model.SceneLease.deterministicEntityId(state.bootstrap().worldId(), actorId); }
+    static FrontierV3ActorCarrierComposition.Declaration carrierDeclaration(FrontierWorldState state, SubjectId actorId,
+                                                                             FrontierV3ActorCarrierComposition.Owner owner, UUID entityId,
+                                                                             FrontierV3ActorCarrierComposition.Representation representation, long revision, long epoch) {
+        return FrontierV3ActorCarrierComposition.fromCanonical(state, actorId, bioform(state, actorId)
+                        ? FrontierV3ActorCarrierComposition.ActorKind.BIOFORM : FrontierV3ActorCarrierComposition.ActorKind.RESIDENT,
+                owner, entityId, representation, revision, epoch);
+    }
     static boolean mayCreateFreshBody(boolean chunkLoaded, boolean entitiesLoaded, boolean exactHeadroom) {
         return chunkLoaded && entitiesLoaded && exactHeadroom;
     }
@@ -380,7 +399,8 @@ final class FrontierV3AmbientActorExecutor {
         AmbientActorLease lease = state.ambientLeases().get(actorId);
         if (lease != null && lease.status() == AmbientLeaseStatus.PREPARED) {
             FrontierV3AmbientCarrierLedger.Reconciliation carrier = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId())
-                    .reconciliation(actorId, expectedId, lease.revision());
+                    .reconciliation(carrierDeclaration(state, actorId, FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, expectedId,
+                            FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, lease.revision(), 1L));
             if (existing != null && carrier != FrontierV3AmbientCarrierLedger.Reconciliation.NO_FENCED_CARRIER) {
                 return FrontierV3AmbientAdmissionDiagnostic.carrierAmbiguity(expectedId, "CONCURRENT_CUSTODY");
             }
@@ -495,7 +515,14 @@ final class FrontierV3AmbientActorExecutor {
     static boolean owned(Entity entity, SubjectId actorId, boolean bioform) {
         return !entity.isRemoved() && actorId.value().equals(entity.getPersistentData().getString(ACTOR_KEY))
                 && (bioform ? entity instanceof Zombie : entity instanceof Villager)
-                && (bioform ? "BIOFORM" : "RESIDENT").equals(entity.getPersistentData().getString(KIND_KEY));
+                && (bioform ? "BIOFORM" : "RESIDENT").equals(entity.getPersistentData().getString(KIND_KEY))
+                && actorId.value().equals(entity.getPersistentData().getString(FrontierV3ActorCarrierComposition.ACTOR_KEY))
+                && (bioform ? FrontierV3ActorCarrierComposition.ActorKind.BIOFORM.name()
+                : FrontierV3ActorCarrierComposition.ActorKind.RESIDENT.name()).equals(entity.getPersistentData().getString(FrontierV3ActorCarrierComposition.KIND_KEY))
+                && FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE.name().equals(entity.getPersistentData().getString(FrontierV3ActorCarrierComposition.OWNER_KEY))
+                && FrontierV3ActorCarrierComposition.Representation.LIVE_BODY.name().equals(entity.getPersistentData().getString(FrontierV3ActorCarrierComposition.REPRESENTATION_KEY))
+                && entity.getPersistentData().getLong(FrontierV3ActorCarrierComposition.REVISION_KEY) >= 1L
+                && entity.getPersistentData().getLong(FrontierV3ActorCarrierComposition.EPOCH_KEY) >= 1L;
     }
     static void configureBioform(Zombie body, Bioform bioform) {
         if (!body.hasEffect(MobEffects.FIRE_RESISTANCE)) {
@@ -633,8 +660,10 @@ final class FrontierV3AmbientActorExecutor {
         if (lease == null) return false;
         long epoch = Math.max(1L, body.getPersistentData().getLong(CUSTODY_EPOCH_KEY));
         FrontierV3AmbientCarrierLedger ledger = FrontierV3AmbientCarrierLedger.get(level, before.bootstrap().worldId());
-        if (!ledger.canFence(actorId, body.getUUID(), lease.revision(), lease.revision(), epoch)) return false;
-        if (!ledger.fence(actorId, body.getUUID(), lease.revision(), lease.revision(), epoch)) return false;
+        FrontierV3ActorCarrierComposition.Declaration carrier = carrierDeclaration(before, actorId, FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
+                body.getUUID(), FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, lease.revision(), epoch);
+        if (!ledger.canFence(carrier, lease.revision(), lease.revision())) return false;
+        if (!ledger.fence(carrier, lease.revision(), lease.revision())) return false;
         Optional<FrontierV3AmbientAdmissionPolicy.EffectResult> released = release(runtime, body, false);
         if (released.isEmpty()) return false;
         body.discard();
@@ -673,9 +702,10 @@ final class FrontierV3AmbientActorExecutor {
         long physicalRevision = Math.max(1L, lease.revision());
         long epoch = Math.max(1L, body.getPersistentData().getLong(CUSTODY_EPOCH_KEY));
         FrontierV3AmbientCarrierLedger ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
-        if (ledger.matchesCarrier(member.actorId(), body.getUUID(), physicalRevision, priorAmbientRevision, epoch)) return SceneCarrierFenceResult.FENCED;
-        if (!ledger.canFence(member.actorId(), body.getUUID(), physicalRevision, priorAmbientRevision, epoch)
-                || !ledger.fence(member.actorId(), body.getUUID(), physicalRevision, priorAmbientRevision, epoch)) return SceneCarrierFenceResult.CARRIER_CONFLICT;
+        FrontierV3ActorCarrierComposition.Declaration carrier = carrierDeclaration(state, member.actorId(), FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE,
+                body.getUUID(), FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, physicalRevision, epoch);
+        if (ledger.matchesCarrier(carrier, physicalRevision, priorAmbientRevision)) return SceneCarrierFenceResult.FENCED;
+        if (!ledger.canFence(carrier, physicalRevision, priorAmbientRevision) || !ledger.fence(carrier, physicalRevision, priorAmbientRevision)) return SceneCarrierFenceResult.CARRIER_CONFLICT;
         return SceneCarrierFenceResult.FENCED;
     }
     enum SceneCarrierFenceResult {

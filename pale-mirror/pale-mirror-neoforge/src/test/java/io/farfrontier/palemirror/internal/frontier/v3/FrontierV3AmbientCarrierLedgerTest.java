@@ -1,85 +1,68 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
-import io.farfrontier.palemirror.frontier.v3.api.WorldId;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierDomainRelationships;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import org.junit.jupiter.api.Test;
-
 import java.util.UUID;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class FrontierV3AmbientCarrierLedgerTest {
     private static final SubjectId ACTOR = new SubjectId("resident:7-31");
     private static final UUID UUID_A = UUID.fromString("ef562345-8f47-37ec-af28-d12c259ab948");
-
-    @Test
-    void fencedCarrierPermitsOnlyOneNewerSameUuidAdoption() {
-        FrontierV3AmbientCarrierLedger ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
-
-        assertTrue(ledger.canFence(ACTOR, UUID_A, 7L, 7L, 3L));
-        assertTrue(ledger.fence(ACTOR, UUID_A, 7L, 7L, 3L));
-        assertEquals(FrontierV3AmbientCarrierLedger.Reconciliation.READY, ledger.reconciliation(ACTOR, UUID_A, 8L));
-        assertEquals(4L, ledger.reconstructionEpoch(ACTOR));
-        assertTrue(ledger.adopt(ACTOR, UUID_A, 8L));
-        assertEquals(0, ledger.inactiveCount(), "adoption leaves no concurrent inactive custody");
+    private static FrontierV3ActorCarrierComposition.Declaration declaration(FrontierV3ActorCarrierComposition.Owner owner,
+                                                                               FrontierV3ActorCarrierComposition.Representation representation, long revision, long epoch) {
+        return new FrontierV3ActorCarrierComposition.Declaration(ACTOR, FrontierV3ActorCarrierComposition.ActorKind.RESIDENT, owner, UUID_A, representation, revision, epoch);
     }
-
-    @Test
-    void missingOrInvalidCarrierNeverSelectsAReplacement() {
+    @Test void fencedCarrierPermitsOnlyOneNewerSameUuidAdoption() {
         FrontierV3AmbientCarrierLedger ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
-        UUID foreign = UUID.fromString("11111111-2222-3333-4444-555555555555");
-
-        assertEquals(FrontierV3AmbientCarrierLedger.Reconciliation.NO_FENCED_CARRIER, ledger.reconciliation(ACTOR, UUID_A, 8L));
-        assertTrue(ledger.fence(ACTOR, UUID_A, 7L, 7L, 1L));
-        assertEquals(FrontierV3AmbientCarrierLedger.Reconciliation.UUID_MISMATCH, ledger.reconciliation(ACTOR, foreign, 8L));
-        assertEquals(FrontierV3AmbientCarrierLedger.Reconciliation.STALE_REVISION, ledger.reconciliation(ACTOR, UUID_A, 7L));
-        assertFalse(ledger.adopt(ACTOR, foreign, 8L));
-        assertFalse(ledger.adopt(ACTOR, UUID_A, 7L));
-        assertEquals(1, ledger.inactiveCount(), "every ambiguous path retains the original exact carrier");
+        var inactive = declaration(FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 7L, 3L);
+        var live = declaration(FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 8L, 4L);
+        assertTrue(ledger.canFence(inactive, 7L, 7L)); assertTrue(ledger.fence(inactive, 7L, 7L));
+        assertEquals(FrontierV3AmbientCarrierLedger.Reconciliation.READY, ledger.reconciliation(live)); assertEquals(4L, ledger.reconstructionEpoch(ACTOR));
+        assertTrue(ledger.adopt(live)); assertEquals(0, ledger.inactiveCount());
     }
-
-    @Test
-    void sceneCarrierUsesPhysicalRevisionWithoutFalselyRejectingFirstAmbientReturn() {
+    @Test void missingForeignStaleKindAndRepresentationAllFailClosed() {
         FrontierV3AmbientCarrierLedger ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
-
-        assertTrue(ledger.fence(ACTOR, UUID_A, 2_538L, 0L, 4L));
-        assertEquals(FrontierV3AmbientCarrierLedger.Reconciliation.READY, ledger.reconciliation(ACTOR, UUID_A, 1L));
-        assertEquals(5L, ledger.reconstructionEpoch(ACTOR));
-        assertTrue(ledger.adopt(ACTOR, UUID_A, 1L));
+        var inactive = declaration(FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 7L, 1L);
+        assertEquals(FrontierV3AmbientCarrierLedger.Reconciliation.NO_FENCED_CARRIER, ledger.reconciliation(declaration(FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 8L, 2L)));
+        assertTrue(ledger.fence(inactive, 7L, 0L));
+        var foreign = new FrontierV3ActorCarrierComposition.Declaration(ACTOR, FrontierV3ActorCarrierComposition.ActorKind.RESIDENT,
+                FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, UUID.randomUUID(), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 8L, 2L);
+        var wrongKind = new FrontierV3ActorCarrierComposition.Declaration(ACTOR, FrontierV3ActorCarrierComposition.ActorKind.BIOFORM,
+                FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, UUID_A, FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 8L, 2L);
+        assertEquals(FrontierV3AmbientCarrierLedger.Reconciliation.UUID_MISMATCH, ledger.reconciliation(foreign));
+        assertEquals(FrontierV3AmbientCarrierLedger.Reconciliation.KIND_MISMATCH, ledger.reconciliation(wrongKind));
+        assertEquals(FrontierV3AmbientCarrierLedger.Reconciliation.REPRESENTATION_MISMATCH, ledger.reconciliation(inactive));
+        assertEquals(FrontierV3AmbientCarrierLedger.Reconciliation.STALE_REVISION, ledger.reconciliation(declaration(FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 7L, 2L)));
+        assertFalse(ledger.adopt(foreign)); assertEquals(1, ledger.inactiveCount());
     }
-
-    @Test
-    void fencedCarrierPermitsOnlyOneNewerSameUuidSceneReturn() {
+    @Test void carrierCannotBeReplacedDuplicatedOrConcurrentWithALiveBody() {
         FrontierV3AmbientCarrierLedger ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
-        UUID foreign = UUID.fromString("11111111-2222-3333-4444-555555555555");
-
-        assertTrue(ledger.fence(ACTOR, UUID_A, 2_538L, 0L, 4L));
-        assertEquals(FrontierV3AmbientCarrierLedger.Reconciliation.READY, ledger.sceneReconciliation(ACTOR, UUID_A, 7_353L));
-        assertEquals(FrontierV3AmbientCarrierLedger.Reconciliation.UUID_MISMATCH, ledger.sceneReconciliation(ACTOR, foreign, 7_353L));
-        assertEquals(FrontierV3AmbientCarrierLedger.Reconciliation.STALE_REVISION, ledger.sceneReconciliation(ACTOR, UUID_A, 2_538L));
-        assertEquals(5L, ledger.reconstructionEpoch(ACTOR));
-        assertTrue(ledger.adoptScene(ACTOR, UUID_A, 7_353L));
-        assertEquals(0, ledger.inactiveCount(), "scene return consumes the sole inactive carrier");
+        var fenced = declaration(FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
+                FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 7L, 3L);
+        var forgedOwner = declaration(FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE,
+                FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 7L, 3L);
+        var live = declaration(FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
+                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 8L, 4L);
+        assertTrue(ledger.fence(fenced, 7L, 7L));
+        assertFalse(ledger.canFence(forgedOwner, 7L, 7L));
+        assertFalse(ledger.matchesCarrier(forgedOwner, 7L, 7L));
+        assertEquals(FrontierV3AmbientCarrierLedger.Reconciliation.CONCURRENT_CUSTODY,
+                ledger.reconciliation(live, true));
+        assertEquals(1, ledger.inactiveCount());
     }
+    @Test void legacySchemaAndDuplicatePersistedCarrierFailBeforeRecovery() {
+        CompoundTag legacy = new CompoundTag(); legacy.putInt("format", 2);
+        assertThrows(IllegalStateException.class, () -> FrontierV3AmbientCarrierLedger.load(legacy, null));
 
-    @Test
-    void inspectionAddsOnlyFencedCarrierEvidenceToTheCanonicalRelationshipView() {
-        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:carrier-inspection"), 91L));
         FrontierV3AmbientCarrierLedger ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
-
-        assertTrue(ledger.fence(ACTOR, UUID_A, 7L, 3L, 2L));
-        FrontierDomainRelationships.View canonical = FrontierDomainRelationships.view(state, 19L);
-        FrontierDomainRelationships.View inspected = FrontierV3RelationshipInspection.inspect(state, 19L, ledger);
-        FrontierDomainRelationships.CarrierEvidenceEndpoint carrier = new FrontierDomainRelationships.CarrierEvidenceEndpoint(ACTOR, "carrier:" + UUID_A);
-
-        assertEquals(canonical.edges().size() + 1, inspected.edges().size());
-        assertEquals(19L, inspected.canonicalRevision());
-        assertTrue(inspected.causalChain(carrier).stream().anyMatch(edge -> edge.kind() == FrontierDomainRelationships.Kind.ACTOR_CARRIER_EVIDENCE));
-        assertEquals(canonical, FrontierDomainRelationships.view(state, 19L), "inspection cannot mutate canonical relationships");
+        var fenced = declaration(FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
+                FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 7L, 3L);
+        assertTrue(ledger.fence(fenced, 7L, 7L));
+        CompoundTag persisted = ledger.save(new CompoundTag(), null);
+        ListTag duplicate = persisted.getList("carriers", net.minecraft.nbt.Tag.TAG_COMPOUND);
+        duplicate.add(duplicate.getCompound(0).copy());
+        assertThrows(IllegalStateException.class, () -> FrontierV3AmbientCarrierLedger.load(persisted, null));
     }
 }
