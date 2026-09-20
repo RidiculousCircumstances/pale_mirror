@@ -51,7 +51,13 @@ public final class FrontierV3ServerLifecycle {
     private static final Map<MinecraftServer, FastForwardSliceTelemetry> FAST_FORWARD_SLICE_TELEMETRY = new IdentityHashMap<>();
     private static final Map<MinecraftServer, Boolean> INITIAL_CANONICAL_HOLDS = new IdentityHashMap<>();
     public static final int MAX_FAST_FORWARD_TICKS = 24_000;
-    private static final int FAST_FORWARD_SLICE_TICKS = 8;
+    /**
+     * Admission is paced by vanilla server ticks; ten canonical ticks retain the existing
+     * 20ms wall-time cap while allowing a declared cold receipt to finish before its own
+     * bounded diagnostic window.  The cap, rather than this count, remains the live-thread
+     * safety boundary when a canonical tick becomes expensive.
+     */
+    private static final int FAST_FORWARD_SLICE_TICKS = 10;
     private static final long MAX_FAST_FORWARD_SLICE_NANOS = 20_000_000L;
     private FrontierV3ServerLifecycle() { }
     private static void clearFastForwardState(MinecraftServer server) {

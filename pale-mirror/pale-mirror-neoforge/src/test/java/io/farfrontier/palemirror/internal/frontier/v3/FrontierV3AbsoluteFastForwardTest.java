@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class FrontierV3AbsoluteFastForwardTest {
     @Test
     void queuedColdAdvanceHasASmallLiveTickSlice() {
-        assertEquals(8, FrontierV3ServerLifecycle.fastForwardSliceTicks());
+        assertEquals(10, FrontierV3ServerLifecycle.fastForwardSliceTicks());
         assertEquals(4, FrontierV3RuntimeBudgets.fastForwardTick().maxActions(),
                 "one coincident due wave may not monopolize the server thread");
         assertTrue(FrontierV3ServerLifecycle.fastForwardSliceTimeRemaining(19_999_999L));

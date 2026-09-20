@@ -584,10 +584,13 @@ async function runZeroPlayerPrelude(server, declaration) {
     await awaitWithin(server.outputAfter(before), Math.min(remaining, 1_000), 'zero-player prelude server output').catch(() => undefined);
     before = server.outputRevision();
   }
-  const [terminalResponse, performanceResponse] = await Promise.all([
-    requestRconQuery({ port: server.rconPort, password: server.rconPassword, command: 'pale_mirror v3 inspect fast_forward' }),
-    requestRconQuery({ port: server.rconPort, password: server.rconPassword, command: 'pale_mirror v3 inspect performance' })
-  ]);
+  // Vanilla's RCON command bridge is one server-thread control plane.  These are distinct
+  // bounded diagnostics, so serialise them rather than letting two simultaneous TCP clients
+  // manufacture a missing response while the request itself remains observable.
+  const terminalResponse = await requestRconQuery({ port: server.rconPort, password: server.rconPassword,
+    command: 'pale_mirror v3 inspect fast_forward' });
+  const performanceResponse = await requestRconQuery({ port: server.rconPort, password: server.rconPassword,
+    command: 'pale_mirror v3 inspect performance' });
   const terminalReceipt = zeroPlayerRequestReceipt(terminalResponse);
   const performance = zeroPlayerPerformance(performanceResponse);
   throw new ZeroPlayerPreludeTimeout(Object.freeze({ status: 'timeout', ...(absolute ? { targetInstant: declaration.targetInstant, holdAtTarget: true }
