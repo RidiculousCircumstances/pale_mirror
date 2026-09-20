@@ -27,11 +27,11 @@ export function assertF06r3RecoveredDutyCarrier({ declaration, beforeRestart, mi
   const hotMotion = exactly(beforeRestart, 5, 'pilot_motion', JOB);
   const release = exactly(beforeRestart, 6, 'process', JOB);
   assertHotPrefix(hot, hotActor, hotMotion, release);
-  const site = exactly(middleRestart, 2, 'site', SITE);
-  const actor = exactly(middleRestart, 3, 'actor', FARMER);
-  const trace = exactlyStatus(middleRestart, 4, 'trace', TRACE, 'retained');
-  const predecessorIntent = exactlyStatus(middleRestart, 5, 'intent', INTENT, 'not_found');
-  const summary = exactly(middleRestart, 6, 'summary', '');
+  const site = exactly(middleRestart, 8, 'site', SITE);
+  const actor = exactly(middleRestart, 9, 'actor', FARMER);
+  const trace = exactlyStatus(middleRestart, 10, 'trace', TRACE, 'retained');
+  const predecessorIntent = exactlyStatus(middleRestart, 11, 'intent', INTENT, 'not_found');
+  const summary = exactly(middleRestart, 12, 'summary', '');
   assertColdTerminal(site, actor, trace, predecessorIntent, summary, hotActor);
   assertLifecycle(manifest.lifecycle); assertResponsiveIngress(manifest.clientSegments);
   return Object.freeze({ job: JOB, worker: FARMER, terminalOutput: OUTPUT, terminalTrace: trace.correlation,
@@ -57,9 +57,11 @@ function assertColdTerminal(site, actor, trace, predecessorIntent, summary, hotA
   if (site.phase !== 'GROWING' || site.activeWork !== '' || site.conflictDisposition !== null
       || !Number.isInteger(site.growthEpoch) || site.growthEpoch < 2 || !terminal || terminal.job !== JOB
       || terminal.worker !== FARMER || terminal.outputItem !== OUTPUT || terminal.outputSlot !== 0
-      || terminal.physicalReceiptConfirmed !== false || terminal.intentStatus !== 'PREPARED'
-      || trace.correlation !== TRACE || trace.complete !== true || !coldTrace(trace.cold)
-      || predecessorIntent.reason !== 'not_found' || summary.inventoryConflicts !== 0 || !sameEntity(hotActor, actor)) {
+      || terminal.outputOwned !== false || terminal.canonicalSuccessor !== true || terminal.successor !== null
+      || terminal.physicalReceiptResolved !== true || terminal.physicalReceiptConfirmed !== false || terminal.intentStatus !== 'MISSING'
+      || terminal.causalTrace?.reconciliation !== 'composed_cold_receipt' || terminal.causalTrace?.completeForColdHotReceipt !== false
+      || trace.correlation !== TRACE || trace.complete !== false || trace.observation?.id !== 'not_observed' || !coldTrace(trace.cold)
+      || summary.inventoryConflicts !== 0 || !sameEntity(hotActor, actor)) {
     throw new Error('F0.6R3 COLD terminal/restart lineage is incoherent, replayable, conflicted, or replaces its exact farmer');
   }
 }
@@ -94,8 +96,9 @@ function assertResponsiveIngress(segments) {
 function exactly(manifest, actionStep, kind, id) { return exactlyStatus(manifest, actionStep, kind, id, 'ok'); }
 function exactlyStatus(manifest, actionStep, kind, id, status) {
   const values = observed(manifest).filter(entry => entry?.actionStep === actionStep && entry.value?.kind === kind && entry.value?.id === id).map(entry => entry.value);
-  if (values.length !== 1 || values[0].status !== status) throw new Error(`F0.6R3 recovered-duty carrier lacks ${status} ${kind}:${id} at action ${actionStep}`);
-  return values[0];
+  const terminal = values.at(-1);
+  if (!terminal || terminal.status !== status) throw new Error(`F0.6R3 recovered-duty carrier lacks ${status} ${kind}:${id} at action ${actionStep}`);
+  return terminal;
 }
 function observed(manifest) {
   const entries = manifest?.diagnostics ?? [], asserted = entries.flatMap(entry => entry?.observed?.value ? [entry.observed] : []);

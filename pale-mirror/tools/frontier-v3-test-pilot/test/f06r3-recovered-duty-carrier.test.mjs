@@ -15,34 +15,43 @@ test('F0.6R3 recovered-duty carrier binds a COLD terminal to the original farmer
   assert.doesNotThrow(() => assertF06r3RecoveredDutyCarrier({ declaration, ...receipt() }));
 });
 
+test('F0.6R3 recovered-duty carrier selects the action terminal after bounded diagnostic polling', async () => {
+  const declaration = JSON.parse(await readFile(resolve(root, 'scenarios/disposable-f06r3-recovered-duty.json'), 'utf8'));
+  const value = receipt();
+  const probe = structuredClone(value.beforeRestart.diagnostics.find(entry => entry.actionStep === 2));
+  probe.value.claims.lease = null;
+  value.beforeRestart.diagnostics.unshift(probe);
+  assert.doesNotThrow(() => assertF06r3RecoveredDutyCarrier({ declaration, ...value }));
+});
+
 test('F0.6R3 recovered-duty carrier rejects a stale crop-63/HOT-final substitution', async () => {
   const declaration = JSON.parse(await readFile(resolve(root, 'scenarios/disposable-f06r3-recovered-duty.json'), 'utf8'));
   const value = receipt();
-  value.middleRestart.diagnostics.find(entry => entry.actionStep === 2).value.phase = 'HARVESTING';
+  value.middleRestart.diagnostics.find(entry => entry.actionStep === 8).value.phase = 'HARVESTING';
   assert.throws(() => assertF06r3RecoveredDutyCarrier({ declaration, ...value }), /COLD terminal\/restart lineage/);
 });
 
 test('F0.6R3 recovered-duty carrier rejects a terminal owned by a replacement farmer', async () => {
   const declaration = JSON.parse(await readFile(resolve(root, 'scenarios/disposable-f06r3-recovered-duty.json'), 'utf8'));
   const value = receipt();
-  value.middleRestart.diagnostics.find(entry => entry.actionStep === 2).value.terminalHarvest.worker = 'resident:7-30';
+  value.middleRestart.diagnostics.find(entry => entry.actionStep === 8).value.terminalHarvest.worker = 'resident:7-30';
   assert.throws(() => assertF06r3RecoveredDutyCarrier({ declaration, ...value }), /COLD terminal\/restart lineage/);
 });
 
 test('F0.6R3 recovered-duty carrier rejects a missing retained terminal trace or replayable predecessor intent', async () => {
   const declaration = JSON.parse(await readFile(resolve(root, 'scenarios/disposable-f06r3-recovered-duty.json'), 'utf8'));
   const missingTrace = receipt();
-  missingTrace.middleRestart.diagnostics.find(entry => entry.actionStep === 4).value.status = 'not_found';
+  missingTrace.middleRestart.diagnostics.find(entry => entry.actionStep === 10).value.status = 'not_found';
   assert.throws(() => assertF06r3RecoveredDutyCarrier({ declaration, ...missingTrace }), /retained trace/);
   const replay = receipt();
-  replay.middleRestart.diagnostics.find(entry => entry.actionStep === 5).value.status = 'ok';
+  replay.middleRestart.diagnostics.find(entry => entry.actionStep === 11).value.status = 'ok';
   assert.throws(() => assertF06r3RecoveredDutyCarrier({ declaration, ...replay }), /not_found intent/);
 });
 
 test('F0.6R3 recovered-duty carrier rejects a restart identity change or stalled natural ingress', async () => {
   const declaration = JSON.parse(await readFile(resolve(root, 'scenarios/disposable-f06r3-recovered-duty.json'), 'utf8'));
   const replacement = receipt();
-  replacement.middleRestart.diagnostics.find(entry => entry.actionStep === 3).value.physicalAdmission.entityUuid = '22222222-2222-2222-2222-222222222222';
+  replacement.middleRestart.diagnostics.find(entry => entry.actionStep === 9).value.physicalAdmission.entityUuid = '22222222-2222-2222-2222-222222222222';
   assert.throws(() => assertF06r3RecoveredDutyCarrier({ declaration, ...replacement }), /COLD terminal\/restart lineage/);
   const stalled = receipt();
   stalled.manifest.clientSegments[1].ingressResponsiveness[0].noServerTickStall = false;
@@ -61,13 +70,15 @@ function receipt() {
   return {
     beforeRestart: { status: 'ok', diagnostics: [{ actionStep: 2, value: process }, { actionStep: 3, value: actor() }, { actionStep: 5, value: motion }, { actionStep: 6, value: { ...process, conservation: { completedCropSlots: 21 } } }] },
     middleRestart: { status: 'ok', diagnostics: [
-      { actionStep: 2, value: { kind: 'site', id: site, status: 'ok', phase: 'GROWING', growthEpoch: 2, activeWork: '', conflictDisposition: null,
-        terminalHarvest: { job, worker: farmer, outputItem: 'item:site-harvest-7-wheat-field-1-wheat', outputSlot: 0, physicalReceiptConfirmed: false, intentStatus: 'PREPARED' } } },
-      { actionStep: 3, value: actor() },
-      { actionStep: 4, value: { kind: 'trace', id: `resource-site-harvest:${job}`, status: 'retained', correlation: `resource-site-harvest:${job}`, complete: true,
-        cold: { command: 'command:cold', event: 'event:cold', revision: 1, instant: 22_000 } } },
-      { actionStep: 5, value: { kind: 'intent', id: 'intent:site-harvest-7-wheat-field-1', status: 'not_found', reason: 'not_found' } },
-      { actionStep: 6, value: { kind: 'summary', id: '', status: 'ok', inventoryConflicts: 0 } }
+      { actionStep: 8, value: { kind: 'site', id: site, status: 'ok', phase: 'GROWING', growthEpoch: 2, activeWork: '', conflictDisposition: null,
+        terminalHarvest: { job, worker: farmer, outputItem: 'item:site-harvest-7-wheat-field-1-wheat', outputSlot: 0,
+          outputOwned: false, canonicalSuccessor: true, successor: null, physicalReceiptResolved: true, physicalReceiptConfirmed: false, intentStatus: 'MISSING',
+          causalTrace: { reconciliation: 'composed_cold_receipt', completeForColdHotReceipt: false } } } },
+      { actionStep: 9, value: actor() },
+      { actionStep: 10, value: { kind: 'trace', id: `resource-site-harvest:${job}`, status: 'retained', correlation: `resource-site-harvest:${job}`, complete: false,
+        observation: { id: 'not_observed' }, cold: { command: 'command:cold', event: 'event:cold', revision: 1, instant: 22_000 } } },
+      { actionStep: 11, value: { kind: 'intent', id: 'intent:site-harvest-7-wheat-field-1', status: 'not_found', reason: 'not_found' } },
+      { actionStep: 12, value: { kind: 'summary', id: '', status: 'ok', inventoryConflicts: 0 } }
     ] },
     manifest: { status: 'ok', scenarioId: 'disposable_f06r3_recovered_duty', recovery: { splitAfterAction: 6 },
       zeroPlayerPrelude: interval({ status: 'held', targetInstant: 21140, holdAtTarget: true }), restartZeroPlayerInterlude: interval({ status: 'completed', advanceTicks: 19000 }),
