@@ -63,7 +63,9 @@ class ResourceSiteHarvestProcessTest {
                 ResourceSiteHarvestProcess.start(task, 22_100L)).get(1).payload();
         ResourceSiteHarvestJob job = started.job();
         assertEquals(tasked.actorLocations().get(job.workerId()).supportingSurface(), job.traversal().linearCorridorSurfaces().getFirst());
-        assertEquals(64, job.traversal().linearCorridorSurfaces().size() - job.firstCropCursor());
+        assertEquals(64, job.traversal().linearCorridorSurfaces().size() - job.firstCropCursor()
+                        - ResourceSiteHarvestTraversal.workReturnStationCount(),
+                "the terminal field-edge tail is outside the 64 immutable crop cursors");
         for (int index = 1; index < job.traversal().linearCorridorSurfaces().size(); index++) {
             SurfaceAnchor prior = job.traversal().linearCorridorSurfaces().get(index - 1), next = job.traversal().linearCorridorSurfaces().get(index);
             assertEquals(1, Math.abs(prior.x() - next.x()) + Math.abs(prior.z() - next.z()));

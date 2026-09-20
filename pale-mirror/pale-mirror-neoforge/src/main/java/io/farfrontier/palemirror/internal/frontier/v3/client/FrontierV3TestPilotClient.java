@@ -53,9 +53,12 @@ public final class FrontierV3TestPilotClient {
     private static boolean runningSetup;
     private static int index;
     private static long actionStartedTick = -1L;
+    private static long anchorResolutionStartedNanos = -1L;
+    private static long anchorResolutionLastRequestNanos = -1L;
     private static boolean breaking, placementAttempted;
     private static boolean visitSent;
     private static long visitChunkReadyTick = -1L;
+    private static long visitChunkReadyNanos = -1L;
     private static FrontierV3PilotVisitIngress visitIngress;
     private static boolean visitHandshakeArmed; private static ObservedDiagnostic visitHandshakeBaseline;
     private static boolean containerOpenAttempted;
@@ -132,7 +135,8 @@ public final class FrontierV3TestPilotClient {
             FrontierV3TestPilotScenario.Parsed scenario = FrontierV3TestPilotScenario.parse(Files.readString(Path.of(configured)));
             setup = scenario.setup(); actions = scenario.actions(); frames = scenario.frames();
             runningSetup = !setup.isEmpty(); index = 0; actionStartedTick = -1L;
-            breaking = false; placementAttempted = false; visitSent = false; visitChunkReadyTick = -1L; visitIngress = null; visitHandshakeArmed = false; visitHandshakeBaseline = null;
+            anchorResolutionStartedNanos = -1L; anchorResolutionLastRequestNanos = -1L;
+            breaking = false; placementAttempted = false; visitSent = false; visitChunkReadyTick = -1L; visitChunkReadyNanos = -1L; visitIngress = null; visitHandshakeArmed = false; visitHandshakeBaseline = null;
             containerOpenAttempted = false; quickMoveAttempted = false;
             inspectSent = false; inspectBaseline = null; fastForwardSent = false; fastForwardBaseline = null; releaseProjectionBaseline = null;
             diagnosticWaitBaseline = null; diagnosticWaitRequestNanos = 0L; currentCausalMilestone = null;
@@ -279,6 +283,7 @@ public final class FrontierV3TestPilotClient {
         long tick = minecraft.level.getGameTime();
         if (actionStartedTick < 0L) {
             actionStartedTick = tick;
+            anchorResolutionStartedNanos = System.nanoTime(); anchorResolutionLastRequestNanos = -1L;
             currentCausalMilestone = action.has("causalMilestone") ? action.get("causalMilestone").getAsString() : null;
             diagnosticWaitBaseline = "wait_until_diagnostic".equals(type)
                     ? diagnostics.get(new DiagnosticIdentity(action.get("view").getAsString(), action.get("id").getAsString())) : null;
@@ -478,7 +483,7 @@ public final class FrontierV3TestPilotClient {
                 action.get("dimension").getAsString(), action.get("settleMs").getAsLong(), action.get("timeoutMs").getAsLong(), "visit_operation", action);
     }
     private static void visit(Minecraft minecraft, FrontierV3PilotVisitTarget target, String dimension, long settleMs, long timeoutMs, String actionType, JsonObject action) {
-        long tick = minecraft.level.getGameTime(); if (visitIngress == null) visitIngress = new FrontierV3PilotVisitIngress(dimension);
+        long tick = minecraft.level.getGameTime(); long now = System.nanoTime(); if (visitIngress == null) visitIngress = new FrontierV3PilotVisitIngress(dimension);
         JsonObject handshake = action.getAsJsonObject("demandHandshake"); if (handshake != null && !visitHandshakeArmed) { String request = handshake.get("request").getAsString(), assault = handshake.get("assault").getAsString();
             visitHandshakeBaseline = diagnostics.get(new DiagnosticIdentity("demand_handshake", request)); FrontierV3PilotDemandReceiptTransition.Arm arm =
                     new FrontierV3PilotDemandReceiptTransition.Arm(visitCorrelation(), request, assault, dimension, target.teleportAnchor());
@@ -500,9 +505,10 @@ public final class FrontierV3TestPilotClient {
                             minecraft.player.getUUID().toString())) { emitVisitIngress(request); advance(actionType); return; }
                     throw new IllegalStateException("server-thread demand handshake failed: " + observed.value());
                 }
-            } else { if (visitChunkReadyTick < 0L) visitChunkReadyTick = tick; if ((tick - visitChunkReadyTick) * 50L >= settleMs) { advance(actionType); return; } }
-        } else visitChunkReadyTick = -1L;
-        if ((tick - actionStartedTick) * 50L >= timeoutMs) {
+            } else { if (visitChunkReadyNanos < 0L) { visitChunkReadyTick = tick; visitChunkReadyNanos = now; }
+                if (FrontierV3PilotAnchorResolutionDeadline.timedOut(now, visitChunkReadyNanos, settleMs)) { advance(actionType); return; } }
+        } else { visitChunkReadyTick = -1L; visitChunkReadyNanos = -1L; }
+        if (FrontierV3PilotAnchorResolutionDeadline.timedOut(now, anchorResolutionStartedNanos, timeoutMs)) {
             throw new IllegalStateException(FrontierV3PilotVisitIngress.timeoutDetail(dimension, target, visitIngress));
         }
     }
@@ -925,10 +931,13 @@ public final class FrontierV3TestPilotClient {
             }
             return new BlockPos(anchor.get("x").getAsInt(), anchor.get("y").getAsInt(), anchor.get("z").getAsInt());
         }
-        if ((minecraft.level.getGameTime() - actionStartedTick) % 20L == 0L) {
+        long now = System.nanoTime();
+        if (FrontierV3PilotAnchorResolutionDeadline.pollDue(now, anchorResolutionLastRequestNanos)) {
             minecraft.player.connection.sendCommand("pale_mirror v3 inspect " + view + " " + id);
+            anchorResolutionLastRequestNanos = now;
         }
-        if ((minecraft.level.getGameTime() - actionStartedTick) * 50L >= FrontierV3TestPilotTimeouts.resolutionTimeoutMillis(action)) {
+        if (FrontierV3PilotAnchorResolutionDeadline.timedOut(now, anchorResolutionStartedNanos,
+                FrontierV3TestPilotTimeouts.resolutionTimeoutMillis(action))) {
             throw new IllegalStateException("timed out reading current " + view + " anchor " + id);
         }
         return null;
@@ -950,8 +959,9 @@ public final class FrontierV3TestPilotClient {
         PaleMirrorMod.LOGGER.info("PMV3_PILOT complete {} step={} type={}", phase, index + 1, type);
         int completedAction = runningSetup ? 0 : index + 1;
         JsonObject reachedFrame = runningSetup ? null : frameAfter(completedAction);
-        index++; actionStartedTick = -1L; currentCausalMilestone = null; breaking = false; placementAttempted = false;
-        visitSent = false; visitChunkReadyTick = -1L; visitIngress = null; visitHandshakeArmed = false; visitHandshakeBaseline = null; containerOpenAttempted = false; quickMoveAttempted = false; inspectSent = false; inspectBaseline = null;
+        index++; actionStartedTick = -1L; anchorResolutionStartedNanos = -1L; anchorResolutionLastRequestNanos = -1L;
+        currentCausalMilestone = null; breaking = false; placementAttempted = false;
+        visitSent = false; visitChunkReadyTick = -1L; visitChunkReadyNanos = -1L; visitIngress = null; visitHandshakeArmed = false; visitHandshakeBaseline = null; containerOpenAttempted = false; quickMoveAttempted = false; inspectSent = false; inspectBaseline = null;
         fastForwardSent = false; fastForwardBaseline = null; releaseProjectionBaseline = null;
         diagnosticWaitBaseline = null; diagnosticWaitRequestNanos = 0L;
         boardInteractionAttempted = false; entityInteractionAttempted = false;
@@ -1023,16 +1033,18 @@ public final class FrontierV3TestPilotClient {
     private static Path captureControlDirectory() { String configured = System.getProperty(CAPTURE_CONTROL_PROPERTY, ""); return configured.isBlank() ? null : Path.of(configured); }
     private static void reset() {
         Minecraft minecraft = Minecraft.getInstance(); minecraft.options.keyUp.setDown(false); FrontierV3TestPilotPresentation.reset(minecraft);
-        actions = null; setup = null; frames = null; captureBarrier = null; captureFocus = null; runningSetup = false; index = 0; actionStartedTick = -1L; breaking = false;
-        visitSent = false; visitChunkReadyTick = -1L; visitIngress = null; visitHandshakeArmed = false; visitHandshakeBaseline = null; containerOpenAttempted = false; quickMoveAttempted = false; inspectSent = false; inspectBaseline = null;
+        actions = null; setup = null; frames = null; captureBarrier = null; captureFocus = null; runningSetup = false; index = 0; actionStartedTick = -1L;
+        anchorResolutionStartedNanos = -1L; anchorResolutionLastRequestNanos = -1L; breaking = false;
+        visitSent = false; visitChunkReadyTick = -1L; visitChunkReadyNanos = -1L; visitIngress = null; visitHandshakeArmed = false; visitHandshakeBaseline = null; containerOpenAttempted = false; quickMoveAttempted = false; inspectSent = false; inspectBaseline = null;
         boardInteractionAttempted = false; entityInteractionAttempted = false; attackedEntityRuntimeId = -1; entityAttackAttempts = 0; lastEntityAttackTick = Long.MIN_VALUE;
         diagnostics.clear(); FrontierV3PilotMotionObserver.reset(); FrontierV3PilotSettlementPopulationObserver.reset(); FrontierV3PilotSessionControl.reset();
         fastForwardSent = false; fastForwardBaseline = null; releaseProjectionBaseline = null; currentCausalMilestone = null; diagnosticWaitBaseline = null; diagnosticWaitRequestNanos = 0L;
     }
     private static void clearExpectedLossTransientState() {
         Minecraft.getInstance().options.keyUp.setDown(false);
-        actions = null; setup = null; frames = null; captureBarrier = null; captureFocus = null; runningSetup = false; index = 0; actionStartedTick = -1L; breaking = false;
-        placementAttempted = false; visitSent = false; visitChunkReadyTick = -1L; visitIngress = null;
+        actions = null; setup = null; frames = null; captureBarrier = null; captureFocus = null; runningSetup = false; index = 0; actionStartedTick = -1L;
+        anchorResolutionStartedNanos = -1L; anchorResolutionLastRequestNanos = -1L; breaking = false;
+        placementAttempted = false; visitSent = false; visitChunkReadyTick = -1L; visitChunkReadyNanos = -1L; visitIngress = null;
         visitHandshakeArmed = false; visitHandshakeBaseline = null; containerOpenAttempted = false;
         quickMoveAttempted = false; inspectSent = false; inspectBaseline = null;
         fastForwardSent = false; fastForwardBaseline = null; releaseProjectionBaseline = null; boardInteractionAttempted = false; diagnosticWaitBaseline = null; diagnosticWaitRequestNanos = 0L;

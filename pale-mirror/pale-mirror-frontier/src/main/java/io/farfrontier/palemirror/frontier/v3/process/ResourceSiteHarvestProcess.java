@@ -295,19 +295,38 @@ public final class ResourceSiteHarvestProcess {
         // may erase that fact.
         java.util.Map<PhysicalIntentId, PhysicalIntent> intents = new java.util.LinkedHashMap<>(state.physicalIntents());
         FencedRecoveryState recovery = retireSupersededPendingReceipt(state, lifecycle, intents);
-        if (intent.status() == PhysicalIntentStatus.RUNNING) {
-            return state.withChanges(FrontierWorldStateUpdate.begin()
-                    .resourceSites(state.resourceSites().replace(next))
-                    .inventory(state.inventory().store(output))
-                    .physicalIntents(intents)
-                    .fencedRecovery(recovery));
-        }
+        FrontierWorldStateUpdate update = FrontierWorldStateUpdate.begin()
+                .resourceSites(state.resourceSites().replace(next))
+                .inventory(state.inventory().store(output))
+                .physicalIntents(intents)
+                .fencedRecovery(recovery)
+                .actorLocations(terminalDeparture(state, job));
+        if (intent.status() == PhysicalIntentStatus.RUNNING) return state.withChanges(update);
         intents.remove(intent.id());
         return state.withChanges(FrontierWorldStateUpdate.begin()
                 .resourceSites(state.resourceSites().replace(next))
                 .inventory(state.inventory().store(output))
                 .physicalIntents(intents)
-                .fencedRecovery(FencedRecoveryPhysicalIntentSupport.composed(recovery, intent, FencedRecoveryAsset.EFFECT)));
+                .fencedRecovery(FencedRecoveryPhysicalIntentSupport.composed(recovery, intent, FencedRecoveryAsset.EFFECT))
+                .actorLocations(terminalDeparture(state, job)));
+    }
+
+    /**
+     * The final crop receipt is the one COLD boundary allowed to retain the worker at the
+     * compiled field-edge station.  It is not a synthetic route or a player-triggered move:
+     * every crop cursor is already complete, and the terminal receipt carries this exact
+     * collision-clear position across restart for later physical admission.
+     */
+    private static java.util.Map<SubjectId, ActorLocation> terminalDeparture(FrontierWorldState state, ResourceSiteHarvestJob job) {
+        ActorLocation actor = state.actorLocations().get(job.workerId());
+        BodyPosition crop = job.traversal().linearCorridorSurfaces().get(job.cropCursor()).standingBody();
+        BodyPosition departure = job.traversal().linearCorridorSurfaces().getLast().standingBody();
+        if (actor == null || !actor.body().equals(crop)) {
+            throw new IllegalArgumentException("resource-site COLD terminal departure lacks its exact final crop worker");
+        }
+        java.util.Map<SubjectId, ActorLocation> actors = new java.util.LinkedHashMap<>(state.actorLocations());
+        actors.put(job.workerId(), actor.withBody(departure));
+        return java.util.Map.copyOf(actors);
     }
 
     /**

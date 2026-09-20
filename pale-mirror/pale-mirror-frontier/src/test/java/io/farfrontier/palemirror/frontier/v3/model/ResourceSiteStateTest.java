@@ -35,31 +35,33 @@ class ResourceSiteStateTest {
                 new InventoryCustody.ContainerSlot(FrontierWorldState.depotId(new SubjectId("settlement:1")), 1),
                 new PhysicalIntentId("intent:site-harvest-1-wheat-field-1"), completeProgress(),
                 ResourceSiteHarvestTraversal.compile(baseline.bootstrap(), site, worker, jobId),
-                ResourceSiteHarvestTraversal.compile(baseline.bootstrap(), site, worker, jobId).linearCorridorSurfaces().size() - 1);
+                ResourceSiteHarvestTraversal.compile(baseline.bootstrap(), site, worker, jobId).linearCorridorSurfaces().size()
+                        - ResourceSiteHarvestTraversal.workReturnStationCount() - 1);
         ResourceSiteLifecycle harvested = growing.harvesting(harvest).harvested();
         assertEquals(ResourceSitePhase.GROWING, harvested.phase());
         assertEquals(2L, harvested.growthEpoch()); assertEquals(0, harvested.growthStage());
     }
 
     @Test
-    void nextGrowthEpochKeepsTheSameFarmerAtItsTerminalCropWithoutCollapsingTheNextSlotVisit() {
+    void nextGrowthEpochKeepsTheSameFarmerAtItsCollisionClearTerminalStationWithoutCollapsingTheNextSlotVisit() {
         FrontierWorldState baseline = initial();
         SubjectId siteId = new SubjectId("site:1-wheat-field");
         ResourceSite site = FrontierResourceSitePlan.compile(baseline.bootstrap()).get(siteId);
         SubjectId workerId = new SubjectId("resident:1-1");
-        SurfaceAnchor terminal = new SurfaceAnchor(site.cropSlots().getLast().offset(0, -1, 0));
+        SurfaceAnchor terminal = ResourceSiteHarvestTraversal.workReturnSurface(baseline.bootstrap(), site);
         ActorLocation retained = new ActorLocation(terminal.standingBody(), baseline.actorLocations().get(workerId).condition());
 
         TraversalTopology nextEpoch = ResourceSiteHarvestTraversal.compile(baseline.bootstrap(), site, retained,
                 new SubjectId("job:site-harvest-1-wheat-field-2"));
 
         assertEquals(terminal, nextEpoch.linearCorridorSurfaces().getFirst(), "the successor begins from the exact retained body support");
+        int firstCropCursor = nextEpoch.linearCorridorSurfaces().size() - site.cropSlots().size()
+                - ResourceSiteHarvestTraversal.workReturnStationCount();
         assertEquals(site.cropSlots().stream().map(crop -> new SurfaceAnchor(crop.offset(0, -1, 0))).toList(),
-                nextEpoch.linearCorridorSurfaces().subList(nextEpoch.linearCorridorSurfaces().size() - site.cropSlots().size(),
-                        nextEpoch.linearCorridorSurfaces().size()),
+                nextEpoch.linearCorridorSurfaces().subList(firstCropCursor, firstCropCursor + site.cropSlots().size()),
                 "the immutable per-slot plan remains complete, including its later terminal-slot visit");
         assertEquals(terminal, nextEpoch.linearCorridorSurfaces().getLast(),
-                "the inherited body and the later work station are distinct plan visits at one exact support");
+                "the terminal field-edge station remains the collision-clear post-harvest receipt station");
     }
 
     private static ResourceSiteHarvestProgress completeProgress() {

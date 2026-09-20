@@ -32,11 +32,10 @@ public final class ResourceSiteHarvestTraversal {
                 surveyedFieldSurface(bootstrap, site), "field-work");
         List<SurfaceAnchor> corridor = new ArrayList<>(approach);
         for (int index = 1; index < workstations.size(); index++) corridor.add(workstations.get(index));
-        // The worker may finish one growth epoch on a crop support which is also a later
-        // slot in the immutable next-epoch plan.  The two visits are separate retained plan
-        // nodes: the first is the actor's inherited body, the latter is the slot's next-epoch
-        // work visit.  Do not collapse that identity into a coordinate or relocate/recreate
-        // the body merely to satisfy a linear-coordinate shortcut.
+        // The terminal field-edge support is not another harvest cursor.  It records the
+        // collision-clear station retained by the terminal receipt, so a later ordinary
+        // ingress never has to recreate the exact farmer inside the replanted final crop.
+        corridor.addAll(workReturnCorridor(bootstrap, site));
         return TraversalTopology.corridor(new TraversalTopologyId("topology:field-work-" + jobId.value().replace(':', '-')),
                 revision(corridor), site.id(), TraversalKind.PEDESTRIAN, Set.of(TraversalCapability.PEDESTRIAN), corridor);
     }
@@ -55,6 +54,13 @@ public final class ResourceSiteHarvestTraversal {
      * canonical movement authority.</p>
      */
     public static SurfaceAnchor workReturnSurface(FrontierBootstrap bootstrap, ResourceSite site) {
+        return workReturnCorridor(bootstrap, site).getLast();
+    }
+
+    /** The fixed edge-station tail is retained outside the immutable 64 crop cursors. */
+    public static int workReturnStationCount() { return WORK_RETURN_DISTANCE; }
+
+    private static List<SurfaceAnchor> workReturnCorridor(FrontierBootstrap bootstrap, ResourceSite site) {
         Objects.requireNonNull(bootstrap, "harvest return bootstrap"); Objects.requireNonNull(site, "harvest return site");
         if (site.kind() != ResourceSiteKind.WHEAT_FIELD) throw new IllegalArgumentException("resource-site return only supports wheat fields");
         SurfaceAnchor terminal = new SurfaceAnchor(site.cropSlots().getLast().offset(0, -1, 0));
@@ -71,7 +77,7 @@ public final class ResourceSiteHarvestTraversal {
                 }
                 corridor.add(surface);
             }
-            if (clear) return corridor.getLast();
+            if (clear) return List.copyOf(corridor);
         }
         throw new IllegalArgumentException("resource-site final crop has no declared clear work return station: " + site.id().value());
     }

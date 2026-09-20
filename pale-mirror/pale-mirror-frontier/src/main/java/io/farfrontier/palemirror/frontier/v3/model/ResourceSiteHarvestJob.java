@@ -44,7 +44,11 @@ public record ResourceSiteHarvestJob(SubjectId id, SubjectId taskId, SubjectId s
                 Objects.requireNonNull(next, "rebased field-work traversal"), 0);
     }
 
-    public int firstCropCursor() { return traversal.linearCorridorSurfaces().size() - ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS; }
+    /** The terminal field-edge tail is retained outside the immutable crop cursors. */
+    public int firstCropCursor() {
+        return traversal.linearCorridorSurfaces().size() - ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS
+                - ResourceSiteHarvestTraversal.workReturnStationCount();
+    }
     public int cropCursor() { return firstCropCursor() + progress.completedCropSlots(); }
     public boolean atCurrentCropStation() { return traversalCursor == cropCursor(); }
     public boolean hasNextTraversalStep() { return !progress.complete() && traversalCursor < cropCursor(); }

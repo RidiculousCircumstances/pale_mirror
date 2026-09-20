@@ -498,7 +498,8 @@ function validResolvablePosition(value) {
   const reference = value?.diagnostic;
   return value && typeof value === 'object' && Object.keys(value).length === 1
     && reference && typeof reference === 'object' && Object.keys(reference).length === 3
-    && ((reference.view === 'site' && requiredId(reference.id, 'site:') && ['firstCrop', 'lastCrop'].includes(reference.field))
+    && ((reference.view === 'site' && requiredId(reference.id, 'site:')
+      && ['firstCrop', 'lastCrop', 'terminalHarvest.terminalBody'].includes(reference.field))
       || (reference.view === 'container' && requiredId(reference.id, 'container:') && reference.field === 'position')
       || (reference.view === 'settlement' && requiredId(reference.id, 'settlement:')
         && ['farmAnchor', 'routeSurface'].includes(reference.field))

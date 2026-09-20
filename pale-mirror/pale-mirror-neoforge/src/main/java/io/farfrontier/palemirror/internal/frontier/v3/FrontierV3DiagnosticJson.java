@@ -397,16 +397,24 @@ final class FrontierV3DiagnosticJson {
                 + quote(value.reconciliation()) + "\",\"completeForColdHotReceipt\":" + value.completeForColdHotReceipt() + "}";
     }
 
-    /** Read-only terminal receipt link for an exact harvest input that is no longer a live stack. */
+    /** Read-only active-or-terminal production link for the exact completed harvest input. */
     private static String harvestSuccessor(FrontierWorldState state, ResourceSiteHarvestLineage lineage) {
-        return state.companies().market().workOrders().values().stream().flatMap(order -> order.terminalReceipt().stream()
+        return java.util.stream.Stream.concat(
+                state.productionJobs().values().stream()
+                        .filter(job -> lineage.outputItemId().equals(job.consumedItemId())
+                                && job.inputHold() instanceof io.farfrontier.palemirror.frontier.v3.model.ProductionInputHold.Cold)
+                        .map(job -> "{\"state\":\"ACTIVE_COLD\",\"job\":\"" + quote(job.id().value())
+                                + "\",\"worker\":\"" + quote(job.workerId().value()) + "\",\"inputItem\":\""
+                                + quote(job.consumedItemId().value()) + "\",\"outputItem\":\"" + quote(job.outputItemId().value())
+                                + "\",\"outputKind\":\"" + quote(job.outputItemKind()) + "\",\"outputCount\":" + job.outputCount() + "}"),
+                state.companies().market().workOrders().values().stream().flatMap(order -> order.terminalReceipt().stream()
                         .filter(receipt -> receipt.inputRepresentation() == io.farfrontier.palemirror.frontier.v3.model.TerminalProductionReceipt.ResourceRepresentation.EXACT_ITEM
                                 && receipt.outputRepresentation() == io.farfrontier.palemirror.frontier.v3.model.TerminalProductionReceipt.ResourceRepresentation.EXACT_ITEM
                                 && lineage.outputItemId().equals(receipt.inputId()))
-                        .map(receipt -> "{\"order\":\"" + quote(order.id().value()) + "\",\"job\":\"" + quote(receipt.jobId().value())
+                        .map(receipt -> "{\"state\":\"TERMINAL\",\"order\":\"" + quote(order.id().value()) + "\",\"job\":\"" + quote(receipt.jobId().value())
                                 + "\",\"worker\":\"" + quote(receipt.workerId().value()) + "\",\"inputItem\":\"" + quote(receipt.inputId().value())
                                 + "\",\"outputItem\":\"" + quote(receipt.outputId().value()) + "\",\"outputKind\":\"" + quote(receipt.outputKind())
-                                + "\",\"outputCount\":" + receipt.outputCount() + "}"))
+                                + "\",\"outputCount\":" + receipt.outputCount() + "}")))
                 .findFirst().orElse("null");
     }
 

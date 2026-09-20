@@ -357,7 +357,8 @@ final class FrontierV3TestPilotScenario {
                 || !reference.get("view").isJsonPrimitive() || !reference.get("id").isJsonPrimitive() || !reference.get("field").isJsonPrimitive()) return false;
         String view = reference.get("view").getAsString(); String id = reference.get("id").getAsString(); String diagnosticField = reference.get("field").getAsString();
         return (view.equals("site") && requiredId(reference, "id", "site:")
-                && (diagnosticField.equals("firstCrop") || diagnosticField.equals("lastCrop")))
+                && (diagnosticField.equals("firstCrop") || diagnosticField.equals("lastCrop")
+                || diagnosticField.equals("terminalHarvest.terminalBody")))
                 || (view.equals("container") && requiredId(reference, "id", "container:") && diagnosticField.equals("position"))
                 || (view.equals("settlement") && requiredId(reference, "id", "settlement:")
                 && (diagnosticField.equals("farmAnchor") || diagnosticField.equals("routeSurface")))

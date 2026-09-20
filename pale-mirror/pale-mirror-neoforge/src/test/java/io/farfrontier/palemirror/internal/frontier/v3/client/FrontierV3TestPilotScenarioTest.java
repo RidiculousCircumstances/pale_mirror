@@ -157,6 +157,14 @@ class FrontierV3TestPilotScenarioTest {
     }
 
     @Test
+    void acceptsTheReadOnlyTerminalHarvestBodyAsAnOrdinaryLookAnchor() {
+        FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"look","position":{"diagnostic":{"view":"site","id":"site:7-wheat-field",
+                "field":"terminalHarvest.terminalBody"}}}]}""");
+        assertEquals(1, parsed.actionCount());
+    }
+
+    @Test
     void acceptsOnlyBoundedWholeTickFastForwardActions() {
         FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"fast_forward","ticks":24000,"timeoutMs":180000}]}""");

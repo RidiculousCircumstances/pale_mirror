@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "id": "disposable_f06r3_first_visibility_cold_continuity",
+  "isolation": { "mode": "disposable_lite", "seed": 47 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "world", "viewDistance": 6 },
+  "zeroPlayerPrelude": {
+    "kind": "cold_duty_cycle",
+    "advanceTicks": 24000,
+    "timeoutMs": 240000,
+    "expectTerminalStatus": "COMPLETED"
+  },
+  "restart": { "mode": "graceful", "afterAction": 2, "zeroPlayerAdvanceTicks": 40, "zeroPlayerTimeoutMs": 30000, "zeroPlayerSettleMs": 1000 },
+  "pilot": { "username": "PMTestPilot" },
+  "assertNoServerTickStallDuringIngress": true,
+  "setup": [{ "type": "assert_fixture", "timeoutMs": 30000, "checks": [{ "view": "summary", "id": "", "expect": { "status": "ok", "settlements": 12, "sites": 12 } }] }],
+  "actions": [
+    { "type": "inspect", "view": "site", "id": "site:7-wheat-field", "causalMilestone": "cold_terminal_current_field_before_restart" },
+    { "type": "inspect", "view": "settlement_population", "id": "settlement:7", "causalMilestone": "cold_terminal_current_population_before_restart" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "diagnostic": { "view": "site", "id": "site:7-wheat-field", "field": "lastCrop" } }, "settleMs": 5000, "causalMilestone": "ordinary_current_field_first_visibility" },
+    { "type": "look", "position": { "diagnostic": { "view": "site", "id": "site:7-wheat-field", "field": "firstCrop" } }, "causalMilestone": "current_field_player_eye_view" },
+    { "type": "wait", "ms": 5000, "causalMilestone": "current_field_frame_settled" },
+    { "type": "assert_visible_board", "text": "WHEAT FIELD", "position": { "x": 141, "y": 67, "z": -8 }, "radius": 3, "maxDistance": 64, "maxAngleDeg": 50, "timeoutMs": 30000, "causalMilestone": "current_field_board_player_eye_view" },
+    { "type": "wait", "ms": 1000, "causalMilestone": "current_field_board_frame_settled" },
+    { "type": "inspect", "view": "settlement_population", "id": "settlement:7", "causalMilestone": "current_terminal_worker_admission_after_first_visibility" },
+    { "type": "observe_settlement_population", "settlementId": "settlement:7", "durationTicks": 40, "maxDistance": 96, "timeoutMs": 60000, "causalMilestone": "current_worker_first_visibility" },
+    { "type": "inspect", "view": "settlement_population", "id": "settlement:7", "causalMilestone": "current_terminal_worker_indexed_after_first_visibility" },
+    { "type": "look", "position": { "diagnostic": { "view": "site", "id": "site:7-wheat-field", "field": "terminalHarvest.terminalBody" } }, "causalMilestone": "current_terminal_worker_player_eye_view" },
+    { "type": "inspect", "view": "site", "id": "site:7-wheat-field", "causalMilestone": "current_field_after_first_visibility" },
+    { "type": "inspect", "view": "settlement", "id": "settlement:7", "causalMilestone": "current_settlement_after_first_visibility" }
+  ],
+  "assertions": [
+    { "after": 1, "view": "site", "id": "site:7-wheat-field", "expect": { "status": "ok" } },
+    { "after": 12, "view": "site", "id": "site:7-wheat-field", "expect": { "status": "ok" } },
+    { "after": 13, "view": "settlement", "id": "settlement:7", "expect": { "status": "ok" } }
+  ],
+  "frames": [
+    { "after": 5, "name": "f06r3-current-field-first-visibility", "presentation": "player" },
+    { "after": 7, "name": "f06r3-current-field-board-first-visibility", "presentation": "player" },
+    { "after": 11, "name": "f06r3-current-worker-first-visibility", "presentation": "player" }
+  ]
+}
