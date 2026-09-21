@@ -7,6 +7,7 @@ import io.farfrontier.palemirror.frontier.v3.model.LocalNavigationEnvelope;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
@@ -100,7 +101,15 @@ final class FrontierV3SemanticMovement {
         if (!hasSupport(level, support) || !level.getFluidState(support.above()).isEmpty()) return false;
         Vec3 point = point(surface);
         AABB target = worker.getBoundingBox().move(point.subtract(worker.position()));
-        return level.noCollision(worker, target);
+        // The shared arrival provider must describe the same body volume that the actuator is
+        // permitted to enter.  Previously `Entity.move` correctly refused a foreign living
+        // body, while this provider declared that very cell IN_PROGRESS because it sampled
+        // blocks only.  The scene then refreshed the same retained edge forever and presented
+        // a running harvest with no physical progress.  A loaded body is ordinary physical
+        // evidence, not a route alternative: report it as blocked clearance so the owning
+        // resource-site disposition can name the exact retained cell rather than hide a stall.
+        return level.noCollision(worker, target) && level.getEntities(worker, target.inflate(0.001D),
+                entity -> entity instanceof LivingEntity living && living.isAlive() && !living.isSpectator()).isEmpty();
     }
 
     private static SemanticTraversalArrival.Medium medium(ServerLevel level, BlockPos position) {

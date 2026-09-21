@@ -484,6 +484,28 @@ public final class FrontierV3LocalNavigationGameTests {
         });
     }
 
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 60)
+    public static void harvestTargetWithForeignLivingBodyIsAnExactClearanceBlocker(GameTestHelper helper) {
+        BlockPos origin = helper.absolutePos(new BlockPos(2, 0, 2));
+        helper.getLevel().setBlock(origin, Blocks.FARMLAND.defaultBlockState(), 3);
+        helper.getLevel().setBlock(origin.east(), Blocks.FARMLAND.defaultBlockState(), 3);
+        helper.getLevel().setBlock(origin.above(), Blocks.WHEAT.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.CropBlock.AGE, 7), 3);
+        helper.getLevel().setBlock(origin.east().above(), Blocks.WHEAT.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.CropBlock.AGE, 7), 3);
+        helper.getLevel().setBlock(origin.above(2), Blocks.AIR.defaultBlockState(), 3);
+        helper.getLevel().setBlock(origin.east().above(2), Blocks.AIR.defaultBlockState(), 3);
+        Villager worker = helper.spawnWithNoFreeWill(EntityType.VILLAGER, new Vec3(2.5D, 1.0D, 2.5D));
+        Villager blocker = helper.spawnWithNoFreeWill(EntityType.VILLAGER, new Vec3(3.5D, 1.0D, 2.5D));
+        SurfaceAnchor target = SurfaceAnchor.at(origin.getX() + 1, origin.getY(), origin.getZ());
+        helper.runAtTickTime(2, () -> {
+            helper.assertValueEqual(FrontierV3SemanticMovement.target(helper.getLevel(), worker, target),
+                    io.farfrontier.palemirror.frontier.v3.model.SemanticTraversalArrival.Disposition.BLOCKED_CLEARANCE,
+                    "a retained harvest target occupied by a foreign living body must not be reported navigable");
+            FrontierV3ControlledMobMotion.stop(worker); worker.discard(); blocker.discard(); helper.succeed();
+        });
+    }
+
     @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
     public static void cropTendingIsAStationaryWorkPoseNotAnOrbit(GameTestHelper helper) {
         BlockPos origin = helper.absolutePos(new BlockPos(2, 0, 2));
