@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -87,17 +88,18 @@ public final class ResourceSiteHarvestTraversal {
      * historic generic survey also treated ordinary terrain as a hypothetical extra surface one
      * cell above its real support.  That can retain a COLD body in air next to a field, which
      * can never be admitted honestly by HOT.  This field-owned survey instead names the actual
-     * terrain support everywhere and the immutable farmland support in crop columns.  Every
-     * non-first crop surface remains an obstacle during the approach and only the declared
-     * first workstation is entered by the bounded compiler.
+     * terrain support everywhere except the settlement's declared public ground and immutable
+     * farmland support in crop columns.  Every non-first crop surface remains an obstacle during
+     * the approach and only the declared first workstation is entered by the bounded compiler.
      */
     private static BoundedPedestrianApproach.SurveyedSurface surveyedFieldSurface(FrontierBootstrap bootstrap, ResourceSite site) {
-        java.util.Map<Long, SurfaceAnchor> fieldSurfaces = new java.util.HashMap<>();
+        Map<Long, SurfaceAnchor> fieldSurfaces = new java.util.HashMap<>();
         for (BlockPosition crop : site.cropSlots()) {
             fieldSurfaces.put(column(crop.x(), crop.z()), new SurfaceAnchor(crop.offset(0, -1, 0)));
         }
+        Map<TerrainColumn, SurfaceAnchor> localGround = SettlementPedestrianGround.localSupports(bootstrap, site.settlementId());
         return (x, z) -> fieldSurfaces.getOrDefault(column(x, z),
-                SurfaceAnchor.at(x, bootstrap.terrain().supportYAt(x, z), z));
+                SettlementPedestrianGround.surveyedSupport(bootstrap, localGround, x, z));
     }
 
     private static long column(int x, int z) {

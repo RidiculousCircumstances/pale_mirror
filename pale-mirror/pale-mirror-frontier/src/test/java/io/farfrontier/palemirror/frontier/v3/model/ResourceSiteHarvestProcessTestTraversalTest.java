@@ -248,16 +248,22 @@ class ResourceSiteHarvestTraversalTest extends ResourceSiteHarvestProcessTest {
                         .filter(surface -> farmlandByColumn.containsKey(column(surface.x(), surface.z())))
                         .allMatch(surface -> surface.support().equals(farmlandByColumn.get(column(surface.x(), surface.z())))),
                 "every retained field-column cursor stands on its exact farmland support, never the non-supporting crop layer");
+        java.util.Map<TerrainColumn, SurfaceAnchor> localGround = SettlementPedestrianGround.localSupports(state.bootstrap(), site.settlementId());
         assertTrue(traversal.linearCorridorSurfaces().stream().skip(1)
                         .filter(surface -> !farmlandByColumn.containsKey(column(surface.x(), surface.z())))
-                        .allMatch(surface -> surface.y() == state.bootstrap().terrain().supportYAt(surface.x(), surface.z())),
-                "the field approach retains real terrain support outside crop columns rather than a virtual air layer");
+                        .allMatch(surface -> surface.equals(SettlementPedestrianGround.surveyedSupport(state.bootstrap(), localGround,
+                                surface.x(), surface.z()))),
+                "the field approach retains the shared local pedestrian support or real terrain, never a virtual air layer or terrain below a public apron");
+        assertTrue(traversal.linearCorridorSurfaces().stream().skip(1)
+                        .anyMatch(surface -> localGround.get(new TerrainColumn(surface.x(), surface.z())) != null),
+                "the bounded field approach must retain one exact materialized public-ground datum when it crosses the settlement apron");
         assertTrue(traversal.linearCorridorSurfaces().stream()
                         .noneMatch(surface -> site.irrigationSlots().contains(surface.support())),
                 "a normal field approach must never retain an irrigation water column as pedestrian ground");
         assertEquals(site.cropSlots().stream().map(crop -> new SurfaceAnchor(crop.offset(0, -1, 0))).toList(),
-                traversal.linearCorridorSurfaces().subList(traversal.linearCorridorSurfaces().size() - site.cropSlots().size(),
-                        traversal.linearCorridorSurfaces().size()),
+                traversal.linearCorridorSurfaces().subList(traversal.linearCorridorSurfaces().size()
+                                - ResourceSiteHarvestTraversal.workReturnStationCount() - site.cropSlots().size(),
+                        traversal.linearCorridorSurfaces().size() - ResourceSiteHarvestTraversal.workReturnStationCount()),
                 "the immutable work order keeps all 64 crop stations at their physical farmland supports");
     }
 

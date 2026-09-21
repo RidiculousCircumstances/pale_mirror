@@ -53,15 +53,14 @@ public final class ProductionWorkTraversal {
         if (blocked.contains(start.support())) {
             throw new IllegalArgumentException("production worker shares its retained support with another living actor");
         }
-        Map<TerrainColumn, SurfaceAnchor> localSurfaces = localSurfaces(bootstrap, workshop.settlementId());
+        Map<TerrainColumn, SurfaceAnchor> localSurfaces = SettlementPedestrianGround.localSupports(bootstrap, workshop.settlementId());
         List<SurfaceAnchor> corridor = new ArrayList<>(BoundedPedestrianApproach.compile(bootstrap, start, exterior, blocked,
                 // A local public circulation surface is a raised, plan-owned supporting block.
                 // The free approach must therefore retain that exact datum instead of treating
                 // its occupied block as the worker's body cell.  Everywhere else the immutable
                 // terrain survey names the physical support directly; no loaded-world query or
                 // alternate route is admitted here.
-                (x, z) -> localSurfaces.getOrDefault(new TerrainColumn(x, z),
-                        SurfaceAnchor.at(x, bootstrap.terrain().supportYAt(x, z), z)), "production-work"));
+                (x, z) -> SettlementPedestrianGround.surveyedSupport(bootstrap, localSurfaces, x, z), "production-work"));
         List<SurfaceAnchor> ingress = port.topologyPort().ingressSurfaces();
         if (ingress.stream().anyMatch(surface -> blocked.contains(surface.support()))) {
             throw new IllegalArgumentException("production workshop ingress is occupied by another living actor");
@@ -74,29 +73,6 @@ public final class ProductionWorkTraversal {
         // relocating the worker or selecting another workshop entrance.
         return TraversalTopology.corridor(new TraversalTopologyId("topology:production-work-" + jobId.value().replace(':', '-')),
                 revision(corridor), workshop.id(), TraversalKind.PEDESTRIAN, Set.of(TraversalCapability.PEDESTRIAN), corridor);
-    }
-
-    /**
-     * Returns the finite elevated public surfaces already owned by this settlement's immutable
-     * local topology.  A column may have one current pedestrian datum only; treating two
-     * differently elevated owners as interchangeable would be a hidden reroute.
-     */
-    private static Map<TerrainColumn, SurfaceAnchor> localSurfaces(FrontierBootstrap bootstrap, SubjectId settlementId) {
-        Settlement settlement = bootstrap.settlements().stream().filter(value -> value.id().equals(settlementId)).findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("production workshop has no settlement"));
-        java.util.LinkedHashMap<TerrainColumn, SurfaceAnchor> surfaces = new java.util.LinkedHashMap<>();
-        SettlementLocalCirculation.surfaceCells(settlement).forEach(position -> addSurface(surfaces, new SurfaceAnchor(position)));
-        SettlementResidentIngressPlan.compile(bootstrap.bounds(), bootstrap.terrain(), settlement,
-                bootstrap.ruleset().facilityCapacity().intactHousingBeds()).ownedSurfaces().forEach(surface -> addSurface(surfaces, surface));
-        return Map.copyOf(surfaces);
-    }
-
-    private static void addSurface(Map<TerrainColumn, SurfaceAnchor> surfaces, SurfaceAnchor surface) {
-        TerrainColumn column = new TerrainColumn(surface.x(), surface.z());
-        SurfaceAnchor prior = surfaces.putIfAbsent(column, surface);
-        if (prior != null && !prior.equals(surface)) {
-            throw new IllegalArgumentException("production local topology has multiple support datums at " + column);
-        }
     }
 
     private static Set<BlockPosition> immutableBodyObstacles(FrontierBootstrap bootstrap, SettlementWorkshopServicePort port,

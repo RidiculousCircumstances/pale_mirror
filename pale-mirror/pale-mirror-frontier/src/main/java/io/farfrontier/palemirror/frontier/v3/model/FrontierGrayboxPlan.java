@@ -708,17 +708,13 @@ public final class FrontierGrayboxPlan {
         for (Settlement settlement : bootstrap.settlements()) {
             SettlementResidentIngressPlan.Plan ingress = SettlementResidentIngressPlan.compile(bootstrap.bounds(), bootstrap.terrain(), settlement,
                     bootstrap.ruleset().facilityCapacity().intactHousingBeds());
-            for (SurfaceAnchor surface : ingress.ownedSurfaces()) {
+            for (SurfaceAnchor surface : SettlementPedestrianGround.localSupports(bootstrap, settlement.id()).values()) {
                 BlockPosition position = surface.support();
-                if (cells.containsKey(position)) continue;
-                add(cells, position, PhysicalDeltaSemanticTargetKind.SETTLEMENT_INFRASTRUCTURE, settlement.id(), GrayboxMaterial.ROUTE, GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE);
-            }
-            for (BlockPosition surface : SettlementLocalCirculation.surfaceCells(settlement)) {
                 // The Hall route node is deliberately already route-network owned. Every other
                 // compiled sidewalk cell belongs to the settlement's public circulation plan;
                 // an audit/materializer may observe loss but never replace it opportunistically.
-                if (cells.containsKey(surface)) continue;
-                add(cells, surface, PhysicalDeltaSemanticTargetKind.SETTLEMENT_INFRASTRUCTURE, settlement.id(), GrayboxMaterial.ROUTE, GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE);
+                if (cells.containsKey(position)) continue;
+                add(cells, position, PhysicalDeltaSemanticTargetKind.SETTLEMENT_INFRASTRUCTURE, settlement.id(), GrayboxMaterial.ROUTE, GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE);
             }
         }
     }
