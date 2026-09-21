@@ -1119,7 +1119,6 @@ public final class FrontierV3TestPilotClient {
             long instant = number(site, "instant");
             if (instant <= lastCanonicalInstant) return;
             lastCanonicalInstant = instant;
-            if (firstCanonicalInstant < 0L) firstCanonicalInstant = instant;
             String phase = string(site, "phase"); String active = string(site, "activeWork");
             if (!site.get("conflictDisposition").isJsonNull()) fail("truthful_local_blocker=" + site.get("conflictDisposition"));
             if ("HARVESTING".equals(phase) && active.isBlank()) fail("false_active_without_current_work");
@@ -1156,6 +1155,12 @@ public final class FrontierV3TestPilotClient {
             snapshot.addProperty("worker", workerId); snapshot.addProperty("intent", intentId); snapshot.addProperty("lease", lease);
             snapshot.addProperty("completedCropSlots", completed); snapshot.addProperty("cursor", cursor); snapshot.addProperty("physical", physical);
             tail.addLast(snapshot); while (tail.size() > 12) tail.removeFirst();
+            // A dynamic oracle cannot start its canonical observation window until the site
+            // has yielded its exact job/worker/intent relation and the matching diagnostics
+            // arrived.  At accelerated tick rates that first diagnostic round-trip can span
+            // the whole window; charging that transport/bootstrap interval would turn a
+            // healthy, already-progressing HOT scene into a false rejection.
+            if (firstCanonicalInstant < 0L) firstCanonicalInstant = instant;
             if (semanticSignature.isBlank()) {
                 lastSemanticProgressInstant = instant;
             } else if (!nextSemanticSignature.equals(semanticSignature)) {
