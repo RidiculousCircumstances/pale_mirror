@@ -91,11 +91,17 @@ public final class ProductionProcess {
         Optional<ExactItemStack> input = wheat(state, settlement);
         if (fungible.isEmpty() && input.isEmpty()) return blocked(task, settlement, workshop, workshop.id(), ProductionDiagnosticProducer.INPUT_UNAVAILABLE);
         int ordinal = state.strategicPlans().objectives().get(task.objectiveId()).decisionOrdinal();
-        if (fungible.isPresent() && physicalCustody) {
+        if (fungible.isPresent() && input.isEmpty() && physicalCustody) {
             return blocked(task, settlement, workshop, depot, ProductionDiagnosticProducer.INPUT_UNAVAILABLE);
         }
-        ProductionJob job = fungible.map(value -> fungibleJob(state, settlement, workshop, value, ordinal)).orElseGet(() ->
-                job(state, settlement, workshop, input.orElseThrow(), ordinal, !physicalCustody));
+        // A live reference-depot lease makes the exact stack the only admissible input
+        // representation.  The fungible mirror may coexist with that stack, but it cannot
+        // consume while the chest is physically owned; selecting it first would permanently
+        // block an otherwise materialized production successor.
+        ProductionJob job = physicalCustody && input.isPresent()
+                ? job(state, settlement, workshop, input.orElseThrow(), ordinal, false)
+                : fungible.map(value -> fungibleJob(state, settlement, workshop, value, ordinal)).orElseGet(() ->
+                job(state, settlement, workshop, input.orElseThrow(), ordinal, true));
         // Finance is a start precondition.  A blocked task must not leave a durable job
         // occupying its workshop: otherwise a later objective review could create a
         // second job for the same facility and quarantine the canonical engine.
