@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
 
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Collection;
 
 /**
  * The one retained predecessor/successor relationship for a renewable field.
@@ -77,6 +78,18 @@ public record ResourceSiteHarvestLineage(SubjectId predecessorJobId, SubjectId p
 
     /** A physical receipt is open only while an exact current intent can still resolve it. */
     public boolean receiptPending() { return !outputReceiptResolved; }
+
+    /**
+     * A COLD consumer may use a harvested exact item only after the one HOT physical receipt
+     * that produced it is durable.  The item can already exist in canonical inventory while
+     * that receipt is pending, but treating it as a consumable input would let a production
+     * successor erase the only remaining field/depot confirmation boundary.
+     */
+    public static boolean hasPendingOutputReceipt(Collection<ResourceSiteLifecycle> lifecycles, SubjectId outputItemId) {
+        Objects.requireNonNull(lifecycles, "resource-site lifecycles"); Objects.requireNonNull(outputItemId, "resource-site output item");
+        return lifecycles.stream().flatMap(lifecycle -> lifecycle.harvestLineage().stream())
+                .anyMatch(lineage -> lineage.receiptPending() && lineage.outputItemId().equals(outputItemId));
+    }
 
     /**
      * The old field write may remain RUNNING after its exact wheat has entered a later COLD

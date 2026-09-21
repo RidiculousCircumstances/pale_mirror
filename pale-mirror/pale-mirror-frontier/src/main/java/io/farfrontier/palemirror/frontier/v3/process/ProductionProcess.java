@@ -812,7 +812,8 @@ public final class ProductionProcess {
     private static Optional<ExactItemStack> wheat(FrontierWorldState state, Settlement settlement) {
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
         return state.inventory().items().values().stream().sorted(Comparator.comparing(ExactItemStack::id)).filter(item -> WHEAT.equals(item.itemKind())
-                && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot)).findFirst();
+                && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot)
+                && !ResourceSiteHarvestLineage.hasPendingOutputReceipt(state.resourceSites().sites().values(), item.id())).findFirst();
     }
     private static boolean materializedInputMatches(FrontierWorldState state, ProductionJob job) {
         ExactItemStack input = state.inventory().items().get(job.consumedItemId());

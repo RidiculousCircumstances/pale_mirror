@@ -8,6 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
@@ -474,6 +475,28 @@ class ResourceSiteHarvestTraversalTest extends ResourceSiteHarvestProcessTest {
         assertEquals("confirmed_exact_physical_receipt", confirmedTrace.reconciliation());
         assertEquals(output, confirmed.inventory().items().get(output.id()),
                 "late physical evidence confirms canonical custody without replaying wheat");
+    }
+
+    @Test
+    void pendingHotReceiptIsNotConsumableMerelyBecauseItsCanonicalOutputExists() {
+        SubjectId site = new SubjectId("site:1-wheat-field");
+        SubjectId output = new SubjectId("item:site-harvest-1-wheat-field-1-wheat");
+        ResourceSiteHarvestLineage pending = new ResourceSiteHarvestLineage(
+                new SubjectId("job:site-harvest-1-wheat-field-1"), new SubjectId("task:settlement-1-harvest"),
+                new SubjectId("resident:1-13"), output, 1L, new BodyPosition(8, 64, 8),
+                new PhysicalIntentId("intent:site-harvest-1-wheat-field-1"),
+                new InventoryCustody.ContainerSlot(new SubjectId("container:1"), 0), false,
+                Optional.of(new SubjectId("task:settlement-1-produce-bread")), Optional.of(new SubjectId("job:production-1-1")));
+        ResourceSiteLifecycle lifecycle = new ResourceSiteLifecycle(site, ResourceSitePhase.GROWING, 2L, 0,
+                Optional.empty(), Optional.empty(), Optional.of(pending));
+
+        assertTrue(ResourceSiteHarvestLineage.hasPendingOutputReceipt(List.of(lifecycle), output),
+                "an exact successor must wait for the prior HOT field/depot receipt");
+        assertFalse(ResourceSiteHarvestLineage.hasPendingOutputReceipt(List.of(lifecycle), new SubjectId("item:other-wheat")));
+        ResourceSiteLifecycle resolved = new ResourceSiteLifecycle(site, ResourceSitePhase.GROWING, 2L, 0,
+                Optional.empty(), Optional.empty(), Optional.of(pending.resolveReceipt()));
+        assertFalse(ResourceSiteHarvestLineage.hasPendingOutputReceipt(List.of(resolved), output),
+                "the same exact output becomes consumable only after its receipt resolves");
     }
 
     private static FrontierWorldState reduceCanonical(FrontierWorldState state, String phase, long revision,

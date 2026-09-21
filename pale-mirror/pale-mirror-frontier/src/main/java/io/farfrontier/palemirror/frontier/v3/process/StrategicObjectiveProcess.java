@@ -325,7 +325,8 @@ public final class StrategicObjectiveProcess {
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
         boolean reserveShort = SettlementProvisionProcess.availableFood(state, settlement.id()) < SettlementProvisionProcess.reserveRequirement(state, settlement.id());
         boolean wheat = state.inventory().items().values().stream().anyMatch(item -> item.itemKind().equals("minecraft:wheat")
-                && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot))
+                && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot)
+                && !ResourceSiteHarvestLineage.hasPendingOutputReceipt(state.resourceSites().sites().values(), item.id()))
                 || FungibleResourceCustodySupport.firstAtContainer(state, depot, "minecraft:wheat", 64).isPresent();
         boolean constructionActive = state.routeConstructions().values().stream().anyMatch(project -> project.settlementId().equals(settlement.id()));
         boolean alreadyConfirmed = state.strategicPlans().routePatrols().values().stream().anyMatch(patrol -> patrol.settlementId().equals(settlement.id())
