@@ -426,11 +426,13 @@ final class FrontierV3AmbientActorExecutor {
             ObservedPosition observedExact = new ObservedPosition(existing.getX(), existing.getY(), existing.getZ());
             if (owned(existing, actorId, bioform(state, actorId))) {
                 return FrontierV3AmbientAdmissionDiagnostic.indexed(expectedId, FrontierV3AmbientPendingAdmissions.get(runtime, expectedId) != null, observedPosition, observedExact,
-                        existing instanceof Mob mob ? FrontierV3MobMotionLifecycle.trackerObservation(mob) : new FrontierV3ControlledMobMotion.TrackerObservation(0, 0));
+                        existing instanceof Mob mob ? FrontierV3MobMotionLifecycle.trackerObservation(mob) : new FrontierV3ControlledMobMotion.TrackerObservation(0, 0),
+                        existing instanceof Mob mob ? FrontierV3ControlledMobMotion.motionObservation(mob) : FrontierV3ControlledMobMotion.MotionObservation.idle());
             }
             if (FrontierV3SceneExecutor.recognizes(runtime, existing)) {
                 return FrontierV3AmbientAdmissionDiagnostic.sceneOwned(expectedId, observedPosition, observedExact,
-                        existing instanceof Mob mob ? FrontierV3MobMotionLifecycle.trackerObservation(mob) : new FrontierV3ControlledMobMotion.TrackerObservation(0, 0));
+                        existing instanceof Mob mob ? FrontierV3MobMotionLifecycle.trackerObservation(mob) : new FrontierV3ControlledMobMotion.TrackerObservation(0, 0),
+                        existing instanceof Mob mob ? FrontierV3ControlledMobMotion.motionObservation(mob) : FrontierV3ControlledMobMotion.MotionObservation.idle());
             }
             return FrontierV3AmbientAdmissionDiagnostic.conflict(expectedId);
         }

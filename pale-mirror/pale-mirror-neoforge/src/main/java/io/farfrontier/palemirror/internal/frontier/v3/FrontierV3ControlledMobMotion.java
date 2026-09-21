@@ -84,9 +84,17 @@ final class FrontierV3ControlledMobMotion {
     /** Bounded read-only evidence of actual accepted collision moves, not an alternate clock. */
     private static final Map<Mob, ArrayDeque<MotionSample>> TRACE = new WeakHashMap<>();
     private static final Map<Mob, TrackerObservation> TRACKER_OBSERVATIONS = new WeakHashMap<>();
+    /** Last local actuator outcome, retained only for the read-only loaded-body diagnostic. */
+    private static final Map<Mob, MotionObservation> MOTION_OBSERVATIONS = new WeakHashMap<>();
 
     record MotionSample(long gameTime, double x, double y, double z, double horizontalVelocity) { }
     record TrackerObservation(int calls, int impulseCalls) { }
+    record MotionObservation(String status, Vec3 target, int acceptedMoves) {
+        MotionObservation {
+            Objects.requireNonNull(status, "motion status");
+        }
+        static MotionObservation idle() { return new MotionObservation("IDLE", null, 0); }
+    }
 
     private FrontierV3ControlledMobMotion() { }
 
@@ -355,6 +363,11 @@ final class FrontierV3ControlledMobMotion {
         return TRACKER_OBSERVATIONS.getOrDefault(actor, new TrackerObservation(0, 0));
     }
 
+    /** Bounded read-only actuator evidence; it never supplies a target or route to a caller. */
+    static MotionObservation motionObservation(Mob actor) {
+        return MOTION_OBSERVATIONS.getOrDefault(actor, MotionObservation.idle());
+    }
+
     static boolean ordinaryPhysicsRegistered(Mob actor) { return ORDINARY_PHYSICS.containsKey(actor); }
 
     /** Compatibility hook for direct tests; production has one entity-pre movement authority. */
@@ -386,6 +399,7 @@ final class FrontierV3ControlledMobMotion {
         STATION_SETTLING.remove(actor);
         LAST_ADVANCE.remove(actor);
         ASCENTS.remove(actor);
+        MOTION_OBSERVATIONS.remove(actor);
         // A stop retires target authority but never rewrites observed physical position or the
         // canonical cursor.
         AVOIDANCE.remove(actor);
@@ -463,18 +477,24 @@ final class FrontierV3ControlledMobMotion {
         Vec3 delta = target.subtract(actor.position());
         double horizontalDistance = Math.sqrt(delta.x * delta.x + delta.z * delta.z);
         if (!continuous && (exactEndpoint ? horizontalDistance == 0.0D && delta.y == 0.0D
-                : horizontalDistance <= ARRIVAL_DISTANCE && Math.abs(delta.y) <= ARRIVAL_DISTANCE)) { actor.stopInPlace(); return; }
-        if (Math.abs(delta.y) > (exactEndpoint ? MAX_WALK_GRADE : MAX_WALK_GRADE + ARRIVAL_DISTANCE)) return;
+                : horizontalDistance <= ARRIVAL_DISTANCE && Math.abs(delta.y) <= ARRIVAL_DISTANCE)) {
+            actor.stopInPlace(); observeMotion(actor, "ARRIVED", target); return;
+        }
+        if (Math.abs(delta.y) > (exactEndpoint ? MAX_WALK_GRADE : MAX_WALK_GRADE + ARRIVAL_DISTANCE)) {
+            observeMotion(actor, "REJECTED_GRADE", target); return;
+        }
         // A one-block retained ascent is an ordinary collision move, but it cannot share the
         // same shallow diagonal vector as horizontal walking: that lets a NoAI body slide into
         // the lower adjacent column beneath the named higher support.  Complete the bounded
         // vertical half in the current clear column first, then walk the already-retained X/Z
         // edge.  This neither changes the target nor creates a stair/side-route search.
         if (delta.y > (exactEndpoint ? 0.0D : ARRIVAL_DISTANCE)) {
+            observeMotion(actor, "ASCENDING", target);
             settleExactAscent(level, actor, target, delta.y);
             return;
         }
         if (exactEndpoint ? horizontalDistance == 0.0D : horizontalDistance <= 1.0E-8D) {
+            observeMotion(actor, "DESCENDING", target);
             settleExactDescent(actor, delta.y, exactEndpoint);
             return;
         }
@@ -568,8 +588,10 @@ final class FrontierV3ControlledMobMotion {
             // interpolation or second movement calculation is involved.
             publishAcceptedMove(actor);
             recordMove(level, actor, moved);
+            acceptedMotion(actor, target);
             return;
         }
+        observeMotion(actor, "NO_MOVABLE_CANDIDATE", target);
     }
 
     private static boolean livingBodyOccupies(ServerLevel level, Mob actor, AABB candidate) {
@@ -652,6 +674,16 @@ final class FrontierV3ControlledMobMotion {
         ArrayDeque<MotionSample> samples = TRACE.computeIfAbsent(actor, ignored -> new ArrayDeque<>());
         if (samples.size() == MAX_TRACE_SAMPLES) samples.removeFirst();
         samples.addLast(new MotionSample(level.getGameTime(), actor.getX(), actor.getY(), actor.getZ(), Math.sqrt(moved.horizontalDistanceSqr())));
+    }
+
+    private static void observeMotion(Mob actor, String status, Vec3 target) {
+        MotionObservation prior = motionObservation(actor);
+        MOTION_OBSERVATIONS.put(actor, new MotionObservation(status, target, prior.acceptedMoves()));
+    }
+
+    private static void acceptedMotion(Mob actor, Vec3 target) {
+        MotionObservation prior = motionObservation(actor);
+        MOTION_OBSERVATIONS.put(actor, new MotionObservation("ACCEPTED", target, Math.addExact(prior.acceptedMoves(), 1)));
     }
 
     private static double walkingSpeed(Mob actor) { return actor instanceof Zombie ? BIOFORM_SPEED : RESIDENT_SPEED; }

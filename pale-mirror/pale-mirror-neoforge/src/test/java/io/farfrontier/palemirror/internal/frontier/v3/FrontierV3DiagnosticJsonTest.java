@@ -492,6 +492,7 @@ class FrontierV3DiagnosticJsonTest {
         assertTrue(actorJson.contains("\"physicalAdmission\":{\"status\":\"BLOCKED\""));
         assertTrue(actorJson.contains("\"placement\":{\"x\":4,\"y\":65,\"z\":8}"));
         assertTrue(actorJson.contains("\"observedExact\":null"));
+        assertTrue(actorJson.contains("\"motionStatus\":\"IDLE\",\"motionTarget\":null,\"motionAcceptedMoves\":0"));
     }
 
     @Test

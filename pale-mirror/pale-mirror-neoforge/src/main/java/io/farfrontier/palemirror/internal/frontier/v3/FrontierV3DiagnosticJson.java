@@ -691,10 +691,14 @@ final class FrontierV3DiagnosticJson {
         String observedPosition = value.observedPosition() == null ? "null" : position(value.observedPosition());
         String observedExact = nullablePosition(value.observedExact());
         String entityId = value.entityId() == null ? "" : value.entityId().toString();
+        FrontierV3ControlledMobMotion.MotionObservation motion = value.motion();
+        String motionTarget = motion.target() == null ? "null" : "{\"x\":" + motion.target().x + ",\"y\":" + motion.target().y + ",\"z\":" + motion.target().z + "}";
         return ",\"physicalAdmission\":{\"status\":\"" + quote(value.status()) + "\",\"entityUuid\":\""
                 + quote(entityId) + "\",\"pending\":" + value.pending() + ",\"placement\":" + placement
                 + ",\"observedPosition\":" + observedPosition + ",\"observedExact\":" + observedExact
-                + ",\"trackerCalls\":" + value.trackerCalls() + ",\"trackerImpulseCalls\":" + value.trackerImpulseCalls() + "}";
+                + ",\"trackerCalls\":" + value.trackerCalls() + ",\"trackerImpulseCalls\":" + value.trackerImpulseCalls()
+                + ",\"motionStatus\":\"" + quote(motion.status()) + "\",\"motionTarget\":" + motionTarget
+                + ",\"motionAcceptedMoves\":" + motion.acceptedMoves() + "}";
     }
 
     private static String item(String id, CheckpointImage checkpoint, FrontierWorldState state) {
