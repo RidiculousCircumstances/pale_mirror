@@ -175,7 +175,7 @@ final class FrontierV3AmbientActorExecutor {
                 Optional<FrontierV3SceneBehaviorRegistry.StandingPositionProvider> preLeaseStanding = genericAdmission.preLeaseSceneCause(actorId)
                         .map(FrontierV3SceneBehaviorRegistry::preLeaseStandingPositionProvider);
                 if (FrontierV3PreLeaseDemandGate.holdsForTypedHandoff(preLeaseStanding.isPresent(),
-                        demand(level, location.supportingSurface().support()))) {
+                        genericAdmission.preLeaseDemandAnchor(actorId).map(anchor -> demand(level, anchor)).orElse(false))) {
                     if (lease == null || lease.status() == AmbientLeaseStatus.CLOSED) {
                         submit(runtime, "ambient-pre-lease-prepare", actorId.value(),
                                 new AmbientLeasePrepared(AmbientActorProcess.nextLease(state, actorId,

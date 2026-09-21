@@ -137,6 +137,7 @@ public final class FrontierSceneAdmission {
                 .forEach(candidate -> reserved.addAll(candidate.memberPositions().keySet()));
 
         java.util.Map<SubjectId, SceneCauseKind> preLeaseCauses = new java.util.LinkedHashMap<>();
+        java.util.Map<SubjectId, BlockPosition> preLeaseDemandAnchors = new java.util.LinkedHashMap<>();
         FrontierResourceSiteHarvestSceneSupport.candidates(state).forEach(candidate -> {
             SubjectId worker = candidate.workerId();
             reserved.add(worker);
@@ -144,6 +145,7 @@ public final class FrontierSceneAdmission {
             if (previous != null) {
                 throw new IllegalStateException("multiple generic ambient pre-lease claims for " + worker.value());
             }
+            preLeaseDemandAnchors.put(worker, candidate.cropSlot());
         });
         // A durable workshop job retains both its exact materialized input and worker.  After a
         // restart its former ambient body may no longer be present, so reservation alone would
@@ -158,22 +160,28 @@ public final class FrontierSceneAdmission {
             if (previous != null) {
                 throw new IllegalStateException("multiple generic ambient pre-lease claims for " + worker.value());
             }
+            preLeaseDemandAnchors.put(worker, candidate.demandPosition());
         });
         // An active class-D patrol is a retained operation, not a generic GUARD goal. A
         // pre-existing ambient body stays still until the patrol scene can atomically adopt it.
         state.strategicPlans().routePatrols().values().stream().filter(RoutePatrol::active)
                 .forEach(patrol -> reserved.addAll(patrol.memberIds()));
-        return new GenericAmbientAdmission(reserved, preLeaseCauses);
+        return new GenericAmbientAdmission(reserved, preLeaseCauses, preLeaseDemandAnchors);
     }
 
     /** Immutable exact-state result of {@link #genericAmbientAdmission(FrontierWorldState)}. */
     public record GenericAmbientAdmission(Set<SubjectId> reservedActorIds,
-                                          java.util.Map<SubjectId, SceneCauseKind> preLeaseSceneCauses) {
+                                          java.util.Map<SubjectId, SceneCauseKind> preLeaseSceneCauses,
+                                          java.util.Map<SubjectId, BlockPosition> preLeaseDemandAnchors) {
         public GenericAmbientAdmission {
             reservedActorIds = Set.copyOf(Objects.requireNonNull(reservedActorIds, "reserved actor ids"));
             preLeaseSceneCauses = java.util.Map.copyOf(Objects.requireNonNull(preLeaseSceneCauses, "pre-lease scene causes"));
+            preLeaseDemandAnchors = java.util.Map.copyOf(Objects.requireNonNull(preLeaseDemandAnchors, "pre-lease demand anchors"));
             if (!reservedActorIds.containsAll(preLeaseSceneCauses.keySet())) {
                 throw new IllegalArgumentException("pre-lease actor must be generically reserved");
+            }
+            if (!preLeaseSceneCauses.keySet().equals(preLeaseDemandAnchors.keySet())) {
+                throw new IllegalArgumentException("pre-lease scene cause must retain one exact demand anchor");
             }
         }
 
@@ -181,6 +189,16 @@ public final class FrontierSceneAdmission {
 
         public java.util.Optional<SceneCauseKind> preLeaseSceneCause(SubjectId actorId) {
             return java.util.Optional.ofNullable(preLeaseSceneCauses.get(Objects.requireNonNull(actorId, "actor id")));
+        }
+
+        /**
+         * The player-demand input for a typed ambient-to-scene hand-off.  It belongs to the
+         * already admitted canonical candidate (field crop or workshop), rather than the
+         * worker's historical COLD cursor: player presence may expose that work, never select
+         * or create it.
+         */
+        public java.util.Optional<BlockPosition> preLeaseDemandAnchor(SubjectId actorId) {
+            return java.util.Optional.ofNullable(preLeaseDemandAnchors.get(Objects.requireNonNull(actorId, "actor id")));
         }
     }
 

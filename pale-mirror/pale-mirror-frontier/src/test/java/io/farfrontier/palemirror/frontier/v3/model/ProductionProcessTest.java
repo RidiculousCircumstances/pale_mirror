@@ -610,6 +610,9 @@ class ProductionProcessTest {
                 "the existing job retains its exact worker and materialized wheat rather than becoming an admission candidate again");
         assertEquals(SceneCauseKind.PRODUCTION_WORK, FrontierSceneAdmission.genericAmbientAdmission(starving).preLeaseSceneCause(workerId).orElseThrow(),
                 "restart recovery must recreate only the retained worker body for its owned workshop hand-off");
+        assertEquals(FrontierProductionWorkSceneSupport.candidate(starving, retained).orElseThrow().demandPosition(),
+                FrontierSceneAdmission.genericAmbientAdmission(starving).preLeaseDemandAnchor(workerId).orElseThrow(),
+                "the existing workshop candidate supplies the physical hand-off demand anchor, not the historical worker cursor");
         assertTrue(FrontierSceneAdmission.permitsPreLeaseAmbientHandoff(starving, workerId));
     }
 

@@ -266,6 +266,10 @@ class ResourceSiteHarvestTraversalTest extends ResourceSiteHarvestProcessTest {
         assertEquals(PhysicalIntentStatus.PREPARED, harvesting.physicalIntents().get(prepared.intent().id()).status());
         assertFalse(harvesting.inventory().items().containsKey(output.id()), "canonical inventory must wait for Minecraft receipt");
         assertEquals(StrategicTaskStatus.ACTIVE, harvesting.strategicPlans().tasks().get(task.id()).status());
+        FrontierResourceSiteHarvestSceneSupport.Candidate candidate = FrontierResourceSiteHarvestSceneSupport.candidate(harvesting, started.job()).orElseThrow();
+        assertEquals(candidate.cropSlot(), FrontierSceneAdmission.genericAmbientAdmission(harvesting)
+                        .preLeaseDemandAnchor(started.job().workerId()).orElseThrow(),
+                "the retained field candidate, not the farmer's historical cursor, owns HOT hand-off demand");
         assertTrue(FrontierResourceSiteHarvestSceneSupport.candidate(harvesting, started.job()).isPresent(),
                 "the traversal-only profile may acquire a HOT cursor lease without beginning its crop effect");
         assertTrue(FrontierSceneAdmission.reservedFromGenericAmbient(harvesting, started.job().workerId()),
