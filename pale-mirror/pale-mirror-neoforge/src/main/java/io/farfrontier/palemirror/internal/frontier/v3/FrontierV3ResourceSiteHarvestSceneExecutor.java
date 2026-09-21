@@ -227,7 +227,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 if (targetState == io.farfrontier.palemirror.frontier.v3.model.SemanticTraversalArrival.Disposition.IN_PROGRESS) {
                     keepTraversalPhysicallyActive(level, worker, current, target);
                 } else {
-                    conflict(level, runtime, lease, "field-work-route-" + FrontierV3SemanticMovement.detail(targetState));
+                    routeConflict(level, runtime, lease, site, target, targetState);
                 }
             } else {
                 conflict(level, runtime, lease, "field-work-cursor-" + FrontierV3SemanticMovement.detail(
@@ -304,6 +304,25 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         worker.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
         submitBound(runtime, "resource-site-harvest-crop-prepared", lease.id().value(),
                 new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex()), dueBinding.orElseThrow());
+    }
+
+    private static void routeConflict(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                      SceneLease lease, io.farfrontier.palemirror.frontier.v3.model.ResourceSite site,
+                                      io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor target,
+                                      io.farfrontier.palemirror.frontier.v3.model.SemanticTraversalArrival.Disposition disposition) {
+        io.farfrontier.palemirror.frontier.v3.model.ResourceSiteDiagnosticProducer producer = switch (disposition) {
+            case BLOCKED_SUPPORT -> io.farfrontier.palemirror.frontier.v3.model.ResourceSiteDiagnosticProducer.FIELD_ROUTE_BLOCKED_SUPPORT;
+            case BLOCKED_CLEARANCE -> io.farfrontier.palemirror.frontier.v3.model.ResourceSiteDiagnosticProducer.FIELD_ROUTE_BLOCKED_CLEARANCE;
+            case BLOCKED_MEDIUM -> io.farfrontier.palemirror.frontier.v3.model.ResourceSiteDiagnosticProducer.FIELD_ROUTE_BLOCKED_MEDIUM;
+            case OFF_CONTRACT -> io.farfrontier.palemirror.frontier.v3.model.ResourceSiteDiagnosticProducer.FIELD_ROUTE_OFF_CONTRACT;
+            case ARRIVED, IN_PROGRESS -> throw new IllegalArgumentException("route conflict needs a blocked semantic disposition");
+        };
+        var checkpoint = runtime.canonicalState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
+        boolean accepted = FrontierV3ResourceSiteConflictExecutor.recordConflict(level, runtime, FrontierV3ResourceSiteLedger.get(level),
+                site, target.support(), producer, new io.farfrontier.palemirror.frontier.v3.api.CommandId(
+                        "executor:resource-site-field-route-" + producer.wireTag() + "-r" + checkpoint.revision().value()
+                                + "-p" + new net.minecraft.core.BlockPos(target.x(), target.y(), target.z()).asLong()));
+        if (!accepted) conflict(level, runtime, lease, "field-work-route-" + FrontierV3SemanticMovement.detail(disposition));
     }
 
     private static void keepTraversalPhysicallyActive(ServerLevel level, Mob worker,

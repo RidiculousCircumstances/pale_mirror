@@ -129,6 +129,22 @@ class FrontierReadabilityPlanTest {
     }
 
     @Test
+    void namesTheExactSharedTraversalBlockerInsteadOfLeavingHarvestActive() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:field-board-route"), 91L));
+        ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).values().iterator().next();
+        ResourceSiteLifecycle lifecycle = state.resourceSites().site(site.id());
+        ResourceSiteConflictObserved conflict = new ResourceSiteConflictObserved(site.id(), site.cropSlots().getFirst(),
+                ResourceSiteDiagnosticProducer.FIELD_ROUTE_BLOCKED_SUPPORT);
+        FrontierWorldState conflicted = state.withResourceSites(state.resourceSites().replace(lifecycle.conflicted(
+                ResourceSiteConflictDisposition.terminal(site.cropSlots().getFirst(), ResourceSiteConflictReason.FIELD_ROUTE_BLOCKED_SUPPORT,
+                        ResourceSiteConflictIncidents.first(lifecycle, conflict)))));
+
+        FrontierObjectBoard board = FrontierReadabilityPlan.compile(conflicted).boards().get(site.id());
+        assertEquals(FrontierObjectBoard.Tone.WARNING, board.tone());
+        assertTrue(board.text().endsWith("HARVEST BLOCKED · ROUTE SUPPORT MISSING"));
+    }
+
+    @Test
     void namesRestartRecoveryInsteadOfClaimingThatAnEligibleFarmerIsMissing() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:field-restart-recovery-board"), 91L));
         Settlement settlement = state.bootstrap().settlements().getFirst();

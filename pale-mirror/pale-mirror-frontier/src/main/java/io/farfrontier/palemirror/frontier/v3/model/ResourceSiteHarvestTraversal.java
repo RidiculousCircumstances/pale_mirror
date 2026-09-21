@@ -110,6 +110,12 @@ public final class ResourceSiteHarvestTraversal {
             blocked.addAll(FrontierSettlementActorSlots.intactStructureOccupancy(bootstrap.terrain(), settlement.structures()));
         }
         blocked.addAll(FrontierGrayboxPlan.intactOrganOccupancy(bootstrap.hive().organs()));
+        // Irrigation is a managed water source at the field perimeter, not pedestrian ground.
+        // Retaining it as an ordinary approach cell produces a route which the shared physical
+        // arrival provider must (correctly) reject as unsupported.  Make that impossible in the
+        // immutable compiler rather than weakening the provider or teaching HOT a coordinate
+        // exception.
+        blocked.addAll(site.irrigationSlots());
         // Crop supports are workstations, never a shortcut through a field.  The exact first
         // station is the declared endpoint and is therefore intentionally left available.
         for (BlockPosition crop : site.cropSlots()) {

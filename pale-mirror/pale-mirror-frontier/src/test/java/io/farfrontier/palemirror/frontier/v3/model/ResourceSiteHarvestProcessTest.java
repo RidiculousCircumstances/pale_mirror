@@ -378,6 +378,27 @@ class ResourceSiteHarvestProcessTest {
     }
 
     @Test
+    void sharedTraversalProviderBlockerMayNameOnlyTheActiveJobsRetainedSupport() {
+        HotHarvest hot = hotHarvestAfterColdSteps(0);
+        ResourceSiteHarvestJob job = hot.job();
+        ResourceSite site = FrontierResourceSitePlan.compile(hot.state().bootstrap()).get(hot.site());
+        BlockPosition retainedApproachSupport = job.traversal().linearCorridorSurfaces().stream()
+                .map(SurfaceAnchor::support).filter(position -> !site.managedSlots().contains(position)).findFirst().orElseThrow();
+        ResourceSiteConflictObserved observed = new ResourceSiteConflictObserved(hot.site(), retainedApproachSupport,
+                ResourceSiteDiagnosticProducer.FIELD_ROUTE_BLOCKED_SUPPORT);
+
+        FrontierWorldState conflicted = ResourceSiteProcess.reduceConflict(hot.state(), hot.site(), observed);
+
+        ResourceSiteConflictDisposition disposition = conflicted.resourceSites().site(hot.site()).conflictDisposition().orElseThrow();
+        assertEquals(ResourceSiteConflictReason.FIELD_ROUTE_BLOCKED_SUPPORT, disposition.reason());
+        assertEquals(ResourceSiteConflictSource.SCENE_TRAVERSAL.name(), disposition.incident().source());
+        assertEquals(PhysicalIntentStatus.CONFLICTED, conflicted.physicalIntents().get(job.intentId()).status(),
+                "one exact shared-provider blockage must retire the otherwise-active field claim");
+        assertEquals(SceneLeaseStatus.DRAINING, conflicted.sceneLeases().get(hot.lease().id()).status(),
+                "the former HOT scene must not keep presenting harvest as active after the local blocker is admitted");
+    }
+
+    @Test
     void carrierFenceAmbiguityRetainsItsOwnRecoveryIncidentRatherThanAPlayerOrTerminalRepairFact() {
         HotHarvest hot = hotHarvestAfterColdSteps(0);
         ResourceSiteHarvestJob job = hot.job();

@@ -13,7 +13,11 @@ public enum ResourceSiteDiagnosticProducer {
     WORKER_DIED(6, ResourceSiteConflictReason.WORKER_DIED, ResourceSiteConflictSource.WORKER_DEATH, DiagnosticReason.RESOURCE_SITE_WORKER_DEATH, DiagnosticSubjectKind.HARVEST_WORKER),
     ADAPTER_WRITE_FAILURE(7, ResourceSiteConflictReason.OBSERVED_MANAGED_CELL_MISMATCH, ResourceSiteConflictSource.ADAPTER_WRITE_FAILURE, DiagnosticReason.RESOURCE_SITE_ADAPTER_WRITE_FAILURE, DiagnosticSubjectKind.ADAPTER_BOUNDARY),
     SCENE_CARRIER_FENCE(8, ResourceSiteConflictReason.CARRIER_FENCE_UNRESOLVED, ResourceSiteConflictSource.SCENE_CARRIER_FENCE, DiagnosticReason.RESOURCE_SITE_CARRIER_FENCE_UNRESOLVED, DiagnosticSubjectKind.SCENE_CARRIER),
-    LAWFUL_LIFECYCLE_LAG(9, ResourceSiteConflictReason.OBSERVED_MANAGED_CELL_MISMATCH, ResourceSiteConflictSource.LAWFUL_LIFECYCLE_LAG, DiagnosticReason.RESOURCE_SITE_LAWFUL_LAG, DiagnosticSubjectKind.RESOURCE_SITE_CELL);
+    LAWFUL_LIFECYCLE_LAG(9, ResourceSiteConflictReason.OBSERVED_MANAGED_CELL_MISMATCH, ResourceSiteConflictSource.LAWFUL_LIFECYCLE_LAG, DiagnosticReason.RESOURCE_SITE_LAWFUL_LAG, DiagnosticSubjectKind.RESOURCE_SITE_CELL),
+    FIELD_ROUTE_BLOCKED_SUPPORT(10, ResourceSiteConflictReason.FIELD_ROUTE_BLOCKED_SUPPORT, ResourceSiteConflictSource.SCENE_TRAVERSAL, DiagnosticReason.RESOURCE_SITE_FIELD_ROUTE_SUPPORT_BLOCKED, DiagnosticSubjectKind.RESOURCE_SITE_CELL),
+    FIELD_ROUTE_BLOCKED_CLEARANCE(11, ResourceSiteConflictReason.FIELD_ROUTE_BLOCKED_CLEARANCE, ResourceSiteConflictSource.SCENE_TRAVERSAL, DiagnosticReason.RESOURCE_SITE_FIELD_ROUTE_CLEARANCE_BLOCKED, DiagnosticSubjectKind.RESOURCE_SITE_CELL),
+    FIELD_ROUTE_BLOCKED_MEDIUM(12, ResourceSiteConflictReason.FIELD_ROUTE_BLOCKED_MEDIUM, ResourceSiteConflictSource.SCENE_TRAVERSAL, DiagnosticReason.RESOURCE_SITE_FIELD_ROUTE_MEDIUM_BLOCKED, DiagnosticSubjectKind.RESOURCE_SITE_CELL),
+    FIELD_ROUTE_OFF_CONTRACT(13, ResourceSiteConflictReason.FIELD_ROUTE_OFF_CONTRACT, ResourceSiteConflictSource.SCENE_TRAVERSAL, DiagnosticReason.RESOURCE_SITE_FIELD_ROUTE_OFF_CONTRACT, DiagnosticSubjectKind.RESOURCE_SITE_CELL);
 
     private final int wireTag; private final ResourceSiteConflictReason reason; private final ResourceSiteConflictSource source;
     private final DiagnosticReason diagnosticReason; private final DiagnosticSubjectKind subjectKind;
@@ -34,6 +38,8 @@ public enum ResourceSiteDiagnosticProducer {
             case 1 -> PLAYER_REMOVED; case 2 -> EXPLOSION_DAMAGE; case 3 -> ORDINARY_OBSERVATION_MISMATCH;
             case 4 -> RESTART_OBSERVATION_MISMATCH; case 5 -> PHYSICAL_INTENT_RECOVERY; case 6 -> WORKER_DIED;
             case 7 -> ADAPTER_WRITE_FAILURE; case 8 -> SCENE_CARRIER_FENCE; case 9 -> LAWFUL_LIFECYCLE_LAG;
+            case 10 -> FIELD_ROUTE_BLOCKED_SUPPORT; case 11 -> FIELD_ROUTE_BLOCKED_CLEARANCE;
+            case 12 -> FIELD_ROUTE_BLOCKED_MEDIUM; case 13 -> FIELD_ROUTE_OFF_CONTRACT;
             default -> throw new IllegalArgumentException("unknown resource-site diagnostic producer tag: " + tag);
         };
     }

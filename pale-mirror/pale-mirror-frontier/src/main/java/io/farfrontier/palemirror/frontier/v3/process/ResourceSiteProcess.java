@@ -119,7 +119,8 @@ public final class ResourceSiteProcess {
     public static FrontierWorldState reduceConflict(FrontierWorldState state, SubjectId subject, ResourceSiteConflictObserved conflict) {
         if (!subject.equals(conflict.siteId())) throw new IllegalArgumentException("resource-site conflict has a foreign event owner");
         ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).get(conflict.siteId());
-        if (site == null || !site.managedSlots().contains(conflict.position())) {
+        boolean retainedTraversalSupport = lifecycleTraversalSupport(state, conflict);
+        if (site == null || (!site.managedSlots().contains(conflict.position()) && !retainedTraversalSupport)) {
             throw new IllegalArgumentException("resource-site conflict must name one exact field cell");
         }
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(conflict.siteId());
@@ -166,6 +167,16 @@ public final class ResourceSiteProcess {
                 .sceneLeases(leases)
                 .fencedRecovery(FencedRecoveryPhysicalIntentSupport.transition(state.fencedRecovery(), intent, PhysicalIntentStatus.CONFLICTED,
                         FencedRecoveryAsset.EFFECT)));
+    }
+
+    private static boolean lifecycleTraversalSupport(FrontierWorldState state, ResourceSiteConflictObserved conflict) {
+        if (conflict.producer().source() != ResourceSiteConflictSource.SCENE_TRAVERSAL) return false;
+        ResourceSiteLifecycle lifecycle = state.resourceSites().site(conflict.siteId());
+        return lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
+                .map(ResourceSiteHarvestJob.class::cast)
+                .map(job -> job.traversal().linearCorridorSurfaces().stream()
+                        .anyMatch(surface -> surface.support().equals(conflict.position())))
+                .orElse(false);
     }
 
     public static List<ProposedEvent> planConflict(FrontierWorldState state, ResourceSiteConflictObserved conflict) {

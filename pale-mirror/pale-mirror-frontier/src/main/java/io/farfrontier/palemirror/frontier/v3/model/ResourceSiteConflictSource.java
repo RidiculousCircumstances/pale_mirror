@@ -11,6 +11,8 @@ public enum ResourceSiteConflictSource {
     WORKER_DEATH,
     ADAPTER_WRITE_FAILURE,
     /** A lawful HOT-to-COLD release could not preserve the exact worker carrier. */
-    SCENE_CARRIER_FENCE;
+    SCENE_CARRIER_FENCE,
+    /** The shared semantic movement provider rejected one retained field edge. */
+    SCENE_TRAVERSAL;
     public int wireTag() { return FrontierWireTags.tag(this); }
 }

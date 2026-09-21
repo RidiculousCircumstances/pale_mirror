@@ -206,6 +206,10 @@ public final class FrontierV3LocalNavigationGameTests {
         helper.getLevel().setBlock(support, Blocks.WHITE_CARPET.defaultBlockState(), 3);
         helper.assertTrue(FrontierV3SemanticMovement.targetIsNavigable(helper.getLevel(), worker, target),
                 "a declared carpet support must remain a valid semantic pedestrian target");
+        helper.getLevel().setBlock(support, Blocks.FARMLAND.defaultBlockState(), 3);
+        helper.getLevel().setBlock(support.above(), Blocks.WHEAT.defaultBlockState(), 3);
+        helper.assertTrue(FrontierV3SemanticMovement.targetIsNavigable(helper.getLevel(), worker, target),
+                "a normal crop workstation must use its farmland support and collision-clear crop body cell");
         helper.getLevel().setBlock(support.above(), Blocks.WATER.defaultBlockState(), 3);
         helper.assertFalse(FrontierV3SemanticMovement.targetIsNavigable(helper.getLevel(), worker, target),
                 "water in an ordinary pedestrian body cell is an explicit undeclared-medium block");

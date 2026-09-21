@@ -217,6 +217,9 @@ class ResourceSiteHarvestTraversalTest extends ResourceSiteHarvestProcessTest {
                         .filter(surface -> !farmlandByColumn.containsKey(column(surface.x(), surface.z())))
                         .allMatch(surface -> surface.y() == state.bootstrap().terrain().supportYAt(surface.x(), surface.z())),
                 "the field approach retains real terrain support outside crop columns rather than a virtual air layer");
+        assertTrue(traversal.linearCorridorSurfaces().stream()
+                        .noneMatch(surface -> site.irrigationSlots().contains(surface.support())),
+                "a normal field approach must never retain an irrigation water column as pedestrian ground");
         assertEquals(site.cropSlots().stream().map(crop -> new SurfaceAnchor(crop.offset(0, -1, 0))).toList(),
                 traversal.linearCorridorSurfaces().subList(traversal.linearCorridorSurfaces().size() - site.cropSlots().size(),
                         traversal.linearCorridorSurfaces().size()),

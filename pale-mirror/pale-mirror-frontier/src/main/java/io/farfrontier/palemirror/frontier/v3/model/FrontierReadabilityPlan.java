@@ -313,8 +313,18 @@ public final class FrontierReadabilityPlan {
             case GROWING -> "GROWING · STAGE " + lifecycle.growthStage() + "/" + ResourceSiteLifecycle.MATURE_STAGE;
             case READY -> readyFieldText(state, site);
             case HARVESTING -> "HARVEST IN PROGRESS";
-            case CONFLICT -> "DAMAGED · REPAIR NEEDED";
+            case CONFLICT -> conflictFieldText(lifecycle);
             case DESTROYED -> "LOST · REBUILD NEEDED";
+        };
+    }
+
+    private static String conflictFieldText(ResourceSiteLifecycle lifecycle) {
+        return switch (lifecycle.conflictDisposition().orElseThrow().reason()) {
+            case FIELD_ROUTE_BLOCKED_SUPPORT -> "HARVEST BLOCKED · ROUTE SUPPORT MISSING";
+            case FIELD_ROUTE_BLOCKED_CLEARANCE -> "HARVEST BLOCKED · ROUTE OBSTRUCTED";
+            case FIELD_ROUTE_BLOCKED_MEDIUM -> "HARVEST BLOCKED · WATER ON FIELD ROUTE";
+            case FIELD_ROUTE_OFF_CONTRACT -> "HARVEST BLOCKED · WORKER OFF FIELD ROUTE";
+            default -> "DAMAGED · REPAIR NEEDED";
         };
     }
 
