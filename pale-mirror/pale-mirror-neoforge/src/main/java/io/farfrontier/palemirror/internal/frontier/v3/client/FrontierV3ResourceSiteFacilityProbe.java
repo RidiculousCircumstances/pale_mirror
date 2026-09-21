@@ -6,7 +6,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CropBlock;
 
-/** Exhaustive local-client read of a complete 8x8 COLD wheat facility. */
+/** Exhaustive local-client read of the current exact 8x8 resource-site facility. */
 final class FrontierV3ResourceSiteFacilityProbe {
     record Result(boolean current, int farmland, int air, int wheat, int water) { }
 
@@ -23,6 +23,7 @@ final class FrontierV3ResourceSiteFacilityProbe {
                 || first.get("z").getAsInt() != last.get("z").getAsInt() || last.get("y").getAsInt() != y) {
             throw new IllegalStateException("site diagnostic has non-8x8 field geometry for " + siteId);
         }
+        int expectedStage = expectedCropStage(site, siteId);
         int farmland = 0, air = 0, wheat = 0, water = 0;
         for (int x = minX; x < minX + 8; x++) for (int z = minZ; z < minZ + 8; z++) {
             BlockPos crop = new BlockPos(x, y, z); BlockPos soil = crop.below();
@@ -30,9 +31,9 @@ final class FrontierV3ResourceSiteFacilityProbe {
             if (minecraft.level.getBlockState(soil).is(Blocks.FARMLAND)) farmland++;
             int slot = (x - minX) * 8 + (((x - minX) & 1) == 0 ? z - minZ : minZ + 7 - z);
             if (minecraft.level.getBlockState(crop).isAir()) air++;
-            if (minecraft.level.getBlockState(crop).equals(Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 7))) wheat++;
+            if (minecraft.level.getBlockState(crop).equals(Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, expectedStage))) wheat++;
             if (minecraft.level.getBlockState(crop).isAir() != (slot < completed)) return new Result(false, farmland, air, wheat, water);
-            if (slot >= completed && !minecraft.level.getBlockState(crop).equals(Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 7))) return new Result(false, farmland, air, wheat, water);
+            if (slot >= completed && !minecraft.level.getBlockState(crop).equals(Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, expectedStage))) return new Result(false, farmland, air, wheat, water);
         }
         for (BlockPos waterSource : new BlockPos[] {new BlockPos(minX + 2, y - 1, minZ - 1), new BlockPos(minX + 6, y - 1, minZ - 1),
                 new BlockPos(minX + 2, y - 1, minZ + 8), new BlockPos(minX + 6, y - 1, minZ + 8)}) {
@@ -40,6 +41,16 @@ final class FrontierV3ResourceSiteFacilityProbe {
             if (minecraft.level.getBlockState(waterSource).equals(Blocks.WATER.defaultBlockState())) water++;
         }
         return new Result(farmland == 64 && air == completed && wheat == 64 - completed && water == 4, farmland, air, wheat, water);
+    }
+
+    /** The local block read must agree with the diagnostic's current lifecycle stage, not silently require maturity. */
+    static int expectedCropStage(JsonObject site, String siteId) {
+        if (!site.has("growthStage") || !site.get("growthStage").isJsonPrimitive()) {
+            throw new IllegalStateException("site diagnostic lacks current growth stage for " + siteId);
+        }
+        int stage = site.get("growthStage").getAsInt();
+        if (stage < 0 || stage > 7) throw new IllegalStateException("site diagnostic has invalid growth stage for " + siteId + ": " + stage);
+        return stage;
     }
 
     /** Resolves the finite structural anchor vocabulary allowed by the pilot schema. */

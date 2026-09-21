@@ -27,6 +27,16 @@ class FrontierV3TestPilotScenarioTest {
     }
 
     @Test
+    void currentFacilityProbeRetainsTheDiagnosedGrowthStageInsteadOfAssumingMaturity() {
+        assertEquals(2, FrontierV3ResourceSiteFacilityProbe.expectedCropStage(JsonParser.parseString("""
+                {"phase":"GROWING","growthStage":2}
+                """).getAsJsonObject(), "site:7-wheat-field"));
+        assertThrows(IllegalStateException.class, () -> FrontierV3ResourceSiteFacilityProbe.expectedCropStage(JsonParser.parseString("""
+                {"phase":"GROWING"}
+                """).getAsJsonObject(), "site:7-wheat-field"));
+    }
+
+    @Test
     void rejectsUnknownActionBeforeTheVisibleClientConnects() {
         assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"rewrite_canon"}]}"""));
