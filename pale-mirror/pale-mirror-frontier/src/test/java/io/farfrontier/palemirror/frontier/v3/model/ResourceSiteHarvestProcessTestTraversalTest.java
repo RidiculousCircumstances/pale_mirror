@@ -85,6 +85,41 @@ class ResourceSiteHarvestTraversalTest extends ResourceSiteHarvestProcessTest {
     }
 
     @Test
+    void firstEpochMayDeclareItsExactIdleHotPatrolForSceneHandoff() {
+        FrontierWorldState state = ready(initial()); SubjectId site = new SubjectId("site:1-wheat-field");
+        SubjectId settlement = new SubjectId("settlement:1");
+        SubjectId farmer = FrontierWorldStateSupport.availableFieldResident(state, settlement,
+                ResidentProfession.AGRICULTURAL_WORKER).orElseThrow().id();
+        FrontierWorldState tasked = harvestTask(state, site, 22_000L); StrategicTask task = onlyHarvestTask(tasked);
+        BodyPosition body = tasked.actorLocations().get(farmer).body();
+        AmbientActorLease lease = AmbientActorProcess.nextLease(tasked, farmer, new SimInstant(22_050L));
+        FrontierWorldState hot = AmbientLeaseStateProcess.transition(
+                AmbientLeaseStateProcess.prepare(tasked, lease), farmer, AmbientLeaseStatus.HOT);
+        hot = AmbientLeaseStateProcess.retarget(hot, farmer, AmbientGoalKind.PATROL, body);
+
+        FrontierWorldState foreignWork = AmbientLeaseStateProcess.retarget(hot, farmer, AmbientGoalKind.WORK, body);
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> foreignPlan = ResourceSiteHarvestProcess.plan(foreignWork,
+                ResourceSiteHarvestProcess.start(task, 22_100L));
+        assertEquals(1, foreignPlan.size(), "the first epoch must not capture an unowned WORK purpose");
+        assertInstanceOf(ScheduleEffect.Rescheduled.class, foreignPlan.getFirst().payload());
+
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planned = ResourceSiteHarvestProcess.plan(hot,
+                ResourceSiteHarvestProcess.start(task, 22_100L));
+
+        assertEquals(4, planned.size(), "the first READY epoch must transfer its exact idle body rather than retry forever");
+        ResourceSiteHarvestStarted started = assertInstanceOf(ResourceSiteHarvestStarted.class, planned.get(1).payload());
+        assertEquals(farmer, started.job().workerId());
+        assertEquals(body, started.job().traversal().linearCorridorSurfaces().getFirst().standingBody());
+        FrontierWorldState active = StrategicObjectiveProcess.reduceTaskTransition(hot, settlement,
+                (StrategicTaskTransition) planned.getFirst().payload());
+        FrontierWorldState harvesting = ResourceSiteHarvestProcess.reduceStarted(active, site, started);
+        harvesting = ResourceSiteHarvestProcess.reducePrepared(harvesting, site,
+                ((PhysicalIntentPrepared) planned.get(2).payload()).intent());
+        assertEquals(farmer, FrontierResourceSiteHarvestSceneSupport.candidate(harvesting, started.job()).orElseThrow().workerId(),
+                "the declared first epoch immediately exposes the one exact ambient-to-scene handoff candidate");
+    }
+
+    @Test
     void retainedSuccessorMayDeclareItsExactHotFarmerForSceneHandoff() {
         FrontierWorldState state = ready(initial()); SubjectId site = new SubjectId("site:1-wheat-field");
         SubjectId settlement = new SubjectId("settlement:1");
