@@ -60,6 +60,26 @@ class FrontierV3ResourceSiteExecutorTest {
     }
 
     @Test
+    void initialProjectionPairsEveryTilledSoilCellWithItsCropBeforeTheNextTurn() {
+        ArrayList<BlockPosition> slots = new ArrayList<>();
+        for (int x = 160; x < 168; x++) for (int z = 320; z < 328; z++) slots.add(new BlockPosition(x, 64, z));
+        ResourceSite site = new ResourceSite(new SubjectId("site:99-wheat-field"), new SubjectId("settlement:99"),
+                new SubjectId("structure:99-farm"), ResourceSiteKind.WHEAT_FIELD, slots);
+
+        var order = FrontierV3ResourceSiteExecutor.initialProjectionSlotOrder(site);
+        assertEquals(132, order.size(), "the durable initial cursor retains the same exact footprint");
+        for (int index = 0; index < site.irrigationSlots().size(); index++) {
+            assertEquals(site.irrigationSlots().get(index), order.get(index));
+        }
+        for (int index = 0; index < site.cropSlots().size(); index++) {
+            int first = site.irrigationSlots().size() + index * 2;
+            assertEquals(site.cropSlots().get(index).offset(0, -1, 0), order.get(first),
+                    "a newly tilled cell is immediately followed by its own crop write");
+            assertEquals(site.cropSlots().get(index), order.get(first + 1));
+        }
+    }
+
+    @Test
     void exactEarlierGrowthClaimIsARecoverablePredecessorOfColdSuccessorHarvest() {
         var intent = new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:site-projection-7-wheat-field");
         var growth = new FrontierV3ResourceSiteLedger.Claim(intent, FrontierV3ResourceSiteLedger.Status.ACTIVE, 0, 0);

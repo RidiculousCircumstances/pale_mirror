@@ -274,13 +274,36 @@ final class FrontierV3ResourceSiteExecutor {
         workBySite.remove(site.id());
         return exact ? StageProjectionResult.UPDATED : StageProjectionResult.CONFLICT;
     }
+    /**
+     * An initial field is a live vanilla surface while its bounded cursor is advancing.  Do not
+     * leave a whole row of newly tilled soil bare until a later turn: vanilla may turn that
+     * soil back into dirt before the durable writer reaches the corresponding crop.  Each
+     * soil/crop pair therefore crosses the physical boundary together, after the four fixed
+     * irrigation cells.  The fixed even write budget preserves that pairing across turns.
+     */
     private static List<FieldWrite> initialWrites(ResourceSite site, int desiredStage, int completedCropSlots) {
         List<FieldWrite> writes = new java.util.ArrayList<>();
-        site.irrigationSlots().forEach(position -> writes.add(new FieldWrite(position, Blocks.WATER.defaultBlockState())));
-        site.soilSlots().forEach(position -> writes.add(new FieldWrite(position, Blocks.FARMLAND.defaultBlockState())));
-        for (int index = 0; index < site.cropSlots().size(); index++) writes.add(new FieldWrite(site.cropSlots().get(index),
-                desiredStage == ResourceSiteLifecycle.MATURE_STAGE && index < completedCropSlots ? Blocks.AIR.defaultBlockState() : crop(desiredStage)));
+        for (BlockPosition position : initialProjectionSlotOrder(site)) {
+            if (site.irrigationSlots().contains(position)) writes.add(new FieldWrite(position, Blocks.WATER.defaultBlockState()));
+            else if (site.soilSlots().contains(position)) writes.add(new FieldWrite(position, Blocks.FARMLAND.defaultBlockState()));
+            else {
+                int index = site.cropSlots().indexOf(position);
+                writes.add(new FieldWrite(position, desiredStage == ResourceSiteLifecycle.MATURE_STAGE && index < completedCropSlots
+                        ? Blocks.AIR.defaultBlockState() : crop(desiredStage)));
+            }
+        }
         return List.copyOf(writes);
+    }
+
+    /** Pure ordered physical ownership boundary for an INITIAL field cursor. */
+    static List<BlockPosition> initialProjectionSlotOrder(ResourceSite site) {
+        List<BlockPosition> order = new java.util.ArrayList<>();
+        order.addAll(site.irrigationSlots());
+        for (BlockPosition cropSlot : site.cropSlots()) {
+            order.add(cropSlot.offset(0, -1, 0));
+            order.add(cropSlot);
+        }
+        return List.copyOf(order);
     }
     private static void beginProjection(FrontierV3ResourceSiteLedger ledger, FrontierWorldState state, ResourceSite site,
                                         FieldProjectionWork work) {
