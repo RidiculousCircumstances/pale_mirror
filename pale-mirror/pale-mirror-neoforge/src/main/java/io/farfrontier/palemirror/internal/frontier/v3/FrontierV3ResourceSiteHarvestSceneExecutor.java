@@ -243,10 +243,29 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             }
             return;
         }
-        if (!job.atCurrentCropStation() || !FrontierV3SemanticMovement.arrived(level, worker,
-                job.traversal().linearCorridorSurfaces().get(job.traversalCursor()))) {
-            conflict(level, runtime, lease, "field-work-station-" + FrontierV3SemanticMovement.detail(
-                    FrontierV3SemanticMovement.at(level, worker, job.traversal().linearCorridorSurfaces().get(job.traversalCursor())))); return;
+        var station = job.traversal().linearCorridorSurfaces().get(job.traversalCursor());
+        var stationState = FrontierV3SemanticMovement.at(level, worker, station);
+        if (!job.atCurrentCropStation() || stationState != io.farfrontier.palemirror.frontier.v3.model.SemanticTraversalArrival.Disposition.ARRIVED) {
+            // A checkpoint command records the exact observed body as an integer cell, while
+            // vanilla can retain that same body on the immediately preceding support for one
+            // more physical turn.  The next scene turn must therefore retain the one already
+            // committed edge long enough to bring that body to its current exact station.  It
+            // may not select a new support, advance the cursor, or turn this into a radius/Y
+            // exception: the only permitted latitude is the immutable predecessor/current
+            // edge that just produced this cursor.
+            if (job.atCurrentCropStation() && job.traversalCursor() > 0) {
+                var previous = job.traversal().linearCorridorSurfaces().get(job.traversalCursor() - 1);
+                if (FrontierV3SemanticMovement.withinRetainedEdgeEnvelope(level, worker, previous, station)) {
+                    keepTraversalPhysicallyActive(level, worker, previous, station);
+                    return;
+                }
+            }
+            // A body outside that one retained edge, or a blocked current station, is a
+            // resource-site-owned physical contradiction.  Record the exact local
+            // disposition before the scene closes so the board can never keep presenting a
+            // generic active harvest with a conflicted lease hidden underneath it.
+            routeConflict(level, runtime, lease, site, station, stationState);
+            return;
         }
         var intent = state.physicalIntents().get(job.intentId());
         if (intent == null || intent.status() == PhysicalIntentStatus.CONFIRMED

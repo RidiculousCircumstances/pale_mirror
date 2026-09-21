@@ -87,6 +87,16 @@ class FrontierV3ResourceSiteHarvestSceneExecutorTest {
     }
 
     @Test
+    void completedCursorRetainsOnlyItsImmediatelyPrecedingEdgeUntilTheBodyReachesItsStation() {
+        SurfaceAnchor previous = SurfaceAnchor.at(137, 63, -7);
+        SurfaceAnchor current = SurfaceAnchor.at(137, 63, -6);
+        assertTrue(FrontierV3SemanticMovement.withinRetainedEdgeEnvelope(new BlockPos(137, 63, -7), previous, current),
+                "a just-committed cursor may still physically occupy its exact predecessor support for one local turn");
+        assertFalse(FrontierV3SemanticMovement.withinRetainedEdgeEnvelope(new BlockPos(135, 63, -7), previous, current),
+                "the post-checkpoint bridge remains confined to the same immutable predecessor/current edge");
+    }
+
+    @Test
     void typedPreLeaseCannotFreezeColdTraversalOutsidePhysicalDemand() {
         assertFalse(FrontierV3PreLeaseDemandGate.holdsForTypedHandoff(true, false),
                 "an unloaded candidate has no physical body authority and must release COLD");
