@@ -340,11 +340,17 @@ public final class FrontierReadabilityPlan {
                 .map(ResidentProfile::id).map(state.ambientLeases()::get)
                 .anyMatch(lease -> lease != null && lease.status() == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART);
         if (unknownFarmer) return "READY TO HARVEST · FARMER RECOVERY IN PROGRESS";
+        boolean pendingExactHarvest = state.strategicPlans().tasks().values().stream()
+                .anyMatch(task -> task.ownerId().equals(site.settlementId())
+                        && task.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE
+                        && task.resourceSiteTarget().equals(java.util.Optional.of(site.id()))
+                        && task.status() == StrategicTaskStatus.PENDING);
+        if (pendingExactHarvest) return "READY TO HARVEST · HARVEST START PENDING";
         boolean facilityLaneActive = state.strategicPlans().objectives().values().stream()
                 .anyMatch(objective -> objective.ownerId().equals(site.settlementId())
                         && objective.lane() == StrategicObjectiveLane.FACILITY
                         && objective.status() == StrategicObjectiveStatus.ACTIVE);
-        if (facilityLaneActive) return "READY TO HARVEST · HARVEST LANE ACTIVE";
+        if (facilityLaneActive) return "READY TO HARVEST · FACILITY LANE BUSY";
         if (livingFarmers > 0 && !workCapableFarmer) return "READY TO HARVEST · FARMERS STARVING\nCHECK DEPOT FOOD";
         return FrontierWorldStateSupport.availableFieldResident(state, site.settlementId(), ResidentProfession.AGRICULTURAL_WORKER).isPresent()
                 ? "READY TO HARVEST · FARMER ASSIGNMENT PENDING"

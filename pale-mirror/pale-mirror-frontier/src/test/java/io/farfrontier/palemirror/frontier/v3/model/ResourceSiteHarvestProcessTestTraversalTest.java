@@ -103,12 +103,18 @@ class ResourceSiteHarvestTraversalTest extends ResourceSiteHarvestProcessTest {
         AmbientActorLease lease = AmbientActorProcess.nextLease(tasked, farmer, new SimInstant(22_050L));
         FrontierWorldState hot = AmbientLeaseStateProcess.prepare(tasked, lease);
         hot = AmbientLeaseStateProcess.transition(hot, farmer, AmbientLeaseStatus.HOT);
-        hot = AmbientLeaseStateProcess.retarget(hot, farmer, AmbientGoalKind.WORK, body);
+        hot = AmbientLeaseStateProcess.retarget(hot, farmer, AmbientGoalKind.PATROL, body);
+
+        FrontierWorldState guarded = AmbientLeaseStateProcess.retarget(hot, farmer, AmbientGoalKind.GUARD, body);
+        List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> guardedPlan = ResourceSiteHarvestProcess.plan(guarded,
+                ResourceSiteHarvestProcess.start(task, 22_100L));
+        assertEquals(1, guardedPlan.size(), "a foreign HOT purpose must remain owner-local pending work, not be captured as a farm successor");
+        assertInstanceOf(ScheduleEffect.Rescheduled.class, guardedPlan.getFirst().payload());
 
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planned = ResourceSiteHarvestProcess.plan(hot,
                 ResourceSiteHarvestProcess.start(task, 22_100L));
 
-        assertEquals(4, planned.size(), "the lineage-fenced HOT return must create the scene handoff candidate, not retry forever");
+        assertEquals(4, planned.size(), "the ordinary retained PATROL return must create the scene handoff candidate, not retry forever");
         ResourceSiteHarvestStarted started = assertInstanceOf(ResourceSiteHarvestStarted.class, planned.get(1).payload());
         assertEquals(farmer, started.job().workerId());
         assertEquals(body, started.job().traversal().linearCorridorSurfaces().getFirst().standingBody());

@@ -116,7 +116,13 @@ public final class ResourceSiteHarvestProcess {
         if (lifecycle.harvestLineage().filter(lineage -> lineage.workerId().equals(farmer.id())).isEmpty()) return false;
         AmbientActorLease lease = state.ambientLeases().get(farmer.id());
         var location = state.actorLocations().get(farmer.id());
-        if (lease == null || location == null || lease.status() != AmbientLeaseStatus.HOT || lease.goal() != AmbientGoalKind.WORK
+        // A terminal harvest worker ordinarily returns to its retained station under PATROL.
+        // That is still the exact lifecycle-owned handoff: the successor scene replaces this
+        // ambient goal atomically, before either COLD or HOT advances the new field cursor.
+        // WORK is retained for an already-observed handoff/recovery boundary; no other ambient
+        // purpose may be captured as a harvest successor.
+        if (lease == null || location == null || lease.status() != AmbientLeaseStatus.HOT
+                || (lease.goal() != AmbientGoalKind.PATROL && lease.goal() != AmbientGoalKind.WORK)
                 || !location.body().equals(lease.handoffBody()) || !location.body().equals(lease.goalBody())) return false;
         return state.sceneLeases().values().stream().noneMatch(scene -> scene.status() != SceneLeaseStatus.CLOSED
                 && scene.members().stream().anyMatch(member -> member.actorId().equals(farmer.id())));

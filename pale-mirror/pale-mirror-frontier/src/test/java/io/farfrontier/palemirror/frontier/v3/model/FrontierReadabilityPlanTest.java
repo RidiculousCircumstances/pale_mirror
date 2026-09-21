@@ -190,6 +190,31 @@ class FrontierReadabilityPlanTest {
     }
 
     @Test
+    void namesAnExactPendingHarvestStartInsteadOfClaimingTheWholeFacilityLaneIsActive() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:board-harvest-start-pending"), 91L));
+        Settlement settlement = state.bootstrap().settlements().getFirst();
+        ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).get(new SubjectId("site:1-wheat-field"));
+        ResourceSiteLifecycle ready = new ResourceSiteLifecycle(site.id(), ResourceSitePhase.READY, 2L,
+                ResourceSiteLifecycle.MATURE_STAGE, java.util.Optional.empty(), java.util.Optional.empty(), java.util.Optional.empty());
+        StrategicObjective objective = new StrategicObjective(new SubjectId("objective:1-harvest"), settlement.id(),
+                StrategicObjectiveKind.SETTLEMENT_HARVEST_RESOURCE_SITE, java.util.Optional.empty(), java.util.Optional.of(site.id()),
+                1, StrategicObjectiveStatus.ACTIVE);
+        StrategicTask task = new StrategicTask(new SubjectId("task:1-harvest"), objective.id(), settlement.id(),
+                StrategicTaskKind.HARVEST_RESOURCE_SITE, java.util.Optional.empty(), java.util.Optional.empty(), java.util.Optional.of(site.id()),
+                java.util.List.of(StrategicTaskRequirement.ACTIVE_FARM, StrategicTaskRequirement.AVAILABLE_FARMER,
+                        StrategicTaskRequirement.FREE_DEPOT_SLOT), java.util.List.of(),
+                StrategicTaskStatus.PENDING);
+        FrontierWorldState pending = state.withResourceSites(state.resourceSites().replace(ready))
+                .withStrategicPlans(state.strategicPlans().addObjective(objective).addTask(task));
+
+        FrontierObjectBoard board = FrontierReadabilityPlan.compile(pending).boards().get(site.id());
+
+        assertTrue(board.text().endsWith("READY TO HARVEST · HARVEST START PENDING"));
+        assertTrue(!board.text().contains("HARVEST LANE ACTIVE"));
+        assertTrue(!board.text().contains("FARMERS NEEDED"));
+    }
+
+    @Test
     void makesExactSettlementFoodShortageReadableAtTheOwnedDepot() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:board-food-shortage"), 91L));
         Settlement settlement = state.bootstrap().settlements().getFirst();
