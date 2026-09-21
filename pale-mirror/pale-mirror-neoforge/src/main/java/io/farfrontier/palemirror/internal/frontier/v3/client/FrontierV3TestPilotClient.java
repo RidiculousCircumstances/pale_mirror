@@ -54,6 +54,7 @@ public final class FrontierV3TestPilotClient {
     private static boolean runningSetup;
     private static int index;
     private static long actionStartedTick = -1L;
+    private static long actionStartedNanos = -1L;
     private static long anchorResolutionStartedNanos = -1L;
     private static long anchorResolutionLastRequestNanos = -1L;
     private static boolean breaking, placementAttempted;
@@ -286,6 +287,7 @@ public final class FrontierV3TestPilotClient {
         long tick = minecraft.level.getGameTime();
         if (actionStartedTick < 0L) {
             actionStartedTick = tick;
+            actionStartedNanos = System.nanoTime();
             anchorResolutionStartedNanos = System.nanoTime(); anchorResolutionLastRequestNanos = -1L;
             currentCausalMilestone = action.has("causalMilestone") ? action.get("causalMilestone").getAsString() : null;
             diagnosticWaitBaseline = "wait_until_diagnostic".equals(type)
@@ -732,7 +734,7 @@ public final class FrontierV3TestPilotClient {
         long pollNanos = action.has("pollIntervalMs") ? action.get("pollIntervalMs").getAsLong() * 1_000_000L : 1_000_000_000L;
         if (System.nanoTime() - diagnosticWaitRequestNanos >= pollNanos) { minecraft.player.connection.sendCommand("pale_mirror v3 inspect " + view + (id.isBlank() ? "" : " " + id)); diagnosticWaitRequestNanos = System.nanoTime(); }
         long timeoutMs = action.get("timeoutMs").getAsLong();
-        if ((tick - actionStartedTick) * 50L >= timeoutMs) throw new IllegalStateException("timed out waiting for diagnostic " + view + " " + id + " predicate=" + action.get("expect"));
+        if (elapsedWallMillis() >= timeoutMs) throw new IllegalStateException("timed out waiting for diagnostic " + view + " " + id + " predicate=" + action.get("expect"));
     }
     /** Waits for the server-owned terminal receipt before allowing a following visible action. */
     private static void waitForFastForward(Minecraft minecraft, JsonObject action) {
@@ -867,7 +869,7 @@ public final class FrontierV3TestPilotClient {
             if (action.has("workerId")) minecraft.player.connection.sendCommand("pale_mirror v3 inspect actor " + action.get("workerId").getAsString());
         }
         long timeoutMs = action.get("timeoutMs").getAsLong();
-        if ((tick - actionStartedTick) * 50L >= timeoutMs) {
+        if (elapsedWallMillis() >= timeoutMs) {
             throw new IllegalStateException("timed out waiting for confirmed harvest site=" + siteId + " intent=" + intentId + " item=" + itemId);
         }
     }
@@ -916,8 +918,9 @@ public final class FrontierV3TestPilotClient {
         if ((tick - actionStartedTick) * 50L >= action.get("timeoutMs").getAsLong()) throw new IllegalStateException("fixture preconditions did not converge: " + checks);
     }
     private static void timeout(Minecraft minecraft, JsonObject action, String detail) {
-        if ((minecraft.level.getGameTime() - actionStartedTick) * 50L >= action.get("timeoutMs").getAsLong()) throw new IllegalStateException(detail);
+        if (elapsedWallMillis() >= action.get("timeoutMs").getAsLong()) throw new IllegalStateException(detail);
     }
+    private static long elapsedWallMillis() { return actionStartedNanos < 0L ? 0L : (System.nanoTime() - actionStartedNanos) / 1_000_000L; }
     private static void look(Minecraft minecraft, BlockPos target) {
         look(minecraft, Vec3.atCenterOf(target));
     }
@@ -981,7 +984,7 @@ public final class FrontierV3TestPilotClient {
         PaleMirrorMod.LOGGER.info("PMV3_PILOT complete {} step={} type={}", phase, index + 1, type);
         int completedAction = runningSetup ? 0 : index + 1;
         JsonObject reachedFrame = runningSetup ? null : frameAfter(completedAction);
-        index++; actionStartedTick = -1L; anchorResolutionStartedNanos = -1L; anchorResolutionLastRequestNanos = -1L;
+        index++; actionStartedTick = -1L; actionStartedNanos = -1L; anchorResolutionStartedNanos = -1L; anchorResolutionLastRequestNanos = -1L;
         currentCausalMilestone = null; breaking = false; placementAttempted = false;
         visitSent = false; visitChunkReadyTick = -1L; visitChunkReadyNanos = -1L; visitIngress = null; visitHandshakeArmed = false; visitHandshakeBaseline = null; containerOpenAttempted = false; quickMoveAttempted = false; inspectSent = false; inspectBaseline = null;
         fastForwardSent = false; fastForwardBaseline = null; releaseProjectionBaseline = null;
