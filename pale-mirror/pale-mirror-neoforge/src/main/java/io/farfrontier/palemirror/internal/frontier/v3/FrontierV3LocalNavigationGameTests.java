@@ -10,6 +10,7 @@ import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.monster.Zombie;
+import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
@@ -400,7 +401,7 @@ public final class FrontierV3LocalNavigationGameTests {
             helper.getLevel().setBlock(origin.offset(x, 1, 0), Blocks.AIR.defaultBlockState(), 3);
             helper.getLevel().setBlock(origin.offset(x, 2, 0), Blocks.AIR.defaultBlockState(), 3);
         }
-        Zombie worker = helper.spawnWithNoFreeWill(EntityType.ZOMBIE, new Vec3(2.5D, 1.0D, 2.5D));
+        Villager worker = helper.spawnWithNoFreeWill(EntityType.VILLAGER, new Vec3(2.5D, 1.0D, 2.5D));
         Vec3 localTendingPose = new Vec3(origin.getX() + 4.5D, origin.getY() + 1.0D, origin.getZ() + .5D);
         // One scene submission models the production interval between durable semantic turns.
         // The actuator must not consume it as a three-frame tracker burst followed by a frozen
@@ -461,17 +462,19 @@ public final class FrontierV3LocalNavigationGameTests {
         SurfaceAnchor next = SurfaceAnchor.at(origin.getX() + 1, origin.getY(), origin.getZ());
         LocalNavigationEnvelope envelope = LocalNavigationEnvelope.around(current.standingBody(), next.standingBody());
         Vec3 target = new Vec3(next.x() + .5D, next.y() + 1.0D, next.z() + .5D);
+        // A production field does not travel through empty air: the next exact standing cell
+        // contains the mature crop that it is about to harvest.  Keep that collision shape in
+        // this EntityTick-owned regression instead of proving only an empty corridor.
+        helper.getLevel().setBlock(origin.east().above(), Blocks.WHEAT.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.CropBlock.AGE, 7), 3);
 
         helper.runAtTickTime(1, () -> FrontierV3ControlledMobMotion.tendCurrentCrop(helper.getLevel(), worker, formerCrop));
-        helper.runAtTickTime(2, () -> FrontierV3ControlledMobMotion.advanceAtEntityBoundary(worker));
         // One scene hand-off is deliberately enough.  A later semantic callback must not be
-        // required to keep the post-crop field edge moving.
+        // required to keep the post-crop field edge moving. Do not invoke the actuator directly
+        // below: this proves the ordinary EntityTick.Pre owner that the live field uses.
         helper.runAtTickTime(3, () -> FrontierV3ControlledMobMotion.pursueRetainedSemanticCheckpoint(
                 helper.getLevel(), worker, target, envelope));
-        for (int turn = 4; turn <= 24; turn++) {
-            helper.runAtTickTime(turn, () -> FrontierV3ControlledMobMotion.advanceAtEntityBoundary(worker));
-        }
-        helper.runAtTickTime(25, () -> {
+        helper.runAfterDelay(24, () -> {
             List<FrontierV3ControlledMobMotion.MotionSample> trace = FrontierV3ControlledMobMotion.trace(worker);
             long forwardTurns = trace.stream().filter(value -> value.horizontalVelocity() >= .15D).count();
             boolean inside = trace.stream().allMatch(value -> envelope.contains(support(new Vec3(value.x(), value.y(), value.z()))));

@@ -106,8 +106,12 @@ public final class PaleMirrorEvents {
         PaleMirrorRuntime.forServer(event.getServer()).tick();
     }
 
-    /** Runs before a server Mob tick, so v3 local motion is visible to the normal tracker pass. */
-    @SubscribeEvent
+    /**
+     * Runs before a server Mob tick, so v3 local motion is visible to the normal tracker pass.
+     * This actuator is PM-owned boundary work, rather than vanilla AI: retain it even when a
+     * pack listener cancels that vanilla tick, and run it before such listeners can do so.
+     */
+    @SubscribeEvent(priority = EventPriority.HIGHEST, receiveCanceled = true)
     public static void onEntityTickPre(EntityTickEvent.Pre event) {
         if (event.getEntity() instanceof net.minecraft.world.entity.Mob mob
                 && mob.level() instanceof net.minecraft.server.level.ServerLevel) {
