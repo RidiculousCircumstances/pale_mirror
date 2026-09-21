@@ -217,7 +217,10 @@ final class FrontierV3TestPilotScenario {
     private static boolean validHarvestSemanticsObservation(JsonObject action) {
         return requiredId(action, "siteId", "site:") && wholeWithin(action, "durationTicks", 1, 12_000L)
                 && wholeWithin(action, "sampleEveryTicks", 1, 20L) && wholeWithin(action, "maxCanonicalStallTicks", 20, 12_000L)
-                && timeout(action, 180_000L);
+                // The window is measured in canonical instants.  Diagnostic transport can be
+                // slower than a render tick, so its bounded wall allowance is deliberately
+                // larger than ordinary visual actions.
+                && timeout(action, 600_000L);
     }
 
     private static boolean validContainerItem(JsonObject action) {

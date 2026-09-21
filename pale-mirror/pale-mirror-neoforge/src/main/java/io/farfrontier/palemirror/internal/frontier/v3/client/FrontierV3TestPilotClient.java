@@ -875,12 +875,14 @@ public final class FrontierV3TestPilotClient {
     /**
      * Bounded online oracle for the graphical product preflight.  It intentionally begins with
      * only the current site: its job, worker, intent and lease are read from that exact current
-     * relation, rather than reconstructed from an epoch-shaped identifier.  This observes the
-     * same canonical ticks which produced the scene and fails in the client before a stalled or
+     * relation, rather than reconstructed from an epoch-shaped identifier.  Its duration and
+     * stall bounds are canonical simulation ticks, never the client's render ticks: a slow
+     * diagnostic transport must not turn an in-flight scene into a false rejection.  It fails
+     * in the client before a stalled or
      * falsely-labelled field can be accepted as a player story.
      */
     private static void observeHarvestSemantics(Minecraft minecraft, JsonObject action) {
-        if (harvestSemanticOracle == null) harvestSemanticOracle = new HarvestSemanticOracle(action, actionStartedTick);
+        if (harvestSemanticOracle == null) harvestSemanticOracle = new HarvestSemanticOracle(action);
         HarvestSemanticOracle.Result result = harvestSemanticOracle.sample(minecraft, diagnostics);
         if (result == HarvestSemanticOracle.Result.PASS) {
             harvestSemanticOracle.publish("PASS");
@@ -1074,7 +1076,6 @@ public final class FrontierV3TestPilotClient {
     /** Client-only state; it has no authority to select a worker or mutate canonical work. */
     private static final class HarvestSemanticOracle {
         private final String siteId;
-        private final long startedTick;
         private final long durationTicks;
         private final long sampleEveryTicks;
         private final long maxCanonicalStallTicks;
@@ -1082,13 +1083,15 @@ public final class FrontierV3TestPilotClient {
         private long lastRequestTick = Long.MIN_VALUE;
         private long lastSiteReceipt = -1L;
         private long lastCanonicalInstant = -1L;
-        private long lastProgressInstant = -1L;
+        private long firstCanonicalInstant = -1L;
+        private long lastSemanticProgressInstant = -1L;
+        private long lastPhysicalProgressInstant = -1L;
         private String jobId = "", workerId = "", intentId = "";
-        private String progressSignature = "";
-        private boolean bound, sawCanonicalProgress, sawPhysicalProgress, sawActive;
+        private String semanticSignature = "", physicalSignature = "";
+        private boolean bound, sawCanonicalProgress, sawPhysicalProgress, sawActive, passed;
 
-        HarvestSemanticOracle(JsonObject action, long startedTick) {
-            this.siteId = action.get("siteId").getAsString(); this.startedTick = startedTick;
+        HarvestSemanticOracle(JsonObject action) {
+            this.siteId = action.get("siteId").getAsString();
             this.durationTicks = action.get("durationTicks").getAsLong(); this.sampleEveryTicks = action.get("sampleEveryTicks").getAsLong();
             this.maxCanonicalStallTicks = action.get("maxCanonicalStallTicks").getAsLong();
         }
@@ -1100,11 +1103,7 @@ public final class FrontierV3TestPilotClient {
             if (site != null && site.receiptSequence() > lastSiteReceipt) {
                 lastSiteReceipt = site.receiptSequence(); inspect(site.value(), diagnostics);
             }
-            if (tick - startedTick >= durationTicks) {
-                if (!bound || !sawActive || !sawCanonicalProgress || !sawPhysicalProgress) fail("incomplete_online_observation");
-                return Result.PASS;
-            }
-            return Result.WAIT;
+            return passed ? Result.PASS : Result.WAIT;
         }
 
         private void request(Minecraft minecraft, Map<DiagnosticIdentity, ObservedDiagnostic> diagnostics) {
@@ -1120,13 +1119,15 @@ public final class FrontierV3TestPilotClient {
             long instant = number(site, "instant");
             if (instant <= lastCanonicalInstant) return;
             lastCanonicalInstant = instant;
+            if (firstCanonicalInstant < 0L) firstCanonicalInstant = instant;
             String phase = string(site, "phase"); String active = string(site, "activeWork");
             if (!site.get("conflictDisposition").isJsonNull()) fail("truthful_local_blocker=" + site.get("conflictDisposition"));
             if ("HARVESTING".equals(phase) && active.isBlank()) fail("false_active_without_current_work");
             if (sawActive && active.isBlank() && "GROWING".equals(phase)) {
                 if (!sawCanonicalProgress || !sawPhysicalProgress || site.get("terminalHarvest").isJsonNull()) fail("terminal_without_observed_progress");
                 publish("PASS:TERMINAL");
-                progressSignature = "TERMINAL";
+                semanticSignature = "TERMINAL";
+                passed = true;
                 return;
             }
             if (!active.isBlank()) {
@@ -1150,20 +1151,33 @@ public final class FrontierV3TestPilotClient {
             String lease = path(value, "claims", "lease", "status");
             String completed = path(value, "conservation", "completedCropSlots"); String cursor = path(value, "cursor", "index");
             String physical = path(admission, "observedExact", "x") + "," + path(admission, "observedExact", "y") + "," + path(admission, "observedExact", "z");
-            String signature = completed + "/" + cursor + "/" + physical + "/" + lease + "/" + string(intentValue, "intentStatus");
+            String nextSemanticSignature = completed + "/" + cursor + "/" + lease + "/" + string(intentValue, "intentStatus");
             JsonObject snapshot = new JsonObject(); snapshot.addProperty("instant", instant); snapshot.addProperty("phase", phase); snapshot.addProperty("job", jobId);
             snapshot.addProperty("worker", workerId); snapshot.addProperty("intent", intentId); snapshot.addProperty("lease", lease);
             snapshot.addProperty("completedCropSlots", completed); snapshot.addProperty("cursor", cursor); snapshot.addProperty("physical", physical);
             tail.addLast(snapshot); while (tail.size() > 12) tail.removeFirst();
-            if (!progressSignature.isBlank() && !signature.equals(progressSignature)) {
+            if (semanticSignature.isBlank()) {
+                lastSemanticProgressInstant = instant;
+            } else if (!nextSemanticSignature.equals(semanticSignature)) {
                 sawCanonicalProgress |= !completed.equals(pathTail("completedCropSlots")) || !cursor.equals(pathTail("cursor"));
-                sawPhysicalProgress |= !physical.equals(pathTail("physical"));
-                lastProgressInstant = instant;
-            } else if (lastProgressInstant >= 0L && instant - lastProgressInstant > maxCanonicalStallTicks) {
-                fail("unexplained_canonical_stall=" + (instant - lastProgressInstant));
+                lastSemanticProgressInstant = instant;
             }
-            if (progressSignature.isBlank()) lastProgressInstant = instant;
-            progressSignature = signature;
+            if (physicalSignature.isBlank() || !physical.equals(physicalSignature)) {
+                sawPhysicalProgress |= !physicalSignature.isBlank();
+                lastPhysicalProgressInstant = instant;
+            }
+            if (lastSemanticProgressInstant >= 0L && instant - lastSemanticProgressInstant > maxCanonicalStallTicks) {
+                String kind = lastPhysicalProgressInstant >= 0L && instant - lastPhysicalProgressInstant <= maxCanonicalStallTicks
+                        ? "canonical_physical_divergence=" : "unexplained_canonical_stall=";
+                fail(kind + (instant - lastSemanticProgressInstant));
+            }
+            semanticSignature = nextSemanticSignature;
+            physicalSignature = physical;
+            if (instant - firstCanonicalInstant >= durationTicks) {
+                if (!bound || !sawActive || !sawCanonicalProgress || !sawPhysicalProgress) fail("incomplete_online_observation");
+                publish("PASS:IN_FLIGHT");
+                passed = true;
+            }
         }
 
         private String pathTail(String field) { JsonObject prior = tail.size() < 2 ? null : tail.stream().skip(tail.size() - 2L).findFirst().orElse(null); return prior == null ? "" : string(prior, field); }

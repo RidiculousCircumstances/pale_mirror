@@ -92,7 +92,9 @@ test('native pilot may await a bounded fresh read-only diagnostic predicate', ()
 test('graphical harvest oracle binds only the current named site and a bounded canonical window', () => {
   const oracle = { ...scenario, assertions: [], frames: [], actions: [{ type: 'observe_harvest_semantics', siteId: 'site:1-wheat-field', durationTicks: 600, sampleEveryTicks: 5, maxCanonicalStallTicks: 300, timeoutMs: 60_000 }] };
   assert.doesNotThrow(() => validateScenario(oracle));
+  assert.doesNotThrow(() => validateScenario({ ...oracle, actions: [{ ...oracle.actions[0], timeoutMs: 600_000 }] }));
   assert.throws(() => validateScenario({ ...oracle, actions: [{ ...oracle.actions[0], maxCanonicalStallTicks: 19 }] }), /observe_harvest_semantics/);
+  assert.throws(() => validateScenario({ ...oracle, actions: [{ ...oracle.actions[0], timeoutMs: 600_001 }] }), /observe_harvest_semantics/);
 });
 
 test('native pilot recognizes the distinct read-only route construction and maintenance views', () => {

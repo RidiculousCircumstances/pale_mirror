@@ -340,7 +340,7 @@ export function validateScenario(scenario) {
           || !Number.isInteger(action.durationTicks) || action.durationTicks < 1 || action.durationTicks > 12_000
           || !Number.isInteger(action.sampleEveryTicks) || action.sampleEveryTicks < 1 || action.sampleEveryTicks > 20
           || !Number.isInteger(action.maxCanonicalStallTicks) || action.maxCanonicalStallTicks < 20 || action.maxCanonicalStallTicks > 12_000
-          || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 180_000)) {
+          || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 600_000)) {
         throw new Error('observe_harvest_semantics needs one site and bounded canonical progress observation');
       }
     }
