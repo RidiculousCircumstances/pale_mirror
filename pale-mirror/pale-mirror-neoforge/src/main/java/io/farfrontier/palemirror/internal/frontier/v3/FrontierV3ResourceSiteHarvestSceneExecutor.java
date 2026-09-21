@@ -229,6 +229,14 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 } else {
                     routeConflict(level, runtime, lease, site, target, targetState);
                 }
+            } else if (FrontierV3SemanticMovement.withinRetainedEdgeEnvelope(level, worker, current, target)) {
+                // An ordinary collision-safe body can occupy a named intermediate support while
+                // traversing exactly one retained edge.  That local latitude is already
+                // enumerated by the immutable current/next envelope; it is not a new route,
+                // an arrival, or permission to advance the cursor.  Treating it as an
+                // off-contract body stranded a mature field at 6/7 despite a valid worker,
+                // lease and ready harvest intent.
+                keepTraversalPhysicallyActive(level, worker, current, target);
             } else {
                 conflict(level, runtime, lease, "field-work-cursor-" + FrontierV3SemanticMovement.detail(
                         FrontierV3SemanticMovement.at(level, worker, current)));

@@ -3,6 +3,8 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 import io.farfrontier.palemirror.frontier.v3.model.SemanticTraversalArrival;
 import io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor;
 import io.farfrontier.palemirror.frontier.v3.model.TraversalCapability;
+import io.farfrontier.palemirror.frontier.v3.model.LocalNavigationEnvelope;
+import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
@@ -39,6 +41,24 @@ final class FrontierV3SemanticMovement {
 
     static boolean targetIsNavigable(ServerLevel level, Mob worker, SurfaceAnchor surface) {
         return target(level, worker, surface) == SemanticTraversalArrival.Disposition.IN_PROGRESS;
+    }
+
+    /**
+     * Reports a physical body that is still inside the explicit HOT latitude of one retained
+     * edge.  This is deliberately separate from arrival: only {@link #arrived} can advance a
+     * canonical cursor.  The observed support comes from Minecraft collision, while the
+     * permitted set is derived solely from the immutable current/next canonical bodies.
+     */
+    static boolean withinRetainedEdgeEnvelope(ServerLevel level, Mob worker, SurfaceAnchor current, SurfaceAnchor next) {
+        BlockPos observed = worker.getOnPos();
+        return withinRetainedEdgeEnvelope(observed, current, next)
+                && level.getFluidState(observed.above()).isEmpty();
+    }
+
+    /** Pure retained-support predicate used by the field-edge recurrence guard. */
+    static boolean withinRetainedEdgeEnvelope(BlockPos observed, SurfaceAnchor current, SurfaceAnchor next) {
+        LocalNavigationEnvelope envelope = LocalNavigationEnvelope.around(current.standingBody(), next.standingBody());
+        return envelope.contains(new BlockPosition(observed.getX(), observed.getY(), observed.getZ()));
     }
 
     static String detail(SemanticTraversalArrival.Disposition disposition) {

@@ -12,6 +12,7 @@ import io.farfrontier.palemirror.frontier.v3.model.SceneCauseKind;
 import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
 import io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor;
 import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess;
+import net.minecraft.core.BlockPos;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -73,6 +74,16 @@ class FrontierV3ResourceSiteHarvestSceneExecutorTest {
                 "the horizontal successor before its one-block descent is still the retained edge");
         assertFalse(FrontierV3TraversalEdgeEnvelope.contains(new BodyPosition(388, 65, -370), current, next),
                 "an off-edge body remains a visible physical conflict rather than a route choice");
+    }
+
+    @Test
+    void exactLocalEnvelopePermitsOnlyTheInFlightSupportsOfItsOneRetainedFieldEdge() {
+        SurfaceAnchor current = SurfaceAnchor.at(137, 63, -7);
+        SurfaceAnchor next = SurfaceAnchor.at(137, 63, -6);
+        assertTrue(FrontierV3SemanticMovement.withinRetainedEdgeEnvelope(new BlockPos(136, 63, -7), current, next),
+                "the collision-authoritative neighbouring support is an explicit bounded in-flight latitude, not a new route");
+        assertFalse(FrontierV3SemanticMovement.withinRetainedEdgeEnvelope(new BlockPos(135, 63, -7), current, next),
+                "the field executor must still reject a body outside the canonical edge envelope");
     }
 
     @Test
