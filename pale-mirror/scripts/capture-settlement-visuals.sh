@@ -211,7 +211,11 @@ for _ in $(seq 1 240); do
   # handshake on a cold client.  Do not mistake a transport handshake for a
   # command-ready game screen: the latter is what makes the spectator probe
   # below meaningful.
-  if [[ -f "$client_log" ]] && rg -q 'JourneyMap: Press|Client on ClientOnly mode connecting|Pale Mirror Atlas snapshot' "$client_log"; then
+  # Some valid full-pack profiles omit JourneyMap and the Atlas snapshot banner.
+  # Advancement synchronization is emitted only after the join packets and
+  # client world have been accepted, so it is a meaningful world-ready marker
+  # rather than a transport-handshake proxy.
+  if [[ -f "$client_log" ]] && rg -q 'JourneyMap: Press|Client on ClientOnly mode connecting|Pale Mirror Atlas snapshot|Loaded [0-9]+ advancements' "$client_log"; then
     connected=true
     break
   fi
