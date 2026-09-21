@@ -27,7 +27,8 @@ final class FrontierV3FastForwardSafety {
      */
     static boolean requiresPhysicalStep(ServerLevel level, FrontierWorldState state) {
         Objects.requireNonNull(level, "physical level"); Objects.requireNonNull(state, "frontier state");
-        return requiresPhysicalStep(state.physicalIntents().values(), state.sceneLeases().values(), intent -> affectedAreaLoaded(level, intent));
+        return requiresPhysicalStep(state.physicalIntents().values(), state.sceneLeases().values(), intent -> affectedAreaLoaded(level, intent))
+                || preparedHarvestHasPresentObserver(state.physicalIntents().values(), intent -> presentationDemandExists(level, intent));
     }
 
     /** Combines canonical physical work with an executor-owned in-flight physical cursor. */
@@ -59,7 +60,16 @@ final class FrontierV3FastForwardSafety {
      */
     static String blockingDescription(ServerLevel level, FrontierWorldState state) {
         Objects.requireNonNull(level, "physical level"); Objects.requireNonNull(state, "frontier state");
-        return blockingDescription(state.physicalIntents().values(), state.sceneLeases().values(), intent -> affectedAreaLoaded(level, intent));
+        String canonical = blockingDescription(state.physicalIntents().values(), state.sceneLeases().values(), intent -> affectedAreaLoaded(level, intent));
+        String presentHarvest = state.physicalIntents().values().stream()
+                .filter(intent -> intent.kind() == PhysicalIntentKind.RESOURCE_SITE_HARVEST
+                        && intent.status() == PhysicalIntentStatus.PREPARED)
+                .filter(intent -> presentationDemandExists(level, intent))
+                .sorted(Comparator.comparing(intent -> intent.id().value()))
+                .map(intent -> "intent=" + intent.id().value() + ":" + intent.kind() + ":" + intent.status()
+                        + ":presentation-demand")
+                .collect(Collectors.joining(","));
+        return presentHarvest.isBlank() ? canonical : canonical.equals("none") ? presentHarvest : canonical + ";" + presentHarvest;
     }
 
     static String blockingDescription(Collection<PhysicalIntent> intents, Collection<SceneLease> sceneLeases,
@@ -113,6 +123,26 @@ final class FrontierV3FastForwardSafety {
             }
         }
         return false;
+    }
+
+    /**
+     * A prepared harvest remains a COLD reservation while unobserved.  Once an ordinary player
+     * is already at its loaded field, however, the next ordinary turn must admit the scene
+     * before operator acceleration advances its COLD cursor.  This is a stop boundary only:
+     * it neither grants effect authority nor creates work from player presence.
+     */
+    static boolean preparedHarvestHasPresentObserver(Collection<PhysicalIntent> intents, Predicate<PhysicalIntent> presentationDemand) {
+        Objects.requireNonNull(intents, "physical intents"); Objects.requireNonNull(presentationDemand, "presentation demand");
+        return intents.stream().anyMatch(intent -> intent.kind() == PhysicalIntentKind.RESOURCE_SITE_HARVEST
+                && intent.status() == PhysicalIntentStatus.PREPARED && presentationDemand.test(intent));
+    }
+
+    private static boolean presentationDemandExists(ServerLevel level, PhysicalIntent intent) {
+        return FrontierV3PhysicalDemand.readiness(level, origin(intent)).presentationDemand();
+    }
+
+    private static BlockPos origin(PhysicalIntent intent) {
+        return new BlockPos(fixedBlock(intent.origin().x()), fixedBlock(intent.origin().y()), fixedBlock(intent.origin().z()));
     }
 
     private static int fixedBlock(FixedScalar value) {

@@ -60,6 +60,26 @@ class FrontierV3FastForwardSafetyTest {
     }
 
     @Test
+    void preparedHarvestReservationRemainsColdInTheGenericSafetyPredicate() {
+        PhysicalIntent preparedHarvest = new PhysicalIntent(new PhysicalIntentId("intent:prepared-harvest-present"), PhysicalIntentKind.RESOURCE_SITE_HARVEST,
+                PhysicalIntentStatus.PREPARED, new SubjectId("site:1-wheat-field"), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.siteHarvest(new SubjectId("site:1-wheat-field"),
+                new SubjectId("job:site-harvest-1-wheat-field-1"), new SubjectId("resident:1-1"), new SubjectId("item:site-harvest-1-wheat-field-1-wheat")),
+                new FixedPosition(FixedScalar.whole(48), FixedScalar.whole(64), FixedScalar.whole(-32)), 0,
+                PhysicalPostcondition.RESOURCE_SITE_HARVESTED_OBSERVED,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.RESOURCE_SITE_HARVEST);
+
+        assertFalse(FrontierV3FastForwardSafety.requiresPhysicalStep(List.of(preparedHarvest), List.of(), ignored -> true),
+                "the generic predicate still distinguishes an unobserved prepared reservation from a running effect");
+        assertFalse(FrontierV3FastForwardSafety.blockingDescription(List.of(preparedHarvest), List.of(), ignored -> true)
+                        .contains("presentation-demand"),
+                "only the live ServerLevel predicate may report an actual ordinary-player presentation boundary");
+        assertTrue(FrontierV3FastForwardSafety.preparedHarvestHasPresentObserver(List.of(preparedHarvest), ignored -> true),
+                "a live ordinary-player presentation demand is separately visible to the ServerLevel fast-forward boundary");
+        assertFalse(FrontierV3FastForwardSafety.preparedHarvestHasPresentObserver(List.of(preparedHarvest), ignored -> false),
+                "an unloaded or unobserved prepared harvest remains eligible for COLD continuation");
+    }
+
+    @Test
     void releasedHarvestIntentDoesNotRetainPhysicalAuthorityDuringOrdinaryChunkGrace() {
         SubjectId job = new SubjectId("job:site-harvest-1-wheat-field-1");
         SubjectId worker = new SubjectId("resident:1-1");
