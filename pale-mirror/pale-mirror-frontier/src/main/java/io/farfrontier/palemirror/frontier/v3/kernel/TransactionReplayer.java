@@ -28,11 +28,11 @@ public final class TransactionReplayer {
         Objects.requireNonNull(worldId, "world id");
         S state = Objects.requireNonNull(initialState, "initial state");
         Objects.requireNonNull(stateValidator, "state validator");
-        stateValidator.validateInitial(state);
         Revision revision = Objects.requireNonNull(initialRevision, "initial revision");
         SimInstant instant = Objects.requireNonNull(initialInstant, "initial instant");
         ScheduledActionQueue schedules = new ScheduledActionQueue();
         List.copyOf(initialSchedules).forEach(schedules::schedule);
+        stateValidator.validateRecoveryInitial(state, schedules.snapshot());
         for (TransactionRecord transaction : List.copyOf(transactions)) {
             validate(transaction, worldId, revision, instant);
             S next = state;

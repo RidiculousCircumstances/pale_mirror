@@ -33,6 +33,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SupplyOperationProcessTest {
@@ -227,6 +228,59 @@ class SupplyOperationProcessTest {
     }
 
     @Test
+    void lateProvisionScheduleFencesACargoHeldBreadStackLocallyAndLetsAnotherSettlementAdvance() {
+        WorldId world = new WorldId("frontier:provision-cargo-custody-recovery");
+        FrontierWorldState initial = loadingState(world.value());
+        SupplyContract contract = initial.contracts().values().iterator().next();
+        PhysicalIntent cargoIntent = assertInstanceOf(PhysicalIntentPrepared.class,
+                SupplyOperationProcess.planCargoLoad(initial, actionFor(contract), false).getFirst().payload()).intent();
+        Settlement owner = initial.bootstrap().settlements().getFirst();
+        List<SubjectId> recipients = initial.humanPopulation().residents().values().stream()
+                .filter(resident -> resident.settlementId().equals(owner.id())).map(ResidentProfile::id).toList();
+        SettlementProvision staleProvision = SettlementProvision.started(owner.id(), 5, 100L, recipients.size(), recipients,
+                List.of(new SettlementRationAllocation(new SubjectId("item:cargo-loading-bread"), recipients)));
+        FrontierWorldState overlap = prepared(initial.withHumanPopulation(initial.humanPopulation().withProvision(staleProvision)), owner.id(), cargoIntent);
+        Settlement other = overlap.bootstrap().settlements().get(1);
+        ScheduledAction lateProgress = new ScheduledAction(new io.farfrontier.palemirror.frontier.v3.api.ScheduleId(
+                "schedule:settlement-provision-progress-1-5-0"), new SimInstant(101L), 0, owner.id(),
+                "frontier.settlement.provision.progress", 1);
+        var engine = provisionRecoveryEngine(world, overlap, lateProgress,
+                SettlementProvisionProcess.review(other.id(), 1, 102L));
+
+        var advanced = engine.advanceTo(new SimInstant(102L), new WorkBudget(64, 256));
+        assertEquals(io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.ACTIVE, advanced.status().kind(),
+                advanced.status().failureDetail().orElse("the late provision schedule quarantined the world"));
+        FrontierWorldState recovered = state(engine);
+        assertEquals(SettlementProvisionStatus.CONFLICT, recovered.humanPopulation().provision(owner.id()).status(),
+                "the stale provision must record its bounded owner-local disposition");
+        assertEquals(PhysicalIntentStatus.PREPARED, recovered.physicalIntents().get(cargoIntent.id()).status(),
+                "the original cargo owner retains its exact stack and recovery authority");
+        assertEquals(SettlementProvisionStatus.SHORTAGE, recovered.humanPopulation().provision(other.id()).status(),
+                "a later unrelated settlement action must execute after the local conflict");
+        assertTrue(recovered.inventory().items().containsKey(new SubjectId("item:cargo-loading-bread")),
+                "the conflicted provision must not consume cargo-held bread");
+    }
+
+    @Test
+    void canonicalReferenceClosureRejectsDuplicatePhysicalCustodyAndRetiredScheduledOwnersBeforePublication() {
+        FrontierWorldState initial = loadingState("frontier:reference-closure");
+        SupplyContract contract = initial.contracts().values().iterator().next();
+        PhysicalIntent cargo = assertInstanceOf(PhysicalIntentPrepared.class,
+                SupplyOperationProcess.planCargoLoad(initial, actionFor(contract), false).getFirst().payload()).intent();
+        FrontierWorldState oneOwner = prepared(initial, contract.settlementId(), cargo);
+        PhysicalIntent duplicate = new PhysicalIntent(new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:duplicate-cargo-owner"),
+                cargo.kind(), cargo.status(), initial.bootstrap().settlements().getFirst().id(), cargo.roles(), cargo.origin(), cargo.radiusBlocks(), cargo.postcondition(), cargo.lifecycleOwner());
+        FrontierWorldState duplicateOwner = FrontierWorldState.duringReducerTransition(() -> oneOwner.preparePhysicalIntent(duplicate));
+
+        assertThrows(IllegalArgumentException.class, () -> FrontierReferenceClosure.validate(duplicateOwner, List.of()),
+                "a cross-family planner cannot publish two active owners for one exact stack");
+        ScheduledAction retired = new ScheduledAction(new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:retired-owner"),
+                new SimInstant(1L), 0, new SubjectId("contract:retired-owner"), "frontier.supply.cargo.load", 1);
+        assertThrows(IllegalArgumentException.class, () -> FrontierReferenceClosure.validate(oneOwner, List.of(retired)),
+                "a retiring owner must dispose its actual scheduled work in the same transaction");
+    }
+
+    @Test
     void preEffectCargoFailureDurablyAbandonsItsExactOrderedContractInsteadOfLeakingIt() {
         FrontierWorldState state = loadingState("frontier:cargo-abandoned");
         SupplyContract contract = state.contracts().values().iterator().next();
@@ -275,6 +329,15 @@ class SupplyOperationProcessTest {
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
         return FrontierEngines.create(new FrontierEngineConfiguration<>(world, initial, SimInstant.ZERO, base.commandPlanner(),
                 base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(), List.of(),
+                base.transactionCommitter(), base.stateValidator(), base.executionMetrics(), base.kernelQuarantineReporter()));
+    }
+
+    private static io.farfrontier.palemirror.frontier.v3.api.FrontierEngine<FrontierWorldProjection> provisionRecoveryEngine(WorldId world,
+                                                                                                                             FrontierWorldState initial,
+                                                                                                                             ScheduledAction... schedules) {
+        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
+        return FrontierEngines.create(new FrontierEngineConfiguration<>(world, initial, SimInstant.ZERO, base.commandPlanner(),
+                base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(), List.of(schedules),
                 base.transactionCommitter(), base.stateValidator(), base.executionMetrics(), base.kernelQuarantineReporter()));
     }
 

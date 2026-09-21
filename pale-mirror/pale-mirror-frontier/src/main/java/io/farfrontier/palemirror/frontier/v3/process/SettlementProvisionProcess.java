@@ -125,6 +125,12 @@ public final class SettlementProvisionProcess {
                 || !(item.custody() instanceof InventoryCustody.ContainerSlot slot) || !slot.containerId().equals(depot)) {
             return List.of(new ProposedEvent(provision.settlementId(), TerminalDiagnosticProducer.provisionConflict(provision.settlementId())));
         }
+        // A review can race an already prepared cargo (or another exact physical owner) on a
+        // later COLD turn.  Do not manufacture a second intent for its still-retained source:
+        // settle this provision locally and leave the original owner to finish or recover.
+        if (hasUnconfirmedPhysicalCustody(state, allocation.itemId())) {
+            return List.of(new ProposedEvent(provision.settlementId(), TerminalDiagnosticProducer.provisionConflict(provision.settlementId())));
+        }
         ContainerSurface surface = state.inventory().surfaces().get(depot);
         // The converted depot's visible surface is only a locator.  Its exact current
         // replica lease, rather than ACTIVE history, is the sole physical-consumption
@@ -320,8 +326,12 @@ public final class SettlementProvisionProcess {
 
     private static boolean hasUnconfirmedPhysicalCustody(FrontierWorldState state, SubjectId itemId) {
         return state.physicalIntents().values().stream()
-                .anyMatch(intent -> intent.status() != PhysicalIntentStatus.CONFIRMED && intent.kind() == PhysicalIntentKind.EXACT_ITEM_CONSUMPTION
-                        && intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ITEM).equals(itemId));
+                .anyMatch(intent -> intent.status() != PhysicalIntentStatus.CONFIRMED
+                        // The physical boundary's typed roles are the sole declaration of an
+                        // intent's exact subject custody.  CARGO_LOADING names its retained
+                        // depot stack as SOURCE_ITEM, whereas provision uses ITEM; restricting
+                        // this fence to the latter admitted the r10 double ownership.
+                        && intent.roles().namedRoles().containsValue(itemId));
     }
 
     private static List<ProposedEvent> planFungibleProgress(FrontierWorldState state, ScheduledAction action, SettlementProvision provision,

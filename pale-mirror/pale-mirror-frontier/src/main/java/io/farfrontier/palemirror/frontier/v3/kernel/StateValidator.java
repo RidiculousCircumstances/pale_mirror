@@ -18,6 +18,11 @@ import java.util.function.Consumer;
 public interface StateValidator<S> {
     void validateInitial(S state);
 
+    /** Recovery has the retained schedule image as well as canonical state. */
+    default void validateRecoveryInitial(S state, List<ScheduledAction> schedules) {
+        validateInitial(state);
+    }
+
     void validateTransition(S previous, S next);
 
     /**

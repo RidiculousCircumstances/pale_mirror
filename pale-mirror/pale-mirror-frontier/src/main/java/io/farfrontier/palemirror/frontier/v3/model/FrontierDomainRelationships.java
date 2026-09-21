@@ -415,7 +415,15 @@ public final class FrontierDomainRelationships {
             for (int ordinal = 0; ordinal < provision.allocations().size(); ordinal++) {
                 SettlementRationAllocation allocation = provision.allocations().get(ordinal); Endpoint allocationEndpoint = new ProvisionAllocationEndpoint(provision.settlementId(), provision.cycleOrdinal(), ordinal);
                 edge(edges, Kind.PROVISION_ALLOCATION, cycle, cycle, allocationEndpoint, provision.status() == SettlementProvisionStatus.IN_PROGRESS ? Lifecycle.ACTIVE : Lifecycle.TERMINAL_RETAINED, provision.settlementId().value());
-                edge(edges, Kind.ALLOCATION_RESOURCE, allocationEndpoint, allocationEndpoint, subject(allocation.fungible() ? EntityKind.RESOURCE_LOT : EntityKind.EXACT_ITEM, allocation.itemId()), Lifecycle.ACTIVE, provision.settlementId().value());
+                boolean resourcePresent = allocation.fungible()
+                        ? state.inventory().fungibleResources().lots().containsKey(allocation.itemId())
+                        : state.inventory().items().containsKey(allocation.itemId());
+                boolean consumedInThisCycle = ordinal < provision.nextAllocation();
+                if (!resourcePresent && !consumedInThisCycle) incident(incidents, Kind.ALLOCATION_RESOURCE, allocationEndpoint, IncidentReason.MISSING_ENDPOINT,
+                        "canonical provision resource", allocation.itemId().value());
+                else edge(edges, Kind.ALLOCATION_RESOURCE, allocationEndpoint, allocationEndpoint,
+                        subject(allocation.fungible() ? EntityKind.RESOURCE_LOT : EntityKind.EXACT_ITEM, allocation.itemId()),
+                        consumedInThisCycle ? Lifecycle.TERMINAL_COMPACTED : Lifecycle.ACTIVE, provision.settlementId().value());
                 for (SubjectId recipient : allocation.recipientIds()) {
                     if (state.humanPopulation().resident(recipient) == null) incident(incidents, Kind.ALLOCATION_RECIPIENT, allocationEndpoint, IncidentReason.MISSING_ENDPOINT, "canonical provision recipient", recipient.value());
                     else edge(edges, Kind.ALLOCATION_RECIPIENT, allocationEndpoint, allocationEndpoint, subject(EntityKind.RESIDENT, recipient), Lifecycle.ACTIVE, provision.settlementId().value());

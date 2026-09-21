@@ -14,7 +14,13 @@ public final class FrontierWorldStateTransitionValidator implements StateValidat
 
     private FrontierWorldStateTransitionValidator() { }
 
-    @Override public void validateInitial(FrontierWorldState state) { state.validateComplete(); }
+    @Override public void validateInitial(FrontierWorldState state) {
+        state.validateComplete(); FrontierReferenceClosure.validate(state, List.of());
+    }
+
+    @Override public void validateRecoveryInitial(FrontierWorldState state, List<ScheduledAction> schedules) {
+        state.validateComplete(); FrontierReferenceClosure.validate(state, schedules);
+    }
 
     @Override public void validateTransition(FrontierWorldState previous, FrontierWorldState next) {
         next.validateTransitionFrom(previous);
@@ -23,6 +29,11 @@ public final class FrontierWorldStateTransitionValidator implements StateValidat
     @Override public void validateTransaction(FrontierWorldState previous, FrontierWorldState next, List<FrontierEvent> events,
                                               List<ScheduledAction> schedulesBefore, List<ScheduledAction> schedulesAfter) {
         validateTransition(previous, next);
+        // This is the one composed publication barrier.  Reducers may construct transient
+        // aggregate snapshots, but no changed state or retained action becomes durable until
+        // every declared relationship, exact current physical subject, and scheduled owner is
+        // closed against the final canonical state.
+        FrontierReferenceClosure.validate(next, schedulesAfter);
         for (FrontierEvent event : events) {
             if (!(event.payload() instanceof PhysicalIntentTransition transition) || !terminal(transition.status())) continue;
             PhysicalIntentRetirementProof proof = transition.retirementProof().orElseThrow(() ->
