@@ -11,7 +11,7 @@ import java.util.Set;
 /** Strict, side-effect-free schema boundary shared by the visible client pilot and unit tests. */
 final class FrontierV3TestPilotScenario {
     private static final Set<String> ACTION_TYPES = Set.of(
-            "wait", "wait_until_block", "wait_until_diagnostic", "wait_until_harvest_result",
+            "wait", "wait_until_block", "wait_until_diagnostic", "wait_until_harvest_result", "observe_harvest_semantics",
             "assert_complete_resource_site", "fast_forward", "fast_forward_to_instant",
             "release_fast_forward_hold", "command", "inspect", "look", "look_nearest_entity",
             "walk", "break", "place", "assert_fixture", "visit", "assert_visible_block", "assert_visible_board",
@@ -70,6 +70,7 @@ final class FrontierV3TestPilotScenario {
                             || !validOptionalDiagnosticPollInterval(action))) ||
                     (type.equals("wait_until_container_item") && !validContainerItem(action)) ||
                     (type.equals("wait_until_harvest_result") && !validHarvestResult(action)) ||
+                    (type.equals("observe_harvest_semantics") && !validHarvestSemanticsObservation(action)) ||
                     (type.equals("assert_complete_resource_site") && !validCompleteResourceSite(action)) ||
                     (type.equals("assert_fixture") && !validFixture(action)) ||
                     (type.equals("assert_visible_block") && (!resolvablePosition(action, "position") || !timeout(action, 120_000L))) ||
@@ -210,6 +211,13 @@ final class FrontierV3TestPilotScenario {
                 && requiredId(action, "itemId", "item:") && (!action.has("settlementId") || requiredId(action, "settlementId", "settlement:"))
                 && (!action.has("workerId") || requiredId(action, "workerId", "resident:"))
                 && timeout(action, 300_000L);
+    }
+
+    /** A live product oracle owns one named site, derives all volatile identities from it, and stays bounded. */
+    private static boolean validHarvestSemanticsObservation(JsonObject action) {
+        return requiredId(action, "siteId", "site:") && wholeWithin(action, "durationTicks", 1, 12_000L)
+                && wholeWithin(action, "sampleEveryTicks", 1, 20L) && wholeWithin(action, "maxCanonicalStallTicks", 20, 12_000L)
+                && timeout(action, 180_000L);
     }
 
     private static boolean validContainerItem(JsonObject action) {

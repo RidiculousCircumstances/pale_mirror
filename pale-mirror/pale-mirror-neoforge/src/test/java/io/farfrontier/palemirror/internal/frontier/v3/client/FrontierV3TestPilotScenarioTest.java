@@ -217,6 +217,16 @@ class FrontierV3TestPilotScenarioTest {
     }
 
     @Test
+    void admitsOnlyABoundedDynamicHarvestSemanticOracle() {
+        assertEquals(1, FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"observe_harvest_semantics","siteId":"site:7-wheat-field",
+                "durationTicks":600,"sampleEveryTicks":5,"maxCanonicalStallTicks":300,"timeoutMs":60000}]}""").actionCount());
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"observe_harvest_semantics","siteId":"site:7-wheat-field",
+                "durationTicks":600,"sampleEveryTicks":5,"maxCanonicalStallTicks":19,"timeoutMs":60000}]}"""));
+    }
+
+    @Test
     void acceptsBoundedOrdinaryPlayerChunkVisitsAndSemanticCameraEvidence() {
         FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"setup":[{"type":"visit","dimension":"pale_mirror:frontier_graybox",

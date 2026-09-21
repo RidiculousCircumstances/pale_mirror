@@ -33,6 +33,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.ArrayDeque;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -81,6 +82,7 @@ public final class FrontierV3TestPilotClient {
     private static long lastEntityAttackTick = Long.MIN_VALUE;
     private static Vec3 lastAttackedEntityPosition;
     private static CaptureBarrier captureBarrier;
+    private static HarvestSemanticOracle harvestSemanticOracle;
     /** Local-only focus retained while the asynchronous X11 frame handshake is in flight. */
     private static Vec3 captureFocus;
     static final Map<DiagnosticIdentity, ObservedDiagnostic> diagnostics = new HashMap<>();
@@ -144,6 +146,7 @@ public final class FrontierV3TestPilotClient {
             entityInteractionAttempted = false;
             attackedEntityRuntimeId = -1; entityAttackAttempts = 0; lastEntityAttackTick = Long.MIN_VALUE; lastAttackedEntityPosition = null;
             captureBarrier = null; captureFocus = null; diagnostics.clear(); FrontierV3PilotMotionObserver.reset(); FrontierV3PilotSettlementPopulationObserver.reset();
+            harvestSemanticOracle = null;
             FrontierV3TestPilotPresentation.clear(Minecraft.getInstance());
             if (FrontierV3PilotSessionControl.resumed()) {
                 FrontierV3PilotSessionControl.publishLifecycleSignal("same_client_reconnected_state_cleared", FrontierV3PilotSessionControl.lifecycleSegment(), new JsonObject());
@@ -296,6 +299,7 @@ public final class FrontierV3TestPilotClient {
                 case "assert_complete_resource_site" -> assertCompleteResourceSite(minecraft, action);
                 case "wait_until_diagnostic" -> waitUntilDiagnostic(minecraft, action);
                 case "wait_until_harvest_result" -> waitUntilHarvestResult(minecraft, action);
+                case "observe_harvest_semantics" -> observeHarvestSemantics(minecraft, action);
                 case "wait_until_container_item" -> waitUntilContainerItem(minecraft, action);
                 case "assert_fixture" -> assertFixture(minecraft, action);
                 case "visit" -> visit(minecraft, action);
@@ -867,6 +871,22 @@ public final class FrontierV3TestPilotClient {
             throw new IllegalStateException("timed out waiting for confirmed harvest site=" + siteId + " intent=" + intentId + " item=" + itemId);
         }
     }
+
+    /**
+     * Bounded online oracle for the graphical product preflight.  It intentionally begins with
+     * only the current site: its job, worker, intent and lease are read from that exact current
+     * relation, rather than reconstructed from an epoch-shaped identifier.  This observes the
+     * same canonical ticks which produced the scene and fails in the client before a stalled or
+     * falsely-labelled field can be accepted as a player story.
+     */
+    private static void observeHarvestSemantics(Minecraft minecraft, JsonObject action) {
+        if (harvestSemanticOracle == null) harvestSemanticOracle = new HarvestSemanticOracle(action, actionStartedTick);
+        HarvestSemanticOracle.Result result = harvestSemanticOracle.sample(minecraft, diagnostics);
+        if (result == HarvestSemanticOracle.Result.PASS) {
+            harvestSemanticOracle.publish("PASS");
+            advance("observe_harvest_semantics");
+        }
+    }
     /** Waits for a precise canonical slot-owned stack without needing its generated item identity. */
     private static void waitUntilContainerItem(Minecraft minecraft, JsonObject action) {
         String containerId = action.get("containerId").getAsString(); long tick = minecraft.level.getGameTime();
@@ -1050,6 +1070,111 @@ public final class FrontierV3TestPilotClient {
         fastForwardSent = false; fastForwardBaseline = null; releaseProjectionBaseline = null; boardInteractionAttempted = false; diagnosticWaitBaseline = null; diagnosticWaitRequestNanos = 0L;
         entityInteractionAttempted = false; attackedEntityRuntimeId = -1; entityAttackAttempts = 0; lastEntityAttackTick = Long.MIN_VALUE; lastAttackedEntityPosition = null;
         diagnostics.clear(); FrontierV3PilotMotionObserver.reset(); FrontierV3PilotSettlementPopulationObserver.reset(); inspectBaseline = null;
+    }
+    /** Client-only state; it has no authority to select a worker or mutate canonical work. */
+    private static final class HarvestSemanticOracle {
+        private final String siteId;
+        private final long startedTick;
+        private final long durationTicks;
+        private final long sampleEveryTicks;
+        private final long maxCanonicalStallTicks;
+        private final ArrayDeque<JsonObject> tail = new ArrayDeque<>();
+        private long lastRequestTick = Long.MIN_VALUE;
+        private long lastSiteReceipt = -1L;
+        private long lastCanonicalInstant = -1L;
+        private long lastProgressInstant = -1L;
+        private String jobId = "", workerId = "", intentId = "";
+        private String progressSignature = "";
+        private boolean bound, sawCanonicalProgress, sawPhysicalProgress, sawActive;
+
+        HarvestSemanticOracle(JsonObject action, long startedTick) {
+            this.siteId = action.get("siteId").getAsString(); this.startedTick = startedTick;
+            this.durationTicks = action.get("durationTicks").getAsLong(); this.sampleEveryTicks = action.get("sampleEveryTicks").getAsLong();
+            this.maxCanonicalStallTicks = action.get("maxCanonicalStallTicks").getAsLong();
+        }
+
+        Result sample(Minecraft minecraft, Map<DiagnosticIdentity, ObservedDiagnostic> diagnostics) {
+            long tick = minecraft.level.getGameTime();
+            if (lastRequestTick == Long.MIN_VALUE || tick - lastRequestTick >= sampleEveryTicks) request(minecraft, diagnostics);
+            ObservedDiagnostic site = diagnostics.get(new DiagnosticIdentity("site", siteId));
+            if (site != null && site.receiptSequence() > lastSiteReceipt) {
+                lastSiteReceipt = site.receiptSequence(); inspect(site.value(), diagnostics);
+            }
+            if (tick - startedTick >= durationTicks) {
+                if (!bound || !sawActive || !sawCanonicalProgress || !sawPhysicalProgress) fail("incomplete_online_observation");
+                return Result.PASS;
+            }
+            return Result.WAIT;
+        }
+
+        private void request(Minecraft minecraft, Map<DiagnosticIdentity, ObservedDiagnostic> diagnostics) {
+            lastRequestTick = minecraft.level.getGameTime();
+            minecraft.player.connection.sendCommand("pale_mirror v3 inspect site " + siteId);
+            if (!jobId.isBlank()) minecraft.player.connection.sendCommand("pale_mirror v3 inspect process " + jobId);
+            if (!workerId.isBlank()) minecraft.player.connection.sendCommand("pale_mirror v3 inspect actor " + workerId);
+            if (!intentId.isBlank()) minecraft.player.connection.sendCommand("pale_mirror v3 inspect intent " + intentId);
+        }
+
+        private void inspect(JsonObject site, Map<DiagnosticIdentity, ObservedDiagnostic> diagnostics) {
+            if (!"ok".equals(string(site, "status"))) fail("site_diagnostic_unavailable");
+            long instant = number(site, "instant");
+            if (instant <= lastCanonicalInstant) return;
+            lastCanonicalInstant = instant;
+            String phase = string(site, "phase"); String active = string(site, "activeWork");
+            if (!site.get("conflictDisposition").isJsonNull()) fail("truthful_local_blocker=" + site.get("conflictDisposition"));
+            if ("HARVESTING".equals(phase) && active.isBlank()) fail("false_active_without_current_work");
+            if (sawActive && active.isBlank() && "GROWING".equals(phase)) {
+                if (!sawCanonicalProgress || !sawPhysicalProgress || site.get("terminalHarvest").isJsonNull()) fail("terminal_without_observed_progress");
+                publish("PASS:TERMINAL");
+                progressSignature = "TERMINAL";
+                return;
+            }
+            if (!active.isBlank()) {
+                if (bound && !jobId.equals(active)) fail("current_work_changed=" + active);
+                jobId = active; bound = true; sawActive = true;
+            }
+            ObservedDiagnostic process = jobId.isBlank() ? null : diagnostics.get(new DiagnosticIdentity("process", jobId));
+            if (process == null || process.value().get("instant").getAsLong() < instant) return;
+            JsonObject value = process.value();
+            String processSite = path(value, "claims", "site"); String worker = path(value, "identity", "worker"); String intent = path(value, "claims", "intent");
+            if (!siteId.equals(processSite) || !jobId.equals(path(value, "identity", "job")) || worker.isBlank() || intent.isBlank()) fail("incoherent_site_process_claim");
+            workerId = worker; intentId = intent;
+            ObservedDiagnostic actor = diagnostics.get(new DiagnosticIdentity("actor", workerId));
+            ObservedDiagnostic intentDiagnostic = diagnostics.get(new DiagnosticIdentity("intent", intentId));
+            if (actor == null || intentDiagnostic == null) return;
+            JsonObject actorValue = actor.value(); JsonObject intentValue = intentDiagnostic.value();
+            if (!jobId.equals(string(actorValue, "assignmentOwner")) || !"FIELD_HARVEST".equals(string(actorValue, "assignment"))) fail("worker_assignment_diverges");
+            if (!intentId.equals(string(intentValue, "id")) || !"RESOURCE_SITE_HARVEST".equals(string(intentValue, "intentKind"))) fail("intent_diverges");
+            JsonObject admission = object(actorValue, "physicalAdmission");
+            if (admission == null || "UUID_CONFLICT".equals(string(admission, "status")) || "CARRIER".equals(string(admission, "status"))) fail("worker_physical_admission_invalid");
+            String lease = path(value, "claims", "lease", "status");
+            String completed = path(value, "conservation", "completedCropSlots"); String cursor = path(value, "cursor", "index");
+            String physical = path(admission, "observedExact", "x") + "," + path(admission, "observedExact", "y") + "," + path(admission, "observedExact", "z");
+            String signature = completed + "/" + cursor + "/" + physical + "/" + lease + "/" + string(intentValue, "intentStatus");
+            JsonObject snapshot = new JsonObject(); snapshot.addProperty("instant", instant); snapshot.addProperty("phase", phase); snapshot.addProperty("job", jobId);
+            snapshot.addProperty("worker", workerId); snapshot.addProperty("intent", intentId); snapshot.addProperty("lease", lease);
+            snapshot.addProperty("completedCropSlots", completed); snapshot.addProperty("cursor", cursor); snapshot.addProperty("physical", physical);
+            tail.addLast(snapshot); while (tail.size() > 12) tail.removeFirst();
+            if (!progressSignature.isBlank() && !signature.equals(progressSignature)) {
+                sawCanonicalProgress |= !completed.equals(pathTail("completedCropSlots")) || !cursor.equals(pathTail("cursor"));
+                sawPhysicalProgress |= !physical.equals(pathTail("physical"));
+                lastProgressInstant = instant;
+            } else if (lastProgressInstant >= 0L && instant - lastProgressInstant > maxCanonicalStallTicks) {
+                fail("unexplained_canonical_stall=" + (instant - lastProgressInstant));
+            }
+            if (progressSignature.isBlank()) lastProgressInstant = instant;
+            progressSignature = signature;
+        }
+
+        private String pathTail(String field) { JsonObject prior = tail.size() < 2 ? null : tail.stream().skip(tail.size() - 2L).findFirst().orElse(null); return prior == null ? "" : string(prior, field); }
+        private void fail(String reason) { publish("REJECTED:" + reason); throw new IllegalStateException("harvest semantic oracle site=" + siteId + " job=" + jobId + " worker=" + workerId + " intent=" + intentId + " " + reason); }
+        void publish(String outcome) { JsonObject value = new JsonObject(); value.addProperty("schema", 1); value.addProperty("kind", "harvest_oracle"); value.addProperty("id", siteId); value.addProperty("status", outcome); value.addProperty("job", jobId); value.addProperty("worker", workerId); value.addProperty("intent", intentId); value.addProperty("lastCanonicalInstant", lastCanonicalInstant); value.add("causalTail", tailJson()); PaleMirrorMod.LOGGER.info("PMV3_PILOT_DIAGNOSTIC {}", value); }
+        private JsonArray tailJson() { JsonArray result = new JsonArray(); tail.forEach(result::add); return result; }
+        private static String string(JsonObject value, String name) { JsonElement element = value.get(name); return element != null && element.isJsonPrimitive() ? element.getAsString() : ""; }
+        private static long number(JsonObject value, String name) { JsonElement element = value.get(name); return element != null && element.isJsonPrimitive() && element.getAsJsonPrimitive().isNumber() ? element.getAsLong() : -1L; }
+        private static JsonObject object(JsonObject value, String name) { JsonElement element = value.get(name); return element != null && element.isJsonObject() ? element.getAsJsonObject() : null; }
+        private static String path(JsonObject value, String... parts) { JsonObject current = value; for (int index = 0; index < parts.length - 1; index++) { current = object(current, parts[index]); if (current == null) return ""; } return string(current, parts[parts.length - 1]); }
+        enum Result { WAIT, PASS }
     }
     record DiagnosticIdentity(String view, String id) { } record ObservedDiagnostic(long tick, long receiptSequence, JsonObject value) { }
     private record CaptureBarrier(int after, String name, String presentation, long readyAtTick, boolean announced) { } }

@@ -19,7 +19,7 @@ const VISIT_TIMEOUT_MS = 120_000;
 const INSPECT_TIMEOUT_MS = 30_000;
 const PILOT_CATALOG = resolve(dirname(new URL(import.meta.url).pathname), '../../../pale-mirror-frontier/src/testFixtures/resources/io/farfrontier/palemirror/frontier/v3/model/frontier-v3-pilot-profiles.properties');
 const { profiles: PILOT_PROFILES, defaultProfile: PILOT_DEFAULT_PROFILE } = loadPilotProfiles(PILOT_CATALOG);
-const EVIDENCE_ACTIONS = new Set(['walk', 'look', 'look_nearest_entity', 'break', 'place', 'open_container', 'quick_move_from_inventory', 'quick_move_from_container', 'split_move_from_container', 'wait_until_container_item', 'wait', 'wait_until_block', 'wait_until_diagnostic', 'wait_until_harvest_result', 'assert_complete_resource_site', 'fast_forward', 'fast_forward_to_instant', 'release_fast_forward_hold', 'inspect', 'assert_visible_block', 'assert_visible_board', 'assert_visible_entity', 'observe_entity_motion', 'observe_settlement_population', 'interact_board', 'interact_nearest_entity', 'attack_nearest_entity', 'visit', 'visit_operation', 'look_operation']);
+const EVIDENCE_ACTIONS = new Set(['walk', 'look', 'look_nearest_entity', 'break', 'place', 'open_container', 'quick_move_from_inventory', 'quick_move_from_container', 'split_move_from_container', 'wait_until_container_item', 'wait', 'wait_until_block', 'wait_until_diagnostic', 'wait_until_harvest_result', 'observe_harvest_semantics', 'assert_complete_resource_site', 'fast_forward', 'fast_forward_to_instant', 'release_fast_forward_hold', 'inspect', 'assert_visible_block', 'assert_visible_board', 'assert_visible_entity', 'observe_entity_motion', 'observe_settlement_population', 'interact_board', 'interact_nearest_entity', 'attack_nearest_entity', 'visit', 'visit_operation', 'look_operation']);
 const SETUP_ACTIONS = new Set(['command', 'observe', 'assert_fixture', 'visit']);
 
 /** Resolves only the unambiguous Xwayland session cookie name; it never reads the secret. */
@@ -335,6 +335,13 @@ export function validateScenario(scenario) {
           || (action.workerId !== undefined && !requiredId(action.workerId, 'resident:'))
           || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 300_000)) {
         throw new Error('wait_until_harvest_result needs exact site, intent, item identities and timeoutMs 0..300000');
+      }
+      if (action.type === 'observe_harvest_semantics' && (!requiredId(action.siteId, 'site:')
+          || !Number.isInteger(action.durationTicks) || action.durationTicks < 1 || action.durationTicks > 12_000
+          || !Number.isInteger(action.sampleEveryTicks) || action.sampleEveryTicks < 1 || action.sampleEveryTicks > 20
+          || !Number.isInteger(action.maxCanonicalStallTicks) || action.maxCanonicalStallTicks < 20 || action.maxCanonicalStallTicks > 12_000
+          || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 180_000)) {
+        throw new Error('observe_harvest_semantics needs one site and bounded canonical progress observation');
       }
     }
   }
