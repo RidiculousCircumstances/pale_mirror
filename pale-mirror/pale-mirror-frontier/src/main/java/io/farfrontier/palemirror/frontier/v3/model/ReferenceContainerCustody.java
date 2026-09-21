@@ -11,6 +11,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyPayloads.ReferenceMutationClosed;
+
 /**
  * Pure contract shared by the first depot and hive-store consumers of the replica kernel.
  *
@@ -71,6 +73,73 @@ public final class ReferenceContainerCustody {
      */
     public static boolean blocksCanonicalUse(FrontierWorldState state, SubjectId containerId) {
         return isReferenceContainer(state, containerId) && hasConflict(state, containerId);
+    }
+
+    /**
+     * Reduces one complete reference transition after an already-confirmed physical mutation.
+     * The retained pre-mutation observation remains the fence for checkpoint/release; the
+     * successor fingerprint is checked against the changed canonical inventory before its new
+     * EXPECTED boundary is published.  If a fungible layout shares the scope, releasing that
+     * layout is inseparable from the custody release rather than a separate command window.
+     */
+    public static FrontierWorldState closeConfirmedMutation(FrontierWorldState state, ReferenceMutationClosed transition) {
+        Objects.requireNonNull(state, "reference mutation state"); Objects.requireNonNull(transition, "reference mutation transition");
+        SubjectId containerId = transition.objectId();
+        if (!isReferenceContainer(state, containerId) || !scopeId(containerId).equals(transition.scopeId())
+                || !provenance(containerId).equals(transition.provenance())
+                || !canonicalFingerprint(state, containerId).equals(transition.fingerprint())) {
+            throw new IllegalArgumentException("reference mutation transition does not match its exact canonical successor");
+        }
+        PhysicalCustodyLease lease = state.replicaCustody().custodyByScope().get(transition.scopeId());
+        if (lease == null || !lease.live() || !lease.objectId().equals(containerId) || !lease.providerId().equals(PROVIDER_ID)
+                || lease.authorityEpoch() != transition.expectedEpoch()) {
+            throw new IllegalArgumentException("reference mutation transition has no exact live custody");
+        }
+        List<PhysicalStackBinding> bindings = boundFungibleSlots(state, containerId);
+        Optional<SubjectId> accountId = oneBoundAccount(bindings);
+        if (!accountId.equals(transition.releasedFungibleAccountId())
+                || bindings.stream().anyMatch(binding -> binding.authorityEpoch() != lease.authorityEpoch())) {
+            throw new IllegalArgumentException("reference mutation fungible disposition does not match custody epoch");
+        }
+        PhysicalReplicaCustodyState custody = state.replicaCustody();
+        if (lease.status() == PhysicalCustodyLeaseStatus.ACQUIRED) {
+            custody = custody.checkpoint(transition.scopeId(), transition.expectedEpoch(), transition.expectedCanonicalRevision(), transition.expectedReplicaRevision());
+        } else if (lease.status() != PhysicalCustodyLeaseStatus.CHECKPOINTED) {
+            throw new IllegalArgumentException("reference mutation custody cannot close from its current lifecycle state");
+        }
+        PhysicalReplicaCustodyState closed = custody
+                .release(transition.scopeId(), transition.expectedEpoch(), transition.expectedCanonicalRevision(), transition.expectedReplicaRevision())
+                .emit(containerId, transition.expectedCanonicalRevision(), transition.expectedReplicaRevision(), transition.emittedCanonicalRevision(),
+                        transition.fingerprint(), transition.provenance());
+        ExactInventory inventory = accountId.map(id -> state.inventory().withFungibleResources(
+                state.inventory().fungibleResources().releaseBindings(id, transition.expectedEpoch()))).orElse(state.inventory());
+        return state.withChanges(FrontierWorldStateUpdate.begin().inventory(inventory).replicaCustody(closed));
+    }
+
+    /** Family-owned construction of the complete legal successor disposition. */
+    public static ReferenceMutationClosed confirmedMutationTransition(FrontierWorldState state, SubjectId containerId,
+                                                                       long emittedCanonicalRevision) {
+        Objects.requireNonNull(state, "reference mutation state"); Objects.requireNonNull(containerId, "reference mutation container");
+        PhysicalCustodyLease lease = state.replicaCustody().custodyByScope().get(scopeId(containerId));
+        if (lease == null) throw new IllegalArgumentException("reference mutation has no current custody");
+        List<PhysicalStackBinding> bindings = boundFungibleSlots(state, containerId);
+        if (bindings.stream().anyMatch(binding -> binding.authorityEpoch() != lease.authorityEpoch())) {
+            throw new IllegalArgumentException("reference mutation has an epoch-mismatched fungible layout");
+        }
+        return new ReferenceMutationClosed(containerId, lease.scopeId(), lease.authorityEpoch(), lease.expectedCanonicalRevision(),
+                lease.expectedReplicaRevision(), emittedCanonicalRevision, canonicalFingerprint(state, containerId), provenance(containerId), oneBoundAccount(bindings));
+    }
+
+    private static List<PhysicalStackBinding> boundFungibleSlots(FrontierWorldState state, SubjectId containerId) {
+        return state.inventory().fungibleResources().bindings().values().stream()
+                .filter(binding -> state.inventory().fungibleResources().accounts().get(binding.accountId()).custody() instanceof ResourceCustody.Container custody
+                        && custody.containerId().equals(containerId)).toList();
+    }
+
+    private static Optional<SubjectId> oneBoundAccount(List<PhysicalStackBinding> bindings) {
+        return bindings.stream().map(PhysicalStackBinding::accountId).distinct().reduce((left, right) -> {
+            throw new IllegalArgumentException("reference mutation has multiple live fungible accounts");
+        });
     }
 
     /** Deterministic canonical fingerprint of the exact slots represented by one chest. */

@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateUpdate;
+import io.farfrontier.palemirror.frontier.v3.model.ReferenceContainerCustody;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyPayloads.*;
 import io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryPayloads.*;
 
@@ -33,6 +34,7 @@ final class FrontierReplicaCustodyProcessModule implements FrontierWorldProcessM
                 }
                 case CustodyReleased released -> { state.replicaCustody().release(released.scopeId(), released.expectedEpoch(),
                         released.expectedCanonicalRevision(), released.expectedReplicaRevision()); yield accepted(released.scopeId(), released); }
+                case ReferenceMutationClosed closed -> { ReferenceContainerCustody.closeConfirmedMutation(state, closed); yield accepted(closed.objectId(), closed); }
                 case Prepared prepared -> { state.fencedRecovery().prepare(prepared.binding()); yield accepted(prepared.binding().bindingId(), prepared); }
                 case Running running -> { state.fencedRecovery().running(running.bindingId(), running.expectedEpoch()); yield accepted(running.bindingId(), running); }
                 case Observed observed -> { state.fencedRecovery().observed(observed.bindingId(), observed.expectedEpoch()); yield accepted(observed.bindingId(), observed); }
@@ -59,6 +61,7 @@ final class FrontierReplicaCustodyProcessModule implements FrontierWorldProcessM
                 case CustodyUnresolved unresolved -> replace(state, state.replicaCustody().unresolved(unresolved.scopeId(), unresolved.expectedEpoch(),
                         unresolved.expectedCanonicalRevision(), unresolved.expectedReplicaRevision(), unresolved.reason(), unresolved.diagnostic()));
                 case CustodyReleased released -> replace(state, state.replicaCustody().release(released.scopeId(), released.expectedEpoch(), released.expectedCanonicalRevision(), released.expectedReplicaRevision()));
+                case ReferenceMutationClosed closed -> ReferenceContainerCustody.closeConfirmedMutation(state, closed);
                 case Prepared prepared -> replaceRecovery(state, state.fencedRecovery().prepare(prepared.binding()));
                 case Running running -> replaceRecovery(state, state.fencedRecovery().running(running.bindingId(), running.expectedEpoch()));
                 case Observed observed -> replaceRecovery(state, state.fencedRecovery().observed(observed.bindingId(), observed.expectedEpoch()));

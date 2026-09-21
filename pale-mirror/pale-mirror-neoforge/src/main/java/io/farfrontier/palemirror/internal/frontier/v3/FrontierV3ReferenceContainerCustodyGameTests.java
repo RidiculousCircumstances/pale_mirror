@@ -16,6 +16,7 @@ import io.farfrontier.palemirror.frontier.v3.persistence.SnapshotReceipt;
 import io.farfrontier.palemirror.frontier.v3.persistence.SnapshotRecord;
 import io.farfrontier.palemirror.frontier.v3.process.HiveNutrientTransferProcess;
 import io.farfrontier.palemirror.frontier.v3.process.HiveGrowthProcess;
+import io.farfrontier.palemirror.frontier.v3.process.SettlementProvisionProcess;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
@@ -143,6 +144,7 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
         ChestBlockEntity chest = (ChestBlockEntity) level.getBlockEntity(position);
         chest.getPersistentData().putString(FrontierV3CargoHandoffExecutor.CONTAINER_ID_KEY, store.value());
         chest.getPersistentData().putString(FrontierV3ReferenceContainerCustodyExecutor.REPLICA_PROVENANCE_KEY, ReferenceContainerCustody.provenance(store));
+        FrontierV3ContainerSurfaceExecutor.replaceCanonicalSlots(chest, confirmed, store);
         helper.assertTrue(FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedMutation(runtime, store, chest),
                 "a confirmed exact mutation must checkpoint, release, and emit before another tick can unload its chest");
         FrontierWorldState fenced = runtime.decodedState().orElseThrow();
@@ -152,6 +154,59 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
                 "the same turn leaves a new serialized replica boundary rather than stale live custody");
         helper.assertValueEqual(fenced, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(fenced)),
                 "an immediate restart preserves the emitted custody/replica boundary without classifying the owned empty chest as foreign drift");
+        runtime.shutdown(); helper.succeed();
+    }
+
+    /**
+     * The provision owner reaches the same boundary through the real physical consumption
+     * executor: the canonical receipt and its depot replica successor must be one continuous
+     * owner-local sequence.  A pre-confirmed inventory fixture is not sufficient here because
+     * the provision transition also advances its resident allocation and schedule.
+     */
+    @GameTest(batch = "pm-frontier-v3-reference-conflict-restart", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void provisionConsumptionClosesItsReferenceDepotBoundary(GameTestHelper helper) {
+        WorldId world = new WorldId("frontier:reference-provision-consumption-boundary");
+        FrontierWorldState state = provisionFixture(world);
+        SubjectId depot = FrontierWorldState.depotId(state.bootstrap().settlements().getFirst().id());
+        state = held(activated(state, depot), depot);
+
+        ChestBlockEntity chest = chest(helper, position(state, depot), depot);
+        FrontierV3ContainerSurfaceExecutor.replaceCanonicalSlots(chest, state, depot);
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(world, state);
+
+        FrontierV3ExactItemConsumptionExecutor.tick(helper.getLevel(), runtime);
+        helper.assertTrue(runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE,
+                "the composed provision receipt cannot quarantine its runtime: " + runtime.status().detail().orElse("no detail"));
+        FrontierWorldState confirmed = runtime.decodedState().orElseThrow();
+        var intent = confirmed.physicalIntents().values().stream().filter(value -> value.causeSubjectId().equals(depot)
+                || value.id().value().startsWith("intent:settlement-provision-")).findFirst().orElseThrow();
+        helper.assertTrue(intent.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED
+                        && emittedAndReleased(confirmed, depot)
+                        && confirmed.inventory().fungibleResources().bindings().isEmpty(),
+                "the real provision receipt releases its co-owned fungible layout and leaves the depot replica emitted rather than quarantining the runtime");
+        runtime.shutdown(); helper.succeed();
+    }
+
+    /** An altered owner marker is a local retained disposition, never a runtime-wide rejection. */
+    @GameTest(batch = "pm-frontier-v3-reference-conflict-restart", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void alteredProvisionDepotRemainsOwnerLocal(GameTestHelper helper) {
+        WorldId world = new WorldId("frontier:reference-provision-altered-depot");
+        FrontierWorldState state = provisionFixture(world);
+        SubjectId depot = FrontierWorldState.depotId(state.bootstrap().settlements().getFirst().id());
+        state = held(activated(state, depot), depot);
+        ChestBlockEntity chest = chest(helper, position(state, depot), depot);
+        FrontierV3ContainerSurfaceExecutor.replaceCanonicalSlots(chest, state, depot);
+        chest.getPersistentData().putString(FrontierV3ReferenceContainerCustodyExecutor.REPLICA_PROVENANCE_KEY, "foreign:altered-owner");
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(world, state);
+
+        helper.assertTrue(FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedMutation(runtime, depot, chest),
+                "an altered physical confirmation is retained by its owner rather than rejected through the world runtime");
+        FrontierWorldState retained = runtime.decodedState().orElseThrow();
+        PhysicalCustodyLease lease = retained.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(depot));
+        helper.assertTrue(runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
+                        && lease.status() == PhysicalCustodyLeaseStatus.UNRESOLVED
+                        && lease.unresolvedReason() == PhysicalCustodyUnresolvedReason.OBSERVATION_MISMATCH,
+                "the exact altered reference evidence becomes an owner-local unresolved disposition while unrelated runtime work remains active");
         runtime.shutdown(); helper.succeed();
     }
 
@@ -320,6 +375,41 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
                 .acquire(new PhysicalCustodyLease(ReferenceContainerCustody.scopeId(containerId), containerId, ReferenceContainerCustody.PROVIDER_ID,
                         1L, 0L, 2L, PhysicalCustodyLeaseStatus.ACQUIRED, null));
         return state.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(custody));
+    }
+
+    private static FrontierWorldState provisionFixture(WorldId world) {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(world, 91L));
+        Settlement settlement = state.bootstrap().settlements().getFirst();
+        SubjectId depot = FrontierWorldState.depotId(settlement.id());
+        SubjectId bread = new SubjectId("item:reference-provision-bread");
+        List<SubjectId> recipients = state.humanPopulation().residents().values().stream()
+                .filter(resident -> resident.settlementId().equals(settlement.id())).map(ResidentProfile::id).sorted().toList();
+        HumanPopulation population = state.humanPopulation();
+        for (SubjectId recipient : recipients) population = population.resolveNutrition(recipient, 1, false);
+        SettlementProvision provision = SettlementProvision.started(settlement.id(), 2, 0L, recipients.size(), recipients,
+                List.of(new SettlementRationAllocation(bread, recipients)));
+        SubjectId lotId = new SubjectId("lot:reference-provision-wheat");
+        SubjectId accountId = new SubjectId("custody:reference-provision-wheat");
+        ResourceLot wheat = new ResourceLot(lotId, settlement.id(), "minecraft:wheat", 64, "reference", List.of());
+        CustodyAccount account = new CustodyAccount(accountId, new ResourceCustody.Container(depot), Map.of(lotId, 64), Map.of());
+        FungibleResourceLedger cold = FungibleResourceLedger.empty().issue(wheat, account);
+        FungiblePhysicalObservation.Stack physicalWheat = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                new InventoryCustody.ContainerSlot(depot, 0)), wheat.itemKind(), 64);
+        FungibleResourceLedger hot = cold.rebind(accountId, 1L, FungiblePhysicalObservation.bind(cold, accountId, 1L, List.of(physicalWheat)));
+        io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent = new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent(
+                new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:settlement-provision-1-2-0"),
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXACT_ITEM_CONSUMPTION,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.PREPARED, settlement.id(),
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.settlementProvisionConsumption(settlement.id(), bread),
+                new io.farfrontier.palemirror.frontier.v3.api.FixedPosition(io.farfrontier.palemirror.frontier.v3.api.FixedScalar.whole(settlement.anchor().x()),
+                        io.farfrontier.palemirror.frontier.v3.api.FixedScalar.whole(settlement.anchor().y()), io.farfrontier.palemirror.frontier.v3.api.FixedScalar.whole(settlement.anchor().z())),
+                0, io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition.EXACT_ITEM_CONSUMED_OBSERVED,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_PROVISION);
+        FrontierWorldState prepared = state.withInventory(state.inventory().withFungibleResources(hot).store(new ExactItemStack(bread, settlement.id(), SettlementProvisionProcess.BREAD, 64,
+                        new InventoryCustody.ContainerSlot(depot, 1))))
+                .withHumanPopulation(population.withProvision(provision.beginPhysical(intent.id()))).preparePhysicalIntent(intent);
+        return prepared.withChanges(FrontierWorldStateUpdate.begin().fencedRecovery(
+                FencedRecoveryPhysicalIntentSupport.prepared(prepared.fencedRecovery(), intent, FencedRecoveryAsset.EFFECT)));
     }
 
     private static ChestBlockEntity chest(GameTestHelper helper, BlockPos position, SubjectId containerId) {

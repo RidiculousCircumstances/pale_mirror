@@ -72,4 +72,24 @@ public final class PhysicalReplicaCustodyPayloads {
         @Override public String type() { return "frontier.physical_custody_released"; }
         @Override public boolean requiresDurableBeforeEffect() { return true; }
     }
+    /**
+     * One completed reference-owned physical mutation closes its old physical authority and
+     * publishes the exact successor boundary in one canonical transaction.  An optional
+     * fungible layout release is part of this transition, never an intervening best-effort
+     * command.
+     */
+    public record ReferenceMutationClosed(SubjectId objectId, SubjectId scopeId, long expectedEpoch,
+                                          long expectedCanonicalRevision, long expectedReplicaRevision,
+                                          long emittedCanonicalRevision, String fingerprint, String provenance,
+                                          java.util.Optional<SubjectId> releasedFungibleAccountId) implements FrontierPayload {
+        public ReferenceMutationClosed {
+            Objects.requireNonNull(objectId, "reference object id"); Objects.requireNonNull(scopeId, "reference scope id");
+            Objects.requireNonNull(fingerprint, "reference successor fingerprint"); Objects.requireNonNull(provenance, "reference successor provenance");
+            releasedFungibleAccountId = Objects.requireNonNull(releasedFungibleAccountId, "released fungible account");
+            if (expectedEpoch < 1 || expectedCanonicalRevision < 0 || expectedReplicaRevision < 1 || emittedCanonicalRevision < 0
+                    || fingerprint.isBlank() || provenance.isBlank()) throw new IllegalArgumentException("reference mutation boundary is invalid");
+        }
+        @Override public String type() { return "frontier.reference_mutation_closed"; }
+        @Override public boolean requiresDurableBeforeEffect() { return true; }
+    }
 }

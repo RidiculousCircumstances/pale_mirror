@@ -11,6 +11,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalCustodyLease;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalCustodyLeaseStatus;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalCustodyUnresolvedReason;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyPayloads.CustodyAcquired;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyPayloads.CustodyCheckpointed;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyPayloads.CustodyReleased;
@@ -181,13 +182,10 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
             // for foreign drift.  No mismatching observation is adopted here.
             if (lease.status() == PhysicalCustodyLeaseStatus.CHECKPOINTED
                     && canonical.equals(observed.fingerprint()) && replica.provenance().equals(observed.provenance())
-                    && release(runtime, lease)) {
-                FrontierWorldState released = runtime.decodedState()
-                        .orElseThrow(() -> new IllegalStateException("reference custody release did not publish state"));
-                PhysicalReplicaRecord releasedReplica = released.replicaCustody().replicas().get(containerId);
-                if (releasedReplica != null && reemit(runtime, released, releasedReplica)) {
-                    FrontierWorldState emitted = runtime.decodedState()
-                            .orElseThrow(() -> new IllegalStateException("reference replica emission did not publish state"));
+                    && closeConfirmedMutation(runtime, state, containerId)) {
+                FrontierWorldState emitted = runtime.decodedState()
+                        .orElseThrow(() -> new IllegalStateException("reference mutation boundary did not publish state"));
+                if (emitted.replicaCustody().replicas().containsKey(containerId)) {
                     FrontierV3ContainerSurfaceExecutor.replaceCanonicalSlots(chest, emitted, containerId);
                 }
                 return;
@@ -288,14 +286,7 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
         observedCustodyEpochs(level).put(lease.scopeId(), lease.authorityEpoch());
     }
 
-    /**
-     * Closes the exact replica boundary immediately after a reference-owned physical effect has
-     * been durably confirmed.  A player may leave on the next normal tick, so waiting for the
-     * periodic sampler would leave an owned output behind an old released observation and make
-     * the later return look like foreign drift.  This method does not adopt a physical value:
-     * the new canonical fingerprint, current live epoch and freshly observed tagged chest must
-     * all agree before it checkpoints, releases and emits the next replica boundary.
-     */
+    /** Closes the checked physical effect through the one typed successor-boundary transaction. */
     static boolean checkpointConfirmedMutation(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                SubjectId containerId, ChestBlockEntity chest) {
         FrontierWorldState state = runtime.decodedState().orElse(null);
@@ -306,19 +297,30 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
                 || !lease.providerId().equals(ReferenceContainerCustody.PROVIDER_ID)) return false;
         Observed observed = observed(state, containerId, chest);
         if (!ReferenceContainerCustody.canonicalFingerprint(state, containerId).equals(observed.fingerprint())
-                || !replica.provenance().equals(observed.provenance())) return false;
-        if (lease.status() == PhysicalCustodyLeaseStatus.ACQUIRED) {
-            if (!submit(runtime, "checkpoint-confirmed-mutation", containerId, lease.authorityEpoch(), new CustodyCheckpointed(lease.scopeId(),
-                    lease.authorityEpoch(), lease.expectedCanonicalRevision(), lease.expectedReplicaRevision()))) return false;
-            state = runtime.decodedState().orElse(null);
-            if (state == null) return false;
-            lease = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(containerId));
+                || !replica.provenance().equals(observed.provenance())) return retainUnresolved(runtime, lease, PhysicalCustodyUnresolvedReason.OBSERVATION_MISMATCH);
+        return closeConfirmedMutation(runtime, state, containerId) || retainUnresolved(runtime, lease, PhysicalCustodyUnresolvedReason.PROVIDER_LOST);
+    }
+
+    private static boolean closeConfirmedMutation(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                                   FrontierWorldState state, SubjectId containerId) {
+        try {
+            PhysicalCustodyLease lease = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(containerId));
+            if (lease == null) return false;
+            long revision = Math.max(runtime.canonicalState().orElseThrow().revision().value(), lease.expectedCanonicalRevision() + 1L);
+            return submit(runtime, "close-confirmed-mutation", containerId, revision,
+                    ReferenceContainerCustody.confirmedMutationTransition(state, containerId, revision));
+        } catch (IllegalArgumentException invalid) {
+            return false;
         }
-        if (lease == null || lease.status() != PhysicalCustodyLeaseStatus.CHECKPOINTED || !release(runtime, lease)) return false;
-        FrontierWorldState released = runtime.decodedState().orElse(null);
-        if (released == null) return false;
-        PhysicalReplicaRecord releasedReplica = released.replicaCustody().replicas().get(containerId);
-        return releasedReplica != null && reemit(runtime, released, releasedReplica);
+    }
+
+    private static boolean retainUnresolved(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                            PhysicalCustodyLease lease, PhysicalCustodyUnresolvedReason reason) {
+        if (lease.status() == PhysicalCustodyLeaseStatus.UNRESOLVED) return true;
+        if (!lease.live()) return false;
+        return submit(runtime, "unresolved-confirmed-mutation", lease.objectId(), lease.authorityEpoch(),
+                ReplicaCustodyDiagnosticProducer.unresolved(lease.scopeId(), lease.authorityEpoch(),
+                        lease.expectedCanonicalRevision(), lease.expectedReplicaRevision(), reason));
     }
 
     static ContainerSurface selectRoundRobin(List<ContainerSurface> eligible, long tick) {

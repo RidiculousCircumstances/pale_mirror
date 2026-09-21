@@ -13,7 +13,7 @@ import java.util.List;
 /** Stable WAL payload codecs for the pure replica/custody transition vocabulary. */
 final class PhysicalReplicaCustodyPayloadCodecs {
     private PhysicalReplicaCustodyPayloadCodecs() { }
-    static List<PayloadCodec> codecs() { return List.of(new Declared(), new Emitted(), new Observed(), new ConflictObserved(), new Acquired(), new Checkpointed(), new Unresolved(), new Released()); }
+    static List<PayloadCodec> codecs() { return List.of(new Declared(), new Emitted(), new Observed(), new ConflictObserved(), new Acquired(), new Checkpointed(), new Unresolved(), new Released(), new ReferenceMutation()); }
     private abstract static class Base implements PayloadCodec {
         final byte[] encodeBytes(Writer writer) { return FrontierWorldPayloadCodecs.encodeProduction(writer::write); }
         final FrontierPayload decodeBytes(byte[] bytes, Reader reader) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, reader::read); }
@@ -85,6 +85,22 @@ final class PhysicalReplicaCustodyPayloadCodecs {
         @Override public byte[] encode(FrontierPayload payload) { return encodeBytes(output -> writeFence(output, (CustodyReleased) payload)); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeBytes(bytes, input -> {
             Fence fence = readFence(input); return new CustodyReleased(fence.scope(), fence.epoch(), fence.canonical(), fence.replica());
+        }); }
+    }
+    private static final class ReferenceMutation extends Base {
+        @Override public String type() { return "frontier.reference_mutation_closed"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeBytes(output -> {
+            ReferenceMutationClosed value = (ReferenceMutationClosed) payload;
+            subject(output, value.objectId()); writeFence(output, value.scopeId(), value.expectedEpoch(), value.expectedCanonicalRevision(), value.expectedReplicaRevision());
+            output.writeLong(value.emittedCanonicalRevision()); FrontierWorldPayloadCodecs.writeString(output, value.fingerprint()); FrontierWorldPayloadCodecs.writeString(output, value.provenance());
+            output.writeBoolean(value.releasedFungibleAccountId().isPresent());
+            if (value.releasedFungibleAccountId().isPresent()) subject(output, value.releasedFungibleAccountId().orElseThrow());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeBytes(bytes, input -> {
+            var object = subject(input); Fence fence = readFence(input); long emitted = input.readLong(); String fingerprint = FrontierWorldPayloadCodecs.readString(input);
+            String provenance = FrontierWorldPayloadCodecs.readString(input); java.util.Optional<io.farfrontier.palemirror.frontier.v3.api.SubjectId> account = input.readBoolean()
+                    ? java.util.Optional.of(subject(input)) : java.util.Optional.empty();
+            return new ReferenceMutationClosed(object, fence.scope(), fence.epoch(), fence.canonical(), fence.replica(), emitted, fingerprint, provenance, account);
         }); }
     }
     private static void writeReplica(DataOutputStream output, PhysicalReplicaRecord value) throws IOException {
