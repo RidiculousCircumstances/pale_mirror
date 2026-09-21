@@ -361,7 +361,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         if (FrontierV3SemanticMovement.arrived(level, worker, surface)) {
             FrontierV3ControlledMobMotion.holdRetainedCheckpoint(level, worker, FrontierV3SemanticMovement.point(surface));
         } else {
-            FrontierV3ControlledMobMotion.moveWithinSemanticEnvelope(level, worker, FrontierV3SemanticMovement.point(surface),
+            FrontierV3ControlledMobMotion.pursueRetainedSemanticCheckpoint(level, worker, FrontierV3SemanticMovement.point(surface),
                     io.farfrontier.palemirror.frontier.v3.model.LocalNavigationEnvelope.around(current.standingBody(), surface.standingBody()));
         }
     }

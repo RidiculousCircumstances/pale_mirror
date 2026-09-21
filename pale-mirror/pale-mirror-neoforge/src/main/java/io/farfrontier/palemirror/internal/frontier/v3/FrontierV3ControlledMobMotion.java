@@ -215,6 +215,25 @@ final class FrontierV3ControlledMobMotion {
     }
 
     /**
+     * Keeps one already-declared semantic edge physically live until its exact endpoint is
+     * observed.  This is the retained-edge counterpart of {@link #pursueRetainedCheckpoint}:
+     * unlike the generic one-turn semantic-envelope submission, it cannot inherit the scene
+     * callback cadence after a crop receipt.  The immutable envelope is still the complete
+     * spatial authority, so continuity does not widen the route or permit a later checkpoint.
+     */
+    static void pursueRetainedSemanticCheckpoint(ServerLevel level, Mob actor, Vec3 target,
+                                                 LocalNavigationEnvelope envelope) {
+        if (!insideEnvelope(level, actor, target, envelope) || !insideEnvelope(target, envelope)) {
+            stop(actor);
+            return;
+        }
+        TENDING.remove(actor);
+        STATION_SETTLING.remove(actor);
+        showTravellingDuty(level, actor);
+        submit(level, actor, target, true, envelope, null, Double.MAX_VALUE, true);
+    }
+
+    /**
      * Follows a continuously moving local target without treating the ordinary arrival radius
      * as a stop-and-go patrol cadence.  This is presentation-only local motion: it does not
      * choose a route, change a cursor, or create a second canonical movement authority.

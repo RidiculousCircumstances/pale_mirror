@@ -447,6 +447,40 @@ public final class FrontierV3LocalNavigationGameTests {
         });
     }
 
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 100)
+    public static void retainedHarvestEdgeRemainsContinuousInsideItsSemanticEnvelope(GameTestHelper helper) {
+        BlockPos origin = helper.absolutePos(new BlockPos(2, 0, 2));
+        for (int x = 0; x <= 5; x++) {
+            helper.getLevel().setBlock(origin.offset(x, 0, 0), Blocks.STONE.defaultBlockState(), 3);
+            helper.getLevel().setBlock(origin.offset(x, 1, 0), Blocks.AIR.defaultBlockState(), 3);
+            helper.getLevel().setBlock(origin.offset(x, 2, 0), Blocks.AIR.defaultBlockState(), 3);
+        }
+        Zombie worker = helper.spawnWithNoFreeWill(EntityType.ZOMBIE, new Vec3(2.5D, 1.0D, 2.5D));
+        BlockPosition formerCrop = new BlockPosition(origin.getX(), origin.getY() + 1, origin.getZ());
+        SurfaceAnchor current = SurfaceAnchor.at(origin.getX(), origin.getY(), origin.getZ());
+        SurfaceAnchor next = SurfaceAnchor.at(origin.getX() + 1, origin.getY(), origin.getZ());
+        LocalNavigationEnvelope envelope = LocalNavigationEnvelope.around(current.standingBody(), next.standingBody());
+        Vec3 target = new Vec3(next.x() + .5D, next.y() + 1.0D, next.z() + .5D);
+
+        helper.runAtTickTime(1, () -> FrontierV3ControlledMobMotion.tendCurrentCrop(helper.getLevel(), worker, formerCrop));
+        helper.runAtTickTime(2, () -> FrontierV3ControlledMobMotion.advanceAtEntityBoundary(worker));
+        // One scene hand-off is deliberately enough.  A later semantic callback must not be
+        // required to keep the post-crop field edge moving.
+        helper.runAtTickTime(3, () -> FrontierV3ControlledMobMotion.pursueRetainedSemanticCheckpoint(
+                helper.getLevel(), worker, target, envelope));
+        for (int turn = 4; turn <= 24; turn++) {
+            helper.runAtTickTime(turn, () -> FrontierV3ControlledMobMotion.advanceAtEntityBoundary(worker));
+        }
+        helper.runAtTickTime(25, () -> {
+            List<FrontierV3ControlledMobMotion.MotionSample> trace = FrontierV3ControlledMobMotion.trace(worker);
+            long forwardTurns = trace.stream().filter(value -> value.horizontalVelocity() >= .15D).count();
+            boolean inside = trace.stream().allMatch(value -> envelope.contains(support(new Vec3(value.x(), value.y(), value.z()))));
+            helper.assertTrue(worker.getX() >= origin.getX() + 1.1D && forwardTurns >= 3 && inside,
+                    "a harvested field edge must continue at normal cadence only inside its declared envelope: " + trace);
+            FrontierV3ControlledMobMotion.stop(worker); worker.discard(); helper.succeed();
+        });
+    }
+
     @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
     public static void cropTendingIsAStationaryWorkPoseNotAnOrbit(GameTestHelper helper) {
         BlockPos origin = helper.absolutePos(new BlockPos(2, 0, 2));
