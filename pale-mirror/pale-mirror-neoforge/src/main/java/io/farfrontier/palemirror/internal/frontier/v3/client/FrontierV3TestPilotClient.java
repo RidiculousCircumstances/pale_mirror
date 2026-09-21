@@ -461,7 +461,7 @@ public final class FrontierV3TestPilotClient {
         FrontierV3ResourceSiteFacilityProbe.Result result = FrontierV3ResourceSiteFacilityProbe.inspect(
                 minecraft, observed.value(), completed, siteId);
         if (!result.current()) {
-            timeout(minecraft, action, "client did not observe complete current facility " + siteId); return;
+            timeout(minecraft, action, "client did not observe complete current facility " + siteId + "; observed=" + result); return;
         }
         JsonObject proof = new JsonObject(); proof.addProperty("schema", 1); proof.addProperty("kind", "resource_site_facility"); proof.addProperty("id", siteId);
         proof.addProperty("status", "ok"); proof.addProperty("cropSlots", 64); proof.addProperty("farmlandSlots", result.farmland());

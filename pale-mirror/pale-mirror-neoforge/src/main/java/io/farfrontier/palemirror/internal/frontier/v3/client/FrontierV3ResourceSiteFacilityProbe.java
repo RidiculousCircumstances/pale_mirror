@@ -8,7 +8,7 @@ import net.minecraft.world.level.block.CropBlock;
 
 /** Exhaustive local-client read of the current exact 8x8 resource-site facility. */
 final class FrontierV3ResourceSiteFacilityProbe {
-    record Result(boolean current, int farmland, int air, int wheat, int water) { }
+    record Result(boolean current, int farmland, int air, int wheat, int water, String detail) { }
 
     private FrontierV3ResourceSiteFacilityProbe() { }
 
@@ -27,20 +27,23 @@ final class FrontierV3ResourceSiteFacilityProbe {
         int farmland = 0, air = 0, wheat = 0, water = 0;
         for (int x = minX; x < minX + 8; x++) for (int z = minZ; z < minZ + 8; z++) {
             BlockPos crop = new BlockPos(x, y, z); BlockPos soil = crop.below();
-            if (!minecraft.level.hasChunkAt(crop) || !minecraft.level.hasChunkAt(soil)) return new Result(false, farmland, air, wheat, water);
+            if (!minecraft.level.hasChunkAt(crop) || !minecraft.level.hasChunkAt(soil)) return new Result(false, farmland, air, wheat, water, "unloaded=" + crop);
             if (minecraft.level.getBlockState(soil).is(Blocks.FARMLAND)) farmland++;
             int slot = (x - minX) * 8 + (((x - minX) & 1) == 0 ? z - minZ : minZ + 7 - z);
             if (minecraft.level.getBlockState(crop).isAir()) air++;
             if (minecraft.level.getBlockState(crop).equals(Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, expectedStage))) wheat++;
-            if (minecraft.level.getBlockState(crop).isAir() != (slot < completed)) return new Result(false, farmland, air, wheat, water);
-            if (slot >= completed && !minecraft.level.getBlockState(crop).equals(Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, expectedStage))) return new Result(false, farmland, air, wheat, water);
+            if (minecraft.level.getBlockState(crop).isAir() != (slot < completed)) return new Result(false, farmland, air, wheat, water,
+                    "air-mismatch=" + crop + ":slot=" + slot + ":expectedCompleted=" + (slot < completed) + ":actual=" + minecraft.level.getBlockState(crop));
+            if (slot >= completed && !minecraft.level.getBlockState(crop).equals(Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, expectedStage))) return new Result(false, farmland, air, wheat, water,
+                    "crop-stage-mismatch=" + crop + ":expected=" + expectedStage + ":actual=" + minecraft.level.getBlockState(crop));
         }
         for (BlockPos waterSource : new BlockPos[] {new BlockPos(minX + 2, y - 1, minZ - 1), new BlockPos(minX + 6, y - 1, minZ - 1),
                 new BlockPos(minX + 2, y - 1, minZ + 8), new BlockPos(minX + 6, y - 1, minZ + 8)}) {
-            if (!minecraft.level.hasChunkAt(waterSource)) return new Result(false, farmland, air, wheat, water);
+            if (!minecraft.level.hasChunkAt(waterSource)) return new Result(false, farmland, air, wheat, water, "unloaded=" + waterSource);
             if (minecraft.level.getBlockState(waterSource).equals(Blocks.WATER.defaultBlockState())) water++;
         }
-        return new Result(farmland == 64 && air == completed && wheat == 64 - completed && water == 4, farmland, air, wheat, water);
+        boolean current = farmland == 64 && air == completed && wheat == 64 - completed && water == 4;
+        return new Result(current, farmland, air, wheat, water, current ? "current" : "aggregate-mismatch");
     }
 
     /** The local block read must agree with the diagnostic's current lifecycle stage, not silently require maturity. */
