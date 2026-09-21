@@ -1157,6 +1157,14 @@ public final class FrontierV3TestPilotClient {
             JsonObject snapshot = new JsonObject(); snapshot.addProperty("instant", instant); snapshot.addProperty("phase", phase); snapshot.addProperty("job", jobId);
             snapshot.addProperty("worker", workerId); snapshot.addProperty("intent", intentId); snapshot.addProperty("lease", lease);
             snapshot.addProperty("completedCropSlots", completed); snapshot.addProperty("cursor", cursor); snapshot.addProperty("physical", physical);
+            // The carrier's causal tail must distinguish an admitted retained edge that the
+            // actuator cannot physically accept from one that was never submitted.  These
+            // are read-only body facts published by the server diagnostic; they cannot choose
+            // a route, relax an arrival condition, or turn a failed motion into progress.
+            snapshot.addProperty("motionStatus", string(admission, "motionStatus"));
+            snapshot.addProperty("motionTarget", path(admission, "motionTarget", "x") + ","
+                    + path(admission, "motionTarget", "y") + "," + path(admission, "motionTarget", "z"));
+            snapshot.addProperty("motionAcceptedMoves", string(admission, "motionAcceptedMoves"));
             tail.addLast(snapshot); while (tail.size() > 12) tail.removeFirst();
             // A dynamic oracle cannot start its canonical observation window until the site
             // has yielded its exact job/worker/intent relation and the matching diagnostics
