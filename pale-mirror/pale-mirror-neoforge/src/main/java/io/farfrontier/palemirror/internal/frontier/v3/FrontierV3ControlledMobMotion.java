@@ -19,6 +19,7 @@ import java.util.IdentityHashMap;
 import java.util.ArrayDeque;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.WeakHashMap;
 /**
  * The small, deterministic physical-motion primitive shared by v3 HOT bodies.
@@ -264,10 +265,15 @@ final class FrontierV3ControlledMobMotion {
         Avoidance avoidance = AVOIDANCE.get(actor);
         if (avoidance != null && !avoidance.target().equals(target)) AVOIDANCE.remove(actor);
         // The normal production order is canonical executor (post tick) → entity pre-tick on
-        // the next server tick. Keep an already-due intent if another observer runs before that
-        // pre-tick: overwriting it with a new timestamp creates a permanent
+        // the next server tick. Keep an already-due *same* intent if another observer runs
+        // before that pre-tick: overwriting it with a new timestamp creates a permanent
         // stop/go loop whose outcome depends on event callback order rather than physical state.
-        if (pending != null && pending.applyAtGameTime() <= level.getGameTime() + 1L) {
+        // A changed retained directive is different: retaining a due crop-tending intent after
+        // the canonical cursor selected its next exact edge leaves the actor visibly pinned to
+        // the old station forever. The latest exact directive must supersede that local pose;
+        // it neither chooses another route nor advances the cursor.
+        if (pending != null && pending.applyAtGameTime() <= level.getGameTime() + 1L
+                && sameDirective(pending, replacement)) {
             return;
         }
         if (PENDING.size() < MAX_PENDING_INTENTS || pending != null) {
@@ -679,7 +685,16 @@ final class FrontierV3ControlledMobMotion {
         return new BlockPosition((int) Math.floor(feet.x), (int) Math.floor(feet.y) - 1, (int) Math.floor(feet.z));
     }
 
-    private record MotionIntent(long applyAtGameTime, Vec3 target, boolean continuous, LocalNavigationEnvelope envelope,
+    static boolean sameDirective(MotionIntent first, MotionIntent second) {
+        return first.target().equals(second.target())
+                && first.continuous() == second.continuous()
+                && Objects.equals(first.envelope(), second.envelope())
+                && Objects.equals(first.bounds(), second.bounds())
+                && Double.compare(first.maximumStep(), second.maximumStep()) == 0
+                && first.exactEndpoint() == second.exactEndpoint();
+    }
+
+    record MotionIntent(long applyAtGameTime, Vec3 target, boolean continuous, LocalNavigationEnvelope envelope,
                                 WorldBounds bounds, double maximumStep, boolean exactEndpoint) { }
     private record AppliedIntent(MotionIntent intent, long gameTime) { }
     private record RetainedAscent(Vec3 target, BlockPos sourceSupport) { }
