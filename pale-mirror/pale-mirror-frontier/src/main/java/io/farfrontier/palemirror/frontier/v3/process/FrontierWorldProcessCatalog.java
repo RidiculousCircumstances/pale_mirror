@@ -392,6 +392,11 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.inventory_conflict_observed",
                     "frontier.container_surface_transition", "frontier.cargo_carrier_released", "frontier.route_construction_material_loaded",
                     "frontier.route_maintenance_material_loaded",
+                    // CARGO_LOADING is admitted by the generic physical boundary, but its
+                    // exact owner atomically transfers the confirmed contract into cargo and
+                    // creates the subsequent route operation.  These are deliberately named
+                    // cross-owner outputs, not a broad logistics emission allowance.
+                    "frontier.cargo_loaded", "frontier.operation_created",
                     "frontier.resident_born", "frontier.resident_migrated",
                     "frontier.resident_migration_started", "frontier.resident_migration_advanced", "frontier.resident_transit_advanced", "frontier.resident_migration_blocked",
                     "frontier.resident_migration_resumed", "frontier.resident_birth_started", "frontier.resident_birth_cancelled", "frontier.settlement_provision_started",

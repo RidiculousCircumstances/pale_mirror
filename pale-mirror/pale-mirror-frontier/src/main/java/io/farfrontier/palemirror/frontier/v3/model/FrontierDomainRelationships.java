@@ -434,12 +434,19 @@ public final class FrontierDomainRelationships {
     }
 
     private static void addCurrentRetirementFamilies(FrontierWorldState state, List<Edge> edges) {
+        // A supply contract owns its declared cargo before a loaded route operation exists.  The
+        // active-depot physical hand-off retires in that interval, so this relation must be
+        // current from contract creation rather than being inferred from the later route.
+        for (SupplyContract contract : state.contracts().values()) {
+            Endpoint owner = subject(EntityKind.SUPPLY_CONTRACT, contract.id());
+            edge(edges, Kind.CONTRACT_CARGO, owner, owner, subject(EntityKind.CARGO, contract.cargoId()),
+                    Lifecycle.ACTIVE, contract.id().value());
+        }
         for (RouteOperation operation : state.operations().values()) {
             SupplyContract contract = state.contracts().get(operation.contractId());
             if (contract == null || !contract.cargoId().equals(operation.cargoId())) throw new IllegalArgumentException("route operation lacks exact retained contract");
             Endpoint route = subject(EntityKind.ROUTE_OPERATION, operation.id()), owner = subject(EntityKind.SUPPLY_CONTRACT, contract.id());
             edge(edges, Kind.CONTRACT_ROUTE_OPERATION, owner, owner, route, Lifecycle.ACTIVE, operation.id().value());
-            edge(edges, Kind.CONTRACT_CARGO, owner, owner, subject(EntityKind.CARGO, contract.cargoId()), Lifecycle.ACTIVE, contract.id().value());
             edge(edges, Kind.ROUTE_CARRIER, route, route, subject(EntityKind.RESIDENT, operation.cargoCarrierId()), Lifecycle.ACTIVE, operation.id().value());
         }
         for (SettlementServiceWork work : state.serviceWorks().values()) { Endpoint service = subject(EntityKind.SERVICE_WORK, work.id());

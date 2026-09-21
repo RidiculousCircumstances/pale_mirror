@@ -4,6 +4,14 @@ import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
+import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
+import io.farfrontier.palemirror.frontier.v3.api.CommandId;
+import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
+import io.farfrontier.palemirror.frontier.v3.api.Revision;
+import io.farfrontier.palemirror.frontier.v3.api.TransactionId;
+import io.farfrontier.palemirror.frontier.v3.api.EventId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
@@ -12,6 +20,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
+import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
@@ -24,6 +33,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SupplyOperationProcessTest {
     @Test
@@ -164,6 +174,59 @@ class SupplyOperationProcessTest {
     }
 
     @Test
+    void composedCargoConfirmationCreatesItsRouteAfterPhysicalRemovalWithoutQuarantiningTheWorld() {
+        WorldId world = new WorldId("frontier:cargo-loading-composed-confirmation");
+        FrontierWorldState initial = loadingState(world.value());
+        SupplyContract contract = initial.contracts().values().iterator().next();
+        PhysicalIntent intent = assertInstanceOf(PhysicalIntentPrepared.class,
+                SupplyOperationProcess.planCargoLoad(initial, actionFor(contract), false).getFirst().payload()).intent();
+        var engine = cargoEngine(world, prepared(initial, contract.settlementId(), intent));
+
+        assertInstanceOf(CommandResult.Accepted.class, submit(engine, world, "running",
+                new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty())));
+        FrontierWorldState running = state(engine);
+        ExactItemStack item = running.inventory().items().get(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.SOURCE_ITEM));
+        CargoLoadObservation receipt = new CargoLoadObservation(new PhysicalObservationId("observation:cargo-loading-composed"), intent.id(),
+                contract.id(), contract.cargoId(), item.id(), item.count());
+
+        CommandResult confirmation = submit(engine, world, "confirmed",
+                new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt)));
+        assertInstanceOf(CommandResult.Accepted.class, confirmation, confirmation::toString);
+        FrontierWorldState confirmed = state(engine);
+        assertEquals(ContractStatus.LOADED, confirmed.contracts().get(contract.id()).status());
+        assertTrue(confirmed.inventory().cargo().containsKey(contract.cargoId()));
+        assertTrue(confirmed.operations().values().stream().anyMatch(operation -> operation.contractId().equals(contract.id())
+                && operation.cargoId().equals(contract.cargoId())), "the confirmed removal must create the exact later route authority");
+        assertEquals(PhysicalIntentStatus.CONFIRMED, confirmed.physicalIntents().get(intent.id()).status());
+        assertEquals(io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.ACTIVE, engine.status().kind(),
+                "a lawful physical confirmation must not quarantine the unrelated world");
+    }
+
+    @Test
+    void ambiguousCargoRemovalRetainsOnlyItsContractRecoveryWithoutQuarantiningTheWorld() {
+        WorldId world = new WorldId("frontier:cargo-loading-composed-ambiguous");
+        FrontierWorldState initial = loadingState(world.value());
+        SupplyContract contract = initial.contracts().values().iterator().next();
+        PhysicalIntent intent = assertInstanceOf(PhysicalIntentPrepared.class,
+                SupplyOperationProcess.planCargoLoad(initial, actionFor(contract), false).getFirst().payload()).intent();
+        var engine = cargoEngine(world, prepared(initial, contract.settlementId(), intent));
+
+        assertInstanceOf(CommandResult.Accepted.class, submit(engine, world, "running",
+                new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty())));
+        CommandResult ambiguousResult = submit(engine, world, "ambiguous",
+                new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty()));
+        assertInstanceOf(CommandResult.Accepted.class, ambiguousResult, ambiguousResult::toString);
+        FrontierWorldState ambiguous = state(engine);
+        assertEquals(PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, ambiguous.physicalIntents().get(intent.id()).status());
+        assertEquals(ContractStatus.ORDERED, ambiguous.contracts().get(contract.id()).status());
+        assertTrue(ambiguous.operations().isEmpty(), "an ambiguous source removal must not invent a route operation");
+        assertEquals(StrategicTaskStatus.BLOCKED, ambiguous.strategicPlans().tasks().values().stream()
+                .filter(task -> task.id().value().contains("cargo-loading-prepare")).findFirst().orElseThrow().status());
+        assertEquals(io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.ACTIVE, engine.status().kind(),
+                "one ambiguous cargo owner must remain local recovery, not a world quarantine");
+    }
+
+    @Test
     void preEffectCargoFailureDurablyAbandonsItsExactOrderedContractInsteadOfLeakingIt() {
         FrontierWorldState state = loadingState("frontier:cargo-abandoned");
         SupplyContract contract = state.contracts().values().iterator().next();
@@ -205,5 +268,30 @@ class SupplyOperationProcessTest {
     private static ScheduledAction actionFor(SupplyContract contract) {
         return new ScheduledAction(new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:cargo-loading-unknown"),
                 new SimInstant(500L), 0, contract.id(), "frontier.supply.cargo.load", 1);
+    }
+
+    private static io.farfrontier.palemirror.frontier.v3.api.FrontierEngine<FrontierWorldProjection> cargoEngine(WorldId world,
+                                                                                                                   FrontierWorldState initial) {
+        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
+        return FrontierEngines.create(new FrontierEngineConfiguration<>(world, initial, SimInstant.ZERO, base.commandPlanner(),
+                base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(), List.of(),
+                base.transactionCommitter(), base.stateValidator(), base.executionMetrics(), base.kernelQuarantineReporter()));
+    }
+
+    private static FrontierWorldState prepared(FrontierWorldState state, SubjectId owner, PhysicalIntent intent) {
+        return FrontierWorldRuntimeDefinition.reduce(state, new FrontierEvent(1, new EventId("event:cargo-loading-prepared"),
+                new TransactionId("transaction:cargo-loading-prepared"), state.bootstrap().worldId(), Revision.ZERO, SimInstant.ZERO,
+                owner, CauseChain.root(new CommandId("command:cargo-loading-prepared")), new PhysicalIntentPrepared(intent)));
+    }
+
+    private static CommandResult submit(io.farfrontier.palemirror.frontier.v3.api.FrontierEngine<FrontierWorldProjection> engine,
+                                        WorldId world, String suffix, PhysicalIntentTransition transition) {
+        var checkpoint = engine.checkpoint(); CommandId id = new CommandId("command:cargo-loading-" + suffix);
+        return engine.submit(new FrontierCommand(1, id, world, checkpoint.revision(), checkpoint.instant(),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id), transition));
+    }
+
+    private static FrontierWorldState state(io.farfrontier.palemirror.frontier.v3.api.FrontierEngine<FrontierWorldProjection> engine) {
+        return new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
     }
 }

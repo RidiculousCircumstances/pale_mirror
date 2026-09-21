@@ -41,6 +41,10 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
                 FrontierLogisticsProcessModule::verifyRetirementBinding,
                 (before, after, intent, transition, binding) -> {
                     if (intent.lifecycleOwner() != owner) throw new IllegalArgumentException("route retirement account owner mismatch");
+                    if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_LOADING) {
+                        verifyCargoLoadingRetirement(before, after, intent, transition, binding);
+                        return;
+                    }
                     RouteOperation operation = before.operations().get(intent.causeSubjectId());
                     if (operation == null || before.contracts().get(operation.contractId()) == null
                             || !before.contracts().get(operation.contractId()).cargoId().equals(operation.cargoId()))
@@ -67,6 +71,9 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
     private static PhysicalIntentRetirementAccount.Binding bindRetirement(FrontierWorldState before, FrontierCommand command,
                                                                             io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
                                                                             PhysicalIntentTransition transition) {
+        if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_LOADING) {
+            return cargoLoadingRetirementBinding(before, command, intent, transition);
+        }
         RouteOperation operation = before == null ? null : before.operations().get(intent.causeSubjectId());
         if (operation == null) throw new IllegalArgumentException("route retirement account has no exact operation");
         List<FrontierDomainRelationships.Edge> relations = retirementRelations(before, operation);
@@ -83,6 +90,11 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
 
     private static void verifyRetirementBinding(FrontierWorldState before, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
                                                 PhysicalIntentTransition transition, PhysicalIntentRetirementAccount.Binding binding) {
+        if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.CARGO_LOADING) {
+            PhysicalIntentRetirementAccount.requireSameDeclaredAccount(binding,
+                    cargoLoadingRetirementBinding(before, null, intent, transition));
+            return;
+        }
         RouteOperation operation = before.operations().get(intent.causeSubjectId());
         if (operation == null) throw new IllegalArgumentException("route retirement account has no exact operation");
         List<FrontierDomainRelationships.Edge> relations = retirementRelations(before, operation);
@@ -112,6 +124,70 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
                 FrontierDomainRelationships.declaredEdge(FrontierDomainRelationships.Kind.ROUTE_CARRIER, route, route,
                         new FrontierDomainRelationships.SubjectEndpoint(FrontierDomainRelationships.EntityKind.RESIDENT, operation.cargoCarrierId()),
                         FrontierDomainRelationships.Lifecycle.ACTIVE, operation.id().value()));
+    }
+
+    /**
+     * Depot removal precedes creation of its route operation.  Its terminal account is therefore
+     * the exact ordered contract/cargo pair, not a future operation or carrier that does not yet
+     * exist.  This is deliberately a distinct owner-local phase of the route-operation lifecycle.
+     */
+    private static PhysicalIntentRetirementAccount.Binding cargoLoadingRetirementBinding(FrontierWorldState state, FrontierCommand command,
+                                                                                            io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                                                            PhysicalIntentTransition transition) {
+        SupplyContract contract = cargoLoadingContract(state, intent);
+        var continuation = command == null
+                ? new PhysicalIntentRetirementAccount.CheckedNone<io.farfrontier.palemirror.frontier.v3.api.ScheduleId>(PhysicalIntentRetirementProof.Absence.NO_ENGINE_CONTINUATION)
+                : command.scheduleBinding().<PhysicalIntentRetirementAccount.Obligation<io.farfrontier.palemirror.frontier.v3.api.ScheduleId>>map(value -> new PhysicalIntentRetirementAccount.Exact<>(value.action().id()))
+                .orElseGet(() -> new PhysicalIntentRetirementAccount.CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_ENGINE_CONTINUATION));
+        return new PhysicalIntentRetirementAccount.Binding(intent.lifecycleOwner(), intent.id(),
+                new PhysicalIntentRetirementAccount.Exact<>(cargoLoadingRelations(contract)), continuation,
+                new PhysicalIntentRetirementAccount.CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_LEASE_OR_CARRIER),
+                new PhysicalIntentRetirementAccount.Exact<>(contract.cargoId()),
+                transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
+                        ? PhysicalIntentRetirementAccount.LateDisposition.RETAIN_AMBIGUOUS_RECOVERY
+                        : PhysicalIntentRetirementAccount.LateDisposition.REJECT_STALE_ONCE);
+    }
+
+    private static void verifyCargoLoadingRetirement(FrontierWorldState before, FrontierWorldState after,
+                                                      io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                      PhysicalIntentTransition transition, PhysicalIntentRetirementAccount.Binding binding) {
+        SupplyContract contract = cargoLoadingContract(before, intent);
+        PhysicalIntentRetirementAccount.requireSameDeclaredAccount(binding,
+                cargoLoadingRetirementBinding(before, null, intent, transition));
+        SupplyContract current = after.contracts().get(contract.id());
+        if (current == null || !current.cargoId().equals(contract.cargoId())) {
+            throw new IllegalArgumentException("cargo loading retirement lost its exact contract/cargo authority");
+        }
+        // The physical transition is the first event in the one atomic command; CargoLoaded and
+        // OperationCreated are reduced immediately afterwards.  At this owner-local boundary the
+        // contract must therefore still be ordered, not prematurely required to observe those
+        // later command events.
+        if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED
+                && current.status() != ContractStatus.ORDERED) {
+            throw new IllegalArgumentException("cargo loading confirmation changed its contract before exact cargo transfer");
+        } else if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
+                && current.status() != ContractStatus.ORDERED) {
+            throw new IllegalArgumentException("ambiguous cargo loading changed its ordered contract");
+        }
+    }
+
+    private static SupplyContract cargoLoadingContract(FrontierWorldState state,
+                                                        io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent) {
+        SupplyContract contract = state.contracts().get(intent.causeSubjectId());
+        if (contract == null || contract.status() != ContractStatus.ORDERED
+                || !intent.roles().equals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.cargoLoading(
+                contract.id(), contract.cargoId(), intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.SOURCE_ITEM)))) {
+            throw new IllegalArgumentException("cargo loading retirement lacks its exact ordered contract");
+        }
+        return contract;
+    }
+
+    private static List<FrontierDomainRelationships.Edge> cargoLoadingRelations(SupplyContract contract) {
+        FrontierDomainRelationships.SubjectEndpoint subject = new FrontierDomainRelationships.SubjectEndpoint(
+                FrontierDomainRelationships.EntityKind.SUPPLY_CONTRACT, contract.id());
+        return List.of(FrontierDomainRelationships.declaredEdge(FrontierDomainRelationships.Kind.CONTRACT_CARGO, subject, subject,
+                new FrontierDomainRelationships.SubjectEndpoint(FrontierDomainRelationships.EntityKind.CARGO, contract.cargoId()),
+                FrontierDomainRelationships.Lifecycle.ACTIVE, contract.id().value()));
     }
 
     private static CommandPlan planPhysicalTransition(FrontierWorldState state, FrontierCommand command,
