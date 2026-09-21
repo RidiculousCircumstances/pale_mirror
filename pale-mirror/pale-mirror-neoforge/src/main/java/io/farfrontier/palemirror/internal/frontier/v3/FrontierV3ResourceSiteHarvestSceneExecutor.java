@@ -200,10 +200,9 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         // shared 200-tick scene grace outlives ordinary client chunk retention and used to make
         // the later carrier fence observe an absent body.  This is not force loading or a new
         // demand authority; it is the same present body's bounded hand-off on demand loss.
-        if (!demand.active() && !job.progress().hasPendingCrop()) {
-            if (immediateColdRelease(demand.active(), playerWithinSafeRadius, job.progress().hasPendingCrop())) {
-                beginImmediateColdRelease(level, runtime, state, lease);
-            }
+        if (!demand.active() && !job.progress().hasPendingCrop()
+                && immediateColdRelease(demand.active(), playerWithinSafeRadius, job.progress().hasPendingCrop())) {
+            beginImmediateColdRelease(level, runtime, state, lease);
             return;
         }
         Entity entity = level.getEntity(lease.members().getFirst().entityId());
