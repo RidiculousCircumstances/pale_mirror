@@ -832,16 +832,15 @@ final class FrontierV3DiagnosticJson {
                         + "\",\"organ\":\"" + quote(job.organ().id().value()) + "\",\"bioform\":\"" + quote(job.bioform().id().value()) + "\"}")
                 .collect(java.util.stream.Collectors.joining(",", "[", "]"));
         // This remains a bounded, read-only F0.2B projection: one settlement
-        // can have at most one active birth permit.  It lets the normal-world
-        // receipt distinguish a COLD-admitted exact-food permit from a later
-        // unrelated 63-bread endpoint without making demography a container
-        // authority.
+        // can have at most one active birth commitment. It lets the normal-world
+        // receipt distinguish COLD canonical food custody from a later unrelated
+        // 63-bread endpoint without making demography a container authority.
         java.util.List<ResidentBirthJob> births = state.humanPopulation().birthJobs().values().stream()
                 .filter(job -> job.settlementId().equals(settlement))
                 .sorted(java.util.Comparator.comparing(ResidentBirthJob::id)).toList();
         java.util.Set<SubjectId> birthIds = births.stream().map(ResidentBirthJob::id).collect(java.util.stream.Collectors.toSet());
         String birthEntries = births.stream().map(job -> "{\"id\":\"" + quote(job.id().value()) + "\",\"food\":\""
-                        + quote(job.foodItemId().value()) + "\",\"intent\":\"" + quote(job.consumptionIntentId().value())
+                        + quote(job.foodItemId().value()) + "\",\"commitment\":\"" + quote(job.foodCommitmentId().value())
                         + "\",\"resident\":\"" + quote(job.resident().id().value()) + "\"}")
                 .collect(java.util.stream.Collectors.joining(",", "[", "]"));
         java.util.Set<SubjectId> subjects = new java.util.HashSet<>(taskIds);

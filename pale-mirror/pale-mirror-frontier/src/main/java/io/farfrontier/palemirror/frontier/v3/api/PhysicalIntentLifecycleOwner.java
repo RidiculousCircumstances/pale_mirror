@@ -19,7 +19,6 @@ public enum PhysicalIntentLifecycleOwner {
     HIVE_MOBILIZATION("frontier.hive-mobilization"),
     ROUTE_ENGAGEMENT("frontier.route-engagement"),
     SETTLEMENT_ASSAULT("frontier.settlement-assault"),
-    POPULATION_MIGRATION("frontier.population-migration"),
     MEDICAL_TREATMENT("frontier.medical-treatment"),
     ENGINEERING_WORKSITE("frontier.engineering-worksite"),
     HIVE_GROWTH("frontier.hive-growth"),

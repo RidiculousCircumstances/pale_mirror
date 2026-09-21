@@ -16,34 +16,7 @@ import java.util.Set;
 /** Exact owner for resident demography, migration, provisioning and health facts. */
 final class FrontierPopulationProcessModule implements FrontierWorldProcessModule {
     @Override public List<PhysicalIntentLifecycleCapability> physicalIntentLifecycleCapabilities() {
-        return List.of(birthConsumptionCapability(), medicalConsumptionCapability(), provisionConsumptionCapability());
-    }
-
-    private static PhysicalIntentLifecycleCapability birthConsumptionCapability() {
-        return new FunctionalPhysicalIntentLifecycleCapability(PhysicalIntentLifecycleDeclaration.physical(PhysicalIntentLifecycleOwner.POPULATION_MIGRATION,
-                Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXACT_ITEM_CONSUMPTION),
-                Set.of(PhysicalIntentRoleSchema.POPULATION_BIRTH_CONSUMPTION)),
-                (state, command, prepared) -> FrontierWorldCommandPlanner.rejected("physical executor cannot prepare population consumption"),
-                (state, command, intent, transition) -> new CommandPlan.Accepted(
-                        PopulationBirthProcess.planTransition(state, intent, transition, command.submittedAt().ticks())),
-                PopulationBirthProcess::reducePrepared,
-                (state, subject, intent, transition) -> {
-                    ResidentBirthJob birth = state.humanPopulation().birthJobs().get(intent.causeSubjectId());
-                    if (birth == null || !subject.equals(birth.settlementId())) {
-                        throw new IllegalArgumentException("resident birth consumption transition lacks settlement ownership");
-                    }
-                    return reducePopulationConsumption(state, intent, transition);
-                }, PhysicalIntentLifecycleRetirementPolicy.of(
-                        (state, command, intent, transition) -> new CommandPlan.Accepted(
-                                PopulationBirthProcess.planTransition(state, intent, transition, command.submittedAt().ticks())),
-                        (state, subject, intent, transition) -> {
-                            ResidentBirthJob birth = state.humanPopulation().birthJobs().get(intent.causeSubjectId());
-                            if (birth == null || !subject.equals(birth.settlementId())) {
-                                throw new IllegalArgumentException("resident birth consumption retirement lacks settlement ownership");
-                            }
-                            return reducePopulationConsumption(state, intent, transition);
-                        }), intent -> FencedRecoveryAsset.EFFECT,
-                retirementAccount(PhysicalIntentLifecycleOwner.POPULATION_MIGRATION), PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery(), PhysicalIntentRecoveryDiagnosticProducer.POPULATION_MIGRATION);
+        return List.of(medicalConsumptionCapability(), provisionConsumptionCapability());
     }
 
     private static PhysicalIntentLifecycleCapability medicalConsumptionCapability() {
@@ -165,11 +138,6 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
     private static SubjectId populationCommitment(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
                                                   PhysicalIntentLifecycleOwner owner) {
         return switch (owner) {
-            case POPULATION_MIGRATION -> {
-                ResidentBirthJob birth = state.humanPopulation().birthJobs().get(intent.causeSubjectId());
-                if (birth == null || !birth.consumptionIntentId().equals(intent.id())) throw new IllegalArgumentException("birth retirement has no exact retained permit");
-                yield birth.foodItemId();
-            }
             case MEDICAL_TREATMENT -> {
                 MedicalEvacuationOperation medical = state.humanPopulation().medicalOperations().get(intent.causeSubjectId());
                 if (medical == null || !medical.consumptionIntentId().equals(intent.id())) throw new IllegalArgumentException("medical retirement has no exact retained operation");
@@ -231,7 +199,7 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
     }
     @Override public CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
         if (command.payload() instanceof ResidentBorn) {
-            return FrontierWorldCommandPlanner.rejected("resident birth is emitted only by a confirmed population permit");
+            return FrontierWorldCommandPlanner.rejected("resident birth is emitted only by its scheduled canonical commitment");
         }
         if (command.payload() instanceof ResidentMigrated migration) {
             try { state.recordResidentMigration(migration); }
@@ -270,7 +238,6 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
             case ResidentMigrationBlocked blocked -> reduceBlocked(state, event.subject(), blocked);
             case ResidentMigrationResumed resumed -> reduceResumed(state, event.subject(), resumed);
             case ResidentBirthStarted started -> PopulationBirthProcess.reduceStarted(state, event.subject(), started);
-            case ResidentBirthCancelled cancelled -> PopulationBirthProcess.reduceCancelled(state, event.subject(), cancelled);
             case LegacySettlementProvisionStarted started -> SettlementProvisionProcess.reduceLegacyStarted(state, event.subject(), started);
             case SettlementProvisionStarted started -> SettlementProvisionProcess.reduceStarted(state, event.subject(), started);
             case SettlementProvisionConsumed consumed -> SettlementProvisionProcess.reduceConsumed(state, event.subject(), consumed);

@@ -16,7 +16,6 @@ public enum PhysicalIntentRecoveryDiagnosticProducer {
     HIVE_GROWTH(PhysicalIntentLifecycleOwner.HIVE_GROWTH),
     ROUTE_ENGAGEMENT(PhysicalIntentLifecycleOwner.ROUTE_ENGAGEMENT),
     SETTLEMENT_ASSAULT(PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT),
-    POPULATION_MIGRATION(PhysicalIntentLifecycleOwner.POPULATION_MIGRATION),
     MEDICAL_TREATMENT(PhysicalIntentLifecycleOwner.MEDICAL_TREATMENT),
     SETTLEMENT_PROVISION(PhysicalIntentLifecycleOwner.SETTLEMENT_PROVISION),
     ROUTE_OPERATION(PhysicalIntentLifecycleOwner.ROUTE_OPERATION),

@@ -7,8 +7,6 @@ import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
 import io.farfrontier.palemirror.frontier.v3.api.CommandId;
 import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
@@ -65,7 +63,7 @@ class HumanPopulationProcessTest {
     }
 
     @Test
-    void exactBirthNeedsAConfirmedOwnedFoodReceiptAndCannotBeSubmittedDirectly() {
+    void exactBirthCommitsCanonicalFoodBeforeItsScheduledResidentAdmission() {
         WorldId world = new WorldId("frontier:human-events");
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(world, 91L));
         FrontierWorldState initial = state(engine);
@@ -74,13 +72,11 @@ class HumanPopulationProcessTest {
                 0L, existing.skills()), initial.bootstrap().settlements().getFirst().anchor());
         assertInstanceOf(CommandResult.Rejected.class, engine.submit(command(world, engine, "command:forged-birth", forged)));
 
-        FrontierWorldState active = stateWithActiveBread(initial, initial.bootstrap().settlements().getFirst().id());
+        FrontierWorldState active = stateWithBread(initial, initial.bootstrap().settlements().getFirst().id());
         ScheduledAction review = PopulationBirthProcess.review(active.bootstrap().settlements().getFirst().id(), 1, 100L);
         var proposed = PopulationBirthProcess.planReview(active, review);
         ResidentBirthStarted started = proposed.stream().map(event -> event.payload()).filter(ResidentBirthStarted.class::isInstance)
                 .map(ResidentBirthStarted.class::cast).findFirst().orElseThrow();
-        PhysicalIntentPrepared prepared = proposed.stream().map(event -> event.payload()).filter(PhysicalIntentPrepared.class::isInstance)
-                .map(PhysicalIntentPrepared.class::cast).findFirst().orElseThrow();
         BlockPosition birthPosition = started.job().position();
         GrayboxCell birthFoot = FrontierGrayboxPlan.compile(active).cells().get(birthPosition);
         assertTrue(birthFoot == null || birthFoot.semanticPart() == GrayboxSemanticPart.ROUTE_SURFACE
@@ -92,14 +88,11 @@ class HumanPopulationProcessTest {
                 "the next resident slot must not overlap an existing exact actor");
         assertEquals(started, FrontierWorldRuntimeDefinition.payloadCodecs().decode(started.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(started)));
         active = PopulationBirthProcess.reduceStarted(active, started.job().settlementId(), started);
-        active = PopulationBirthProcess.reducePrepared(active, started.job().settlementId(), prepared.intent());
         assertEquals(started.job(), active.humanPopulation().birthJobs().get(started.job().id()));
+        assertEquals(63, active.inventory().items().get(started.job().foodItemId()).count());
+        assertTrue(active.physicalIntents().isEmpty(), "birth food is a COLD semantic commitment, not an unfenced physical intent");
         assertEquals(active, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(active)));
 
-        ExactItemConsumedObservation receipt = new ExactItemConsumedObservation(new PhysicalObservationId("observation:birth-food"), prepared.intent().id(),
-                started.job().foodItemId(), 64, 63);
-        active = active.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.RUNNING, java.util.Optional.empty());
-        active = active.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(receipt));
         var completion = PopulationBirthProcess.planCompletion(active, new ScheduledAction(new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:resident-birth-complete-test"),
                 new io.farfrontier.palemirror.frontier.v3.api.SimInstant(300L), 0, started.job().id(), "frontier.population.birth.complete", 1));
         ResidentBorn born = (ResidentBorn) completion.getFirst().payload();
@@ -112,7 +105,7 @@ class HumanPopulationProcessTest {
     }
 
     @Test
-    void birthReviewWaitsWithoutCreatingAHiddenPopulationWhenNoOwnedActiveFoodExists() {
+    void birthReviewWaitsWithoutCreatingAHiddenPopulationWhenNoOwnedFoodExists() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:birth-no-food"), 91L));
         Settlement settlement = state.bootstrap().settlements().getFirst();
         var proposed = PopulationBirthProcess.planReview(state, PopulationBirthProcess.review(settlement.id(), 1, 100L));
@@ -122,7 +115,7 @@ class HumanPopulationProcessTest {
     }
 
     @Test
-    void coldReferenceDepotDefersPhysicalBirthPermitAndLeavesItsFoodForProvisioning() {
+    void coldReferenceDepotStartsTheSameCanonicalBirthAsAnActiveReplicaAndKeepsTheRemainderProvisionable() {
         FrontierWorldState active = stateWithBread(FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:birth-reference"), 91L)),
                 new SubjectId("settlement:1"));
         SubjectId depot = FrontierWorldState.depotId(new SubjectId("settlement:1"));
@@ -130,12 +123,22 @@ class HumanPopulationProcessTest {
                 ReferenceContainerCustody.canonicalFingerprint(active, depot), ReferenceContainerCustody.provenance(depot));
         FrontierWorldState released = active.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(PhysicalReplicaCustodyState.empty().declare(replica)));
 
-        var proposed = PopulationBirthProcess.planReview(released, PopulationBirthProcess.review(new SubjectId("settlement:1"), 1, 100L));
+        ScheduledAction review = PopulationBirthProcess.review(new SubjectId("settlement:1"), 1, 100L);
+        var proposed = PopulationBirthProcess.planReview(released, review);
+        FrontierWorldState activeReplica = active.withInventory(active.inventory().withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED)
+                .withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE));
+        var activeProposed = PopulationBirthProcess.planReview(activeReplica, review);
+        ResidentBirthStarted coldStarted = proposed.stream().map(event -> event.payload()).filter(ResidentBirthStarted.class::isInstance)
+                .map(ResidentBirthStarted.class::cast).findFirst().orElseThrow();
+        ResidentBirthStarted activeStarted = activeProposed.stream().map(event -> event.payload()).filter(ResidentBirthStarted.class::isInstance)
+                .map(ResidentBirthStarted.class::cast).findFirst().orElseThrow();
 
-        assertEquals(1, proposed.size(), "a COLD depot cannot retain an unobservable physical birth-food permit");
-        assertTrue(proposed.getFirst().payload() instanceof io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created);
-        assertEquals(64, SettlementProvisionProcess.availableFood(released, new SubjectId("settlement:1")),
-                "the deferred birth leaves the complete exact stack available to the next ordinary ration cycle");
+        assertEquals(3, proposed.size(), "COLD birth emits only its review, semantic commitment and delayed completion");
+        assertEquals(activeStarted, coldStarted, "historical replica materialization cannot alter the canonical birth subject");
+        FrontierWorldState committed = PopulationBirthProcess.reduceStarted(released, coldStarted.job().settlementId(), coldStarted);
+        assertEquals(63, SettlementProvisionProcess.availableFood(committed, new SubjectId("settlement:1")),
+                "the semantic birth consumes one ration and leaves the remaining exact stack available to provisioning");
+        assertTrue(committed.physicalIntents().isEmpty(), "COLD birth creates no physical consumption permit");
 
         PhysicalReplicaCustodyState heldCustody = PhysicalReplicaCustodyState.empty().declare(replica)
                 .observe(depot, 7L, 1L, replica.fingerprint(), replica.provenance(), 7L)
@@ -143,8 +146,11 @@ class HumanPopulationProcessTest {
                         1L, 7L, 2L, PhysicalCustodyLeaseStatus.ACQUIRED, null));
         FrontierWorldState held = released.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(heldCustody));
 
-        assertEquals(1, PopulationBirthProcess.planReview(held, PopulationBirthProcess.review(new SubjectId("settlement:1"), 1, 100L)).size(),
-                "a live reference custodian excludes a competing birth-consumption permit");
+        assertEquals(1, PopulationBirthProcess.planReview(held, review).size(),
+                "a live reference custodian excludes competing canonical spending until its current lease is released");
+        assertThrows(IllegalArgumentException.class,
+                () -> PopulationBirthProcess.reduceStarted(held, coldStarted.job().settlementId(), coldStarted),
+                "the reducer also rejects a forged commitment while the current custodian holds the scope");
     }
 
     @Test
@@ -166,10 +172,10 @@ class HumanPopulationProcessTest {
     }
 
     @Test
-    void schedulerAndPhysicalTransitionAdmitExactlyOneResidentOnlyAfterTheConfirmedStackReceipt() {
+    void schedulerAdmitsExactlyOneResidentAfterTheCanonicalBirthDelayWithoutPhysicalConsumption() {
         WorldId world = new WorldId("frontier:birth-scheduled");
         var base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
-        FrontierWorldState active = stateWithActiveBread(base.initialState(), base.initialState().bootstrap().settlements().getFirst().id());
+        FrontierWorldState active = stateWithBread(base.initialState(), base.initialState().bootstrap().settlements().getFirst().id());
         SubjectId settlement = active.bootstrap().settlements().getFirst().id();
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration = new FrontierEngineConfiguration<>(world, active, base.initialInstant(),
                 base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(),
@@ -179,13 +185,8 @@ class HumanPopulationProcessTest {
         FrontierWorldState permitted = state(engine);
         ResidentBirthJob job = permitted.humanPopulation().birthJobs().values().stream().findFirst().orElseThrow();
         assertTrue(permitted.humanPopulation().resident(job.resident().id()) == null);
-
-        PhysicalIntentTransition running = new PhysicalIntentTransition(job.consumptionIntentId(), PhysicalIntentStatus.RUNNING, java.util.Optional.empty());
-        assertInstanceOf(CommandResult.Accepted.class, engine.submit(command(world, engine, "command:birth-running", running)));
-        ExactItemConsumedObservation receipt = new ExactItemConsumedObservation(new PhysicalObservationId("observation:birth-scheduled"), job.consumptionIntentId(), job.foodItemId(), 64, 63);
-        PhysicalIntentTransition confirmed = new PhysicalIntentTransition(job.consumptionIntentId(), PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(receipt));
-        assertInstanceOf(CommandResult.Accepted.class, engine.submit(command(world, engine, "command:birth-confirmed", confirmed)));
-        assertTrue(state(engine).humanPopulation().resident(job.resident().id()) == null);
+        assertEquals(63, permitted.inventory().items().get(job.foodItemId()).count());
+        assertTrue(permitted.physicalIntents().isEmpty());
 
         engine.advanceTo(new SimInstant(300L), new WorkBudget(16, 64));
         FrontierWorldState born = state(engine);
@@ -194,27 +195,22 @@ class HumanPopulationProcessTest {
     }
 
     @Test
-    void unknownFoodEffectReleasesThePermitWithoutInventingAResidentOrDiscardingFood() {
-        FrontierWorldState state = stateWithActiveBread(FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:birth-unknown"), 91L)),
+    void semanticBirthCommitmentSurvivesRestartWithoutAPhysicalConsumptionRecoveryWindow() {
+        FrontierWorldState state = stateWithBread(FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:birth-restart"), 91L)),
                 new SubjectId("settlement:1"));
         ScheduledAction review = PopulationBirthProcess.review(new SubjectId("settlement:1"), 1, 100L);
         var planned = PopulationBirthProcess.planReview(state, review);
         ResidentBirthStarted started = planned.stream().map(event -> event.payload()).filter(ResidentBirthStarted.class::isInstance)
                 .map(ResidentBirthStarted.class::cast).findFirst().orElseThrow();
-        PhysicalIntentPrepared prepared = planned.stream().map(event -> event.payload()).filter(PhysicalIntentPrepared.class::isInstance)
-                .map(PhysicalIntentPrepared.class::cast).findFirst().orElseThrow();
         state = PopulationBirthProcess.reduceStarted(state, started.job().settlementId(), started);
-        state = PopulationBirthProcess.reducePrepared(state, started.job().settlementId(), prepared.intent());
-        state = state.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.RUNNING, java.util.Optional.empty());
-        PhysicalIntentTransition unknown = new PhysicalIntentTransition(prepared.intent().id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, java.util.Optional.empty());
-        var outcome = PopulationBirthProcess.planTransition(state, prepared.intent(), unknown, 110L);
-        state = state.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, java.util.Optional.empty());
-        ResidentBirthCancelled cancelled = outcome.stream().map(event -> event.payload()).filter(ResidentBirthCancelled.class::isInstance)
-                .map(ResidentBirthCancelled.class::cast).findFirst().orElseThrow();
-        state = PopulationBirthProcess.reduceCancelled(state, started.job().settlementId(), cancelled);
-        assertTrue(state.humanPopulation().birthJobs().isEmpty());
-        assertTrue(state.humanPopulation().resident(started.job().resident().id()) == null);
-        assertTrue(state.inventory().items().containsKey(started.job().foodItemId()));
+        state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+        assertEquals(63, state.inventory().items().get(started.job().foodItemId()).count());
+        assertTrue(state.physicalIntents().isEmpty());
+        ResidentBorn born = (ResidentBorn) PopulationBirthProcess.planCompletion(state, new ScheduledAction(
+                new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:resident-birth-complete-restart"), new SimInstant(300L), 0,
+                started.job().id(), "frontier.population.birth.complete", 1)).getFirst().payload();
+        state = PopulationBirthProcess.reduceBorn(state, started.job().settlementId(), born);
+        assertEquals(born.resident(), state.humanPopulation().resident(born.resident().id()));
     }
 
     @Test
@@ -235,7 +231,7 @@ class HumanPopulationProcessTest {
         ResidentProfile newborn = new ResidentProfile(new SubjectId("resident:1-housing-blocked"), parent.householdId(), settlement.id(),
                 ResidentRole.FARMER, 0L, parent.skills());
         ResidentBirthJob permit = new ResidentBirthJob(new SubjectId("job:resident-birth-housing-blocked"), settlement.id(), parent.householdId(),
-                new SubjectId("item:bootstrap-1-wheat"), new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:resident-birth-housing-blocked"), newborn, settlement.anchor());
+                new SubjectId("item:bootstrap-1-wheat"), new SubjectId("commitment:resident-birth-housing-blocked"), newborn, settlement.anchor());
         assertThrows(IllegalArgumentException.class, () -> destroyed.startResidentBirth(permit));
 
         FrontierObjectBoard board = FrontierReadabilityPlan.compile(state).boards().get(housing.id());

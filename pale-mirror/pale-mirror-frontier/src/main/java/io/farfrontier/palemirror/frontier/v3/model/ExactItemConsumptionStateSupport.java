@@ -17,7 +17,6 @@ public final class ExactItemConsumptionStateSupport {
         if (intent.kind() != PhysicalIntentKind.EXACT_ITEM_CONSUMPTION) throw new IllegalArgumentException("not an exact consumption intent");
         return switch (intent.roles().schema()) {
             case HIVE_GROWTH_CONSUMPTION -> hiveGrowthClaim(state, intent);
-            case POPULATION_BIRTH_CONSUMPTION -> populationBirthClaim(state, intent);
             case MEDICAL_TREATMENT_CONSUMPTION -> medicalTreatmentClaim(state, intent);
             case SETTLEMENT_PROVISION_CONSUMPTION -> settlementProvisionClaim(state, intent);
             default -> throw new IllegalArgumentException("exact consumption has foreign role schema");
@@ -28,14 +27,6 @@ public final class ExactItemConsumptionStateSupport {
         HiveGrowthJob job = state.hiveColony().growthJobs().get(intent.roles().require(PhysicalIntentSubjectRole.HIVE_GROWTH_JOB));
         if (job == null || !job.consumptionIntentId().equals(intent.id()) || !intent.causeSubjectId().equals(job.id())) throw new IllegalArgumentException("exact consumption does not bind its hive growth job");
         return ownedActiveClaim(state, job.consumedItemId(), state::isHiveStore, "hive store", 64);
-    }
-
-    private static Claim populationBirthClaim(FrontierWorldState state, PhysicalIntent intent) {
-        ResidentBirthJob birth = state.humanPopulation().birthJobs().get(intent.roles().require(PhysicalIntentSubjectRole.POPULATION_BIRTH_JOB));
-        if (birth == null || !birth.consumptionIntentId().equals(intent.id()) || !intent.causeSubjectId().equals(birth.id())) throw new IllegalArgumentException("exact consumption does not bind its resident birth permit");
-        Claim claim = ownedActiveClaim(state, birth.foodItemId(), FrontierWorldState.depotId(birth.settlementId())::equals, "settlement depot", 1);
-        if (!claim.ownerId().equals(birth.settlementId()) || !claim.item().itemKind().equals("minecraft:bread")) throw new IllegalArgumentException("resident birth has no exact owned food stack");
-        return claim;
     }
 
     private static Claim medicalTreatmentClaim(FrontierWorldState state, PhysicalIntent intent) {

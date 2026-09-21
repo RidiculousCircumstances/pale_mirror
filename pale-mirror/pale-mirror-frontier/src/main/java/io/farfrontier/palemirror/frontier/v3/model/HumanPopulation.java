@@ -1,6 +1,5 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.LinkedHashMap;
@@ -54,11 +53,11 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
         for (Map.Entry<SubjectId, SettlementProvision> entry : provisions.entrySet()) {
             if (!entry.getKey().equals(entry.getValue().settlementId())) throw new IllegalArgumentException("settlement provision map key must match identity");
         }
-        java.util.Set<PhysicalIntentId> intents = new java.util.HashSet<>();
+        java.util.Set<SubjectId> commitments = new java.util.HashSet<>();
         for (Map.Entry<SubjectId, ResidentBirthJob> entry : birthJobs.entrySet()) {
             ResidentBirthJob job = entry.getValue(); Household household = households.get(job.householdId());
             if (!entry.getKey().equals(job.id()) || household == null || !household.settlementId().equals(job.settlementId())
-                    || residents.containsKey(job.resident().id()) || !intents.add(job.consumptionIntentId())) {
+                    || residents.containsKey(job.resident().id()) || !commitments.add(job.foodCommitmentId())) {
                 throw new IllegalArgumentException("resident birth job has invalid exact identity or household");
             }
         }

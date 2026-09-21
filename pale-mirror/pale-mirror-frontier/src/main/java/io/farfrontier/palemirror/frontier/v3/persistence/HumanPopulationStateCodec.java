@@ -27,7 +27,7 @@ final class HumanPopulationStateCodec {
         for (ResidentBirthJob job : population.birthJobs().values().stream().sorted(Comparator.comparing(ResidentBirthJob::id)).toList()) {
             FrontierWorldStateCodec.writeString(output, job.id().value()); FrontierWorldStateCodec.writeString(output, job.settlementId().value());
             FrontierWorldStateCodec.writeString(output, job.householdId().value()); FrontierWorldStateCodec.writeString(output, job.foodItemId().value());
-            FrontierWorldStateCodec.writeString(output, job.consumptionIntentId().value()); writeProfile(output, job.resident()); FrontierWorldStateCodec.writePosition(output, job.position());
+            FrontierWorldStateCodec.writeString(output, job.foodCommitmentId().value()); writeProfile(output, job.resident()); FrontierWorldStateCodec.writePosition(output, job.position());
         }
         FrontierWorldStateCodec.writeCount(output, population.health().size());
         for (Map.Entry<SubjectId, ResidentHealth> entry : population.health().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
@@ -98,7 +98,7 @@ final class HumanPopulationStateCodec {
         for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) {
             SubjectId id = new SubjectId(FrontierWorldStateCodec.readString(input)); SubjectId settlement = new SubjectId(FrontierWorldStateCodec.readString(input));
             SubjectId household = new SubjectId(FrontierWorldStateCodec.readString(input)); SubjectId food = new SubjectId(FrontierWorldStateCodec.readString(input));
-            ResidentBirthJob job = new ResidentBirthJob(id, settlement, household, food, new PhysicalIntentId(FrontierWorldStateCodec.readString(input)),
+            ResidentBirthJob job = new ResidentBirthJob(id, settlement, household, food, new SubjectId(FrontierWorldStateCodec.readString(input)),
                     readProfile(input, hasCapabilityProfile), FrontierWorldStateCodec.readPosition(input));
             if (birthJobs.put(id, job) != null) throw new IllegalArgumentException("duplicate resident birth job");
         }

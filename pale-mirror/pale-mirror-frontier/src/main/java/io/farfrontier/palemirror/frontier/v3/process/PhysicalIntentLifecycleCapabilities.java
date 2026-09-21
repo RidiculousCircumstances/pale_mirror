@@ -89,8 +89,8 @@ final class PhysicalIntentLifecycleCapabilities {
             throw new IllegalArgumentException("physical lifecycle composition is missing an exact role-schema declaration");
         }
         PhysicalIntentLifecycleCapabilities composition = new PhysicalIntentLifecycleCapabilities(capabilities);
-        if (composition.unresolvedAdmissionCapacity != FrontierWorldState.MAX_PHYSICAL_INTENTS) {
-            throw new IllegalArgumentException("physical lifecycle declarations must partition the aggregate unresolved admission bound");
+        if (composition.unresolvedAdmissionCapacity > FrontierWorldState.MAX_PHYSICAL_INTENTS) {
+            throw new IllegalArgumentException("physical lifecycle declarations exceed the aggregate unresolved admission bound");
         }
         return composition;
     }

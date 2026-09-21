@@ -129,7 +129,7 @@ final class HumanPopulationPayloadCodecs {
     private static void writeBirthJob(DataOutputStream output, ResidentBirthJob job) throws IOException {
         FrontierWorldPayloadCodecs.writeSubject(output, job.id()); FrontierWorldPayloadCodecs.writeSubject(output, job.settlementId());
         FrontierWorldPayloadCodecs.writeSubject(output, job.householdId()); FrontierWorldPayloadCodecs.writeSubject(output, job.foodItemId());
-        FrontierWorldPayloadCodecs.writeString(output, job.consumptionIntentId().value()); writeProfile(output, job.resident());
+        FrontierWorldPayloadCodecs.writeString(output, job.foodCommitmentId().value()); writeProfile(output, job.resident());
         FrontierWorldPayloadCodecs.writePosition(output, job.position());
     }
 
@@ -137,7 +137,7 @@ final class HumanPopulationPayloadCodecs {
         var id = FrontierWorldPayloadCodecs.readSubject(input); var settlement = FrontierWorldPayloadCodecs.readSubject(input);
         var household = FrontierWorldPayloadCodecs.readSubject(input); var food = FrontierWorldPayloadCodecs.readSubject(input);
         return new ResidentBirthJob(id.value(), settlement.value(), household.value(), food.value(),
-                new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(FrontierWorldPayloadCodecs.readString(input)),
+                new io.farfrontier.palemirror.frontier.v3.api.SubjectId(FrontierWorldPayloadCodecs.readString(input)),
                 readProfile(input), FrontierWorldPayloadCodecs.readPosition(input));
     }
 

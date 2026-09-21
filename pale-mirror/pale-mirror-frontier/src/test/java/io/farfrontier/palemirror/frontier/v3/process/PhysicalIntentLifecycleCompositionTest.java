@@ -51,12 +51,14 @@ class PhysicalIntentLifecycleCompositionTest {
         assertDoesNotThrow(FrontierWorldProcessCatalog::physicalLifecycles);
         assertDoesNotThrow(() -> PhysicalIntentLifecycleCapabilities.compose(List.of(module(Arrays.stream(
                 PhysicalIntentLifecycleOwner.values()).map(owner -> capability(owner, supported(owner))).toList()))));
-        assertEquals(FrontierWorldState.MAX_PHYSICAL_INTENTS,
+        long physicalOwnerCount = Arrays.stream(PhysicalIntentRoleSchema.values())
+                .map(PhysicalIntentRoleSchema::owner).distinct().count();
+        assertEquals(physicalOwnerCount * PhysicalIntentLifecycleDeclaration.MAX_PER_OWNER,
                 FrontierWorldProcessCatalog.physicalLifecycles().unresolvedAdmissionCapacity(),
-                "explicit per-owner quotas must partition the aggregate bound so no one owner can consume it first");
-        assertEquals(16 * PhysicalIntentLifecycleDeclaration.MAX_PER_OWNER,
-                FrontierWorldProcessCatalog.physicalLifecycles().unresolvedAdmissionCapacity(),
-                "all sixteen physical owners receive the same bounded unresolved admission share");
+                "every declared physical owner receives the same bounded unresolved admission share");
+        assertTrue(FrontierWorldProcessCatalog.physicalLifecycles().unresolvedAdmissionCapacity()
+                        <= FrontierWorldState.MAX_PHYSICAL_INTENTS,
+                "physical-owner quotas must never exceed the aggregate unresolved admission bound");
     }
 
     @Test

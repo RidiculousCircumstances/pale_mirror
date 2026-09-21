@@ -22,7 +22,7 @@ record PhysicalIntentLifecycleDeclaration(PhysicalIntentLifecycleOwner owner, in
                                           Set<PhysicalIntentRoleSchema> schemas,
                                           int maxUnresolved, int maxResolvedRetention) {
     static final int VERSION = 1;
-    /** Sixteen physical owners each receive one 256-intent retained-work share of the 4,096 bound. */
+    /** Each registered physical owner receives one bounded 256-intent retained-work share. */
     static final int MAX_PER_OWNER = 256;
 
     PhysicalIntentLifecycleDeclaration {

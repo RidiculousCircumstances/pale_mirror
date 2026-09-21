@@ -2,14 +2,6 @@ package io.farfrontier.palemirror.frontier.v3.process;
 
 import io.farfrontier.palemirror.frontier.v3.model.*;
 
-import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
-import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.api.ScheduleId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
@@ -22,8 +14,9 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Bounded demographic growth: one physical, exact-food permit at a time per settlement.
- * A birth exists only after the owned stack is durably observed consumed.
+ * Bounded demographic growth: one canonical, exact-food commitment at a time per settlement.
+ * The semantic food consequence is durable before its delayed resident admission; a serialized
+ * depot replica is only a later projection of that current canonical balance.
  */
 public final class PopulationBirthProcess {
     public static final String BREAD = "minecraft:bread";
@@ -45,13 +38,10 @@ public final class PopulationBirthProcess {
         // birth permit retain the only COLD bread stack between a visible
         // shortage and its next ordinary provision review.
         if (!SettlementProvisionProcess.allowsPopulationGrowth(state, settlement.id())) return List.copyOf(events);
-        // A retained replica is evidence, not a spending authority.  A birth
-        // is a physical exact-food effect, so an unmaterialized depot cannot
-        // own its permit: no executor can produce the required receipt there.
-        // Leaving such a permit PREPARED would fence its entire exact stack
-        // from ordinary COLD provisioning and can starve the residents that
-        // the discretionary birth was supposed to join.  Retry the review
-        // after the ordinary surface is active instead.
+        // A current physical custodian fences its item scope, but historical
+        // replica status never changes autonomous demographic eligibility.
+        // COLD therefore commits the exact one-bread semantic consequence and
+        // leaves any unloaded replica to catch up from canonical custody.
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
         if (ReferenceContainerCustody.blocksCanonicalUse(state, depot)) return List.copyOf(events);
         if (ReferenceContainerCustody.isReferenceContainer(state, depot)
@@ -66,32 +56,14 @@ public final class PopulationBirthProcess {
         ResidentBirthJob job = job(state.bootstrap().bounds(), state.bootstrap().terrain(), settlement,
                 Math.toIntExact(SettlementFacilityCapability.housingCapacity(state, settlement.id())), household, food.orElseThrow(), ordinal, placementOrdinal,
                 action.dueAt().ticks() + state.bootstrap().ruleset().cadence().populationBirthCompletionDelay());
-        PhysicalIntent intent = new PhysicalIntent(job.consumptionIntentId(), PhysicalIntentKind.EXACT_ITEM_CONSUMPTION,
-                PhysicalIntentStatus.PREPARED, job.id(), PhysicalIntentRoleBinding.populationBirthConsumption(job.id(), job.foodItemId()), fixed(job.position()), 0,
-                PhysicalPostcondition.EXACT_ITEM_CONSUMED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.POPULATION_MIGRATION);
         events.add(new ProposedEvent(settlement.id(), new ResidentBirthStarted(job)));
-        events.add(new ProposedEvent(settlement.id(), new PhysicalIntentPrepared(intent)));
+        events.add(schedule(complete(job, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().populationBirthCompletionDelay())));
         return List.copyOf(events);
-    }
-
-    public static List<ProposedEvent> planTransition(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentTransition transition, long now) {
-        ResidentBirthJob job = jobForIntent(state, intent);
-        ProposedEvent physical = new ProposedEvent(job.settlementId(), transition);
-        if (transition.status() == PhysicalIntentStatus.CONFIRMED) return List.of(physical,
-                schedule(complete(job, now + state.bootstrap().ruleset().cadence().populationBirthCompletionDelay())));
-        if (transition.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) {
-            return List.of(physical, new ProposedEvent(job.settlementId(), new ResidentBirthCancelled(job.id())));
-        }
-        return List.of(physical);
     }
 
     public static List<ProposedEvent> planCompletion(FrontierWorldState state, ScheduledAction action) {
         ResidentBirthJob job = state.humanPopulation().birthJobs().get(action.subject());
         if (job == null) throw new IllegalStateException("resident birth completion has no active permit: " + action.subject().value());
-        PhysicalIntent consumption = state.physicalIntents().get(job.consumptionIntentId());
-        if (consumption == null || consumption.status() != PhysicalIntentStatus.CONFIRMED) {
-            throw new IllegalStateException("resident birth completion has no confirmed food receipt");
-        }
         return List.of(new ProposedEvent(job.settlementId(), new ResidentBorn(job.resident(), job.position())));
     }
 
@@ -100,28 +72,13 @@ public final class PopulationBirthProcess {
         if (!subject.equals(job.settlementId()) || !hasHousing(state, job.settlementId())
                 || !SettlementProvisionProcess.allowsPopulationGrowth(state, job.settlementId())
                 || !food(state, job.settlementId()).map(item -> item.id().equals(job.foodItemId())).orElse(false)) {
-            throw new IllegalArgumentException("resident birth start lacks owned active food and housing");
+            throw new IllegalArgumentException("resident birth start lacks unfenced canonical food and housing");
         }
-        return state.startResidentBirth(job);
-    }
-
-    public static FrontierWorldState reduceCancelled(FrontierWorldState state, SubjectId subject, ResidentBirthCancelled cancelled) {
-        ResidentBirthJob job = state.humanPopulation().birthJobs().get(cancelled.jobId());
-        if (job == null || !subject.equals(job.settlementId())) throw new IllegalArgumentException("resident birth cancellation lacks its settlement permit");
-        PhysicalIntent intent = state.physicalIntents().get(job.consumptionIntentId());
-        if (intent == null || intent.status() != PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) {
-            throw new IllegalArgumentException("resident birth cancellation requires unknown physical food result");
-        }
-        return state.cancelResidentBirth(job.id());
-    }
-
-    public static FrontierWorldState reducePrepared(FrontierWorldState state, SubjectId subject, PhysicalIntent intent) {
-        ResidentBirthJob job = jobForIntent(state, intent);
-        if (!subject.equals(job.settlementId()) || !intent.roles().equals(PhysicalIntentRoleBinding.populationBirthConsumption(job.id(), job.foodItemId())) || !food(state, job.settlementId())
-                .map(item -> item.id().equals(job.foodItemId())).orElse(false)) {
-            throw new IllegalArgumentException("resident birth food intent does not bind an active owned stack");
-        }
-        return state.preparePhysicalIntent(intent);
+        // This is one semantic event: retain the exact pending resident and
+        // atomically commit exactly one ration.  No PhysicalIntent is created,
+        // so an unvisited replica cannot fence the rest of its stack from COLD
+        // provisioning or turn a player visit into demographic eligibility.
+        return state.startResidentBirth(job).withInventory(state.inventory().consume(job.foodItemId(), 1));
     }
 
     public static FrontierWorldState reduceBorn(FrontierWorldState state, SubjectId subject, ResidentBorn birth) {
@@ -129,16 +86,7 @@ public final class PopulationBirthProcess {
         ResidentBirthJob job = state.humanPopulation().birthJobs().values().stream()
                 .filter(value -> value.resident().equals(birth.resident()) && value.position().equals(birth.position())).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("resident birth has no active exact permit"));
-        PhysicalIntent intent = state.physicalIntents().get(job.consumptionIntentId());
-        if (intent == null || intent.status() != PhysicalIntentStatus.CONFIRMED) throw new IllegalArgumentException("resident birth food has not been physically confirmed");
         return state.completeResidentBirth(job);
-    }
-
-    public static ResidentBirthJob jobForIntent(FrontierWorldState state, PhysicalIntent intent) {
-        if (intent.kind() != PhysicalIntentKind.EXACT_ITEM_CONSUMPTION) throw new IllegalArgumentException("resident birth has invalid physical intent kind");
-        ResidentBirthJob job = state.humanPopulation().birthJobs().get(intent.causeSubjectId());
-        if (job == null || !job.consumptionIntentId().equals(intent.id())) throw new IllegalArgumentException("resident birth food intent has no active permit");
-        return job;
     }
 
     private static boolean hasActiveJob(FrontierWorldState state, SubjectId settlementId) {
@@ -151,15 +99,11 @@ public final class PopulationBirthProcess {
 
     private static Optional<ExactItemStack> food(FrontierWorldState state, SubjectId settlementId) {
         SubjectId depot = FrontierWorldState.depotId(settlementId);
-        boolean referenceDepot = ReferenceContainerCustody.isReferenceContainer(state, depot);
-        if (referenceDepot && ReferenceContainerCustody.blocksCanonicalUse(state, depot)) return Optional.empty();
-        // The permit has a physical lifecycle and must not be created from an
-        // off-screen COLD stack.  Provisioning has its own COLD consumption
-        // path; birth deliberately waits for its materialized care boundary.
-        if (state.inventory().surfaces().get(depot).status() != ContainerSurfaceStatus.ACTIVE) return Optional.empty();
+        if (ReferenceContainerCustody.blocksCanonicalUse(state, depot)
+                || ReferenceContainerCustody.hasLiveCustody(state, depot)) return Optional.empty();
         return state.inventory().items().values().stream().sorted(Comparator.comparing(ExactItemStack::id)).filter(item -> BREAD.equals(item.itemKind())
                 && item.count() >= 1 && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot)
-                && (referenceDepot || state.inventory().surfaces().get(depot).status() == ContainerSurfaceStatus.ACTIVE)).findFirst();
+                ).findFirst();
     }
 
     private static Household household(FrontierWorldState state, SubjectId settlementId) {
@@ -174,7 +118,7 @@ public final class PopulationBirthProcess {
         ResidentProfile resident = new ResidentProfile(new SubjectId("resident:" + suffix(settlement.id()) + "-born-" + ordinal), household.id(), settlement.id(), ResidentRole.FARMER,
                 birthTick, HumanPopulation.birthSkills(ordinal));
         return new ResidentBirthJob(new SubjectId("job:resident-birth-" + suffix), settlement.id(), household.id(), food.id(),
-                new PhysicalIntentId("intent:resident-birth-food-" + suffix), resident,
+                new SubjectId("commitment:resident-birth-food-" + suffix), resident,
                 FrontierSettlementActorSlots.residentSlot(bounds, terrain, settlement, housingBeds, placementOrdinal));
     }
 
@@ -190,6 +134,5 @@ public final class PopulationBirthProcess {
     }
 
     private static ProposedEvent schedule(ScheduledAction action) { return new ProposedEvent(action.subject(), new ScheduleEffect.Created(action)); }
-    private static FixedPosition fixed(BlockPosition position) { return new FixedPosition(FixedScalar.whole(position.x()), FixedScalar.whole(position.y()), FixedScalar.whole(position.z())); }
     private static String suffix(SubjectId settlementId) { return settlementId.value().substring("settlement:".length()); }
 }

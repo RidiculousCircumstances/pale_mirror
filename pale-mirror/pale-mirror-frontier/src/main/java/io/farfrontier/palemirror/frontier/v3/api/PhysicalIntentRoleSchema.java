@@ -29,8 +29,6 @@ public enum PhysicalIntentRoleSchema {
             PhysicalIntentSubjectRole.ATTACKER, PhysicalIntentSubjectRole.TARGET),
     HIVE_GROWTH_CONSUMPTION(9, PhysicalIntentLifecycleOwner.HIVE_GROWTH, PhysicalIntentKind.EXACT_ITEM_CONSUMPTION,
             PhysicalIntentSubjectRole.HIVE_GROWTH_JOB, PhysicalIntentSubjectRole.ITEM),
-    POPULATION_BIRTH_CONSUMPTION(10, PhysicalIntentLifecycleOwner.POPULATION_MIGRATION, PhysicalIntentKind.EXACT_ITEM_CONSUMPTION,
-            PhysicalIntentSubjectRole.POPULATION_BIRTH_JOB, PhysicalIntentSubjectRole.ITEM),
     MEDICAL_TREATMENT_CONSUMPTION(11, PhysicalIntentLifecycleOwner.MEDICAL_TREATMENT, PhysicalIntentKind.EXACT_ITEM_CONSUMPTION,
             PhysicalIntentSubjectRole.MEDICAL_TREATMENT_OPERATION, PhysicalIntentSubjectRole.ITEM),
     SETTLEMENT_PROVISION_CONSUMPTION(12, PhysicalIntentLifecycleOwner.SETTLEMENT_PROVISION, PhysicalIntentKind.EXACT_ITEM_CONSUMPTION,

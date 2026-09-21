@@ -16,7 +16,6 @@ import io.farfrontier.palemirror.frontier.v3.persistence.SnapshotReceipt;
 import io.farfrontier.palemirror.frontier.v3.persistence.SnapshotRecord;
 import io.farfrontier.palemirror.frontier.v3.process.HiveNutrientTransferProcess;
 import io.farfrontier.palemirror.frontier.v3.process.HiveGrowthProcess;
-import io.farfrontier.palemirror.frontier.v3.process.PopulationBirthProcess;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
@@ -154,37 +153,6 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
         helper.assertValueEqual(fenced, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(fenced)),
                 "an immediate restart preserves the emitted custody/replica boundary without classifying the owned empty chest as foreign drift");
         runtime.shutdown(); helper.succeed();
-    }
-
-    @GameTest(batch = "pm-frontier-v3-reference-conflict-restart", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
-    public static void exactConsumptionExecutorClosesAndRecoversItsOwnReferenceBoundary(GameTestHelper helper) {
-        WorldId world = new WorldId("frontier:reference-exact-consumption-boundary");
-        SubjectId depot = new SubjectId("container:1-depot");
-        FrontierWorldState state = activated(FrontierWorldState.initial(FrontierBootstrapper.create(world, 91L)), depot);
-        BlockPos position = position(state, depot);
-        SubjectId settlement = new SubjectId("settlement:1"); SubjectId bread = new SubjectId("item:reference-exact-bread");
-        state = state.withInventory(state.inventory().store(new ExactItemStack(bread, settlement, PopulationBirthProcess.BREAD, 1,
-                new InventoryCustody.ContainerSlot(depot, 1))));
-        var planned = PopulationBirthProcess.planReview(state, PopulationBirthProcess.review(settlement, 1, 100L));
-        ResidentBirthStarted started = planned.stream().map(event -> event.payload()).filter(ResidentBirthStarted.class::isInstance)
-                .map(ResidentBirthStarted.class::cast).findFirst().orElseThrow();
-        PhysicalIntentPrepared prepared = planned.stream().map(event -> event.payload()).filter(PhysicalIntentPrepared.class::isInstance)
-                .map(PhysicalIntentPrepared.class::cast).findFirst().orElseThrow();
-        state = PopulationBirthProcess.reducePrepared(PopulationBirthProcess.reduceStarted(state, settlement, started), settlement, prepared.intent());
-        state = held(state, depot);
-
-        ChestBlockEntity chest = chest(helper, position, depot);
-        FrontierV3ContainerSurfaceExecutor.replaceCanonicalSlots(chest, state, depot);
-        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(world, state);
-        FrontierV3ExactItemConsumptionExecutor.tick(helper.getLevel(), runtime);
-        FrontierWorldState confirmed = runtime.decodedState().orElseThrow();
-        helper.assertTrue(confirmed.physicalIntents().get(prepared.intent().id()).status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED
-                        && emittedAndReleased(confirmed, depot),
-                "the exact-consumption executor itself confirms, checkpoints, releases, and emits before unload");
-        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> recovered = recovered(world, runtime.checkpointImage().orElseThrow());
-        helper.assertTrue(emittedAndReleased(recovered.decodedState().orElseThrow(), depot),
-                "the executor-established exact-consumption boundary survives persisted recovery");
-        recovered.shutdown(); runtime.shutdown(); helper.succeed();
     }
 
     @GameTest(batch = "pm-frontier-v3-reference-conflict-restart", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
