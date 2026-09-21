@@ -208,6 +208,11 @@ class FrontierV3ResourceSiteExecutorTest {
                 "an already mismatched managed crop stays frozen as local conflict evidence rather than receiving further native mutation");
         assertTrue(FrontierV3ResourceSiteExecutor.blocksNativeCropGrowth(terminal, false, true),
                 "the settled active claim keeps its normal canonical-stage guard");
+        FrontierV3ResourceSiteLedger.Claim pending = new FrontierV3ResourceSiteLedger.Claim(
+                new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:site-projection-1-wheat-field"),
+                FrontierV3ResourceSiteLedger.Status.PENDING, 0, 0);
+        assertTrue(FrontierV3ResourceSiteExecutor.blocksNativeCropGrowth(pending, false, true),
+                "the reserved initial writer owns its crop cells before its claim becomes active");
     }
 
     @Test

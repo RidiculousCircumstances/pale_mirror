@@ -146,7 +146,10 @@ final class FrontierV3ResourceSiteExecutor {
     }
     static boolean blocksNativeCropGrowth(FrontierV3ResourceSiteLedger.Claim claim, boolean projectionInFlight,
                                           boolean matchesRecordedClaimStage) {
-        return projectionInFlight || (claim != null && claim.status() == FrontierV3ResourceSiteLedger.Status.ACTIVE);
+        // PENDING has already reserved the exact managed cells while the bounded physical
+        // writer transitions its durable claim.  Treating only ACTIVE as owned leaves the
+        // complete initial field exposed to vanilla random ticks during that hand-off.
+        return projectionInFlight || claim != null;
     }
     static boolean matchesHarvestProgress(ServerLevel level, ResourceSite site, int completedCropSlots) {
         ManagedFacilityProgressProjection projection;
