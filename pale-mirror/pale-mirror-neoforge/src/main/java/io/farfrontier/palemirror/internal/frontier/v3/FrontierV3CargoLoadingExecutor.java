@@ -81,7 +81,10 @@ final class FrontierV3CargoLoadingExecutor {
                 new PhysicalObservationId("observation:" + intent.id().value().replace(':', '-')), intent.id(), target.contract().id(),
                 target.contract().cargoId(), target.item().id(), target.item().count());
         if (!transition(runtime, intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation), "confirmed")) {
-            throw new IllegalStateException("cargo loading confirmation was rejected");
+            // A rejected owner command is evidence about this one intent, never a reason to
+            // escape the physical lane and quarantine unrelated Frontier work.  The planner
+            // owns the exact recovery/blocked-task disposition for UNKNOWN_AFTER_RESTART.
+            unknown(runtime, intent.id(), "confirmation-rejected");
         }
     }
 
