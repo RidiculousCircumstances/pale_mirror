@@ -21,6 +21,15 @@ test('F0.6R3 first-visibility carrier derives the current worker from the COLD t
   assert.throws(() => assertF06r3FirstVisibilityColdContinuityCarrier({ declaration, beforeRestart: before, manifest }), /replaced, converged/);
 });
 
+test('F0.6R3 first-visibility carrier rejects a field held by starving visible farmers', async () => {
+  const declaration = JSON.parse(await readFile(resolve(root, 'scenarios/disposable-f06r3-first-visibility-cold-continuity.json'), 'utf8'));
+  const { before, manifest } = fixtures();
+  manifest.diagnostics.find(row => row.actionStep === 13).value.harvestAdmission = 'FARMERS_STARVING';
+  manifest.diagnostics.find(row => row.actionStep === 13).value.food.starving = 4;
+
+  assert.throws(() => assertF06r3FirstVisibilityColdContinuityCarrier({ declaration, beforeRestart: before, manifest }), /starving-farmer/);
+});
+
 function fixtures() {
   const terminalHarvest = { job: 'job:site-harvest-7-wheat-field-7', worker: 'resident:7-13', canonicalSuccessor: true,
     successor: { job: 'job:production-7-365', worker: 'resident:7-15' } };
@@ -34,7 +43,7 @@ function fixtures() {
     clientSegments: [{ ingressResponsiveness: { status: 'ok', ordinaryClientJoined: true, noServerTickStall: true } }], diagnostics: [
       { actionStep: 9, value: { kind: 'pilot_settlement_population', id: 'settlement:7', status: 'ok', residents: [{ ...resident, first: { x: 144.5, y: 64, z: -5.5 }, maxDisplacement: 0, maxStep: 0 }] } },
       { actionStep: 10, value: { kind: 'settlement_population', id: 'settlement:7', status: 'ok', residents: [{ ...resident, admission: 'INDEXED' }] } },
-      { actionStep: 12, value: site }, { actionStep: 13, value: { kind: 'settlement', id: 'settlement:7', status: 'ok', harvestAdmission: 'NO_READY_SITE' } }
+      { actionStep: 12, value: site }, { actionStep: 13, value: { kind: 'settlement', id: 'settlement:7', status: 'ok', harvestAdmission: 'NO_READY_SITE', food: { starving: 0 } } }
     ] };
   return { before, manifest };
 }

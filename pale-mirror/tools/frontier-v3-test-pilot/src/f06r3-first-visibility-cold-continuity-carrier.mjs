@@ -49,8 +49,9 @@ export function assertF06r3FirstVisibilityColdContinuityCarrier({ declaration, b
   }
   if (after.phase !== before.phase || after.growthEpoch !== before.growthEpoch || after.growthStage !== before.growthStage
       || after.activeWork !== before.activeWork || after.terminalHarvest?.job !== terminal.job
-      || after.terminalHarvest?.worker !== worker || settlement.harvestAdmission === 'FARMERS_NEEDED') {
-    throw new Error('F0.6R3 first visibility reset current COLD field history or misreported its worker admission');
+      || after.terminalHarvest?.worker !== worker || settlement.harvestAdmission === 'FARMERS_NEEDED'
+      || settlement.harvestAdmission === 'FARMERS_STARVING' || settlement.food?.starving !== 0) {
+    throw new Error('F0.6R3 first visibility reset current COLD field history or retained a starving-farmer admission block');
   }
   const ingress = manifest.clientSegments?.flatMap(segment => Array.isArray(segment?.ingressResponsiveness)
     ? segment.ingressResponsiveness : [segment?.ingressResponsiveness]).filter(Boolean) ?? [];

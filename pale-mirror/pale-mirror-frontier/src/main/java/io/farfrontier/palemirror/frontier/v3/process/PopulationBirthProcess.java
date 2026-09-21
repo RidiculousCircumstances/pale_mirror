@@ -45,11 +45,13 @@ public final class PopulationBirthProcess {
         // birth permit retain the only COLD bread stack between a visible
         // shortage and its next ordinary provision review.
         if (!SettlementProvisionProcess.allowsPopulationGrowth(state, settlement.id())) return List.copyOf(events);
-        // A retained replica is evidence, not a spending authority.  The one
-        // exceptional boundary is an actually live physical custodian: do not
-        // create a second exact-item consumer while that owner is responsible
-        // for the chest.  Once it is safely released, COLD planning remains
-        // eligible even if its presentation surface is UNMATERIALIZED.
+        // A retained replica is evidence, not a spending authority.  A birth
+        // is a physical exact-food effect, so an unmaterialized depot cannot
+        // own its permit: no executor can produce the required receipt there.
+        // Leaving such a permit PREPARED would fence its entire exact stack
+        // from ordinary COLD provisioning and can starve the residents that
+        // the discretionary birth was supposed to join.  Retry the review
+        // after the ordinary surface is active instead.
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
         if (ReferenceContainerCustody.blocksCanonicalUse(state, depot)) return List.copyOf(events);
         if (ReferenceContainerCustody.isReferenceContainer(state, depot)
@@ -151,6 +153,10 @@ public final class PopulationBirthProcess {
         SubjectId depot = FrontierWorldState.depotId(settlementId);
         boolean referenceDepot = ReferenceContainerCustody.isReferenceContainer(state, depot);
         if (referenceDepot && ReferenceContainerCustody.blocksCanonicalUse(state, depot)) return Optional.empty();
+        // The permit has a physical lifecycle and must not be created from an
+        // off-screen COLD stack.  Provisioning has its own COLD consumption
+        // path; birth deliberately waits for its materialized care boundary.
+        if (state.inventory().surfaces().get(depot).status() != ContainerSurfaceStatus.ACTIVE) return Optional.empty();
         return state.inventory().items().values().stream().sorted(Comparator.comparing(ExactItemStack::id)).filter(item -> BREAD.equals(item.itemKind())
                 && item.count() >= 1 && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot)
                 && (referenceDepot || state.inventory().surfaces().get(depot).status() == ContainerSurfaceStatus.ACTIVE)).findFirst();

@@ -167,6 +167,29 @@ class FrontierReadabilityPlanTest {
     }
 
     @Test
+    void namesVisibleButStarvingFarmersInsteadOfClaimingTheyAreMissing() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:board-starving-farmers"), 91L));
+        Settlement settlement = state.bootstrap().settlements().getFirst();
+        ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).get(new SubjectId("site:1-wheat-field"));
+        ResourceSiteLifecycle ready = new ResourceSiteLifecycle(site.id(), ResourceSitePhase.READY, 2L,
+                ResourceSiteLifecycle.MATURE_STAGE, java.util.Optional.empty(), java.util.Optional.empty(), java.util.Optional.empty());
+        HumanPopulation population = state.humanPopulation();
+        for (int cycle = 1; cycle <= ResidentNutrition.STARVING_AFTER_MISSED_CYCLES; cycle++) {
+            for (ResidentProfile resident : population.residents().values()) {
+                if (resident.settlementId().equals(settlement.id()) && resident.profession() == ResidentProfession.AGRICULTURAL_WORKER) {
+                    population = population.resolveNutrition(resident.id(), cycle, false);
+                }
+            }
+        }
+        FrontierWorldState hungry = state.withResourceSites(state.resourceSites().replace(ready)).withHumanPopulation(population);
+
+        FrontierObjectBoard board = FrontierReadabilityPlan.compile(hungry).boards().get(site.id());
+
+        assertTrue(board.text().endsWith("READY TO HARVEST · FARMERS STARVING\nCHECK DEPOT FOOD"));
+        assertTrue(!board.text().contains("FARMERS NEEDED"));
+    }
+
+    @Test
     void makesExactSettlementFoodShortageReadableAtTheOwnedDepot() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:board-food-shortage"), 91L));
         Settlement settlement = state.bootstrap().settlements().getFirst();

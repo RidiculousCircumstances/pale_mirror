@@ -122,7 +122,7 @@ class HumanPopulationProcessTest {
     }
 
     @Test
-    void releasedReferenceReplicaRemainsColdEligibleButLiveCustodyExcludesACompetingBirthPermit() {
+    void coldReferenceDepotDefersPhysicalBirthPermitAndLeavesItsFoodForProvisioning() {
         FrontierWorldState active = stateWithBread(FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:birth-reference"), 91L)),
                 new SubjectId("settlement:1"));
         SubjectId depot = FrontierWorldState.depotId(new SubjectId("settlement:1"));
@@ -132,10 +132,10 @@ class HumanPopulationProcessTest {
 
         var proposed = PopulationBirthProcess.planReview(released, PopulationBirthProcess.review(new SubjectId("settlement:1"), 1, 100L));
 
-        assertEquals(3, proposed.size(), "a safely released reference depot remains COLD eligible despite retained replica history");
+        assertEquals(1, proposed.size(), "a COLD depot cannot retain an unobservable physical birth-food permit");
         assertTrue(proposed.getFirst().payload() instanceof io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created);
-        assertTrue(proposed.get(1).payload() instanceof ResidentBirthStarted);
-        assertTrue(proposed.get(2).payload() instanceof PhysicalIntentPrepared);
+        assertEquals(64, SettlementProvisionProcess.availableFood(released, new SubjectId("settlement:1")),
+                "the deferred birth leaves the complete exact stack available to the next ordinary ration cycle");
 
         PhysicalReplicaCustodyState heldCustody = PhysicalReplicaCustodyState.empty().declare(replica)
                 .observe(depot, 7L, 1L, replica.fingerprint(), replica.provenance(), 7L)
