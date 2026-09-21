@@ -90,7 +90,7 @@ final class FrontierV3ControlledMobMotion {
     private FrontierV3ControlledMobMotion() { }
 
     static void moveToward(ServerLevel level, Mob actor, Vec3 target) {
-        submit(level, actor, target, false, null, null, Double.MAX_VALUE);
+        submit(level, actor, target, false, null, null, Double.MAX_VALUE, false);
     }
 
     /**
@@ -103,7 +103,7 @@ final class FrontierV3ControlledMobMotion {
             stop(actor);
             return;
         }
-        submit(level, actor, target, false, null, bounds, Double.MAX_VALUE);
+        submit(level, actor, target, false, null, bounds, Double.MAX_VALUE, false);
     }
 
     /**
@@ -128,7 +128,7 @@ final class FrontierV3ControlledMobMotion {
         // walking.  Retiring that presentation state at the sole travel-authority hand-off is
         // not a position/velocity rewrite and cannot advance a cursor.
         showTravellingDuty(level, actor);
-        submit(level, actor, next, true, null, null, Double.MAX_VALUE);
+        submit(level, actor, next, true, null, null, Double.MAX_VALUE, false);
     }
 
     /**
@@ -204,7 +204,13 @@ final class FrontierV3ControlledMobMotion {
             stop(actor);
             return;
         }
-        submit(level, actor, target, false, envelope, null, Double.MAX_VALUE);
+        submit(level, actor, target, false, envelope, null, Double.MAX_VALUE, false);
+    }
+
+    /** Same bounded actuator, but its endpoint remains live until an exact support observation. */
+    static void moveWithinSemanticEnvelope(ServerLevel level, Mob actor, Vec3 target, LocalNavigationEnvelope envelope) {
+        if (!insideEnvelope(level, actor, target, envelope) || !insideEnvelope(target, envelope)) { stop(actor); return; }
+        submit(level, actor, target, false, envelope, null, Double.MAX_VALUE, true);
     }
 
     /**
@@ -214,25 +220,25 @@ final class FrontierV3ControlledMobMotion {
      */
     static void followContinuously(ServerLevel level, Mob actor, Vec3 target) {
         TENDING.remove(actor);
-        submit(level, actor, target, true, null, null, Double.MAX_VALUE);
+        submit(level, actor, target, true, null, null, Double.MAX_VALUE, false);
     }
 
     /** Retains only the current crop station; it never creates a local orbit or a job cursor. */
     static void tendCurrentCrop(ServerLevel level, Mob actor, io.farfrontier.palemirror.frontier.v3.model.BlockPosition crop) {
         TendingPose pose = new TendingPose(crop.x() + .5D, crop.y(), crop.z() + .5D);
         TENDING.put(actor, pose);
-        submit(level, actor, pose.target(level.getGameTime()), true, null, null, Double.MAX_VALUE);
+        submit(level, actor, pose.target(level.getGameTime()), true, null, null, Double.MAX_VALUE, false);
     }
 
     /** Holds an already observed retained checkpoint visibly active without exposing another edge. */
     static void holdRetainedCheckpoint(ServerLevel level, Mob actor, Vec3 checkpoint) {
         TendingPose pose = new TendingPose(checkpoint.x, checkpoint.y, checkpoint.z);
         TENDING.put(actor, pose);
-        submit(level, actor, pose.target(level.getGameTime()), true, null, null, Double.MAX_VALUE);
+        submit(level, actor, pose.target(level.getGameTime()), true, null, null, Double.MAX_VALUE, false);
     }
 
     private static void submit(ServerLevel level, Mob actor, Vec3 target, boolean continuous, LocalNavigationEnvelope envelope,
-                               WorldBounds bounds, double maximumStep) {
+                               WorldBounds bounds, double maximumStep, boolean exactEndpoint) {
         actor.setNoAi(true);
         // NoAI suppresses Minecraft's goal selector, not physical gravity.  Reassert the latter
         // because a retained entity can carry an old mod/AI no-gravity flag across a HOT handoff.
@@ -240,16 +246,17 @@ final class FrontierV3ControlledMobMotion {
         actor.getNavigation().stop();
         Vec3 delta = target.subtract(actor.position());
         double horizontalDistance = Math.sqrt(delta.x * delta.x + delta.z * delta.z);
-        if (!continuous && horizontalDistance <= ARRIVAL_DISTANCE && Math.abs(delta.y) <= ARRIVAL_DISTANCE) { stop(actor); return; }
+        if (!continuous && (exactEndpoint ? horizontalDistance == 0.0D && delta.y == 0.0D
+                : horizontalDistance <= ARRIVAL_DISTANCE && Math.abs(delta.y) <= ARRIVAL_DISTANCE)) { stop(actor); return; }
         // A HOT adapter may only follow the next retained pedestrian edge.  Existing callers
         // that still use same-level local goals remain unaffected; a larger vertical gap is not
         // a licence to fly or to infer a route and is therefore left for the canonical planner.
-        if (Math.abs(delta.y) > MAX_WALK_GRADE + ARRIVAL_DISTANCE) { stop(actor); return; }
+        if (Math.abs(delta.y) > (exactEndpoint ? MAX_WALK_GRADE : MAX_WALK_GRADE + ARRIVAL_DISTANCE)) { stop(actor); return; }
         if (!Double.isFinite(maximumStep) || maximumStep <= 0.0D) throw new IllegalArgumentException("motion maximum step");
         MotionIntent pending = PENDING.get(actor);
         if (continuous && !CONTINUOUS.containsKey(actor) && CONTINUOUS.size() >= MAX_PENDING_INTENTS) return;
         if (!continuous) TENDING.remove(actor);
-        MotionIntent replacement = new MotionIntent(level.getGameTime(), target, continuous, envelope, bounds, maximumStep);
+        MotionIntent replacement = new MotionIntent(level.getGameTime(), target, continuous, envelope, bounds, maximumStep, exactEndpoint);
         RetainedAscent ascent = ASCENTS.get(actor);
         if (ascent != null && !ascent.target().equals(target)) ASCENTS.remove(actor);
         if (continuous) CONTINUOUS.put(actor, replacement);
@@ -295,12 +302,12 @@ final class FrontierV3ControlledMobMotion {
         // circular locomotion that would read as filler wandering.
         TendingPose tending = TENDING.get(actor);
         if (tending != null) {
-            intent = new MotionIntent(level.getGameTime(), tending.target(level.getGameTime()), true, null, null, Double.MAX_VALUE);
+            intent = new MotionIntent(level.getGameTime(), tending.target(level.getGameTime()), true, null, null, Double.MAX_VALUE, false);
             CONTINUOUS.put(actor, intent);
         }
         PENDING.remove(actor);
         LAST_ADVANCE.put(actor, new AppliedIntent(intent, level.getGameTime()));
-        apply(level, actor, intent.target(), intent.continuous(), intent.envelope(), intent.bounds(), intent.maximumStep());
+        apply(level, actor, intent.target(), intent.continuous(), intent.envelope(), intent.bounds(), intent.maximumStep(), intent.exactEndpoint());
     }
 
     /**
@@ -339,7 +346,7 @@ final class FrontierV3ControlledMobMotion {
                 advance(actor);
                 continue;
             }
-            MotionIntent turn = new MotionIntent(level.getGameTime(), pose.target(level.getGameTime()), true, null, null, Double.MAX_VALUE);
+            MotionIntent turn = new MotionIntent(level.getGameTime(), pose.target(level.getGameTime()), true, null, null, Double.MAX_VALUE, false);
             PENDING.remove(actor);
             CONTINUOUS.put(actor, turn);
             advance(actor);
@@ -427,22 +434,23 @@ final class FrontierV3ControlledMobMotion {
     }
 
     private static void apply(ServerLevel level, Mob actor, Vec3 target, boolean continuous, LocalNavigationEnvelope envelope,
-                              WorldBounds bounds, double maximumStep) {
+                              WorldBounds bounds, double maximumStep, boolean exactEndpoint) {
         Vec3 delta = target.subtract(actor.position());
         double horizontalDistance = Math.sqrt(delta.x * delta.x + delta.z * delta.z);
-        if (!continuous && horizontalDistance <= ARRIVAL_DISTANCE && Math.abs(delta.y) <= ARRIVAL_DISTANCE) { actor.stopInPlace(); return; }
-        if (Math.abs(delta.y) > MAX_WALK_GRADE + ARRIVAL_DISTANCE) return;
+        if (!continuous && (exactEndpoint ? horizontalDistance == 0.0D && delta.y == 0.0D
+                : horizontalDistance <= ARRIVAL_DISTANCE && Math.abs(delta.y) <= ARRIVAL_DISTANCE)) { actor.stopInPlace(); return; }
+        if (Math.abs(delta.y) > (exactEndpoint ? MAX_WALK_GRADE : MAX_WALK_GRADE + ARRIVAL_DISTANCE)) return;
         // A one-block retained ascent is an ordinary collision move, but it cannot share the
         // same shallow diagonal vector as horizontal walking: that lets a NoAI body slide into
         // the lower adjacent column beneath the named higher support.  Complete the bounded
         // vertical half in the current clear column first, then walk the already-retained X/Z
         // edge.  This neither changes the target nor creates a stair/side-route search.
-        if (delta.y > ARRIVAL_DISTANCE) {
+        if (delta.y > (exactEndpoint ? 0.0D : ARRIVAL_DISTANCE)) {
             settleExactAscent(level, actor, target, delta.y);
             return;
         }
-        if (horizontalDistance <= 1.0E-8D) {
-            settleExactDescent(actor, delta.y);
+        if (exactEndpoint ? horizontalDistance == 0.0D : horizontalDistance <= 1.0E-8D) {
+            settleExactDescent(actor, delta.y, exactEndpoint);
             return;
         }
         // A descending retained edge is a physical walk-off, not a downward impulse.  Pushing
@@ -573,8 +581,8 @@ final class FrontierV3ControlledMobMotion {
      * staged: an actor never applies a downward vector while its body can still collide with the
      * upper ledge, and it cannot use this branch to choose a different X/Z position.
      */
-    private static void settleExactDescent(Mob actor, double verticalDelta) {
-        if (verticalDelta >= -ARRIVAL_DISTANCE) return;
+    private static void settleExactDescent(Mob actor, double verticalDelta, boolean exactEndpoint) {
+        if (verticalDelta >= (exactEndpoint ? 0.0D : -ARRIVAL_DISTANCE)) return;
         Vec3 before = actor.position();
         actor.move(MoverType.SELF, new Vec3(0.0D, -Math.min(Math.abs(verticalDelta), VERTICAL_SPEED), 0.0D));
         if (actor.position().y < before.y - 1.0E-8D) publishAcceptedMove(actor);
@@ -672,7 +680,7 @@ final class FrontierV3ControlledMobMotion {
     }
 
     private record MotionIntent(long applyAtGameTime, Vec3 target, boolean continuous, LocalNavigationEnvelope envelope,
-                                WorldBounds bounds, double maximumStep) { }
+                                WorldBounds bounds, double maximumStep, boolean exactEndpoint) { }
     private record AppliedIntent(MotionIntent intent, long gameTime) { }
     private record RetainedAscent(Vec3 target, BlockPos sourceSupport) { }
     private record TendingPose(double x, double y, double z) {

@@ -27,7 +27,6 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CropBlock;
-import net.minecraft.world.phys.Vec3;
 
 import java.util.Comparator;
 import java.util.ArrayList;
@@ -213,38 +212,33 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         }
         if (job.hasNextTraversalStep()) {
             var target = job.nextTraversalSurface();
-            if (!atTraversalSurface(worker, job.traversal().linearCorridorSurfaces().get(job.traversalCursor()))) {
-                // An exact loaded arrival advances the retained traversal cursor immediately,
-                // but retains its one COLD continuation unchanged.  The worker must pursue its
-                // route at ordinary entity cadence; only crop mutation consumes due work.
-                    if (atTraversalSurface(worker, target)) {
-                        var binding = FrontierV3TraversalScheduleGate.binding(runtime.checkpointImage().orElseThrow(), job.id());
-                        if (binding.isPresent()) {
-                            submitBound(runtime, "resource-site-harvest-traversal-advanced", lease.id().value(),
-                                    checkpoint(job, lease, worker), binding.orElseThrow());
-                        } else keepTraversalPhysicallyActive(level, runtime, job, worker, target);
-                } else if (withinTraversalEdgeEnvelope(worker, job.traversal().linearCorridorSurfaces().get(job.traversalCursor()), target)) {
-                    // Minecraft resolves a descending grid edge through an intermediate feet
-                    // cell (the horizontal successor before gravity settles one block down).
-                    // It is still only the exact retained edge: keep driving that same target,
-                    // without advancing or rewriting the cursor, until an endpoint is observed.
-                    keepTraversalPhysicallyActive(level, runtime, job, worker, target);
-                } else conflict(level, runtime, lease, mismatchReason(worker, job));
-                return;
-            }
-            if (atTraversalSurface(worker, target)) {
-                    var binding = FrontierV3TraversalScheduleGate.binding(runtime.checkpointImage().orElseThrow(), job.id());
+            var current = job.traversal().linearCorridorSurfaces().get(job.traversalCursor());
+            // Arrival is a provider-neutral exact support/medium/clearance observation.  A
+            // local pose between supports never advances the cursor, and a water/collision
+            // defect is a named owner-local disposition rather than a coordinate exception.
+            if (FrontierV3SemanticMovement.arrived(level, worker, target)) {
+                var binding = FrontierV3TraversalScheduleGate.binding(runtime.checkpointImage().orElseThrow(), job.id());
                 if (binding.isPresent()) {
                     submitBound(runtime, "resource-site-harvest-traversal-advanced", lease.id().value(),
                             checkpoint(job, lease, worker), binding.orElseThrow());
-                } else keepTraversalPhysicallyActive(level, runtime, job, worker, target);
+                } else keepTraversalPhysicallyActive(level, worker, current, target);
+            } else if (FrontierV3SemanticMovement.arrived(level, worker, current)) {
+                var targetState = FrontierV3SemanticMovement.target(level, worker, target);
+                if (targetState == io.farfrontier.palemirror.frontier.v3.model.SemanticTraversalArrival.Disposition.IN_PROGRESS) {
+                    keepTraversalPhysicallyActive(level, worker, current, target);
+                } else {
+                    conflict(level, runtime, lease, "field-work-route-" + FrontierV3SemanticMovement.detail(targetState));
+                }
             } else {
-                keepTraversalPhysicallyActive(level, runtime, job, worker, target);
+                conflict(level, runtime, lease, "field-work-cursor-" + FrontierV3SemanticMovement.detail(
+                        FrontierV3SemanticMovement.at(level, worker, current)));
             }
             return;
         }
-        if (!job.atCurrentCropStation() || !atTraversalSurface(worker, job.traversal().linearCorridorSurfaces().get(job.traversalCursor()))) {
-            conflict(level, runtime, lease, stationMismatchReason(worker, job)); return;
+        if (!job.atCurrentCropStation() || !FrontierV3SemanticMovement.arrived(level, worker,
+                job.traversal().linearCorridorSurfaces().get(job.traversalCursor()))) {
+            conflict(level, runtime, lease, "field-work-station-" + FrontierV3SemanticMovement.detail(
+                    FrontierV3SemanticMovement.at(level, worker, job.traversal().linearCorridorSurfaces().get(job.traversalCursor())))); return;
         }
         var intent = state.physicalIntents().get(job.intentId());
         if (intent == null || intent.status() == PhysicalIntentStatus.CONFIRMED
@@ -312,40 +306,19 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex()), dueBinding.orElseThrow());
     }
 
-    private static boolean atTraversalSurface(Mob worker, io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor surface) {
-        // HOT causality is a grid checkpoint, not a near-enough movement hint.  The local
-        // navigator may approach continuously, but only the observed feet cell exactly above
-        // the retained support can advance the canonical cursor.
-        return worker.getBlockX() == surface.x() && worker.getBlockY() == surface.y() + 1 && worker.getBlockZ() == surface.z();
-    }
-
-    static boolean withinTraversalEdgeEnvelope(Mob worker, io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor current,
-                                               io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor next) {
-        return FrontierV3TraversalEdgeEnvelope.contains(new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(
-                worker.getBlockX(), worker.getBlockY(), worker.getBlockZ()), current, next);
-    }
-
-    private static String mismatchReason(Mob worker, io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob job) {
-        return "field-work-cursor-body-mismatch:actual=" + worker.getBlockX() + "," + worker.getBlockY() + "," + worker.getBlockZ()
-                + ":retained=" + job.traversal().linearCorridorSurfaces().get(job.traversalCursor()).standingBody()
-                + ":next=" + job.nextTraversalSurface().standingBody();
-    }
-
-    private static String stationMismatchReason(Mob worker, io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob job) {
-        return "field-work-station-mismatch:actual=" + worker.getBlockX() + "," + worker.getBlockY() + "," + worker.getBlockZ()
-                + ":retained=" + job.traversal().linearCorridorSurfaces().get(job.traversalCursor()).standingBody();
-    }
-
-    private static void keepTraversalPhysicallyActive(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                                      io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob job,
-                                                      Mob worker, io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor surface) {
-        Vec3 checkpoint = new Vec3(surface.x() + 0.5D, surface.y() + 1.0D, surface.z() + 0.5D);
+    private static void keepTraversalPhysicallyActive(ServerLevel level, Mob worker,
+                                                      io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor current,
+                                                      io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor surface) {
         // An undued shared traversal action may keep its exact observed body cell, but cannot
         // leave a player-facing frozen worker there. This is a cell-local physical hold, not a
         // new route target or a cursor advance; the existing due binding remains the sole
         // semantic authority for exposing the next retained surface.
-        if (atTraversalSurface(worker, surface)) FrontierV3ControlledMobMotion.holdRetainedCheckpoint(level, worker, checkpoint);
-        else FrontierV3ControlledMobMotion.pursueRetainedCheckpoint(level, worker, checkpoint);
+        if (FrontierV3SemanticMovement.arrived(level, worker, surface)) {
+            FrontierV3ControlledMobMotion.holdRetainedCheckpoint(level, worker, FrontierV3SemanticMovement.point(surface));
+        } else {
+            FrontierV3ControlledMobMotion.moveWithinSemanticEnvelope(level, worker, FrontierV3SemanticMovement.point(surface),
+                    io.farfrontier.palemirror.frontier.v3.model.LocalNavigationEnvelope.around(current.standingBody(), surface.standingBody()));
+        }
     }
 
     /**

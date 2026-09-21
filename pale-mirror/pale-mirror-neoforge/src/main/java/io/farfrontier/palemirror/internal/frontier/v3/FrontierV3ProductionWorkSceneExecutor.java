@@ -136,23 +136,12 @@ final class FrontierV3ProductionWorkSceneExecutor {
         // next surface when this tick reads the still-old cursor.  That is observed arrival,
         // not a conflict and not permission to skip an edge.  Any other displacement remains
         // a visible mismatch.
-        if (!at(worker, current)) {
-            if (job.traversalCursor() < route.size() - 1 && at(worker, route.get(job.traversalCursor() + 1))) {
+        if (!FrontierV3SemanticMovement.arrived(level, worker, current)) {
+            if (job.traversalCursor() < route.size() - 1 && FrontierV3SemanticMovement.arrived(level, worker, route.get(job.traversalCursor() + 1))) {
                 submit(runtime, "production-work-traversal", lease.id().value(),
                         new ProductionWorkTraversalAdvanced(job.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, route.get(job.traversalCursor() + 1)), job.traversalCursor() + 1));
-            } else if (job.traversalCursor() < route.size() - 1
-                    && settleRetainedDescendingArrival(level, worker, current, route.get(job.traversalCursor() + 1))) {
-                // The exact body has already walked horizontally over the one retained lower
-                // support.  It must settle that same edge before a current-surface recovery is
-                // considered; otherwise the current/next tolerances make it oscillate across
-                // the lip forever without changing the canonical cursor.
-            } else if (job.traversalCursor() < route.size() - 1
-                    && continueRetainedAscendingLip(level, worker, current, route.get(job.traversalCursor() + 1))) {
-                // The body is still in the current column but already collision-lifted by the
-                // one declared higher support.  Returning it to the lower cursor would try to
-                // move through that support and loop forever; continue only this retained edge.
-            } else if (!reacquireRetainedSurface(level, worker, current)) conflict(level, runtime, lease,
-                    cursorBodyMismatch(level, job.traversalCursor(), worker, current));
+            } else conflict(level, runtime, lease, "production-work-cursor-" + FrontierV3SemanticMovement.detail(
+                    FrontierV3SemanticMovement.at(level, worker, current)));
             return;
         }
         if (job.workProgress().stage() == ProductionWorkProgress.Stage.APPROACH && job.traversalCursor() == inputCursor) {
@@ -162,8 +151,8 @@ final class FrontierV3ProductionWorkSceneExecutor {
         }
         if (job.traversalCursor() < route.size() - 1) {
             SurfaceAnchor next = route.get(job.traversalCursor() + 1);
-            if (at(worker, next)) submit(runtime, "production-work-traversal", lease.id().value(), new ProductionWorkTraversalAdvanced(job.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, next), job.traversalCursor() + 1));
-            else if (!clearNextBody(level, worker, next)) blocked(level, runtime, lease, job, worker, current, next);
+            if (FrontierV3SemanticMovement.arrived(level, worker, next)) submit(runtime, "production-work-traversal", lease.id().value(), new ProductionWorkTraversalAdvanced(job.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, next), job.traversalCursor() + 1));
+            else if (!FrontierV3SemanticMovement.targetIsNavigable(level, worker, next)) blocked(level, runtime, lease, job, worker, current, next);
             else pursueRetainedTraversalEdge(level, worker, current, next);
             return;
         }
@@ -177,9 +166,6 @@ final class FrontierV3ProductionWorkSceneExecutor {
         worker.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
         submit(runtime, "production-work-progress", lease.id().value(), new ProductionWorkProgressed(job.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, current), next));
     }
-    private static boolean at(Mob worker, SurfaceAnchor surface) { return FrontierV3SurfaceObservation.at(worker, surface); }
-    private static Vec3 point(SurfaceAnchor surface) { return FrontierV3SurfaceObservation.point(surface); }
-
     /**
      * Keeps one admitted production body inside the fixed neighborhood of its current and next
      * canonical supports when a live body temporarily occupies the direct physical column.
@@ -187,52 +173,12 @@ final class FrontierV3ProductionWorkSceneExecutor {
      * observation at that target can advance the durable traversal cursor.
      */
     static void pursueRetainedTraversalEdge(ServerLevel level, Mob worker, SurfaceAnchor current, SurfaceAnchor next) {
-        FrontierV3ControlledMobMotion.moveWithinEnvelope(level, worker, point(next),
+        FrontierV3ControlledMobMotion.moveWithinSemanticEnvelope(level, worker, FrontierV3SemanticMovement.point(next),
                 LocalNavigationEnvelope.around(current.standingBody(), next.standingBody()));
-    }
-
-    /**
-     * Finishes only the vertical half of a directly observed one-grade descending retained
-     * edge.  The body remains at the retained next X/Z checkpoint, and the actuator remains
-     * bounded by the same current/next envelope; it cannot select a new support or cursor.
-     */
-    static boolean settleRetainedDescendingArrival(ServerLevel level, Mob worker, SurfaceAnchor current, SurfaceAnchor next) {
-        if (next.y() >= current.y() || !FrontierV3SurfaceObservation.horizontallyAt(worker, next)
-                || !FrontierV3SurfaceObservation.withinDescendingEdgeHeights(worker, current, next)
-                || !clearNextBody(level, worker, next)) return false;
-        pursueRetainedTraversalEdge(level, worker, current, next);
-        return true;
-    }
-
-    /**
-     * Continues precisely one declared ascending edge after collision has lifted the body over
-     * its next support lip.  It has no cursor authority: only a later exact observation at
-     * {@code next} can commit the durable traversal advance.
-     */
-    static boolean continueRetainedAscendingLip(ServerLevel level, Mob worker, SurfaceAnchor current, SurfaceAnchor next) {
-        if (!FrontierV3SurfaceObservation.withinAscendingEdgeLip(worker, current, next)
-                || !clearNextBody(level, worker, next)) return false;
-        pursueRetainedTraversalEdge(level, worker, current, next);
-        return true;
     }
     /** Tests the exact retained target support and body against loaded physical collision without choosing an alternate edge. */
     static boolean clearNextBody(ServerLevel level, Mob worker, SurfaceAnchor surface) {
-        net.minecraft.core.BlockPos support = new net.minecraft.core.BlockPos(surface.x(), surface.y(), surface.z());
-        return !level.getBlockState(support).isAir()
-                && level.getBlockState(support).isFaceSturdy(level, support, net.minecraft.core.Direction.UP)
-                && level.noCollision(worker, worker.getBoundingBox().move(point(surface).subtract(worker.position())));
-    }
-
-    /**
-     * Minecraft may push a body one local cell between observations.  This does not advance or
-     * rewrite the immutable canonical cursor: it merely lets the same exact body walk back to
-     * that retained surface.  A farther displacement or an occupied target remains a visible
-     * scene conflict, never a hidden route repair.
-     */
-    static boolean reacquireRetainedSurface(ServerLevel level, Mob worker, SurfaceAnchor surface) {
-        if (!FrontierV3SurfaceObservation.mayReacquire(worker, surface) || !clearNextBody(level, worker, surface)) return false;
-        FrontierV3ControlledMobMotion.moveToward(level, worker, point(surface));
-        return true;
+        return FrontierV3SemanticMovement.targetIsNavigable(level, worker, surface);
     }
 
     /**
@@ -242,7 +188,7 @@ final class FrontierV3ProductionWorkSceneExecutor {
      */
     static boolean observedHandoffSurfaceIsCurrent(ServerLevel level, Mob worker, BodyPosition observed) {
         SurfaceAnchor inferredSupport = observed.supportingSurface();
-        return at(worker, inferredSupport) && clearNextBody(level, worker, inferredSupport);
+        return FrontierV3SemanticMovement.arrived(level, worker, inferredSupport) && clearNextBody(level, worker, inferredSupport);
     }
 
     /** Applies the accepted grounded hand-off fact without changing the retained body or route. */

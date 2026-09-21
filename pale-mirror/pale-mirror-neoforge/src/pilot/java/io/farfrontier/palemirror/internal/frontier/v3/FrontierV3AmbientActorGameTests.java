@@ -20,6 +20,8 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor;
+import io.farfrontier.palemirror.frontier.v3.model.SemanticTraversalArrival;
+import io.farfrontier.palemirror.frontier.v3.model.TraversalCapability;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.persistence.AppendReceipt;
 import io.farfrontier.palemirror.frontier.v3.persistence.CompactionReceipt;
@@ -43,6 +45,7 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /** Materialized recovery evidence for the ambient before-effect actor lease boundary. */
 @GameTestHolder(PaleMirrorMod.MOD_ID)
@@ -51,28 +54,18 @@ public final class FrontierV3AmbientActorGameTests {
     private FrontierV3AmbientActorGameTests() { }
 
     @GameTest(batch = "pm-frontier-v3-ambient-local-brain", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 1)
-    public static void surfaceObservationAllowsOnlyBoundedReturnToTheSameRetainedCursor(GameTestHelper helper) {
+    public static void semanticArrivalRequiresExactSupportAndDeclaredGroundMedium(GameTestHelper helper) {
         SurfaceAnchor surface = SurfaceAnchor.at(0, 8, 0);
-        Vec3 centre = FrontierV3SurfaceObservation.point(surface);
-        helper.assertTrue(FrontierV3SurfaceObservation.at(centre.add(0.40D, 0.0D, 0.0D), surface),
-                "a narrow physical overhang remains on its retained semantic support");
-        helper.assertTrue(FrontierV3SurfaceObservation.mayReacquire(centre.add(1.20D, 0.0D, 0.0D), surface),
-                "a one-cell collision displacement may walk only back to the existing cursor");
-        helper.assertFalse(FrontierV3SurfaceObservation.mayReacquire(centre.add(1.51D, 0.0D, 0.0D), surface),
-                "a farther displacement is not a hidden route repair or cursor rebasing");
-        helper.assertFalse(FrontierV3SurfaceObservation.at(centre.add(0.0D, .36D, 0.0D), surface),
-                "a fractional elevated body is not an observed semantic arrival");
-        helper.assertTrue(FrontierV3SurfaceObservation.mayReacquire(centre.add(0.0D, .391D, 0.0D), surface),
-                "the same bounded collision pose may settle only to its existing cursor");
-        helper.assertTrue(FrontierV3SurfaceObservation.mayReacquire(centre.add(0.0D, .50D, 0.0D), surface),
-                "the bounded retained collision lip remains recoverable without cursor authority");
-        helper.assertFalse(FrontierV3SurfaceObservation.mayReacquire(centre.add(0.0D, .501D, 0.0D), surface),
-                "reacquisition must remain bounded below the next support datum");
-        SurfaceAnchor upper = SurfaceAnchor.at(0, 9, 1);
-        helper.assertTrue(FrontierV3SurfaceObservation.withinAscendingEdgeLip(centre.add(0.0D, 1.349D, 0.0D), surface, upper),
-                "a collision-lifted body in the current column may continue only its declared ascending edge");
-        helper.assertFalse(FrontierV3SurfaceObservation.withinAscendingEdgeLip(centre.add(0.0D, 1.351D, 0.0D), surface, upper),
-                "a body above the bounded current-to-next observation interval cannot be treated as an ascending-edge lip");
+        SemanticTraversalArrival.Contract contract = new SemanticTraversalArrival.Contract(surface, Set.of(TraversalCapability.PEDESTRIAN), 2);
+        helper.assertValueEqual(SemanticTraversalArrival.evaluate(new SemanticTraversalArrival.Observation(surface,
+                SemanticTraversalArrival.Medium.AIR, true, true), contract), SemanticTraversalArrival.Disposition.ARRIVED,
+                "only the exact named support is a pedestrian arrival");
+        helper.assertValueEqual(SemanticTraversalArrival.evaluate(new SemanticTraversalArrival.Observation(surface,
+                SemanticTraversalArrival.Medium.WATER, true, true), contract), SemanticTraversalArrival.Disposition.BLOCKED_MEDIUM,
+                "ground work may not acquire implicit swimming from a loaded water cell");
+        helper.assertValueEqual(SemanticTraversalArrival.evaluate(new SemanticTraversalArrival.Observation(SurfaceAnchor.at(1, 8, 0),
+                SemanticTraversalArrival.Medium.AIR, true, true), contract), SemanticTraversalArrival.Disposition.OFF_CONTRACT,
+                "a neighbouring support is not a proximity arrival or route rewrite");
         helper.succeed();
     }
 

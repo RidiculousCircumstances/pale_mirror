@@ -189,6 +189,33 @@ public final class FrontierV3LocalNavigationGameTests {
     }
 
     /**
+     * The shared arrival provider reads named collision supports, not a hard-coded body Y or a
+     * near-enough point.  Thin legitimate supports remain admissible; water and a foreign body
+     * cell are explicit local blocks for an ordinary pedestrian edge.
+     */
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft", template = "bastion/mobs/empty")
+    public static void semanticTraversalDistinguishesThinSupportFromUndeclaredMediumAndForeignObstruction(GameTestHelper helper) {
+        BlockPos support = helper.absolutePos(new BlockPos(4, 0, 4));
+        Zombie worker = helper.spawnWithNoFreeWill(EntityType.ZOMBIE, new Vec3(3.5D, 1.0D, 4.5D));
+        SurfaceAnchor target = SurfaceAnchor.at(support.getX(), support.getY(), support.getZ());
+        helper.getLevel().setBlock(support, Blocks.OAK_SLAB.defaultBlockState(), 3);
+        helper.getLevel().setBlock(support.above(), Blocks.AIR.defaultBlockState(), 3);
+        helper.getLevel().setBlock(support.above(2), Blocks.AIR.defaultBlockState(), 3);
+        helper.assertTrue(FrontierV3SemanticMovement.targetIsNavigable(helper.getLevel(), worker, target),
+                "a declared slab support must remain a valid semantic pedestrian target");
+        helper.getLevel().setBlock(support, Blocks.WHITE_CARPET.defaultBlockState(), 3);
+        helper.assertTrue(FrontierV3SemanticMovement.targetIsNavigable(helper.getLevel(), worker, target),
+                "a declared carpet support must remain a valid semantic pedestrian target");
+        helper.getLevel().setBlock(support.above(), Blocks.WATER.defaultBlockState(), 3);
+        helper.assertFalse(FrontierV3SemanticMovement.targetIsNavigable(helper.getLevel(), worker, target),
+                "water in an ordinary pedestrian body cell is an explicit undeclared-medium block");
+        helper.getLevel().setBlock(support.above(), Blocks.STONE.defaultBlockState(), 3);
+        helper.assertFalse(FrontierV3SemanticMovement.targetIsNavigable(helper.getLevel(), worker, target),
+                "a foreign occupied body cell is an explicit clearance block, never a proximity arrival");
+        worker.discard(); helper.succeed();
+    }
+
+    /**
      * A second naturally loaded body can occupy a retained production column after COLD
      * admission.  The exact worker may use only the fixed current/next neighborhood to pass
      * it; no alternate route or cursor is supplied to the physical actuator.
@@ -257,19 +284,17 @@ public final class FrontierV3LocalNavigationGameTests {
         SurfaceAnchor current = SurfaceAnchor.at(currentSupport.getX(), currentSupport.getY(), currentSupport.getZ());
         SurfaceAnchor next = SurfaceAnchor.at(nextSupport.getX(), nextSupport.getY(), nextSupport.getZ());
 
-        helper.runAfterDelay(1, () -> {
-            for (int turn = 0; turn < 32; turn++) {
+        for (int turn = 1; turn <= 32; turn++) {
+            helper.runAtTickTime(turn, () -> {
                 FrontierV3ControlledMobMotion.advance(worker);
-                if (FrontierV3SurfaceObservation.at(worker, next)) break;
-                if (FrontierV3SurfaceObservation.at(worker, current)) {
+                if (!FrontierV3SemanticMovement.arrived(helper.getLevel(), worker, next)) {
                     FrontierV3ProductionWorkSceneExecutor.pursueRetainedTraversalEdge(helper.getLevel(), worker, current, next);
-                } else {
-                    helper.assertTrue(FrontierV3ProductionWorkSceneExecutor.settleRetainedDescendingArrival(helper.getLevel(), worker, current, next),
-                            "a body that crossed the retained lower checkpoint horizontally must settle it instead of reacquiring current: "
-                                    + worker.position());
                 }
-            }
-            helper.assertTrue(FrontierV3SurfaceObservation.at(worker, next),
+            });
+        }
+        helper.runAtTickTime(33, () -> {
+            FrontierV3ControlledMobMotion.advance(worker);
+            helper.assertTrue(FrontierV3SemanticMovement.arrived(helper.getLevel(), worker, next),
                     "a descending retained production edge must reach its named lower support without changing cursor authority: "
                             + worker.position() + " trace=" + FrontierV3ControlledMobMotion.trace(worker));
             FrontierV3ControlledMobMotion.stop(worker); worker.discard(); helper.succeed();

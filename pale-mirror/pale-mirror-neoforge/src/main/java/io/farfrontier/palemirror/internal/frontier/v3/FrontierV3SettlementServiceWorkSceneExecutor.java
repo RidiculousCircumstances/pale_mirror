@@ -78,7 +78,7 @@ final class FrontierV3SettlementServiceWorkSceneExecutor {
         SceneMember member = lease.members().getFirst(); AmbientActorLease ambient = state.ambientLeases().get(member.actorId()); Entity entity = level.getEntity(member.entityId());
         if (ambient == null || ambient.status() != AmbientLeaseStatus.HOT || !(entity instanceof Mob body) || !body.isAlive()
                 || !FrontierV3AmbientActorExecutor.owned(body, member.actorId(), false)
-                || !at(body, lease.memberPosition(member.actorId()).supportingSurface())) return;
+                || !FrontierV3SemanticMovement.arrived(level, body, lease.memberPosition(member.actorId()).supportingSurface())) return;
         BodyPosition observed = FrontierV3SurfaceObservation.observedAt(body, lease.memberPosition(member.actorId()).supportingSurface());
         // A scene cursor is not a broad encounter radius.  Ambient motion may only hand this
         // exact body over at the retained canonical cell; it may not rebase a service route to
@@ -108,7 +108,7 @@ final class FrontierV3SettlementServiceWorkSceneExecutor {
             conflict(level, runtime, lease, "worker-unavailable"); return;
         }
         SurfaceAnchor current = FrontierSettlementServiceWorkSceneSupport.currentSurface(work);
-        if (!at(worker, current)) {
+        if (!FrontierV3SemanticMovement.arrived(level, worker, current)) {
             // The server can stop after the normal entity pre-tick has physically completed one
             // retained edge but before the executor's next canonical turn writes its cursor.
             // On recovery that exact next surface is an observed one-edge arrival, not a route
@@ -117,16 +117,12 @@ final class FrontierV3SettlementServiceWorkSceneExecutor {
             if (isTraversalPhase(work.phase())) {
                 List<SurfaceAnchor> corridor = traversal(work);
                 int cursor = traversalCursor(work);
-                if (cursor < corridor.size() - 1 && at(worker, corridor.get(cursor + 1))) {
+                if (cursor < corridor.size() - 1 && FrontierV3SemanticMovement.arrived(level, worker, corridor.get(cursor + 1))) {
                     submit(runtime, "settlement-service-work-traversal", lease.id().value(),
                             new SettlementServiceWorkTraversalAdvanced(work.id(), lease.id(),
                                     FrontierV3SurfaceObservation.observedAt(worker, corridor.get(cursor + 1)), cursor + 1));
-                } else if (!FrontierV3ProductionWorkSceneExecutor.reacquireRetainedSurface(level, worker, current)) {
-                    conflict(level, runtime, lease, "cursor-body-mismatch");
-                }
-            } else if (!FrontierV3ProductionWorkSceneExecutor.reacquireRetainedSurface(level, worker, current)) {
-                conflict(level, runtime, lease, "cursor-body-mismatch");
-            }
+                } else conflict(level, runtime, lease, "cursor-" + FrontierV3SemanticMovement.detail(FrontierV3SemanticMovement.at(level, worker, current)));
+            } else conflict(level, runtime, lease, "cursor-" + FrontierV3SemanticMovement.detail(FrontierV3SemanticMovement.at(level, worker, current)));
             return;
         }
         if (work.phase() == SettlementServiceWorkPhase.INPUT_ISSUE_PENDING) return;
@@ -135,13 +131,14 @@ final class FrontierV3SettlementServiceWorkSceneExecutor {
             int cursor = traversalCursor(work);
             if (cursor >= corridor.size() - 1) { conflict(level, runtime, lease, "uncommitted-station-arrival"); return; }
             SurfaceAnchor next = corridor.get(cursor + 1);
-            if (at(worker, next)) {
+            if (FrontierV3SemanticMovement.arrived(level, worker, next)) {
                 submit(runtime, "settlement-service-work-traversal", lease.id().value(),
                         new SettlementServiceWorkTraversalAdvanced(work.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, next), cursor + 1));
             } else if (!FrontierV3ProductionWorkSceneExecutor.clearNextBody(level, worker, next)) {
                 submit(runtime, "settlement-service-work-route-blocked", lease.id().value(),
                         new SettlementServiceWorkTraversalBlocked(work.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, current), cursor + 1));
-            } else FrontierV3ControlledMobMotion.moveToward(level, worker, point(next));
+            } else FrontierV3ControlledMobMotion.moveWithinSemanticEnvelope(level, worker, FrontierV3SemanticMovement.point(next),
+                    io.farfrontier.palemirror.frontier.v3.model.LocalNavigationEnvelope.around(current.standingBody(), next.standingBody()));
             return;
         }
         if (work.phase() != SettlementServiceWorkPhase.WORKING) { conflict(level, runtime, lease, "unsupported-work-phase"); return; }
@@ -153,8 +150,6 @@ final class FrontierV3SettlementServiceWorkSceneExecutor {
                 new SettlementServiceWorkProgressed(work.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, current), next, ticks));
     }
 
-    private static boolean at(Mob worker, SurfaceAnchor surface) { return FrontierV3SurfaceObservation.at(worker, surface); }
-    private static Vec3 point(SurfaceAnchor surface) { return FrontierV3SurfaceObservation.point(surface); }
     private static boolean isTraversalPhase(SettlementServiceWorkPhase phase) {
         return phase == SettlementServiceWorkPhase.PREPARED || phase == SettlementServiceWorkPhase.APPROACH_INPUT
                 || phase == SettlementServiceWorkPhase.APPROACH_WORK;
