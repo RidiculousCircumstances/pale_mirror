@@ -218,6 +218,16 @@ test('semantic visible checks are bounded evidence actions, not world mutations'
   assert.throws(() => validateScenario({ ...visible, setup: [visible.actions[0]] }), /unsupported setup action/);
 });
 
+test('semantic board checks may use only the current site board-plan anchor', () => {
+  const board = { diagnostic: { view: 'site', id: 'site:1-wheat-field', field: 'boardPosition' } };
+  assert.doesNotThrow(() => validateScenario({ ...scenario, setup: [], actions: [
+    { type: 'look', at: board }, { type: 'assert_visible_board', text: 'WHEAT FIELD', position: board, timeoutMs: 10_000 }
+  ], assertions: [], frames: [] }));
+  assert.throws(() => validateScenario({ ...scenario, setup: [], actions: [
+    { type: 'assert_visible_board', text: 'WHEAT FIELD', position: { diagnostic: { view: 'site', id: 'site:1-wheat-field', field: 'unpublished' } }, timeoutMs: 10_000 }
+  ], assertions: [], frames: [] }), /assert_visible_board/);
+});
+
 test('materialization may follow only named immutable diagnostic anchors', () => {
   const crop = { diagnostic: { view: 'site', id: 'site:1-wheat-field', field: 'firstCrop' } };
   const depot = { diagnostic: { view: 'container', id: 'container:1-depot', field: 'position' } };

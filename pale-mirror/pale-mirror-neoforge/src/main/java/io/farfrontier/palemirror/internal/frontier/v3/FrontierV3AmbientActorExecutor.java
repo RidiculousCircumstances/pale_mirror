@@ -237,6 +237,15 @@ final class FrontierV3AmbientActorExecutor {
                 continue;
             }
             forgetColdDemand(runtime, actorId);
+            FrontierV3SceneExecutor.ClosedSceneReturnRecovery closedReturn = FrontierV3SceneExecutor.fenceObservedAbsentHarvestReturn(level, state, actorId);
+            if (closedReturn == FrontierV3SceneExecutor.ClosedSceneReturnRecovery.LIVE_BODY
+                    || closedReturn == FrontierV3SceneExecutor.ClosedSceneReturnRecovery.PENDING
+                    || closedReturn == FrontierV3SceneExecutor.ClosedSceneReturnRecovery.CONFLICT) {
+                // The retained scene path either owns the live UUID, is not yet safely observed,
+                // or has exposed local ambiguity.  Generic ambient admission must not invent a
+                // second authority in any of those cases.
+                continue;
+            }
             if (lease == null || lease.status() == AmbientLeaseStatus.CLOSED) {
                 submit(runtime, "ambient-prepare", actorId.value(), new AmbientLeasePrepared(AmbientActorProcess.nextLease(state, actorId, runtime.canonicalState().orElseThrow().instant())));
                 admitted++;

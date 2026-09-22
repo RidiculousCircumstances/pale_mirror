@@ -565,7 +565,8 @@ public final class FrontierV3TestPilotClient {
      * possible through this pilot.
      */
     private static void assertVisibleBoard(Minecraft minecraft, JsonObject action) {
-        BlockPos anchor = position(action, "position");
+        BlockPos anchor = resolvedPosition(minecraft, action, "position");
+        if (anchor == null) return;
         FrontierV3PilotPresentationAssertions.assertVisibleBoard(minecraft, action, actionStartedTick, anchor,
                 value -> look(minecraft, value), value -> captureFocus = Vec3.atCenterOf(value), FrontierV3TestPilotClient::advance);
     }

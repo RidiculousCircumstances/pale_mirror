@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import java.util.LinkedHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrontierReadabilityPlanTest {
@@ -125,7 +126,22 @@ class FrontierReadabilityPlanTest {
         FrontierObjectBoard board = FrontierReadabilityPlan.compile(conflicted).boards().get(site.id());
         assertEquals(FrontierObjectBoard.Tone.WARNING, board.tone());
         assertTrue(board.text().endsWith("DAMAGED · REPAIR NEEDED"));
-        assertEquals(site.cropSlots().getFirst().offset(4, 3, -2), board.position());
+        SettlementStructure farm = state.bootstrap().settlements().stream().flatMap(value -> value.structures().stream())
+                .filter(value -> value.id().equals(site.facilityId())).findFirst().orElseThrow();
+        int minX = site.cropSlots().stream().mapToInt(BlockPosition::x).min().orElseThrow();
+        int maxX = site.cropSlots().stream().mapToInt(BlockPosition::x).max().orElseThrow();
+        int minZ = site.cropSlots().stream().mapToInt(BlockPosition::z).min().orElseThrow();
+        int maxZ = site.cropSlots().stream().mapToInt(BlockPosition::z).max().orElseThrow();
+        int centreX = (minX + maxX) / 2, centreZ = (minZ + maxZ) / 2;
+        assertEquals(site.cropSlots().getFirst().y() + 3, board.position().y());
+        assertFalse(site.cropSlots().contains(board.position()), "the local field board may not be embedded in a crop column");
+        if (Math.abs(centreX - farm.anchor().x()) >= Math.abs(centreZ - farm.anchor().z())) {
+            assertEquals(centreX >= farm.anchor().x() ? maxX + 1 : minX - 1, board.position().x());
+            assertEquals(centreZ, board.position().z());
+        } else {
+            assertEquals(centreX, board.position().x());
+            assertEquals(centreZ >= farm.anchor().z() ? maxZ + 1 : minZ - 1, board.position().z());
+        }
     }
 
     @Test

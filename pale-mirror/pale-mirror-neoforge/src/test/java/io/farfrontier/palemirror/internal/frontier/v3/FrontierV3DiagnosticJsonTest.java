@@ -381,6 +381,8 @@ class FrontierV3DiagnosticJsonTest {
                 "the all-current-process inventory must be bounded, read-only, and say why an ineligible site is waiting");
         assertTrue(siteJson.contains("\"id\":\"" + site.value() + "\""));
         assertTrue(siteJson.contains("\"firstCrop\":{"));
+        assertTrue(siteJson.contains("\"boardPosition\":{"),
+                "the current site diagnostic must publish the immutable board-plan anchor used by player-visible verification");
         assertTrue(actorJson.contains("\"position\":{"));
         assertTrue(actorJson.contains("\"nutrition\":\"NOURISHED\""));
         assertTrue(JsonParser.parseString(actorJson.substring(FrontierV3DiagnosticJson.PREFIX.length()))

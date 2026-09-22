@@ -807,6 +807,40 @@ final class FrontierV3SceneExecutor {
                     return FrontierV3ResourceSiteHarvestSceneExecutor.retainsClosedBody(entity, state, lease, member);
                 }).map(SceneMember::actorId)).distinct().sorted().toList();
     }
+
+    /**
+     * A terminal harvest scene keeps the exact actor identity after its work is closed.  When
+     * its naturally loaded current body column has been observed empty, convert that one closed
+     * scene authority into a fenced inactive carrier before generic ambient admission can create
+     * a newer lease.  An unloaded column, a live UUID, ambiguous historical scenes, or a foreign
+     * carrier remain deliberately non-admissible.
+     */
+    static ClosedSceneReturnRecovery fenceObservedAbsentHarvestReturn(ServerLevel level, FrontierWorldState state, SubjectId actorId) {
+        List<SceneLease> matches = state.sceneLeases().values().stream().filter(lease -> lease.status() == SceneLeaseStatus.CLOSED)
+                .filter(FrontierSceneBehaviors::isResourceSiteHarvest)
+                .filter(lease -> lease.members().stream().anyMatch(member -> member.actorId().equals(actorId)
+                        && member.entityId().equals(FrontierV3AmbientActorExecutor.entityId(state, actorId))))
+                .sorted(Comparator.comparingLong(SceneLease::revision).reversed()).toList();
+        if (matches.isEmpty()) return ClosedSceneReturnRecovery.NOT_RETAINED;
+        if (matches.size() > 1 && matches.get(0).revision() == matches.get(1).revision()) return ClosedSceneReturnRecovery.CONFLICT;
+        SceneLease lease = matches.getFirst();
+        SceneMember member = lease.members().stream().filter(value -> value.actorId().equals(actorId)).findFirst().orElseThrow();
+        if (level.getEntity(member.entityId()) != null) return ClosedSceneReturnRecovery.LIVE_BODY;
+        var actor = state.actorLocations().get(actorId);
+        if (actor == null || actor.condition().status() != io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.ALIVE) return ClosedSceneReturnRecovery.CONFLICT;
+        BlockPos current = new BlockPos(actor.body().x(), actor.body().y(), actor.body().z());
+        if (!level.hasChunkAt(current) || !level.areEntitiesLoaded(ChunkPos.asLong(current))) return ClosedSceneReturnRecovery.PENDING;
+        FrontierV3AmbientCarrierLedger ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
+        if (ledger.hasCarrier(actorId)) return ClosedSceneReturnRecovery.FENCED;
+        var ambient = state.ambientLeases().get(actorId);
+        if (ambient != null && ambient.status() != AmbientLeaseStatus.CLOSED) return ClosedSceneReturnRecovery.CONFLICT;
+        long priorAmbientRevision = ambient == null ? 0L : ambient.revision();
+        var carrier = FrontierV3AmbientActorExecutor.carrierDeclaration(state, actorId, FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE,
+                member.entityId(), FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, Math.max(1L, lease.revision()), 1L);
+        return ledger.fenceObservedAbsentClosedScene(carrier, Math.max(1L, lease.revision()), priorAmbientRevision, true)
+                ? ClosedSceneReturnRecovery.FENCED : ClosedSceneReturnRecovery.CONFLICT;
+    }
+    enum ClosedSceneReturnRecovery { NOT_RETAINED, LIVE_BODY, PENDING, FENCED, CONFLICT }
     static FrontierV3SceneDemand.Snapshot demandSnapshot(ServerLevel level, BlockPosition anchor) {
         return FrontierV3SceneDemand.observe(level, anchor);
     }

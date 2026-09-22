@@ -13,7 +13,8 @@ export function assertF06r3FirstVisibilityColdContinuityCarrier({ declaration, b
       || declaration.actions[2].position?.diagnostic?.view !== 'site' || declaration.actions[2].position.diagnostic.id !== SITE
       || declaration.actions?.[3]?.type !== 'look' || declaration.actions[3].position?.diagnostic?.field !== 'firstCrop'
       || declaration.actions?.[5]?.type !== 'assert_visible_board' || declaration.actions[5].text !== 'WHEAT FIELD'
-      || declaration.actions[5].position?.x !== 141 || declaration.actions[5].position?.y !== 67 || declaration.actions[5].position?.z !== -8
+      || declaration.actions[5].position?.diagnostic?.view !== 'site' || declaration.actions[5].position.diagnostic.id !== SITE
+      || declaration.actions[5].position.diagnostic.field !== 'boardPosition'
       || declaration?.assertNoServerTickStallDuringIngress !== true || manifest?.status !== 'ok'
       || manifest.scenarioId !== SCENARIO || !Array.isArray(manifest.frames) || manifest.frames.length !== 3
       || !manifest.frames.every(frame => frame?.presentation === 'player' && typeof frame.path === 'string' && frame.path.endsWith('.png'))) {
@@ -31,11 +32,12 @@ export function assertF06r3FirstVisibilityColdContinuityCarrier({ declaration, b
   const visible = exactly(manifest, 9, 'pilot_settlement_population', 'settlement:7');
   const after = exactly(manifest, 12, 'site', SITE);
   const settlement = exactly(manifest, 13, 'settlement', 'settlement:7');
+  const board = before.boardPosition;
   const terminal = before.terminalHarvest;
   const worker = terminal?.worker;
   if (before.phase !== 'GROWING' || before.activeWork !== '' || before.conflictDisposition !== null
       || typeof worker !== 'string' || !worker.startsWith('resident:7-') || !terminal?.canonicalSuccessor
-      || typeof terminal.successor?.job !== 'string' || typeof terminal.successor?.worker !== 'string') {
+      || typeof terminal.successor?.job !== 'string' || typeof terminal.successor?.worker !== 'string' || !position(board)) {
     throw new Error('F0.6R3 current field does not expose one exact completed COLD lineage');
   }
   const canonicalWorker = exactlyResident(population, worker, 'canonical');
@@ -60,7 +62,7 @@ export function assertF06r3FirstVisibilityColdContinuityCarrier({ declaration, b
   }
   return Object.freeze({ worker, workerUuid: canonicalWorker.entityUuid, successorJob: terminal.successor.job,
     successorWorker: terminal.successor.worker, growthEpoch: before.growthEpoch, growthStage: before.growthStage,
-    frames: manifest.frames.map(frame => frame.path), fieldBoard: { text: declaration.actions[5].text, position: declaration.actions[5].position } });
+    frames: manifest.frames.map(frame => frame.path), fieldBoard: { text: declaration.actions[5].text, position: board } });
 }
 
 function exactly(manifest, actionStep, kind, id) {

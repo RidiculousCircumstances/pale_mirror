@@ -15,7 +15,7 @@ test('F0.6R3 first-visibility carrier derives the current worker from the COLD t
   assert.deepEqual(assertF06r3FirstVisibilityColdContinuityCarrier({ declaration, beforeRestart: before, manifest }), {
     worker: 'resident:7-13', workerUuid: '00000000-0000-0000-0000-000000000013', successorJob: 'job:production-7-365',
     successorWorker: 'resident:7-15', growthEpoch: 8, growthStage: 5, frames: ['one.png', 'two.png', 'three.png'],
-    fieldBoard: { text: 'WHEAT FIELD', position: { x: 141, y: 67, z: -8 } }
+    fieldBoard: { text: 'WHEAT FIELD', position: { x: 145, y: 67, z: -2 } }
   });
   manifest.diagnostics.find(row => row.actionStep === 9).value.residents[0].first.x = 0.5;
   assert.throws(() => assertF06r3FirstVisibilityColdContinuityCarrier({ declaration, beforeRestart: before, manifest }), /replaced, converged/);
@@ -34,7 +34,7 @@ function fixtures() {
   const terminalHarvest = { job: 'job:site-harvest-7-wheat-field-7', worker: 'resident:7-13', canonicalSuccessor: true,
     successor: { job: 'job:production-7-365', worker: 'resident:7-15' } };
   const site = { kind: 'site', id: 'site:7-wheat-field', status: 'ok', phase: 'GROWING', growthEpoch: 8, growthStage: 5,
-    activeWork: '', conflictDisposition: null, terminalHarvest };
+    activeWork: '', conflictDisposition: null, boardPosition: { x: 145, y: 67, z: -2 }, terminalHarvest };
   const resident = { actor: 'resident:7-13', entityUuid: '00000000-0000-0000-0000-000000000013', dutyPhase: 'AMBIENT:IDLE:CLOSED', position: { x: 144, y: 64, z: -6 } };
   const before = { status: 'ok', diagnostics: [{ actionStep: 1, value: site }, { actionStep: 2, value: { kind: 'settlement_population', id: 'settlement:7', status: 'ok', residents: [resident] } }] };
   const manifest = { status: 'ok', scenarioId: 'disposable_f06r3_first_visibility_cold_continuity',

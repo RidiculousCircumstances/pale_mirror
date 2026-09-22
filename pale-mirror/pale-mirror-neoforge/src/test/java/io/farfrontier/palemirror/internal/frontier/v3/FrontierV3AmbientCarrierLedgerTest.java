@@ -52,6 +52,22 @@ class FrontierV3AmbientCarrierLedgerTest {
                 ledger.reconciliation(live, true));
         assertEquals(1, ledger.inactiveCount());
     }
+    @Test void observedAbsentClosedSceneMayFenceOnlyItsExactNextAmbientReturn() {
+        FrontierV3AmbientCarrierLedger ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
+        var closedScene = declaration(FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE,
+                FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 17L, 1L);
+        var nextAmbient = declaration(FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
+                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 9L, 2L);
+        assertFalse(ledger.fenceObservedAbsentClosedScene(closedScene, 17L, 8L, false),
+                "an unobserved closed scene may not manufacture an inactive carrier");
+        assertTrue(ledger.fenceObservedAbsentClosedScene(closedScene, 17L, 8L, true),
+                "one naturally observed absent exact scene body fences the closed scene authority");
+        assertEquals(FrontierV3AmbientCarrierLedger.Reconciliation.READY, ledger.reconciliation(nextAmbient),
+                "only the newer exact ambient lease may reconstruct the fenced scene actor");
+        assertFalse(ledger.fenceObservedAbsentClosedScene(declaration(FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
+                FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 18L, 1L), 18L, 9L, true),
+                "an ambient or foreign owner cannot impersonate the closed-scene recovery edge");
+    }
     @Test void legacySchemaAndDuplicatePersistedCarrierFailBeforeRecovery() {
         CompoundTag legacy = new CompoundTag(); legacy.putInt("format", 2);
         assertThrows(IllegalStateException.class, () -> FrontierV3AmbientCarrierLedger.load(legacy, null));

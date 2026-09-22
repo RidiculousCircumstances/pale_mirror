@@ -295,7 +295,7 @@ final class FrontierV3TestPilotScenario {
     }
 
     private static boolean validVisibleBoard(JsonObject action) {
-        if (!position(action) || !timeout(action, 120_000L) || !action.has("text") || !action.get("text").isJsonPrimitive()
+        if (!resolvablePosition(action, "position") || !timeout(action, 120_000L) || !action.has("text") || !action.get("text").isJsonPrimitive()
                 || action.get("text").getAsString().isBlank()) return false;
         return boundedOptionalNumber(action, "radius", 0.0D, 16.0D)
                 && boundedOptionalNumber(action, "maxDistance", 1.0D, 128.0D)
@@ -368,7 +368,7 @@ final class FrontierV3TestPilotScenario {
                 || !reference.get("view").isJsonPrimitive() || !reference.get("id").isJsonPrimitive() || !reference.get("field").isJsonPrimitive()) return false;
         String view = reference.get("view").getAsString(); String id = reference.get("id").getAsString(); String diagnosticField = reference.get("field").getAsString();
         return (view.equals("site") && requiredId(reference, "id", "site:")
-                && (diagnosticField.equals("firstCrop") || diagnosticField.equals("lastCrop")
+                && (diagnosticField.equals("firstCrop") || diagnosticField.equals("lastCrop") || diagnosticField.equals("boardPosition")
                 || diagnosticField.equals("terminalHarvest.terminalBody")))
                 || (view.equals("container") && requiredId(reference, "id", "container:") && diagnosticField.equals("position"))
                 || (view.equals("settlement") && requiredId(reference, "id", "settlement:")

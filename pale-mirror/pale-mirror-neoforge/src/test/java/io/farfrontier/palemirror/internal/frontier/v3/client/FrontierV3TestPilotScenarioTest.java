@@ -306,12 +306,13 @@ class FrontierV3TestPilotScenarioTest {
                 {"schema":1,"actions":[
                 {"type":"wait_until_block","position":{"diagnostic":{"view":"site","id":"site:1-wheat-field","field":"firstCrop"}},"block":"minecraft:wheat","timeoutMs":10000},
                 {"type":"look","at":{"diagnostic":{"view":"site","id":"site:1-wheat-field","field":"firstCrop"}}},
+                {"type":"assert_visible_board","text":"WHEAT FIELD","position":{"diagnostic":{"view":"site","id":"site:1-wheat-field","field":"boardPosition"}},"timeoutMs":10000},
                 {"type":"assert_visible_block","position":{"diagnostic":{"view":"site","id":"site:1-wheat-field","field":"firstCrop"}},"timeoutMs":10000},
                 {"type":"open_container","position":{"diagnostic":{"view":"container","id":"container:1-depot","field":"position"}},"timeoutMs":10000},
                 {"type":"look","at":{"diagnostic":{"view":"scene","id":"job:production-example","field":"productionCurrent"}}},
                 {"type":"assert_visible_block","position":{"diagnostic":{"view":"settlement","id":"settlement:1","field":"farmAnchor"}},"timeoutMs":10000},
                 {"type":"look","at":{"diagnostic":{"view":"settlement","id":"settlement:1","field":"routeSurface"}}}]}""");
-        assertEquals(7, parsed.actionCount());
+        assertEquals(8, parsed.actionCount());
         FrontierV3TestPilotScenario.Parsed intervention = FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"break","position":{"diagnostic":{"view":"site","id":"site:1-wheat-field","field":"firstCrop"}}}]}""");
         assertEquals(1, intervention.actionCount());

@@ -14,6 +14,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
 import io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryBinding;
 import io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryTombstone;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSitePlan;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierReadabilityPlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneLabels;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSiteHarvestSceneSupport;
 import io.farfrontier.palemirror.frontier.v3.model.HumanAssignmentProjection;
@@ -380,11 +381,12 @@ final class FrontierV3DiagnosticJson {
                     + ",\"intentStatus\":\"" + (intent == null ? "MISSING" : intent.status().name()) + "\",\"terminalBody\":" + position(lineage.terminalBody())
                     + ",\"causalTrace\":" + harvestCausality(lineage.causality()) + "}";
         }).orElse("null");
+        BlockPosition boardPosition = FrontierReadabilityPlan.compile(state).boards().get(subject).position();
         return base("site", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(site.settlementId().value())
                 + "\",\"facility\":\"" + quote(site.facilityId().value()) + "\",\"phase\":\"" + lifecycle.phase()
                 + "\",\"growthEpoch\":" + lifecycle.growthEpoch() + ",\"growthStage\":" + lifecycle.growthStage()
                 + ",\"activeWork\":\"" + quote(work) + "\",\"conflictDisposition\":" + conflict + ",\"terminalHarvest\":" + terminal + ",\"firstCrop\":" + position(site.cropSlots().getFirst())
-                + ",\"lastCrop\":" + position(site.cropSlots().getLast()) + "}";
+                + ",\"lastCrop\":" + position(site.cropSlots().getLast()) + ",\"boardPosition\":" + position(boardPosition) + "}";
     }
 
     /** Bounded retained COLD/HOT receipt lineage; this query never derives missing stages. */

@@ -212,7 +212,7 @@ public final class FrontierReadabilityPlan {
     private static void addResourceSite(Map<SubjectId, FrontierObjectBoard> values, FrontierWorldState state, ResourceSite site) {
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), site.settlementId());
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(site.id());
-        add(values, new FrontierObjectBoard(site.id(), fieldBoardPosition(site), fieldTone(lifecycle.phase()), FrontierObjectBoard.Scope.LOCAL,
+        add(values, new FrontierObjectBoard(site.id(), fieldBoardPosition(state, site), fieldTone(lifecycle.phase()), FrontierObjectBoard.Scope.LOCAL,
                 settlement.displayName() + "\nWHEAT FIELD\n" + fieldStateText(state, site, lifecycle)));
     }
 
@@ -254,9 +254,23 @@ public final class FrontierReadabilityPlan {
         return structure.anchor().offset(0, Math.max(2, height - 1), -depth / 2 - 1);
     }
 
-    private static BlockPosition fieldBoardPosition(ResourceSite site) {
-        BlockPosition firstCrop = site.cropSlots().getFirst();
-        return firstCrop.offset(4, 3, -2);
+    private static BlockPosition fieldBoardPosition(FrontierWorldState state, ResourceSite site) {
+        SettlementStructure farm = state.bootstrap().settlements().stream().flatMap(settlement -> settlement.structures().stream())
+                .filter(structure -> structure.id().equals(site.facilityId())).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("field has no owning farm: " + site.id().value()));
+        int minX = site.cropSlots().stream().mapToInt(BlockPosition::x).min().orElseThrow();
+        int maxX = site.cropSlots().stream().mapToInt(BlockPosition::x).max().orElseThrow();
+        int minZ = site.cropSlots().stream().mapToInt(BlockPosition::z).min().orElseThrow();
+        int maxZ = site.cropSlots().stream().mapToInt(BlockPosition::z).max().orElseThrow();
+        int centreX = (minX + maxX) / 2, centreZ = (minZ + maxZ) / 2;
+        // Place the physical readout on the field's exterior edge away from its own farm.  The
+        // former fixed north offset could sit behind a mature crop wall whenever a generated
+        // field used the east/west farm side, so the semantic board technically existed but was
+        // unreadable from the ordinary approach.
+        if (Math.abs(centreX - farm.anchor().x()) >= Math.abs(centreZ - farm.anchor().z())) {
+            return new BlockPosition(centreX >= farm.anchor().x() ? maxX + 1 : minX - 1, site.cropSlots().getFirst().y() + 3, centreZ);
+        }
+        return new BlockPosition(centreX, site.cropSlots().getFirst().y() + 3, centreZ >= farm.anchor().z() ? maxZ + 1 : minZ - 1);
     }
 
     private static FrontierObjectBoard.Tone tone(StructureCondition condition, InfectionOverlayStage stage, boolean quarantine, boolean foodRisk) {

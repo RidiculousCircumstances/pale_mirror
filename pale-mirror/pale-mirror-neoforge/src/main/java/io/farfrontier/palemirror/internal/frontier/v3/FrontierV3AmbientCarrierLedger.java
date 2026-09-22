@@ -57,6 +57,18 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
         if (!canFence(inactive, physicalRevision, ambientRevision)) return false;
         carriers.put(inactive.actorId(), next); setDirty(); return true;
     }
+    /**
+     * Records the one lawful no-body recovery edge for a closed scene.  The caller has already
+     * proved the exact scene member's naturally loaded entity storage contains no body; this
+     * method deliberately refuses to turn an arbitrary missing actor into a carrier.
+     */
+    boolean fenceObservedAbsentClosedScene(FrontierV3ActorCarrierComposition.Declaration inactive,
+                                           long physicalRevision, long ambientRevision, boolean absenceObserved) {
+        return absenceObserved
+                && inactive.owner() == FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE
+                && inactive.representation() == FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER
+                && fence(inactive, physicalRevision, ambientRevision);
+    }
     boolean matchesCarrier(FrontierV3ActorCarrierComposition.Declaration inactive, long physicalRevision, long ambientRevision) {
         return new Carrier(inactive, physicalRevision, ambientRevision).equals(carriers.get(inactive.actorId()));
     }

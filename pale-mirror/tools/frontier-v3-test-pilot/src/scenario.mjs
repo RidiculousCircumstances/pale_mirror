@@ -244,7 +244,7 @@ export function validateScenario(scenario) {
         throw new Error('assert_visible_block needs position and timeoutMs 0..120000');
       }
       if (action.type === 'assert_visible_board' && (typeof action.text !== 'string' || !action.text
-          || !validPosition(action.position) || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 120_000
+          || !validResolvablePosition(action.position) || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 120_000
           || (action.radius !== undefined && (!Number.isFinite(action.radius) || action.radius < 0 || action.radius > 16))
           || (action.maxDistance !== undefined && (!Number.isFinite(action.maxDistance) || action.maxDistance < 1 || action.maxDistance > 128))
           || (action.maxAngleDeg !== undefined && (!Number.isFinite(action.maxAngleDeg) || action.maxAngleDeg < 1 || action.maxAngleDeg > 90)))) {
@@ -506,7 +506,7 @@ function validResolvablePosition(value) {
   return value && typeof value === 'object' && Object.keys(value).length === 1
     && reference && typeof reference === 'object' && Object.keys(reference).length === 3
     && ((reference.view === 'site' && requiredId(reference.id, 'site:')
-      && ['firstCrop', 'lastCrop', 'terminalHarvest.terminalBody'].includes(reference.field))
+      && ['firstCrop', 'lastCrop', 'boardPosition', 'terminalHarvest.terminalBody'].includes(reference.field))
       || (reference.view === 'container' && requiredId(reference.id, 'container:') && reference.field === 'position')
       || (reference.view === 'settlement' && requiredId(reference.id, 'settlement:')
         && ['farmAnchor', 'routeSurface'].includes(reference.field))
