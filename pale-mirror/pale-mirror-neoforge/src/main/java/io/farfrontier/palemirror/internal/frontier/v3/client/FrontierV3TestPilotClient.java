@@ -758,7 +758,10 @@ public final class FrontierV3TestPilotClient {
         }
         long tick = minecraft.level.getGameTime();
         if ((tick - actionStartedTick) % 20L == 0L) minecraft.player.connection.sendCommand("pale_mirror v3 inspect performance");
-        if ((tick - actionStartedTick) * 50L >= action.get("timeoutMs").getAsLong()) throw new IllegalStateException("timed out waiting for bounded canonical fast-forward completion");
+        // Canonical acceleration deliberately changes the client-visible game-tick rate.  This
+        // deadline protects the carrier process, so it must remain wall-clock based rather than
+        // silently shrink whenever the scenario raises /tick rate.
+        if (elapsedWallMillis() >= action.get("timeoutMs").getAsLong()) throw new IllegalStateException("timed out waiting for bounded canonical fast-forward completion");
     }
 
     /** Waits for one server-held absolute checkpoint; client packet latency cannot add canonical time. */
@@ -791,7 +794,8 @@ public final class FrontierV3TestPilotClient {
         }
         long tick = minecraft.level.getGameTime();
         if ((tick - actionStartedTick) % 20L == 0L) minecraft.player.connection.sendCommand("pale_mirror v3 inspect performance");
-        if ((tick - actionStartedTick) * 50L >= action.get("timeoutMs").getAsLong()) {
+        // See the relative path above: this is an operator wall-clock guard, not canonical time.
+        if (elapsedWallMillis() >= action.get("timeoutMs").getAsLong()) {
             throw new IllegalStateException("timed out waiting for server-held absolute canonical target " + target);
         }
     }
