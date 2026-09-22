@@ -221,6 +221,43 @@ public final class FrontierV3LocalNavigationGameTests {
     }
 
     /**
+     * Farmland's real collision top is 15/16 of a block, while the retained semantic surface
+     * remains its exact integer floor cell.  The common support provider must therefore hand
+     * the actuator that physical feet height; otherwise each gravity turn is mistaken for a
+     * new ascent and the worker never starts the next retained horizontal edge.
+     */
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
+    public static void retainedHarvestEdgeUsesSharedFarmlandSupportTopWithoutAscentLoop(GameTestHelper helper) {
+        BlockPos currentSupport = helper.absolutePos(new BlockPos(4, 0, 4));
+        BlockPos nextSupport = currentSupport.north();
+        for (BlockPos support : List.of(currentSupport, nextSupport)) {
+            helper.getLevel().setBlock(support, Blocks.FARMLAND.defaultBlockState(), 3);
+            helper.getLevel().setBlock(support.above(), Blocks.WHEAT.defaultBlockState(), 3);
+            helper.getLevel().setBlock(support.above(2), Blocks.AIR.defaultBlockState(), 3);
+        }
+        Zombie worker = helper.spawnWithNoFreeWill(EntityType.ZOMBIE, new Vec3(4.5D, 1.0D, 4.5D));
+        SurfaceAnchor current = SurfaceAnchor.at(currentSupport.getX(), currentSupport.getY(), currentSupport.getZ());
+        SurfaceAnchor next = SurfaceAnchor.at(nextSupport.getX(), nextSupport.getY(), nextSupport.getZ());
+        Vec3 physicalNext = FrontierV3SemanticMovement.point(helper.getLevel(), next);
+        helper.assertTrue(Math.abs(physicalNext.y - (nextSupport.getY() + .9375D)) <= 1.0E-8D,
+                "the shared support point must be the real farmland top, not its logical air cell: " + physicalNext);
+        FrontierV3ControlledMobMotion.restoreOrdinaryPhysics(worker);
+        helper.runAfterDelay(1, () -> {
+            for (int turn = 0; turn < 24; turn++) {
+                FrontierV3ControlledMobMotion.pursueRetainedSemanticCheckpoint(helper.getLevel(), worker, physicalNext,
+                        LocalNavigationEnvelope.around(current.standingBody(), next.standingBody()));
+                FrontierV3ControlledMobMotion.advanceAtEntityBoundary(worker);
+            }
+            helper.assertTrue(FrontierV3SemanticMovement.arrived(helper.getLevel(), worker, next),
+                    "a retained harvest worker must reach the next exact farmland support instead of repeating ascent: actual="
+                            + worker.position() + " motion=" + FrontierV3ControlledMobMotion.motionObservation(worker));
+            helper.assertTrue(FrontierV3ControlledMobMotion.trace(worker).stream().anyMatch(sample -> sample.horizontalVelocity() > .0D),
+                    "farmland support must admit an actual horizontal collision move");
+            FrontierV3ControlledMobMotion.stop(worker); worker.discard(); helper.succeed();
+        });
+    }
+
+    /**
      * A second naturally loaded body can occupy a retained production column after COLD
      * admission.  The exact worker may use only the fixed current/next neighborhood to pass
      * it; no alternate route or cursor is supplied to the physical actuator.

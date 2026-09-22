@@ -12,6 +12,7 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.VoxelShape;
 
 import java.util.Objects;
 import java.util.Set;
@@ -99,7 +100,7 @@ final class FrontierV3SemanticMovement {
     private static boolean clear(ServerLevel level, Mob worker, SurfaceAnchor surface) {
         BlockPos support = block(surface);
         if (!hasSupport(level, support) || !level.getFluidState(support.above()).isEmpty()) return false;
-        Vec3 point = point(surface);
+        Vec3 point = point(level, surface);
         AABB target = worker.getBoundingBox().move(point.subtract(worker.position()));
         // The shared arrival provider must describe the same body volume that the actuator is
         // permitted to enter.  Previously `Entity.move` correctly refused a foreign living
@@ -121,6 +122,21 @@ final class FrontierV3SemanticMovement {
 
     static Vec3 point(SurfaceAnchor surface) {
         return new Vec3(surface.x() + .5D, surface.y() + 1.0D, surface.z() + .5D);
+    }
+
+    /**
+     * Returns the physical feet point for one exact semantic support.  The semantic anchor is
+     * deliberately still the block coordinate; its physical top is a fact supplied by the
+     * shared support provider, not a movement-side Y tolerance.  This matters for farmland,
+     * slabs and other legitimate non-full collision shapes: a body standing on their real top
+     * must be allowed to take the next retained horizontal edge instead of endlessly trying to
+     * lift to the integer cell above the anchor.
+     */
+    static Vec3 point(ServerLevel level, SurfaceAnchor surface) {
+        BlockPos support = block(surface);
+        VoxelShape shape = level.getBlockState(support).getCollisionShape(level, support);
+        if (shape.isEmpty()) return point(surface);
+        return new Vec3(surface.x() + .5D, support.getY() + shape.max(net.minecraft.core.Direction.Axis.Y), surface.z() + .5D);
     }
 
     private static BlockPos block(SurfaceAnchor surface) { return new BlockPos(surface.x(), surface.y(), surface.z()); }

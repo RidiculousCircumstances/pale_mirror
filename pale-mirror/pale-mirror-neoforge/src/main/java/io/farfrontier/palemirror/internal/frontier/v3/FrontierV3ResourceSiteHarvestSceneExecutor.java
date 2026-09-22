@@ -359,9 +359,9 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         // new route target or a cursor advance; the existing due binding remains the sole
         // semantic authority for exposing the next retained surface.
         if (FrontierV3SemanticMovement.arrived(level, worker, surface)) {
-            FrontierV3ControlledMobMotion.holdRetainedCheckpoint(level, worker, FrontierV3SemanticMovement.point(surface));
+            FrontierV3ControlledMobMotion.holdRetainedCheckpoint(level, worker, FrontierV3SemanticMovement.point(level, surface));
         } else {
-            FrontierV3ControlledMobMotion.pursueRetainedSemanticCheckpoint(level, worker, FrontierV3SemanticMovement.point(surface),
+            FrontierV3ControlledMobMotion.pursueRetainedSemanticCheckpoint(level, worker, FrontierV3SemanticMovement.point(level, surface),
                     io.farfrontier.palemirror.frontier.v3.model.LocalNavigationEnvelope.around(current.standingBody(), surface.standingBody()));
         }
     }
