@@ -507,6 +507,20 @@ final class FrontierV3ResourceSiteExecutor {
         return lifecycle.harvestLineage().map(lineage -> lineage.outputReceiptResolved()
                 && lineage.completedGrowthEpoch() + 1L == lifecycle.growthEpoch()).orElse(false);
     }
+    /**
+     * The restart dispatcher must not route an exact composed terminal predecessor through
+     * the legacy preparation-intent reconciler: that reconciler correctly rejects a missing
+     * claim, whereas this narrower case owns an already-confirmed successor and its complete
+     * physical predecessor surface.  Keep the absent-claim condition explicit so no active
+     * or damaged field can borrow this recovery authority.
+     */
+    static boolean admitsMissingComposedTerminalRehydration(FrontierV3ResourceSiteLedger.Claim claim,
+                                                             ResourceSiteLifecycle lifecycle, int desiredStage,
+                                                             int completedCropSlots, boolean exactCurrentSurface,
+                                                             boolean composedCanonicalSuccessor) {
+        return claim == null && allowsComposedTerminalLedgerRehydration(lifecycle, desiredStage, completedCropSlots,
+                exactCurrentSurface, composedCanonicalSuccessor);
+    }
     private static String claimPhysicalState(ServerLevel level, FrontierV3ResourceSiteLedger ledger, ResourceSite site, FrontierV3ResourceSiteLedger.Claim claim) {
         String physical;
         if (claim == null) physical = "MISSING_CLAIM";
@@ -786,6 +800,16 @@ final class FrontierV3ResourceSiteExecutor {
             } else if (allowsOwnedStageCatchUp(FrontierV3ResourceSiteLedger.get(level).claim(site.id()),
                     lifecycle.growthStage(), 0)
                     && matchesClaim(level, site, FrontierV3ResourceSiteLedger.get(level).claim(site.id()))) {
+                result = boundedRestartProjection(level, runtime, state, site, lifecycle.growthStage(), 0);
+            } else if (admitsMissingComposedTerminalRehydration(FrontierV3ResourceSiteLedger.get(level).claim(site.id()),
+                    lifecycle, lifecycle.growthStage(), 0,
+                    matches(level, site, lifecycle.growthStage())
+                            || (lifecycle.growthStage() < ResourceSiteLifecycle.MATURE_STAGE
+                            && matchesHarvestProgress(level, site, ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS)),
+                    lifecycle.harvestLineage().map(lineage -> lineage.composedIntoCanonicalSuccessor(state)).orElse(false))) {
+                // This re-enters projectLifecycleBounded, which persists the exact terminal
+                // predecessor claim before writing its successor through the normal eight-cell
+                // bounded cursor.  A retained preparation intent is not competing ownership.
                 result = boundedRestartProjection(level, runtime, state, site, lifecycle.growthStage(), 0);
             } else if (intent == null) {
                 result = boundedRestartProjection(level, runtime, state, site, lifecycle.growthStage(), 0);

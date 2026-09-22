@@ -158,9 +158,18 @@ class FrontierV3ResourceSiteExecutorTest {
         assertTrue(FrontierV3ResourceSiteExecutor.allowsComposedTerminalLedgerRehydration(
                 regrowth, 2, 0, true, true),
                 "an exact current successor may restore only its missing physical ownership witness after restart");
+        assertTrue(FrontierV3ResourceSiteExecutor.admitsMissingComposedTerminalRehydration(
+                null, regrowth, 2, 0, true, true),
+                "restart must route the exact composed terminal predecessor through its bounded rehydration writer");
+        assertFalse(FrontierV3ResourceSiteExecutor.admitsMissingComposedTerminalRehydration(
+                hotPrefix, regrowth, 2, 0, true, true),
+                "an extant owner stays on its ordinary recovery path instead of borrowing missing-claim authority");
         assertFalse(FrontierV3ResourceSiteExecutor.allowsComposedTerminalLedgerRehydration(
                 regrowth, 2, 0, false, true),
                 "a missing ledger never adopts a changed or foreign field surface");
+        assertFalse(FrontierV3ResourceSiteExecutor.admitsMissingComposedTerminalRehydration(
+                null, regrowth, 2, 0, false, true),
+                "a missing ledger with a changed field stays a truthful local conflict");
         assertFalse(FrontierV3ResourceSiteExecutor.allowsComposedTerminalLedgerRehydration(
                 regrowth, 2, 1, true, true),
                 "a live harvest cursor is not terminal successor recovery");
