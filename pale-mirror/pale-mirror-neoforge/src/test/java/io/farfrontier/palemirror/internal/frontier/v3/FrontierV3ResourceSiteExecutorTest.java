@@ -170,6 +170,18 @@ class FrontierV3ResourceSiteExecutorTest {
         assertFalse(FrontierV3ResourceSiteExecutor.admitsMissingComposedTerminalRehydration(
                 null, regrowth, 2, 0, false, true),
                 "a missing ledger with a changed field stays a truthful local conflict");
+        assertTrue(FrontierV3ResourceSiteExecutor.admitsMissingComposedGrowthPredecessor(
+                null, regrowth, 2, 0, 1, true, true),
+                "an exact whole stage-one surface may advance through a composed epoch-two successor");
+        assertFalse(FrontierV3ResourceSiteExecutor.admitsMissingComposedGrowthPredecessor(
+                null, regrowth, 2, 0, 0, false, true),
+                "a mixed or changed predecessor surface stays a truthful local conflict");
+        assertFalse(FrontierV3ResourceSiteExecutor.admitsMissingComposedGrowthPredecessor(
+                null, regrowth, 2, 0, 2, true, true),
+                "the current surface takes the direct rehydration path rather than a predecessor transition");
+        assertFalse(FrontierV3ResourceSiteExecutor.admitsMissingComposedGrowthPredecessor(
+                hotPrefix, regrowth, 2, 0, 1, true, true),
+                "an extant owner cannot borrow missing-ledger predecessor authority");
         assertFalse(FrontierV3ResourceSiteExecutor.allowsComposedTerminalLedgerRehydration(
                 regrowth, 2, 1, true, true),
                 "a live harvest cursor is not terminal successor recovery");

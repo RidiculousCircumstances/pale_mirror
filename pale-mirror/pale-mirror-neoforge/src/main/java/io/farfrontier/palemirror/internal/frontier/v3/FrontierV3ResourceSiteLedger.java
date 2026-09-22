@@ -90,9 +90,25 @@ final class FrontierV3ResourceSiteLedger extends SavedData {
      * interruption cannot reinterpret irrigated farmland and AIR crops as a neutral field.
      */
     void reserveComposedTerminalSuccessor(SubjectId siteId, PhysicalIntentId intentId) {
-        Claim next = new Claim(intentId, Status.PENDING, 7, 64);
+        reserveComposedSuccessor(siteId, intentId, 7, 64);
+    }
+
+    /**
+     * Re-establishes a bounded, exact physical predecessor of a composed successor.  The
+     * caller supplies only a complete stage surface (or the stage-seven/64 terminal receipt),
+     * never a mixed or inferred cursor.
+     */
+    void reserveComposedSuccessor(SubjectId siteId, PhysicalIntentId intentId, int predecessorStage,
+                                  int predecessorHarvestedCropSlots) {
+        if (predecessorStage < 0 || predecessorStage > 7
+                || (predecessorStage == 7
+                ? predecessorHarvestedCropSlots != 0 && predecessorHarvestedCropSlots != 64
+                : predecessorHarvestedCropSlots != 0)) {
+            throw new IllegalArgumentException("v3 composed successor predecessor is invalid");
+        }
+        Claim next = new Claim(intentId, Status.PENDING, predecessorStage, predecessorHarvestedCropSlots);
         Claim prior = claims.get(siteId); if (prior != null) {
-            if (!prior.equals(next)) throw new IllegalStateException("v3 resource site claim changes terminal successor lifecycle");
+            if (!prior.equals(next)) throw new IllegalStateException("v3 resource site claim changes composed successor lifecycle");
             return;
         }
         if (claims.size() >= MAX_SITES) throw new IllegalStateException("v3 resource site claim limit exceeded");

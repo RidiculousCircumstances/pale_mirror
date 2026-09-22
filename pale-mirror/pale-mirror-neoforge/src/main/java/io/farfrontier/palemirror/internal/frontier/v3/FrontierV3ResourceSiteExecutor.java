@@ -263,8 +263,15 @@ final class FrontierV3ResourceSiteExecutor {
                 // must be projected through the same bounded writer on re-entry.
                 boolean exactTerminalPredecessorSurface = desiredStage < ResourceSiteLifecycle.MATURE_STAGE
                         && matchesHarvestProgress(level, site, ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS);
+                int exactGrowthPredecessorStage = exactComposedGrowthPredecessorStage(level, site, desiredStage);
+                boolean exactGrowthPredecessor = admitsMissingComposedGrowthPredecessor(claim,
+                        state.resourceSites().site(site.id()), desiredStage, completedCropSlots,
+                        exactGrowthPredecessorStage, exactGrowthPredecessorStage >= 0,
+                        state.resourceSites().site(site.id()).harvestLineage()
+                                .map(lineage -> lineage.composedIntoCanonicalSuccessor(state)).orElse(false));
                 if (allowsComposedTerminalLedgerRehydration(state.resourceSites().site(site.id()), desiredStage,
-                        completedCropSlots, exactCurrentSurface || exactTerminalPredecessorSurface,
+                        completedCropSlots, exactCurrentSurface || exactTerminalPredecessorSurface
+                                || exactGrowthPredecessor,
                         state.resourceSites().site(site.id()).harvestLineage()
                                 .map(lineage -> lineage.composedIntoCanonicalSuccessor(state)).orElse(false))) {
                     if (exactTerminalPredecessorSurface) {
@@ -278,6 +285,18 @@ final class FrontierV3ResourceSiteExecutor {
                         FrontierV3ResourceSiteLedger.Claim terminal = ledger.claim(site.id());
                         work = new FieldProjectionWork(desiredStage, completedCropSlots,
                                 transitionWrites(site, terminal, desiredStage, completedCropSlots, false), 0, false, false);
+                    } else if (exactGrowthPredecessor) {
+                        // COLD may have already advanced canonical time while no field
+                        // observer was present.  The complete exact prior growth surface is
+                        // still an owned predecessor, but it must retain its actual stage in
+                        // the ledger before the bounded writer moves it forward; relabelling
+                        // it as current would create the same restart mismatch on the next
+                        // durable boundary.
+                        ledger.reserveComposedSuccessor(site.id(), projectionClaim(site), exactGrowthPredecessorStage, 0);
+                        ledger.activate(site.id());
+                        FrontierV3ResourceSiteLedger.Claim predecessor = ledger.claim(site.id());
+                        work = new FieldProjectionWork(desiredStage, completedCropSlots,
+                                transitionWrites(site, predecessor, desiredStage, completedCropSlots, false), 0, false, false);
                     } else {
                         ledger.reserve(site.id(), projectionClaim(site));
                         ledger.activate(site.id());
@@ -520,6 +539,27 @@ final class FrontierV3ResourceSiteExecutor {
                                                              boolean composedCanonicalSuccessor) {
         return claim == null && allowsComposedTerminalLedgerRehydration(lifecycle, desiredStage, completedCropSlots,
                 exactCurrentSurface, composedCanonicalSuccessor);
+    }
+    static boolean admitsMissingComposedGrowthPredecessor(FrontierV3ResourceSiteLedger.Claim claim,
+                                                           ResourceSiteLifecycle lifecycle, int desiredStage,
+                                                           int completedCropSlots, int predecessorStage,
+                                                           boolean exactPredecessorSurface,
+                                                           boolean composedCanonicalSuccessor) {
+        return claim == null && predecessorStage >= 0 && predecessorStage < desiredStage
+                && allowsComposedTerminalLedgerRehydration(lifecycle, desiredStage, completedCropSlots,
+                exactPredecessorSurface, composedCanonicalSuccessor);
+    }
+    /**
+     * Finds only a whole physical growth stage strictly preceding the desired successor
+     * stage.  A mixed crop surface is deliberately not normalized: it is an unknown write and
+     * remains a local conflict.  Walking down from the desired stage preserves the nearest
+     * exact predecessor if COLD advanced more than one canonical stage before re-entry.
+     */
+    private static int exactComposedGrowthPredecessorStage(ServerLevel level, ResourceSite site, int desiredStage) {
+        for (int stage = desiredStage - 1; stage >= 0; stage--) {
+            if (matches(level, site, stage)) return stage;
+        }
+        return -1;
     }
     private static String claimPhysicalState(ServerLevel level, FrontierV3ResourceSiteLedger ledger, ResourceSite site, FrontierV3ResourceSiteLedger.Claim claim) {
         String physical;
@@ -805,7 +845,8 @@ final class FrontierV3ResourceSiteExecutor {
                     lifecycle, lifecycle.growthStage(), 0,
                     matches(level, site, lifecycle.growthStage())
                             || (lifecycle.growthStage() < ResourceSiteLifecycle.MATURE_STAGE
-                            && matchesHarvestProgress(level, site, ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS)),
+                            && matchesHarvestProgress(level, site, ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS))
+                            || exactComposedGrowthPredecessorStage(level, site, lifecycle.growthStage()) >= 0,
                     lifecycle.harvestLineage().map(lineage -> lineage.composedIntoCanonicalSuccessor(state)).orElse(false))) {
                 // This re-enters projectLifecycleBounded, which persists the exact terminal
                 // predecessor claim before writing its successor through the normal eight-cell
