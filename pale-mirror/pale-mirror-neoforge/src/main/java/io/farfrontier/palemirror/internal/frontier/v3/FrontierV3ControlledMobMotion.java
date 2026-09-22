@@ -5,7 +5,6 @@ import io.farfrontier.palemirror.frontier.v3.model.LocalNavigationEnvelope;
 import io.farfrontier.palemirror.frontier.v3.model.WorldBounds;
 import io.farfrontier.palemirror.internal.network.PaleMirrorNetwork;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MoverType;
@@ -644,7 +643,13 @@ final class FrontierV3ControlledMobMotion {
         // response to an absent or player-destroyed floor.  This keeps a retained climb live
         // across ordinary gravity while immediately returning the body to vanilla falling when
         // that exact support disappears.
-        if (!level.getBlockState(sourceSupport).isFaceSturdy(level, sourceSupport, Direction.UP)) {
+        // The shared standing provider accepts any non-empty collision support, including the
+        // deliberately exact farmland under a harvest crop.  `isFaceSturdy` is stricter than
+        // that provider and rejects farmland, leaving ordinary gravity to create a perpetual
+        // apparent ascent at a same-level field edge.  Use the same physical support notion:
+        // this still rejects air, pass-through decoration and a removed floor, without adding
+        // a coordinate exception or alternate path.
+        if (level.getBlockState(sourceSupport).getCollisionShape(level, sourceSupport).isEmpty()) {
             ASCENTS.remove(actor);
             return;
         }
