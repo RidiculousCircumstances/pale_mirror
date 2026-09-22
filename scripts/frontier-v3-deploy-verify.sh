@@ -103,24 +103,27 @@ command -v journalctl >/dev/null || { printf 'journalctl is required for fresh s
 deadline=$((SECONDS + wait_seconds))
 while :; do
   fresh_log=$(journalctl --user -u "$service" --since "@$not_before" --no-pager -o cat)
+  # Do not pipe a large journal through `grep -q` under pipefail: grep may
+  # succeed early and deliberately close the pipe, making printf report
+  # SIGPIPE and turning a healthy deployment into a false negative.
   if [[ -n "$fresh_log" ]] \
-    && printf '%s\n' "$fresh_log" | grep -Fq 'Frontier v3 runtime started' \
-    && printf '%s\n' "$fresh_log" | grep -Eq 'Done \('; then
+    && grep -Fq 'Frontier v3 runtime started' <<<"$fresh_log" \
+    && grep -Eq 'Done \(' <<<"$fresh_log"; then
     break
   fi
   (( SECONDS >= deadline )) && break
   sleep 1
 done
 [[ -n "$fresh_log" ]] || { printf 'No service journal records after restart marker %s.\n' "$not_before" >&2; exit 1; }
-printf '%s\n' "$fresh_log" | grep -Fq 'Frontier v3 runtime started' || {
+grep -Fq 'Frontier v3 runtime started' <<<"$fresh_log" || {
   printf 'Fresh journal lacks Frontier v3 runtime startup evidence.\n' >&2
   exit 1
 }
-printf '%s\n' "$fresh_log" | grep -Eq 'Done \(' || {
+grep -Eq 'Done \(' <<<"$fresh_log" || {
   printf 'Fresh journal lacks dedicated-server ready evidence.\n' >&2
   exit 1
 }
-if printf '%s\n' "$fresh_log" | grep -Eiq 'frontier v3.*quarantin|pmv3.*quarantin'; then
+if grep -Eiq 'frontier v3.*quarantin|pmv3.*quarantin' <<<"$fresh_log"; then
   printf 'Fresh journal contains a Frontier v3 quarantine record; deployment is not healthy.\n' >&2
   exit 1
 fi
