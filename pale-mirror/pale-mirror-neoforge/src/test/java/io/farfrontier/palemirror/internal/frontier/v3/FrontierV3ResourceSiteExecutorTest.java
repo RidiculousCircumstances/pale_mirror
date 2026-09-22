@@ -2,6 +2,12 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
+import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
+import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
 import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
@@ -193,6 +199,10 @@ class FrontierV3ResourceSiteExecutorTest {
     @Test
     void pendingColdTerminalCompletesOnlyItsExactRunningHotPrefixBeforeReceipt() {
         SubjectId siteId = new SubjectId("site:1-wheat-field");
+        ArrayList<BlockPosition> slots = new ArrayList<>();
+        for (int x = 0; x < 8; x++) for (int z = 0; z < 8; z++) slots.add(new BlockPosition(x, 64, z));
+        ResourceSite site = new ResourceSite(siteId, new SubjectId("settlement:1"),
+                new SubjectId("structure:1-farm"), ResourceSiteKind.WHEAT_FIELD, slots);
         ResourceSiteHarvestLineage pending = new ResourceSiteHarvestLineage(
                 new SubjectId("job:site-harvest-1-wheat-field-3"), new SubjectId("task:settlement-1-harvest"),
                 new SubjectId("resident:1-31"), new SubjectId("item:site-harvest-1-wheat-field-3-wheat"), 3L,
@@ -201,7 +211,20 @@ class FrontierV3ResourceSiteExecutorTest {
         ResourceSiteLifecycle successor = new ResourceSiteLifecycle(siteId, ResourceSitePhase.GROWING, 4L, 2,
                 Optional.empty(), Optional.empty(), Optional.of(pending));
         FrontierV3ResourceSiteLedger.Claim prefix = new FrontierV3ResourceSiteLedger.Claim(
-                pending.predecessorIntentId(), FrontierV3ResourceSiteLedger.Status.ACTIVE, ResourceSiteLifecycle.MATURE_STAGE, 21);
+                new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:site-projection-1-wheat-field"),
+                FrontierV3ResourceSiteLedger.Status.ACTIVE, ResourceSiteLifecycle.MATURE_STAGE, 21);
+
+        assertTrue(FrontierV3ResourceSiteExecutor.ownsFacilityClaim(prefix.intentId(), site, pending.predecessorIntentId()),
+                "the plan-derived facility claim remains the exact owner across one harvest hand-off");
+        PhysicalIntent running = new PhysicalIntent(pending.predecessorIntentId(), PhysicalIntentKind.RESOURCE_SITE_HARVEST,
+                PhysicalIntentStatus.RUNNING, siteId,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.siteHarvest(siteId,
+                        pending.predecessorJobId(), pending.workerId(), pending.outputItemId()),
+                new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0,
+                PhysicalPostcondition.RESOURCE_SITE_HARVESTED_OBSERVED,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.RESOURCE_SITE_HARVEST);
+        assertTrue(FrontierV3ResourceSiteDeferredTerminalPrefix.ownsExactPrefix(site, pending, prefix, running),
+                "a plan-derived stable facility claim retains the exact running harvest prefix through COLD receipt");
 
         assertTrue(FrontierV3ResourceSiteDeferredTerminalPrefix.admits(successor, prefix,
                         io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING, 2, 0),
@@ -217,6 +240,13 @@ class FrontierV3ResourceSiteExecutorTest {
         assertFalse(FrontierV3ResourceSiteDeferredTerminalPrefix.admits(successor, complete,
                         io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING, 2, 0),
                 "a complete terminal field belongs to the existing deferred-receipt path");
+        FrontierV3ResourceSiteLedger.Claim foreign = new FrontierV3ResourceSiteLedger.Claim(
+                new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:foreign-1"),
+                FrontierV3ResourceSiteLedger.Status.ACTIVE, ResourceSiteLifecycle.MATURE_STAGE, 21);
+        assertFalse(FrontierV3ResourceSiteExecutor.ownsFacilityClaim(foreign.intentId(), site, pending.predecessorIntentId()),
+                "a look-alike prefix never borrows the stable facility claim");
+        assertFalse(FrontierV3ResourceSiteDeferredTerminalPrefix.ownsExactPrefix(site, pending, foreign, running),
+                "a foreign active claim cannot borrow terminal-prefix authority");
     }
 
     @Test

@@ -1033,9 +1033,12 @@ final class FrontierV3ResourceSiteExecutor {
     private static PhysicalIntentId projectionClaim(ResourceSite site) {
         return new PhysicalIntentId("intent:site-projection-" + site.id().value().substring("site:".length()));
     }
-    static boolean ownsRestartClaim(PhysicalIntentId claimIntentId, ResourceSite site, PhysicalIntentId preparationIntentId) {
+    static boolean ownsFacilityClaim(PhysicalIntentId claimIntentId, ResourceSite site, PhysicalIntentId transitionIntentId) {
         return claimIntentId.equals(projectionClaim(site))
-                || preparationIntentId != null && claimIntentId.equals(preparationIntentId);
+                || transitionIntentId != null && claimIntentId.equals(transitionIntentId);
+    }
+    static boolean ownsRestartClaim(PhysicalIntentId claimIntentId, ResourceSite site, PhysicalIntentId preparationIntentId) {
+        return ownsFacilityClaim(claimIntentId, site, preparationIntentId);
     }
     private static BlockPos minecraft(BlockPosition position) { return new BlockPos(position.x(), position.y(), position.z()); }
     private static BlockPosition canonical(BlockPos position) { return new BlockPosition(position.getX(), position.getY(), position.getZ()); }

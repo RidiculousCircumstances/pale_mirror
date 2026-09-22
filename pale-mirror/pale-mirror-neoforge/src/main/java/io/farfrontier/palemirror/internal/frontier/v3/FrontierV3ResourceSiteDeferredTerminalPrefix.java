@@ -46,12 +46,17 @@ final class FrontierV3ResourceSiteDeferredTerminalPrefix {
                 && lifecycle.harvestLineage().filter(ResourceSiteHarvestLineage::receiptPending).isPresent();
     }
 
-    private static boolean ownsExactPrefix(ResourceSite site, ResourceSiteHarvestLineage lineage,
-                                           FrontierV3ResourceSiteLedger.Claim claim, PhysicalIntent intent) {
+    static boolean ownsExactPrefix(ResourceSite site, ResourceSiteHarvestLineage lineage,
+                                   FrontierV3ResourceSiteLedger.Claim claim, PhysicalIntent intent) {
         // Status alone is insufficient: a foreign RUNNING intent, look-alike site, or stale
         // claim remains a local conflict. This owner alone may finish its terminal AIR suffix.
         return lineage != null && intent != null && intent.id().equals(lineage.predecessorIntentId())
-                && intent.id().equals(claim.intentId()) && intent.kind() == PhysicalIntentKind.RESOURCE_SITE_HARVEST
+                // The durable facility claim is intentionally stable across harvest jobs.
+                // It is the plan-derived site-projection identity, or (for the bounded
+                // hand-off itself) the exact predecessor intent.  Requiring only the latter
+                // misclassifies a lawful COLD terminal prefix as foreign on player re-entry.
+                && FrontierV3ResourceSiteExecutor.ownsFacilityClaim(claim.intentId(), site, intent.id())
+                && intent.kind() == PhysicalIntentKind.RESOURCE_SITE_HARVEST
                 && intent.causeSubjectId().equals(site.id())
                 && intent.roles().require(PhysicalIntentSubjectRole.SITE).equals(site.id())
                 && intent.roles().require(PhysicalIntentSubjectRole.RESOURCE_SITE_JOB).equals(lineage.predecessorJobId());
