@@ -27,6 +27,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestLineage;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestObservation;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestProgress;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteLifecycle;
+import io.farfrontier.palemirror.frontier.v3.model.ReferenceContainerCustody;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
@@ -127,9 +128,25 @@ final class FrontierV3ResourceSiteHarvestExecutor {
         // location exists there is no chunk to inspect and no absence to infer. A still-working
         // HOT harvest belongs to its scene/cursor authority, rather than occupying this final
         // receipt executor ahead of a later COLD-completed deferred receipt.
-        return target != null && loaded(level, target.site()) && level.hasChunkAt(target.chestPosition())
+        return target != null && loaded(level, target.site()) && physicalDepotEligible(level, state, target)
                 && (target.deferredReceipt() || target.activeJob().filter(job -> job.progress().complete()
                 && !hasOpenHarvestScene(state, job.id())).isPresent());
+    }
+
+    /**
+     * A reference depot retained in the server's serialization cache is prior replica evidence,
+     * not a live physical writer.  Harvest must wait for that exact scope's custody adapter to
+     * acquire an operational lease after an ordinary ticking ingress; otherwise a COLD terminal
+     * receipt can mistake a normal unloaded socket for an irreversible missing chest.
+     */
+    static boolean physicalDepotEligible(ServerLevel level, FrontierWorldState state, Target target) {
+        SubjectId containerId = outputSlot(target).containerId();
+        return level.hasChunkAt(target.chestPosition()) && hasOperationalDepotCustody(state, containerId);
+    }
+
+    static boolean hasOperationalDepotCustody(FrontierWorldState state, SubjectId containerId) {
+        return !ReferenceContainerCustody.isReferenceContainer(state, containerId)
+                || ReferenceContainerCustody.hasOperationalCustody(state, containerId);
     }
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, PhysicalIntent intent) {
@@ -145,7 +162,7 @@ final class FrontierV3ResourceSiteHarvestExecutor {
         // still-DRAINING lease point at a vanished job, so defer rather than relying on tick
         // registration order or weakening the scene invariant.
         if (target.activeJob().map(job -> hasOpenHarvestScene(state, job.id())).orElse(false)) return;
-        if (!loaded(level, target.site()) || !level.hasChunkAt(target.chestPosition())) return;
+        if (!loaded(level, target.site()) || !physicalDepotEligible(level, state, target)) return;
         ContainerSurface surface = state.inventory().surfaces().get(outputSlot(target).containerId());
         if (surface == null || surface.status() == ContainerSurfaceStatus.CONFLICT) { unknown(runtime, intent.id(), "depot-conflict"); return; }
         // COLD already owns a terminal output before the container projection exists.  Its

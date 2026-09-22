@@ -8,6 +8,9 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
 import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.WorldId;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -41,6 +44,17 @@ class FrontierV3ResourceSiteHarvestExecutorTest {
     void currentProfileAdmitsCropEffectsOnlyThroughTheExactHotSceneOwner() {
         assertTrue(FrontierV3ResourceSiteHarvestExecutor.effectExecutionAdmitted(),
                 "the current profile admits observed crop work through its exact HOT scene owner");
+    }
+
+    @Test
+    void releasedReferenceDepotIsNotAnEligibleHarvestWriter() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:harvest-custody"), 71L));
+        SubjectId depot = FrontierWorldState.depotId(new SubjectId("settlement:7"));
+
+        assertTrue(!FrontierV3ResourceSiteHarvestExecutor.hasOperationalDepotCustody(state, depot),
+                "a released reference replica is not permission to write a COLD harvest receipt");
+        assertTrue(FrontierV3ResourceSiteHarvestExecutor.hasOperationalDepotCustody(state, new SubjectId("container:non-reference")),
+                "the reference custody fence must not change legacy non-reference container eligibility");
     }
 
     private static PhysicalIntent intent(String settlement) {
