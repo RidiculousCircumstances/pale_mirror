@@ -269,6 +269,16 @@ final class FrontierV3ProductionWorkSceneExecutor {
     private static void release(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                 FrontierWorldState state, SceneLease lease) {
         SceneMember member = lease.members().getFirst();
+        // A whole unloaded hand-off chunk has no living physical custodian to fence.  The
+        // shared scene release owns the already-retained HOT observation and turns that exact
+        // scene back into COLD.  Treating the absent entity as deletion here instead made a
+        // normal player departure irreversibly CONFLICT an otherwise valid production job.
+        // A loaded chunk with a missing or foreign entity still takes the fail-closed fence
+        // below; this is not a coordinate, support, or admission relaxation.
+        if (!level.hasChunkAt(lease.handoffPosition().x(), lease.handoffPosition().z())) {
+            FrontierV3SceneExecutor.release(level, runtime, lease);
+            return;
+        }
         Entity retained = level.getEntity(member.entityId());
         FrontierV3AmbientActorExecutor.SceneCarrierFenceResult fence =
                 FrontierV3AmbientActorExecutor.fenceDrainingSceneBody(level, state, lease, member, retained);
