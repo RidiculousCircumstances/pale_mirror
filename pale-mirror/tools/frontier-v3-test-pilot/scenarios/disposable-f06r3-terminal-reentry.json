@@ -6,7 +6,7 @@
   "setup": [
     { "type": "command", "command": "/weather clear" },
     { "type": "command", "command": "/gamerule doDaylightCycle false" },
-    { "type": "command", "command": "/tick rate 100" }
+    { "type": "command", "command": "/tick rate 20" }
   ],
   "actions": [
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "diagnostic": { "view": "site", "id": "site:7-wheat-field", "field": "lastCrop" } }, "offset": { "x": -14, "y": 0, "z": 3 }, "settleMs": 1500, "causalMilestone": "terminal_current_field_ingress" },
