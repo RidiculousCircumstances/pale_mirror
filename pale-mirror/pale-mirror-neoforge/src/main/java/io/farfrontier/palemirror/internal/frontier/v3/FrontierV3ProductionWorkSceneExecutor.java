@@ -140,6 +140,15 @@ final class FrontierV3ProductionWorkSceneExecutor {
             if (job.traversalCursor() < route.size() - 1 && FrontierV3SemanticMovement.arrived(level, worker, route.get(job.traversalCursor() + 1))) {
                 submit(runtime, "production-work-traversal", lease.id().value(),
                         new ProductionWorkTraversalAdvanced(job.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, route.get(job.traversalCursor() + 1)), job.traversalCursor() + 1));
+            } else if (job.traversalCursor() < route.size() - 1
+                    && FrontierV3SemanticMovement.withinRetainedEdgeEnvelope(level, worker, current, route.get(job.traversalCursor() + 1))) {
+                // Canonical cursor ownership changes only at an exact next-surface arrival.
+                // Vanilla may nevertheless report the admitted body on one intermediate
+                // support while it is crossing that same retained edge.  That is neither a
+                // new route nor a completed edge; keep pursuing the named next surface rather
+                // than turning an ordinary in-flight workshop approach into an off-contract
+                // conflict (the same ownership rule used by field harvesting).
+                pursueRetainedTraversalEdge(level, worker, current, route.get(job.traversalCursor() + 1));
             } else conflict(level, runtime, lease, "production-work-cursor-" + FrontierV3SemanticMovement.detail(
                     FrontierV3SemanticMovement.at(level, worker, current)));
             return;
