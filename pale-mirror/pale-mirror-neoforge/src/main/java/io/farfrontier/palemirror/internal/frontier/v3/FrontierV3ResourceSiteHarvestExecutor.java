@@ -52,6 +52,14 @@ final class FrontierV3ResourceSiteHarvestExecutor {
      */
     enum Precondition { READY, WAITING_FOR_FIELD_PROJECTION, HARVESTING, CONFLICT }
 
+    /**
+     * The canonical inventory surface may materialize the already-owned terminal output on
+     * ordinary depot ingress before this receipt owner observes it.  That exact output is an
+     * acknowledgement candidate, never a second harvest write; every other occupied slot
+     * remains conflict evidence.
+     */
+    enum ReceiptDisposition { ALREADY_CONFIRMED, ACKNOWLEDGE_EXISTING_OUTPUT, APPLY_NEW_OUTPUT, CONFLICT }
+
     /** Immutable loaded-world probe for the read-only operator diagnostic boundary. */
     record Readiness(boolean fieldLoaded, boolean depotLoaded, String depotSurface, boolean ownedChestPresent,
                      boolean fieldMatchesMatureStage, boolean outputSlotEmpty, int claimedFieldStage,
@@ -210,11 +218,27 @@ final class FrontierV3ResourceSiteHarvestExecutor {
      */
     static boolean completeRunning(ServerLevel level, ResourceSite site, FrontierV3ResourceSiteLedger ledger,
                                    ChestBlockEntity chest, ExactItemStack output) {
-        if (completePostcondition(level, site, ledger, chest, output)) return true;
-        if (!fullyHarvested(level, site, ledger) || !(output.custody() instanceof io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.ContainerSlot slot)
-                || !chest.getItem(slot.slot()).isEmpty()) return false;
-        if (ledger.hasHarvestReceipt(site.id(), output)) return false;
-        return apply(level, ledger, site, chest, output);
+        boolean completeField = fullyHarvested(level, site, ledger);
+        if (!(output.custody() instanceof io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.ContainerSlot slot)) return false;
+        ReceiptDisposition disposition = receiptDisposition(completeField, ledger.hasHarvestReceipt(site.id(), output),
+                FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(slot.slot()), output), chest.getItem(slot.slot()).isEmpty());
+        return switch (disposition) {
+            case ALREADY_CONFIRMED -> true;
+            case ACKNOWLEDGE_EXISTING_OUTPUT -> {
+                ledger.recordHarvestReceipt(site.id(), output);
+                yield completePostcondition(level, site, ledger, chest, output);
+            }
+            case APPLY_NEW_OUTPUT -> apply(level, ledger, site, chest, output);
+            case CONFLICT -> false;
+        };
+    }
+
+    static ReceiptDisposition receiptDisposition(boolean completeField, boolean receiptRecorded,
+                                                  boolean exactExistingOutput, boolean outputSlotEmpty) {
+        if (!completeField) return ReceiptDisposition.CONFLICT;
+        if (receiptRecorded) return exactExistingOutput ? ReceiptDisposition.ALREADY_CONFIRMED : ReceiptDisposition.CONFLICT;
+        if (exactExistingOutput) return ReceiptDisposition.ACKNOWLEDGE_EXISTING_OUTPUT;
+        return outputSlotEmpty ? ReceiptDisposition.APPLY_NEW_OUTPUT : ReceiptDisposition.CONFLICT;
     }
 
     private static boolean fullyHarvested(ServerLevel level, ResourceSite site, FrontierV3ResourceSiteLedger ledger) {

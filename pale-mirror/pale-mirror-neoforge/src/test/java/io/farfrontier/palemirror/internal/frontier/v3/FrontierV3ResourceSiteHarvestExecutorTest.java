@@ -69,6 +69,21 @@ class FrontierV3ResourceSiteHarvestExecutorTest {
                 "only the shared ticking body plus exact custody admits the receipt");
     }
 
+    @Test
+    void exactCanonicalOutputOnACompleteOwnedFieldIsAcknowledgedRatherThanQuarantined() {
+        assertEquals(FrontierV3ResourceSiteHarvestExecutor.ReceiptDisposition.ACKNOWLEDGE_EXISTING_OUTPUT,
+                FrontierV3ResourceSiteHarvestExecutor.receiptDisposition(true, false, true, false),
+                "ordinary depot ingress may materialize COLD's exact canonical output before the harvest receipt observer");
+        assertEquals(FrontierV3ResourceSiteHarvestExecutor.ReceiptDisposition.APPLY_NEW_OUTPUT,
+                FrontierV3ResourceSiteHarvestExecutor.receiptDisposition(true, false, false, true));
+        assertEquals(FrontierV3ResourceSiteHarvestExecutor.ReceiptDisposition.CONFLICT,
+                FrontierV3ResourceSiteHarvestExecutor.receiptDisposition(true, false, false, false),
+                "a foreign occupied slot never borrows the canonical output identity");
+        assertEquals(FrontierV3ResourceSiteHarvestExecutor.ReceiptDisposition.CONFLICT,
+                FrontierV3ResourceSiteHarvestExecutor.receiptDisposition(false, false, true, false),
+                "even an exact output cannot confirm without the complete owned terminal field");
+    }
+
     private static PhysicalIntent intent(String settlement) {
         SubjectId site = new SubjectId("site:" + settlement + "-wheat-field");
         SubjectId job = new SubjectId("job:site-harvest-" + settlement + "-wheat-field-1");

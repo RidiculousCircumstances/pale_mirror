@@ -311,19 +311,24 @@ final class FrontierV3ContainerSurfaceExecutor {
             return new Readiness("UNLOADED", "", "", "", "", "", "", false, false, 0, 0);
         }
         GrayboxCell support = FrontierContainerSocketPlan.support(state, surface).orElse(null);
-        SocketReadiness fresh = socketReadiness(level, FrontierV3GrayboxLedger.get(level), target, support);
         SocketReadiness supportStatus = supportReadiness(level, FrontierV3GrayboxLedger.get(level), target, support);
         ChestBlockEntity owned = activeChest(level, target, containerId);
         ChestBlockEntity chest = level.getBlockEntity(target) instanceof ChestBlockEntity value ? value : null;
+        SocketReadiness fresh = socketReadiness(level, FrontierV3GrayboxLedger.get(level), target, support);
         String chestStatus = chest == null ? "NO_CHEST" : owned != null ? "OWNED" : "FOREIGN_OR_UNTAGGED";
         String slots = owned == null ? "UNAVAILABLE" : matchesCanonicalSlots(owned, state, containerId) ? "CURRENT"
                 : matchesCanonicalSlotsOrPendingProductionOutput(owned, state, containerId) ? "PENDING_PRODUCTION_OUTPUT" : "MISMATCH";
         String mismatch = owned == null || slots.equals("CURRENT") || slots.equals("PENDING_PRODUCTION_OUTPUT") ? ""
                 : firstMismatch(owned, state, containerId);
         FrontierV3PhysicalDemand.Readiness demand = FrontierV3PhysicalDemand.readiness(level, target);
-        return new Readiness("LOADED", fresh.name(), supportStatus.name(),
+        return new Readiness("LOADED", freshSocketDiagnostic(fresh, owned != null), supportStatus.name(),
                 BuiltInRegistries.BLOCK.getKey(level.getBlockState(target).getBlock()).toString(), chestStatus, slots, mismatch,
                 demand.ordinaryPlayerNearby(), demand.presentationDemand(), demand.eligibleObserverCount(), demand.presentationObserverCount());
+    }
+
+    /** A fresh-socket probe is intentionally inapplicable after the exact owned chest exists. */
+    static String freshSocketDiagnostic(SocketReadiness fresh, boolean ownedChestPresent) {
+        return ownedChestPresent ? "NOT_APPLICABLE_OWNED" : fresh.name();
     }
 
     private static String firstMismatch(ChestBlockEntity chest, FrontierWorldState state, SubjectId containerId) {

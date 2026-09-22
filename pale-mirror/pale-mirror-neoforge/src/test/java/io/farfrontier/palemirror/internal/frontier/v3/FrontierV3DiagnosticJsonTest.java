@@ -479,6 +479,16 @@ class FrontierV3DiagnosticJsonTest {
     }
 
     @Test
+    void ownedContainerDoesNotPresentThePreProjectionFreshSocketProbeAsAConflict() {
+        assertEquals("NOT_APPLICABLE_OWNED", FrontierV3ContainerSurfaceExecutor.freshSocketDiagnostic(
+                FrontierV3ContainerSurfaceExecutor.SocketReadiness.CONFLICT, true),
+                "a chest occupying its own active socket makes the fresh-air probe inapplicable, not conflicting");
+        assertEquals("CONFLICT", FrontierV3ContainerSurfaceExecutor.freshSocketDiagnostic(
+                FrontierV3ContainerSurfaceExecutor.SocketReadiness.CONFLICT, false),
+                "foreign or untagged occupancy remains truthful conflict evidence");
+    }
+
+    @Test
     void exposesBoundedReadOnlyAmbientAdmissionEvidence(@TempDir Path directory) {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
                 FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:diagnostic-admission-test"), 93L),
