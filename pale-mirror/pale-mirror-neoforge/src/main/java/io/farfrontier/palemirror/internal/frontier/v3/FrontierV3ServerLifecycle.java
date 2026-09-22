@@ -787,6 +787,13 @@ public final class FrontierV3ServerLifecycle {
         return FrontierV3PhysicalWorld.isPhysical(level) && runtime != null
                 && FrontierV3ResourceSiteExecutor.blocksNativeCropGrowth(runtime, level, position);
     }
+    /** Restores an exact owned crop only when another listener forced native growth past the pre-event fence. */
+    public static boolean restoreNativeCropGrowthPostcondition(ServerLevel level, BlockPos position) {
+        Objects.requireNonNull(level, "level"); Objects.requireNonNull(position, "position");
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
+        return FrontierV3PhysicalWorld.isPhysical(level) && runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
+                && FrontierV3ResourceSiteExecutor.restoreNativeGrowthPostcondition(runtime, level, position);
+    }
     static boolean normalDemandLossReleased(MinecraftServer server) {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(server);
         if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return false;

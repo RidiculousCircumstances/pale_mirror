@@ -144,6 +144,35 @@ final class FrontierV3ResourceSiteExecutor {
         return site.cropSlots().contains(canonical(position)) && blocksNativeCropGrowth(claim, false,
                 level.getBlockState(position).equals(crop(claim == null ? 0 : claim.stage())));
     }
+    /**
+     * A foreign listener can still force a CropGrowEvent after our pre-event fence has returned
+     * {@code DO_NOT_GROW}.  The post-event boundary therefore restores only the exact owned
+     * crop state that existed before that native event.  This is deliberately not general
+     * reconciliation: an AIR/non-wheat/foreign block remains a truthful local conflict.
+     */
+    static boolean restoreNativeGrowthPostcondition(ServerLevel level, FrontierV3ResourceSiteLedger ledger,
+                                                     ResourceSite site, BlockPos position) {
+        if (!site.cropSlots().contains(canonical(position))) return false;
+        FrontierV3ResourceSiteLedger.Claim claim = ledger.claim(site.id());
+        if (claim == null || claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE || claim.projection() != null) return false;
+        BlockState observed = level.getBlockState(position);
+        if (!observed.is(Blocks.WHEAT)) return false;
+        int index = site.cropSlots().indexOf(canonical(position));
+        BlockState expected = claim.stage() == ResourceSiteLifecycle.MATURE_STAGE && index < claim.harvestedCropSlots()
+                ? Blocks.AIR.defaultBlockState() : crop(claim.stage());
+        if (observed.equals(expected)) return false;
+        if (!level.setBlock(position, expected, 2)) return false;
+        ledger.recordNativeGrowthFence(site.id(), new FrontierV3ResourceSiteLedger.NativeGrowthFence(
+                "crop-grow-post", canonical(position), observed.getValue(CropBlock.AGE), claim.stage()));
+        return level.getBlockState(position).equals(expected);
+    }
+    static boolean restoreNativeGrowthPostcondition(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                                     ServerLevel level, BlockPos position) {
+        FrontierWorldState state = runtime.decodedState().orElse(null);
+        if (state == null) return false;
+        Target target = target(state, position);
+        return target != null && restoreNativeGrowthPostcondition(level, FrontierV3ResourceSiteLedger.get(level), target.site(), position);
+    }
     static boolean blocksNativeCropGrowth(FrontierV3ResourceSiteLedger.Claim claim, boolean projectionInFlight,
                                           boolean matchesRecordedClaimStage) {
         // PENDING has already reserved the exact managed cells while the bounded physical

@@ -150,6 +150,14 @@ public final class PaleMirrorEvents {
         }
     }
 
+    /** Defends the exact owned field if another listener overrides the native-growth pre-fence. */
+    @SubscribeEvent(priority = EventPriority.LOWEST)
+    public static void onFrontierCropGrew(CropGrowEvent.Post event) {
+        if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel level) {
+            io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.restoreNativeCropGrowthPostcondition(level, event.getPos());
+        }
+    }
+
     /** Source adapters may reject unmanaged native forms at the server boundary. */
     @SubscribeEvent
     public static void onEntityJoin(EntityJoinLevelEvent event) {

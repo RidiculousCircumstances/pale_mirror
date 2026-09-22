@@ -102,6 +102,27 @@ public final class FrontierV3ResourceSiteHarvestGameTests {
 
     @GameTest(batch = "pm-frontier-v3-resource-harvest", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full",
             timeoutTicks = 40)
+    public static void forcedNativeGrowthIsRestoredToTheExactOwnedStage(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); ResourceSite site = field(fixtureOrigin(helper), "site:resource-harvest-native-post-fence"); prepare(level, site);
+        runWhenLit(helper, level, site, () -> {
+            FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.fixture();
+            ledger.reserve(site.id(), new PhysicalIntentId("intent:site-harvest-native-post-fence"));
+            helper.assertTrue(FrontierV3ResourceSiteExecutor.placeWholeField(level, site),
+                    "native post-fence fixture must begin with one exact owned stage-zero field"); ledger.activate(site.id());
+            BlockPosition crop = site.cropSlots().getFirst(); BlockPos position = new BlockPos(crop.x(), crop.y(), crop.z());
+            level.setBlock(position, Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 1), 2);
+            helper.assertTrue(FrontierV3ResourceSiteExecutor.restoreNativeGrowthPostcondition(level, ledger, site, position),
+                    "a native post-event override must be returned to the exact active owner stage");
+            helper.assertTrue(level.getBlockState(position).equals(Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 0)),
+                    "the post-fence must retain the exact stage-zero crop instead of adopting native progress");
+            helper.assertValueEqual(ledger.nativeGrowthFence(site.id()), new FrontierV3ResourceSiteLedger.NativeGrowthFence(
+                    "crop-grow-post", crop, 1, 0), "the restored native event retains one exact diagnostic witness");
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "pm-frontier-v3-resource-harvest", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full",
+            timeoutTicks = 40)
     public static void oneObservedCropPersistsAsPartialFieldWithoutCreatingTheDepotOutput(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); ResourceSite site = field(fixtureOrigin(helper), "site:resource-harvest-partial-progress"); prepare(level, site);
         runWhenLit(helper, level, site, () -> {
