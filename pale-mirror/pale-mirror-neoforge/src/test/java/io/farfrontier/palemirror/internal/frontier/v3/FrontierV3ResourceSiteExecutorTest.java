@@ -154,6 +154,19 @@ class FrontierV3ResourceSiteExecutorTest {
         assertFalse(FrontierV3ResourceSiteExecutor.isExactComposedTerminalRegrowth(
                 regrowth, 2, 1, hotPrefix),
                 "a live harvest cursor is never relabelled as terminal regrowth");
+
+        assertTrue(FrontierV3ResourceSiteExecutor.allowsComposedTerminalLedgerRehydration(
+                regrowth, 2, 0, true, true),
+                "an exact current successor may restore only its missing physical ownership witness after restart");
+        assertFalse(FrontierV3ResourceSiteExecutor.allowsComposedTerminalLedgerRehydration(
+                regrowth, 2, 0, false, true),
+                "a missing ledger never adopts a changed or foreign field surface");
+        assertFalse(FrontierV3ResourceSiteExecutor.allowsComposedTerminalLedgerRehydration(
+                regrowth, 2, 1, true, true),
+                "a live harvest cursor is not terminal successor recovery");
+        assertFalse(FrontierV3ResourceSiteExecutor.allowsComposedTerminalLedgerRehydration(
+                regrowth, 2, 0, true, false),
+                "terminal history without its exact composed consumer remains fail-closed");
     }
 
     @Test

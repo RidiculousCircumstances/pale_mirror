@@ -218,6 +218,21 @@ final class FrontierV3ResourceSiteExecutor {
             } else if (claim == null) {
                 Optional<ResourceSiteHarvestJob> unmaterialized = exactUnmaterializedColdHarvest(level, state, site,
                         desiredStage, completedCropSlots);
+                // The field ledger is a physical ownership witness, not the owner of a
+                // completed canonical successor.  If its SavedData entry is absent after
+                // restart, re-establish it only when the entire currently loaded surface
+                // already exactly matches that successor and the terminal lineage names
+                // the exact composed consumer.  A missing or changed cell remains a local
+                // conflict; this branch neither projects nor repairs a look-alike field.
+                if (allowsComposedTerminalLedgerRehydration(state.resourceSites().site(site.id()), desiredStage,
+                        completedCropSlots, matches(level, site, desiredStage),
+                        state.resourceSites().site(site.id()).harvestLineage()
+                                .map(lineage -> lineage.composedIntoCanonicalSuccessor(state)).orElse(false))) {
+                    ledger.reserve(site.id(), projectionClaim(site));
+                    ledger.activate(site.id());
+                    ledger.updateStage(site.id(), desiredStage);
+                    return StageProjectionResult.CURRENT;
+                }
                 if (unmaterialized.isEmpty() && !baseline(level, site)) return StageProjectionResult.CONFLICT;
                 ledger.reserve(site.id(), unmaterialized.map(ResourceSiteHarvestJob::intentId).orElseGet(() -> projectionClaim(site)));
                 work = new FieldProjectionWork(desiredStage, completedCropSlots, initialWrites(site, desiredStage, completedCropSlots), 0, true, false);
@@ -401,6 +416,22 @@ final class FrontierV3ResourceSiteExecutor {
                 && claim.harvestedCropSlots() == 0 && completedCropSlots == 0
                 && claim.stage() >= 0 && claim.stage() < desiredStage
                 && desiredStage <= ResourceSiteLifecycle.MATURE_STAGE;
+    }
+
+    /**
+     * Re-entry may rebuild a missing physical ownership witness only for a complete current
+     * surface whose exact terminal lineage still names its canonical successor.  This is not
+     * a permissive recovery of a damaged field: callers must provide an exact whole-surface
+     * observation and a composed successor relation.
+     */
+    static boolean allowsComposedTerminalLedgerRehydration(ResourceSiteLifecycle lifecycle, int desiredStage,
+                                                            int completedCropSlots, boolean exactCurrentSurface,
+                                                            boolean composedCanonicalSuccessor) {
+        if (lifecycle == null || completedCropSlots != 0 || desiredStage != lifecycle.growthStage()
+                || !exactCurrentSurface || !composedCanonicalSuccessor) return false;
+        if (lifecycle.phase() != ResourceSitePhase.GROWING && lifecycle.phase() != ResourceSitePhase.READY) return false;
+        return lifecycle.harvestLineage().map(lineage -> lineage.outputReceiptResolved()
+                && lineage.completedGrowthEpoch() + 1L == lifecycle.growthEpoch()).orElse(false);
     }
     private static String claimPhysicalState(ServerLevel level, FrontierV3ResourceSiteLedger ledger, ResourceSite site, FrontierV3ResourceSiteLedger.Claim claim) {
         String physical;
