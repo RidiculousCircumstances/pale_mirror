@@ -141,7 +141,20 @@ final class FrontierV3ResourceSiteHarvestExecutor {
      */
     static boolean physicalDepotEligible(ServerLevel level, FrontierWorldState state, Target target) {
         SubjectId containerId = outputSlot(target).containerId();
-        return level.hasChunkAt(target.chestPosition()) && hasOperationalDepotCustody(state, containerId);
+        BlockPos position = target.chestPosition();
+        // `hasChunkAt` alone includes the server's retained serialization cache.  That cache
+        // can legitimately retain a live custody epoch while the body is no longer an ordinary
+        // ticking chest.  A receipt is a physical write, so it requires the same ground/body
+        // fact as the reference-custody provider: a ticking chunk and its exact owned chest.
+        boolean naturallyTicking = level.hasChunkAt(position) && level.shouldTickBlocksAt(position);
+        boolean ownedChestPresent = naturallyTicking && FrontierV3CargoHandoffExecutor.activeChest(level,
+                new FrontierV3CargoHandoffExecutor.StoreTarget(target.chestPosition(), containerId)) != null;
+        return physicallyGroundedDepot(naturallyTicking, ownedChestPresent, hasOperationalDepotCustody(state, containerId));
+    }
+
+    /** Shared receipt admission: custody alone never substitutes for a ticking owned body. */
+    static boolean physicallyGroundedDepot(boolean naturallyTicking, boolean ownedChestPresent, boolean operationalCustody) {
+        return naturallyTicking && ownedChestPresent && operationalCustody;
     }
 
     static boolean hasOperationalDepotCustody(FrontierWorldState state, SubjectId containerId) {

@@ -57,6 +57,18 @@ class FrontierV3ResourceSiteHarvestExecutorTest {
                 "the reference custody fence must not change legacy non-reference container eligibility");
     }
 
+    @Test
+    void receiptRequiresTheSameTickingOwnedDepotBodyAsReferenceCustody() {
+        assertTrue(!FrontierV3ResourceSiteHarvestExecutor.physicallyGroundedDepot(false, true, true),
+                "a retained but non-ticking chunk is serialized evidence, not a harvest writer");
+        assertTrue(!FrontierV3ResourceSiteHarvestExecutor.physicallyGroundedDepot(true, false, true),
+                "a lease without its owned chest body is not a harvest writer");
+        assertTrue(!FrontierV3ResourceSiteHarvestExecutor.physicallyGroundedDepot(true, true, false),
+                "a physical chest without current custody is not a harvest writer");
+        assertTrue(FrontierV3ResourceSiteHarvestExecutor.physicallyGroundedDepot(true, true, true),
+                "only the shared ticking body plus exact custody admits the receipt");
+    }
+
     private static PhysicalIntent intent(String settlement) {
         SubjectId site = new SubjectId("site:" + settlement + "-wheat-field");
         SubjectId job = new SubjectId("job:site-harvest-" + settlement + "-wheat-field-1");
