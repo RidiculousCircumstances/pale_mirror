@@ -480,6 +480,11 @@ public final class FrontierV3TestPilotClient {
     private static void visit(Minecraft minecraft, JsonObject action) {
         FrontierV3PilotVisitTarget target = resolvedVisitTarget(minecraft, action, "position");
         if (target == null) return;
+        if (action.has("offset")) {
+            JsonObject offset = action.getAsJsonObject("offset");
+            int x = offset.get("x").getAsInt(), y = offset.get("y").getAsInt(), z = offset.get("z").getAsInt();
+            target = new FrontierV3PilotVisitTarget(target.teleportAnchor().offset(x, y, z), target.expectedClientFeet().offset(x, y, z));
+        }
         visit(minecraft, target, action.get("dimension").getAsString(), action.get("settleMs").getAsLong(), 120_000L, "visit", action);
     }
     private static void visitOperation(Minecraft minecraft, JsonObject action) {

@@ -17,6 +17,18 @@ class FrontierV3TestPilotScenarioTest {
     }
 
     @Test
+    void permitsOnlyOneBoundedOffsetFromAReadOnlyVisitAnchor() {
+        assertEquals(1, FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"visit","dimension":"pale_mirror:frontier_graybox",
+                "position":{"diagnostic":{"view":"site","id":"site:7-wheat-field","field":"lastCrop"}},
+                "offset":{"x":-4,"y":0,"z":-8},"settleMs":1000}]}""").actionCount());
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"visit","dimension":"pale_mirror:frontier_graybox",
+                "position":{"diagnostic":{"view":"site","id":"site:7-wheat-field","field":"lastCrop"}},
+                "offset":{"x":33,"y":0,"z":0},"settleMs":1000}]}"""));
+    }
+
+    @Test
     void permitsOnlyTheBoundedExhaustiveCurrentFacilityProbe() {
         assertEquals(1, FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"assert_complete_resource_site","siteId":"site:7-wheat-field",

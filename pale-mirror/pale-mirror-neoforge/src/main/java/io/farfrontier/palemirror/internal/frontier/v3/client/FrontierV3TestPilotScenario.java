@@ -267,7 +267,8 @@ final class FrontierV3TestPilotScenario {
         boolean handshake = !action.has("demandHandshake") || validDemandHandshake(action.getAsJsonObject("demandHandshake"));
         return action.has("dimension") && action.get("dimension").isJsonPrimitive()
                 && action.get("dimension").getAsString().matches("[a-z0-9_.-]+:[a-z0-9_./-]+")
-                && resolvablePosition(action, "position") && timeout(action, 120_000L, "settleMs") && handshake
+                && resolvablePosition(action, "position") && (!action.has("offset") || offset(action))
+                && timeout(action, 120_000L, "settleMs") && handshake
                 && (!action.has("demandHandshake") || action.get("settleMs").getAsLong() == 0L);
     }
 

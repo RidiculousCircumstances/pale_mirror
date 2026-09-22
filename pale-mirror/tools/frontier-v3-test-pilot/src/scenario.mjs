@@ -193,6 +193,7 @@ export function validateScenario(scenario) {
       if (action.causalMilestone !== undefined) causalMilestones.add(action.causalMilestone);
       if (action.type === 'command' && !String(action.command).startsWith('/')) throw new Error('setup command must start with /');
       if (action.type === 'visit' && (!validDimension(action.dimension) || !validResolvablePosition(action.position)
+          || (action.offset !== undefined && (!validPosition(action.offset) || Math.abs(action.offset.x) > 32 || Math.abs(action.offset.y) > 8 || Math.abs(action.offset.z) > 32))
           || !Number.isInteger(action.settleMs) || action.settleMs < 0 || action.settleMs > 120_000
           || !validDemandHandshake(action.demandHandshake) || (action.demandHandshake !== undefined && action.settleMs !== 0))) {
         throw new Error('visit needs a namespaced dimension, block position and settleMs 0..120000');
