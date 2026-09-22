@@ -387,7 +387,11 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
     private static ResourceSiteHarvestHotTraversalAdvanced checkpoint(io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob job,
                                                                        SceneLease lease, Mob worker) {
         return new ResourceSiteHarvestHotTraversalAdvanced(job.id(), lease.id(), job.workerId(),
-                new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(worker.getBlockX(), worker.getBlockY(), worker.getBlockZ()),
+                // Feet on farmland are at support.y + 15/16, so getBlockY() describes the
+                // non-canonical fractional collision cell below the retained body.  The
+                // observed named support is the common authority for the actuator, body and
+                // checkpoint; it preserves the exact semantic body without a Y tolerance.
+                FrontierV3SurfaceObservation.observedAt(worker, job.nextTraversalSurface()),
                 job.traversalCursor() + 1);
     }
 

@@ -1137,7 +1137,9 @@ public final class FrontierV3TestPilotClient {
                 jobId = active; bound = true; sawActive = true;
             }
             ObservedDiagnostic process = jobId.isBlank() ? null : diagnostics.get(new DiagnosticIdentity("process", jobId));
-            if (process == null || process.value().get("instant").getAsLong() < instant) return;
+            if (process == null) return;
+            if (!"ok".equals(string(process.value(), "status"))) fail("process_diagnostic_unavailable");
+            if (number(process.value(), "instant") < instant) return;
             JsonObject value = process.value();
             String processSite = path(value, "claims", "site"); String worker = path(value, "identity", "worker"); String intent = path(value, "claims", "intent");
             if (!siteId.equals(processSite) || !jobId.equals(path(value, "identity", "job")) || worker.isBlank() || intent.isBlank()) fail("incoherent_site_process_claim");
@@ -1146,6 +1148,8 @@ public final class FrontierV3TestPilotClient {
             ObservedDiagnostic intentDiagnostic = diagnostics.get(new DiagnosticIdentity("intent", intentId));
             if (actor == null || intentDiagnostic == null) return;
             JsonObject actorValue = actor.value(); JsonObject intentValue = intentDiagnostic.value();
+            if (!"ok".equals(string(actorValue, "status"))) fail("actor_diagnostic_unavailable");
+            if (!"ok".equals(string(intentValue, "status"))) fail("intent_diagnostic_unavailable");
             if (!jobId.equals(string(actorValue, "assignmentOwner")) || !"FIELD_HARVEST".equals(string(actorValue, "assignment"))) fail("worker_assignment_diverges");
             if (!intentId.equals(string(intentValue, "id")) || !"RESOURCE_SITE_HARVEST".equals(string(intentValue, "intentKind"))) fail("intent_diverges");
             JsonObject admission = object(actorValue, "physicalAdmission");

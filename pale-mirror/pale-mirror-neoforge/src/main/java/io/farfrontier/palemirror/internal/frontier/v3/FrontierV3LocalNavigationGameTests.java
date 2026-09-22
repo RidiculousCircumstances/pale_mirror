@@ -251,6 +251,8 @@ public final class FrontierV3LocalNavigationGameTests {
             helper.assertTrue(FrontierV3SemanticMovement.arrived(helper.getLevel(), worker, next),
                     "a retained harvest worker must reach the next exact farmland support instead of repeating ascent: actual="
                             + worker.position() + " motion=" + FrontierV3ControlledMobMotion.motionObservation(worker));
+            helper.assertTrue(FrontierV3SurfaceObservation.observedAt(worker, next).equals(next.standingBody()),
+                    "the fractional farmland feet position must checkpoint as the named retained semantic body, not floor into its support cell");
             helper.assertTrue(FrontierV3ControlledMobMotion.trace(worker).stream().anyMatch(sample -> sample.horizontalVelocity() > .0D),
                     "farmland support must admit an actual horizontal collision move");
             FrontierV3ControlledMobMotion.stop(worker); worker.discard(); helper.succeed();
