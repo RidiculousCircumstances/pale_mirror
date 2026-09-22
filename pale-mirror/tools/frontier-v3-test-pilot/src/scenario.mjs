@@ -326,10 +326,11 @@ export function validateScenario(scenario) {
         throw new Error('release_fast_forward_hold accepts no parameters');
       }
       if (action.type === 'wait_until_diagnostic' && (!validDiagnosticIdentity(action) || !action.expect || typeof action.expect !== 'object'
-          || Array.isArray(action.expect) || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 300_000
+          || Array.isArray(action.expect) || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0
+          || (!matureFieldAdmissionWait(action) && action.timeoutMs > 300_000)
           || (action.requireIncreaseAt !== undefined && !validDiagnosticPath(action.requireIncreaseAt))
           || (action.pollIntervalMs !== undefined && (!Number.isInteger(action.pollIntervalMs) || action.pollIntervalMs < 50 || action.pollIntervalMs > 1_000)))) {
-        throw new Error('wait_until_diagnostic needs a read-only view, predicate and timeoutMs 0..300000');
+        throw new Error('wait_until_diagnostic needs a read-only predicate, a 300000ms bound, or one progressing field-admission bound');
       }
       if (action.type === 'wait_until_harvest_result' && (!requiredId(action.siteId, 'site:') || !requiredId(action.intentId, 'intent:')
           || !requiredId(action.itemId, 'item:') || (action.settlementId !== undefined && !requiredId(action.settlementId, 'settlement:'))
@@ -469,6 +470,20 @@ function validDiagnosticIdentity(value) {
 }
 
 function validDiagnosticPath(value) { return typeof value === 'string' && /^[A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z][A-Za-z0-9]*){0,7}$/.test(value); }
+
+// A mature field can legitimately take longer than the normal diagnostic waiter at a
+// deliberately moderate simulation rate.  This is not a generic timeout escape hatch:
+// the one extended wall budget is tied to an exact site, its terminal HARVESTING epoch,
+// and an observed epoch increase from the action's fresh baseline receipt.
+function matureFieldAdmissionWait(action) {
+  return action.timeoutMs <= 600_000
+    && action.view === 'site'
+    && /^site:[1-9][0-9]*-wheat-field$/.test(action.id)
+    && action.requireIncreaseAt === 'growthEpoch'
+    && action.expect?.phase === 'HARVESTING'
+    && Number.isInteger(action.expect?.growthEpoch)
+    && action.expect.growthEpoch > 0;
+}
 
 function requiredId(value, prefix) { return typeof value === 'string' && value.startsWith(prefix) && value.length > prefix.length; }
 

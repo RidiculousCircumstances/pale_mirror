@@ -66,7 +66,7 @@ final class FrontierV3TestPilotScenario {
                     (type.equals("look_operation") && !validOperationLook(action)) ||
                     (type.equals("inspect") && !validDiagnosticIdentity(action)) ||
                     (type.equals("wait_until_diagnostic") && (!validDiagnosticIdentity(action) || !action.has("expect")
-                            || !action.get("expect").isJsonObject() || !timeout(action, 300_000L) || !validOptionalIncreasePath(action)
+                            || !action.get("expect").isJsonObject() || !boundedDiagnosticWait(action) || !validOptionalIncreasePath(action)
                             || !validOptionalDiagnosticPollInterval(action))) ||
                     (type.equals("wait_until_container_item") && !validContainerItem(action)) ||
                     (type.equals("wait_until_harvest_result") && !validHarvestResult(action)) ||
@@ -95,6 +95,27 @@ final class FrontierV3TestPilotScenario {
                 throw new IllegalArgumentException(section + " action " + index + " lacks required position/command");
             }
         }
+    }
+
+    /**
+     * Most read-only diagnostic waits remain capped at five minutes.  A field maturation
+     * admission may use ten minutes only when its exact epoch must advance from the fresh
+     * baseline diagnostic; that preserves a typed liveness oracle instead of hiding a stall.
+     */
+    private static boolean boundedDiagnosticWait(JsonObject action) {
+        if (timeout(action, 300_000L)) return true;
+        if (!timeout(action, 600_000L) || !action.has("view") || !action.has("id") || !action.has("expect")
+                || !action.has("requireIncreaseAt")) return false;
+        if (!action.get("view").isJsonPrimitive() || !action.get("id").isJsonPrimitive()
+                || !action.get("requireIncreaseAt").isJsonPrimitive()) return false;
+        if (!action.get("view").getAsString().equals("site")
+                || !action.get("id").getAsString().matches("site:[1-9][0-9]*-wheat-field")
+                || !action.get("requireIncreaseAt").getAsString().equals("growthEpoch")) return false;
+        JsonObject expected = action.getAsJsonObject("expect");
+        return expected.has("phase") && expected.get("phase").isJsonPrimitive()
+                && expected.get("phase").getAsString().equals("HARVESTING")
+                && expected.has("growthEpoch") && expected.get("growthEpoch").isJsonPrimitive()
+                && expected.get("growthEpoch").getAsLong() > 0L;
     }
 
     private static boolean validRelativeFastForward(JsonObject action) {
