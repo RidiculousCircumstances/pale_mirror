@@ -100,33 +100,51 @@ ss -ltnH | awk '{print $4}' | grep -Eq "(:|\\.)${port}$" || {
 }
 
 command -v journalctl >/dev/null || { printf 'journalctl is required for fresh startup evidence.\n' >&2; exit 2; }
+
+# Stream the post-start journal rather than retaining it in a shell variable.
+# A long-lived service can have enough records after the restart marker for a
+# here-string (or command substitution) to consume temporary storage before
+# the verifier evaluates any evidence. The scanner retains only the facts this
+# proof needs and remains bounded to the caller's restart epoch.
+journal_evidence() {
+  journalctl --user -u "$service" --since "@$not_before" --no-pager -o cat \
+    | awk '
+        { seen = 1 }
+        /Frontier v3 runtime started/ { started = 1 }
+        /Done \(/ { ready = 1 }
+        {
+          line = tolower($0)
+          if (line ~ /frontier v3.*quarantin/ || line ~ /pmv3.*quarantin/) quarantined = 1
+        }
+        END {
+          if (!seen) exit 10
+          if (!started) exit 11
+          if (!ready) exit 12
+          if (quarantined) exit 13
+        }
+      '
+}
+
 deadline=$((SECONDS + wait_seconds))
+evidence_status=10
 while :; do
-  fresh_log=$(journalctl --user -u "$service" --since "@$not_before" --no-pager -o cat)
-  # Do not pipe a large journal through `grep -q` under pipefail: grep may
-  # succeed early and deliberately close the pipe, making printf report
-  # SIGPIPE and turning a healthy deployment into a false negative.
-  if [[ -n "$fresh_log" ]] \
-    && grep -Fq 'Frontier v3 runtime started' <<<"$fresh_log" \
-    && grep -Eq 'Done \(' <<<"$fresh_log"; then
+  if journal_evidence; then
+    evidence_status=0
     break
+  else
+    evidence_status=$?
   fi
   (( SECONDS >= deadline )) && break
   sleep 1
 done
-[[ -n "$fresh_log" ]] || { printf 'No service journal records after restart marker %s.\n' "$not_before" >&2; exit 1; }
-grep -Fq 'Frontier v3 runtime started' <<<"$fresh_log" || {
-  printf 'Fresh journal lacks Frontier v3 runtime startup evidence.\n' >&2
-  exit 1
-}
-grep -Eq 'Done \(' <<<"$fresh_log" || {
-  printf 'Fresh journal lacks dedicated-server ready evidence.\n' >&2
-  exit 1
-}
-if grep -Eiq 'frontier v3.*quarantin|pmv3.*quarantin' <<<"$fresh_log"; then
-  printf 'Fresh journal contains a Frontier v3 quarantine record; deployment is not healthy.\n' >&2
-  exit 1
-fi
+case "$evidence_status" in
+  0) ;;
+  10) printf 'No service journal records after restart marker %s.\n' "$not_before" >&2; exit 1 ;;
+  11) printf 'Fresh journal lacks Frontier v3 runtime startup evidence.\n' >&2; exit 1 ;;
+  12) printf 'Fresh journal lacks dedicated-server ready evidence.\n' >&2; exit 1 ;;
+  13) printf 'Fresh journal contains a Frontier v3 quarantine record; deployment is not healthy.\n' >&2; exit 1 ;;
+  *) printf 'Unable to evaluate fresh service journal evidence.\n' >&2; exit 1 ;;
+esac
 
 printf 'FRONTIER_V3_DEPLOY_VERIFY=OK\n'
 printf 'pid=%s\nport=%s\nworld=%s\nsha512=%s\nnotBefore=%s\n' \
