@@ -474,12 +474,12 @@ function validDiagnosticPath(value) { return typeof value === 'string' && /^[A-Z
 // A mature field can legitimately take longer than the normal diagnostic waiter at a
 // deliberately moderate simulation rate.  This is not a generic timeout escape hatch:
 // the one extended wall budget is tied to an exact site, its terminal HARVESTING epoch,
-// and an observed epoch increase from the action's fresh baseline receipt.
+// and an observed growth-stage increase from the action's fresh baseline receipt.
 function matureFieldAdmissionWait(action) {
   return action.timeoutMs <= 600_000
     && action.view === 'site'
     && /^site:[1-9][0-9]*-wheat-field$/.test(action.id)
-    && action.requireIncreaseAt === 'growthEpoch'
+    && action.requireIncreaseAt === 'growthStage'
     && action.expect?.phase === 'HARVESTING'
     && Number.isInteger(action.expect?.growthEpoch)
     && action.expect.growthEpoch > 0;

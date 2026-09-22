@@ -99,7 +99,7 @@ final class FrontierV3TestPilotScenario {
 
     /**
      * Most read-only diagnostic waits remain capped at five minutes.  A field maturation
-     * admission may use ten minutes only when its exact epoch must advance from the fresh
+     * admission may use ten minutes only when its exact growth stage must advance from the fresh
      * baseline diagnostic; that preserves a typed liveness oracle instead of hiding a stall.
      */
     private static boolean boundedDiagnosticWait(JsonObject action) {
@@ -110,7 +110,7 @@ final class FrontierV3TestPilotScenario {
                 || !action.get("requireIncreaseAt").isJsonPrimitive()) return false;
         if (!action.get("view").getAsString().equals("site")
                 || !action.get("id").getAsString().matches("site:[1-9][0-9]*-wheat-field")
-                || !action.get("requireIncreaseAt").getAsString().equals("growthEpoch")) return false;
+                || !action.get("requireIncreaseAt").getAsString().equals("growthStage")) return false;
         JsonObject expected = action.getAsJsonObject("expect");
         return expected.has("phase") && expected.get("phase").isJsonPrimitive()
                 && expected.get("phase").getAsString().equals("HARVESTING")

@@ -84,11 +84,11 @@ test('native pilot may await a bounded fresh read-only diagnostic predicate', ()
   assert.throws(() => validateScenario({ ...diagnosticWait, actions: [{ ...diagnosticWait.actions[0], expect: [] }] }), /wait_until_diagnostic/);
   assert.throws(() => validateScenario({ ...diagnosticWait, actions: [{ ...diagnosticWait.actions[0], timeoutMs: 300_001 }] }), /wait_until_diagnostic/);
   assert.doesNotThrow(() => validateScenario({ ...diagnosticWait, actions: [{ ...diagnosticWait.actions[0],
-    expect: { phase: 'HARVESTING', growthEpoch: 1 }, requireIncreaseAt: 'growthEpoch', timeoutMs: 600_000 }] }));
+    expect: { phase: 'HARVESTING', growthEpoch: 1 }, requireIncreaseAt: 'growthStage', timeoutMs: 600_000 }] }));
   assert.throws(() => validateScenario({ ...diagnosticWait, actions: [{ ...diagnosticWait.actions[0],
     expect: { phase: 'HARVESTING', growthEpoch: 1 }, timeoutMs: 600_000 }] }), /wait_until_diagnostic/);
   assert.throws(() => validateScenario({ ...diagnosticWait, actions: [{ ...diagnosticWait.actions[0],
-    expect: { phase: 'HARVESTING', growthEpoch: 1 }, requireIncreaseAt: 'growthEpoch', timeoutMs: 600_001 }] }), /wait_until_diagnostic/);
+    expect: { phase: 'HARVESTING', growthEpoch: 1 }, requireIncreaseAt: 'growthStage', timeoutMs: 600_001 }] }), /wait_until_diagnostic/);
   assert.doesNotThrow(() => validateScenario({ ...diagnosticWait, actions: [{ ...diagnosticWait.actions[0], requireIncreaseAt: 'cursor.index' }] }));
   assert.throws(() => validateScenario({ ...diagnosticWait, actions: [{ ...diagnosticWait.actions[0], requireIncreaseAt: 'cursor index' }] }), /wait_until_diagnostic/);
   assert.doesNotThrow(() => validateScenario({ ...diagnosticWait, actions: [{ ...diagnosticWait.actions[0], pollIntervalMs: 50 }] }));

@@ -78,7 +78,7 @@ class FrontierV3TestPilotScenarioTest {
                 "expect":[],"timeoutMs":180000}]}"""));
         assertEquals(1, FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"wait_until_diagnostic","view":"site","id":"site:1-wheat-field",
-                "expect":{"phase":"HARVESTING","growthEpoch":1},"requireIncreaseAt":"growthEpoch","timeoutMs":600000}]}""").actionCount());
+                "expect":{"phase":"HARVESTING","growthEpoch":1},"requireIncreaseAt":"growthStage","timeoutMs":600000}]}""").actionCount());
         assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"wait_until_diagnostic","view":"site","id":"site:1-wheat-field",
                 "expect":{"phase":"HARVESTING","growthEpoch":1},"timeoutMs":600000}]}"""));
