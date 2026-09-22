@@ -198,6 +198,16 @@ final class FrontierV3AmbientActorExecutor {
                     Entity body = level.getEntity(entityId(state, actorId));
                     if (body instanceof Mob mob && owned(mob, actorId, bioform(state, actorId))
                             && drainReservedColdContinuation(runtime, state, actorId, mob, lease)) admitted++;
+                    // An unloaded serialized body is not a live physical owner.  Leaving its
+                    // HOT lease open nevertheless made the same retained COLD production
+                    // cursor reschedule forever: the production planner correctly refused to
+                    // advance while an ambient owner existed, but this adapter had no loaded
+                    // body from which to drain it.  Close only the exact reserved hand-off
+                    // after its chunk is genuinely unloaded; a loaded missing/foreign body is
+                    // deliberately not treated as a release observation.
+                    else if (body == null && !level.hasChunkAt(lease.handoffBody().supportingSurface().support().x(),
+                            lease.handoffBody().supportingSurface().support().z())
+                            && releaseUnloadedReservedColdContinuation(runtime, state, actorId, lease)) admitted++;
                 } else if (lease != null && lease.status() == AmbientLeaseStatus.PREPARED
                         && abandonPreparedForReservation(level, runtime, state, actorId, lease).isPresent()) {
                     admitted++;
@@ -831,6 +841,26 @@ final class FrontierV3AmbientActorExecutor {
                 || released.ambientLeases().get(actorId).status() != AmbientLeaseStatus.CLOSED) return false;
         body.discard();
         return true;
+    }
+    /** Releases an exact ambient hand-off only once Minecraft has unloaded its whole chunk. */
+    private static boolean releaseUnloadedReservedColdContinuation(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                                                    FrontierWorldState state, SubjectId actorId,
+                                                                    AmbientActorLease lease) {
+        var actor = state.actorLocations().get(actorId);
+        if (!lease.equals(state.ambientLeases().get(actorId)) || actor == null
+                || actor.condition().status() != ActorLifeStatus.ALIVE || !actor.body().equals(lease.handoffBody())) return false;
+        if (!(submit(runtime, "ambient-unloaded-reserved-draining", actorId.value(),
+                new AmbientLeaseTransition(actorId, AmbientLeaseStatus.DRAINING))
+                instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) return false;
+        FrontierWorldState draining = runtime.decodedState().orElse(null);
+        if (draining == null || draining.ambientLeases().get(actorId) == null
+                || draining.ambientLeases().get(actorId).status() != AmbientLeaseStatus.DRAINING) return false;
+        var condition = draining.actorLocations().get(actorId);
+        if (condition == null || condition.condition().status() != ActorLifeStatus.ALIVE
+                || !condition.body().equals(lease.handoffBody())) return false;
+        return submit(runtime, "ambient-unloaded-reserved-release", actorId.value(),
+                new AmbientLeaseReleased(actorId, lease.handoffBody(), condition.condition().health()))
+                instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted;
     }
     static void forget(FrontierV3ServerRuntime<?, ?> runtime) {
         FrontierV3AmbientPendingAdmissions.forget(runtime);
