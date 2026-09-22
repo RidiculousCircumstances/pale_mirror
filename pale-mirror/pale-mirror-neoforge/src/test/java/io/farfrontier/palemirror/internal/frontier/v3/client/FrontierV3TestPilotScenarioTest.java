@@ -1,12 +1,19 @@
 package io.farfrontier.palemirror.internal.frontier.v3.client;
 
 import com.google.gson.JsonParser;
+import net.minecraft.core.BlockPos;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FrontierV3TestPilotScenarioTest {
+    @Test
+    void crossDimensionVisitAlwaysBindsTheExactPlayerAsTheTeleportExecutor() {
+        assertEquals("execute as PMTestPilot in pale_mirror:frontier_graybox run tp @s 137 65 14",
+                FrontierV3TestPilotClient.crossDimensionVisitCommand("PMTestPilot", "pale_mirror:frontier_graybox", new BlockPos(137, 65, 14)));
+    }
+
     @Test
     void parsesSetupSeparatelyFromEvidenceActions() {
         FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""

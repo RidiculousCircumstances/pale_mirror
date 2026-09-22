@@ -501,7 +501,7 @@ public final class FrontierV3TestPilotClient {
             if (visitIngress.requestServerReceipt(arm.correlation())) minecraft.player.connection.sendCommand(FrontierV3PilotDemandReceiptTransition.armCommand(arm));
             visitHandshakeArmed = true; visitSent = true; return; }
         if (!visitSent) { String username = minecraft.player.getGameProfile().getName(); BlockPos teleport = target.teleportAnchor();
-            minecraft.player.connection.sendCommand("execute in " + dimension + " run tp " + username + " " + teleport.getX() + " " + teleport.getY() + " " + teleport.getZ());
+            minecraft.player.connection.sendCommand(crossDimensionVisitCommand(username, dimension, teleport));
             visitSent = true; return; }
         String clientDimension = minecraft.level.dimension().location().toString(); boolean targetChunkPresent = clientDimension.equals(dimension) && minecraft.level.hasChunkAt(target.teleportAnchor());
         visitIngress.observe(clientDimension, targetChunkPresent,
@@ -522,6 +522,16 @@ public final class FrontierV3TestPilotClient {
         if (FrontierV3PilotAnchorResolutionDeadline.timedOut(now, anchorResolutionStartedNanos, timeoutMs)) {
             throw new IllegalStateException(FrontierV3PilotVisitIngress.timeoutDetail(dimension, target, visitIngress));
         }
+    }
+    /**
+     * Transfer the actual connected player as the command executor before selecting the
+     * destination dimension.  A bare {@code execute in} can acknowledge a coordinate change
+     * server-side without emitting the player's cross-dimension transition packet on a later
+     * COLD re-entry; {@code @s} binds both halves to the one ordinary client connection.
+     */
+    static String crossDimensionVisitCommand(String username, String dimension, BlockPos teleport) {
+        return "execute as " + username + " in " + dimension + " run tp @s "
+                + teleport.getX() + " " + teleport.getY() + " " + teleport.getZ();
     }
     private static void emitVisitIngress(String request) { JsonObject value = visitIngress.receipt(request);
         FrontierV3PilotSessionControl.stampDiagnostic(value, index + 1, currentCausalMilestone); PaleMirrorMod.LOGGER.info("PMV3_PILOT_DIAGNOSTIC {}", value); }
