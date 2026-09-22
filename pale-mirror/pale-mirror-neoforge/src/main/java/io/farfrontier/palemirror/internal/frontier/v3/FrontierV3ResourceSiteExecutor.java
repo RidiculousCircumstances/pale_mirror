@@ -224,12 +224,19 @@ final class FrontierV3ResourceSiteExecutor {
                 // already exactly matches that successor and the terminal lineage names
                 // the exact composed consumer.  A missing or changed cell remains a local
                 // conflict; this branch neither projects nor repairs a look-alike field.
+                boolean exactCurrentSurface = matches(level, site, desiredStage);
+                boolean exactTerminalPredecessorSurface = desiredStage < ResourceSiteLifecycle.MATURE_STAGE
+                        && matches(level, site, ResourceSiteLifecycle.MATURE_STAGE);
                 if (allowsComposedTerminalLedgerRehydration(state.resourceSites().site(site.id()), desiredStage,
-                        completedCropSlots, matches(level, site, desiredStage),
+                        completedCropSlots, exactCurrentSurface || exactTerminalPredecessorSurface,
                         state.resourceSites().site(site.id()).harvestLineage()
                                 .map(lineage -> lineage.composedIntoCanonicalSuccessor(state)).orElse(false))) {
                     ledger.reserve(site.id(), projectionClaim(site));
                     ledger.activate(site.id());
+                    if (exactTerminalPredecessorSurface) {
+                        for (BlockPosition cropSlot : site.cropSlots()) level.setBlock(minecraft(cropSlot), crop(desiredStage), 2);
+                        if (!matches(level, site, desiredStage)) return StageProjectionResult.CONFLICT;
+                    }
                     ledger.updateStage(site.id(), desiredStage);
                     return StageProjectionResult.CURRENT;
                 }
