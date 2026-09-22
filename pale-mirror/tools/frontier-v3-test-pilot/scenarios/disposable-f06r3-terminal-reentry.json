@@ -17,6 +17,7 @@
     { "type": "look_nearest_entity", "entityType": "minecraft:villager", "nameContains": "Clearwater AGRICULTURAL WORKER", "maxDistance": 64, "timeoutMs": 30000, "causalMilestone": "terminal_assigned_farmer_visible" },
     { "type": "observe_harvest_semantics", "siteId": "site:7-wheat-field", "durationTicks": 300, "sampleEveryTicks": 20, "maxCanonicalStallTicks": 1200, "timeoutMs": 180000, "causalMilestone": "terminal_dynamic_harvest_oracle" },
     { "type": "visit", "dimension": "minecraft:overworld", "position": { "x": 0, "y": 64, "z": 0 }, "settleMs": 1000, "causalMilestone": "terminal_release_to_cold" },
+    { "type": "wait_until_diagnostic", "view": "site", "id": "site:7-wheat-field", "expect": { "phase": "GROWING", "terminalHarvest": { "outputOwned": true } }, "timeoutMs": 300000, "causalMilestone": "terminal_harvest_canonical_receipt" },
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "diagnostic": { "view": "container", "id": "container:7-depot", "field": "position" } }, "settleMs": 3000, "causalMilestone": "terminal_depot_custody_ingress" },
     { "type": "wait_until_diagnostic", "view": "site", "id": "site:7-wheat-field", "expect": { "phase": "GROWING", "terminalHarvest": { "canonicalSuccessor": true } }, "timeoutMs": 300000, "causalMilestone": "terminal_harvest_receipt_and_successor" },
     { "type": "wait_until_container_item", "containerId": "container:7-depot", "item": "minecraft:bread", "count": 64, "timeoutMs": 300000, "causalMilestone": "terminal_bread_custody" },
@@ -28,14 +29,14 @@
     { "type": "inspect", "view": "container", "id": "container:7-depot", "causalMilestone": "terminal_custody_identity" }
   ],
   "assertions": [
-    { "after": 16, "view": "site", "id": "site:7-wheat-field", "expect": { "status": "ok", "phase": "GROWING", "conflictDisposition": null, "terminalHarvest": { "canonicalSuccessor": true } } },
-    { "after": 17, "view": "container", "id": "container:7-depot", "expect": { "status": "ok" } }
+    { "after": 17, "view": "site", "id": "site:7-wheat-field", "expect": { "status": "ok", "phase": "GROWING", "conflictDisposition": null, "terminalHarvest": { "canonicalSuccessor": true } } },
+    { "after": 18, "view": "container", "id": "container:7-depot", "expect": { "status": "ok" } }
   ],
   "frames": [
     { "after": 4, "name": "f06r3-terminal-admission-board", "presentation": "player" },
     { "after": 6, "name": "f06r3-terminal-farmer-progress", "presentation": "player" },
     { "after": 7, "name": "f06r3-terminal-motion-progress", "presentation": "player" },
-    { "after": 12, "name": "f06r3-terminal-custody", "presentation": "player" },
-    { "after": 15, "name": "f06r3-terminal-readable-field", "presentation": "player" }
+    { "after": 13, "name": "f06r3-terminal-custody", "presentation": "player" },
+    { "after": 16, "name": "f06r3-terminal-readable-field", "presentation": "player" }
   ]
 }
