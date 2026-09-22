@@ -158,6 +158,7 @@ final class FrontierV3ResourceSiteHarvestExecutor {
         if (chest == null) { unknown(runtime, intent.id(), "missing-depot"); return; }
         FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
         if (intent.status() == PhysicalIntentStatus.RUNNING) {
+            if (target.deferredReceipt() && FrontierV3ResourceSiteDeferredTerminalPrefix.awaitingProjection(level, state, target.site(), intent)) return;
             if (completeRunning(level, target.site(), ledger, chest, target.output())) { confirm(runtime, intent, target); }
             else { fail(level, runtime, ledger, target, "completion-postcondition-conflict"); }
             return;

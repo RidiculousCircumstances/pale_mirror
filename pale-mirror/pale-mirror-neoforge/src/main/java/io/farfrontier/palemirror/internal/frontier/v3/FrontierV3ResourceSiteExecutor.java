@@ -294,6 +294,8 @@ final class FrontierV3ResourceSiteExecutor {
                 boolean successorRegrowth = isExactSuccessorRegrowth(state, site, desiredStage, completedCropSlots, claim);
                 boolean terminalPredecessor = isExactTerminalPredecessor(level, state, site, desiredStage, completedCropSlots, claim);
                 boolean deferredTerminalReceipt = isExactDeferredHarvestReceipt(level, state, site, desiredStage, completedCropSlots, claim);
+                boolean deferredTerminalPrefix = FrontierV3ResourceSiteDeferredTerminalPrefix.matches(level, state, site,
+                        desiredStage, completedCropSlots, claim);
                 boolean confirmedHarvestRegrowth = isExactConfirmedHarvestRegrowth(level, state, site,
                         desiredStage, completedCropSlots, claim);
                 boolean composedTerminalRegrowth = isExactComposedTerminalRegrowth(state.resourceSites().site(site.id()),
@@ -301,7 +303,7 @@ final class FrontierV3ResourceSiteExecutor {
                 boolean interruptedStageZero = isExactInterruptedStageZeroProjection(level, state, site, desiredStage, completedCropSlots, claim);
                 boolean uncommittedCurrentHarvest = isExactUncommittedCurrentHarvest(level, state, site, desiredStage, completedCropSlots, claim);
                 if (claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE
-                        || (!successorRegrowth && !terminalPredecessor && !deferredTerminalReceipt && !confirmedHarvestRegrowth
+                        || (!successorRegrowth && !terminalPredecessor && !deferredTerminalReceipt && !deferredTerminalPrefix && !confirmedHarvestRegrowth
                         && !composedTerminalRegrowth && !interruptedStageZero && !uncommittedCurrentHarvest
                         && !matchesClaim(level, site, claim))) return StageProjectionResult.CONFLICT;
                 if (claim.stage() == desiredStage && claim.harvestedCropSlots() == completedCropSlots) return StageProjectionResult.CURRENT;
@@ -310,13 +312,24 @@ final class FrontierV3ResourceSiteExecutor {
                 // field as the physical receipt witness; do not let projection, player
                 // demand, or a restart turn turn that bounded lag into drift or regrowth.
                 if (deferredTerminalReceipt) return StageProjectionResult.DEFERRED;
-                boolean lawfulRegrowthReset = resetsTerminalHarvestClaim(claim, completedCropSlots,
-                        successorRegrowth, confirmedHarvestRegrowth) || composedTerminalRegrowth;
-                if (claim.stage() == ResourceSiteLifecycle.MATURE_STAGE && claim.harvestedCropSlots() > completedCropSlots && !lawfulRegrowthReset) {
-                    if (!successorRegrowth) return StageProjectionResult.CONFLICT;
+                // COLD may close the shared semantic cursor after a player leaves a HOT field.
+                // If its owned field stopped at an exact prefix, complete only the terminal AIR
+                // suffix through this bounded writer. The separate receipt executor still owns
+                // the sole depot write and confirmation.
+                if (deferredTerminalPrefix) {
+                    work = new FieldProjectionWork(ResourceSiteLifecycle.MATURE_STAGE,
+                            ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS,
+                            transitionWrites(site, claim, ResourceSiteLifecycle.MATURE_STAGE,
+                                    ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS, false), 0, false, false);
+                } else {
+                    boolean lawfulRegrowthReset = resetsTerminalHarvestClaim(claim, completedCropSlots,
+                            successorRegrowth, confirmedHarvestRegrowth) || composedTerminalRegrowth;
+                    if (claim.stage() == ResourceSiteLifecycle.MATURE_STAGE && claim.harvestedCropSlots() > completedCropSlots && !lawfulRegrowthReset) {
+                        if (!successorRegrowth) return StageProjectionResult.CONFLICT;
+                    }
+                    work = new FieldProjectionWork(desiredStage, completedCropSlots,
+                            transitionWrites(site, claim, desiredStage, completedCropSlots, successorRegrowth), 0, false, successorRegrowth);
                 }
-                work = new FieldProjectionWork(desiredStage, completedCropSlots,
-                        transitionWrites(site, claim, desiredStage, completedCropSlots, successorRegrowth), 0, false, successorRegrowth);
             }
             if (claim == null || claim.projection() == null) beginProjection(ledger, state, site, work);
             workBySite.put(site.id(), work);
@@ -436,7 +449,9 @@ final class FrontierV3ResourceSiteExecutor {
     private static String projectionSource(FrontierWorldState state, ResourceSite site) {
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(site.id());
         return lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
-                .map(job -> job.id().value()).orElse("growth:" + site.id().value() + ":e" + lifecycle.growthEpoch());
+                .map(job -> job.id().value()).or(() -> lifecycle.harvestLineage().filter(ResourceSiteHarvestLineage::receiptPending)
+                        .map(lineage -> lineage.predecessorJobId().value()))
+                .orElse("growth:" + site.id().value() + ":e" + lifecycle.growthEpoch());
     }
     private static List<FieldWrite> transitionWrites(ResourceSite site, FrontierV3ResourceSiteLedger.Claim claim,
                                                      int desiredStage, int completedCropSlots, boolean successorRegrowth) {

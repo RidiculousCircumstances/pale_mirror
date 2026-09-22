@@ -170,6 +170,35 @@ class FrontierV3ResourceSiteExecutorTest {
     }
 
     @Test
+    void pendingColdTerminalCompletesOnlyItsExactRunningHotPrefixBeforeReceipt() {
+        SubjectId siteId = new SubjectId("site:1-wheat-field");
+        ResourceSiteHarvestLineage pending = new ResourceSiteHarvestLineage(
+                new SubjectId("job:site-harvest-1-wheat-field-3"), new SubjectId("task:settlement-1-harvest"),
+                new SubjectId("resident:1-31"), new SubjectId("item:site-harvest-1-wheat-field-3-wheat"), 3L,
+                new BodyPosition(0, 64, 0), new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:site-harvest-1-wheat-field-3"),
+                new InventoryCustody.ContainerSlot(new SubjectId("container:1"), 2), false, Optional.empty(), Optional.empty());
+        ResourceSiteLifecycle successor = new ResourceSiteLifecycle(siteId, ResourceSitePhase.GROWING, 4L, 2,
+                Optional.empty(), Optional.empty(), Optional.of(pending));
+        FrontierV3ResourceSiteLedger.Claim prefix = new FrontierV3ResourceSiteLedger.Claim(
+                pending.predecessorIntentId(), FrontierV3ResourceSiteLedger.Status.ACTIVE, ResourceSiteLifecycle.MATURE_STAGE, 21);
+
+        assertTrue(FrontierV3ResourceSiteDeferredTerminalPrefix.admits(successor, prefix,
+                        io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING, 2, 0),
+                "a COLD-complete terminal with its exact RUNNING HOT prefix must finish that one receipt cursor, not quarantine regrowth");
+        assertFalse(FrontierV3ResourceSiteDeferredTerminalPrefix.admits(successor, prefix,
+                        io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.PREPARED, 2, 0),
+                "an unstarted intent has no physical-prefix authority");
+        assertFalse(FrontierV3ResourceSiteDeferredTerminalPrefix.admits(successor, prefix,
+                        io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING, 2, 1),
+                "a live successor cursor cannot be relabelled as a terminal receipt prefix");
+        FrontierV3ResourceSiteLedger.Claim complete = new FrontierV3ResourceSiteLedger.Claim(
+                pending.predecessorIntentId(), FrontierV3ResourceSiteLedger.Status.ACTIVE, ResourceSiteLifecycle.MATURE_STAGE, 64);
+        assertFalse(FrontierV3ResourceSiteDeferredTerminalPrefix.admits(successor, complete,
+                        io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING, 2, 0),
+                "a complete terminal field belongs to the existing deferred-receipt path");
+    }
+
+    @Test
     void lifecycleConflictTraceRetainsItsCallerAndPreConflictOwnershipTuple() {
         SubjectId site = new SubjectId("site:1-wheat-field");
         ResourceSiteLifecycle lifecycle = new ResourceSiteLifecycle(site, ResourceSitePhase.GROWING, 2L, 0, Optional.empty());

@@ -237,6 +237,37 @@ public final class FrontierV3ResourceSiteHarvestGameTests {
         });
     }
 
+    @GameTest(batch = "pm-frontier-v3-resource-recovery", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full",
+            timeoutTicks = 40)
+    public static void coldTerminalCompletesAnExactRunningHotPrefixBeforeItsOneReceipt(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); ResourceSite site = field(fixtureOrigin(helper), "site:resource-harvest-cold-terminal-prefix"); prepare(level, site);
+        runWhenLit(helper, level, site, () -> {
+            FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.fixture();
+            PhysicalIntentId intent = new PhysicalIntentId("intent:site-harvest-cold-terminal-prefix");
+            ledger.reserve(site.id(), intent);
+            helper.assertTrue(FrontierV3ResourceSiteExecutor.placeWholeField(level, site),
+                    "the prefix fixture begins with one exact owned field"); ledger.activate(site.id());
+            helper.assertValueEqual(FrontierV3ResourceSiteExecutor.projectStage(level, ledger, site, ResourceSiteLifecycle.MATURE_STAGE),
+                    FrontierV3ResourceSiteExecutor.StageProjectionResult.UPDATED, "the prefix fixture begins mature");
+            for (int index = 0; index < 21; index++) {
+                BlockPosition crop = site.cropSlots().get(index);
+                level.setBlock(new BlockPos(crop.x(), crop.y(), crop.z()), Blocks.AIR.defaultBlockState(), 3);
+                ledger.harvestOne(site.id(), index + 1);
+            }
+            CompoundTag saved = ledger.save(new CompoundTag(), level.registryAccess()); ledger = FrontierV3ResourceSiteLedger.load(saved, level.registryAccess());
+            helper.assertTrue(ledger.claim(site.id()).harvestedCropSlots() == 21
+                            && FrontierV3ResourceSiteExecutor.matchesHarvestProgress(level, site, 21),
+                    "restart retains the exact owned HOT prefix before COLD terminal completion");
+            helper.assertValueEqual(FrontierV3ResourceSiteExecutor.projectHarvestProgress(level, ledger, site, 64),
+                    FrontierV3ResourceSiteExecutor.StageProjectionResult.UPDATED,
+                    "the one exact terminal suffix advances from the retained prefix instead of being relabelled as drift");
+            helper.assertTrue(ledger.claim(site.id()).harvestedCropSlots() == 64
+                            && FrontierV3ResourceSiteExecutor.matchesHarvestProgress(level, site, 64),
+                    "the completed terminal cursor remains the separate exact receipt witness");
+            helper.succeed();
+        });
+    }
+
     @GameTest(batch = "pm-frontier-v3-resource-harvest", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full",
             timeoutTicks = 40)
     public static void completedHotCursorReceiptsOnceWhileRestartOnlyConfirms(GameTestHelper helper) {
