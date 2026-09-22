@@ -95,6 +95,13 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
                     new PhysicalIntentRetirementAccount.Exact<>(lineage.outputItemId()), lateDisposition(transition));
         }
         ResourceSiteHarvestJob job = harvestJob(state, intent);
+        // A HOT executor confirmation is not itself an engine-scheduled command, but it closes
+        // the active harvest's one durable COLD continuation in the same transaction.  The
+        // retirement proof must therefore bind that exact stable schedule identity rather than
+        // falsely declaring that no engine continuation exists.
+        if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED) {
+            continuation = new PhysicalIntentRetirementAccount.Exact<>(ResourceSiteHarvestProcess.coldProgress(job, 0L).id());
+        }
         FrontierDomainRelationships.SubjectEndpoint site = new FrontierDomainRelationships.SubjectEndpoint(FrontierDomainRelationships.EntityKind.RESOURCE_SITE, job.siteId());
         FrontierDomainRelationships.SubjectEndpoint harvest = new FrontierDomainRelationships.SubjectEndpoint(FrontierDomainRelationships.EntityKind.RESOURCE_HARVEST_JOB, job.id());
         List<FrontierDomainRelationships.Edge> edges = List.of(

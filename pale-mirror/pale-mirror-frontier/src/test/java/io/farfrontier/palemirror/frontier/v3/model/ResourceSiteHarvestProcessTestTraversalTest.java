@@ -478,6 +478,54 @@ class ResourceSiteHarvestTraversalTest extends ResourceSiteHarvestProcessTest {
     }
 
     @Test
+    void terminalHotReceiptNamesItsExactColdContinuationForAtomicCancellation() {
+        HotHarvest hot = hotHarvestAfterColdSteps(0);
+        ResourceSiteHarvestJob job = hot.job();
+        CommandId runningCommandId = new CommandId("command:site-harvest-terminal-running");
+        PhysicalIntentTransition runningTransition = new PhysicalIntentTransition(job.intentId(), PhysicalIntentStatus.RUNNING, Optional.empty());
+        FrontierCommand runningCommand = new FrontierCommand(1, runningCommandId, hot.state().bootstrap().worldId(), new Revision(1L),
+                new SimInstant(22_300L), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(runningCommandId), runningTransition);
+        CommandPlan.Accepted runningPlan = assertInstanceOf(CommandPlan.Accepted.class, FrontierWorldRuntimeDefinition.planCommand(hot.state(), runningCommand));
+        FrontierWorldState running = reduceCanonical(hot.state(), "terminal-running", 1L, runningCommandId, runningPlan.events().getFirst());
+        FrontierWorldState completed = completeHarvestWorkHot(running, hot.site(), job, hot.lease().id());
+        FrontierWorldState released = completed.transitionSceneLease(hot.lease().id(), SceneLeaseStatus.DRAINING)
+                .releaseSceneLease(hot.lease().id(), List.of(new SceneMemberPosition(job.workerId(),
+                        completed.actorLocations().get(job.workerId()).body(), completed.actorLocations().get(job.workerId()).condition().health())));
+        PhysicalIntent intent = released.physicalIntents().get(job.intentId());
+        ExactItemStack output = new ExactItemStack(job.outputItemId(), new SubjectId("settlement:1"), "minecraft:wheat", 64, job.outputSlot());
+        CommandId receiptCommandId = new CommandId("command:site-harvest-terminal-receipt");
+        long receiptAt = 22_400L;
+        PhysicalIntentTransition receiptTransition = new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.CONFIRMED,
+                Optional.of(receipt(intent, job, output)));
+        FrontierCommand receiptCommand = new FrontierCommand(1, receiptCommandId, released.bootstrap().worldId(), new Revision(2L),
+                new SimInstant(receiptAt), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(receiptCommandId), receiptTransition);
+        CommandPlan.Accepted receiptPlan = assertInstanceOf(CommandPlan.Accepted.class, FrontierWorldRuntimeDefinition.planCommand(released, receiptCommand));
+        PhysicalIntentTransition accounted = receiptPlan.events().stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                .filter(PhysicalIntentTransition.class::isInstance).map(PhysicalIntentTransition.class::cast).findFirst().orElseThrow();
+        assertEquals(new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:resource-site-harvest-cold-progress-"
+                        + job.id().value().substring("job:".length())),
+                ((PhysicalIntentRetirementProof.ExactSchedule) accounted.retirementProof().orElseThrow().continuation()).value());
+
+        List<FrontierEvent> events = new java.util.ArrayList<>();
+        FrontierWorldState next = released;
+        int index = 0;
+        for (io.farfrontier.palemirror.frontier.v3.api.ProposedEvent proposed : receiptPlan.events()) {
+            FrontierEvent event = new FrontierEvent(1, new EventId("event:site-harvest-terminal-receipt-" + index),
+                    new TransactionId("transaction:site-harvest-terminal-receipt"), released.bootstrap().worldId(), new Revision(2L),
+                    new SimInstant(receiptAt), proposed.subject(), CauseChain.root(receiptCommandId), proposed.payload());
+            events.add(event);
+            if (!(proposed.payload() instanceof ScheduleEffect)) next = FrontierWorldRuntimeDefinition.reduce(next, event);
+            index++;
+        }
+        ScheduledAction continuation = ResourceSiteHarvestProcess.coldProgress(job, receiptAt);
+        List<ScheduledAction> afterSchedules = receiptPlan.events().stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                .filter(ScheduleEffect.Created.class::isInstance).map(ScheduleEffect.Created.class::cast).map(ScheduleEffect.Created::action).toList();
+        FrontierWorldStateTransitionValidator.INSTANCE.validateTransaction(released, next, events, List.of(continuation), afterSchedules);
+        assertEquals(ResourceSitePhase.GROWING, next.resourceSites().site(hot.site()).phase());
+        assertEquals(output, next.inventory().items().get(output.id()));
+    }
+
+    @Test
     void pendingHotReceiptIsNotConsumableMerelyBecauseItsCanonicalOutputExists() {
         SubjectId site = new SubjectId("site:1-wheat-field");
         SubjectId output = new SubjectId("item:site-harvest-1-wheat-field-1-wheat");
