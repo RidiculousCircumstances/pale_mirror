@@ -1,0 +1,34 @@
+{
+  "schema": 1,
+  "id": "disposable_f06r3_terminal_reentry",
+  "pilot": { "username": "PMTestPilot" },
+  "server": { "host": "127.0.0.1", "port": 25586 },
+  "setup": [
+    { "type": "command", "command": "/weather clear" },
+    { "type": "command", "command": "/gamerule doDaylightCycle false" },
+    { "type": "command", "command": "/tick rate 100" }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 130, "y": 64, "z": -10 }, "settleMs": 1500, "causalMilestone": "terminal_current_field_ingress" },
+    { "type": "look", "position": { "diagnostic": { "view": "site", "id": "site:7-wheat-field", "field": "lastCrop" } }, "causalMilestone": "terminal_dynamic_field_visibility" },
+    { "type": "wait_until_diagnostic", "view": "site", "id": "site:7-wheat-field", "expect": { "phase": "HARVESTING", "growthEpoch": 1 }, "timeoutMs": 300000, "causalMilestone": "terminal_hot_admission" },
+    { "type": "look_nearest_entity", "entityType": "minecraft:villager", "nameContains": "Clearwater AGRICULTURAL WORKER", "maxDistance": 64, "timeoutMs": 30000, "causalMilestone": "terminal_assigned_farmer_visible" },
+    { "type": "observe_harvest_semantics", "siteId": "site:7-wheat-field", "durationTicks": 300, "sampleEveryTicks": 20, "maxCanonicalStallTicks": 1200, "timeoutMs": 180000, "causalMilestone": "terminal_dynamic_harvest_oracle" },
+    { "type": "visit", "dimension": "minecraft:overworld", "position": { "x": 0, "y": 64, "z": 0 }, "settleMs": 1000, "causalMilestone": "terminal_release_to_cold" },
+    { "type": "wait_until_diagnostic", "view": "site", "id": "site:7-wheat-field", "expect": { "phase": "GROWING", "terminalHarvest": { "canonicalSuccessor": true } }, "timeoutMs": 300000, "causalMilestone": "terminal_harvest_receipt_and_successor" },
+    { "type": "wait_until_container_item", "containerId": "container:7-depot", "item": "minecraft:bread", "count": 64, "timeoutMs": 300000, "causalMilestone": "terminal_bread_custody" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 130, "y": 64, "z": -10 }, "settleMs": 3000, "causalMilestone": "terminal_successor_reentry" },
+    { "type": "look", "position": { "diagnostic": { "view": "site", "id": "site:7-wheat-field", "field": "boardPosition" } }, "causalMilestone": "terminal_dynamic_board_focus" },
+    { "type": "assert_visible_board", "text": "WHEAT FIELD", "position": { "diagnostic": { "view": "site", "id": "site:7-wheat-field", "field": "boardPosition" } }, "radius": 3, "maxDistance": 64, "maxAngleDeg": 50, "timeoutMs": 30000, "causalMilestone": "terminal_readable_field_board" },
+    { "type": "inspect", "view": "site", "id": "site:7-wheat-field", "causalMilestone": "terminal_successor_identity" },
+    { "type": "inspect", "view": "container", "id": "container:7-depot", "causalMilestone": "terminal_custody_identity" }
+  ],
+  "assertions": [
+    { "after": 12, "view": "site", "id": "site:7-wheat-field", "expect": { "status": "ok", "phase": "GROWING", "conflictDisposition": null, "terminalHarvest": { "canonicalSuccessor": true } } },
+    { "after": 13, "view": "container", "id": "container:7-depot", "expect": { "status": "ok" } }
+  ],
+  "frames": [
+    { "after": 4, "name": "f06r3-terminal-farmer-progress", "presentation": "player" },
+    { "after": 11, "name": "f06r3-terminal-readable-field", "presentation": "player" }
+  ]
+}
