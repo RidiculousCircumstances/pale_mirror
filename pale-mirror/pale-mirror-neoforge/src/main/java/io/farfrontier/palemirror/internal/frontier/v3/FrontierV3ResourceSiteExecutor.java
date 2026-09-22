@@ -250,28 +250,46 @@ final class FrontierV3ResourceSiteExecutor {
                 // The field ledger is a physical ownership witness, not the owner of a
                 // completed canonical successor.  If its SavedData entry is absent after
                 // restart, re-establish it only when the entire currently loaded surface
-                // already exactly matches that successor and the terminal lineage names
-                // the exact composed consumer.  A missing or changed cell remains a local
-                // conflict; this branch neither projects nor repairs a look-alike field.
+                // is either the exact current successor or its exact terminal predecessor,
+                // and the terminal lineage names the exact composed consumer.  A missing
+                // or changed cell remains a local conflict; this branch never repairs a
+                // look-alike field.
                 boolean exactCurrentSurface = matches(level, site, desiredStage);
+                // A completed COLD harvest deliberately leaves the owned irrigation and
+                // farmland in place while its complete crop cursor is AIR.  That is not
+                // the neutral, unprepared baseline.  When the retained lineage proves
+                // that this exact terminal receipt has already composed into canonical
+                // custody, it is the predecessor of the current successor epoch and
+                // must be projected through the same bounded writer on re-entry.
                 boolean exactTerminalPredecessorSurface = desiredStage < ResourceSiteLifecycle.MATURE_STAGE
-                        && matches(level, site, ResourceSiteLifecycle.MATURE_STAGE);
+                        && matchesHarvestProgress(level, site, ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS);
                 if (allowsComposedTerminalLedgerRehydration(state.resourceSites().site(site.id()), desiredStage,
                         completedCropSlots, exactCurrentSurface || exactTerminalPredecessorSurface,
                         state.resourceSites().site(site.id()).harvestLineage()
                                 .map(lineage -> lineage.composedIntoCanonicalSuccessor(state)).orElse(false))) {
-                    ledger.reserve(site.id(), projectionClaim(site));
-                    ledger.activate(site.id());
                     if (exactTerminalPredecessorSurface) {
-                        for (BlockPosition cropSlot : site.cropSlots()) level.setBlock(minecraft(cropSlot), crop(desiredStage), 2);
-                        if (!matches(level, site, desiredStage)) return StageProjectionResult.CONFLICT;
+                        // Do not convert an exactly identified predecessor receipt with
+                        // an unbounded write.  Retain its terminal cursor first, then
+                        // rebuild its current successor through the ordinary bounded
+                        // writer so a restart sees the terminal receipt at every
+                        // uncommitted physical boundary.
+                        ledger.reserveComposedTerminalSuccessor(site.id(), projectionClaim(site));
+                        ledger.activate(site.id());
+                        FrontierV3ResourceSiteLedger.Claim terminal = ledger.claim(site.id());
+                        work = new FieldProjectionWork(desiredStage, completedCropSlots,
+                                transitionWrites(site, terminal, desiredStage, completedCropSlots, false), 0, false, false);
+                    } else {
+                        ledger.reserve(site.id(), projectionClaim(site));
+                        ledger.activate(site.id());
+                        ledger.updateStage(site.id(), desiredStage);
+                        return StageProjectionResult.CURRENT;
                     }
-                    ledger.updateStage(site.id(), desiredStage);
-                    return StageProjectionResult.CURRENT;
                 }
-                if (unmaterialized.isEmpty() && !baseline(level, site)) return StageProjectionResult.CONFLICT;
-                ledger.reserve(site.id(), unmaterialized.map(ResourceSiteHarvestJob::intentId).orElseGet(() -> projectionClaim(site)));
-                work = new FieldProjectionWork(desiredStage, completedCropSlots, initialWrites(site, desiredStage, completedCropSlots), 0, true, false);
+                if (work == null) {
+                    if (unmaterialized.isEmpty() && !baseline(level, site)) return StageProjectionResult.CONFLICT;
+                    ledger.reserve(site.id(), unmaterialized.map(ResourceSiteHarvestJob::intentId).orElseGet(() -> projectionClaim(site)));
+                    work = new FieldProjectionWork(desiredStage, completedCropSlots, initialWrites(site, desiredStage, completedCropSlots), 0, true, false);
+                }
             } else {
                 boolean successorRegrowth = isExactSuccessorRegrowth(state, site, desiredStage, completedCropSlots, claim);
                 boolean terminalPredecessor = isExactTerminalPredecessor(level, state, site, desiredStage, completedCropSlots, claim);
@@ -384,6 +402,11 @@ final class FrontierV3ResourceSiteExecutor {
         return new FieldProjectionWork(projection.targetStage(), projection.targetHarvestedCropSlots(), writes,
                 projection.nextWrite(), projection.mode() == FrontierV3ResourceSiteLedger.ProjectionMode.INITIAL,
                 projection.mode() == FrontierV3ResourceSiteLedger.ProjectionMode.SUCCESSOR_RESTORE);
+    }
+    /** Read-only restart seam for a persisted bounded field cursor. */
+    static boolean matchesPersistedProjectionPrefix(ServerLevel level, ResourceSite site, FrontierV3ResourceSiteLedger.Claim claim) {
+        FieldProjectionWork work = restoreProjectionWork(site, claim);
+        return work != null && matchesProjectionPrefix(level, site, claim, work);
     }
     private static boolean matchesProjectionPrefix(ServerLevel level, ResourceSite site, FrontierV3ResourceSiteLedger.Claim claim,
                                                    FieldProjectionWork work) {

@@ -16,8 +16,11 @@ import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSite;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestLineage;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteLifecycle;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSitePhase;
+import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -117,6 +120,64 @@ public final class FrontierV3ResourceSiteHarvestGameTests {
                     "the post-fence must retain the exact stage-zero crop instead of adopting native progress");
             helper.assertValueEqual(ledger.nativeGrowthFence(site.id()), new FrontierV3ResourceSiteLedger.NativeGrowthFence(
                     "crop-grow-post", crop, 1, 0), "the restored native event retains one exact diagnostic witness");
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "pm-frontier-v3-resource-recovery", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full",
+            timeoutTicks = 40)
+    public static void composedColdTerminalReceiptAdmitsOnlyItsNamedSuccessorProjection(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); ResourceSite site = field(fixtureOrigin(helper), "site:resource-harvest-composed-terminal"); prepare(level, site);
+        runWhenLit(helper, level, site, () -> {
+            FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.fixture();
+            PhysicalIntentId intent = new PhysicalIntentId("intent:site-harvest-resource-harvest-composed-terminal");
+            ledger.reserve(site.id(), intent);
+            helper.assertTrue(FrontierV3ResourceSiteExecutor.placeWholeField(level, site), "the exact predecessor receipt begins with one owned field");
+            ledger.activate(site.id());
+            helper.assertValueEqual(FrontierV3ResourceSiteExecutor.projectStage(level, ledger, site, ResourceSiteLifecycle.MATURE_STAGE),
+                    FrontierV3ResourceSiteExecutor.StageProjectionResult.UPDATED, "the predecessor receipt begins mature");
+            for (int cursor = 0; cursor < site.cropSlots().size(); cursor++) {
+                level.setBlock(new BlockPos(site.cropSlots().get(cursor).x(), site.cropSlots().get(cursor).y(), site.cropSlots().get(cursor).z()), Blocks.AIR.defaultBlockState(), 3);
+                ledger.harvestOne(site.id(), cursor + 1);
+            }
+            helper.assertTrue(FrontierV3ResourceSiteExecutor.matchesHarvestProgress(level, site, 64)
+                            && !FrontierV3ResourceSiteExecutor.baseline(level, site),
+                    "the COLD terminal receipt retains its exact irrigated/farmland predecessor surface, not a neutral baseline");
+            ResourceSiteHarvestLineage lineage = new ResourceSiteHarvestLineage(
+                    new SubjectId("job:site-harvest-resource-harvest-composed-terminal"), new SubjectId("task:settlement-1-harvest"),
+                    new SubjectId("resident:1-13"), new SubjectId("item:site-harvest-resource-harvest-composed-terminal-wheat"), 1L,
+                    new BodyPosition(site.cropSlots().getLast().x(), site.cropSlots().getLast().y(), site.cropSlots().getLast().z()), intent,
+                    new InventoryCustody.ContainerSlot(new SubjectId("container:1-depot"), 0), true, Optional.empty(), Optional.empty());
+            ResourceSiteLifecycle successor = new ResourceSiteLifecycle(site.id(), ResourceSitePhase.GROWING, 2L, 3,
+                    Optional.empty(), Optional.empty(), Optional.of(lineage));
+            helper.assertTrue(FrontierV3ResourceSiteExecutor.allowsComposedTerminalLedgerRehydration(successor, 3, 0, true, true),
+                    "only the exact composed terminal lineage may re-establish its current successor projection");
+            helper.assertFalse(FrontierV3ResourceSiteExecutor.allowsComposedTerminalLedgerRehydration(successor, 3, 0, true, false),
+                    "the same terminal-looking surface without its named canonical consumer remains conflict evidence");
+            FrontierV3ResourceSiteLedger successorLedger = FrontierV3ResourceSiteLedger.fixture();
+            successorLedger.reserveComposedTerminalSuccessor(site.id(), new PhysicalIntentId("intent:site-projection-resource-harvest-composed-terminal"));
+            successorLedger.activate(site.id());
+            successorLedger.beginProjection(site.id(), new FrontierV3ResourceSiteLedger.ProjectionTransition(
+                    "growth:" + site.id().value() + ":e2", ResourceSiteLifecycle.MATURE_STAGE, 64, 3, 0, 0,
+                    site.cropSlots().size(), FrontierV3ResourceSiteLedger.ProjectionMode.ADVANCE));
+            for (int cursor = 0; cursor < 8; cursor++) {
+                BlockPosition crop = site.cropSlots().get(cursor);
+                level.setBlock(new BlockPos(crop.x(), crop.y(), crop.z()), Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 3), 3);
+                successorLedger.advanceProjection(site.id(), cursor + 1);
+            }
+            CompoundTag persisted = successorLedger.save(new CompoundTag(), level.registryAccess());
+            successorLedger = FrontierV3ResourceSiteLedger.load(persisted, level.registryAccess());
+            helper.assertTrue(FrontierV3ResourceSiteExecutor.matchesPersistedProjectionPrefix(level, site, successorLedger.claim(site.id())),
+                    "restart accepts the exact terminal-receipt prefix instead of treating its remaining farmland as foreign baseline drift");
+            for (int cursor = 8; cursor < site.cropSlots().size(); cursor++) {
+                BlockPosition crop = site.cropSlots().get(cursor);
+                level.setBlock(new BlockPos(crop.x(), crop.y(), crop.z()), Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 3), 3);
+                successorLedger.advanceProjection(site.id(), cursor + 1);
+            }
+            successorLedger.completeProjection(site.id()); successorLedger.updateStage(site.id(), 3);
+            helper.assertTrue(FrontierV3ResourceSiteExecutor.matches(level, site, 3)
+                            && successorLedger.claim(site.id()).harvestedCropSlots() == 0,
+                    "the restarted exact successor ends with its current stage and no retired terminal cursor");
             helper.succeed();
         });
     }

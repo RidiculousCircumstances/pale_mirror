@@ -84,6 +84,24 @@ final class FrontierV3ResourceSiteLedger extends SavedData {
         claims.put(siteId, next); setDirty();
     }
 
+    /**
+     * Re-establishes only the durable terminal predecessor shape of an exact composed
+     * successor.  Its following projection retains this stage-seven/64-slot origin, so an
+     * interruption cannot reinterpret irrigated farmland and AIR crops as a neutral field.
+     */
+    void reserveComposedTerminalSuccessor(SubjectId siteId, PhysicalIntentId intentId) {
+        Claim next = new Claim(intentId, Status.PENDING, 7, 64);
+        Claim prior = claims.get(siteId); if (prior != null) {
+            if (!prior.equals(next)) throw new IllegalStateException("v3 resource site claim changes terminal successor lifecycle");
+            return;
+        }
+        if (claims.size() >= MAX_SITES) throw new IllegalStateException("v3 resource site claim limit exceeded");
+        claims.put(siteId, next);
+        // A composed successor has already retained the output in canonical custody; this
+        // physical cursor may not leave a retired predecessor receipt fence behind.
+        harvestReceipts.remove(siteId); setDirty();
+    }
+
     void activate(SubjectId siteId) { transition(siteId, Status.PENDING, Status.ACTIVE); }
     /**
      * Persists the exact bounded physical transition before its first world write.  A claim is
