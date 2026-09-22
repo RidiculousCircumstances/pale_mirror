@@ -617,6 +617,23 @@ class ProductionProcessTest {
     }
 
     @Test
+    void coldProductionRetainsItsWorkerOnlyForAmbientBodyReleaseNotForAnotherHotHandoff() {
+        ColdMarketJob cold = coldMarketJob();
+        SubjectId worker = cold.job().workerId();
+        AmbientActorLease formerBody = AmbientActorProcess.nextLease(cold.state(), worker, new SimInstant(400L))
+                .withStatus(AmbientLeaseStatus.HOT);
+        FrontierWorldState held = cold.state().withChanges(FrontierWorldStateUpdate.begin()
+                .ambientLeases(Map.of(worker, formerBody)));
+
+        FrontierSceneAdmission.GenericAmbientAdmission admission = FrontierSceneAdmission.genericAmbientAdmission(held);
+        assertTrue(admission.reserves(worker),
+                "the COLD continuation keeps its former ambient body from racing the retained production cursor");
+        assertTrue(admission.preLeaseSceneCause(worker).isEmpty(),
+                "COLD release may drain its existing body but cannot reconstruct or promote a new production scene");
+        assertFalse(FrontierSceneAdmission.permitsPreLeaseAmbientHandoff(held, worker));
+    }
+
+    @Test
     void unaffordableCompanyWorkBlocksBeforeItOccupiesTheWorkshop() {
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:production-finance"), 91L));
         SubjectId settlementId = new SubjectId("settlement:1");

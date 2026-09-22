@@ -162,6 +162,21 @@ public final class FrontierSceneAdmission {
             }
             preLeaseDemandAnchors.put(worker, candidate.demandPosition());
         });
+        // A released reference-depot input turns the same named workshop job back into COLD
+        // ownership.  Its former ambient body can still be HOT, however, and then the COLD
+        // scheduler quite correctly refuses to advance the worker.  Keep that worker reserved
+        // without granting a new pre-lease scene cause: the ambient adapter may only drain or
+        // release its existing exact body (including the unloaded-body receipt), never recreate
+        // it or promote this COLD continuation to HOT work.
+        state.productionJobs().values().stream()
+                .filter(job -> job.inputHold() instanceof ProductionInputHold.Cold)
+                .filter(job -> !job.workProgress().terminalEffectEligible())
+                .filter(job -> state.actorLocations().get(job.workerId()) != null)
+                .filter(job -> state.actorLocations().get(job.workerId()).condition().status() == ActorLifeStatus.ALIVE)
+                .filter(job -> state.sceneLeases().values().stream().noneMatch(lease -> lease.status() != SceneLeaseStatus.CLOSED
+                        && FrontierSceneBehaviors.isProductionWork(lease)
+                        && FrontierSceneBehaviors.productionWork(lease).jobId().equals(job.id())))
+                .forEach(job -> reserved.add(job.workerId()));
         // An active class-D patrol is a retained operation, not a generic GUARD goal. A
         // pre-existing ambient body stays still until the patrol scene can atomically adopt it.
         state.strategicPlans().routePatrols().values().stream().filter(RoutePatrol::active)
