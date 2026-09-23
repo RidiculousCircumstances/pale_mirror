@@ -259,12 +259,52 @@ class ResourceSiteHarvestProcessTest {
                 receiptFirst.actorLocations().get(atField.workerId()).condition().health())));
 
         assertTrue(FrontierResourceSiteHarvestSceneSupport.isTerminalReceiptRelease(receiptFirst, new ResourceSiteHarvestSceneCause(atField.id())));
+        for (int stage = 0; stage < ResourceSiteLifecycle.MATURE_STAGE; stage++) {
+            var lifecycle = receiptFirst.resourceSites().site(site);
+            receiptFirst = ResourceSiteProcess.reduceGrowth(receiptFirst, site,
+                    new ResourceSiteGrowthAdvanced(site, lifecycle.growthEpoch(), lifecycle.growthStage()));
+            assertTrue(FrontierResourceSiteHarvestSceneSupport.isTerminalReceiptRelease(receiptFirst,
+                    new ResourceSiteHarvestSceneCause(atField.id())), "growth cannot orphan the exact pending body exit");
+            var codec = new FrontierWorldStateCodec();
+            assertEquals(receiptFirst, codec.decode(codec.encode(receiptFirst)));
+            assertFalse(FrontierResourceSiteHarvestSceneSupport.isTerminalReceiptRelease(receiptFirst,
+                    new ResourceSiteHarvestSceneCause(new SubjectId("job:site-harvest-foreign"))));
+        }
         assertEquals(List.of(released), FrontierSceneContinuationPlanner.releaseEvents(receiptFirst,
                 receiptFirst.sceneLeases().get(lease.id()), 22_220L, released, Optional.empty()).stream()
                 .map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload).toList());
+        var unknown = receiptFirst.transitionSceneLease(lease.id(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART);
+        FrontierWorldStateTransitionValidator.INSTANCE.validateInitial(receiptFirst);
+        FrontierWorldStateTransitionValidator.INSTANCE.validateInitial(unknown);
+        var exactUnknown = unknown;
+        assertThrows(IllegalArgumentException.class, () -> exactUnknown.transitionSceneLease(lease.id(), SceneLeaseStatus.HOT),
+                "terminal recovery must not grant permission to replay consumed work");
+        var codec = new FrontierWorldStateCodec();
+        unknown = codec.decode(codec.encode(unknown));
+        assertEquals(SceneLeaseStatus.DRAINING, FrontierSceneBehaviors.recoveredStatus(unknown, unknown.sceneLeases().get(lease.id())));
+        var recovered = unknown.transitionSceneLease(lease.id(), FrontierSceneBehaviors.recoveredStatus(unknown, unknown.sceneLeases().get(lease.id())));
+        assertEquals(SceneLeaseStatus.CLOSED, recovered.releaseSceneLease(lease.id(), released.members()).sceneLeases().get(lease.id()).status());
+
+        var fenceConflict = ResourceSiteProcess.reduceConflict(receiptFirst, site, new ResourceSiteConflictObserved(site,
+                FrontierResourceSitePlan.compile(receiptFirst.bootstrap()).get(site).cropSlots().getLast(),
+                ResourceSiteDiagnosticProducer.SCENE_CARRIER_FENCE));
+        fenceConflict = fenceConflict.transitionSceneLease(lease.id(), SceneLeaseStatus.CONFLICT);
+        assertEquals(fenceConflict, codec.decode(codec.encode(fenceConflict)));
+        FrontierWorldStateTransitionValidator.INSTANCE.validateInitial(fenceConflict);
+        assertEquals(ResourceSiteConflictReason.CARRIER_FENCE_UNRESOLVED,
+                fenceConflict.resourceSites().site(site).conflictDisposition().orElseThrow().reason());
+        assertEquals(receiptFirst.inventory(), fenceConflict.inventory());
+
+        var dead = receiptFirst.recordActorDeath(new ActorDied(lease.id(), atField.workerId(), workerBody, "observed-test-death"), 22_220L);
+        assertEquals(ActorLifeStatus.DEAD, dead.actorLocations().get(atField.workerId()).condition().status());
+        assertEquals(receiptFirst.inventory(), dead.inventory());
+        assertEquals(receiptFirst.physicalIntents(), dead.physicalIntents());
+        assertEquals(dead, codec.decode(codec.encode(dead)));
+        FrontierWorldStateTransitionValidator.INSTANCE.validateInitial(dead);
+        assertEquals(SceneLeaseStatus.CLOSED, dead.releaseSceneLease(lease.id(), List.of()).sceneLeases().get(lease.id()).status());
         FrontierWorldState releasedState = receiptFirst.releaseSceneLease(lease.id(), released.members());
         assertEquals(SceneLeaseStatus.CLOSED, releasedState.sceneLeases().get(lease.id()).status());
-        assertEquals(ResourceSitePhase.GROWING, releasedState.resourceSites().site(site).phase());
+        assertEquals(ResourceSitePhase.READY, releasedState.resourceSites().site(site).phase());
         assertEquals(workerBody, releasedState.actorLocations().get(atField.workerId()).body(),
                 "the terminal receipt releases the same observed farmer instead of leaving a draining body at the last crop");
     }

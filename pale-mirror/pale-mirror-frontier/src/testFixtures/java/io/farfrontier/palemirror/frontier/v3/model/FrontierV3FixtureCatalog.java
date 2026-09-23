@@ -112,8 +112,8 @@ public final class FrontierV3FixtureCatalog {
     }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> hotSceneStrikeConfiguration(WorldId worldId, long seed) {
-        FrontierWorldState initial = FrontierDevelopmentScenarios.hotSceneStrikeState(worldId, seed);
-        return configured(worldId, initial, new SimInstant(2_600L), List.of(), true);
+        var fixture = FrontierDevelopmentScenarios.hotSceneStrikeFixture(worldId, seed);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), true);
     }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> settlementAssaultConfiguration(WorldId worldId, long seed) {
@@ -204,17 +204,19 @@ public final class FrontierV3FixtureCatalog {
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> hotScoutSightingConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.RouteSceneReturnFixture fixture = FrontierDevelopmentScenarios.hotScoutSightingFixture(worldId, seed);
-        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false, true);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false,
+                java.util.Optional.of(FrontierDevelopmentScenarios.initialNorthwatchShipment(fixture.state()).orElseThrow().id()));
     }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> hotScoutInterceptConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.RouteSceneReturnFixture fixture = FrontierDevelopmentScenarios.hotScoutInterceptFixture(worldId, seed);
-        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false, true);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false,
+                java.util.Optional.of(FrontierDevelopmentScenarios.initialNorthwatchShipment(fixture.state()).orElseThrow().id()));
     }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> hotScoutPatrolRecoveryConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.AmbientScoutPatrolFixture fixture = FrontierDevelopmentScenarios.hotScoutPatrolRecoveryFixture(worldId, seed);
-        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false, true);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
     }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> operationAssemblyConfiguration(WorldId worldId, long seed) {
@@ -375,21 +377,28 @@ public final class FrontierV3FixtureCatalog {
     private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configured(WorldId worldId, FrontierWorldState state,
                                                                                                          SimInstant instant, List<ScheduledAction> schedules,
                                                                                                          boolean autonomousInterception) {
-        return configured(worldId, state, instant, schedules, autonomousInterception, false);
+        return configured(worldId, state, instant, schedules, autonomousInterception, java.util.Optional.empty());
     }
 
     private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configured(WorldId worldId, FrontierWorldState state,
                                                                                                          SimInstant instant, List<ScheduledAction> schedules,
-                                                                                                         boolean autonomousInterception, boolean freezeScoutProgress) {
+                                                                                                         boolean autonomousInterception, java.util.Optional<SubjectId> frozenOperation) {
         return new FrontierEngineConfiguration<>(worldId, state, instant, FrontierWorldRuntimeDefinition::planCommand,
-                (candidate, action) -> freezeScoutProgress ? frozenScoutSightingProgress(candidate, action)
-                        : FrontierWorldRuntimeDefinition.planScheduled(candidate, action, autonomousInterception),
+                new io.farfrontier.palemirror.frontier.v3.kernel.ScheduledActionPlanner<FrontierWorldState>() {
+                    @Override public List<ProposedEvent> plan(FrontierWorldState candidate, ScheduledAction action) {
+                        return frozenOperation.isPresent() ? frozenScoutSightingProgress(candidate, action, frozenOperation.orElseThrow())
+                                : FrontierWorldRuntimeDefinition.planScheduled(candidate, action, autonomousInterception);
+                    }
+                    @Override public boolean held(FrontierWorldState candidate, ScheduledAction action) {
+                        return FrontierWorldRuntimeDefinition.scheduledHeld(candidate, action);
+                    }
+                },
                 FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(state.bootstrap()), FrontierWorldProjectionCompiler::compile,
                 new EngineLimits(4_096, 1_200L, 4_096), schedules, TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE);
     }
 
-    private static List<ProposedEvent> frozenScoutSightingProgress(FrontierWorldState state, ScheduledAction action) {
-        if (action.subject().equals(new SubjectId("operation:supply-1-2")) && action.kind().equals("frontier.operation.progress")) {
+    private static List<ProposedEvent> frozenScoutSightingProgress(FrontierWorldState state, ScheduledAction action, SubjectId operationId) {
+        if (action.subject().equals(operationId) && action.kind().equals("frontier.operation.progress")) {
             return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id())));
         }
         return FrontierWorldRuntimeDefinition.planScheduled(state, action, false);

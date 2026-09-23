@@ -8,7 +8,14 @@ public final class CargoCarrierIdentity {
     private CargoCarrierIdentity() { }
 
     public static UUID id(SceneLease lease) {
-        return UUID.nameUUIDFromBytes(("frontier-v3:cargo-carrier:" + lease.worldId().value() + ":" + lease.id().value() + ":" + FrontierSceneBehaviors.logistics(lease).cargoId().value())
+        return id(lease.worldId(), lease.id(), FrontierSceneBehaviors.logistics(lease).cargoId());
+    }
+
+    /** Identity validation for retained terminal declarations after scene-history compaction. */
+    public static UUID id(io.farfrontier.palemirror.frontier.v3.api.WorldId world,
+                          io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId scene,
+                          io.farfrontier.palemirror.frontier.v3.api.SubjectId cargo) {
+        return UUID.nameUUIDFromBytes(("frontier-v3:cargo-carrier:" + world.value() + ":" + scene.value() + ":" + cargo.value())
                 .getBytes(StandardCharsets.UTF_8));
     }
 }

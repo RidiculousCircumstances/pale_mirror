@@ -8,6 +8,12 @@ import java.util.Objects;
 /** Closed WAL vocabulary for recovery authority; each mutation is fenced by exact identity/epoch. */
 public final class FencedRecoveryPayloads {
     private FencedRecoveryPayloads() { }
+    /** The physical provider supplies this only after exact successful write and durable sync. */
+    public record CargoCleanupSaved(CargoProjectionRetirement retirement) implements FrontierPayload {
+        public CargoCleanupSaved { Objects.requireNonNull(retirement, "saved cargo retirement"); }
+        @Override public String type() { return "frontier.cargo_cleanup_saved"; }
+        @Override public boolean requiresDurableBeforeEffect() { return true; }
+    }
     public record Prepared(FencedRecoveryBinding binding) implements FrontierPayload {
         public Prepared { Objects.requireNonNull(binding, "recovery binding"); }
         @Override public String type() { return "frontier.fenced_recovery_prepared"; }

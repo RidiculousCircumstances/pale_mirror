@@ -52,16 +52,25 @@ final class FrontierV3SceneDemand {
                 .anyMatch(player -> retainedPositions.stream().anyMatch(position -> player.blockPosition().closerThan(position, radiusBlocks)));
     }
 
-    /** Selects the first physically demanded member from a deterministic canonical inventory. */
-    static <Candidate> java.util.Optional<Candidate> firstDemandedCandidate(ServerLevel level, List<Candidate> candidates,
-                                                                              Function<Candidate, BlockPosition> demandAnchor) {
+    /** Filters the whole inventory before the service owner selects a turn. */
+    static <Candidate> List<Candidate> demandedCandidates(ServerLevel level, List<Candidate> candidates,
+                                                         Function<Candidate, BlockPosition> demandAnchor) {
         Objects.requireNonNull(level, "scene demand level");
         Objects.requireNonNull(candidates, "scene candidates");
         Objects.requireNonNull(demandAnchor, "scene demand anchor");
         return candidates.stream().filter(candidate -> {
             BlockPosition anchor = Objects.requireNonNull(demandAnchor.apply(candidate), "candidate demand anchor");
             return FrontierV3ServerLifecycle.sceneEligible(level, anchor) && observe(level, anchor).active();
-        }).findFirst();
+        }).toList();
+    }
+
+    /** Demand filters eligibility before the shared admission cursor spends its bounded turn. */
+    static <Candidate> java.util.Optional<Candidate> nextDemandedCandidate(
+            ServerLevel level, FrontierV3ServerRuntime<?, ?> runtime,
+            io.farfrontier.palemirror.frontier.v3.model.SceneCauseKind kind, List<Candidate> candidates,
+            Function<Candidate, BlockPosition> demandAnchor,
+            Function<Candidate, io.farfrontier.palemirror.frontier.v3.api.SubjectId> identity) {
+        return FrontierV3SceneTurnScheduler.candidate(runtime, kind, demandedCandidates(level, candidates, demandAnchor), identity);
     }
 
     /** Immutable bounded input to HOT admission and drain policy; it grants no ownership. */

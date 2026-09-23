@@ -48,7 +48,9 @@ public record FencedRecoveryBinding(SubjectId bindingId, FencedRecoveryAsset ass
                 FencedRecoveryPhase.OBSERVED, false, 0, FencedRecoveryDisposition.RECLAIM, "physical-observed");
     }
     FencedRecoveryBinding inspectedObserved() {
-        if (phase != FencedRecoveryPhase.AMBIGUOUS || nextAction != FencedRecoveryDisposition.INSPECT) {
+        // nextAction is a proposed recovery step, not an already committed retirement.
+        // Exact evidence may resolve this authority until abandonment actually fences it.
+        if (phase != FencedRecoveryPhase.AMBIGUOUS) {
             throw new IllegalArgumentException("recovery inspection is not current");
         }
         return new FencedRecoveryBinding(bindingId, asset, ownerId, ownerRevision, authorityEpoch,

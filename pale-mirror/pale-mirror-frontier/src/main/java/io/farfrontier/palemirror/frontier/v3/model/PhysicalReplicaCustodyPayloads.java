@@ -49,6 +49,55 @@ public final class PhysicalReplicaCustodyPayloads {
         @Override public String type() { return "frontier.physical_custody_acquired"; }
         @Override public boolean requiresDurableBeforeEffect() { return true; }
     }
+    public record ProjectionCustodyPrepared(PhysicalCustodyLease lease) implements FrontierPayload {
+        public ProjectionCustodyPrepared {
+            Objects.requireNonNull(lease, "projection lease");
+            if (lease.status() != PhysicalCustodyLeaseStatus.PREPARING) throw new IllegalArgumentException("projection preparation requires PREPARING custody");
+        }
+        @Override public String type() { return "frontier.projection_custody_prepared"; }
+        @Override public boolean requiresDurableBeforeEffect() { return true; }
+    }
+    public record ReferenceProjectionPrepared(SubjectId containerId, long authorityEpoch, long expectedReplicaRevision,
+                                              String priorFingerprint, String priorProvenance) implements FrontierPayload {
+        public ReferenceProjectionPrepared {
+            Objects.requireNonNull(containerId, "reference container");
+            Objects.requireNonNull(priorFingerprint, "prior fingerprint"); Objects.requireNonNull(priorProvenance, "prior provenance");
+            if (authorityEpoch < 1 || expectedReplicaRevision < 0
+                    || (expectedReplicaRevision == 0) != (priorFingerprint.isEmpty() && priorProvenance.isEmpty())
+                    || (expectedReplicaRevision > 0 && (priorFingerprint.isBlank() || priorProvenance.isBlank()))) {
+                throw new IllegalArgumentException("reference projection predecessor is invalid");
+            }
+        }
+        @Override public String type() { return "frontier.reference_projection_prepared"; }
+        @Override public boolean requiresDurableBeforeEffect() { return true; }
+    }
+    public record ProjectionCustodyConfirmed(SubjectId scopeId, long expectedEpoch, long expectedCanonicalRevision,
+                                             long expectedReplicaRevision, String fingerprint, String provenance) implements FrontierPayload {
+        public ProjectionCustodyConfirmed {
+            Objects.requireNonNull(scopeId, "projection scope");
+            Objects.requireNonNull(fingerprint, "projection fingerprint"); Objects.requireNonNull(provenance, "projection provenance");
+            if (expectedEpoch < 1 || expectedCanonicalRevision < 0 || expectedReplicaRevision < 1
+                    || fingerprint.isBlank() || provenance.isBlank()) throw new IllegalArgumentException("projection confirmation is invalid");
+        }
+        @Override public String type() { return "frontier.projection_custody_confirmed"; }
+        @Override public boolean requiresDurableBeforeEffect() { return true; }
+    }
+    public record ProjectionConflictObserved(SubjectId scopeId, long expectedEpoch, long expectedCanonicalRevision,
+                                              long expectedReplicaRevision, String fingerprint, String provenance,
+                                              DiagnosticTuple diagnostic) implements FrontierPayload {
+        public ProjectionConflictObserved {
+            Objects.requireNonNull(scopeId, "projection scope"); Objects.requireNonNull(fingerprint, "actual fingerprint");
+            Objects.requireNonNull(provenance, "actual provenance"); Objects.requireNonNull(diagnostic, "projection conflict diagnostic");
+            if (expectedEpoch < 1 || expectedCanonicalRevision < 0 || expectedReplicaRevision < 1
+                    || fingerprint.isBlank() || provenance.isBlank()
+                    || diagnostic.reason() != DiagnosticReason.PHYSICAL_CUSTODY_UNRESOLVED
+                    || !diagnostic.owner().id().equals(scopeId) || !diagnostic.subject().id().equals(scopeId)) {
+                throw new IllegalArgumentException("projection conflict has invalid evidence or a foreign diagnostic");
+            }
+        }
+        @Override public String type() { return "frontier.projection_conflict_observed"; }
+        @Override public boolean requiresDurableBeforeEffect() { return true; }
+    }
     public record CustodyCheckpointed(SubjectId scopeId, long expectedEpoch, long expectedCanonicalRevision,
                                       long expectedReplicaRevision) implements FrontierPayload {
         public CustodyCheckpointed { Objects.requireNonNull(scopeId, "scope id"); if (expectedEpoch < 1 || expectedCanonicalRevision < 0 || expectedReplicaRevision < 1) throw new IllegalArgumentException("custody checkpoint is invalid"); }

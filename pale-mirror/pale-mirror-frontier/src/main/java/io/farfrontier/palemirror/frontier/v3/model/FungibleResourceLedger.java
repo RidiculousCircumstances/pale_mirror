@@ -65,7 +65,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         Map<SubjectId, PhysicalStackBinding> next = withoutBindingsFor(account.id());
         int remaining = claim.quantity();
         for (PhysicalStackBinding binding : current.stream().sorted(java.util.Comparator.comparing(PhysicalStackBinding::id)).toList()) {
-            int available = compatibleBindingStock(binding) - compatibleBindingClaims(binding, claim);
+            int available = compatibleBindingStock(binding, claim) - compatibleBindingClaims(binding, claim);
             int allocated = Math.min(remaining, available);
             Map<SubjectId, Integer> bindingClaims = new HashMap<>(binding.claimQuantities());
             if (allocated > 0) bindingClaims.put(claim.id(), allocated);
@@ -526,6 +526,24 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         return new FungibleResourceLedger(nextLots, nextClaims, nextAccounts, bindings);
     }
 
+    /**
+     * Records an observed recipe result under the same physical epoch. Intermediate immutable
+     * values are private to this transition: no released account is published and neither the
+     * recipe nor the adapter may spend its stock between consumption and rebinding.
+     * The caller supplies the complete actual post-effect layout, not a projected replacement.
+     */
+    public FungibleResourceLedger transformObserved(SubjectId accountId, long authorityEpoch,
+                                                     Map<SubjectId, Integer> inputLots, Map<SubjectId, Integer> inputClaims,
+                                                     ResourceLot output, List<FungiblePhysicalObservation.Stack> observed) {
+        if (inputClaims.isEmpty() || sum(inputClaims) != sum(inputLots)) {
+            throw new IllegalArgumentException("observed recipe requires its complete claimed input portion");
+        }
+        FungibleResourceLedger transformed = releaseBindings(accountId, authorityEpoch)
+                .transformCold(accountId, inputLots, inputClaims, output);
+        return transformed.rebind(accountId, authorityEpoch,
+                FungiblePhysicalObservation.bind(transformed, accountId, authorityEpoch, observed));
+    }
+
     public int totalQuantity(SubjectId owner, String kind) {
         return lots.values().stream().filter(lot -> lot.economicOwnerId().equals(owner) && lot.itemKind().equals(kind)).mapToInt(ResourceLot::quantity).sum();
     }
@@ -611,8 +629,11 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
             return current.economicOwnerId().equals(claim.economicOwnerId()) && current.itemKind().equals(claim.itemKind());
         }).mapToInt(Map.Entry::getValue).sum();
     }
-    private int compatibleBindingStock(PhysicalStackBinding binding) {
-        return binding.lotQuantities().entrySet().stream().filter(entry -> requireLot(entry.getKey()).itemKind().equals(binding.itemKind()))
+    private int compatibleBindingStock(PhysicalStackBinding binding, ClaimAllocation claim) {
+        return binding.lotQuantities().entrySet().stream().filter(entry -> {
+                    ResourceLot lot = requireLot(entry.getKey());
+                    return lot.itemKind().equals(claim.itemKind()) && lot.economicOwnerId().equals(claim.economicOwnerId());
+                })
                 .mapToInt(Map.Entry::getValue).sum();
     }
     private int compatibleBindingClaims(PhysicalStackBinding binding, ClaimAllocation claim) {

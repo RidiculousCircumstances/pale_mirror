@@ -70,11 +70,41 @@ public final class FrontierV3SceneDeathGameTests {
                     helper.assertTrue(body != null, "the exact scene body must remain loaded until its death observation");
                     body.setPos(candidate.handoffPosition().x() + 0.5D, candidate.handoffPosition().y(), candidate.handoffPosition().z() + 0.5D);
                 });
+                // Fault-injected retained observations: work is forbidden, physical death is not.
+                var ledger = FrontierV3AmbientCarrierLedger.get(level, world);
+                long physicalRevision = Math.max(1L, lease.revision());
+                var inactive = FrontierV3AmbientActorExecutor.carrierDeclaration(state(runtime), first.actorId(),
+                        FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, first.entityId(),
+                        FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, physicalRevision, 1L);
+                helper.assertTrue(ledger.fence(inactive, physicalRevision, 0), "retain the provisional inactive body before contradiction");
+                helper.assertFalse(ledger.retireDeadActor(state(runtime), first.actorId()), "a living actor cannot lose its retained carrier");
+                for (int health : new int[]{9, 8}) {
+                    ledger.recordDeparture(new FrontierV3SceneDeparture(
+                            new FrontierV3AmbientCarrierLedger.Carrier(inactive, physicalRevision, 0), leaseId, lease.revision(),
+                            new SceneMemberPosition(first.actorId(), lease.memberPosition(first.actorId()),
+                                    io.farfrontier.palemirror.frontier.v3.api.FixedScalar.whole(health)),
+                            state(runtime).actorLocations().get(first.actorId()).condition().health()));
+                }
+                helper.assertTrue(ledger.hasDepartureConflict(first.actorId()), "fixture must retain conflicting departure evidence");
+                helper.assertFalse(FrontierV3SceneExecutor.owned(firstBody, state(runtime), lease, first),
+                        "a conflicted body must not perform work");
+                ((Mob) firstBody).setHealth(0.0F);
+                ((Mob) secondBody).setHealth(0.0F);
                 helper.assertTrue(FrontierV3SceneExecutor.observeDeath(runtime, firstBody, null),
                         "first exact death must drain the HOT scene through the actual body observer");
+                var afterFirst = state(runtime);
+                var draining = afterFirst.sceneLeases().get(leaseId);
+                helper.assertValueEqual(FrontierV3AmbientActorExecutor.fenceDrainingSceneBody(level, afterFirst, draining, first, null),
+                        FrontierV3AmbientActorExecutor.SceneCarrierFenceResult.RETIRED_BY_DEATH,
+                        "accepted death permits release without recreating an inactive living carrier");
+                helper.assertFalse(FrontierV3AmbientActorExecutor.fenceDrainingSceneBody(level, afterFirst, draining, second, secondBody).permitsRelease(),
+                        "a physically dead but not yet canonically observed member cannot bypass the death receipt");
                 helper.assertTrue(FrontierV3SceneExecutor.observeDeath(runtime, secondBody, null),
                         "a later same-effect death must remain accepted after the lease is DRAINING");
                 FrontierWorldState afterDeaths = state(runtime);
+                helper.assertTrue(ledger.departure(first.actorId()).isEmpty(), "accepted canonical death retires obsolete departure observations");
+                helper.assertFalse(ledger.hasDepartureConflict(first.actorId()), "accepted death resolves the contradictory living snapshots");
+                helper.assertFalse(ledger.hasCarrier(first.actorId()), "canonical death also retires the provisional inactive carrier");
                 helper.assertValueEqual(afterDeaths.actorLocations().get(first.actorId()).condition().status(), ActorLifeStatus.DEAD, "first death must be canonical");
                 helper.assertValueEqual(afterDeaths.actorLocations().get(second.actorId()).condition().status(), ActorLifeStatus.DEAD, "second death must be canonical");
                 helper.assertValueEqual(afterDeaths.sceneLeases().get(leaseId).status(), SceneLeaseStatus.DRAINING, "no invalid second transition may occur");
@@ -101,6 +131,7 @@ public final class FrontierV3SceneDeathGameTests {
         Mob body = bioform ? EntityType.ZOMBIE.create(level) : EntityType.VILLAGER.create(level);
         helper.assertTrue(body != null, "the exact HOT body fixture must be constructible");
         body.setUUID(member.entityId()); body.setPos(position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D); body.setNoAi(true);
+        body.setPersistenceRequired();
         body.getPersistentData().putString(FrontierV3SceneExecutor.LEASE_KEY, lease.id().value());
         body.getPersistentData().putString(FrontierV3SceneExecutor.ACTOR_KEY, member.actorId().value());
         body.getPersistentData().putLong(FrontierV3SceneExecutor.REVISION_KEY, lease.revision());

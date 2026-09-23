@@ -185,7 +185,7 @@ public final class FrontierV3CargoLoadingGameTests {
     }
 
     /** GameTest coordinates are far from (0,0); move the whole immutable topology with its bounds. */
-    private static FrontierBootstrap translatedBootstrap(FrontierBootstrap source, int dx, int dy, int dz) {
+    static FrontierBootstrap translatedBootstrap(FrontierBootstrap source, int dx, int dy, int dz) {
         java.util.function.Function<BlockPosition, BlockPosition> translate = position -> new BlockPosition(position.x() + dx, position.y() + dy, position.z() + dz);
         List<Settlement> settlements = source.settlements().stream().map(settlement -> new Settlement(settlement.id(), settlement.displayName(),
                 translate.apply(settlement.anchor()), settlement.residents().stream().map(resident -> new Resident(resident.id(), resident.settlementId(),

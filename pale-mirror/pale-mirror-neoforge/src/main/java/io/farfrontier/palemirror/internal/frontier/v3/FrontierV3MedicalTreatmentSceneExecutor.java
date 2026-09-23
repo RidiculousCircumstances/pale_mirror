@@ -11,7 +11,6 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -33,12 +32,13 @@ final class FrontierV3MedicalTreatmentSceneExecutor {
     static boolean tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return false;
-        Optional<SceneLease> active = state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isMedicalTreatment)
-                .filter(lease -> lease.status() != SceneLeaseStatus.CLOSED && lease.status() != SceneLeaseStatus.CONFLICT)
-                .min(Comparator.comparing(SceneLease::id));
-        if (active.isPresent()) { execute(level, runtime, state, active.orElseThrow()); return true; }
-        Optional<FrontierMedicalTreatmentSceneSupport.Candidate> candidate = FrontierV3SceneDemand.firstDemandedCandidate(
-                level, FrontierMedicalTreatmentSceneSupport.candidates(state), FrontierMedicalTreatmentSceneSupport.Candidate::infirmaryAnchor);
+        return FrontierV3SceneTurnScheduler.run(runtime, state, io.farfrontier.palemirror.frontier.v3.model.SceneCauseKind.MEDICAL_TREATMENT,
+                lease -> execute(level, runtime, state, lease), () -> admit(level, runtime, state));
+    }
+
+    private static boolean admit(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state) {
+        Optional<FrontierMedicalTreatmentSceneSupport.Candidate> candidate = FrontierV3SceneDemand.nextDemandedCandidate(
+                level, runtime, io.farfrontier.palemirror.frontier.v3.model.SceneCauseKind.MEDICAL_TREATMENT, FrontierMedicalTreatmentSceneSupport.candidates(state), FrontierMedicalTreatmentSceneSupport.Candidate::infirmaryAnchor, FrontierMedicalTreatmentSceneSupport.Candidate::operationId);
         if (candidate.isEmpty()) return false;
         FrontierMedicalTreatmentSceneSupport.Candidate treatment = candidate.orElseThrow();
         SceneLease lease = lease(runtime, treatment);
@@ -82,7 +82,7 @@ final class FrontierV3MedicalTreatmentSceneExecutor {
         if (result == FrontierV3SceneExecutor.BodyMaterialization.CONFLICT) { conflict(level, runtime, lease, "prepared-body-conflict"); return; }
         if (result != FrontierV3SceneExecutor.BodyMaterialization.COMPLETE) return;
         if (!atInfirmary(level, runtime, state, lease)) return;
-        FrontierV3SceneExecutor.rememberObserved(level, runtime, state, lease);
+
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "medical_treatment_hot", lease,
                 submit(runtime, "medical-scene-hot", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT)));
     }
@@ -110,7 +110,7 @@ final class FrontierV3MedicalTreatmentSceneExecutor {
                 body.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
             }
         }
-        FrontierV3SceneExecutor.rememberObserved(level, runtime, state, lease);
+
     }
 
     /** Recovery has one special pre-effect branch: reassemble the same bodies before allowing a remedy. */

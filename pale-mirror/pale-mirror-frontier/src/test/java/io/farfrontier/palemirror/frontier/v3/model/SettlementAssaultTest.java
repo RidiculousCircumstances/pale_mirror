@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.persistence.StrategicPlanStateCodec
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.process.HiveSettlementAssaultProcess;
 import io.farfrontier.palemirror.frontier.v3.process.FrontierWorldProcessCatalog;
+import io.farfrontier.palemirror.frontier.v3.process.PhysicalIntentLifecycleFixture;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 
 import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
@@ -96,25 +97,108 @@ class SettlementAssaultTest {
         SubjectId attacker = attackers.getFirst(), target = targets.getFirst();
         SubjectId cause = SettlementAssaultCauseIdentity.strike(assault.id(), attacker, assault.nextStrikeEpoch());
         PhysicalIntent intent = strike(state, lease, cause, attacker, target);
+        SubjectId hive = assault.hiveId();
         FrontierWorldState hot = state;
-        assertThrows(IllegalArgumentException.class, () -> hot.preparePhysicalIntent(strike(hot, lease,
+        var wrongFamily = new PhysicalIntent(intent.id(), intent.kind(), intent.status(), cause,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.routeSceneStrike(attacker, target, lease.id(), lease.revision()),
+                intent.origin(), 0, intent.postcondition(), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ROUTE_ENGAGEMENT);
+        assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleFixture.prepare(hot, hive, wrongFamily),
+                "an exact scene identity cannot authorize a foreign lifecycle family");
+        assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleFixture.prepare(hot, hive, strike(hot, lease,
                 SettlementAssaultCauseIdentity.strike(assault.id(), attackers.getLast(), assault.nextStrikeEpoch()), attackers.getLast(), target)),
                 "a lease member who is not the COLD-selected attacker must not manufacture a HOT cause");
         if (targets.size() > 1) {
             SubjectId wrongTarget = targets.getLast();
-            assertThrows(IllegalArgumentException.class, () -> hot.preparePhysicalIntent(strike(hot, lease, cause, attacker, wrongTarget)),
+            assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleFixture.prepare(hot, hive, strike(hot, lease, cause, attacker, wrongTarget)),
                     "the shared cause must not make the target interchangeable inside the HOT lease");
         }
 
-        state = state.preparePhysicalIntent(intent).transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
+        state = PhysicalIntentLifecycleFixture.prepare(state, hive, intent);
+        var releasedBeforeStart = state.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING)
+                .releaseSceneLease(leaseId, members.stream().map(member -> new SceneMemberPosition(member.actorId(),
+                        hot.actorLocations().get(member.actorId()).body(), hot.actorLocations().get(member.actorId()).condition().health())).toList());
+        assertFalse(releasedBeforeStart.physicalIntents().containsKey(intent.id()));
+        var retiredStrike = FencedRecoveryPhysicalIntentSupport.bindingId(intent);
+        assertFalse(releasedBeforeStart.fencedRecovery().current().containsKey(retiredStrike));
+        assertTrue(releasedBeforeStart.fencedRecovery().tombstones().containsKey(retiredStrike));
+        assertEquals(0, releasedBeforeStart.strategicPlans().settlementAssaults().get(assault.id()).nextStrikeEpoch(),
+                "cancelling an unstarted strike must not manufacture a hit");
+        assertEquals(releasedBeforeStart, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(releasedBeforeStart)));
+        assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleFixture.transition(releasedBeforeStart, hive, intent,
+                PhysicalIntentStatus.RUNNING, Optional.empty()));
+        state = PhysicalIntentLifecycleFixture.transition(state, hive, intent, PhysicalIntentStatus.RUNNING, Optional.empty());
+        var startedStrike = state;
+        for (var unresolved : List.of(startedStrike, PhysicalIntentLifecycleFixture.transition(startedStrike, hive, intent,
+                PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty()))) {
+            var held = unresolved.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING);
+            var captured = members.stream().map(member -> new SceneMemberPosition(member.actorId(),
+                    held.actorLocations().get(member.actorId()).body(), held.actorLocations().get(member.actorId()).condition().health())).toList();
+            assertThrows(IllegalArgumentException.class, () -> held.releaseSceneLease(leaseId, captured),
+                    "possible physical effects must be settled before scene release");
+            assertThrows(IllegalArgumentException.class, () -> io.farfrontier.palemirror.frontier.v3.process.FrontierSceneContinuationPlanner.releaseEvents(
+                    held, held.sceneLeases().get(leaseId), 1000L, new SceneLeaseReleased(leaseId, captured)),
+                    "planning must reject before an impossible release reaches the journal");
+        }
         SceneStrikeObservation observation = new SceneStrikeObservation(new PhysicalObservationId("observation:hot-receipt-selection"), intent.id(), attacker, target,
                 FixedScalar.whole(20), FixedScalar.whole(18));
+        var afterLethalDeath = startedStrike.recordActorDeath(new ActorDied(leaseId, target,
+                startedStrike.actorLocations().get(target).body(), "actual-strike-death"), 11L);
+        var lethalReceipt = new SceneStrikeObservation(new PhysicalObservationId("observation:hot-lethal-receipt"),
+                intent.id(), attacker, target, FixedScalar.whole(20), FixedScalar.ZERO);
+        assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleFixture.transition(startedStrike, hive, intent,
+                PhysicalIntentStatus.CONFIRMED, Optional.of(lethalReceipt)),
+                "a receipt cannot invent death without the ordinary exact death transition");
+        var lethalConfirmed = PhysicalIntentLifecycleFixture.transition(afterLethalDeath, hive, intent,
+                PhysicalIntentStatus.CONFIRMED, Optional.of(lethalReceipt));
+        assertEquals(ActorLifeStatus.DEAD, lethalConfirmed.actorLocations().get(target).condition().status());
+        assertEquals(PhysicalIntentStatus.CONFIRMED, lethalConfirmed.physicalIntents().get(intent.id()).status(),
+                "death must not reselect a different target for an already admitted exact strike");
+        var lethalUnknown = PhysicalIntentLifecycleFixture.transition(afterLethalDeath, hive, intent,
+                PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty());
+        var recoveredLethal = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(lethalUnknown));
+        var recoveredConfirmed = PhysicalIntentLifecycleFixture.transition(recoveredLethal, hive, intent,
+                PhysicalIntentStatus.CONFIRMED, Optional.of(lethalReceipt));
+        assertEquals(lethalConfirmed.actorLocations(), recoveredConfirmed.actorLocations());
+        assertEquals(lethalConfirmed.physicalObservations(), recoveredConfirmed.physicalObservations());
+        var unknownScene = recoveredConfirmed.transitionSceneLease(leaseId, SceneLeaseStatus.UNKNOWN_AFTER_RESTART);
+        unknownScene = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(unknownScene));
+        assertEquals(SceneLeaseStatus.DRAINING,
+                FrontierSceneBehaviors.recoveredStatus(unknownScene, unknownScene.sceneLeases().get(leaseId)));
+        var recoveredDrain = unknownScene.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING);
+        var survivors = members.stream().filter(member -> !member.actorId().equals(target))
+                .map(member -> new SceneMemberPosition(member.actorId(),
+                        recoveredDrain.actorLocations().get(member.actorId()).body(),
+                        recoveredDrain.actorLocations().get(member.actorId()).condition().health())).toList();
+        var releasedAfterDeath = recoveredDrain.releaseSceneLease(leaseId, survivors);
+        assertEquals(SceneLeaseStatus.CLOSED, releasedAfterDeath.sceneLeases().get(leaseId).status());
+        assertEquals(ActorLifeStatus.DEAD, releasedAfterDeath.actorLocations().get(target).condition().status());
+        assertEquals(recoveredConfirmed.physicalObservations(), releasedAfterDeath.physicalObservations());
+        var unknownStrike = PhysicalIntentLifecycleFixture.transition(startedStrike, hive, intent,
+                PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty());
+        var firstUnknown = unknownStrike;
+        assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleFixture.transition(firstUnknown, hive, intent,
+                PhysicalIntentStatus.CONFLICTED, Optional.empty()), "missing evidence cannot bypass bounded inspection");
+        for (int attempt = 1; attempt < FencedRecoveryBinding.MAX_RECOVERY_ATTEMPTS; attempt++) {
+            unknownStrike = PhysicalIntentLifecycleFixture.transition(unknownStrike, hive, intent,
+                    PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty());
+        }
+        unknownStrike = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(unknownStrike));
+        var abandoned = PhysicalIntentLifecycleFixture.transition(unknownStrike, hive, intent,
+                PhysicalIntentStatus.CONFLICTED, Optional.empty());
+        assertEquals(startedStrike.actorLocations(), abandoned.actorLocations());
+        assertEquals(startedStrike.physicalObservations(), abandoned.physicalObservations());
+        assertEquals(FencedRecoveryDisposition.ABANDON, abandoned.fencedRecovery().tombstones().get(retiredStrike).disposition());
+        var drained = abandoned.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING);
+        var safelyClosed = drained.releaseSceneLease(leaseId, members.stream().map(member -> new SceneMemberPosition(member.actorId(),
+                drained.actorLocations().get(member.actorId()).body(), drained.actorLocations().get(member.actorId()).condition().health())).toList());
+        assertEquals(SceneLeaseStatus.CLOSED, safelyClosed.sceneLeases().get(leaseId).status());
+        assertEquals(0, safelyClosed.strategicPlans().settlementAssaults().get(assault.id()).nextStrikeEpoch(),
+                "explicit abandonment cannot fabricate a confirmed combat round");
         FrontierWorldState preparedStrike = state;
-        assertThrows(IllegalArgumentException.class, () -> preparedStrike.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED,
+        assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleFixture.transition(preparedStrike, hive, intent, PhysicalIntentStatus.CONFIRMED,
                 Optional.of(new SceneStrikeObservation(new PhysicalObservationId("observation:hot-receipt-stale-health"), intent.id(), attacker, target,
                         FixedScalar.whole(19), FixedScalar.whole(18)))),
                 "a stale physical wound cannot overwrite the current exact target health");
-        SubjectId hive = state.bootstrap().hive().id();
         List<SubjectId> currentCommitments = state.strategicPlans().objectives().values().stream()
                 .filter(objective -> objective.ownerId().equals(hive) && objective.status() == StrategicObjectiveStatus.ACTIVE)
                 .map(StrategicObjective::id).toList();
@@ -122,9 +206,9 @@ class SettlementAssaultTest {
         assertTrue(reconsidered.coldSettlementAssaultSceneCandidates().isEmpty(),
                 "a superseded expedition tactical plan must not admit a second HOT scene");
         assertThrows(IllegalArgumentException.class,
-                () -> reconsidered.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation)),
+                () -> PhysicalIntentLifecycleFixture.transition(reconsidered, hive, intent, PhysicalIntentStatus.CONFIRMED, Optional.of(observation)),
                 "a superseded expedition authority must not commit its stale child-front receipt");
-        state = state.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation));
+        state = PhysicalIntentLifecycleFixture.transition(state, hive, intent, PhysicalIntentStatus.CONFIRMED, Optional.of(observation));
         assertEquals(1, state.strategicPlans().settlementAssaults().get(assault.id()).nextStrikeEpoch(),
                 "one exact confirmed HOT receipt advances the retained COLD epoch once");
         assertEquals(FixedScalar.whole(18), state.actorLocations().get(target).condition().health(),
@@ -139,7 +223,7 @@ class SettlementAssaultTest {
         assertFalse(state.strategicPlans().frontEffects().accepts(effect),
                 "the attack and defence allocations share one durable cross-front receipt");
         FrontierWorldState confirmed = state;
-        assertThrows(IllegalArgumentException.class, () -> confirmed.preparePhysicalIntent(strike(confirmed, lease, cause, attacker, target)),
+        assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleFixture.prepare(confirmed, hive, strike(confirmed, lease, cause, attacker, target)),
                 "the confirmed prior epoch cannot be prepared again while its HOT lease remains authoritative");
 
         FrontierWorldState draining = state.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING);
@@ -158,6 +242,10 @@ class SettlementAssaultTest {
                 "recovery must retain the completed typed cross-front receipt");
         assertEquals(PhysicalIntentStatus.CONFIRMED, restored.physicalIntents().get(intent.id()).status());
         assertEquals(observation, restored.physicalObservations().get(observation.id()));
+        assertFalse(FrontierSceneLeaseStateSupport.mayCompact(restored, restored.sceneLeases().get(leaseId)),
+                "retained physical history pins its exact closed scene until owner receipt compaction");
+        assertTrue(FrontierSceneLeaseStateSupport.mayCompact(hot, lease.withStatus(SceneLeaseStatus.CLOSED)),
+                "an otherwise unreferenced closed scene remains eligible for bounded retention");
         members.forEach(member -> assertEquals(lease.memberPosition(member.actorId()), restored.actorLocations().get(member.actorId()).body(),
                 "release must restore the exact provider-approved assault floor rather than a transient HOT observation"));
 
@@ -181,10 +269,10 @@ class SettlementAssaultTest {
         SubjectId nextAttacker = nextAttackers.get(Math.floorMod(1, nextAttackers.size()));
         SubjectId nextTarget = nextTargets.get(Math.floorMod(1, nextTargets.size()));
         SubjectId nextCause = SettlementAssaultCauseIdentity.strike(assault.id(), nextAttacker, 1);
-        assertThrows(IllegalArgumentException.class, () -> nextHot.preparePhysicalIntent(strike(nextHot, lease, cause, attacker, target)),
+        assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleFixture.prepare(nextHot, hive, strike(nextHot, lease, cause, attacker, target)),
                 "release must not make the prior confirmed epoch replayable");
         PhysicalIntent nextIntent = strike(nextHot, nextLease, nextCause, nextAttacker, nextTarget);
-        assertEquals(PhysicalIntentStatus.PREPARED, nextHot.preparePhysicalIntent(nextIntent).physicalIntents().get(nextIntent.id()).status(),
+        assertEquals(PhysicalIntentStatus.PREPARED, PhysicalIntentLifecycleFixture.prepare(nextHot, hive, nextIntent).physicalIntents().get(nextIntent.id()).status(),
                 "the released COLD assault admits only its next exact epoch");
     }
 
@@ -215,7 +303,7 @@ class SettlementAssaultTest {
         PhysicalIntent staleContact = new PhysicalIntent(new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:overseer-retreat"),
                 PhysicalIntentKind.SCENE_STRIKE, PhysicalIntentStatus.RUNNING,
                 SettlementAssaultCauseIdentity.strike(assault.id(), assault.combatantAttackerIds().getFirst(), 0),
-                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.assaultSceneStrike(assault.combatantAttackerIds().getFirst(), assault.defenderIds().getFirst()),
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.assaultSceneStrike(assault.combatantAttackerIds().getFirst(), assault.defenderIds().getFirst(), lease.id(), lease.revision()),
                 new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
         FrontierWorldState afterLoss = state;
@@ -348,7 +436,7 @@ class SettlementAssaultTest {
 
     private static PhysicalIntent strike(FrontierWorldState state, SceneLease lease, SubjectId cause, SubjectId attacker, SubjectId target) {
         return new PhysicalIntent(SettlementAssaultStrikeReceiptBinding.intentId(state, lease, cause), PhysicalIntentKind.SCENE_STRIKE,
-                PhysicalIntentStatus.PREPARED, cause, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.assaultSceneStrike(attacker, target),
+                PhysicalIntentStatus.PREPARED, cause, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.assaultSceneStrike(attacker, target, lease.id(), lease.revision()),
                 new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
     }

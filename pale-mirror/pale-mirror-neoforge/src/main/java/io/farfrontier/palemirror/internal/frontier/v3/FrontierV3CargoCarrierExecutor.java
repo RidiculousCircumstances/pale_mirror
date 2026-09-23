@@ -30,6 +30,8 @@ import java.util.UUID;
 final class FrontierV3CargoCarrierExecutor {
     static final String LEASE_KEY = "pale_mirror_frontier_v3_cargo_carrier_lease";
     static final String CARGO_KEY = "pale_mirror_frontier_v3_cargo_carrier";
+    static final String REVISION_KEY = "pale_mirror_frontier_v3_cargo_carrier_revision";
+    static final String EPOCH_KEY = "pale_mirror_frontier_v3_cargo_carrier_epoch";
     private static final double SPEED = 0.055D, ARRIVAL_DISTANCE = 0.35D;
 
     /** Bounded read-only physical admission result for one exact HOT cargo carrier. */
@@ -52,7 +54,12 @@ final class FrontierV3CargoCarrierExecutor {
         if (cargo == null) return FrontierV3SceneExecutor.BodyMaterialization.CONFLICT;
         List<ExactItemStack> items = items(state, cargo);
         if (!validContents(state, cargo, items)) return FrontierV3SceneExecutor.BodyMaterialization.CONFLICT;
+        var authority = FrontierV3CargoCarrierAuthority.currentEpoch(state.fencedRecovery(), lease);
+        if (authority.isEmpty()) return FrontierV3SceneExecutor.BodyMaterialization.CONFLICT;
         Entity existing = carrier(level, lease);
+        if (FrontierV3CargoDepartureLedger.get(level, state.bootstrap().worldId()).observation(id(lease)).isPresent()) {
+            return FrontierV3SceneExecutor.BodyMaterialization.DEFERRED;
+        }
         if (existing != null) {
             if (!owned(state, existing, lease, cargo, items)) return FrontierV3SceneExecutor.BodyMaterialization.CONFLICT;
             FrontierV3CargoCarrierPresentation.ensure(level, state, lease, (MinecartChest) existing);
@@ -76,7 +83,12 @@ final class FrontierV3CargoCarrierExecutor {
         if (cargo.fungibleContents()) cart.setItem(0, fungibleStack(state, cargo));
         else for (int index = 0; index < items.size(); index++) cart.setItem(index, FrontierV3CargoHandoffExecutor.materializedStack(items.get(index)));
         cart.getPersistentData().putString(LEASE_KEY, lease.id().value());
+        cart.getPersistentData().putLong(REVISION_KEY, lease.revision());
+        cart.getPersistentData().putLong(EPOCH_KEY, authority.getAsLong());
         cart.getPersistentData().putString(CARGO_KEY, FrontierSceneBehaviors.logistics(lease).cargoId().value());
+        if (!knownFixtureColumns && !FrontierV3CargoFootprintObserver.prepareBirth(level, lease, authority.getAsLong(), cart)) {
+            return FrontierV3SceneExecutor.BodyMaterialization.DEFERRED;
+        }
         if (!level.addFreshEntity(cart)) return FrontierV3SceneExecutor.BodyMaterialization.CONFLICT;
         FrontierV3CargoCarrierPresentation.ensure(level, state, lease, cart);
         return FrontierV3SceneExecutor.BodyMaterialization.COMPLETE;
@@ -135,7 +147,7 @@ final class FrontierV3CargoCarrierExecutor {
 
     static Readiness readiness(ServerLevel level, FrontierWorldState state, SceneLease lease) {
         CargoBatch cargo = state.inventory().cargo().get(FrontierSceneBehaviors.logistics(lease).cargoId());
-        if (cargo == null) return Readiness.CONFLICT;
+        if (cargo == null || FrontierV3CargoCarrierAuthority.currentEpoch(state.fencedRecovery(), lease).isEmpty()) return Readiness.CONFLICT;
         List<ExactItemStack> items = items(state, cargo);
         if (!validContents(state, cargo, items)) return Readiness.CONFLICT;
         Entity existing = carrier(level, lease);
@@ -145,12 +157,46 @@ final class FrontierV3CargoCarrierExecutor {
         return FrontierV3StandingPosition.aboveExactFloor(level, candidate) == null ? Readiness.BLOCKED : Readiness.READY;
     }
 
+    /** Pending retirement, not evictable scene history, owns terminal provider cleanup. */
+    static void cleanRetired(ServerLevel level, FrontierWorldState state,
+            io.farfrontier.palemirror.frontier.v3.model.CargoProjectionRetirement retirement) {
+        if (!retirement.worldId().equals(state.bootstrap().worldId())
+                || !retirement.equals(state.fencedRecovery().cargoRetirements().pending().get(retirement.entityId()))) return;
+        if (!(level.getEntity(retirement.entityId()) instanceof MinecartChest cart) || cart.isRemoved()) return;
+        if (retirement.disposition() == io.farfrontier.palemirror.frontier.v3.model.CargoProjectionRetirement.Disposition.RETAIN_WORLD_CUSTODY) {
+            if (hasDeclaration(cart)) FrontierV3CargoDepartureObserver.observeJoin(level, state, cart);
+            else FrontierV3CargoFootprintObserver.retireIdentity(level, retirement, cart);
+            return;
+        }
+        var lease = state.sceneLeases().get(retirement.leaseId());
+        if (lease != null) discardClosed(level, state, lease);
+        else FrontierV3CargoDepartureObserver.observeJoin(level, state, cart);
+    }
+
     static void discardClosed(ServerLevel level, FrontierWorldState state, SceneLease lease) {
+        var terminal = state.fencedRecovery().cargoRetirements().pending().get(id(lease));
+        if (terminal != null && terminal.disposition()
+                == io.farfrontier.palemirror.frontier.v3.model.CargoProjectionRetirement.Disposition.RETAIN_WORLD_CUSTODY
+                && carrier(level, lease) instanceof MinecartChest retained) {
+            FrontierV3CargoFootprintObserver.retireIdentity(level, terminal, retained);
+            return;
+        }
         // A canonical cargo batch alone is not authority to delete a naturally returned cart.
         // It must be the exact retired scene-cargo binding.  Released player/world custody is
         // intentionally not intact and therefore remains outside this cleanup path.
         if (intact(level, state, lease) && FrontierV3ClosedProjectionFence.cargoIsStale(state, lease)) {
-            Entity carrier = carrier(level, lease); FrontierV3CargoCarrierPresentation.discard(carrier, lease); carrier.discard();
+            var retirement = state.fencedRecovery().cargoRetirements().pending().get(id(lease));
+            if (retirement == null || retirement.disposition()
+                    != io.farfrontier.palemirror.frontier.v3.model.CargoProjectionRetirement.Disposition.REMOVE_PROJECTION
+                    || hasWorldCustody(state, id(lease))) return;
+            var cart = (MinecartChest) carrier(level, lease);
+            var receipt = new FrontierV3CargoDeparture(lease.id(), retirement.cargoId(), cart.getUUID(), lease.revision(),
+                    retirement.authorization().retiredEpoch(), new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(
+                    cart.getBlockX(), cart.getBlockY(), cart.getBlockZ()), observedInventory(cart));
+            if (!FrontierV3CargoDepartureObserver.samePhysicalSnapshot(cart, receipt)
+                    || !FrontierV3CargoDepartureObserver.retainCleanupWitness(level, state, receipt)) return;
+            FrontierV3CargoCarrierPresentation.discard(cart, lease);
+            cart.clearContent(); cart.discard();
         }
     }
 
@@ -160,11 +206,16 @@ final class FrontierV3CargoCarrierExecutor {
 
     /** Finds the one still-atomic HOT shipment represented by this exact Minecraft cart. */
     static Optional<SceneLease> activeLease(FrontierWorldState state, Entity entity) {
-        return state.sceneLeases().values().stream().filter(lease -> lease.status() == io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.HOT)
-                .filter(lease -> intactEntity(state, entity, lease)).sorted(Comparator.comparing(SceneLease::id)).findFirst();
+        return activeLease(state.sceneLeases().values(), lease -> intactEntity(state, entity, lease));
     }
 
-    /** Applies stable world-carrier provenance before the durable release permits container use. */
+    static Optional<SceneLease> activeLease(java.util.Collection<SceneLease> leases, java.util.function.Predicate<SceneLease> intactCarrier) {
+        return leases.stream().filter(lease -> lease.status() == io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.HOT)
+                .filter(FrontierSceneBehaviors::isLogistics)
+                .filter(intactCarrier).min(Comparator.comparing(SceneLease::id));
+    }
+
+    /** Applies world-carrier provenance after durable release, before ordinary container use. */
     static boolean markReleasedCarrier(FrontierWorldState state, SceneLease lease, Entity entity) {
         CargoBatch cargo = state.inventory().cargo().get(FrontierSceneBehaviors.logistics(lease).cargoId());
         if (cargo == null) return false;
@@ -182,12 +233,19 @@ final class FrontierV3CargoCarrierExecutor {
     }
 
     static boolean owned(FrontierWorldState state, Entity entity, SceneLease lease, CargoBatch cargo, List<ExactItemStack> items) {
-        if (!(entity instanceof MinecartChest cart) || entity.isRemoved() || !id(lease).equals(entity.getUUID())
-                || !lease.id().value().equals(entity.getPersistentData().getString(LEASE_KEY))
-                || !FrontierSceneBehaviors.logistics(lease).cargoId().value().equals(entity.getPersistentData().getString(CARGO_KEY)) || cart.getContainerSize() < Math.max(1, items.size())) return false;
+        return owned(state, entity, lease, cargo, items, false);
+    }
+
+    private static boolean owned(FrontierWorldState state, Entity entity, SceneLease lease, CargoBatch cargo,
+                                 List<ExactItemStack> items, boolean unloading) {
+        if (!(entity instanceof MinecartChest cart) || !matchesDeclaration(state, entity, lease, unloading)
+                || cart.getContainerSize() < Math.max(1, items.size())) return false;
+        if (!unloading && entity.level() instanceof ServerLevel level
+                && FrontierV3CargoDepartureLedger.get(level, state.bootstrap().worldId()).observation(entity.getUUID()).isPresent()) return false;
         if (cargo.fungibleContents()) {
             ItemStack expected = fungibleStack(state, cargo);
-            if (expected.isEmpty() || !ItemStack.isSameItemSameComponents(cart.getItem(0), expected)) return false;
+            if (expected.isEmpty() || cart.getItem(0).getCount() != expected.getCount()
+                    || !ItemStack.isSameItemSameComponents(cart.getItem(0), expected)) return false;
             for (int index = 1; index < cart.getContainerSize(); index++) if (!cart.getItem(index).isEmpty()) return false;
             return true;
         }
@@ -196,8 +254,120 @@ final class FrontierV3CargoCarrierExecutor {
         return true;
     }
 
+    private static boolean matchesDeclaration(FrontierWorldState state, Entity entity, SceneLease lease) {
+        return matchesDeclaration(state, entity, lease, false);
+    }
+
+    private static boolean matchesDeclaration(FrontierWorldState state, Entity entity, SceneLease lease, boolean unloading) {
+        if (!(entity instanceof MinecartChest) || !FrontierSceneBehaviors.isLogistics(lease)) return false;
+        if (unloading ? entity.getRemovalReason() != Entity.RemovalReason.UNLOADED_TO_CHUNK : entity.isRemoved()) return false;
+        var tag = entity.getPersistentData();
+        return id(lease).equals(entity.getUUID()) && lease.id().value().equals(tag.getString(LEASE_KEY))
+                && tag.contains(REVISION_KEY, net.minecraft.nbt.Tag.TAG_LONG) && tag.getLong(REVISION_KEY) == lease.revision()
+                && tag.contains(EPOCH_KEY, net.minecraft.nbt.Tag.TAG_LONG)
+                && FrontierV3CargoCarrierAuthority.matches(state.fencedRecovery(), lease, tag.getLong(EPOCH_KEY))
+                && FrontierSceneBehaviors.logistics(lease).cargoId().value().equals(tag.getString(CARGO_KEY));
+    }
+
+    /** Called only with the exact declared scene at a real chunk-unload boundary. */
+    static Optional<FrontierV3CargoDeparture> captureDeparture(FrontierWorldState state, Entity entity, SceneLease lease) {
+        return captureObservation(state, entity, lease, true);
+    }
+
+    /** Current loaded observation for durable pre-close preparation, not an unload event. */
+    static Optional<FrontierV3CargoDeparture> captureLoadedRelease(FrontierWorldState state, Entity entity, SceneLease lease) {
+        return captureObservation(state, entity, lease, false);
+    }
+
+    private static Optional<FrontierV3CargoDeparture> captureObservation(FrontierWorldState state, Entity entity, SceneLease lease,
+                                                                      boolean unloading) {
+        if (!FrontierSceneBehaviors.isLogistics(lease)
+                || lease.status() == io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.CLOSED) return Optional.empty();
+        CargoBatch cargo = state.inventory().cargo().get(FrontierSceneBehaviors.logistics(lease).cargoId());
+        if (cargo == null) return Optional.empty();
+        var exact = items(state, cargo);
+        if (!validContents(state, cargo, exact) || !owned(state, entity, lease, cargo, exact, unloading)) return Optional.empty();
+        var cart = (MinecartChest) entity;
+        if (cart.getContainerSize() != FrontierV3CargoDeparture.SLOTS) return Optional.empty();
+        var inventory = observedInventory(cart);
+        return Optional.of(new FrontierV3CargoDeparture(lease.id(), cargo.id(), cart.getUUID(), lease.revision(),
+                cart.getPersistentData().getLong(EPOCH_KEY),
+                new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(cart.getBlockX(), cart.getBlockY(), cart.getBlockZ()), inventory));
+    }
+
+    static List<net.minecraft.nbt.CompoundTag> observedInventory(MinecartChest cart) {
+        return java.util.stream.IntStream.range(0, cart.getContainerSize())
+                .mapToObj(slot -> (net.minecraft.nbt.CompoundTag) cart.getItem(slot).saveOptional(cart.registryAccess())).toList();
+    }
+
+    /** Revalidate the full expected contents and current attempt, never just the cart UUID. */
+    static boolean currentDeparture(FrontierWorldState state, SceneLease lease, FrontierV3CargoDeparture receipt,
+                                     net.minecraft.core.HolderLookup.Provider registries) {
+        if (!FrontierSceneBehaviors.isLogistics(lease) || !receipt.leaseId().equals(lease.id())
+                || receipt.sceneRevision() != lease.revision() || !receipt.entityId().equals(id(lease))
+                || !receipt.cargoId().equals(FrontierSceneBehaviors.logistics(lease).cargoId())
+                || FrontierV3CargoCarrierAuthority.currentEpoch(state.fencedRecovery(), lease).orElse(-1L) != receipt.authorityEpoch()) return false;
+        CargoBatch cargo = state.inventory().cargo().get(receipt.cargoId());
+        if (cargo == null) return false;
+        var exact = items(state, cargo);
+        if (!validContents(state, cargo, exact) || exact.size() > FrontierV3CargoDeparture.SLOTS) return false;
+        var expected = java.util.stream.IntStream.range(0, FrontierV3CargoDeparture.SLOTS).mapToObj(slot -> {
+            ItemStack stack = cargo.fungibleContents() ? (slot == 0 ? fungibleStack(state, cargo) : ItemStack.EMPTY)
+                    : (slot < exact.size() ? FrontierV3CargoHandoffExecutor.materializedStack(exact.get(slot)) : ItemStack.EMPTY);
+            return (net.minecraft.nbt.CompoundTag) stack.saveOptional(registries);
+        }).toList();
+        return receipt.inventory().equals(expected);
+    }
+
+    /** World custody alone cannot validate a stale physical declaration from another attempt. */
+    static boolean hasCurrentDeclaration(FrontierWorldState state, Entity entity) {
+        var retained = state.fencedRecovery().cargoRetirements().pending().get(entity.getUUID());
+        if (entity instanceof MinecartChest && !entity.isRemoved() && retained != null
+                && retained.worldId().equals(state.bootstrap().worldId())
+                && retained.disposition() == io.farfrontier.palemirror.frontier.v3.model.CargoProjectionRetirement.Disposition.RETAIN_WORLD_CUSTODY
+                && hasWorldCustody(state, entity.getUUID())
+                && matchesRetiredDeclaration(retained, entity.getUUID(), entity.getPersistentData())) return true;
+        try {
+            var lease = state.sceneLeases().get(new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(
+                    entity.getPersistentData().getString(LEASE_KEY)));
+            return lease != null && matchesDeclaration(state, entity, lease);
+        } catch (IllegalArgumentException invalidDeclaration) { return false; }
+    }
+
+    static boolean matchesRetiredDeclaration(
+            io.farfrontier.palemirror.frontier.v3.model.CargoProjectionRetirement retired,
+            UUID entity, net.minecraft.nbt.CompoundTag tag) {
+        return retired.entityId().equals(entity)
+                && tag.contains(LEASE_KEY, net.minecraft.nbt.Tag.TAG_STRING)
+                && tag.getString(LEASE_KEY).equals(retired.leaseId().value())
+                && tag.contains(CARGO_KEY, net.minecraft.nbt.Tag.TAG_STRING)
+                && tag.getString(CARGO_KEY).equals(retired.cargoId().value())
+                && tag.contains(REVISION_KEY, net.minecraft.nbt.Tag.TAG_LONG)
+                && tag.getLong(REVISION_KEY) == retired.authorization().ownerRevision()
+                && tag.contains(EPOCH_KEY, net.minecraft.nbt.Tag.TAG_LONG)
+                && tag.getLong(EPOCH_KEY) == retired.authorization().retiredEpoch();
+    }
+
     static boolean active(FrontierWorldState state, Entity entity) {
         return activeLease(state, entity).isPresent();
+    }
+
+    /** Partial declarations are managed-but-invalid, never an ordinary container bypass. */
+    static boolean hasDeclaration(Entity entity) {
+        var tag = entity.getPersistentData();
+        return tag.contains(LEASE_KEY) || tag.contains(CARGO_KEY) || tag.contains(REVISION_KEY) || tag.contains(EPOCH_KEY);
+    }
+
+    /** Canonical custody, not scene tags or current contents, owns post-release observation. */
+    static boolean hasWorldCustody(FrontierWorldState state, UUID carrierId) {
+        return state.inventory().hasWorldCarrierCustody(carrierId);
+    }
+
+    /** Only a durable accepted handoff permits removing the scene's physical declaration. */
+    static void relinquishDeclaration(Entity entity) {
+        var tag = entity.getPersistentData();
+        tag.remove(LEASE_KEY); tag.remove(CARGO_KEY); tag.remove(REVISION_KEY); tag.remove(EPOCH_KEY);
+        entity.setNoGravity(false);
     }
 
     private static boolean intactEntity(FrontierWorldState state, Entity entity, SceneLease lease) {

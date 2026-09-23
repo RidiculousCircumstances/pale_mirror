@@ -37,23 +37,36 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.core.registries.BuiltInRegistries;
 
-import java.util.Comparator;
+import java.util.IdentityHashMap;
+import java.util.Map;
 import java.util.List;
 import java.util.Optional;
 
 /** Removes one exact identity-tagged count only after durable admission and loaded-world inspection. */
 final class FrontierV3ExactItemConsumptionExecutor {
+    private static final Map<FrontierV3ServerRuntime<?, ?>, FrontierV3FairTurn<PhysicalIntentId>> TURNS = new IdentityHashMap<>();
     private FrontierV3ExactItemConsumptionExecutor() { }
 
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         FrontierWorldState state = runtime.decodedState().orElse(null); if (state == null) return;
-        state.physicalIntents().values().stream().sorted(Comparator.comparing(PhysicalIntent::id))
+        nextIntent(state, state.physicalIntents().values(), TURNS.computeIfAbsent(runtime, ignored -> new FrontierV3FairTurn<>()))
+                .ifPresent(intent -> execute(level, runtime, state, intent));
+    }
+
+    static void forget(FrontierV3ServerRuntime<?, ?> runtime) { TURNS.remove(runtime); }
+
+    static Optional<PhysicalIntent> nextIntent(FrontierWorldState state, java.util.Collection<PhysicalIntent> inventory,
+                                               FrontierV3FairTurn<PhysicalIntentId> turns) {
+        var candidates = inventory.stream()
                 .filter(intent -> intent.kind() == PhysicalIntentKind.EXACT_ITEM_CONSUMPTION)
                 .filter(intent -> intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING
                         || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART)
-                .filter(intent -> !state.humanPopulation().medicalOperations().containsKey(intent.causeSubjectId())
-                        || FrontierMedicalTreatmentSceneSupport.permitsCurrentConsumptionIntent(state, intent))
-                .findFirst().ifPresent(intent -> execute(level, runtime, state, intent));
+                .filter(intent -> intent.lifecycleOwner() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.MEDICAL_TREATMENT
+                        || (intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
+                        ? FrontierMedicalTreatmentSceneSupport.permitsConsumptionReceipt(state, intent)
+                        : FrontierMedicalTreatmentSceneSupport.permitsCurrentConsumptionIntent(state, intent)))
+                .toList();
+        return turns.next(candidates, PhysicalIntent::id);
     }
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, PhysicalIntent intent) {

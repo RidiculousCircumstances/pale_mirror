@@ -25,6 +25,16 @@ public final class TransactionReplayer {
             List<ScheduledAction> initialSchedules, List<TransactionRecord> transactions,
             EventReducer<S> reducer, StateCodec<S> stateCodec, StateValidator<S> stateValidator
     ) {
+        return replayFrom(worldId, initialState, initialRevision, initialInstant, initialSchedules,
+                transactions, reducer, stateCodec, stateValidator, (state, action) -> false);
+    }
+
+    public static <S> ReplayResult<S> replayFrom(
+            WorldId worldId, S initialState, Revision initialRevision, SimInstant initialInstant,
+            List<ScheduledAction> initialSchedules, List<TransactionRecord> transactions,
+            EventReducer<S> reducer, StateCodec<S> stateCodec, StateValidator<S> stateValidator,
+            java.util.function.BiPredicate<S, ScheduledAction> held
+    ) {
         Objects.requireNonNull(worldId, "world id");
         S state = Objects.requireNonNull(initialState, "initial state");
         Objects.requireNonNull(stateValidator, "state validator");
@@ -38,10 +48,16 @@ public final class TransactionReplayer {
             S next = state;
             ScheduledActionQueue.Mutation nextSchedules = schedules.beginMutation();
             for (FrontierEvent event : transaction.events()) {
-                if (event.payload() instanceof ScheduleEffect effect) ScheduleEffectApplier.apply(nextSchedules, effect);
+                if (event.payload() instanceof ScheduleEffect effect) {
+                    S scheduleState = next;
+                    ScheduleEffectApplier.apply(nextSchedules, effect, action -> held.test(scheduleState, action));
+                }
                 else next = Objects.requireNonNull(reducer.apply(next, event), "reducer state");
             }
             if (next != state) stateValidator.validateTransaction(state, next, transaction.events(), schedules.snapshot(), nextSchedules.snapshot());
+            else if (!nextSchedules.retainedChanges().isEmpty()) {
+                stateValidator.validateScheduleChanges(state, nextSchedules.retainedChanges());
+            }
             if (stateCodec.encode(next) == null) throw new IllegalStateException("state codec returned null");
             state = next;
             nextSchedules.commit();

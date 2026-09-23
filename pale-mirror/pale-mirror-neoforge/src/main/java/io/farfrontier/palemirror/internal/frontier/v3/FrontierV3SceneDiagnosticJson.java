@@ -59,6 +59,10 @@ final class FrontierV3SceneDiagnosticJson {
         boolean exactReceipt = receipt != null && receipt.intentId().equals(strike.id()) && receipt.attackerId().equals(strike.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ATTACKER))
                 && receipt.targetId().equals(strike.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.TARGET));
         boolean healthChanged = exactReceipt && receipt.targetHealthAfter().compareTo(receipt.targetHealthBefore()) < 0;
+        var cargoRetirement = logistics == null ? null : state.fencedRecovery().cargoRetirements().pending()
+                .get(io.farfrontier.palemirror.frontier.v3.model.CargoCarrierIdentity.id(lease));
+        String cargoCleanup = ",\"cargoCleanupPending\":" + (logistics == null ? "null" : Boolean.toString(cargoRetirement != null))
+                + ",\"cargoCleanupEpoch\":" + (cargoRetirement == null ? "null" : cargoRetirement.authorization().retiredEpoch());
         String recovery = lease.recoveryEvidence().map(value -> ",\"recoveryMissingActors\":" + FrontierV3DiagnosticJson.strings(value.missingActorIds().stream().map(SubjectId::value).sorted().toList())
                 + ",\"recoveryMissingCarrier\":" + value.missingCargoCarrier()).orElse("");
         return FrontierV3DiagnosticJson.base("scene", id, checkpoint) + ",\"status\":\"ok\",\"leaseId\":\"" + FrontierV3DiagnosticJson.quote(lease.id().value())
@@ -93,7 +97,7 @@ final class FrontierV3SceneDiagnosticJson {
                 + ",\"strikeHealthAfter\":" + (receipt == null ? -1 : receipt.targetHealthAfter().raw())
                 + ",\"coldContinuationAvailable\":" + (assaultState != null && assaultState.status() == SettlementAssaultStatus.COLD_COMBAT
                         && state.coldSettlementAssaultSceneCandidates().stream().anyMatch(value -> value.assaultId().equals(assaultState.id())))
-                + recovery + readiness.map(FrontierV3SceneDiagnosticJson::sceneReadiness).orElse("") + "}";
+                + cargoCleanup + recovery + readiness.map(FrontierV3SceneDiagnosticJson::sceneReadiness).orElse("") + "}";
     }
 
     private static String productionTraversal(ProductionJob job) {

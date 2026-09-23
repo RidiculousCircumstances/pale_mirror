@@ -561,7 +561,7 @@ class FrontierV3ServerRuntimeTest {
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.RESOURCE_SITE_HARVEST);
         PhysicalIntent unsupported = new PhysicalIntent(new PhysicalIntentId("intent:restart-unsupported"), PhysicalIntentKind.SCENE_STRIKE,
                 PhysicalIntentStatus.RUNNING, new SubjectId("operation:supply-1-2"),
-                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.routeSceneStrike(new SubjectId("bioform:west-1"), new SubjectId("resident:1-1")),
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.routeSceneStrike(new SubjectId("bioform:west-1"), new SubjectId("resident:1-1"), new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:runtime-test"), 0L),
                 new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ROUTE_ENGAGEMENT);
 
@@ -608,15 +608,21 @@ class FrontierV3ServerRuntimeTest {
                 job.id(), leaseId, workBody, workCursor));
         job = worldState(runtime).productionJobs().get(job.id());
         for (int completed = 0; completed <= 17; completed++) {
-            submitWorld(runtime, "production-restart-processing-" + completed,
+            if (completed > 0) runtime.advance(20, new WorkBudget(64, 512));
+            FrontierV3CommandSubmission.submitBound(runtime, "production-restart-processing-" + completed, job.id().value(),
                     new io.farfrontier.palemirror.frontier.v3.model.ProductionWorkProgressed(job.id(), leaseId, workBody,
-                            io.farfrontier.palemirror.frontier.v3.model.ProductionWorkProgress.processing(completed)));
+                            io.farfrontier.palemirror.frontier.v3.model.ProductionWorkProgress.processing(completed)),
+                    FrontierV3ContinuationBinding.require(runtime.checkpointImage().orElseThrow(), job.id(), "frontier.settlement.production.task.complete"));
         }
+        var retainedWorkAction = FrontierV3ContinuationBinding.require(runtime.checkpointImage().orElseThrow(), job.id(),
+                "frontier.settlement.production.task.complete");
         runtime.shutdown();
 
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> recovered =
                 FrontierV3ServerRuntime.start(configuration, store, 10_000);
         FrontierWorldState persisted = worldState(recovered);
+        assertEquals(retainedWorkAction, FrontierV3ContinuationBinding.require(recovered.checkpointImage().orElseThrow(), job.id(),
+                "frontier.settlement.production.task.complete"), "restart must preserve the exact labor deadline, not only progress count");
         assertEquals(io.farfrontier.palemirror.frontier.v3.model.ProductionWorkProgress.processing(17), persisted.productionJobs().get(job.id()).workProgress());
         assertEquals(workCursor, persisted.productionJobs().get(job.id()).traversalCursor());
         assertEquals(SceneLeaseStatus.HOT, persisted.sceneLeases().get(leaseId).status());

@@ -61,8 +61,9 @@ public final class FrontierResourceSiteHarvestSceneSupport {
     /**
      * The terminal output receipt consumes the active job before the same HOT body's DRAINING
      * scene can publish its body-exit receipt.  That is a valid one-tick ownership boundary,
-     * not an invitation to invent a new farmer or a new field owner.  Recognize it only while
-     * the immediately succeeding growth epoch is still at its exact zero-stage checkpoint.
+     * not an invitation to invent a new farmer or a new field owner. Growth may advance
+     * while body release waits; the exact predecessor relation, not growth stage zero,
+     * retains authority throughout the immediately succeeding unassigned growth epoch.
      */
     public static boolean isTerminalReceiptRelease(FrontierWorldState state, ResourceSiteHarvestSceneCause cause) {
         return activeJob(state, cause).isEmpty() && terminalReceiptSite(state.bootstrap(), state.resourceSites(), cause) != null;
@@ -84,25 +85,33 @@ public final class FrontierResourceSiteHarvestSceneSupport {
     }
 
     public static SubjectId owner(FrontierWorldState state, ResourceSiteHarvestSceneCause cause) {
+        return site(state, cause).settlementId();
+    }
+
+    /** Exact active or retained terminal owner; never reconstruct a consumed job. */
+    public static ResourceSite site(FrontierWorldState state, ResourceSiteHarvestSceneCause cause) {
         ResourceSiteHarvestJob job = activeJob(state, cause).orElse(null);
         ResourceSite site = job == null ? terminalReceiptSite(state.bootstrap(), state.resourceSites(), cause)
                 : FrontierResourceSitePlan.compile(state.bootstrap()).get(job.siteId());
         if (site == null) throw new IllegalArgumentException("resource-site harvest scene has an unknown field");
-        return site.settlementId();
+        return site;
     }
 
     /**
      * Returns the immutable site only for the exact completed predecessor retained by the
-     * current zero-stage growth epoch.  The lifecycle-owned lineage is the authoritative
+     * current unassigned successor epoch. The lifecycle-owned lineage is the authoritative
      * relation: a stale, foreign, or later successor scene cannot borrow this terminal-release
      * exception by reconstructing a plausible identifier from a site and epoch.
      */
-    private static ResourceSite terminalReceiptSite(FrontierBootstrap bootstrap, ResourceSiteState resourceSites,
+    static ResourceSite terminalReceiptSite(FrontierBootstrap bootstrap, ResourceSiteState resourceSites,
                                                     ResourceSiteHarvestSceneCause cause) {
-        return resourceSites.sites().values().stream().filter(lifecycle -> lifecycle.phase() == ResourceSitePhase.GROWING
-                        && lifecycle.growthStage() == 0 && lifecycle.activeWork().isEmpty() && lifecycle.growthEpoch() > 0L)
-                .filter(lifecycle -> lifecycle.harvestLineage().map(ResourceSiteHarvestLineage::predecessorJobId)
-                        .filter(cause.jobId()::equals).isPresent())
+        return resourceSites.sites().values().stream().filter(lifecycle ->
+                        (lifecycle.phase() == ResourceSitePhase.GROWING || lifecycle.phase() == ResourceSitePhase.READY
+                                || lifecycle.phase() == ResourceSitePhase.CONFLICT)
+                        && lifecycle.activeWork().isEmpty() && lifecycle.growthEpoch() > 0L)
+                .filter(lifecycle -> lifecycle.harvestLineage().filter(lineage ->
+                        lineage.predecessorJobId().equals(cause.jobId())
+                                && lineage.completedGrowthEpoch() == lifecycle.growthEpoch() - 1L).isPresent())
                 .map(ResourceSiteLifecycle::siteId).map(FrontierResourceSitePlan.compile(bootstrap)::get)
                 .filter(java.util.Objects::nonNull).reduce((first, second) -> {
                     throw new IllegalArgumentException("resource-site terminal receipt is ambiguous");

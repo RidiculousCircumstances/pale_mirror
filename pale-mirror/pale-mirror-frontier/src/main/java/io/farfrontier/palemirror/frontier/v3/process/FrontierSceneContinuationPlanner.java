@@ -47,6 +47,8 @@ public final class FrontierSceneContinuationPlanner {
 
     public static List<ProposedEvent> releaseEvents(FrontierWorldState state, SceneLease lease, long submittedAt,
                                                     SceneLeaseReleased released, Optional<ScheduledAction> binding) {
+        // The reducer repeats this atomic disposition; do not journal an impossible release.
+        io.farfrontier.palemirror.frontier.v3.model.SceneStrikeStateSupport.prepareRelease(state, lease);
         SceneReleasePlan plan = FrontierSceneBehaviors.releasePlan(state, lease, submittedAt, released);
         return events(state, plan.owner(), plan.released(), plan.continuation(), submittedAt, binding);
     }
@@ -163,7 +165,8 @@ public final class FrontierSceneContinuationPlanner {
             if (!(continuation instanceof SceneContinuation.FinalizeProductionWork finalize)) throw invalid(continuation, kind());
             ProductionJob job = state.productionJobs().get(finalize.jobId());
             if (job == null) throw new IllegalArgumentException("production scene finalization has no active job");
-            return List.of(new ProposedEvent(job.settlementId(), new ProductionWorkSceneFinalized(finalize.leaseId(), job.id())));
+            return List.of(new ProposedEvent(job.settlementId(), new ProductionWorkSceneFinalized(finalize.leaseId(), job.id())),
+                    new ProposedEvent(job.id(), new ScheduleEffect.Cancelled(ProductionProcess.complete(job, submittedAt).id())));
         }
     }
 

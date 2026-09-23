@@ -45,7 +45,7 @@ final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule 
             return FrontierWorldPhysicalObservationProcess.planFungibleHandoff(state, observed);
         }
         if (command.payload() instanceof FungibleStackBindingsReleased released) {
-            return FrontierWorldPhysicalObservationProcess.planFungibleBindingRelease(state, released);
+            return FrontierWorldPhysicalObservationProcess.planFungibleBindingRelease(state, released, command.submittedAt().ticks());
         }
         if (command.payload() instanceof ExactItemCustodyChanged changed) {
             ExactItemStack item = state.inventory().items().get(changed.itemId());

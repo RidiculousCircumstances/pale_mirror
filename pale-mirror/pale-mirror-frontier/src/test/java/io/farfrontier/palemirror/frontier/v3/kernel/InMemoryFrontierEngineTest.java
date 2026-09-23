@@ -245,6 +245,47 @@ class InMemoryFrontierEngineTest {
     }
 
     @Test
+    void ownerHeldHeadDoesNotSpendIndependentWorkBudgetAndReleaseReplaysInOrder() {
+        ScheduledAction held = scheduled("schedule:held-first", "settlement:a", 5L, 1);
+        ScheduledAction independent = scheduled("schedule:independent", "settlement:b", 6L, 1);
+        ScheduledActionPlanner<Counter> planner = new ScheduledActionPlanner<>() {
+            @Override public boolean held(Counter state, ScheduledAction action) {
+                return state.value() == 0 && action.equals(held);
+            }
+            @Override public List<ProposedEvent> plan(Counter state, ScheduledAction action) {
+                return List.of(new ProposedEvent(action.subject(), new Delta(1)));
+            }
+        };
+        InMemoryFrontierEngine<Counter, CounterProjection> engine = new InMemoryFrontierEngine<>(
+                WORLD, new Counter(0), SimInstant.ZERO,
+                (state, command) -> new CommandPlan.Accepted(List.of(new ProposedEvent(SUBJECT, command.payload()))),
+                planner, (state, event) -> reduce(state, event, false),
+                state -> ByteBuffer.allocate(4).putInt(state.value()).array(),
+                (state, world, revision, instant, query) -> new CounterProjection(world, revision, instant, state.value()),
+                new EngineLimits(8, 100L, 8), List.of(held, independent));
+
+        engine.advanceTo(new SimInstant(5L), new WorkBudget(1, 1));
+        assertTrue(engine.transactions().isEmpty(), "an owner hold is not a repeated no-op WAL transaction");
+        assertEquals(List.of(held, independent), engine.scheduledActions());
+        engine.advanceTo(new SimInstant(10L), new WorkBudget(1, 1));
+        assertEquals(List.of(held), engine.scheduledActions(), "held identity/deadline must stay byte-exact");
+        assertEquals(1, engine.canonicalState().state().value(), "independent work receives the only budget slot");
+        engine.advanceTo(new SimInstant(11L), new WorkBudget(1, 1));
+        assertEquals(List.of(), engine.scheduledActions());
+        assertEquals(List.of(new SimInstant(6L), new SimInstant(10L)),
+                engine.transactions().stream().map(TransactionRecord::instant).toList());
+        var replay = TransactionReplayer.replayFrom(WORLD, new Counter(0), Revision.ZERO, SimInstant.ZERO,
+                List.of(held, independent), engine.transactions(), (state, event) -> reduce(state, event, false),
+                state -> ByteBuffer.allocate(4).putInt(state.value()).array(), StateValidator.none(), planner::held);
+        assertEquals(2, replay.state().value());
+        assertTrue(replay.schedules().isEmpty());
+        assertThrows(IllegalStateException.class, () -> TransactionReplayer.replayFrom(
+                WORLD, new Counter(0), Revision.ZERO, SimInstant.ZERO, List.of(held, independent), engine.transactions(),
+                (state, event) -> reduce(state, event, false), state -> ByteBuffer.allocate(4).putInt(state.value()).array(),
+                StateValidator.none()), "without an owner-declared hold, skipping a runnable head is still invalid");
+    }
+
+    @Test
     void scheduleCreationRescheduleAndCancellationAreCommittedEvents() {
         InMemoryFrontierEngine<Counter, CounterProjection> engine = engine(List.of(), false);
         ScheduledAction original = scheduled("schedule:created", "settlement:a", 10L, 1);
@@ -262,6 +303,115 @@ class InMemoryFrontierEngineTest {
         assertTrue(engine.scheduledActions().isEmpty());
         assertEquals(List.of("kernel.schedule_created", "kernel.schedule_rescheduled", "kernel.schedule_cancelled"),
                 engine.transactions().stream().map(record -> record.events().getFirst().payload().type()).toList());
+    }
+
+    @Test
+    void scheduleOnlyReferencesAreCheckedBeforeWalWithoutReauditingStateOrUnchangedQueue() {
+        List<TransactionRecord> durable = new ArrayList<>();
+        List<List<ScheduledAction>> checked = new ArrayList<>();
+        StateValidator<Counter> validator = new StateValidator<>() {
+            @Override public void validateInitial(Counter state) { }
+            @Override public void validateTransition(Counter previous, Counter next) {
+                throw new AssertionError("schedule-only work must not audit the aggregate");
+            }
+            @Override public void validateScheduleChanges(Counter state, List<ScheduledAction> changes) {
+                checked.add(changes);
+                if (changes.stream().anyMatch(action -> !action.subject().equals(SUBJECT))) {
+                    throw new IllegalArgumentException("absent scheduled owner");
+                }
+            }
+        };
+        ScheduledAction retained = scheduled("schedule:retained", SUBJECT.value(), 10L, 1);
+        ScheduledAction created = scheduled("schedule:new", SUBJECT.value(), 20L, 1);
+        ScheduledAction invalid = scheduled("schedule:invalid", "subject:absent", 30L, 1);
+        InMemoryFrontierEngine<Counter, CounterProjection> engine = new InMemoryFrontierEngine<>(
+                WORLD, new Counter(0), SimInstant.ZERO,
+                (state, command) -> new CommandPlan.Accepted(List.of(new ProposedEvent(SUBJECT, command.payload()))),
+                (state, due) -> List.of(new ProposedEvent(due.subject(), new ScheduleEffect.Cancelled(due.id()))),
+                (state, event) -> reduce(state, event, false), state -> ByteBuffer.allocate(4).putInt(state.value()).array(),
+                (state, world, revision, instant, query) -> new CounterProjection(world, revision, instant, state.value()),
+                new EngineLimits(8, 100L, 8), List.of(retained), (transaction, durability) -> durable.add(transaction),
+                validator, FrontierExecutionMetrics.noOp(), KernelQuarantineReporter.disabled());
+
+        assertInstanceOf(CommandResult.Accepted.class,
+                engine.submit(command("command:valid-reference", Revision.ZERO, new ScheduleEffect.Created(created))));
+        assertEquals(List.of(List.of(retained), List.of(created)), checked);
+        assertRejected(engine.submit(command("command:invalid-reference", new Revision(1L),
+                new ScheduleEffect.Rescheduled(created.id(), invalid))), RejectionCode.INVARIANT_FAILURE);
+        assertEquals(List.of(retained, created), engine.scheduledActions());
+        assertEquals(1, durable.size(), "invalid schedule reference must not reach the WAL");
+        assertEquals(new Revision(1L), engine.canonicalState().revision());
+
+        var replayed = TransactionReplayer.replayFrom(WORLD, new Counter(0), Revision.ZERO, SimInstant.ZERO,
+                List.of(retained), durable, (state, event) -> reduce(state, event, false),
+                state -> ByteBuffer.allocate(4).putInt(state.value()).array(), validator);
+        assertEquals(List.of(retained, created), replayed.schedules());
+        // Simulate a WAL written by the former bypass, not a fabricated successful outcome.
+        var unchecked = engine(List.of(), false);
+        assertInstanceOf(CommandResult.Accepted.class, unchecked.submit(
+                command("command:legacy-invalid-reference", Revision.ZERO, new ScheduleEffect.Created(invalid))));
+        assertThrows(IllegalArgumentException.class, () -> TransactionReplayer.replayFrom(
+                WORLD, new Counter(0), Revision.ZERO, SimInstant.ZERO, List.of(), unchecked.transactions(),
+                (state, event) -> reduce(state, event, false),
+                state -> ByteBuffer.allocate(4).putInt(state.value()).array(), validator));
+    }
+
+    @Test
+    void ownerRetirementMustCancelItsScheduleInTheSameDurableTransaction() {
+        var continuation = scheduled("schedule:retiring-owner", SUBJECT.value(), 10L, 1);
+        var durable = new ArrayList<TransactionRecord>();
+        StateValidator<Counter> validator = new StateValidator<>() {
+            @Override public void validateInitial(Counter state) { }
+            @Override public void validateTransition(Counter previous, Counter next) { }
+            @Override public void validateRecoveryInitial(Counter state, List<ScheduledAction> schedules) {
+                validateScheduleChanges(state, schedules);
+            }
+            @Override public void validateScheduleChanges(Counter state, List<ScheduledAction> schedules) {
+                if (state.value() != 0 && !schedules.isEmpty()) throw new IllegalArgumentException("retired owner");
+            }
+            @Override public void validateTransaction(Counter previous, Counter next, List<FrontierEvent> events,
+                                                       List<ScheduledAction> before, List<ScheduledAction> after) {
+                validateScheduleChanges(next, after);
+            }
+        };
+        java.util.function.Supplier<InMemoryFrontierEngine<Counter, CounterProjection>> factory = () ->
+                new InMemoryFrontierEngine<Counter, CounterProjection>(WORLD, new Counter(0), SimInstant.ZERO,
+                (state, command) -> {
+                    var events = new ArrayList<ProposedEvent>();
+                    events.add(new ProposedEvent(SUBJECT, new Delta(1)));
+                    if (command.payload().equals(new Delta(2))) {
+                        events.add(new ProposedEvent(SUBJECT, new ScheduleEffect.Cancelled(continuation.id())));
+                    }
+                    return new CommandPlan.Accepted(events);
+                }, (state, action) -> List.of(), (state, event) -> reduce(state, event, false),
+                state -> ByteBuffer.allocate(4).putInt(state.value()).array(),
+                (state, world, revision, instant, query) -> new CounterProjection(world, revision, instant, state.value()),
+                new EngineLimits(8, 100L, 8), List.of(continuation),
+                (transaction, durability) -> durable.add(transaction), validator,
+                FrontierExecutionMetrics.noOp(), KernelQuarantineReporter.disabled());
+        var engine = factory.get();
+        assertRejected(engine.submit(command("command:incomplete-retirement", Revision.ZERO, new Delta(1))),
+                RejectionCode.INVARIANT_FAILURE);
+        assertTrue(durable.isEmpty());
+        assertEquals(0, engine.canonicalState().state().value());
+        assertEquals(List.of(continuation), engine.scheduledActions());
+
+        // The injected invariant violation correctly quarantines that instance.
+        // Exercise the valid transition in a fresh engine with the same intact initial state.
+        engine = factory.get();
+        assertInstanceOf(CommandResult.Accepted.class,
+                engine.submit(command("command:complete-retirement", Revision.ZERO, new Delta(2))));
+        assertEquals(1, durable.size());
+        assertEquals(1, engine.canonicalState().state().value());
+        assertTrue(engine.scheduledActions().isEmpty());
+        var replayed = TransactionReplayer.replayFrom(WORLD, new Counter(0), Revision.ZERO, SimInstant.ZERO,
+                List.of(continuation), durable, (state, event) -> reduce(state, event, false),
+                state -> ByteBuffer.allocate(4).putInt(state.value()).array(), validator);
+        assertTrue(replayed.schedules().isEmpty());
+        assertThrows(IllegalArgumentException.class, () -> TransactionReplayer.replayFrom(
+                WORLD, new Counter(1), Revision.ZERO, SimInstant.ZERO, List.of(continuation), List.of(),
+                (state, event) -> reduce(state, event, false),
+                state -> ByteBuffer.allocate(4).putInt(state.value()).array(), validator));
     }
 
     @Test

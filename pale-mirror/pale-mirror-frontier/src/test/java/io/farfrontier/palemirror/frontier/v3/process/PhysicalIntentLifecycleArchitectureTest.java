@@ -26,6 +26,11 @@ class PhysicalIntentLifecycleArchitectureTest {
                 "the former common kind-dispatch command process must not return");
         assertFalse(composition.contains("switch (intent.kind") || composition.contains("switch (owner"),
                 "composition validates declared compatibility but must not choose behavior by kind or owner switch");
+        assertFalse(composition.contains("PhysicalIntentKind.SCENE_STRIKE"),
+                "strike inspection/abandonment policy belongs to the registered family, not common composition");
+        String storage = Files.readString(root.resolve("main/java/io/farfrontier/palemirror/frontier/v3/model/PhysicalIntentTransitionStorage.java"));
+        assertFalse(storage.contains(".kind()") || storage.contains("PhysicalIntentKind"),
+                "storage consumes owner-declared recovery edges without discovering the physical family");
         assertTrue(composition.contains("intent.lifecycleOwner()") && composition.contains("missing physical lifecycle capability"),
                 "composition must resolve only the durable explicit owner and fail closed");
         assertTrue(composition.contains("declaration().admits(intent)") && composition.contains("requirePreparationCapacity"),
@@ -60,7 +65,8 @@ class PhysicalIntentLifecycleArchitectureTest {
                 "resolved-history disposition must preserve every live recovery authority and only select settled receipts");
         assertTrue(composition.contains("compactResolvedForPreparation")
                         && composition.contains("owner retention share is saturated")
-                        && composition.contains("must partition the aggregate unresolved admission bound"),
+                        && composition.contains("declaration.maxUnresolved() != PhysicalIntentLifecycleDeclaration.MAX_PER_OWNER")
+                        && composition.contains("composition.unresolvedAdmissionCapacity > FrontierWorldState.MAX_PHYSICAL_INTENTS"),
                 "same owner declarations must drive executable compaction and fair bounded admission, not diagnostic-only pressure");
         assertTrue(composition.contains("physicalIntents(intents).physicalObservations(observations)")
                         && composition.contains("owner-selected terminal intent is not confirmed"),

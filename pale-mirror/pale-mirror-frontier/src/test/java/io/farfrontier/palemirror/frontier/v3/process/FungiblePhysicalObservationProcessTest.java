@@ -29,6 +29,11 @@ import io.farfrontier.palemirror.frontier.v3.model.HiveGrowthStarted;
 import io.farfrontier.palemirror.frontier.v3.model.HiveGrowthInputHold;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentPrepared;
 import io.farfrontier.palemirror.frontier.v3.model.ReferenceContainerCustodyFixtures;
+import io.farfrontier.palemirror.frontier.v3.model.ReferenceContainerCustody;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaRecord;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalCustodyLease;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalCustodyLeaseStatus;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateUpdate;
 import io.farfrontier.palemirror.frontier.v3.model.StrategicObjective;
 import io.farfrontier.palemirror.frontier.v3.model.StrategicObjectiveKind;
 import io.farfrontier.palemirror.frontier.v3.model.StrategicObjectiveStatus;
@@ -60,12 +65,24 @@ class FungiblePhysicalObservationProcessTest {
         FungibleResourceLedger resources = FungibleResourceLedger.empty().issue(new ResourceLot(lotId, owner, "minecraft:bread", 10, "test", List.of()),
                 new CustodyAccount(accountId, new ResourceCustody.Container(container), Map.of(lotId, 10), Map.of()));
         FrontierWorldState state = base.initialState().withInventory(base.initialState().inventory().withFungibleResources(resources));
+        FungibleStackLayoutObserved split = observation(accountId, 4L, "minecraft:bread", 6, 4);
+        assertInstanceOf(CommandPlan.Rejected.class, FrontierWorldPhysicalObservationProcess.planFungibleLayout(state, split));
+        FrontierWorldState withoutCustody = state;
+        assertThrows(IllegalArgumentException.class, () -> FrontierWorldPhysicalObservationProcess.reduceFungibleLayout(withoutCustody, owner, split));
+        PhysicalReplicaRecord expected = PhysicalReplicaRecord.expected(container, ReferenceContainerCustody.semanticKind(state, container), 0L,
+                ReferenceContainerCustody.canonicalFingerprint(state, container), ReferenceContainerCustody.provenance(container));
+        var preparing = state.replicaCustody().declare(expected).prepareProjection(new PhysicalCustodyLease(
+                ReferenceContainerCustody.scopeId(container), container, ReferenceContainerCustody.PROVIDER_ID, 4L, 0L, 1L,
+                PhysicalCustodyLeaseStatus.PREPARING, null));
+        FrontierWorldState pending = state.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(preparing));
+        assertInstanceOf(CommandPlan.Rejected.class, FrontierWorldPhysicalObservationProcess.planFungibleLayout(pending, split));
+        assertThrows(IllegalArgumentException.class, () -> FrontierWorldPhysicalObservationProcess.reduceFungibleLayout(pending, owner, split));
+        state = state.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(preparing.confirmProjection(
+                ReferenceContainerCustody.scopeId(container), 4L, 0L, 1L, expected.fingerprint(), expected.provenance())));
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration = new FrontierEngineConfiguration<>(base.worldId(), state,
                 base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(),
                 List.of(), base.transactionCommitter(), base.stateValidator(), base.executionMetrics());
         var engine = FrontierEngines.create(configuration);
-        FungibleStackLayoutObserved split = observation(accountId, 4L, "minecraft:bread", 6, 4);
-
         assertInstanceOf(CommandResult.Accepted.class, engine.submit(command(engine, world, "split", split)));
         FrontierWorldState afterSplit = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         assertEquals(2, afterSplit.inventory().fungibleResources().bindings().size());

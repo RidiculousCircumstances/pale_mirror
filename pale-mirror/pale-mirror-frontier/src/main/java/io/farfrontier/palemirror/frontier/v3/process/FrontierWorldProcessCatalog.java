@@ -27,6 +27,7 @@ public final class FrontierWorldProcessCatalog {
     @FunctionalInterface
     private interface ScheduledPlanner {
         List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, boolean autonomousInterception);
+        default boolean held(FrontierWorldState state, ScheduledAction action) { return false; }
     }
 
     private static final Set<String> KERNEL = types(
@@ -39,9 +40,13 @@ public final class FrontierWorldProcessCatalog {
             "frontier.cargo_carrier_released");
     private static final Set<String> REPLICA_CUSTODY = types(
             "frontier.physical_replica_declared", "frontier.physical_replica_emitted", "frontier.physical_replica_observed", "frontier.physical_replica_conflict_observed", "frontier.reference_mutation_closed", "frontier.physical_custody_acquired",
+            "frontier.projection_custody_prepared", "frontier.projection_custody_confirmed",
+            "frontier.reference_projection_prepared",
+            "frontier.projection_conflict_observed",
             "frontier.physical_custody_checkpointed", "frontier.physical_custody_unresolved", "frontier.physical_custody_released",
             "frontier.fenced_recovery_prepared", "frontier.fenced_recovery_running", "frontier.fenced_recovery_observed", "frontier.fenced_recovery_confirmed",
-            "frontier.fenced_recovery_revoked_to_cold", "frontier.fenced_recovery_ambiguous", "frontier.fenced_recovery_abandoned");
+            "frontier.fenced_recovery_revoked_to_cold", "frontier.fenced_recovery_ambiguous", "frontier.fenced_recovery_abandoned",
+            "frontier.cargo_cleanup_saved");
     private static final Set<String> AMBIENT = types(
             "frontier.ambient_actor_died", "frontier.ambient_actor_observed", "frontier.ambient_lease_prepared",
             "frontier.ambient_lease_released", "frontier.ambient_lease_transition", "frontier.ambient_lease_restart_absence_observed");
@@ -130,7 +135,14 @@ public final class FrontierWorldProcessCatalog {
     private static final Map<String, ScheduledPlanner> SCHEDULED_PLANNERS = Map.ofEntries(
             Map.entry("frontier.hive.infection.task", (state, action, autonomous) -> HiveInfectionProcess.plan(state, action)),
             Map.entry("frontier.settlement.production.task.start", (state, action, autonomous) -> ProductionProcess.planStart(state, action)),
-            Map.entry("frontier.settlement.production.task.complete", (state, action, autonomous) -> ProductionProcess.planCompletion(state, action)),
+            Map.entry("frontier.settlement.production.task.complete", new ScheduledPlanner() {
+                @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, boolean autonomous) {
+                    return ProductionProcess.planCompletion(state, action);
+                }
+                @Override public boolean held(FrontierWorldState state, ScheduledAction action) {
+                    return ProductionProcess.completionHeld(state, action);
+                }
+            }),
             Map.entry("frontier.supply.task.start", (state, action, autonomous) -> SupplyOperationProcess.planStart(state, action)),
             Map.entry("frontier.supply.cargo.load", SupplyOperationProcess::planCargoLoad),
             Map.entry("frontier.operation.assembly", (state, action, autonomous) -> SupplyOperationProcess.planAssembly(state, action)),
@@ -154,7 +166,14 @@ public final class FrontierWorldProcessCatalog {
             Map.entry("frontier.resource_site.growth", (state, action, autonomous) -> ResourceSiteProcess.planGrowth(state, action)),
             Map.entry("frontier.resource_site.prepare", (state, action, autonomous) -> ResourceSiteProcess.planPreparation(state, action)),
             Map.entry("frontier.resource_site.harvest", (state, action, autonomous) -> ResourceSiteHarvestProcess.plan(state, action)),
-            Map.entry("frontier.resource_site.harvest.cold_progress", (state, action, autonomous) -> ResourceSiteHarvestProcess.planColdProgress(state, action)),
+            Map.entry("frontier.resource_site.harvest.cold_progress", new ScheduledPlanner() {
+                @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, boolean autonomous) {
+                    return ResourceSiteHarvestProcess.planColdProgress(state, action);
+                }
+                @Override public boolean held(FrontierWorldState state, ScheduledAction action) {
+                    return ResourceSiteHarvestProcess.coldProgressHeld(state, action);
+                }
+            }),
             Map.entry("frontier.objective.resource_harvest", (state, action, autonomous) -> StrategicObjectiveProcess.planResourceHarvestOpportunity(state, action)),
             Map.entry("frontier.structural_repair.scan", (state, action, autonomous) -> StructuralRepairProcess.plan(state, action)),
             Map.entry("frontier.route_construction.scan", (state, action, autonomous) -> RouteConstructionProcess.plan(state, action)),
@@ -250,6 +269,14 @@ public final class FrontierWorldProcessCatalog {
         return module(processId).reduce(state, event);
     }
 
+    /** Exact registered reducer owner supplies same-transaction schedule retirement. */
+    public static List<ScheduledAction> retiredSchedules(DeterministicProcessRegistry registry,
+            FrontierWorldState previous, FrontierWorldState next, FrontierEvent event,
+            java.util.function.Supplier<List<ScheduledAction>> pending) {
+        return module(registry.requireReducedEventOwner(event.payload().type()))
+                .retiredSchedules(previous, next, pending);
+    }
+
     /** Bootstrap is data-only; this catalog owns the finite initial process schedule. */
     public static List<ScheduledAction> initialSchedule(FrontierBootstrap bootstrap) {
         FrontierRuleset.Cadence cadence = bootstrap.ruleset().cadence();
@@ -288,6 +315,13 @@ public final class FrontierWorldProcessCatalog {
                 ? List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id())))
                 : planned;
         return registry.validateEmissions(processId, result);
+    }
+
+    public static boolean scheduledHeld(DeterministicProcessRegistry registry, FrontierWorldState state, ScheduledAction action) {
+        registry.requireScheduledOwner(action.kind());
+        ScheduledPlanner planner = SCHEDULED_PLANNERS.get(action.kind());
+        if (planner == null) throw new IllegalStateException("registered scheduled kind has no planner: " + action.kind());
+        return planner.held(state, action);
     }
 
     private static DeterministicProcessDescriptor descriptor(String id, Set<String> commands, Set<String> schedules,
@@ -408,7 +442,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.production_completed", "frontier.production_blocked", "frontier.settlement_infection_observed", "frontier.strategic_objective_selected",
                     "frontier.strategic_task_planned", "frontier.strategic_task_transition", "frontier.scene_lease_transition",
                     "frontier.production_work_scene_preparation_aborted", "frontier.production_work_scene_finalized");
-            case "replica-custody" -> REPLICA_CUSTODY;
+            case "replica-custody" -> union(REPLICA_CUSTODY, types("kernel.schedule_created"));
             case "ambient-actors" -> types(
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
                     "frontier.ambient_actor_died", "frontier.ambient_actor_observed", "frontier.ambient_lease_prepared", "frontier.ambient_lease_released",

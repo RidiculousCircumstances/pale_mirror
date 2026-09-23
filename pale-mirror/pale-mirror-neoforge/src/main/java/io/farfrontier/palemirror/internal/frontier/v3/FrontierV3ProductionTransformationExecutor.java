@@ -22,23 +22,32 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 
-import java.util.Comparator;
+import java.util.IdentityHashMap;
+import java.util.Map;
 import java.util.Optional;
 
 /** Durable loaded-chunk transformation of one owned wheat stack into its exact bread output. */
 final class FrontierV3ProductionTransformationExecutor {
+    private static final Map<FrontierV3ServerRuntime<?, ?>, FrontierV3FairTurn<PhysicalIntentId>> TURNS = new IdentityHashMap<>();
     private FrontierV3ProductionTransformationExecutor() { }
 
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         FrontierWorldState state = runtime.decodedState().orElse(null); if (state == null) return;
-        state.physicalIntents().values().stream().sorted(Comparator.comparing(PhysicalIntent::id))
+        var candidates = state.physicalIntents().values().stream()
                 .filter(intent -> intent.kind() == PhysicalIntentKind.PRODUCTION_TRANSFORMATION)
                 .filter(intent -> intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING
                         || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART)
-                .findFirst().ifPresent(intent -> execute(level, runtime, state, intent));
+                .toList();
+        TURNS.computeIfAbsent(runtime, ignored -> new FrontierV3FairTurn<>())
+                .next(candidates, PhysicalIntent::id).ifPresent(intent -> execute(level, runtime, state, intent));
     }
 
+    static void forget(FrontierV3ServerRuntime<?, ?> runtime) { TURNS.remove(runtime); }
+
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, PhysicalIntent intent) {
+        if (intent.roles().schema() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleSchema.PRODUCTION_RESOURCES) {
+            FrontierV3FungibleProductionEffect.execute(level, runtime, state, intent); return;
+        }
         ProductionTransformationStateSupport.Target target;
         try { target = ProductionTransformationStateSupport.target(state, intent); }
         catch (IllegalArgumentException conflict) { unknown(runtime, intent.id(), "canonical-precondition-conflict"); return; }
@@ -49,29 +58,47 @@ final class FrontierV3ProductionTransformationExecutor {
         ChestBlockEntity chest = FrontierV3CargoHandoffExecutor.activeChest(level,
                 new FrontierV3CargoHandoffExecutor.StoreTarget(position, target.slot().containerId()));
         if (chest == null) { unknown(runtime, intent.id(), "chest-conflict"); return; }
-        if (intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) { inspectRecovered(runtime, intent, target, chest); return; }
-        if (intent.status() == PhysicalIntentStatus.RUNNING) { inspectOrApply(runtime, intent, target, chest); return; }
-        if (!matchesInput(chest, target)) { unknown(runtime, intent.id(), "input-precondition-conflict"); return; }
-        if (!transition(runtime, intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty(), "running")) return;
-        if (!replace(chest, target)) { unknown(runtime, intent.id(), "physical-write-conflict"); return; }
-        confirm(runtime, intent, target, chest);
-    }
-
-    private static void inspectOrApply(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent,
-                                       ProductionTransformationStateSupport.Target target, ChestBlockEntity chest) {
-        if (matchesOutput(chest, target)) { confirm(runtime, intent, target, chest); return; }
-        if (matchesInput(chest, target) && replace(chest, target)) { confirm(runtime, intent, target, chest); return; }
-        unknown(runtime, intent.id(), "restart-postcondition-conflict");
+        executeEffect(intent.status(), new EffectTurn() {
+            @Override public boolean inputPresent() { return matchesInput(chest, target); }
+            @Override public boolean outputPresent() { return matchesOutput(chest, target); }
+            @Override public boolean begin() { return transition(runtime, intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty(), "running"); }
+            @Override public boolean replaceInput() { return replace(chest, target); }
+            @Override public void confirm() { FrontierV3ProductionTransformationExecutor.confirm(runtime, intent, target, chest); }
+            @Override public void unknown(String reason) { FrontierV3ProductionTransformationExecutor.unknown(runtime, intent.id(), reason); }
+        });
     }
 
     /**
-     * A restart-quarantined effect is evidence-only.  It may settle only when the exact planned
-     * output is already in its named slot; an unchanged input remains visible UNKNOWN rather
-     * than being silently replayed after the server boundary.
+     * The actual loaded-slot protocol, separated from Minecraft access, not a second executor.
+     * UNKNOWN may inspect an exact output but must never begin or repeat an ambiguous write.
      */
-    private static void inspectRecovered(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent,
-                                         ProductionTransformationStateSupport.Target target, ChestBlockEntity chest) {
-        if (matchesOutput(chest, target)) confirm(runtime, intent, target, chest);
+    static void executeEffect(PhysicalIntentStatus status, EffectTurn turn) {
+        switch (status) {
+            case UNKNOWN_AFTER_RESTART -> {
+                if (turn.outputPresent()) turn.confirm();
+            }
+            case RUNNING -> {
+                if (turn.outputPresent()) { turn.confirm(); return; }
+                if (turn.inputPresent() && turn.replaceInput()) { turn.confirm(); return; }
+                turn.unknown("restart-postcondition-conflict");
+            }
+            case PREPARED -> {
+                if (!turn.inputPresent()) { turn.unknown("input-precondition-conflict"); return; }
+                if (!turn.begin()) return;
+                if (!turn.replaceInput()) { turn.unknown("physical-write-conflict"); return; }
+                turn.confirm();
+            }
+            default -> throw new IllegalArgumentException("terminal transformation cannot own an execution turn: " + status);
+        }
+    }
+
+    interface EffectTurn {
+        boolean inputPresent();
+        boolean outputPresent();
+        boolean begin();
+        boolean replaceInput();
+        void confirm();
+        void unknown(String reason);
     }
 
     static boolean matchesInput(ChestBlockEntity chest, ProductionTransformationStateSupport.Target target) {
@@ -101,12 +128,17 @@ final class FrontierV3ProductionTransformationExecutor {
     private static void unknown(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntentId id, String phase) {
         transition(runtime, id, PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty(), phase);
     }
-    private static boolean transition(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntentId id, PhysicalIntentStatus status,
+    static boolean transition(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntentId id, PhysicalIntentStatus status,
                                       Optional<PhysicalEffectObservation> observation, String phase) {
         io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = runtime.canonicalState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         CommandId command = new CommandId("executor:production-transform-" + phase + "-" + id.value().replace(':', '-'));
+        PhysicalIntentTransition payload = new PhysicalIntentTransition(id, status, observation);
+        if (status == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) {
+            PhysicalIntent current = runtime.decodedState().orElseThrow().physicalIntents().get(id);
+            payload = payload.withRecoveryDiagnostic(io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentRecoveryDiagnosticProducer.PRODUCTION_WORK.stamp(current));
+        }
         CommandResult result = runtime.submit(new FrontierCommand(1, command, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
-                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(command), new PhysicalIntentTransition(id, status, observation)))
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(command), payload))
                 .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         if (result instanceof CommandResult.Accepted) return true;
         CommandResult.Rejected rejected = (CommandResult.Rejected) result;

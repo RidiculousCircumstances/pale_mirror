@@ -12,7 +12,6 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.phys.Vec3;
 
-import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -30,12 +29,13 @@ final class FrontierV3EngineeringWorkSceneExecutor {
     static boolean tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return false;
-        Optional<SceneLease> active = state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isEngineeringWorksite)
-                .filter(lease -> lease.status() != SceneLeaseStatus.CLOSED && lease.status() != SceneLeaseStatus.CONFLICT)
-                .sorted(Comparator.comparing(SceneLease::id)).findFirst();
-        if (active.isPresent()) { execute(level, runtime, state, active.orElseThrow()); return true; }
-        Optional<EngineeringWorkSceneCandidate> candidate = FrontierV3SceneDemand.firstDemandedCandidate(
-                level, FrontierEngineeringWorkSceneSupport.candidates(state), EngineeringWorkSceneCandidate::workCell);
+        return FrontierV3SceneTurnScheduler.run(runtime, state, io.farfrontier.palemirror.frontier.v3.model.SceneCauseKind.ENGINEERING_WORKSITE,
+                lease -> execute(level, runtime, state, lease), () -> admit(level, runtime, state));
+    }
+
+    private static boolean admit(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state) {
+        Optional<EngineeringWorkSceneCandidate> candidate = FrontierV3SceneDemand.nextDemandedCandidate(
+                level, runtime, io.farfrontier.palemirror.frontier.v3.model.SceneCauseKind.ENGINEERING_WORKSITE, FrontierEngineeringWorkSceneSupport.candidates(state), EngineeringWorkSceneCandidate::workCell, EngineeringWorkSceneCandidate::projectId);
         if (candidate.isEmpty()) return false;
         EngineeringWorkSceneCandidate work = candidate.orElseThrow();
         SceneLease lease = lease(runtime, work);
@@ -98,7 +98,7 @@ final class FrontierV3EngineeringWorkSceneExecutor {
             FrontierV3ControlledMobMotion.moveToward(level, mob, new Vec3(slot.x() + 0.5D, slot.y(), slot.z() + 0.5D));
             if (level.getGameTime() % 12L == 0L) mob.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
         }
-        FrontierV3SceneExecutor.rememberObserved(level, runtime, state, lease);
+
         if (state.physicalIntents().values().stream().anyMatch(intent -> (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_CONSTRUCTION
                 && intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ROUTE_CONSTRUCTION_PROJECT).equals(FrontierSceneBehaviors.engineeringWorksite(lease).projectId())
                 || intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.ROUTE_MAINTENANCE

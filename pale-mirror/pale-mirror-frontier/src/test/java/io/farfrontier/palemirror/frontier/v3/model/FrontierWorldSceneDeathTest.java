@@ -28,7 +28,7 @@ class FrontierWorldSceneDeathTest {
         FrontierEngine<FrontierWorldProjection> engine = FrontierEngines.create(
                 FrontierV3FixtureCatalog.routeSceneReturnConfiguration(world, 91L));
         FrontierWorldState initial = state(engine);
-        RouteOperation operation = initial.operations().get(new SubjectId("operation:supply-1-2"));
+        RouteOperation operation = FrontierDevelopmentScenarios.initialNorthwatchShipment(initial).orElseThrow();
         SceneLeaseId leaseId = new SceneLeaseId("lease:multiple-deaths");
         SceneLease lease = FrontierTestSceneLeases.exact(initial, leaseId, operation.id(), operation.cargoId(),
                 operation.currentPosition(), engine.checkpoint().instant(), engine.checkpoint().revision().value(),

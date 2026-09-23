@@ -364,6 +364,15 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         return new ExactInventory(containers, nextItems, nextCargo, playerItems, worldCarrierItems, conflicts, surfaces, economics, fungibleResources);
     }
 
+    /** Exact and fungible custody share one world-carrier ownership predicate. */
+    public boolean hasWorldCarrierCustody(UUID carrierId) {
+        Objects.requireNonNull(carrierId, "world carrier identity");
+        var exact = worldCarrierItems.get(carrierId);
+        return exact != null && !exact.isEmpty() || fungibleResources.accounts().values().stream()
+                .anyMatch(account -> account.custody().equals(new ResourceCustody.WorldCarrier(carrierId))
+                        && !account.lotQuantities().isEmpty());
+    }
+
     /** Delivers a COLD fungible cargo account into one existing or fresh owned container account. */
     public ExactInventory completeFungibleCargoHandoff(SubjectId cargoId, SubjectId targetContainerId) {
         CargoBatch batch = cargo.get(Objects.requireNonNull(cargoId, "fungible cargo id")); ContainerRecord target = containers.get(targetContainerId);

@@ -19,7 +19,7 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
         return List.of(new FunctionalPhysicalIntentLifecycleCapability(
                 PhysicalIntentLifecycleDeclaration.physical(PhysicalIntentLifecycleOwner.PRODUCTION_WORK,
                         Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.PRODUCTION_TRANSFORMATION),
-                        Set.of(PhysicalIntentRoleSchema.PRODUCTION)),
+                        Set.of(PhysicalIntentRoleSchema.PRODUCTION, PhysicalIntentRoleSchema.PRODUCTION_RESOURCES)),
                 (state, command, prepared) -> FrontierWorldCommandPlanner.rejected("physical executor cannot prepare production work"),
                 (state, command, intent, transition) -> {
                     ProductionJob job = state.productionJobs().get(intent.causeSubjectId());
@@ -66,6 +66,10 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
                             || !commitment.value().equals(job.consumedItemId())) {
                         throw new IllegalArgumentException("production retirement account does not retain its exact declared relations, worker and input commitment");
                     }
+                    if (job.inputHold() instanceof ProductionInputHold.FungibleBound) {
+                        FungibleProductionStateSupport.verifyRetirement(before, after, job, transition.status());
+                        return;
+                    }
                     if (after != before && transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED
                             && (after.productionJobs().containsKey(job.id()) || after.inventory().items().containsKey(job.consumedItemId())
                             || !after.inventory().items().containsKey(job.outputItemId()))) {
@@ -98,8 +102,7 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
         ProductionJob job = before.productionJobs().get(intent.causeSubjectId());
         if (job == null) throw new IllegalArgumentException("production retirement account has no exact job");
         FrontierDomainRelationships.SubjectEndpoint owner = new FrontierDomainRelationships.SubjectEndpoint(FrontierDomainRelationships.EntityKind.PRODUCTION_JOB, job.id());
-        FrontierDomainRelationships.EntityKind resourceKind = job.inputHold() instanceof ProductionInputHold.FungibleCold
-                ? FrontierDomainRelationships.EntityKind.RESOURCE_LOT : FrontierDomainRelationships.EntityKind.EXACT_ITEM;
+        FrontierDomainRelationships.EntityKind resourceKind = job.inputHold().resourceEntityKind();
         java.util.List<FrontierDomainRelationships.Edge> relations = java.util.List.of(
                 FrontierDomainRelationships.declaredEdge(FrontierDomainRelationships.Kind.JOB_WORKER, owner, owner,
                         new FrontierDomainRelationships.SubjectEndpoint(FrontierDomainRelationships.EntityKind.RESIDENT, job.workerId()), FrontierDomainRelationships.Lifecycle.ACTIVE, job.id().value()),
@@ -122,6 +125,12 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
         }
         return PhysicalIntentTransitionStorage.reduce(state, intent, transition,
                 (currentState, current, evidence, intents) -> {
+                    if (current.roles().schema() == PhysicalIntentRoleSchema.PRODUCTION_RESOURCES) {
+                        if (!(evidence instanceof FungibleProductionObservation production)) {
+                            throw new IllegalArgumentException("resource production requires its nominal lot receipt");
+                        }
+                        return FungibleProductionStateSupport.complete(currentState, current, production, intents);
+                    }
                     if (!(evidence instanceof ProductionTransformationObservation production)) {
                         throw new IllegalArgumentException("production transformation requires exact physical receipt");
                     }
@@ -140,7 +149,7 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
                     FrontierSceneBehaviors.productionWork(handoff.lease())), handoff))); }
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
-        if (command.payload() instanceof ProductionWorkProgressed progressed) return planHotProgress(state, progressed);
+        if (command.payload() instanceof ProductionWorkProgressed progressed) return planHotProgress(state, command, progressed);
         if (command.payload() instanceof ProductionWorkTraversalAdvanced advanced) return planHotTraversal(state, advanced);
         if (command.payload() instanceof ProductionWorkTraversalBlocked blocked) return planHotTraversalBlocked(state, command, blocked);
         return FrontierWorldCommandPlanner.rejected("economy process does not admit command: " + command.payload().type());
@@ -174,11 +183,21 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
         };
     }
 
-    private static CommandPlan planHotProgress(FrontierWorldState state, ProductionWorkProgressed progressed) {
+    private static CommandPlan planHotProgress(FrontierWorldState state, FrontierCommand command, ProductionWorkProgressed progressed) {
         try {
             ProductionJob job = FrontierProductionWorkSceneSupport.require(state, new ProductionWorkSceneCause(progressed.jobId()));
             if (!hot(state, job.id())) return FrontierWorldCommandPlanner.rejected("production work progress requires its HOT scene");
             ProductionProcess.reduceWorkProgressed(state, job.settlementId(), progressed);
+            if (job.workProgress().stage() == ProductionWorkProgress.Stage.INPUT_READY
+                    || job.workProgress().stage() == ProductionWorkProgress.Stage.PROCESSING) {
+                var binding = command.scheduleBinding().orElseThrow(() -> new IllegalArgumentException("production labor requires its retained schedule")).action();
+                if (!binding.equals(ProductionProcess.complete(job, binding.dueAt().ticks())))
+                    throw new IllegalArgumentException("production labor has a foreign schedule");
+                long nextDue = job.workProgress().nextWorkDue(binding.dueAt().ticks(), command.submittedAt().ticks());
+                var replacement = ProductionProcess.complete(job, nextDue);
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(job.settlementId(), progressed),
+                        new ProposedEvent(job.id(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled(binding.id(), replacement))));
+            }
             return new CommandPlan.Accepted(java.util.List.of(new ProposedEvent(job.settlementId(), progressed)));
         } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
     }

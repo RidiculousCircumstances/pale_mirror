@@ -27,7 +27,7 @@ public record TerminalProductionReceipt(SubjectId jobId, SubjectId workerId,
     }
     public static TerminalProductionReceipt of(ProductionJob job) {
         Objects.requireNonNull(job, "completed production job");
-        ResourceRepresentation representation = job.inputHold() instanceof ProductionInputHold.FungibleCold ? ResourceRepresentation.RESOURCE_LOT : ResourceRepresentation.EXACT_ITEM;
+        ResourceRepresentation representation = job.inputHold().resourceRepresentation();
         return new TerminalProductionReceipt(job.id(), job.workerId(), job.consumedItemId(), job.outputItemId(), representation, representation, job.outputItemKind(), job.outputCount(),
                 job.workTraversal().id(), job.workTraversal().revision(), job.traversalCursor(), job.workTraversal().linearCorridorSurfaces().get(job.traversalCursor()).standingBody());
     }

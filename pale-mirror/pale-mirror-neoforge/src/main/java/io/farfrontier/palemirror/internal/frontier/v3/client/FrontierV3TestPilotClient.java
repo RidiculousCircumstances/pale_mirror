@@ -488,7 +488,7 @@ public final class FrontierV3TestPilotClient {
         visit(minecraft, target, action.get("dimension").getAsString(), action.get("settleMs").getAsLong(), 120_000L, "visit", action);
     }
     private static void visitOperation(Minecraft minecraft, JsonObject action) {
-        BlockPos anchor = operationAnchor(minecraft, action, "travelCurrent"); if (anchor == null) return;
+        BlockPos anchor = operationAnchor(minecraft, action, FrontierV3PilotSemanticAnchors.visitAnchor(action)); if (anchor == null) return;
         JsonObject offset = action.getAsJsonObject("offset");
         visit(minecraft, FrontierV3PilotVisitTarget.fromClientFeet(anchor.offset(offset.get("x").getAsInt(), offset.get("y").getAsInt(), offset.get("z").getAsInt())),
                 action.get("dimension").getAsString(), action.get("settleMs").getAsLong(), action.get("timeoutMs").getAsLong(), "visit_operation", action);
@@ -678,6 +678,7 @@ public final class FrontierV3TestPilotClient {
         String expectedName = action.has("nameContains") ? action.get("nameContains").getAsString() : null;
         double maximum = action.has("maxDistance") ? action.get("maxDistance").getAsDouble() : 8.0D;
         int maximumAttempts = action.get("maxAttacks").getAsInt();
+        boolean requireRemoval = action.has("requireRemoval") && action.get("requireRemoval").getAsBoolean();
         Entity target;
         if (attackedEntityRuntimeId < 0) {
             target = minecraft.level.getEntitiesOfClass(Entity.class, minecraft.player.getBoundingBox().inflate(maximum), entity ->
@@ -692,7 +693,7 @@ public final class FrontierV3TestPilotClient {
             // A normal death packet reaches the client before Minecraft necessarily removes
             // the corpse entity from its local index.  The pilot must treat that ordinary
             // dead body as completion, otherwise a test can spin forever waiting for removal.
-            if (target == null || target.isRemoved() || target instanceof LivingEntity living && !living.isAlive()) {
+            if (target == null || target.isRemoved() || !requireRemoval && target instanceof LivingEntity living && !living.isAlive()) {
                 // A dead or removed target is the terminal physical result of this bounded
                 // interaction.  Do not make completion depend on walking back to a corpse:
                 // its local presentation/removal timing is not part of the domain contract.
@@ -702,6 +703,11 @@ public final class FrontierV3TestPilotClient {
                     || expectedName != null && (target.getCustomName() == null || !target.getCustomName().getString().contains(expectedName))) {
                 throw new IllegalStateException("selected ordinary entity changed its permitted type/name");
             }
+        }
+        if (requireRemoval && entityAttackAttempts >= maximumAttempts) {
+            minecraft.options.keyUp.setDown(false);
+            timeout(minecraft, action, "attack budget exhausted; selected entity has not been removed");
+            return;
         }
         lastAttackedEntityPosition = target.position();
         double distanceSquared = target.distanceToSqr(minecraft.player);
@@ -721,7 +727,7 @@ public final class FrontierV3TestPilotClient {
             entityAttackAttempts++;
             lastEntityAttackTick = tick;
         }
-        if (entityAttackAttempts >= maximumAttempts) {
+        if (!requireRemoval && entityAttackAttempts >= maximumAttempts) {
             advance("attack_nearest_entity");
             return;
         }

@@ -9,7 +9,6 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.phys.Vec3;
 
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -26,12 +25,13 @@ final class FrontierV3SettlementServiceWorkSceneExecutor {
 
     static boolean tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         FrontierWorldState state = runtime.decodedState().orElse(null); if (state == null) return false;
-        Optional<SceneLease> active = state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isServiceWork)
-                .filter(lease -> lease.status() != SceneLeaseStatus.CLOSED && lease.status() != SceneLeaseStatus.CONFLICT)
-                .min(Comparator.comparing(SceneLease::id));
-        if (active.isPresent()) { execute(level, runtime, state, active.orElseThrow()); return true; }
-        Optional<FrontierSettlementServiceWorkSceneSupport.Candidate> candidate = FrontierV3SceneDemand.firstDemandedCandidate(
-                level, FrontierSettlementServiceWorkSceneSupport.candidates(state), FrontierSettlementServiceWorkSceneSupport.Candidate::handoffPosition);
+        return FrontierV3SceneTurnScheduler.run(runtime, state, io.farfrontier.palemirror.frontier.v3.model.SceneCauseKind.SERVICE_WORK,
+                lease -> execute(level, runtime, state, lease), () -> admit(level, runtime, state));
+    }
+
+    private static boolean admit(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state) {
+        Optional<FrontierSettlementServiceWorkSceneSupport.Candidate> candidate = FrontierV3SceneDemand.nextDemandedCandidate(
+                level, runtime, io.farfrontier.palemirror.frontier.v3.model.SceneCauseKind.SERVICE_WORK, FrontierSettlementServiceWorkSceneSupport.candidates(state), FrontierSettlementServiceWorkSceneSupport.Candidate::handoffPosition, FrontierSettlementServiceWorkSceneSupport.Candidate::workId);
         if (candidate.isEmpty()) return false;
         FrontierSettlementServiceWorkSceneSupport.Candidate work = candidate.orElseThrow(); SceneLease lease = lease(runtime, work);
         if (FrontierSceneAdmission.available(state, Set.of(work.workerId()))) prepare(level, runtime, lease); else handoff(level, runtime, state, lease);
@@ -69,7 +69,7 @@ final class FrontierV3SettlementServiceWorkSceneExecutor {
         FrontierV3SceneExecutor.BodyMaterialization result = FrontierV3ActorCarrierFactory.materializeSceneBodies(FrontierV3ActorCarrierComposition.InventoryEntry.SETTLEMENT_SERVICE, level, state, lease);
         if (result == FrontierV3SceneExecutor.BodyMaterialization.CONFLICT) { conflict(level, runtime, lease, "prepared-body-conflict"); return; }
         if (result != FrontierV3SceneExecutor.BodyMaterialization.COMPLETE) return;
-        FrontierV3SceneExecutor.rememberObserved(level, runtime, state, lease);
+
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "settlement_service_work_hot", lease,
                 submit(runtime, "settlement-service-work-hot", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT)));
     }

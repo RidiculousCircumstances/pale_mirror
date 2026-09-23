@@ -11,12 +11,26 @@ import java.util.Objects;
  * effect ledger: it only fences which physical projection may speak for an already-owned asset.
  */
 public record FencedRecoveryState(Map<SubjectId, FencedRecoveryBinding> current,
-                                  Map<SubjectId, FencedRecoveryTombstone> tombstones) {
+                                  Map<SubjectId, FencedRecoveryTombstone> tombstones,
+                                  CargoProjectionRetirements cargoRetirements) {
     public static final int MAX_BINDINGS = 4_096;
 
     public FencedRecoveryState {
+        Objects.requireNonNull(cargoRetirements, "pending cargo retirements");
         current = Map.copyOf(Objects.requireNonNull(current, "current recovery bindings"));
         tombstones = Map.copyOf(Objects.requireNonNull(tombstones, "recovery tombstones"));
+        long liveCargo = current.values().stream().filter(binding -> binding.asset() == FencedRecoveryAsset.CARGO).count();
+        if (liveCargo + cargoRetirements.pending().size() > CargoProjectionRetirements.MAX_PENDING) {
+            throw new IllegalArgumentException("live cargo lacks reserved cleanup capacity");
+        }
+        for (var pending : cargoRetirements.pending().values()) {
+            var live = current.get(pending.authorization().bindingId());
+            if (live != null && (live.asset() != FencedRecoveryAsset.CARGO
+                    || live.ownerId().equals(pending.authorization().ownerId())
+                    || live.authorityEpoch() <= pending.authorization().retiredEpoch())) {
+                throw new IllegalArgumentException("live cargo overlaps a pending retired projection");
+            }
+        }
         if (current.size() + tombstones.size() > MAX_BINDINGS) throw new IllegalArgumentException("recovery retention limit exceeded");
         for (Map.Entry<SubjectId, FencedRecoveryBinding> entry : current.entrySet()) {
             if (!entry.getKey().equals(entry.getValue().bindingId())) throw new IllegalArgumentException("recovery binding key is not exact");
@@ -33,19 +47,50 @@ public record FencedRecoveryState(Map<SubjectId, FencedRecoveryBinding> current,
 
     public static FencedRecoveryState empty() { return new FencedRecoveryState(Map.of(), Map.of()); }
 
+    public FencedRecoveryState(Map<SubjectId, FencedRecoveryBinding> current,
+                               Map<SubjectId, FencedRecoveryTombstone> tombstones) {
+        this(current, tombstones, CargoProjectionRetirements.empty());
+    }
+
+    /** Only the exact terminal owner can introduce a still-unacknowledged cleanup. */
+    public FencedRecoveryState retainCargoRetirement(CargoProjectionRetirement obligation) {
+        Objects.requireNonNull(obligation, "cargo retirement obligation");
+        if (!obligation.authorization().equals(tombstones.get(obligation.authorization().bindingId()))) {
+            throw new IllegalArgumentException("cargo retirement lacks current terminal authorization");
+        }
+        return new FencedRecoveryState(current, tombstones, cargoRetirements.retain(obligation));
+    }
+
+    /** Live cargo authority reserves space for its eventual cleanup before materialization. */
+    public boolean canAdmitCargoProjection() {
+        int liveCargo = (int) current.values().stream().filter(binding -> binding.asset() == FencedRecoveryAsset.CARGO).count();
+        return cargoRetirements.canAdmit(liveCargo);
+    }
+
+    public FencedRecoveryState acknowledgeCargoCleanupSaved(CargoProjectionRetirement expected) {
+        return new FencedRecoveryState(current, tombstones, cargoRetirements.acknowledgeSaved(expected));
+    }
+
     /** Monotonic allocator for an exact binding identity; callers never infer an epoch from a scene revision. */
     public long nextEpoch(SubjectId bindingId) {
         Objects.requireNonNull(bindingId, "recovery binding id");
         FencedRecoveryBinding live = current.get(bindingId);
         FencedRecoveryTombstone retired = tombstones.get(bindingId);
         long prior = Math.max(live == null ? 0L : live.authorityEpoch(), retired == null ? 0L : retired.retiredEpoch());
+        for (var pending : cargoRetirements.pending().values()) {
+            if (pending.authorization().bindingId().equals(bindingId)) prior = Math.max(prior, pending.authorization().retiredEpoch());
+        }
         if (prior == Long.MAX_VALUE) throw new IllegalArgumentException("recovery authority epoch is exhausted");
         return prior + 1L;
     }
 
     public FencedRecoveryState prepare(FencedRecoveryBinding binding) {
         Objects.requireNonNull(binding, "recovery binding"); binding.require(FencedRecoveryPhase.PREPARED);
+        if (binding.asset() == FencedRecoveryAsset.CARGO && !canAdmitCargoProjection()) {
+            throw new IllegalArgumentException("cargo projection admission waits for pending cleanup capacity");
+        }
         if (current.containsKey(binding.bindingId())) throw new IllegalArgumentException("recovery binding is already current");
+        if (binding.authorityEpoch() < nextEpoch(binding.bindingId())) throw new IllegalArgumentException("recovery binding reuses retained authority epoch");
         FencedRecoveryTombstone prior = tombstones.get(binding.bindingId());
         if (prior != null && (prior.asset() != binding.asset() || binding.authorityEpoch() <= prior.retiredEpoch())) {
             throw new IllegalArgumentException("recovery binding reuses a stale authority epoch or owner");
@@ -56,7 +101,7 @@ public record FencedRecoveryState(Map<SubjectId, FencedRecoveryBinding> current,
         // authority transition. A successor for the same identity itself fences all old epochs.
         FencedRecoveryState retained = compactForNewBinding(binding.bindingId());
         Map<SubjectId, FencedRecoveryBinding> next = new LinkedHashMap<>(retained.current); next.put(binding.bindingId(), binding);
-        return new FencedRecoveryState(next, retained.tombstones);
+        return new FencedRecoveryState(next, retained.tombstones, retained.cargoRetirements);
     }
 
     /**
@@ -89,6 +134,13 @@ public record FencedRecoveryState(Map<SubjectId, FencedRecoveryBinding> current,
     public FencedRecoveryState confirm(SubjectId bindingId, long epoch) {
         FencedRecoveryBinding binding = requireCurrent(bindingId, epoch).confirmed();
         return retire(binding, FencedRecoveryDisposition.REJECT_STALE, "confirmed");
+    }
+    /** Exact observed death is terminal even if work was unstarted or recovery ambiguous. */
+    FencedRecoveryState retireObservedBodyDeath(SubjectId bindingId, long epoch, SubjectId owner, long revision) {
+        FencedRecoveryBinding binding = requireCurrent(bindingId, epoch);
+        if (binding.asset() != FencedRecoveryAsset.BODY || !binding.ownerId().equals(owner)
+                || binding.ownerRevision() != revision) throw new IllegalArgumentException("death lacks exact body recovery authority");
+        return retire(binding, FencedRecoveryDisposition.REJECT_STALE, "observed-body-death");
     }
     /**
      * Retires an unstarted effect because its exact canonical successor now owns the result.
@@ -148,7 +200,7 @@ public record FencedRecoveryState(Map<SubjectId, FencedRecoveryBinding> current,
             if (current.containsKey(id)) throw new IllegalArgumentException("cannot compact a current recovery authority");
             next.remove(id);
         }
-        return new FencedRecoveryState(current, next);
+        return new FencedRecoveryState(current, next, cargoRetirements);
     }
 
     /** Deterministic bounded retention policy; unknown late projections still reject by default. */
@@ -158,7 +210,7 @@ public record FencedRecoveryState(Map<SubjectId, FencedRecoveryBinding> current,
                 .orElseGet(() -> tombstones.containsKey(incomingId) ? incomingId : null);
         if (retired == null) throw new IllegalArgumentException("recovery current-authority limit exceeded");
         Map<SubjectId, FencedRecoveryTombstone> next = new LinkedHashMap<>(tombstones); next.remove(retired);
-        return new FencedRecoveryState(current, next);
+        return new FencedRecoveryState(current, next, cargoRetirements);
     }
 
     private FencedRecoveryBinding requireCurrent(SubjectId bindingId, long epoch) {
@@ -168,13 +220,13 @@ public record FencedRecoveryState(Map<SubjectId, FencedRecoveryBinding> current,
     }
     private FencedRecoveryState replace(FencedRecoveryBinding binding) {
         Map<SubjectId, FencedRecoveryBinding> next = new LinkedHashMap<>(current); next.put(binding.bindingId(), binding);
-        return new FencedRecoveryState(next, tombstones);
+        return new FencedRecoveryState(next, tombstones, cargoRetirements);
     }
     private FencedRecoveryState retire(FencedRecoveryBinding binding, FencedRecoveryDisposition disposition, String reason) {
         Map<SubjectId, FencedRecoveryBinding> nextCurrent = new LinkedHashMap<>(current); nextCurrent.remove(binding.bindingId());
         Map<SubjectId, FencedRecoveryTombstone> nextTombstones = new LinkedHashMap<>(tombstones);
         nextTombstones.put(binding.bindingId(), new FencedRecoveryTombstone(binding.bindingId(), binding.asset(), binding.ownerId(),
                 binding.ownerRevision(), binding.authorityEpoch(), disposition, reason));
-        return new FencedRecoveryState(nextCurrent, nextTombstones);
+        return new FencedRecoveryState(nextCurrent, nextTombstones, cargoRetirements);
     }
 }

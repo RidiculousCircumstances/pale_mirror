@@ -32,7 +32,11 @@ class PhysicalReplicaCustodyPayloadCodecTest {
                 "sha256:a", "owned:genesis", 10L), ReplicaCustodyDiagnosticProducer.conflict(OBJECT, 10L, 2L, "sha256:foreign", "foreign:player"),
                 new CustodyAcquired(lease), new CustodyCheckpointed(SCOPE, 1L, 10L, 2L),
                 ReplicaCustodyDiagnosticProducer.unresolved(SCOPE, 1L, 10L, 2L, PhysicalCustodyUnresolvedReason.RESTART_AMBIGUITY),
-                new CustodyReleased(SCOPE, 1L, 10L, 2L));
+                new CustodyReleased(SCOPE, 1L, 10L, 2L),
+                new ProjectionCustodyPrepared(new PhysicalCustodyLease(SCOPE, OBJECT, PROVIDER, 1L, 10L, 1L,
+                        PhysicalCustodyLeaseStatus.PREPARING, null)),
+                new ProjectionCustodyConfirmed(SCOPE, 1L, 10L, 1L, "sha256:a", "owned:genesis"),
+                ReplicaCustodyDiagnosticProducer.projectionConflict(SCOPE, 1L, 10L, 1L, "sha256:changed", "foreign:player"));
         var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
         for (FrontierPayload payload : payloads) {
             byte[] encoded = codecs.encode(payload);

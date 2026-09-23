@@ -74,4 +74,17 @@ public record PhysicalReplicaRecord(SubjectId objectId, String semanticKind, lon
         return new PhysicalReplicaRecord(objectId, semanticKind, emittedCanonicalRevision, observedCanonicalRevision, replicaRevision + 1,
                 fingerprint, provenance, PhysicalReplicaState.CONFLICT, Optional.of(actualFingerprint), Optional.of(actualProvenance), Optional.of(reason));
     }
+
+    /** Exact later observation resolves a pending-write mismatch; this performs no repair. */
+    PhysicalReplicaRecord confirmProjectionRecovery(long expectedCanonicalRevision, long expectedReplicaRevision,
+                                                     String actualFingerprint, String actualProvenance) {
+        if (state != PhysicalReplicaState.CONFLICT || emittedCanonicalRevision != expectedCanonicalRevision
+                || replicaRevision != expectedReplicaRevision || !fingerprint.equals(actualFingerprint)
+                || !provenance.equals(actualProvenance)) {
+            throw new IllegalArgumentException("projection recovery requires the exact expected result and current conflict revision");
+        }
+        return new PhysicalReplicaRecord(objectId, semanticKind, emittedCanonicalRevision, observedCanonicalRevision,
+                Math.addExact(replicaRevision, 1L), fingerprint, provenance, PhysicalReplicaState.OBSERVED_CURRENT,
+                Optional.empty(), Optional.empty(), Optional.empty());
+    }
 }

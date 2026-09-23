@@ -19,7 +19,7 @@ final class FencedRecoveryPayloadCodecs {
                 new FenceCodec("frontier.fenced_recovery_observed", Observed.class),
                 new FenceCodec("frontier.fenced_recovery_confirmed", Confirmed.class),
                 new FenceCodec("frontier.fenced_recovery_revoked_to_cold", RevokedToCold.class),
-                new AmbiguousCodec(), new FenceCodec("frontier.fenced_recovery_abandoned", Abandoned.class));
+                new AmbiguousCodec(), new FenceCodec("frontier.fenced_recovery_abandoned", Abandoned.class), new CargoCleanupSavedCodec());
     }
     private abstract static class Base implements PayloadCodec {
         final byte[] bytes(Writer writer) { return FrontierWorldPayloadCodecs.encodeProduction(writer::write); }
@@ -33,6 +33,15 @@ final class FencedRecoveryPayloadCodecs {
         @Override public String type() { return "frontier.fenced_recovery_prepared"; }
         @Override public byte[] encode(FrontierPayload payload) { return bytes(output -> writeBinding(output, ((Prepared) payload).binding())); }
         @Override public FrontierPayload decode(byte[] bytes) { return payload(bytes, input -> new Prepared(readBinding(input))); }
+    }
+    private static final class CargoCleanupSavedCodec extends Base {
+        @Override public String type() { return "frontier.cargo_cleanup_saved"; }
+        @Override public byte[] encode(FrontierPayload payload) {
+            return bytes(output -> FencedRecoveryStateCodec.writeRetirement(output, ((CargoCleanupSaved) payload).retirement()));
+        }
+        @Override public FrontierPayload decode(byte[] bytes) {
+            return payload(bytes, input -> new CargoCleanupSaved(FencedRecoveryStateCodec.readRetirement(input)));
+        }
     }
     private static final class FenceCodec extends Base {
         private final String type; private final Class<?> kind;

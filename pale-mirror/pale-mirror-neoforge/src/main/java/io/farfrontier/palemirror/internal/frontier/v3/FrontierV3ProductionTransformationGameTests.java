@@ -24,7 +24,7 @@ public final class FrontierV3ProductionTransformationGameTests {
 
     @GameTest(batch = "pm-frontier-v3-production", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void replacesOnlyOneExactOwnedInputAndLeavesAnInspectableOutput(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel(); BlockPos chestPosition = helper.absolutePos(new BlockPos(30, 8, 0));
+        ServerLevel level = helper.getLevel(); BlockPos chestPosition = helper.absolutePos(new BlockPos(2, 2, 2));
         level.setBlock(chestPosition.below(), Blocks.STONE.defaultBlockState(), 3); level.setBlock(chestPosition, Blocks.CHEST.defaultBlockState(), 3);
         ChestBlockEntity chest = (ChestBlockEntity) level.getBlockEntity(chestPosition);
         SubjectId settlement = new SubjectId("settlement:1"), container = new SubjectId("container:1-depot");

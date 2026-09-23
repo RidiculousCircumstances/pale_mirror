@@ -25,9 +25,7 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
                 Set.of(PhysicalIntentRoleSchema.MEDICAL_TREATMENT_CONSUMPTION)),
                 (state, command, prepared) -> FrontierWorldCommandPlanner.rejected("physical executor cannot prepare medical consumption"),
                 (state, command, intent, transition) -> {
-                    if ((transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING
-                            || transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED)
-                            && !FrontierMedicalTreatmentSceneSupport.permitsCurrentConsumptionIntent(state, intent)) {
+                    if (!medicalConsumptionPermitted(state, intent, transition)) {
                         return FrontierWorldCommandPlanner.rejected("medical treatment consumption requires its current HOT infirmary scene");
                     }
                     return new CommandPlan.Accepted(MedicalTreatmentProcess.planTransition(state, intent, transition, command.submittedAt().ticks()));
@@ -46,11 +44,11 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
                         throw new IllegalArgumentException("medical treatment consumption transition lacks settlement ownership");
                     }
                     MedicalTreatmentProcess.operationForIntent(state, intent);
+                    requireMedicalConsumptionPermission(state, intent, transition);
                     return reducePopulationConsumption(state, intent, transition);
                 }, PhysicalIntentLifecycleRetirementPolicy.of(
                         (state, command, intent, transition) -> {
-                            if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED
-                                    && !FrontierMedicalTreatmentSceneSupport.permitsCurrentConsumptionIntent(state, intent)) {
+                            if (!medicalConsumptionPermitted(state, intent, transition)) {
                                 return FrontierWorldCommandPlanner.rejected("medical treatment consumption requires its current HOT infirmary scene");
                             }
                             return new CommandPlan.Accepted(MedicalTreatmentProcess.planTransition(state, intent, transition, command.submittedAt().ticks()));
@@ -61,9 +59,28 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
                                 throw new IllegalArgumentException("medical treatment consumption retirement lacks settlement ownership");
                             }
                             MedicalTreatmentProcess.operationForIntent(state, intent);
+                            requireMedicalConsumptionPermission(state, intent, transition);
                             return reducePopulationConsumption(state, intent, transition);
                         }), intent -> FencedRecoveryAsset.EFFECT,
                 retirementAccount(PhysicalIntentLifecycleOwner.MEDICAL_TREATMENT), PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery(), PhysicalIntentRecoveryDiagnosticProducer.MEDICAL_TREATMENT);
+    }
+
+    private static boolean medicalConsumptionPermitted(FrontierWorldState state,
+                                                       io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                       PhysicalIntentTransition transition) {
+        return switch (transition.status()) {
+            case RUNNING -> FrontierMedicalTreatmentSceneSupport.permitsCurrentConsumptionIntent(state, intent);
+            case CONFIRMED -> FrontierMedicalTreatmentSceneSupport.permitsConsumptionReceipt(state, intent);
+            default -> true;
+        };
+    }
+
+    private static void requireMedicalConsumptionPermission(FrontierWorldState state,
+                                                            io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
+                                                            PhysicalIntentTransition transition) {
+        if (!medicalConsumptionPermitted(state, intent, transition)) {
+            throw new IllegalArgumentException("medical treatment consumption requires its current HOT infirmary scene");
+        }
     }
 
     private static PhysicalIntentLifecycleCapability provisionConsumptionCapability() {

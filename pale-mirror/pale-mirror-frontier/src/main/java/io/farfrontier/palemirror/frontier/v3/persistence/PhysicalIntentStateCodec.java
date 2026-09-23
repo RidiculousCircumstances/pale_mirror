@@ -42,6 +42,7 @@ final class PhysicalIntentStateCodec {
             for (var entry : intent.roles().namedRoles().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey(java.util.Comparator.comparingInt(PhysicalIntentSubjectRole::wireTag))).toList()) {
                 output.writeByte(entry.getKey().wireTag()); FrontierWorldStateCodec.writeString(output, entry.getValue().value());
             }
+            PhysicalSceneBindingCodec.write(output, intent.roles());
             output.writeLong(intent.origin().x().raw()); output.writeLong(intent.origin().y().raw()); output.writeLong(intent.origin().z().raw());
             output.writeByte(intent.radiusBlocks()); output.writeByte(intent.postcondition().wireTag()); output.writeBoolean(intent.postconditionObservationId().isPresent());
             if (intent.postconditionObservationId().isPresent()) FrontierWorldStateCodec.writeString(output, intent.postconditionObservationId().orElseThrow().value());
@@ -64,6 +65,7 @@ final class PhysicalIntentStateCodec {
                 PhysicalIntentSubjectRole role = PhysicalIntentSubjectRole.fromWire(input.readUnsignedByte());
                 if (roles.put(role, new SubjectId(FrontierWorldStateCodec.readString(input))) != null) throw new IllegalArgumentException("duplicate physical intent role tag");
             }
+            var scene = PhysicalSceneBindingCodec.read(input, schema);
             FixedPosition origin = new FixedPosition(new FixedScalar(input.readLong()), new FixedScalar(input.readLong()), new FixedScalar(input.readLong()));
             int radius = input.readUnsignedByte(); int postcondition = input.readUnsignedByte(); boolean observed = input.readBoolean();
             Optional<PhysicalObservationId> observation = observed ? Optional.of(new PhysicalObservationId(FrontierWorldStateCodec.readString(input))) : Optional.empty();
@@ -73,7 +75,7 @@ final class PhysicalIntentStateCodec {
             PhysicalIntentLifecycleOwner lifecycleOwner = PhysicalIntentLifecycleOwner.fromWire(input.readUnsignedByte(), FrontierWorldStateCodec.readString(input));
             Optional<DiagnosticTuple> diagnostic = input.readBoolean() ? Optional.of(readDiagnostic(input)) : Optional.empty();
             PhysicalIntent intent = new PhysicalIntent(id, FrontierWireTags.require(PhysicalIntentKind.class, kind), FrontierWireTags.require(PhysicalIntentStatus.class, status), cause,
-                    PhysicalIntentRoleBinding.decode(schema, roles), origin, radius, FrontierWireTags.require(PhysicalPostcondition.class, postcondition), observation, target, semanticTarget, lifecycleOwner, diagnostic);
+                    PhysicalIntentRoleBinding.decode(schema, roles, scene), origin, radius, FrontierWireTags.require(PhysicalPostcondition.class, postcondition), observation, target, semanticTarget, lifecycleOwner, diagnostic);
             if (kind >= PhysicalIntentKind.values().length || status >= PhysicalIntentStatus.values().length || postcondition >= PhysicalPostcondition.values().length || intents.put(id, intent) != null) {
                 throw new IllegalArgumentException("invalid or duplicate physical intent");
             }

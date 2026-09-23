@@ -17,6 +17,10 @@ final class FrontierReplicaCustodyProcessModule implements FrontierWorldProcessM
     @Override public CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
         try {
             return switch (command.payload()) {
+                case CargoCleanupSaved saved -> {
+                    state.fencedRecovery().acknowledgeCargoCleanupSaved(saved.retirement());
+                    yield accepted(saved.retirement().cargoId(), saved);
+                }
                 case ReplicaDeclared declared -> { state.replicaCustody().declare(declared.replica()); yield accepted(declared.replica().objectId(), declared); }
                 case ReplicaEmitted emitted -> { state.replicaCustody().emit(emitted.objectId(), emitted.expectedCanonicalRevision(), emitted.expectedReplicaRevision(),
                         emitted.emittedCanonicalRevision(), emitted.fingerprint(), emitted.provenance()); yield accepted(emitted.objectId(), emitted); }
@@ -25,16 +29,42 @@ final class FrontierReplicaCustodyProcessModule implements FrontierWorldProcessM
                 case ReplicaConflictObserved conflict -> { state.replicaCustody().conflict(conflict.objectId(), conflict.expectedCanonicalRevision(), conflict.expectedReplicaRevision(),
                         conflict.fingerprint(), conflict.provenance(), conflict.diagnostic()); yield accepted(conflict.objectId(), conflict); }
                 case CustodyAcquired acquired -> { state.replicaCustody().acquire(acquired.lease()); yield accepted(acquired.lease().scopeId(), acquired); }
+                case ProjectionCustodyPrepared prepared -> { state.replicaCustody().prepareProjection(prepared.lease()); yield accepted(prepared.lease().scopeId(), prepared); }
+                case ReferenceProjectionPrepared prepared -> {
+                    io.farfrontier.palemirror.frontier.v3.model.ReferenceProjectionStateSupport.prepare(state, prepared, command.expectedRevision().next().value());
+                    yield accepted(prepared.containerId(), prepared);
+                }
+                case ProjectionCustodyConfirmed confirmed -> {
+                    state.replicaCustody().confirmProjection(confirmed.scopeId(), confirmed.expectedEpoch(), confirmed.expectedCanonicalRevision(),
+                            confirmed.expectedReplicaRevision(), confirmed.fingerprint(), confirmed.provenance());
+                    yield accepted(confirmed.scopeId(), confirmed);
+                }
                 case CustodyCheckpointed checkpointed -> { state.replicaCustody().checkpoint(checkpointed.scopeId(), checkpointed.expectedEpoch(),
                         checkpointed.expectedCanonicalRevision(), checkpointed.expectedReplicaRevision()); yield accepted(checkpointed.scopeId(), checkpointed); }
+                case ProjectionConflictObserved conflict -> {
+                    state.replicaCustody().conflictProjection(conflict.scopeId(), conflict.expectedEpoch(), conflict.expectedCanonicalRevision(),
+                            conflict.expectedReplicaRevision(), conflict.fingerprint(), conflict.provenance(), conflict.diagnostic());
+                    yield accepted(conflict.scopeId(), conflict);
+                }
                 case CustodyUnresolved unresolved -> {
                     state.replicaCustody().unresolved(unresolved.scopeId(), unresolved.expectedEpoch(),
                             unresolved.expectedCanonicalRevision(), unresolved.expectedReplicaRevision(), unresolved.reason(), unresolved.diagnostic());
                     yield accepted(unresolved.scopeId(), unresolved);
                 }
-                case CustodyReleased released -> { state.replicaCustody().release(released.scopeId(), released.expectedEpoch(),
-                        released.expectedCanonicalRevision(), released.expectedReplicaRevision()); yield accepted(released.scopeId(), released); }
-                case ReferenceMutationClosed closed -> { ReferenceContainerCustody.closeConfirmedMutation(state, closed); yield accepted(closed.objectId(), closed); }
+                case CustodyReleased released -> {
+                    var after = ReferenceContainerCustody.release(state, released);
+                    var events = new java.util.ArrayList<ProposedEvent>();
+                    events.add(new ProposedEvent(released.scopeId(), released));
+                    events.addAll(ProductionProcess.resumeReleasedEffects(state, after, command.submittedAt().ticks()));
+                    yield new CommandPlan.Accepted(List.copyOf(events));
+                }
+                case ReferenceMutationClosed closed -> {
+                    var after = ReferenceContainerCustody.closeConfirmedMutation(state, closed);
+                    var events = new java.util.ArrayList<ProposedEvent>();
+                    events.add(new ProposedEvent(closed.objectId(), closed));
+                    events.addAll(ProductionProcess.resumeReleasedEffects(state, after, command.submittedAt().ticks()));
+                    yield new CommandPlan.Accepted(List.copyOf(events));
+                }
                 case Prepared prepared -> { state.fencedRecovery().prepare(prepared.binding()); yield accepted(prepared.binding().bindingId(), prepared); }
                 case Running running -> { state.fencedRecovery().running(running.bindingId(), running.expectedEpoch()); yield accepted(running.bindingId(), running); }
                 case Observed observed -> { state.fencedRecovery().observed(observed.bindingId(), observed.expectedEpoch()); yield accepted(observed.bindingId(), observed); }
@@ -49,6 +79,10 @@ final class FrontierReplicaCustodyProcessModule implements FrontierWorldProcessM
     @Override public FrontierWorldState reduce(FrontierWorldState state, FrontierEvent event) {
         try {
             return switch (event.payload()) {
+                case CargoCleanupSaved saved -> {
+                    if (!event.subject().equals(saved.retirement().cargoId())) throw new IllegalArgumentException("cargo cleanup has a foreign subject");
+                    yield replaceRecovery(state, state.fencedRecovery().acknowledgeCargoCleanupSaved(saved.retirement()));
+                }
                 case ReplicaDeclared declared -> replace(state, state.replicaCustody().declare(declared.replica()));
                 case ReplicaEmitted emitted -> replace(state, state.replicaCustody().emit(emitted.objectId(), emitted.expectedCanonicalRevision(), emitted.expectedReplicaRevision(),
                         emitted.emittedCanonicalRevision(), emitted.fingerprint(), emitted.provenance()));
@@ -57,10 +91,28 @@ final class FrontierReplicaCustodyProcessModule implements FrontierWorldProcessM
                 case ReplicaConflictObserved conflict -> replace(state, state.replicaCustody().conflict(conflict.objectId(), conflict.expectedCanonicalRevision(),
                         conflict.expectedReplicaRevision(), conflict.fingerprint(), conflict.provenance(), conflict.diagnostic()));
                 case CustodyAcquired acquired -> replace(state, state.replicaCustody().acquire(acquired.lease()));
+                case ProjectionCustodyPrepared prepared -> {
+                    if (!event.subject().equals(prepared.lease().scopeId())) throw new IllegalArgumentException("projection preparation has a foreign scope");
+                    yield replace(state, state.replicaCustody().prepareProjection(prepared.lease()));
+                }
+                case ReferenceProjectionPrepared prepared -> {
+                    if (!event.subject().equals(prepared.containerId())) throw new IllegalArgumentException("reference projection has a foreign container");
+                    yield io.farfrontier.palemirror.frontier.v3.model.ReferenceProjectionStateSupport.prepare(state, prepared, event.revision().value());
+                }
+                case ProjectionCustodyConfirmed confirmed -> {
+                    if (!event.subject().equals(confirmed.scopeId())) throw new IllegalArgumentException("projection confirmation has a foreign scope");
+                    yield replace(state, state.replicaCustody().confirmProjection(confirmed.scopeId(), confirmed.expectedEpoch(), confirmed.expectedCanonicalRevision(),
+                            confirmed.expectedReplicaRevision(), confirmed.fingerprint(), confirmed.provenance()));
+                }
                 case CustodyCheckpointed checkpointed -> replace(state, state.replicaCustody().checkpoint(checkpointed.scopeId(), checkpointed.expectedEpoch(), checkpointed.expectedCanonicalRevision(), checkpointed.expectedReplicaRevision()));
+                case ProjectionConflictObserved conflict -> {
+                    if (!event.subject().equals(conflict.scopeId())) throw new IllegalArgumentException("projection conflict has a foreign scope");
+                    yield replace(state, state.replicaCustody().conflictProjection(conflict.scopeId(), conflict.expectedEpoch(), conflict.expectedCanonicalRevision(),
+                            conflict.expectedReplicaRevision(), conflict.fingerprint(), conflict.provenance(), conflict.diagnostic()));
+                }
                 case CustodyUnresolved unresolved -> replace(state, state.replicaCustody().unresolved(unresolved.scopeId(), unresolved.expectedEpoch(),
                         unresolved.expectedCanonicalRevision(), unresolved.expectedReplicaRevision(), unresolved.reason(), unresolved.diagnostic()));
-                case CustodyReleased released -> replace(state, state.replicaCustody().release(released.scopeId(), released.expectedEpoch(), released.expectedCanonicalRevision(), released.expectedReplicaRevision()));
+                case CustodyReleased released -> ReferenceContainerCustody.release(state, released);
                 case ReferenceMutationClosed closed -> ReferenceContainerCustody.closeConfirmedMutation(state, closed);
                 case Prepared prepared -> replaceRecovery(state, state.fencedRecovery().prepare(prepared.binding()));
                 case Running running -> replaceRecovery(state, state.fencedRecovery().running(running.bindingId(), running.expectedEpoch()));

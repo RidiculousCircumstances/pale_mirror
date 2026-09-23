@@ -97,8 +97,9 @@ public final class FrontierV3ProductionWorkGameTests {
             BodyPosition work = job.workTraversal().linearCorridorSurfaces().get(workCursor).standingBody();
             FrontierV3CommandSubmission.submit(runtime, "production-work-game-test-work-arrival", suffix,
                     new ProductionWorkTraversalAdvanced(job.id(), leaseId, work, workCursor));
-            FrontierV3CommandSubmission.submit(runtime, "production-work-game-test-processing", suffix,
-                    new ProductionWorkProgressed(job.id(), leaseId, work, ProductionWorkProgress.processing(0)));
+            FrontierV3CommandSubmission.submitBound(runtime, "production-work-game-test-processing", suffix,
+                    new ProductionWorkProgressed(job.id(), leaseId, work, ProductionWorkProgress.processing(0)),
+                    FrontierV3ContinuationBinding.require(runtime.checkpointImage().orElseThrow(), job.id(), "frontier.settlement.production.task.complete"));
             helper.assertValueEqual(state(runtime).productionJobs().get(job.id()).workProgress(), ProductionWorkProgress.processing(0),
                     "the exact HOT worker must reach the declared work station before processing starts");
             helper.assertValueEqual(state(runtime).sceneLeases().get(leaseId).memberPosition(job.workerId()), work,
@@ -122,6 +123,7 @@ public final class FrontierV3ProductionWorkGameTests {
                     // Keep body admission local, then present its already-retained canonical work
                     // position to the observer; setPos has no chunk-loading or world-write authority.
                     body.setPos(work.x() + 0.5D, work.y(), work.z() + 0.5D);
+                    body.setHealth(0.0F);
                     helper.assertTrue(FrontierV3SceneExecutor.observeDeath(runtime, body, null),
                             "the physical scene-death observer must accept only the exact leased production worker");
                     FrontierWorldState afterDeath = state(runtime);
@@ -134,6 +136,9 @@ public final class FrontierV3ProductionWorkGameTests {
                     FrontierWorldState finalized = state(runtime);
                     helper.assertFalse(finalized.productionJobs().containsKey(jobId),
                             "release must run the typed production finalizer and free no zombie job or reservation");
+                    helper.assertTrue(runtime.checkpointImage().orElseThrow().schedules().stream()
+                                    .noneMatch(action -> action.subject().equals(jobId)),
+                            "job retirement and cancellation of its held continuation must be atomic");
                     body.discard(); runtime.shutdown(); helper.succeed();
                 } catch (RuntimeException failure) {
                     body.discard(); runtime.shutdown(); throw failure;

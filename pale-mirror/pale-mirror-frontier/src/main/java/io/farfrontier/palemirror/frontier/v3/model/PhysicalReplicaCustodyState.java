@@ -28,7 +28,12 @@ public record PhysicalReplicaCustodyState(Map<SubjectId, PhysicalReplicaRecord> 
                 throw new IllegalArgumentException("custody must retain one indexed known replica scope");
             }
             PhysicalReplicaRecord replica = replicas.get(entry.getValue().objectId());
-            if (entry.getValue().live() && (replica.state() != PhysicalReplicaState.OBSERVED_CURRENT
+            PhysicalReplicaState required = entry.getValue().status() == PhysicalCustodyLeaseStatus.PREPARING
+                    ? PhysicalReplicaState.EXPECTED : PhysicalReplicaState.OBSERVED_CURRENT;
+            if (entry.getValue().status() == PhysicalCustodyLeaseStatus.UNRESOLVED && replica.state() == PhysicalReplicaState.CONFLICT) {
+                required = PhysicalReplicaState.CONFLICT;
+            }
+            if (entry.getValue().live() && (replica.state() != required
                     || entry.getValue().expectedCanonicalRevision() != replica.observedCanonicalRevision()
                     || entry.getValue().expectedReplicaRevision() != replica.replicaRevision())) {
                 throw new IllegalArgumentException("live custody must exactly fence current replica evidence");
@@ -108,6 +113,81 @@ public record PhysicalReplicaCustodyState(Map<SubjectId, PhysicalReplicaRecord> 
         if (custodyByScope.values().stream().anyMatch(lease -> lease.live() && lease.objectId().equals(requested.objectId()))) throw new IllegalArgumentException("custody scope overlaps a live object scope");
         Map<SubjectId, PhysicalCustodyLease> next = new LinkedHashMap<>(custodyByScope); next.put(requested.scopeId(), requested);
         return new PhysicalReplicaCustodyState(replicas, next, diagnostics);
+    }
+
+    /** Fences an already-declared exact expected write without pretending it was observed. */
+    public PhysicalReplicaCustodyState prepareProjection(PhysicalCustodyLease requested) {
+        Objects.requireNonNull(requested, "projection custody lease");
+        PhysicalReplicaRecord replica = requireReplica(requested.objectId());
+        if (requested.status() != PhysicalCustodyLeaseStatus.PREPARING || replica.state() != PhysicalReplicaState.EXPECTED
+                || replica.emittedCanonicalRevision() != requested.expectedCanonicalRevision()
+                || replica.replicaRevision() != requested.expectedReplicaRevision()) {
+            throw new IllegalArgumentException("projection custody requires its exact unobserved expected write");
+        }
+        PhysicalCustodyLease prior = custodyByScope.get(requested.scopeId());
+        if (prior != null && (prior.live() || requested.authorityEpoch() <= prior.authorityEpoch())) {
+            throw new IllegalArgumentException("projection custody scope is live or reuses its epoch");
+        }
+        if (custodyByScope.values().stream().anyMatch(lease -> lease.objectId().equals(requested.objectId())
+                && (lease.live() || requested.authorityEpoch() <= lease.authorityEpoch()))) {
+            throw new IllegalArgumentException("projection custody overlaps an object or reuses its epoch");
+        }
+        Map<SubjectId, PhysicalCustodyLease> next = new LinkedHashMap<>(custodyByScope);
+        next.put(requested.scopeId(), requested);
+        return new PhysicalReplicaCustodyState(replicas, next, diagnostics);
+    }
+
+    /** Confirm only matching actual evidence; a mismatch retains the fence for explicit recovery. */
+    public PhysicalReplicaCustodyState confirmProjection(SubjectId scopeId, long epoch, long canonicalRevision,
+                                                         long replicaRevision, String fingerprint, String provenance) {
+        PhysicalCustodyLease lease = requireLive(scopeId, epoch);
+        PhysicalReplicaRecord replica = requireReplica(lease.objectId());
+        boolean recoveringConflict = lease.status() == PhysicalCustodyLeaseStatus.UNRESOLVED
+                && lease.unresolvedReason() == PhysicalCustodyUnresolvedReason.OBSERVATION_MISMATCH
+                && replica.state() == PhysicalReplicaState.CONFLICT;
+        if ((lease.status() != PhysicalCustodyLeaseStatus.PREPARING && !recoveringConflict)
+                || canonicalRevision != lease.expectedCanonicalRevision() || replicaRevision != lease.expectedReplicaRevision()) {
+            throw new IllegalArgumentException("projection confirmation fence is stale or not preparing");
+        }
+        if (recoveringConflict) requireUnresolvedDiagnostic(scopeId, diagnostics.get(scopeId));
+        PhysicalReplicaRecord observed = recoveringConflict
+                ? replica.confirmProjectionRecovery(canonicalRevision, replicaRevision, fingerprint, provenance)
+                : replica.observe(canonicalRevision, fingerprint, provenance, canonicalRevision);
+        if (observed.state() != PhysicalReplicaState.OBSERVED_CURRENT) {
+            throw new IllegalArgumentException("projection confirmation does not match its expected physical result");
+        }
+        Map<SubjectId, PhysicalReplicaRecord> nextReplicas = new LinkedHashMap<>(replicas);
+        nextReplicas.put(replica.objectId(), observed);
+        Map<SubjectId, PhysicalCustodyLease> nextLeases = new LinkedHashMap<>(custodyByScope);
+        nextLeases.put(scopeId, new PhysicalCustodyLease(scopeId, lease.objectId(), lease.providerId(), epoch,
+                canonicalRevision, observed.replicaRevision(), PhysicalCustodyLeaseStatus.ACQUIRED, null));
+        return new PhysicalReplicaCustodyState(nextReplicas, nextLeases, withoutDiagnostic(scopeId));
+    }
+
+    /** Retains actual contradictory evidence and its exact write fence as one local conflict. */
+    public PhysicalReplicaCustodyState conflictProjection(SubjectId scopeId, long epoch, long canonicalRevision,
+                                                          long replicaRevision, String fingerprint, String provenance,
+                                                          DiagnosticTuple diagnostic) {
+        PhysicalCustodyLease lease = requireLive(scopeId, epoch);
+        PhysicalReplicaRecord replica = requireReplica(lease.objectId());
+        if (lease.status() != PhysicalCustodyLeaseStatus.PREPARING || canonicalRevision != lease.expectedCanonicalRevision()
+                || replicaRevision != lease.expectedReplicaRevision()) {
+            throw new IllegalArgumentException("projection conflict fence is stale or not preparing");
+        }
+        requireUnresolvedDiagnostic(scopeId, diagnostic);
+        PhysicalReplicaRecord observed = replica.observe(canonicalRevision, fingerprint, provenance, canonicalRevision);
+        if (observed.state() != PhysicalReplicaState.CONFLICT) {
+            throw new IllegalArgumentException("matching projection evidence is not a conflict");
+        }
+        Map<SubjectId, PhysicalReplicaRecord> nextReplicas = new LinkedHashMap<>(replicas);
+        nextReplicas.put(replica.objectId(), observed);
+        Map<SubjectId, PhysicalCustodyLease> nextLeases = new LinkedHashMap<>(custodyByScope);
+        nextLeases.put(scopeId, new PhysicalCustodyLease(scopeId, lease.objectId(), lease.providerId(), epoch,
+                canonicalRevision, observed.replicaRevision(), PhysicalCustodyLeaseStatus.UNRESOLVED,
+                PhysicalCustodyUnresolvedReason.OBSERVATION_MISMATCH));
+        Map<SubjectId, DiagnosticTuple> nextDiagnostics = new LinkedHashMap<>(diagnostics);
+        nextDiagnostics.put(scopeId, diagnostic);
+        return new PhysicalReplicaCustodyState(nextReplicas, nextLeases, nextDiagnostics);
     }
     public PhysicalReplicaCustodyState checkpoint(SubjectId scopeId, long expectedEpoch, long canonicalRevision, long replicaRevision) {
         PhysicalCustodyLease lease = requireLive(scopeId, expectedEpoch);

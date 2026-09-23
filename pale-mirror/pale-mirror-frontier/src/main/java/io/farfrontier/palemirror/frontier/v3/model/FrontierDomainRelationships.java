@@ -127,6 +127,8 @@ public final class FrontierDomainRelationships {
             new Family("supply-cargo-route", FamilyDisposition.RELATION_LAYER_CURRENT, "SupplyContract/RouteOperation", "ARC-001C explicit route contract"),
             new Family("hive-operation-roster", FamilyDisposition.RELATION_LAYER_CURRENT, "HiveColony/StrategicPlanState", "ARC-001C current mobilization roster"),
             new Family("service-work-station", FamilyDisposition.RELATION_LAYER_CURRENT, "SettlementServiceWork", "ARC-001C current service endpoints"),
+            new Family("cargo-projection-retirement", FamilyDisposition.OWNER_EXPLICIT_UNCHANGED, "FencedRecoveryState/CargoProjectionRetirements",
+                    "terminal self-contained authorization; validate world and retained scene, never require compacted historical cargo/scene"),
             new Family("replica-fingerprint", FamilyDisposition.NOT_A_DOMAIN_RELATION, "PhysicalReplicaCustodyState", "adapter evidence, never domain relationship authority"));
     public static List<Family> inventory() { return INVENTORY; }
 
@@ -159,7 +161,9 @@ public final class FrontierDomainRelationships {
             surface(SettlementProvision.class, "settlementId", "recipientIds", "activeIntentId"),
             surface(SettlementRationAllocation.class, "itemId", "recipientIds"),
             surface(SceneLease.class, "id", "worldId", "memberPositions", "ambientHandoffActorIds"),
-            surface(AmbientActorLease.class, "actorId"));
+            surface(AmbientActorLease.class, "actorId"),
+            surface(CargoProjectionRetirement.class, "worldId", "leaseId", "cargoId"),
+            surface(FencedRecoveryTombstone.class, "bindingId", "ownerId"));
 
     public static List<OwnerSurface> currentOwnerSurfaces() { return CURRENT_OWNER_SURFACES; }
 
@@ -377,8 +381,8 @@ public final class FrontierDomainRelationships {
             Endpoint owner = subject(EntityKind.PRODUCTION_JOB, job.id());
             if (state.humanPopulation().resident(job.workerId()) == null) incident(incidents, Kind.JOB_WORKER, owner, IncidentReason.MISSING_ENDPOINT, "canonical resident worker", job.workerId().value());
             else edge(edges, Kind.JOB_WORKER, owner, owner, subject(EntityKind.RESIDENT, job.workerId()), Lifecycle.ACTIVE, job.id().value());
-            edge(edges, Kind.JOB_INPUT, owner, owner, subject(job.inputHold() instanceof ProductionInputHold.FungibleCold ? EntityKind.RESOURCE_LOT : EntityKind.EXACT_ITEM, job.consumedItemId()), Lifecycle.ACTIVE, job.id().value());
-            edge(edges, Kind.JOB_OUTPUT, owner, owner, subject(job.inputHold() instanceof ProductionInputHold.FungibleCold ? EntityKind.RESOURCE_LOT : EntityKind.EXACT_ITEM, job.outputItemId()), Lifecycle.ACTIVE, job.id().value());
+            edge(edges, Kind.JOB_INPUT, owner, owner, subject(job.inputHold().resourceEntityKind(), job.consumedItemId()), Lifecycle.ACTIVE, job.id().value());
+            edge(edges, Kind.JOB_OUTPUT, owner, owner, subject(job.inputHold().resourceEntityKind(), job.outputItemId()), Lifecycle.ACTIVE, job.id().value());
         }
     }
 

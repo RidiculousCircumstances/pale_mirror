@@ -5,6 +5,16 @@ import java.util.Objects;
 /** Durable bounded work-cycle state for one exact workshop job. */
 public record ProductionWorkProgress(Stage stage, int completedTicks) {
     public static final int REQUIRED_PROCESSING_TICKS = 80;
+    public static final long SIMULATION_TICKS_PER_WORK_UNIT = 20L;
+
+    /** One retained deadline, not executor invocation count, grants the next labor unit. */
+    public long nextWorkDue(long retainedDue, long observedAt) {
+        if (observedAt < 0 || retainedDue < 0 || (stage != Stage.INPUT_READY && stage != Stage.PROCESSING))
+            throw new IllegalArgumentException("production labor clock has no stationary phase");
+        if (stage == Stage.PROCESSING && observedAt < retainedDue)
+            throw new IllegalArgumentException("production labor unit is not due");
+        return Math.addExact(observedAt, SIMULATION_TICKS_PER_WORK_UNIT);
+    }
 
     public ProductionWorkProgress {
         stage = Objects.requireNonNull(stage, "production work stage");

@@ -9,6 +9,22 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FrontierV3TestPilotScenarioTest {
     @Test
+    void operationVisitHonorsItsDeclaredAnchorAndRejectsUnknownOnes() {
+        var action = JsonParser.parseString("""
+                {"type":"visit_operation","operationId":"operation:supply-1-11",
+                "dimension":"pale_mirror:frontier_graybox","offset":{"x":10,"y":0,"z":-10},
+                "settleMs":500,"timeoutMs":30000}
+                """).getAsJsonObject();
+        assertEquals("travelCurrent", FrontierV3PilotSemanticAnchors.visitAnchor(action));
+        action.addProperty("anchor", "travelCargo");
+        assertEquals("travelCargo", FrontierV3PilotSemanticAnchors.visitAnchor(action));
+        assertEquals(1, FrontierV3TestPilotScenario.parse("{\"schema\":1,\"actions\":[" + action + "]}").actionCount());
+        action.addProperty("anchor", "unknown");
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3PilotSemanticAnchors.visitAnchor(action));
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("{\"schema\":1,\"actions\":[" + action + "]}"));
+    }
+
+    @Test
     void crossDimensionVisitAlwaysBindsTheExactPlayerAsTheTeleportExecutor() {
         assertEquals("execute as PMTestPilot in pale_mirror:frontier_graybox run tp @s 137 65 14",
                 FrontierV3TestPilotClient.crossDimensionVisitCommand("PMTestPilot", "pale_mirror:frontier_graybox", new BlockPos(137, 65, 14)));
@@ -443,6 +459,14 @@ class FrontierV3TestPilotScenarioTest {
 
     @Test
     void permitsBoundedOrdinaryAttacksWithoutEntityIdentityAuthority() {
+        String terminal = """
+                {"schema":1,"actions":[{"type":"attack_nearest_entity","entityType":"minecraft:chest_minecart",
+                "maxDistance":8,"maxAttacks":4,"timeoutMs":30000,"requireRemoval":true}]}""";
+        assertEquals(1, FrontierV3TestPilotScenario.parse(terminal).actionCount());
+        for (String invalid : java.util.List.of("\"true\"", "1", "null", "{}")) {
+            assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse(
+                    terminal.replace("\"requireRemoval\":true", "\"requireRemoval\":" + invalid)));
+        }
         FrontierV3TestPilotScenario.Parsed parsed = FrontierV3TestPilotScenario.parse("""
                 {"schema":1,"actions":[{"type":"attack_nearest_entity","entityType":"minecraft:villager",
                 "nameContains":"ARMED DEFENDER","maxDistance":8,"maxAttacks":4,"timeoutMs":30000}]}""");

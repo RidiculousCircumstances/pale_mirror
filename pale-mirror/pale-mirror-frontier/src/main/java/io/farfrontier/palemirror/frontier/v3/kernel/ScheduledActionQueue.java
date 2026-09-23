@@ -14,6 +14,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.Predicate;
 
 /** Engine-owned schedule index. Its only mutation path is explicit schedule or cancellation events. */
 public final class ScheduledActionQueue {
@@ -40,6 +41,13 @@ public final class ScheduledActionQueue {
         return action.equals(ordered.isEmpty() ? null : ordered.first());
     }
 
+    public boolean isEligibleHead(ScheduledAction action, Predicate<ScheduledAction> eligible) {
+        for (ScheduledAction candidate : ordered) {
+            if (eligible.test(candidate)) return action.equals(candidate);
+        }
+        return false;
+    }
+
     /** Exact immutable membership check used by an engine-owned continuation binding. */
     public boolean containsExact(ScheduledAction action) {
         Objects.requireNonNull(action, "scheduled action");
@@ -60,6 +68,10 @@ public final class ScheduledActionQueue {
      * corresponding transaction is committed, so a failing reducer cannot lose future work.
      */
     public ScheduledWork selectDue(SimInstant instant, WorkBudget budget) {
+        return selectDue(instant, budget, ignored -> true);
+    }
+
+    public ScheduledWork selectDue(SimInstant instant, WorkBudget budget, Predicate<ScheduledAction> eligible) {
         Objects.requireNonNull(instant, "instant");
         Objects.requireNonNull(budget, "budget");
         List<ScheduledAction> executed = new ArrayList<>();
@@ -68,6 +80,7 @@ public final class ScheduledActionQueue {
             if (next.dueAt().compareTo(instant) > 0) {
                 break;
             }
+            if (!eligible.test(next)) continue;
             if (executed.size() == budget.maxActions() || next.weight() > budget.maxWeight() - weight) {
                 return new ScheduledWork(executed, next);
             }
@@ -132,8 +145,13 @@ public final class ScheduledActionQueue {
         }
 
         ScheduledAction head() {
-            ScheduledAction retained = base.ordered.stream().filter(action -> !removed.contains(action.id())).findFirst().orElse(null);
-            ScheduledAction added = created.values().stream().min(ScheduledAction::compareTo).orElse(null);
+            return head(ignored -> true);
+        }
+
+        ScheduledAction head(Predicate<ScheduledAction> eligible) {
+            ScheduledAction retained = base.ordered.stream().filter(action -> !removed.contains(action.id()))
+                    .filter(eligible).findFirst().orElse(null);
+            ScheduledAction added = created.values().stream().filter(eligible).min(ScheduledAction::compareTo).orElse(null);
             if (retained == null) return added;
             if (added == null) return retained;
             return retained.compareTo(added) <= 0 ? retained : added;
@@ -162,6 +180,11 @@ public final class ScheduledActionQueue {
             if (projected > maximum) {
                 throw new IllegalStateException("scheduled-action capacity exhausted: " + projected + ">" + maximum);
             }
+        }
+
+        List<ScheduledAction> retainedChanges() {
+            requireOpen();
+            return List.copyOf(created.values());
         }
 
         List<ScheduledAction> snapshot() {

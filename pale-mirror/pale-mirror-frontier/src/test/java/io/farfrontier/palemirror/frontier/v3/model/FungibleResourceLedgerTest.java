@@ -113,6 +113,31 @@ class FungibleResourceLedgerTest {
     }
 
     @Test
+    void boundReservationSkipsEarlierStacksOfAnotherKindOrEconomicOwner() {
+        var wheat = new ResourceLot(new SubjectId("lot:wheat"), OWNER, "minecraft:wheat", 10, "bootstrap", List.of());
+        var foreignBread = new ResourceLot(new SubjectId("lot:foreign-bread"), new SubjectId("settlement:other"), "minecraft:bread", 10, "bootstrap", List.of());
+        var bread = new ResourceLot(LOT, OWNER, "minecraft:bread", 10, "bootstrap", List.of());
+        var account = new CustodyAccount(DEPOT_ACCOUNT, new ResourceCustody.Container(DEPOT),
+                Map.of(wheat.id(), 10, foreignBread.id(), 10, bread.id(), 10), Map.of());
+        var cold = new FungibleResourceLedger(Map.of(wheat.id(), wheat, foreignBread.id(), foreignBread, bread.id(), bread),
+                Map.of(), Map.of(account.id(), account), Map.of());
+        var bindings = List.of(
+                new PhysicalStackBinding(new SubjectId("binding:a-wheat"), account.id(), new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(DEPOT, 0)),
+                        7L, wheat.itemKind(), Map.of(wheat.id(), 10), Map.of(), ""),
+                new PhysicalStackBinding(new SubjectId("binding:b-foreign"), account.id(), new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(DEPOT, 1)),
+                        7L, foreignBread.itemKind(), Map.of(foreignBread.id(), 10), Map.of(), ""),
+                new PhysicalStackBinding(new SubjectId("binding:c-own"), account.id(), new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(DEPOT, 2)),
+                        7L, bread.itemKind(), Map.of(bread.id(), 10), Map.of(), ""));
+        var hot = cold.rebind(account.id(), 7L, bindings);
+        var claim = new ClaimAllocation(new SubjectId("claim:own-bread"), new SubjectId("job:own-bread"), OWNER, bread.itemKind(), 7);
+        var reserved = hot.reserveBound(claim, account.id(), 7L);
+        assertEquals(Map.of(), reserved.bindings().get(bindings.get(0).id()).claimQuantities());
+        assertEquals(Map.of(), reserved.bindings().get(bindings.get(1).id()).claimQuantities());
+        assertEquals(Map.of(claim.id(), 7), reserved.bindings().get(bindings.get(2).id()).claimQuantities());
+        assertEquals(hot.lots(), reserved.lots());
+    }
+
+    @Test
     void hotVanillaSplitAndMergeRebindOneLotWithoutStackIdentityOrQuantityDrift() {
         FungibleResourceLedger issued = issue(10);
         List<FungiblePhysicalObservation.Stack> splitStacks = List.of(

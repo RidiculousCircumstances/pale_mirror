@@ -475,6 +475,59 @@ class ResourceSiteHarvestTraversalTest extends ResourceSiteHarvestProcessTest {
         assertEquals("confirmed_exact_physical_receipt", confirmedTrace.reconciliation());
         assertEquals(output, confirmed.inventory().items().get(output.id()),
                 "late physical evidence confirms canonical custody without replaying wheat");
+
+        FrontierWorldState mature = restored;
+        for (int stage = 0; stage < ResourceSiteLifecycle.MATURE_STAGE; stage++) {
+            var lifecycle = mature.resourceSites().site(hot.site());
+            mature = ResourceSiteProcess.reduceGrowth(mature, hot.site(),
+                    new ResourceSiteGrowthAdvanced(hot.site(), lifecycle.growthEpoch(), lifecycle.growthStage()));
+        }
+        assertLateReceiptPreservesSuccessor(mature, job);
+        var opportunity = StrategicObjectiveProcess.planResourceHarvestOpportunity(mature,
+                StrategicObjectiveProcess.resourceHarvestOpportunity(mature, mature.resourceSites().site(hot.site()), 40_000L));
+        FrontierWorldState tasked = StrategicObjectiveProcess.reduceObjective(mature, new SubjectId("settlement:1"),
+                (StrategicObjectiveSelected) opportunity.getFirst().payload());
+        tasked = StrategicObjectiveProcess.reduceTask(tasked, new SubjectId("settlement:1"),
+                (StrategicTaskPlanned) opportunity.get(1).payload());
+        var successorTask = tasked.strategicPlans().tasks().values().stream()
+                .filter(candidate -> candidate.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE
+                        && candidate.status() == StrategicTaskStatus.PENDING).findFirst().orElseThrow();
+        var successorPlan = ResourceSiteHarvestProcess.plan(tasked, ResourceSiteHarvestProcess.start(successorTask, 40_100L));
+        FrontierWorldState active = StrategicObjectiveProcess.reduceTaskTransition(tasked, new SubjectId("settlement:1"),
+                (StrategicTaskTransition) successorPlan.getFirst().payload());
+        var started = successorPlan.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                .filter(ResourceSiteHarvestStarted.class::isInstance).map(ResourceSiteHarvestStarted.class::cast).findFirst().orElseThrow();
+        active = ResourceSiteHarvestProcess.reduceStarted(active, hot.site(), started);
+        active = ResourceSiteHarvestProcess.reducePrepared(active, hot.site(), successorPlan.stream()
+                .map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                .filter(PhysicalIntentPrepared.class::isInstance).map(PhysicalIntentPrepared.class::cast).findFirst().orElseThrow().intent());
+        assertEquals(job.workerId(), started.job().workerId());
+        assertLateReceiptPreservesSuccessor(active, job);
+    }
+
+    private static void assertLateReceiptPreservesSuccessor(FrontierWorldState state, ResourceSiteHarvestJob predecessor) {
+        var codec = new FrontierWorldStateCodec();
+        var recovered = codec.decode(codec.encode(state));
+        var before = recovered.resourceSites().site(predecessor.siteId());
+        var intent = recovered.physicalIntents().get(predecessor.intentId());
+        var output = recovered.inventory().items().get(predecessor.outputItemId());
+        String phase = before.phase().name().toLowerCase(java.util.Locale.ROOT);
+        var id = new CommandId("command:late-receipt-" + phase);
+        var command = new FrontierCommand(1, id, recovered.bootstrap().worldId(), new Revision(900L),
+                new SimInstant(40_200L), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id),
+                new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt(intent, predecessor, output))));
+        var plan = assertInstanceOf(CommandPlan.Accepted.class, FrontierWorldRuntimeDefinition.planCommand(recovered, command));
+        var confirmed = recovered;
+        for (var event : plan.events()) confirmed = reduceCanonical(confirmed, "late-" + phase, 900L, id, event);
+        var after = confirmed.resourceSites().site(predecessor.siteId());
+        assertEquals(before.phase(), after.phase());
+        assertEquals(before.growthEpoch(), after.growthEpoch());
+        assertEquals(before.activeWork(), after.activeWork(), "old receipt cannot consume the new job or change its worker/cursor");
+        assertFalse(after.harvestLineage().orElseThrow().receiptPending());
+        assertEquals(recovered.inventory(), confirmed.inventory(), "late confirmation does not replay canonical wheat");
+        assertEquals(confirmed, codec.decode(codec.encode(confirmed)), "resolved successor survives snapshot recovery");
+        assertInstanceOf(CommandPlan.Rejected.class, FrontierWorldRuntimeDefinition.planCommand(confirmed, command),
+                "duplicate receipt is not another output transition");
     }
 
     @Test
@@ -681,6 +734,9 @@ class ResourceSiteHarvestTraversalTest extends ResourceSiteHarvestProcessTest {
         assertEquals(retained.id(), rescheduled.scheduleId());
         assertEquals(retained, rescheduled.replacement(),
                 "HOT arrival must bind the current due action; only its observed semantic checkpoint may apply cadence");
+        assertTrue(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:hold-policy"), 1L)
+                .scheduledPlanner().held(hot.state(), retained),
+                "the production engine must use the registered harvest owner's hold before budget admission");
     }
 
     @Test

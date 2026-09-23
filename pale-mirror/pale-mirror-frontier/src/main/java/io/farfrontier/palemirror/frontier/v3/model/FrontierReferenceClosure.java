@@ -6,7 +6,6 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -53,38 +52,42 @@ final class FrontierReferenceClosure {
         }
     }
 
-    private static void validateScheduledSubjects(FrontierWorldState state, List<ScheduledAction> schedules) {
-        Set<SubjectId> live = liveSubjects(state);
+    static void validateScheduledSubjects(FrontierWorldState state, List<ScheduledAction> schedules) {
         for (ScheduledAction action : schedules) {
-            if (!live.contains(action.subject()) && !SYSTEM_SUBJECTS.contains(action.subject().value())) {
+            if (!SYSTEM_SUBJECTS.contains(action.subject().value()) && !isLiveSubject(state, action.subject())) {
                 throw new IllegalArgumentException("scheduled action references a retired canonical subject: " + action.id().value());
             }
         }
     }
 
-    private static Set<SubjectId> liveSubjects(FrontierWorldState state) {
-        Set<SubjectId> live = new HashSet<>();
-        state.bootstrap().settlements().forEach(settlement -> {
-            live.add(settlement.id()); settlement.residents().forEach(resident -> live.add(resident.id()));
-        });
-        live.add(state.bootstrap().hive().id());
-        state.bootstrap().hive().bioforms().forEach(bioform -> live.add(bioform.id()));
-        state.bootstrap().hive().organs().forEach(organ -> live.add(organ.id()));
-        live.addAll(state.actorLocations().keySet()); live.addAll(state.structureConditions().keySet());
-        live.addAll(state.inventory().items().keySet()); live.addAll(state.inventory().cargo().keySet());
-        live.addAll(state.inventory().fungibleResources().lots().keySet()); live.addAll(state.inventory().fungibleResources().claims().keySet());
-        live.addAll(state.productionJobs().keySet()); live.addAll(state.serviceWorks().keySet()); live.addAll(state.contracts().keySet());
-        live.addAll(state.operations().keySet()); live.addAll(state.routeConstructions().keySet()); live.addAll(state.routeMaintenances().keySet());
-        live.addAll(state.resourceSites().sites().keySet());
-        state.resourceSites().sites().values().forEach(site -> site.activeWork().ifPresent(work -> live.add(work.id())));
-        live.addAll(state.humanPopulation().residents().keySet());
-        live.addAll(state.humanPopulation().birthJobs().keySet()); live.addAll(state.humanPopulation().migrations().keySet());
-        live.addAll(state.humanPopulation().provisions().keySet()); live.addAll(state.hiveColony().growthJobs().keySet());
-        live.addAll(state.hiveColony().mobilizations().keySet()); live.addAll(state.strategicPlans().objectives().keySet());
-        live.addAll(state.strategicPlans().tasks().keySet()); live.addAll(state.strategicPlans().routePatrols().keySet());
-        live.addAll(state.strategicPlans().routeEngagements().keySet()); live.addAll(state.strategicPlans().settlementAssaults().keySet());
-        live.addAll(state.companies().market().demands().keySet()); live.addAll(state.companies().market().quotes().keySet());
-        live.addAll(state.companies().market().workOrders().keySet());
-        return Set.copyOf(live);
+    /** Existence validation only, never owner discovery or dispatch. No whole-world ID copy. */
+    private static boolean isLiveSubject(FrontierWorldState state, SubjectId id) {
+        if (state.actorLocations().containsKey(id) || state.structureConditions().containsKey(id)
+                || state.inventory().items().containsKey(id) || state.inventory().cargo().containsKey(id)
+                || state.inventory().fungibleResources().lots().containsKey(id)
+                || state.inventory().fungibleResources().claims().containsKey(id)
+                || state.productionJobs().containsKey(id) || state.serviceWorks().containsKey(id)
+                || state.contracts().containsKey(id) || state.operations().containsKey(id)
+                || state.routeConstructions().containsKey(id) || state.routeMaintenances().containsKey(id)
+                || state.resourceSites().sites().containsKey(id)
+                || state.humanPopulation().residents().containsKey(id)
+                || state.humanPopulation().birthJobs().containsKey(id) || state.humanPopulation().migrations().containsKey(id)
+                || state.humanPopulation().provisions().containsKey(id) || state.hiveColony().growthJobs().containsKey(id)
+                || state.hiveColony().nutrientTransfers().containsKey(id)
+                || state.hiveColony().mobilizations().containsKey(id) || state.strategicPlans().objectives().containsKey(id)
+                || state.strategicPlans().tasks().containsKey(id) || state.strategicPlans().routePatrols().containsKey(id)
+                || state.strategicPlans().routeEngagements().containsKey(id)
+                || state.strategicPlans().settlementAssaults().containsKey(id)
+                || state.companies().market().demands().containsKey(id) || state.companies().market().quotes().containsKey(id)
+                || state.companies().market().workOrders().containsKey(id)) return true;
+        // These fixed bootstrap/site collections have no separate subject index. Retain the
+        // same accepted owner surface as the full recovery barrier without building its union.
+        return state.bootstrap().hive().id().equals(id)
+                || state.bootstrap().settlements().stream().anyMatch(settlement -> settlement.id().equals(id)
+                    || settlement.residents().stream().anyMatch(resident -> resident.id().equals(id)))
+                || state.bootstrap().hive().bioforms().stream().anyMatch(bioform -> bioform.id().equals(id))
+                || state.bootstrap().hive().organs().stream().anyMatch(organ -> organ.id().equals(id))
+                || state.resourceSites().sites().values().stream()
+                    .anyMatch(site -> site.activeWork().filter(work -> work.id().equals(id)).isPresent());
     }
 }

@@ -5,6 +5,9 @@
   "mixins": [
     "FrontierV3GameTestSliceMixin",
     "FrontierV3ServerEntityTrackerMixin",
+    "FrontierV3EntityDepartureMixin",
+    "FrontierV3EntityStorageMixin",
+    "FrontierV3EntitySavePassMixin",
     "FrontierV3CargoCarrierMinecartMixin",
     "FrontierV3VehicleEntityMixin",
     "FrontierV3PlayerActionMixin"

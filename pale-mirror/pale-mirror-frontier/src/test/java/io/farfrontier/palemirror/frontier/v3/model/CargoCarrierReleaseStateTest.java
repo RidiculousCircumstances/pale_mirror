@@ -28,14 +28,225 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CargoCarrierReleaseStateTest {
     @Test
+    void deadEngagementMemberRecoveryDrainsBeforeColdCombatCanResume() {
+        var world = new WorldId("frontier:engagement-death-return");
+        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.hotSceneStrikeConfiguration(world, 91L));
+        var before = state(engine);
+        var candidate = before.coldEngagementSceneCandidates().getFirst();
+        var lease = FrontierTestSceneLeases.exact(before, new SceneLeaseId("lease:engagement-death-return"),
+                candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(), engine.checkpoint().instant(),
+                engine.checkpoint().revision().value(), Optional.of(candidate.engagementId()), candidate.actorIds());
+        submit(engine, world, "prepare", new SceneLeasePrepared(lease));
+        submit(engine, world, "hot", new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
+        var target = before.strategicPlans().routeEngagements().get(candidate.engagementId()).attackerIds().getFirst();
+        submit(engine, world, "death", new ActorDied(lease.id(), target, lease.memberPosition(target), "test-death"));
+        submit(engine, world, "unknown", new SceneLeaseTransition(lease.id(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART));
+        var unknown = state(engine);
+        assertEquals(SceneLeaseStatus.DRAINING,
+                FrontierSceneBehaviors.recoveredStatus(unknown, unknown.sceneLeases().get(lease.id())));
+        submit(engine, world, "returned", new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
+        var draining = state(engine);
+        var survivors = lease.members().stream().filter(member -> !member.actorId().equals(target))
+                .map(member -> new SceneMemberPosition(member.actorId(), draining.actorLocations().get(member.actorId()).body(),
+                        draining.actorLocations().get(member.actorId()).condition().health())).toList();
+        submit(engine, world, "closed", new SceneLeaseReleased(lease.id(), survivors));
+        var closed = state(engine);
+        assertEquals(SceneLeaseStatus.CLOSED, closed.sceneLeases().get(lease.id()).status());
+        assertEquals(ActorLifeStatus.DEAD, closed.actorLocations().get(target).condition().status());
+        assertEquals(RouteEngagementStatus.COLD_COMBAT, closed.strategicPlans().routeEngagements().get(candidate.engagementId()).status());
+        assertEquals(unknown.inventory(), closed.inventory());
+    }
+
+    @Test
+    void returnedFailedDeliveryReleasesCustodyWithoutResumingItsOperation() {
+        var world = new WorldId("frontier:failed-delivery-return");
+        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(world, 91L));
+        var before = state(engine);
+        var operation = FrontierDevelopmentScenarios.initialNorthwatchShipment(before).orElseThrow();
+        var lease = FrontierTestSceneLeases.exact(before, new SceneLeaseId("lease:failed-delivery-return"),
+                operation.id(), operation.cargoId(), operation.currentPosition(), engine.checkpoint().instant(),
+                engine.checkpoint().revision().value(), Optional.empty(), operation.participantIds());
+        submit(engine, world, "prepare", new SceneLeasePrepared(lease));
+        submit(engine, world, "hot", new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
+        submit(engine, world, "unknown", new SceneLeaseTransition(lease.id(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART));
+        submit(engine, world, "missing", new SceneLeaseRecoveryUnresolved(lease.id(),
+                java.util.Set.of(operation.participantIds().getFirst()), false));
+        var failed = state(engine);
+        assertEquals(OperationStage.FAILED, failed.operations().get(operation.id()).stage());
+        assertEquals(SceneLeaseStatus.DRAINING,
+                FrontierSceneBehaviors.recoveredStatus(failed, failed.sceneLeases().get(lease.id())));
+        submit(engine, world, "returned", new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
+        var draining = state(engine);
+        assertEquals(draining, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(draining)));
+        submit(engine, world, "drain-lost", new SceneLeaseTransition(lease.id(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART));
+        submit(engine, world, "still-missing", new SceneLeaseRecoveryUnresolved(lease.id(),
+                java.util.Set.of(operation.participantIds().getFirst()), false));
+        var missingAgain = state(engine);
+        assertEquals(failed.operations(), missingAgain.operations());
+        assertThrows(IllegalArgumentException.class,
+                () -> missingAgain.transitionSceneLease(lease.id(), SceneLeaseStatus.HOT));
+        submit(engine, world, "returned-again", new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
+        var positions = lease.members().stream().map(member -> new SceneMemberPosition(member.actorId(),
+                failed.actorLocations().get(member.actorId()).body(),
+                failed.actorLocations().get(member.actorId()).condition().health())).toList();
+        submit(engine, world, "closed", new SceneLeaseReleased(lease.id(), positions));
+        var closed = state(engine);
+        assertEquals(SceneLeaseStatus.CLOSED, closed.sceneLeases().get(lease.id()).status());
+        assertEquals(failed.operations(), closed.operations());
+        assertEquals(failed.inventory(), closed.inventory());
+        assertEquals(failed.strategicPlans(), closed.strategicPlans());
+    }
+
+    @Test
+    void missingCombatMemberRetainsUncertaintyWithoutInventingAnOutcomeAcrossRecovery() {
+        for (boolean cargoReleased : List.of(false, true)) {
+            var world = new WorldId("frontier:engagement-missing-" + cargoReleased);
+            var transactions = new java.util.ArrayList<io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord>();
+            var configuration = FrontierV3FixtureCatalog.hotSceneStrikeConfiguration(world, 91L)
+                    .withTransactionCommitter((transaction, durability) -> transactions.add(transaction));
+            var engine = FrontierEngines.create(configuration);
+            var before = state(engine);
+            var candidate = before.coldEngagementSceneCandidates().getFirst();
+            var lease = FrontierTestSceneLeases.exact(before, new SceneLeaseId("lease:engagement-missing"),
+                    candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(),
+                    engine.checkpoint().instant(), engine.checkpoint().revision().value(),
+                    Optional.of(candidate.engagementId()), candidate.actorIds());
+            submit(engine, world, "prepare", new SceneLeasePrepared(lease));
+            submit(engine, world, "hot", new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
+            if (cargoReleased) {
+                submit(engine, world, "release", new CargoCarrierReleased(lease.id(), candidate.cargoId(),
+                        CargoCarrierIdentity.id(lease), Optional.empty()));
+            }
+            submit(engine, world, "unknown", new SceneLeaseTransition(lease.id(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART));
+            var unknown = state(engine);
+            var checkpoint = engine.checkpoint();
+            var missing = java.util.Set.of(candidate.actorIds().getFirst());
+            submit(engine, world, "missing", new SceneLeaseRecoveryUnresolved(lease.id(), missing, false));
+            var retained = state(engine);
+            assertEquals(unknown.actorLocations(), retained.actorLocations());
+            assertEquals(unknown.inventory(), retained.inventory());
+            assertEquals(unknown.operations(), retained.operations());
+            assertEquals(unknown.strategicPlans(), retained.strategicPlans());
+            assertEquals(SceneLeaseStatus.UNKNOWN_AFTER_RESTART, retained.sceneLeases().get(lease.id()).status());
+            assertTrue(retained.sceneLeases().get(lease.id()).recoveryEvidence().isPresent());
+            assertEquals(retained, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(retained)));
+            var replayed = FrontierEngines.recover(configuration,
+                    new io.farfrontier.palemirror.frontier.v3.persistence.RecoveryImage(world,
+                            Optional.of(new io.farfrontier.palemirror.frontier.v3.persistence.SnapshotRecord(checkpoint, 0)),
+                            List.of(transactions.getLast())));
+            assertEquals(engine.checkpoint(), replayed.checkpoint());
+            var recoveryStatus = FrontierSceneBehaviors.recoveredStatus(retained, retained.sceneLeases().get(lease.id()));
+            assertEquals(cargoReleased ? SceneLeaseStatus.DRAINING : SceneLeaseStatus.HOT, recoveryStatus);
+            submit(replayed, world, "returned", new SceneLeaseTransition(lease.id(), recoveryStatus));
+            var returned = state(replayed);
+            assertEquals(unknown.actorLocations(), returned.actorLocations());
+            assertEquals(unknown.inventory(), returned.inventory());
+            assertTrue(returned.sceneLeases().get(lease.id()).recoveryEvidence().isEmpty());
+            if (cargoReleased) {
+                var positions = lease.members().stream().map(member -> new SceneMemberPosition(member.actorId(),
+                        returned.actorLocations().get(member.actorId()).body(),
+                        returned.actorLocations().get(member.actorId()).condition().health())).toList();
+                submit(replayed, world, "returned-drain", new SceneLeaseReleased(lease.id(), positions));
+                var closed = state(replayed);
+                assertEquals(SceneLeaseStatus.CLOSED, closed.sceneLeases().get(lease.id()).status());
+                assertEquals(OperationStage.INTERRUPTED, closed.operations().get(candidate.operationId()).stage());
+                assertEquals(RouteEngagementOutcome.ABORTED,
+                        closed.strategicPlans().routeEngagements().get(candidate.engagementId()).outcome().orElseThrow());
+                assertEquals(CargoProjectionRetirement.Disposition.RETAIN_WORLD_CUSTODY,
+                        closed.fencedRecovery().cargoRetirements().pending().get(CargoCarrierIdentity.id(lease)).disposition());
+            }
+        }
+    }
+
+    @Test
+    void playerTakingAllCargoBeforeBodyDrainCannotTurnReleasedCartIntoRemovableProjection() {
+        var before = FrontierDevelopmentScenarios.hotSceneStrikeState(new WorldId("frontier:cargo-drain-race"), 91L);
+        var candidate = before.coldEngagementSceneCandidates().getFirst();
+        var lease = FrontierTestSceneLeases.exact(before, new SceneLeaseId("lease:cargo-drain-race"),
+                candidate.operationId(), candidate.cargoId(), candidate.handoffPosition(), new SimInstant(2_600L),
+                1L, Optional.of(candidate.engagementId()), candidate.actorIds());
+        var hot = before.prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT);
+        var carrier = CargoCarrierIdentity.id(lease);
+        var released = hot.releaseCargoCarrier(new CargoCarrierReleased(lease.id(), candidate.cargoId(), carrier, Optional.empty()));
+        var codec = new FrontierWorldStateCodec();
+        released = codec.decode(codec.encode(released));
+        assertEquals(CargoProjectionRetirement.Disposition.RETAIN_WORLD_CUSTODY,
+                FrontierSceneBehaviors.logistics(released.sceneLeases().get(lease.id())).carrierDisposition());
+        var releasedLease = released.sceneLeases().get(lease.id());
+        assertThrows(IllegalArgumentException.class, () -> releasedLease.withStatus(SceneLeaseStatus.HOT));
+        assertThrows(IllegalArgumentException.class, () -> releasedLease.withStatus(SceneLeaseStatus.PREPARED));
+        var inventory = released.inventory();
+        var resources = inventory.fungibleResources();
+        var account = resources.accounts().values().stream()
+                .filter(value -> value.custody().equals(new ResourceCustody.WorldCarrier(carrier))).findFirst().orElseThrow();
+        var binding = resources.bindings().values().stream().filter(value -> value.accountId().equals(account.id())).findFirst().orElseThrow();
+        var playerId = new UUID(0, 99);
+        var player = new CustodyAccount(new SubjectId("custody:drain-race-player"), new ResourceCustody.Player(playerId),
+                account.lotQuantities(), account.claimQuantities());
+        var held = new PhysicalStackBinding(new SubjectId("binding:drain-race-player"), player.id(),
+                new PhysicalStackAddress.PlayerSlot(playerId, 0), 1L, binding.itemKind(), player.lotQuantities(), player.claimQuantities());
+        inventory = inventory.withFungibleResources(resources.transferObservedToNewAccount(account.id(), player,
+                binding.authorityEpoch(), 1L, account.lotQuantities(), account.claimQuantities(), List.of(), List.of(held)));
+        var emptied = released.withInventory(inventory).transitionSceneLease(lease.id(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART);
+        emptied = codec.decode(codec.encode(emptied)).transitionSceneLease(lease.id(), SceneLeaseStatus.DRAINING);
+        assertTrue(!emptied.inventory().hasWorldCarrierCustody(carrier));
+        var actors = emptied.actorLocations();
+        var positions = lease.members().stream().map(member -> new SceneMemberPosition(member.actorId(),
+                actors.get(member.actorId()).body(), actors.get(member.actorId()).condition().health())).toList();
+        var closed = emptied.releaseSceneLease(lease.id(), positions);
+        assertEquals(CargoProjectionRetirement.Disposition.RETAIN_WORLD_CUSTODY,
+                closed.fencedRecovery().cargoRetirements().pending().get(carrier).disposition(),
+                "accepted carrier release is irreversible even after its last item changes custody");
+    }
+
+    @Test
+    void ordinarySceneReleaseRetainsCleanupAlongsideColdCargoAndPersistsIt() {
+        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(
+                new WorldId("frontier:cargo-cleanup"), 91L));
+        var before = state(engine);
+        var operation = FrontierDevelopmentScenarios.initialNorthwatchShipment(before).orElseThrow();
+        var lease = FrontierTestSceneLeases.exact(before, new SceneLeaseId("lease:cargo-cleanup"),
+                operation.id(), operation.cargoId(), operation.currentPosition(), engine.checkpoint().instant(),
+                engine.checkpoint().revision().value(), Optional.empty(), operation.participantIds());
+        var draining = before.prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT)
+                .transitionSceneLease(lease.id(), SceneLeaseStatus.DRAINING);
+        var preparedPayload = new SceneLeasePrepared(lease);
+        var payloadCodecs = FrontierWorldRuntimeDefinition.payloadCodecs();
+        byte[] encoded = payloadCodecs.encode(preparedPayload);
+        assertEquals(preparedPayload, payloadCodecs.decode(preparedPayload.type(), encoded));
+        byte[] missingDispositionEnvelope = encoded.clone();
+        missingDispositionEnvelope[0] = (byte) 0xff;
+        missingDispositionEnvelope[1] = (byte) 0xfe;
+        assertThrows(IllegalArgumentException.class, () -> payloadCodecs.decode(preparedPayload.type(), missingDispositionEnvelope));
+        var positions = lease.members().stream().map(member -> new SceneMemberPosition(member.actorId(),
+                draining.actorLocations().get(member.actorId()).body(),
+                draining.actorLocations().get(member.actorId()).condition().health())).toList();
+        var closed = draining.releaseSceneLease(lease.id(), positions);
+        var obligation = closed.fencedRecovery().cargoRetirements().pending().get(CargoCarrierIdentity.id(lease));
+        assertEquals(CargoProjectionRetirement.Disposition.REMOVE_PROJECTION, obligation.disposition());
+        assertEquals(operation.cargoId(), obligation.cargoId());
+        assertThrows(IllegalArgumentException.class, () -> closed.fencedRecovery().cargoRetirements()
+                .validateContext(closed.bootstrap().worldId(), java.util.Map.of(lease.id(), lease.withStatus(SceneLeaseStatus.HOT))));
+        var foreignWorld = new WorldId("frontier:foreign-retirement");
+        var foreign = new CargoProjectionRetirement(foreignWorld, obligation.leaseId(), obligation.cargoId(),
+                CargoCarrierIdentity.id(foreignWorld, obligation.leaseId(), obligation.cargoId()),
+                obligation.authorization(), obligation.disposition());
+        var forgedRecovery = new FencedRecoveryState(closed.fencedRecovery().current(), closed.fencedRecovery().tombstones(),
+                new CargoProjectionRetirements(java.util.Map.of(foreign.entityId(), foreign)));
+        assertThrows(IllegalArgumentException.class, () -> closed.withChanges(FrontierWorldStateUpdate.begin().fencedRecovery(forgedRecovery)));
+        assertTrue(closed.inventory().cargo().containsKey(operation.cargoId()));
+        assertEquals(closed, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(closed)));
+    }
+
+    @Test
     void releaseAtomicallyInterruptsRouteAndKeepsFungibleCargoHotAtItsObservedCarrier() {
         var engine = FrontierEngines.create(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(
                 new WorldId("frontier:cargo-release"), 91L));
         FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        RouteOperation operation = before.operations().get(new SubjectId("operation:supply-1-2"));
+        RouteOperation operation = FrontierDevelopmentScenarios.initialNorthwatchShipment(before).orElseThrow();
         SceneLeaseId leaseId = new SceneLeaseId("lease:cargo-release");
         SceneLease lease = FrontierTestSceneLeases.exact(before, leaseId, operation.id(), operation.cargoId(),
-                operation.currentPosition(), new SimInstant(2_550L), engine.checkpoint().revision().value(),
+                operation.currentPosition(), engine.checkpoint().instant(), engine.checkpoint().revision().value(),
                 Optional.empty(), operation.participantIds());
         FrontierWorldState hot = before.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         SubjectId recoveryBinding = FrontierSceneLeaseStateSupport.cargoRecoveryBindingId(operation.cargoId());
@@ -107,8 +318,11 @@ class CargoCarrierReleaseStateTest {
     @Test
     void physicalCargoLossClosesHotSceneWithoutInventingColdCombat() {
         WorldId world = new WorldId("frontier:cargo-release-live-path");
-        FrontierEngine<FrontierWorldProjection> engine = FrontierEngines.create(
-                FrontierV3FixtureCatalog.hotSceneStrikeConfiguration(world, 91L));
+        var transactions = new java.util.ArrayList<io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord>();
+        var durabilities = new java.util.ArrayList<io.farfrontier.palemirror.frontier.v3.persistence.Durability>();
+        var configuration = FrontierV3FixtureCatalog.hotSceneStrikeConfiguration(world, 91L)
+                .withTransactionCommitter((transaction, durability) -> { transactions.add(transaction); durabilities.add(durability); });
+        FrontierEngine<FrontierWorldProjection> engine = FrontierEngines.create(configuration);
         FrontierWorldState before = state(engine);
         SceneEngagementCandidate candidate = before.coldEngagementSceneCandidates().getFirst();
         SceneLeaseId leaseId = new SceneLeaseId("lease:cargo-release-live-path");
@@ -133,11 +347,29 @@ class CargoCarrierReleaseStateTest {
 
         FrontierWorldState closed = state(engine);
         assertEquals(SceneLeaseStatus.CLOSED, closed.sceneLeases().get(leaseId).status());
+        assertEquals(CargoProjectionRetirement.Disposition.RETAIN_WORLD_CUSTODY,
+                closed.fencedRecovery().cargoRetirements().pending().get(CargoCarrierIdentity.id(lease)).disposition());
         assertEquals(OperationStage.INTERRUPTED, closed.operations().get(candidate.operationId()).stage());
         assertEquals(RouteEngagementOutcome.ABORTED,
                 closed.strategicPlans().routeEngagements().get(candidate.engagementId()).outcome().orElseThrow());
         assertTrue(engine.checkpoint().schedules().stream().noneMatch(action -> action.kind().equals("frontier.hive_route_engagement.combat")),
                 "an aborted physical scene must not manufacture a COLD combat continuation");
+
+        // Pure protocol verification: supplies a provider acknowledgement as input, not native save proof.
+        var retirement = closed.fencedRecovery().cargoRetirements().pending().get(CargoCarrierIdentity.id(lease));
+        var saved = new FencedRecoveryPayloads.CargoCleanupSaved(retirement);
+        var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
+        assertEquals(saved, codecs.decode(saved.type(), codecs.encode(saved)));
+        var beforeAck = engine.checkpoint();
+        submit(engine, world, "cleanup-saved", saved);
+        assertTrue(state(engine).fencedRecovery().cargoRetirements().pending().isEmpty());
+        assertEquals(closed.inventory(), state(engine).inventory(), "ack releases cleanup capacity, never cargo custody");
+        assertEquals(io.farfrontier.palemirror.frontier.v3.persistence.Durability.DURABLE_BEFORE_EFFECT,
+                durabilities.getLast(), "ack must be durable before provider witness compaction");
+        var replayed = FrontierEngines.recover(configuration, new io.farfrontier.palemirror.frontier.v3.persistence.RecoveryImage(
+                world, Optional.of(new io.farfrontier.palemirror.frontier.v3.persistence.SnapshotRecord(beforeAck, 0)),
+                List.of(transactions.getLast())));
+        assertEquals(engine.checkpoint(), replayed.checkpoint());
     }
 
     private static FrontierWorldState state(FrontierEngine<FrontierWorldProjection> engine) {

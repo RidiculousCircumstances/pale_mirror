@@ -279,5 +279,9 @@ final class FrontierV3CargoHandoffExecutor {
         if (data == null || !data.copyTag().hasUUID(WORLD_CARRIER_ID_KEY)) return Optional.empty();
         return Optional.of(data.copyTag().getUUID(WORLD_CARRIER_ID_KEY));
     }
+    static boolean hasWorldCarrierDeclaration(ItemStack stack) {
+        CustomData data = stack.get(DataComponents.CUSTOM_DATA);
+        return data != null && data.copyTag().contains(WORLD_CARRIER_ID_KEY);
+    }
     record StoreTarget(BlockPos position, SubjectId containerId) { }
 }

@@ -10,7 +10,11 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 /** Versioned exact state codec. Snapshot checksumming is owned by the persistence envelope. */
-public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D; static final int VERSION = 177; private static final int MAX_ENTRIES = 65_535;
+public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldState> { private static final int MAGIC = 0x4656334D;
+    // Version 180 requires cargo storage footprints from physical birth. Version 179
+    // worlds may already contain carts with unknown historical storage columns;
+    // accepting their state cannot manufacture that missing provider evidence.
+    static final int VERSION = 180; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -64,7 +68,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         try (DataInputStream input = new DataInputStream(new ByteArrayInputStream(encoded))) {
             if (input.readInt() != MAGIC) throw new IllegalArgumentException("unknown Frontier v3 state magic");
             int version = input.readUnsignedByte();
-            if (version != VERSION) throw new IllegalArgumentException("Frontier v3 state has no compatible diagnostic producer codec; fresh current-schema world required");
+            if (version != VERSION) throw new IllegalArgumentException("Frontier v3 state schema " + version + " is incompatible with required schema " + VERSION + "; fresh current-schema world required");
             if (!FrontierDurationProcessDriverRegistry.inventoryFingerprint().equals(readString(input))) {
                 throw new IllegalArgumentException("Frontier v3 state has an incompatible process/scene descriptor inventory");
             }
@@ -180,7 +184,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     private static PhysicalReplicaState replicaState(int tag) { return switch (tag) { case 1 -> PhysicalReplicaState.EXPECTED; case 2 -> PhysicalReplicaState.OBSERVED_CURRENT; case 3 -> PhysicalReplicaState.CONFLICT;
         default -> throw new IllegalArgumentException("unknown physical replica lifecycle tag"); }; }
     private static PhysicalCustodyLeaseStatus custodyStatus(int tag) { return switch (tag) { case 1 -> PhysicalCustodyLeaseStatus.ACQUIRED; case 2 -> PhysicalCustodyLeaseStatus.CHECKPOINTED;
-        case 3 -> PhysicalCustodyLeaseStatus.UNRESOLVED; case 4 -> PhysicalCustodyLeaseStatus.RELEASED;
+        case 3 -> PhysicalCustodyLeaseStatus.UNRESOLVED; case 4 -> PhysicalCustodyLeaseStatus.RELEASED; case 5 -> PhysicalCustodyLeaseStatus.PREPARING;
         default -> throw new IllegalArgumentException("unknown physical custody lifecycle tag"); }; }
     private static PhysicalCustodyUnresolvedReason unresolvedReason(int tag) { return switch (tag) { case 1 -> PhysicalCustodyUnresolvedReason.OBSERVATION_MISMATCH; case 2 -> PhysicalCustodyUnresolvedReason.RESTART_AMBIGUITY;
         case 3 -> PhysicalCustodyUnresolvedReason.PROVIDER_LOST; default -> throw new IllegalArgumentException("unknown physical custody conflict tag"); }; }

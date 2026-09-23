@@ -16,9 +16,10 @@ import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyPayload
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyPayloads.CustodyCheckpointed;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyPayloads.CustodyReleased;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyPayloads.ReplicaDeclared;
-import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyPayloads.ReplicaEmitted;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyPayloads.ReplicaConflictObserved;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyPayloads.ReplicaObserved;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyPayloads.ReferenceProjectionPrepared;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyPayloads.ProjectionCustodyConfirmed;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaRecord;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaState;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress;
@@ -78,6 +79,9 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
                 .sorted(Comparator.comparing(PhysicalCustodyLease::scopeId)).toList()) {
             ContainerSurface surface = state.inventory().surfaces().get(lease.objectId());
             if (surface == null || !naturallyTicking(level, position(surface))) {
+                // Pending or contradictory writes cannot be blindly released. They also
+                // must not consume the only drain turn while making no transition.
+                if (lease.status() == PhysicalCustodyLeaseStatus.PREPARING || lease.status() == PhysicalCustodyLeaseStatus.UNRESOLVED) continue;
                 // A persisted HOT fungible layout is still the only authority for a possible
                 // player/container handoff.  On restart the player is normally not connected
                 // when this first loop runs, so checkpointing an unobserved source would turn
@@ -109,6 +113,14 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
             // admitted only against a durable active surface and its exact owned chest.
             if (initialDeclarationReady(surface.status(), FrontierV3ContainerSurfaceExecutor.activeChest(level, position(surface), containerId))) {
                 declare(runtime, state, containerId);
+            }
+            return;
+        }
+        PhysicalCustodyLease projectionLease = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(containerId));
+        if (projectionLease != null && (projectionLease.status() == PhysicalCustodyLeaseStatus.PREPARING
+                || (projectionLease.status() == PhysicalCustodyLeaseStatus.UNRESOLVED && replica.state() == PhysicalReplicaState.CONFLICT))) {
+            if (surface.status() == ContainerSurfaceStatus.ACTIVE && stableLoadedObservation(level, containerId, chest)) {
+                reconcilePreparedProjection(runtime, state, projectionLease, chest);
             }
             return;
         }
@@ -154,20 +166,14 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
                 conflict(runtime, replica, beforeCatchup);
                 return;
             }
-            boolean newerCanonicalSlots = !ReferenceContainerCustody.canonicalFingerprint(state, containerId).equals(replica.fingerprint());
-            if (newerCanonicalSlots && reemit(runtime, state, replica)) {
-                // `ReplicaEmitted` is the durable before-write boundary.  The state passed to
-                // this tick predates that accepted command, so using it here would put the old
-                // slots back into the chest and turn an owned physical mutation into false
-                // drift on the next observation.  Read the exact accepted state instead.
+            if (prepareReleasedProjection(runtime, state, replica)) {
+                // Fence COLD completion and transfer held exact inputs before writing.
+                // Even unchanged inventory slots may hide an input held by a COLD job;
+                // reacquiring directly would strand that input outside the physical chest.
                 FrontierWorldState emitted = runtime.decodedState()
                         .orElseThrow(() -> new IllegalStateException("reference replica emission did not publish state"));
                 FrontierV3ContainerSurfaceExecutor.replaceCanonicalSlots(chest, emitted, containerId);
-                return;
             }
-            // An unchanged released scope may begin its next exact custody cycle.
-            // Its retained observation is still current, so no fabricated emission is needed.
-            acquire(runtime, state, replica, containerId);
             return;
         }
         String canonical = ReferenceContainerCustody.canonicalFingerprint(state, containerId);
@@ -201,6 +207,29 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
                 ReferenceContainerCustody.canonicalFingerprint(state, containerId), ReferenceContainerCustody.provenance(containerId))));
     }
 
+    static boolean prepareInitialProjection(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                            FrontierWorldState state, SubjectId containerId) {
+        long epoch = Math.addExact(state.replicaCustody().custodyByScope().values().stream()
+                .filter(prior -> prior.objectId().equals(containerId)).mapToLong(PhysicalCustodyLease::authorityEpoch).max().orElse(0L), 1L);
+        return submit(runtime, "prepare-projection", containerId, epoch, new ReferenceProjectionPrepared(containerId, epoch, 0L, "", ""));
+    }
+
+    /** Only actual loaded slots may confirm or conflict the already durable write fence. */
+    static boolean reconcilePreparedProjection(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
+                                               PhysicalCustodyLease lease, ChestBlockEntity chest) {
+        PhysicalReplicaRecord replica = state.replicaCustody().replicas().get(lease.objectId());
+        Observed actual = observed(state, lease.objectId(), chest);
+        if (replica.fingerprint().equals(actual.fingerprint()) && replica.provenance().equals(actual.provenance())) {
+            return submit(runtime, "confirm-projection", lease.objectId(), replica.replicaRevision(),
+                    new ProjectionCustodyConfirmed(lease.scopeId(), lease.authorityEpoch(), lease.expectedCanonicalRevision(),
+                            lease.expectedReplicaRevision(), actual.fingerprint(), actual.provenance()));
+        }
+        if (lease.status() != PhysicalCustodyLeaseStatus.PREPARING) return false;
+        return submit(runtime, "projection-conflict", lease.objectId(), replica.replicaRevision(),
+                ReplicaCustodyDiagnosticProducer.projectionConflict(lease.scopeId(), lease.authorityEpoch(), lease.expectedCanonicalRevision(),
+                        lease.expectedReplicaRevision(), actual.fingerprint(), actual.provenance()));
+    }
+
     private static void observe(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
                                 PhysicalReplicaRecord replica, ChestBlockEntity chest) {
         Observed observed = observed(state, replica.objectId(), chest);
@@ -224,12 +253,14 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
         submit(runtime, "acquire", containerId, epoch, new CustodyAcquired(requested));
     }
 
-    private static boolean reemit(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
+    static boolean prepareReleasedProjection(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
                                   PhysicalReplicaRecord replica) {
-        long revision = Math.max(runtime.canonicalState().orElseThrow().revision().value(), replica.emittedCanonicalRevision() + 1L);
-        return submit(runtime, "emit", replica.objectId(), replica.replicaRevision(), new ReplicaEmitted(replica.objectId(),
-                replica.emittedCanonicalRevision(), replica.replicaRevision(), revision,
-                ReferenceContainerCustody.canonicalFingerprint(state, replica.objectId()), ReferenceContainerCustody.provenance(replica.objectId())));
+        long epoch = Math.addExact(state.replicaCustody().custodyByScope().values().stream()
+                .filter(prior -> prior.objectId().equals(replica.objectId()))
+                .mapToLong(PhysicalCustodyLease::authorityEpoch).max().orElse(0L), 1L);
+        return submit(runtime, "prepare-projection", replica.objectId(), epoch,
+                new ReferenceProjectionPrepared(replica.objectId(), epoch, replica.replicaRevision(),
+                        replica.fingerprint(), replica.provenance()));
     }
 
     /** Checkpoint then release; the next re-observation retains malformed/missing actual evidence. */
@@ -293,7 +324,7 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
         if (state == null) return false;
         PhysicalReplicaRecord replica = state.replicaCustody().replicas().get(containerId);
         PhysicalCustodyLease lease = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(containerId));
-        if (replica == null || lease == null || !lease.live() || !lease.objectId().equals(containerId)
+        if (replica == null || lease == null || !ReferenceContainerCustody.hasOperationalCustody(state, containerId) || !lease.objectId().equals(containerId)
                 || !lease.providerId().equals(ReferenceContainerCustody.PROVIDER_ID)) return false;
         Observed observed = observed(state, containerId, chest);
         if (!ReferenceContainerCustody.canonicalFingerprint(state, containerId).equals(observed.fingerprint())
@@ -359,11 +390,15 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
     static List<ContainerSurface> eligibleReferenceSurfaces(FrontierWorldState state, List<ContainerSurface> loaded) {
         return loaded.stream().filter(surface -> ReferenceContainerCustody.isReferenceContainer(state, surface.containerId()))
                 .sorted(Comparator.comparing(ContainerSurface::containerId))
-                // A retained local conflict is intentionally terminal for that one object.  Do
-                // not let its lexical position starve another independently usable depot/store.
+                // Ordinary released conflicts remain isolated. A retained pending-write
+                // conflict may receive matching later evidence under its same exact epoch;
+                // round-robin selection prevents that inspection from monopolizing service.
                 .filter(surface -> {
                     PhysicalReplicaRecord replica = state.replicaCustody().replicas().get(surface.containerId());
-                    return replica == null || replica.state() != PhysicalReplicaState.CONFLICT;
+                    if (replica == null || replica.state() != PhysicalReplicaState.CONFLICT) return true;
+                    PhysicalCustodyLease lease = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(surface.containerId()));
+                    return ReferenceContainerCustody.hasLiveCustody(state, surface.containerId()) && lease.status() == PhysicalCustodyLeaseStatus.UNRESOLVED
+                            && lease.unresolvedReason() == PhysicalCustodyUnresolvedReason.OBSERVATION_MISMATCH;
                 }).toList();
     }
 

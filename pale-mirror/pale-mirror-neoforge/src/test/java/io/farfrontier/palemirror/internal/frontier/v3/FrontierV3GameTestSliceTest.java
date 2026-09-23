@@ -7,6 +7,48 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrontierV3GameTestSliceTest {
+    @Test void localNavigationSliceRetainsTheActualMovementBoundary() {
+        assertTrue(FrontierV3GameTestSlice.includes("route-construction", "pm-frontier-v3-scene-route-construction"));
+        assertFalse(FrontierV3GameTestSlice.includes("route-construction", "pm-frontier-v3-scene-local-navigation"));
+        assertTrue(FrontierV3GameTestSlice.includes("local-navigation", "pm-frontier-v3-scene-local-navigation"));
+        assertTrue(FrontierV3GameTestSlice.includes("scene", "pm-frontier-v3-scene-local-navigation"));
+        assertFalse(FrontierV3GameTestSlice.includes("local-navigation", "pm-frontier-v3-scene-cargo"));
+    }
+    @Test void pendingProjectionRemainsInEconomyReferenceAndFullGates() {
+        String batch = "pm-frontier-v3-reference-projection";
+        assertTrue(FrontierV3GameTestSlice.includes("reference-projection", batch));
+        assertTrue(FrontierV3GameTestSlice.includes("reference-all", batch));
+        assertTrue(FrontierV3GameTestSlice.includes("economy", batch));
+        assertTrue(FrontierV3GameTestSlice.includes("", batch));
+        assertFalse(FrontierV3GameTestSlice.includes("reference-projection", "pm-frontier-v3-production"));
+    }
+    @Test void productionWorkSliceRetainsTheRegisteredWorkerBatchOnly() {
+        assertTrue(FrontierV3GameTestSlice.includes("production-effect", "pm-frontier-v3-production"));
+        assertTrue(FrontierV3GameTestSlice.includes("resource-prefix", "pm-frontier-v3-resource-site-prefix"));
+        assertFalse(FrontierV3GameTestSlice.includes("resource-prefix", "pm-frontier-v3-production"));
+        assertTrue(FrontierV3GameTestSlice.includes("economy", "pm-frontier-v3-production"));
+        assertFalse(FrontierV3GameTestSlice.includes("production-effect", "pm-frontier-v3-scene-production-work"));
+        assertTrue(FrontierV3GameTestSlice.includes("production-work", "pm-frontier-v3-scene-production-work"));
+        assertTrue(FrontierV3GameTestSlice.includes("scene", "pm-frontier-v3-scene-production-work"));
+        assertFalse(FrontierV3GameTestSlice.includes("production-work", "pm-frontier-v3-scene-cargo"));
+    }
+    @Test
+    void cargoSliceRunsTheActualCarrierBoundaryWithoutOtherSceneFamilies() {
+        assertTrue(FrontierV3GameTestSlice.includes("cargo", "pm-frontier-v3-scene-cargo"));
+        assertFalse(FrontierV3GameTestSlice.includes("cargo", "pm-frontier-v3-scene-handoff"));
+        assertTrue(FrontierV3GameTestSlice.includes("scene", "pm-frontier-v3-scene-cargo"));
+        assertTrue(FrontierV3GameTestSlice.includes("cargo", "pm-frontier-v3-scene-cargo-authority"));
+        assertTrue(FrontierV3GameTestSlice.includes("cargo-authority", "pm-frontier-v3-scene-cargo-authority"));
+        assertFalse(FrontierV3GameTestSlice.includes("cargo-authority", "pm-frontier-v3-scene-cargo"));
+        assertTrue(FrontierV3GameTestSlice.includes("cargo", "pm-frontier-v3-scene-cargo-interaction"));
+        assertTrue(FrontierV3GameTestSlice.includes("cargo-interaction", "pm-frontier-v3-scene-cargo-interaction"));
+        assertFalse(FrontierV3GameTestSlice.includes("cargo-interaction", "pm-frontier-v3-scene-cargo-authority"));
+        assertTrue(FrontierV3GameTestSlice.includes("scene-departure", "pm-frontier-v3-scene-departure"));
+        assertTrue(FrontierV3GameTestSlice.includes("scene-departure", "pm-frontier-v3-scene-deaths"));
+        assertTrue(FrontierV3GameTestSlice.includes("scene", "pm-frontier-v3-scene-departure"));
+        assertFalse(FrontierV3GameTestSlice.includes("scene-departure", "pm-frontier-v3-scene-cargo"));
+    }
+
     @Test
     void sceneSliceIncludesOnlyTheFastHotColdBatches() {
         assertTrue(FrontierV3GameTestSlice.includes("scene", "pm-frontier-v3-scene-handoff"));

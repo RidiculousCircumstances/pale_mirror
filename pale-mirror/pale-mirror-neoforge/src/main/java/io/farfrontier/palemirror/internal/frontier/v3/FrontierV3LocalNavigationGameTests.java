@@ -151,22 +151,30 @@ public final class FrontierV3LocalNavigationGameTests {
         // exact body must still clear this one-grade retained edge instead of having gravity
         // erase each bounded ascent increment.
         FrontierV3ControlledMobMotion.restoreOrdinaryPhysics(worker);
-        Vec3 retainedNext = new Vec3(nextSupport.getX() + .5D, nextSupport.getY() + 1.0D, nextSupport.getZ() + .5D);
+        SurfaceAnchor retainedCurrent = SurfaceAnchor.at(origin.getX(), origin.getY(), origin.getZ());
+        SurfaceAnchor retainedNext = SurfaceAnchor.at(nextSupport.getX(), nextSupport.getY(), nextSupport.getZ());
         helper.runAfterDelay(1, () -> {
             // GameTest can coalesce registered tick callbacks after a catch-up, so model the
             // ordinary scene-post submission and following entity-pre turn directly here.  It
             // still invokes the production actuator's real gravity/collision path and supplies
             // no body position, target, route, or collision result from the fixture.
-            FrontierV3ControlledMobMotion.moveToward(helper.getLevel(), worker, retainedNext);
-            for (int turn = 0; turn < 24; turn++) {
+            FrontierV3ProductionWorkSceneExecutor.pursueRetainedTraversalEdge(helper.getLevel(), worker, retainedCurrent, retainedNext);
+            for (int turn = 0; turn < 40; turn++) {
                 FrontierV3ControlledMobMotion.advanceAtEntityBoundary(worker);
-                FrontierV3ControlledMobMotion.moveToward(helper.getLevel(), worker, retainedNext);
+                FrontierV3ProductionWorkSceneExecutor.pursueRetainedTraversalEdge(helper.getLevel(), worker, retainedCurrent, retainedNext);
             }
             FrontierV3ControlledMobMotion.advanceAtEntityBoundary(worker);
-            helper.assertTrue(worker.getX() <= nextSupport.getX() + .85D && worker.getY() >= nextSupport.getY() + .65D,
+            helper.assertTrue(FrontierV3SemanticMovement.arrived(helper.getLevel(), worker, retainedNext),
                     "a retained grade-one hand-off edge must physically advance without changing its cursor or route: actual="
                             + worker.position() + " trace=" + FrontierV3ControlledMobMotion.trace(worker));
             FrontierV3ControlledMobMotion.stop(worker);
+            // The same body must actually settle on the raised support without treating the
+            // actuator's gravity/lift halves as an accumulated fall from a fictitious height.
+            for (int turn = 0; turn < 4; turn++) FrontierV3ControlledMobMotion.advanceAtEntityBoundary(worker);
+            helper.assertTrue(worker.isAlive() && worker.getHealth() == worker.getMaxHealth()
+                            && worker.fallDistance == 0.0F,
+                    "a completed one-block ascent must land without synthetic fall damage: health="
+                            + worker.getHealth() + " fallDistance=" + worker.fallDistance);
             helper.succeed();
         });
     }

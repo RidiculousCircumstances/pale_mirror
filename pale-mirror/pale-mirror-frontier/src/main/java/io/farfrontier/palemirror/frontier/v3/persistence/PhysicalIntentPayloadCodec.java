@@ -36,6 +36,7 @@ final class PhysicalIntentPayloadCodec {
         for (var entry : intent.roles().namedRoles().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey(java.util.Comparator.comparingInt(PhysicalIntentSubjectRole::wireTag))).toList()) {
             output.writeByte(entry.getKey().wireTag()); FrontierWorldPayloadCodecs.writeSubject(output, entry.getValue());
         }
+        PhysicalSceneBindingCodec.write(output, intent.roles());
         output.writeLong(intent.origin().x().raw()); output.writeLong(intent.origin().y().raw()); output.writeLong(intent.origin().z().raw());
         output.writeByte(intent.radiusBlocks()); output.writeByte(intent.postcondition().wireTag()); output.writeBoolean(intent.postconditionObservationId().isPresent());
         if (intent.postconditionObservationId().isPresent()) FrontierWorldPayloadCodecs.writeString(output, intent.postconditionObservationId().orElseThrow().value());
@@ -57,6 +58,7 @@ final class PhysicalIntentPayloadCodec {
             PhysicalIntentSubjectRole role = PhysicalIntentSubjectRole.fromWire(input.readUnsignedByte());
             if (roles.put(role, FrontierWorldPayloadCodecs.readSubject(input).value()) != null) throw new IllegalArgumentException("duplicate physical intent role tag");
         }
+        var scene = PhysicalSceneBindingCodec.read(input, schema);
         FixedPosition origin = new FixedPosition(new FixedScalar(input.readLong()), new FixedScalar(input.readLong()), new FixedScalar(input.readLong()));
         int radius = input.readUnsignedByte(); int postcondition = input.readUnsignedByte(); boolean observed = input.readBoolean();
         Optional<PhysicalObservationId> observation = observed ? Optional.of(new PhysicalObservationId(FrontierWorldPayloadCodecs.readString(input))) : Optional.empty();
@@ -69,7 +71,7 @@ final class PhysicalIntentPayloadCodec {
         PhysicalIntentLifecycleOwner lifecycleOwner = PhysicalIntentLifecycleOwner.fromWire(input.readUnsignedByte(), FrontierWorldPayloadCodecs.readString(input));
         Optional<DiagnosticTuple> diagnostic = input.readBoolean() ? Optional.of(readDiagnostic(input)) : Optional.empty();
         return new PhysicalIntent(id, FrontierWireTags.require(PhysicalIntentKind.class, kind), FrontierWireTags.require(PhysicalIntentStatus.class, status),
-                cause.value(), PhysicalIntentRoleBinding.decode(schema, roles), origin, radius, FrontierWireTags.require(PhysicalPostcondition.class, postcondition), observation, target, semanticTarget,
+                cause.value(), PhysicalIntentRoleBinding.decode(schema, roles, scene), origin, radius, FrontierWireTags.require(PhysicalPostcondition.class, postcondition), observation, target, semanticTarget,
                 lifecycleOwner, diagnostic);
     }
     private static void writeDiagnostic(DataOutputStream output, DiagnosticTuple diagnostic) throws IOException {

@@ -23,9 +23,10 @@ public enum PhysicalIntentRoleSchema {
             PhysicalIntentSubjectRole.SETTLEMENT_SERVICE_WORK, PhysicalIntentSubjectRole.WORKER, PhysicalIntentSubjectRole.INPUT_ITEM),
     EXPLOSION(6, PhysicalIntentLifecycleOwner.HIVE_MOBILIZATION, PhysicalIntentKind.EXPLOSION,
             PhysicalIntentSubjectRole.BOMBER, PhysicalIntentSubjectRole.ENGAGEMENT),
-    ROUTE_SCENE_STRIKE(7, PhysicalIntentLifecycleOwner.ROUTE_ENGAGEMENT, PhysicalIntentKind.SCENE_STRIKE,
+    // Tags 7/8 are retired: they omitted the mandatory exact scene binding.
+    ROUTE_SCENE_STRIKE(28, PhysicalIntentLifecycleOwner.ROUTE_ENGAGEMENT, PhysicalIntentKind.SCENE_STRIKE,
             PhysicalIntentSubjectRole.ATTACKER, PhysicalIntentSubjectRole.TARGET),
-    ASSAULT_SCENE_STRIKE(8, PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT, PhysicalIntentKind.SCENE_STRIKE,
+    ASSAULT_SCENE_STRIKE(29, PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT, PhysicalIntentKind.SCENE_STRIKE,
             PhysicalIntentSubjectRole.ATTACKER, PhysicalIntentSubjectRole.TARGET),
     HIVE_GROWTH_CONSUMPTION(9, PhysicalIntentLifecycleOwner.HIVE_GROWTH, PhysicalIntentKind.EXACT_ITEM_CONSUMPTION,
             PhysicalIntentSubjectRole.HIVE_GROWTH_JOB, PhysicalIntentSubjectRole.ITEM),
@@ -60,7 +61,10 @@ public enum PhysicalIntentRoleSchema {
     ROUTE_MAINTENANCE_LOADING(25, PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE, PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING,
             PhysicalIntentSubjectRole.ROUTE, PhysicalIntentSubjectRole.ROUTE_MAINTENANCE, PhysicalIntentSubjectRole.CARGO, PhysicalIntentSubjectRole.CARGO_ITEM, PhysicalIntentSubjectRole.SOURCE_ITEM),
     SERVICE_INPUT_ISSUE(26, PhysicalIntentLifecycleOwner.SETTLEMENT_SERVICE_WORK, PhysicalIntentKind.SETTLEMENT_SERVICE_INPUT_ISSUE,
-            PhysicalIntentSubjectRole.SETTLEMENT_SERVICE_WORK, PhysicalIntentSubjectRole.WORKER, PhysicalIntentSubjectRole.INPUT_ITEM);
+            PhysicalIntentSubjectRole.SETTLEMENT_SERVICE_WORK, PhysicalIntentSubjectRole.WORKER, PhysicalIntentSubjectRole.INPUT_ITEM),
+    PRODUCTION_RESOURCES(27, PhysicalIntentLifecycleOwner.PRODUCTION_WORK, PhysicalIntentKind.PRODUCTION_TRANSFORMATION,
+            PhysicalIntentSubjectRole.PRODUCTION_JOB, PhysicalIntentSubjectRole.INPUT_RESOURCE_LOT, PhysicalIntentSubjectRole.OUTPUT_RESOURCE_LOT,
+            PhysicalIntentSubjectRole.RESOURCE_CLAIM, PhysicalIntentSubjectRole.CUSTODY_ACCOUNT, PhysicalIntentSubjectRole.RESOURCE_CONTAINER);
 
     private final int wireTag;
     private final PhysicalIntentLifecycleOwner owner;

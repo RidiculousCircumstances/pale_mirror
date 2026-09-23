@@ -13,7 +13,7 @@ import java.util.List;
 /** Stable WAL payload codecs for the pure replica/custody transition vocabulary. */
 final class PhysicalReplicaCustodyPayloadCodecs {
     private PhysicalReplicaCustodyPayloadCodecs() { }
-    static List<PayloadCodec> codecs() { return List.of(new Declared(), new Emitted(), new Observed(), new ConflictObserved(), new Acquired(), new Checkpointed(), new Unresolved(), new Released(), new ReferenceMutation()); }
+    static List<PayloadCodec> codecs() { return List.of(new Declared(), new Emitted(), new Observed(), new ConflictObserved(), new Acquired(), new Checkpointed(), new Unresolved(), new Released(), new ReferenceMutation(), new ProjectionPrepared(), new ProjectionConfirmed(), new ReferencePrepared(), new ProjectionConflict()); }
     private abstract static class Base implements PayloadCodec {
         final byte[] encodeBytes(Writer writer) { return FrontierWorldPayloadCodecs.encodeProduction(writer::write); }
         final FrontierPayload decodeBytes(byte[] bytes, Reader reader) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, reader::read); }
@@ -61,6 +61,48 @@ final class PhysicalReplicaCustodyPayloadCodecs {
         @Override public String type() { return "frontier.physical_custody_acquired"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeBytes(output -> writeLease(output, ((CustodyAcquired) payload).lease())); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeBytes(bytes, input -> new CustodyAcquired(readLease(input))); }
+    }
+    private static final class ProjectionPrepared extends Base {
+        @Override public String type() { return "frontier.projection_custody_prepared"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeBytes(output -> writeLease(output, ((ProjectionCustodyPrepared) payload).lease())); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeBytes(bytes, input -> new ProjectionCustodyPrepared(readLease(input))); }
+    }
+    private static final class ProjectionConflict extends Base {
+        @Override public String type() { return "frontier.projection_conflict_observed"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeBytes(output -> {
+            ProjectionConflictObserved value = (ProjectionConflictObserved) payload;
+            writeFence(output, value.scopeId(), value.expectedEpoch(), value.expectedCanonicalRevision(), value.expectedReplicaRevision());
+            FrontierWorldPayloadCodecs.writeString(output, value.fingerprint()); FrontierWorldPayloadCodecs.writeString(output, value.provenance());
+            FrontierWorldPayloadCodecs.writeDiagnosticTuple(output, value.diagnostic());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeBytes(bytes, input -> {
+            Fence fence = readFence(input);
+            return new ProjectionConflictObserved(fence.scope(), fence.epoch(), fence.canonical(), fence.replica(),
+                    FrontierWorldPayloadCodecs.readString(input), FrontierWorldPayloadCodecs.readString(input), FrontierWorldPayloadCodecs.readDiagnosticTuple(input));
+        }); }
+    }
+    private static final class ReferencePrepared extends Base {
+        @Override public String type() { return "frontier.reference_projection_prepared"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeBytes(output -> {
+            ReferenceProjectionPrepared value = (ReferenceProjectionPrepared) payload;
+            subject(output, value.containerId()); output.writeLong(value.authorityEpoch()); output.writeLong(value.expectedReplicaRevision());
+            FrontierWorldPayloadCodecs.writeString(output, value.priorFingerprint()); FrontierWorldPayloadCodecs.writeString(output, value.priorProvenance());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeBytes(bytes, input -> new ReferenceProjectionPrepared(subject(input),
+                input.readLong(), input.readLong(), FrontierWorldPayloadCodecs.readString(input), FrontierWorldPayloadCodecs.readString(input))); }
+    }
+    private static final class ProjectionConfirmed extends Base {
+        @Override public String type() { return "frontier.projection_custody_confirmed"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeBytes(output -> {
+            ProjectionCustodyConfirmed value = (ProjectionCustodyConfirmed) payload;
+            writeFence(output, value.scopeId(), value.expectedEpoch(), value.expectedCanonicalRevision(), value.expectedReplicaRevision());
+            FrontierWorldPayloadCodecs.writeString(output, value.fingerprint()); FrontierWorldPayloadCodecs.writeString(output, value.provenance());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeBytes(bytes, input -> {
+            Fence fence = readFence(input);
+            return new ProjectionCustodyConfirmed(fence.scope(), fence.epoch(), fence.canonical(), fence.replica(),
+                    FrontierWorldPayloadCodecs.readString(input), FrontierWorldPayloadCodecs.readString(input));
+        }); }
     }
     private static final class Checkpointed extends Base {
         @Override public String type() { return "frontier.physical_custody_checkpointed"; }
@@ -155,7 +197,7 @@ final class PhysicalReplicaCustodyPayloadCodecs {
     }; }
     private static PhysicalCustodyLeaseStatus readStatus(int tag) { return switch (tag) {
         case 1 -> PhysicalCustodyLeaseStatus.ACQUIRED; case 2 -> PhysicalCustodyLeaseStatus.CHECKPOINTED;
-        case 3 -> PhysicalCustodyLeaseStatus.UNRESOLVED; case 4 -> PhysicalCustodyLeaseStatus.RELEASED;
+        case 3 -> PhysicalCustodyLeaseStatus.UNRESOLVED; case 4 -> PhysicalCustodyLeaseStatus.RELEASED; case 5 -> PhysicalCustodyLeaseStatus.PREPARING;
         default -> throw new IllegalArgumentException("unknown custody lifecycle tag");
     }; }
     private static PhysicalCustodyUnresolvedReason readReason(int tag) { return switch (tag) {

@@ -603,6 +603,106 @@ public final class FrontierV3SceneGameTests {
 
     @GameTest(batch = "pm-frontier-v3-scene-strikes", templateNamespace = "pale_mirror_visuals", template = "temperate/residence_1", timeoutTicks = 40)
     public static void localSettlementAssaultStrikeRetainsAnIndependentExactReceipt(GameTestHelper helper) {
+        localSettlementAssaultStrike(helper, StrikeScenario.ORDINARY);
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-strikes", templateNamespace = "pale_mirror_visuals", template = "temperate/residence_1", timeoutTicks = 40)
+    public static void conflictedSettlementStrikeCannotApplyDamageAgain(GameTestHelper helper) {
+        localSettlementAssaultStrike(helper, StrikeScenario.CONFLICT);
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-strikes", templateNamespace = "pale_mirror_visuals", template = "temperate/residence_1", timeoutTicks = 80)
+    public static void failedStrikeConfirmationUsesTargetWitnessWithoutAnotherHit(GameTestHelper helper) {
+        localSettlementAssaultStrike(helper, StrikeScenario.RECOVERY);
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-strikes", templateNamespace = "pale_mirror_visuals", template = "temperate/residence_1", timeoutTicks = 80)
+    public static void missingStrikeWitnessEndsInBoundedLocalDrainWithoutInventingHit(GameTestHelper helper) {
+        localSettlementAssaultStrike(helper, StrikeScenario.MISSING);
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-strikes", templateNamespace = "pale_mirror_visuals", template = "temperate/residence_1", timeoutTicks = 80)
+    public static void malformedRunningWitnessCannotTrapDrainingScene(GameTestHelper helper) {
+        localSettlementAssaultStrike(helper, StrikeScenario.MALFORMED);
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-strikes", templateNamespace = "pale_mirror_visuals", template = "temperate/residence_1", timeoutTicks = 80)
+    public static void removedDeadTargetDoesNotRetainAnUnresolvedHitForever(GameTestHelper helper) {
+        localSettlementAssaultStrike(helper, StrikeScenario.REMOVED_DEAD);
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-strikes", templateNamespace = "pale_mirror_visuals", template = "temperate/residence_1", timeoutTicks = 80)
+    public static void missingLivingTargetDelegatesToSceneRecoveryWithoutInventingAbsence(GameTestHelper helper) {
+        localSettlementAssaultStrike(helper, StrikeScenario.MISSING_LIVING);
+    }
+
+    private enum StrikeScenario { ORDINARY, CONFLICT, RECOVERY, MISSING, MALFORMED, REMOVED_DEAD, MISSING_LIVING }
+
+    @GameTest(batch = "pm-frontier-v3-scene-strikes", templateNamespace = "pale_mirror_visuals", template = "temperate/residence_1", timeoutTicks = 100)
+    public static void recordedMissingMemberIsReinspectedWithoutDuplicateCommands(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos origin = helper.absolutePos(new BlockPos(1, 2, 1));
+        var runtime = FrontierV3ServerRuntime.start(FrontierV3FixtureCatalog.settlementAssaultConfiguration(
+                new WorldId("frontier:reinspect-" + origin.getX() + "-" + origin.getZ()), 91L), new EphemeralStore(), 20_000);
+        var initial = state(runtime);
+        var candidate = initial.coldSettlementAssaultSceneCandidates().getFirst();
+        var canonical = settlementAssaultLease(runtime, initial, candidate, new SceneLeaseId("lease:reinspect"));
+        FrontierV3CommandSubmission.submit(runtime, "reinspect-prepare", canonical.id().value(),
+                new io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneLeasePrepared(canonical));
+        FrontierV3CommandSubmission.submit(runtime, "reinspect-hot", canonical.id().value(), new SceneLeaseTransition(canonical.id(), SceneLeaseStatus.HOT));
+        var positions = new java.util.LinkedHashMap<SubjectId, BodyPosition>();
+        for (int index = 0; index < canonical.members().size(); index++) {
+            BlockPos cell = origin.offset(index % 6, 0, index / 6);
+            prepareFloorWithinTemplate(helper, level, helper.getBounds(), cell);
+            positions.put(canonical.members().get(index).actorId(), new BodyPosition(cell.getX(), cell.getY(), cell.getZ()));
+        }
+        // Component-only coordinate projection; canonical commands still bind the original lease.
+        var local = canonical.withMemberPositions(positions).withHandoffPosition(new BlockPosition(origin.getX(), origin.getY(), origin.getZ()));
+        for (var member : local.members()) {
+            var body = positions.get(member.actorId());
+            addOwnedBody(helper, level, state(runtime), local, member, new BlockPos(body.x(), body.y(), body.z()));
+        }
+        var player = helper.makeMockServerPlayerInLevel();
+        player.setPos(origin.getX(), origin.getY(), origin.getZ());
+        helper.runAfterDelay(2L, () -> {
+            FrontierV3CommandSubmission.submit(runtime, "reinspect-unknown", local.id().value(), new SceneLeaseTransition(local.id(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART));
+            var member = local.members().getFirst();
+            Entity body = level.getEntity(member.entityId());
+            var declaration = body.getPersistentData().copy();
+            body.getPersistentData().remove(FrontierV3AmbientActorExecutor.CUSTODY_EPOCH_KEY);
+            FrontierV3SceneExecutor.reclaim(level, runtime, state(runtime), local.withStatus(SceneLeaseStatus.UNKNOWN_AFTER_RESTART));
+            helper.runAfterDelay(22L, () -> {
+                FrontierV3SceneExecutor.reclaim(level, runtime, state(runtime), local.withStatus(SceneLeaseStatus.UNKNOWN_AFTER_RESTART));
+                var unresolved = state(runtime).sceneLeases().get(local.id());
+                helper.assertTrue(unresolved.recoveryEvidence().isPresent(), "unrecognized exact UUID must retain missing-member evidence");
+                var inspected = local.withStatus(SceneLeaseStatus.UNKNOWN_AFTER_RESTART).withRecoveryEvidence(unresolved.recoveryEvidence().orElseThrow());
+                long revision = runtime.canonicalState().orElseThrow().revision().value();
+                FrontierV3SceneExecutor.reclaim(level, runtime, state(runtime), inspected);
+                helper.runAfterDelay(22L, () -> {
+                    FrontierV3SceneExecutor.reclaim(level, runtime, state(runtime), inspected);
+                    helper.assertValueEqual(runtime.canonicalState().orElseThrow().revision().value(), revision,
+                            "repeated missing-member inspection must not append duplicate diagnostic commands");
+                    body.getPersistentData().merge(declaration);
+                    FrontierV3SceneExecutor.reclaim(level, runtime, state(runtime), inspected);
+                    helper.runAfterDelay(22L, () -> {
+                        FrontierV3SceneExecutor.reclaim(level, runtime, state(runtime), inspected);
+                        helper.assertValueEqual(state(runtime).sceneLeases().get(local.id()).status(), SceneLeaseStatus.HOT,
+                                "retained absence evidence must not latch out a later exact observed body set");
+                        helper.assertTrue(level.getEntity(member.entityId()) == body, "reclaim must keep the original entity object");
+                        helper.assertTrue(state(runtime).sceneLeases().get(local.id()).recoveryEvidence().isEmpty(), "successful reclaim clears old absence evidence");
+                        local.members().forEach(value -> { var entity = level.getEntity(value.entityId()); if (entity != null) entity.discard(); });
+                        player.discard(); FrontierV3SceneExecutor.forget(runtime); runtime.shutdown(); helper.succeed();
+                    });
+                });
+            });
+        });
+    }
+
+    private static void localSettlementAssaultStrike(GameTestHelper helper, StrikeScenario scenario) {
+        boolean conflictBeforeDamage = scenario == StrikeScenario.CONFLICT;
+        boolean recoverAfterDamage = scenario == StrikeScenario.RECOVERY;
+        boolean missingWitness = scenario == StrikeScenario.MISSING;
+        boolean malformedWitness = scenario == StrikeScenario.MALFORMED;
         // This component proof has no claim about natural player demand. It owns the decoded
         // pale_mirror_visuals:temperate/residence_1 [10, 7, 9] template and proves every fixture
         // write and observed body remains inside the actual GameTest envelope.
@@ -612,8 +712,10 @@ public final class FrontierV3SceneGameTests {
                 "the authored settlement-assault component template must retain its [10, 7, 9] envelope");
         BlockPos origin = helper.absolutePos(new BlockPos(1, 2, 1));
         String fixture = "settlement-assault-strike-" + origin.getX() + "-" + origin.getZ();
+        var replayStore = new StrikeReplayStore();
+        var configuration = FrontierV3FixtureCatalog.settlementAssaultConfiguration(new WorldId("frontier:" + fixture), 91L);
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
-                FrontierV3ServerRuntime.start(FrontierV3FixtureCatalog.settlementAssaultConfiguration(new WorldId("frontier:" + fixture), 91L), new EphemeralStore(), 20_000);
+                FrontierV3ServerRuntime.start(configuration, recoverAfterDamage ? replayStore : new EphemeralStore(), 20_000);
         FrontierWorldState initial = state(runtime); SettlementAssaultSceneCandidate candidate = initial.coldSettlementAssaultSceneCandidates().getFirst();
         SceneLease canonical = settlementAssaultLease(runtime, initial, candidate, new SceneLeaseId("lease:" + fixture));
         FrontierV3CommandSubmission.submit(runtime, "local-assault-strike-prepare", canonical.id().value(), new io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneLeasePrepared(canonical));
@@ -650,6 +752,137 @@ public final class FrontierV3SceneGameTests {
                 if (!(target instanceof net.minecraft.world.entity.LivingEntity living)) throw new IllegalStateException("local exact target did not materialize");
                 requireEntityWithinTemplate(helper, templateBounds, living, "the health-observed strike target must remain inside the authored envelope");
                 FixedScalar before = fixed(living.getHealth());
+                if (scenario == StrikeScenario.MISSING_LIVING) {
+                    FrontierV3CommandSubmission.submit(runtime, "missing-living-unknown", prepared.id().value(),
+                            new io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition(prepared.id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty()));
+                    var actorsBefore = state(runtime).actorLocations();
+                    living.discard(); // Missing physical input, not an observed death.
+                    FrontierV3SceneExecutor.executeStrike(level, runtime, state(runtime), local.withStatus(SceneLeaseStatus.HOT),
+                            io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
+                    helper.assertValueEqual(state(runtime).sceneLeases().get(local.id()).status(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART,
+                            "missing live target delegates to ordinary scene recovery");
+                    helper.assertValueEqual(onlyStrike(state(runtime)).status(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART,
+                            "scene handoff cannot settle the unobserved effect");
+                    helper.assertValueEqual(state(runtime).actorLocations(), actorsBefore, "absence cannot invent death or replacement");
+                    helper.assertTrue(state(runtime).physicalObservations().isEmpty(), "absence cannot invent hit evidence");
+                    helper.assertValueEqual(state(runtime).fencedRecovery().current().get(
+                            io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryPhysicalIntentSupport.bindingId(prepared)).recoveryAttempts(), 1,
+                            "lack of a loaded target is not a failed physical inspection");
+                    helper.succeed(); return;
+                }
+                if (scenario == StrikeScenario.REMOVED_DEAD) {
+                    living.hurt(level.damageSources().genericKill(), Float.MAX_VALUE);
+                    helper.assertTrue(!living.isAlive(), "physical input must actually kill the exact target");
+                    var deadActor = prepared.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.TARGET);
+                    // This component template is translated outside canonical bounds. Feed
+                    // the actual observed death at its canonical fixture station; this does
+                    // not claim the production dimension's event-to-coordinate bridge.
+                    FrontierV3CommandSubmission.submit(runtime, "fixture-observed-death", deadActor.value(),
+                            new io.farfrontier.palemirror.frontier.v3.model.ActorDied(local.id(), deadActor,
+                                    canonical.memberPosition(deadActor), "fixture-observed-physical-death"));
+                    helper.assertValueEqual(state(runtime).sceneLeases().get(local.id()).status(), SceneLeaseStatus.DRAINING,
+                            "registered death must itself drain the scene atomically");
+                    living.discard();
+                    var deadActors = state(runtime).actorLocations();
+                    for (int attempt = 0; attempt <= io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryBinding.MAX_RECOVERY_ATTEMPTS; attempt++) {
+                        FrontierV3SceneExecutor.release(level, runtime, state(runtime).sceneLeases().get(local.id()));
+                    }
+                    helper.assertValueEqual(onlyStrike(state(runtime)).status(), PhysicalIntentStatus.CONFLICTED,
+                            "committed death permits bounded abandonment after physical target removal");
+                    helper.assertTrue(state(runtime).physicalObservations().isEmpty(), "unrelated death cannot fabricate hit attribution");
+                    helper.assertValueEqual(state(runtime).actorLocations(), deadActors, "inspection cannot resurrect or change actors");
+                    helper.assertValueEqual(runtime.status().kind(), FrontierV3RuntimeStatus.Kind.ACTIVE, "death recovery stays local");
+                    helper.succeed(); return;
+                }
+                if (malformedWitness) {
+                    living.getPersistentData().putString(FrontierV3SceneStrikeReceipt.KEY, "malformed-provider-input");
+                    FrontierV3CommandSubmission.submit(runtime, "malformed-strike-drain", local.id().value(),
+                            new SceneLeaseTransition(local.id(), SceneLeaseStatus.DRAINING));
+                    for (int attempt = 0; attempt <= io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryBinding.MAX_RECOVERY_ATTEMPTS; attempt++) {
+                        FrontierV3SceneExecutor.release(level, runtime, state(runtime).sceneLeases().get(local.id()));
+                    }
+                    helper.assertValueEqual(onlyStrike(state(runtime)).status(), PhysicalIntentStatus.CONFLICTED,
+                            "malformed RUNNING witness must enter bounded inspection through ordinary drain");
+                    helper.assertValueEqual(fixed(living.getHealth()), before, "inspection cannot replay damage");
+                    helper.assertTrue(state(runtime).physicalObservations().isEmpty(), "invalid witness cannot invent hit evidence");
+                    helper.assertValueEqual(runtime.status().kind(), FrontierV3RuntimeStatus.Kind.ACTIVE, "local conflict must not quarantine world");
+                    helper.succeed(); return;
+                }
+                if (missingWitness) {
+                    FrontierV3CommandSubmission.submit(runtime, "strike-missing-unknown", prepared.id().value(),
+                            new io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition(prepared.id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty()));
+                    for (int attempt = 0; attempt <= io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryBinding.MAX_RECOVERY_ATTEMPTS; attempt++) {
+                        FrontierV3SceneExecutor.executeStrike(level, runtime, state(runtime), local.withStatus(SceneLeaseStatus.HOT),
+                                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
+                    }
+                    helper.assertValueEqual(onlyStrike(state(runtime)).status(), PhysicalIntentStatus.CONFLICTED,
+                            "bounded failed inspection must retire unknown strike locally");
+                    helper.assertValueEqual(state(runtime).sceneLeases().get(local.id()).status(), SceneLeaseStatus.DRAINING,
+                            "conflicted strike must permit scene drain, not permanent HOT waiting");
+                    helper.assertValueEqual(fixed(living.getHealth()), before, "no witness cannot authorize replayed damage");
+                    helper.assertTrue(state(runtime).physicalObservations().isEmpty(), "abandonment must not invent an observed hit");
+                    helper.assertValueEqual(runtime.status().kind(), FrontierV3RuntimeStatus.Kind.ACTIVE, "local ambiguity cannot quarantine world");
+                    helper.succeed(); return;
+                }
+                if (recoverAfterDamage) {
+                    replayStore.failNextAppend = true;
+                    boolean interrupted = false;
+                    try {
+                        FrontierV3SceneExecutor.executeStrike(level, runtime, state(runtime), local,
+                                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
+                    } catch (IllegalStateException expected) { interrupted = true; }
+                    helper.assertTrue(interrupted && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.QUARANTINED,
+                            "injected confirmation storage failure must stop canonical mutation after actual hurt");
+                    var afterHit = fixed(living.getHealth());
+                    helper.assertTrue(afterHit.compareTo(before) < 0, "production must actually damage the target before failed confirmation");
+                    var savedTarget = new net.minecraft.nbt.CompoundTag();
+                    helper.assertTrue(living.save(savedTarget), "serialize actual health and producer-written witness together");
+                    living.load(savedTarget); // Provider serialization boundary, not an OS/process restart claim.
+                    var recovered = FrontierV3ServerRuntime.start(configuration, replayStore, 20_000);
+                    try {
+                        helper.assertValueEqual(onlyStrike(state(recovered)).status(), PhysicalIntentStatus.RUNNING,
+                                "failed confirmation must be absent from recovered committed WAL");
+                        FrontierV3CommandSubmission.submit(recovered, "strike-recovery-unknown", prepared.id().value(),
+                                new io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition(prepared.id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty()));
+                        living.setHealth(living.getHealth() - 1.0F); // Separate divergent physical input.
+                        var changed = fixed(living.getHealth());
+                        FrontierV3SceneExecutor.executeStrike(level, recovered, state(recovered), local,
+                                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
+                        helper.assertValueEqual(onlyStrike(state(recovered)).status(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART,
+                                "external health drift cannot become exact old hit evidence");
+                        helper.assertValueEqual(fixed(living.getHealth()), changed, "unknown inspection must not hurt or restore health");
+                        FrontierV3SceneExecutor.executeStrike(level, recovered, state(recovered), local,
+                                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
+                        helper.assertValueEqual(state(recovered).fencedRecovery().current().get(
+                                        io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryPhysicalIntentSupport.bindingId(prepared)).nextAction(),
+                                io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryDisposition.ABANDON,
+                                "inspection limit proposes abandonment but has not committed it");
+                        living.load(savedTarget); // Restore separate exact serialized input, not production repair.
+                        FrontierV3CommandSubmission.submit(recovered, "strike-recovery-drain", local.id().value(),
+                                new SceneLeaseTransition(local.id(), SceneLeaseStatus.DRAINING));
+                        FrontierV3SceneExecutor.release(level, recovered, state(recovered).sceneLeases().get(local.id()));
+                        helper.assertValueEqual(onlyStrike(state(recovered)).status(), PhysicalIntentStatus.CONFIRMED,
+                                "ordinary draining release must inspect and confirm the retained hit before releasing bodies");
+                        helper.assertValueEqual(state(recovered).sceneLeases().get(local.id()).status(), SceneLeaseStatus.DRAINING,
+                                "hit inspection is its own bounded turn before any scene release");
+                        helper.assertValueEqual(fixed(living.getHealth()), afterHit, "confirmation must not apply a second hit");
+                        helper.assertFalse(living.getPersistentData().contains(FrontierV3SceneStrikeReceipt.KEY),
+                                "accepted confirmation retires its exact witness");
+                    } finally { recovered.shutdown(); }
+                    helper.succeed(); return;
+                }
+                if (conflictBeforeDamage) {
+                    FrontierV3CommandSubmission.submit(runtime, "local-strike-conflict", prepared.id().value(),
+                            new io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition(prepared.id(), PhysicalIntentStatus.CONFLICTED, Optional.empty()));
+                    for (int attempt = 0; attempt < 2; attempt++) {
+                        FrontierV3SceneExecutor.executeStrike(level, runtime, state(runtime), local,
+                                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
+                        helper.assertValueEqual(fixed(living.getHealth()), before, "terminally conflicted strike cannot damage the real target");
+                        helper.assertValueEqual(onlyStrike(state(runtime)).status(), PhysicalIntentStatus.CONFLICTED,
+                                "conflict remains terminal without replay or invented confirmation");
+                    }
+                    helper.succeed(); return;
+                }
                 FrontierV3SceneExecutor.executeStrike(level, runtime, state(runtime), local,
                         io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
                 PhysicalIntent confirmed = onlyStrike(state(runtime));
@@ -690,7 +923,7 @@ public final class FrontierV3SceneGameTests {
         SubjectId cause = SettlementAssaultCauseIdentity.strike(assault.id(), attacker, epoch);
         SceneLease foreign = receiptLease(canonical, new SceneLeaseId(canonical.id().value() + "-foreign"), canonical.revision());
         PhysicalIntent foreignIntent = new PhysicalIntent(FrontierV3SettlementAssaultReceiptBinding.intentId(canonical.worldId(), cause, foreign.id(), foreign.revision()),
-                PhysicalIntentKind.SCENE_STRIKE, PhysicalIntentStatus.PREPARED, cause, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.assaultSceneStrike(attacker, target),
+                PhysicalIntentKind.SCENE_STRIKE, PhysicalIntentStatus.PREPARED, cause, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.assaultSceneStrike(attacker, target, foreign.id(), foreign.revision()),
                 new io.farfrontier.palemirror.frontier.v3.api.FixedPosition(FixedScalar.whole(origin.getX()), FixedScalar.whole(origin.getY()), FixedScalar.whole(origin.getZ())),
                 0, io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition.SCENE_STRIKE_OBSERVED,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
@@ -942,6 +1175,9 @@ public final class FrontierV3SceneGameTests {
         helper.assertTrue(cart != null, "the HOT cargo carrier fixture must be constructible");
         cart.setUUID(FrontierV3CargoCarrierExecutor.id(lease)); cart.setPos(position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D);
         cart.getPersistentData().putString(FrontierV3CargoCarrierExecutor.LEASE_KEY, lease.id().value());
+        cart.getPersistentData().putLong(FrontierV3CargoCarrierExecutor.REVISION_KEY, lease.revision());
+        cart.getPersistentData().putLong(FrontierV3CargoCarrierExecutor.EPOCH_KEY,
+                FrontierV3CargoCarrierAuthority.currentEpoch(state.fencedRecovery(), lease).orElseThrow());
         cart.getPersistentData().putString(FrontierV3CargoCarrierExecutor.CARGO_KEY, FrontierSceneBehaviors.logistics(lease).cargoId().value());
         CustodyAccount account = state.inventory().fungibleResources().accounts().values().stream()
                 .filter(value -> value.custody() instanceof ResourceCustody.Cargo cargo
@@ -982,7 +1218,7 @@ public final class FrontierV3SceneGameTests {
                 .map(value -> value.revision() + "/" + value.status()).findFirst().orElse("missing");
     }
     /** GameTest-only memory port: the filesystem restart proof lives in FrontierV3ServerRuntimeTest. */
-    private static final class EphemeralStore implements FrontierStore {
+    private static class EphemeralStore implements FrontierStore {
         @Override public RecoveryImage recover(WorldId worldId) { return new RecoveryImage(worldId, Optional.empty(), List.of()); }
         @Override public AppendReceipt append(TransactionRecord transaction, Durability durability) {
             return new AppendReceipt(transaction.id(), transaction.revision(), durability, transaction.revision().value());
@@ -990,6 +1226,23 @@ public final class FrontierV3SceneGameTests {
         @Override public SnapshotReceipt installSnapshot(SnapshotRecord snapshot) { throw new UnsupportedOperationException("GameTest does not checkpoint"); }
         @Override public CompactionReceipt compact(WorldId worldId, io.farfrontier.palemirror.frontier.v3.api.Revision coveredRevision) {
             throw new UnsupportedOperationException("GameTest does not compact");
+        }
+    }
+
+    /** Fault-injection port retaining only successful transactions; no fabricated effect receipt. */
+    private static final class StrikeReplayStore extends EphemeralStore {
+        private final java.util.ArrayList<TransactionRecord> transactions = new java.util.ArrayList<>();
+        boolean failNextAppend;
+        @Override public RecoveryImage recover(WorldId worldId) {
+            return new RecoveryImage(worldId, Optional.empty(), List.copyOf(transactions));
+        }
+        @Override public AppendReceipt append(TransactionRecord transaction, Durability durability) {
+            if (failNextAppend) {
+                failNextAppend = false;
+                throw new IllegalStateException("injected strike confirmation storage interruption");
+            }
+            transactions.add(transaction);
+            return super.append(transaction, durability);
         }
     }
 }

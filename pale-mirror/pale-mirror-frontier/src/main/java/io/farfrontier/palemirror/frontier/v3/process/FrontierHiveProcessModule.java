@@ -114,20 +114,20 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
                         return new CommandPlan.Accepted(List.of(new ProposedEvent(SceneStrikeStateSupport.owner(state, prepared.intent()), prepared)));
                     } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
                 },
-                (state, command, intent, transition) -> new CommandPlan.Accepted(List.of(new ProposedEvent(SceneStrikeStateSupport.owner(state, intent), transition))),
+                (state, command, intent, transition) -> new CommandPlan.Accepted(List.of(new ProposedEvent(SceneStrikeStateSupport.transitionOwner(state, intent, transition), transition))),
                 (state, subject, intent) -> {
                     SceneStrikeStateSupport.validateIntent(state, intent);
                     if (!subject.equals(SceneStrikeStateSupport.owner(state, intent))) throw new IllegalArgumentException("scene strike must be prepared by its exact scene owner");
                     return state.preparePhysicalIntent(intent);
                 },
                 (state, subject, intent, transition) -> {
-                    if (!subject.equals(SceneStrikeStateSupport.owner(state, intent))) throw new IllegalArgumentException("scene strike transition lacks exact scene ownership");
+                    if (!subject.equals(SceneStrikeStateSupport.transitionOwner(state, intent, transition))) throw new IllegalArgumentException("scene strike transition lacks exact scene ownership");
                     return reduceSceneStrikeTransition(state, intent, transition);
                 }, PhysicalIntentLifecycleRetirementPolicy.of(
                         (state, command, intent, transition) -> new CommandPlan.Accepted(List.of(
-                                new ProposedEvent(SceneStrikeStateSupport.owner(state, intent), transition))),
+                                new ProposedEvent(SceneStrikeStateSupport.transitionOwner(state, intent, transition), transition))),
                         (state, subject, intent, transition) -> {
-                            if (!subject.equals(SceneStrikeStateSupport.owner(state, intent))) throw new IllegalArgumentException("scene strike retirement lacks exact scene ownership");
+                            if (!subject.equals(SceneStrikeStateSupport.transitionOwner(state, intent, transition))) throw new IllegalArgumentException("scene strike retirement lacks exact scene ownership");
                             return reduceSceneStrikeTransition(state, intent, transition);
                         }), intent -> FencedRecoveryAsset.EFFECT,
                 retirementAccount(PhysicalIntentLifecycleOwner.ROUTE_ENGAGEMENT), PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery(), PhysicalIntentRecoveryDiagnosticProducer.ROUTE_ENGAGEMENT);
@@ -183,8 +183,15 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
                             && !before.hiveColony().mobilizations().equals(after.hiveColony().mobilizations())) {
                         throw new IllegalArgumentException("hive explosion retirement changed a mobilization roster outside its exact effect boundary");
                     }
-                    if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE
-                            && transition.observation().isEmpty()) throw new IllegalArgumentException("scene strike retirement lacks exact effect evidence");
+                    if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE) {
+                        if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED
+                                && transition.observation().isEmpty()) throw new IllegalArgumentException("scene strike confirmation lacks exact effect evidence");
+                        if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFLICTED
+                                && (!before.actorLocations().equals(after.actorLocations())
+                                || !before.physicalObservations().equals(after.physicalObservations()))) {
+                            throw new IllegalArgumentException("conflicted scene strike cannot invent a hit or change actor health");
+                        }
+                    }
                 });
     }
 
@@ -242,8 +249,8 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
             }
             case ROUTE_ENGAGEMENT, SETTLEMENT_ASSAULT -> {
                 if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE) {
-                    SceneStrikeStateSupport.validateIntent(state, intent);
-                    carrier = new PhysicalIntentRetirementAccount.Exact<>(intent.causeSubjectId());
+                    SceneStrikeStateSupport.transitionOwner(state, intent, transition);
+                    carrier = new PhysicalIntentRetirementAccount.Exact<>(new SubjectId(intent.roles().scene().orElseThrow().leaseId().value()));
                     commitment = new PhysicalIntentRetirementAccount.Exact<>(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ATTACKER));
                 } else {
                     SubjectId item = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.EQUIPMENT);
@@ -282,7 +289,7 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
     private static CommandPlan planAssaultTransition(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
                                                       PhysicalIntentTransition transition) {
         if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE) {
-            return new CommandPlan.Accepted(List.of(new ProposedEvent(SceneStrikeStateSupport.owner(state, intent), transition)));
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(SceneStrikeStateSupport.transitionOwner(state, intent, transition), transition)));
         }
         if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_ISSUE) EquipmentIssueStateSupport.validateIntent(state, intent);
         else EquipmentReturnStateSupport.validateIntent(state, intent);
@@ -310,7 +317,7 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
                                                                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
                                                                PhysicalIntentTransition transition) {
         if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE) {
-            if (!subject.equals(SceneStrikeStateSupport.owner(state, intent))) throw new IllegalArgumentException("scene strike transition lacks exact scene ownership");
+            if (!subject.equals(SceneStrikeStateSupport.transitionOwner(state, intent, transition))) throw new IllegalArgumentException("scene strike transition lacks exact scene ownership");
         } else if (!subject.equals(intent.causeSubjectId())) {
             throw new IllegalArgumentException("settlement-assault equipment transition lacks settlement ownership");
         }
@@ -400,7 +407,7 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
                     }
                     return currentState.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).physicalIntents(intents)
                             .physicalObservations(observations)).withStrategicPlans(currentState.strategicPlans().afterConfirmedHotStrike(current));
-                }, PhysicalIntentTransitionStorage::recordUnknown);
+                }, PhysicalIntentTransitionStorage::recordUnknown, PhysicalIntentTransitionStorage.RecoveryEdges.INSPECT_AND_ABANDON);
     }
     @Override public CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
         if (command.payload() instanceof ScoutPatrolAdvanced advanced) {

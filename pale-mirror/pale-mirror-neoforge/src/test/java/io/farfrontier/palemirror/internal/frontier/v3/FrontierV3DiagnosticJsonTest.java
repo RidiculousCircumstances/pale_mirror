@@ -810,7 +810,7 @@ class FrontierV3DiagnosticJsonTest {
         SubjectId firstCause = io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultCauseIdentity.strike(assault.id(), firstAttacker, 0L);
         var firstIntent = new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent(FrontierV3SettlementAssaultReceiptBinding.intentId(state, firstLease, firstCause),
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.PREPARED,
-                firstCause, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.assaultSceneStrike(firstAttacker, firstTarget), new io.farfrontier.palemirror.frontier.v3.api.FixedPosition(
+                firstCause, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.assaultSceneStrike(firstAttacker, firstTarget, firstLease.id(), firstLease.revision()), new io.farfrontier.palemirror.frontier.v3.api.FixedPosition(
                 io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO, io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO,
                 io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO), 0, io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition.SCENE_STRIKE_OBSERVED,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
@@ -841,7 +841,7 @@ class FrontierV3DiagnosticJsonTest {
         SubjectId secondCause = io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultCauseIdentity.strike(assault.id(), secondAttacker, 1L);
         var secondIntent = new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent(FrontierV3SettlementAssaultReceiptBinding.intentId(state, secondLease, secondCause),
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.PREPARED,
-                secondCause, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.assaultSceneStrike(secondAttacker, secondTarget), new io.farfrontier.palemirror.frontier.v3.api.FixedPosition(
+                secondCause, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.assaultSceneStrike(secondAttacker, secondTarget, secondLease.id(), secondLease.revision()), new io.farfrontier.palemirror.frontier.v3.api.FixedPosition(
                 io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO, io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO,
                 io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO), 0, io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition.SCENE_STRIKE_OBSERVED,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);

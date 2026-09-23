@@ -146,8 +146,16 @@ public final class FrontierWorldPhysicalObservationProcess {
     static FrontierWorldState reduceFungibleLayout(FrontierWorldState state, SubjectId subject, FungibleStackLayoutObserved observed) {
         FungibleResourceLedger ledger = state.inventory().fungibleResources(); CustodyAccount account = ledger.accounts().get(observed.accountId());
         if (account == null || !subject.equals(owner(state, account))) throw new IllegalArgumentException("fungible layout observation has no owning subject");
+        if (account.custody() instanceof ResourceCustody.Container container
+                && ReferenceContainerCustody.isReferenceContainer(state, container.containerId())) {
+            PhysicalCustodyLease lease = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(container.containerId()));
+            if (!ReferenceContainerCustody.hasOperationalCustody(state, container.containerId())
+                    || lease.status() != PhysicalCustodyLeaseStatus.ACQUIRED || lease.authorityEpoch() != observed.authorityEpoch()) {
+                throw new IllegalArgumentException("fungible layout requires the current acquired reference custody epoch");
+            }
+        }
         List<PhysicalStackBinding> bindings = FungiblePhysicalObservation.bind(ledger, account.id(), observed.authorityEpoch(), observed.stacks());
-        return state.withInventory(state.inventory().withFungibleResources(ledger.rebind(account.id(), observed.authorityEpoch(), bindings)));
+        return ProductionResourceCustody.bind(state, account.id(), observed.authorityEpoch(), bindings);
     }
 
     static CommandPlan planFungibleHandoff(FrontierWorldState state, FungibleResourceHandoffObserved observed) {
@@ -185,20 +193,24 @@ public final class FrontierWorldPhysicalObservationProcess {
         return state.withInventory(state.inventory().withFungibleResources(transferred));
     }
 
-    static CommandPlan planFungibleBindingRelease(FrontierWorldState state, FungibleStackBindingsReleased released) {
+    static CommandPlan planFungibleBindingRelease(FrontierWorldState state, FungibleStackBindingsReleased released, long now) {
         CustodyAccount account = state.inventory().fungibleResources().accounts().get(released.accountId());
         if (account == null) return new CommandPlan.Rejected(new CommandRejection(RejectionCode.REJECTED_BY_POLICY,
                 "fungible binding release has an unknown custody account"));
         SubjectId owner = owner(state, account);
-        try { reduceFungibleBindingRelease(state, owner, released); }
+        FrontierWorldState after;
+        try { after = reduceFungibleBindingRelease(state, owner, released); }
         catch (IllegalArgumentException invalid) { return new CommandPlan.Rejected(new CommandRejection(RejectionCode.REJECTED_BY_POLICY, invalid.getMessage())); }
-        return new CommandPlan.Accepted(List.of(new ProposedEvent(owner, released)));
+        var events = new ArrayList<ProposedEvent>();
+        events.add(new ProposedEvent(owner, released));
+        events.addAll(ProductionProcess.resumeReleasedEffects(state, after, now));
+        return new CommandPlan.Accepted(List.copyOf(events));
     }
 
     static FrontierWorldState reduceFungibleBindingRelease(FrontierWorldState state, SubjectId subject, FungibleStackBindingsReleased released) {
         FungibleResourceLedger ledger = state.inventory().fungibleResources(); CustodyAccount account = ledger.accounts().get(released.accountId());
         if (account == null || !subject.equals(owner(state, account))) throw new IllegalArgumentException("fungible binding release has no owning subject");
-        return state.withInventory(state.inventory().withFungibleResources(ledger.releaseBindings(released.accountId(), released.authorityEpoch())));
+        return ProductionResourceCustody.release(state, released.accountId(), released.authorityEpoch());
     }
 
     private static CustodyAccount expectedDestination(CustodyAccount current, FungibleResourceHandoffObserved observed) {

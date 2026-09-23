@@ -17,8 +17,33 @@ import java.util.Map;
 public final class ProductionTransformationStateSupport {
     private ProductionTransformationStateSupport() { }
 
+    /** Revoke only unstarted exact-item actuators when their reference container releases. */
+    static FrontierWorldState releasePreparedForContainer(FrontierWorldState state, SubjectId containerId) {
+        var intents = new LinkedHashMap<>(state.physicalIntents());
+        var recovery = state.fencedRecovery();
+        for (ProductionJob job : state.productionJobs().values()) {
+            if (!(job.inputHold() instanceof ProductionInputHold.Materialized)
+                    || !FrontierWorldState.depotId(job.settlementId()).equals(containerId)) continue;
+            for (PhysicalIntent intent : state.physicalIntents().values()) {
+                if (!intent.causeSubjectId().equals(job.id())) continue;
+                if (intent.status() != PhysicalIntentStatus.PREPARED) {
+                    throw new IllegalArgumentException("started exact production retains its physical container custody");
+                }
+                validateIntent(state, intent);
+                recovery = FencedRecoveryPhysicalIntentSupport.composed(recovery, intent, FencedRecoveryAsset.EFFECT);
+                intents.remove(intent.id());
+            }
+        }
+        // The exact item remains in the released canonical inventory. Existing COLD work
+        // consumes that retained item; no container fingerprint or quantity changes here.
+        return state.withChanges(FrontierWorldStateUpdate.begin().physicalIntents(intents).fencedRecovery(recovery));
+    }
+
     public static void validateIntent(FrontierWorldState state, PhysicalIntent intent) {
         if (intent.kind() != PhysicalIntentKind.PRODUCTION_TRANSFORMATION) return;
+        if (intent.roles().schema() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleSchema.PRODUCTION_RESOURCES) {
+            FungibleProductionStateSupport.validateIntent(state, intent); return;
+        }
         ProductionJob job = state.productionJobs().get(intent.causeSubjectId());
         if (job == null || !intent.roles().equals(PhysicalIntentRoleBinding.production(job.id(), job.consumedItemId(), job.outputItemId()))) {
             throw new IllegalArgumentException("production transformation must bind its active job, input and output");
@@ -26,14 +51,24 @@ public final class ProductionTransformationStateSupport {
         if (!(job.inputHold() instanceof ProductionInputHold.Materialized)) {
             throw new IllegalArgumentException("only a materialized production input may receive a physical transformation");
         }
-        if (!job.workProgress().terminalEffectEligible()) {
-            throw new IllegalArgumentException("production transformation requires observed output readiness");
+        SubjectId depot = FrontierWorldState.depotId(job.settlementId());
+        if (intent.status() == PhysicalIntentStatus.PREPARED && ReferenceContainerCustody.hasLiveCustody(state, depot)
+                && !ReferenceContainerCustody.hasOperationalCustody(state, depot)) {
+            throw new IllegalArgumentException("production transformation awaits operational container custody");
         }
         ExactItemStack input = state.inventory().items().get(job.consumedItemId());
         if (input == null || !input.economicOwnerId().equals(job.settlementId()) || !"minecraft:wheat".equals(input.itemKind())
                 || !(input.custody() instanceof InventoryCustody.ContainerSlot slot)
                 || !slot.containerId().equals(FrontierWorldState.depotId(job.settlementId())) || input.count() != job.outputCount()) {
             throw new IllegalArgumentException("production transformation has no matching exact depot wheat input");
+        }
+        validateWorkAndFinance(state, intent, job);
+    }
+
+    static void validateWorkAndFinance(FrontierWorldState state, PhysicalIntent intent, ProductionJob job) {
+        if (!job.workProgress().terminalEffectEligible()
+                || job.traversalCursor() != job.workTraversal().linearCorridorSurfaces().size() - 1) {
+            throw new IllegalArgumentException("production transformation requires observed output readiness");
         }
         activeTask(state, job);
         java.util.Optional<EmploymentContract> contract = intent.status() == PhysicalIntentStatus.RUNNING
@@ -52,6 +87,7 @@ public final class ProductionTransformationStateSupport {
 
     public static FrontierWorldState complete(FrontierWorldState state, PhysicalIntent intent, ProductionTransformationObservation observation,
                                        Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, PhysicalIntent> intents) {
+        validateReceipt(intent, observation);
         validateIntent(state, intent);
         ProductionJob job = state.productionJobs().get(intent.causeSubjectId());
         ExactItemStack input = state.inventory().items().get(job.consumedItemId());
@@ -96,6 +132,9 @@ public final class ProductionTransformationStateSupport {
     }
 
     public static Target target(FrontierWorldState state, PhysicalIntent intent) {
+        if (intent.roles().schema() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleSchema.PRODUCTION) {
+            throw new IllegalArgumentException("exact production target requires its declared exact-item schema");
+        }
         validateIntent(state, intent);
         ProductionJob job = state.productionJobs().get(intent.causeSubjectId());
         ExactItemStack input = state.inventory().items().get(job.consumedItemId());
@@ -106,7 +145,7 @@ public final class ProductionTransformationStateSupport {
         return new Target(job, input, output, source, surface.position());
     }
 
-    private static StrategicTask activeTask(FrontierWorldState state, ProductionJob job) {
+    static StrategicTask activeTask(FrontierWorldState state, ProductionJob job) {
         return taskFor(state, job, StrategicTaskStatus.ACTIVE);
     }
 

@@ -10,9 +10,13 @@ public record SceneLeaseTransition(SceneLeaseId leaseId, SceneLeaseStatus status
     public SceneLeaseTransition {
         Objects.requireNonNull(leaseId, "scene lease id");
         Objects.requireNonNull(status, "scene lease status");
-        if (status == SceneLeaseStatus.PREPARED || status == SceneLeaseStatus.CLOSED) {
-            throw new IllegalArgumentException("scene lease transition must target an active or unknown status");
+        if (status == SceneLeaseStatus.CLOSED) {
+            throw new IllegalArgumentException("scene closure requires its explicit release or recovery disposition");
         }
+    }
+    /** PREPARED creates no new lease here: only declared recovery edges may target it. */
+    public boolean appliesTo(SceneLease lease) {
+        return lease != null && lease.id().equals(leaseId) && lease.status().canTransitionTo(status);
     }
     @Override public String type() { return "frontier.scene_lease_transition"; }
     @Override public boolean requiresDurableBeforeEffect() { return true; }

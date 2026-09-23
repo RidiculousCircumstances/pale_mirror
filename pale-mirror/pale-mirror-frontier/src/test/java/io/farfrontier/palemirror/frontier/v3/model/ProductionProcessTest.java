@@ -509,6 +509,17 @@ class ProductionProcessTest {
                 base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(), base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter()));
 
         assertInstanceOf(CommandResult.Accepted.class, submitSurface(engine, world, "surface-prepared", depot, ContainerSurfaceStatus.PREPARED));
+        FrontierWorldState prepared = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        var activation = new ContainerSurfaceTransition(depot, ContainerSurfaceStatus.ACTIVE);
+        var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
+        var recovered = codecs.decode(activation.type(), codecs.encode(activation));
+        var replayed = new io.farfrontier.palemirror.frontier.v3.api.FrontierEvent(1,
+                new io.farfrontier.palemirror.frontier.v3.api.EventId("event:cold-surface-activation"),
+                new io.farfrontier.palemirror.frontier.v3.api.TransactionId("transaction:cold-surface-activation"),
+                world, engine.checkpoint().revision(), engine.checkpoint().instant(), cold.settlementId(),
+                CauseChain.root(new CommandId("command:cold-surface-activation")), recovered);
+        assertThrows(IllegalArgumentException.class, () -> base.reducer().apply(prepared, replayed),
+                "replay must not bypass the production input custody guard enforced by command admission");
         CommandResult rejected = submitSurface(engine, world, "surface-active", depot, ContainerSurfaceStatus.ACTIVE);
         assertInstanceOf(CommandResult.Rejected.class, rejected);
         assertEquals(ContainerSurfaceStatus.PREPARED, new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState())

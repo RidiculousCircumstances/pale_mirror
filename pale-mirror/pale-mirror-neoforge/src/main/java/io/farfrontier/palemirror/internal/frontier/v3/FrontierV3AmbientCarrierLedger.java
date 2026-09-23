@@ -21,8 +21,10 @@ import java.util.Map;
 /** Bounded inactive-body evidence; canonical actors and rosters remain domain-owned. */
 final class FrontierV3AmbientCarrierLedger extends SavedData {
     private static final String NAME = "pale_mirror_frontier_v3_ambient_carriers";
-    private static final int FORMAT = 3, MAX_CARRIERS = 4_096;
+    private static final int FORMAT = 5, MAX_CARRIERS = 4_096;
     private final Map<SubjectId, Carrier> carriers;
+    private final Map<SubjectId, FrontierV3SceneDeparture> departures = new LinkedHashMap<>();
+    private final Map<SubjectId, FrontierV3SceneDeparture> departureConflicts = new LinkedHashMap<>();
     private FrontierV3AmbientCarrierLedger() { this(new LinkedHashMap<>()); }
     private FrontierV3AmbientCarrierLedger(Map<SubjectId, Carrier> carriers) { this.carriers = carriers; }
     static FrontierV3AmbientCarrierLedger emptyForTest() { return new FrontierV3AmbientCarrierLedger(); }
@@ -31,6 +33,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
                 DataFixTypes.SAVED_DATA_COMMAND_STORAGE), NAME + "_" + Base64.getUrlEncoder().withoutPadding().encodeToString(worldId.value().getBytes(StandardCharsets.UTF_8)));
     }
     Reconciliation reconciliation(FrontierV3ActorCarrierComposition.Declaration live) {
+        if (hasDepartureConflict(live.actorId())) return Reconciliation.DEPARTURE_CONFLICT;
         Carrier carrier = carriers.get(live.actorId());
         if (carrier == null) return Reconciliation.NO_FENCED_CARRIER;
         if (!carrier.identity.entityId().equals(live.entityId())) return Reconciliation.UUID_MISMATCH;
@@ -47,10 +50,11 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
     }
     boolean canFence(FrontierV3ActorCarrierComposition.Declaration inactive, long physicalRevision, long ambientRevision) {
         if (inactive.representation() != FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER || physicalRevision < 1L || ambientRevision < 0L
-                || carriers.containsKey(inactive.actorId()) || carriers.size() >= MAX_CARRIERS) return false;
+                || hasDepartureConflict(inactive.actorId()) || carriers.containsKey(inactive.actorId()) || carriers.size() >= MAX_CARRIERS) return false;
         return carriers.values().stream().noneMatch(value -> value.identity.entityId().equals(inactive.entityId()));
     }
     boolean fence(FrontierV3ActorCarrierComposition.Declaration inactive, long physicalRevision, long ambientRevision) {
+        if (hasDepartureConflict(inactive.actorId())) return false;
         Carrier next = new Carrier(inactive, physicalRevision, ambientRevision);
         Carrier previous = carriers.get(inactive.actorId());
         if (previous != null) return previous.equals(next);
@@ -73,8 +77,51 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
         return new Carrier(inactive, physicalRevision, ambientRevision).equals(carriers.get(inactive.actorId()));
     }
     boolean hasCarrier(SubjectId actorId) { return carriers.containsKey(actorId); }
+    /** A receipt is evidence only; recording it does not install an inactive carrier. */
+    boolean recordDeparture(FrontierV3SceneDeparture departure) {
+        SubjectId actor = departure.carrier().identity().actorId();
+        var previous = departures.get(actor);
+        if (previous != null) {
+            if (!previous.equals(departure) && departureConflicts.putIfAbsent(actor, departure) == null) setDirty();
+            return previous.equals(departure) && !hasDepartureConflict(actor);
+        }
+        if (departures.size() >= MAX_CARRIERS) return false;
+        if (departures.values().stream().anyMatch(value -> value.carrier().identity().entityId().equals(departure.carrier().identity().entityId()))) return false;
+        departures.put(actor, departure);
+        setDirty();
+        return true;
+    }
+    java.util.Optional<FrontierV3SceneDeparture> departure(SubjectId actor) {
+        return java.util.Optional.ofNullable(departures.get(actor));
+    }
+    boolean hasDepartureConflict(SubjectId actor) { return departureConflicts.containsKey(actor); }
+    boolean retireDeadActor(io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState state, SubjectId actor) {
+        var location = state.actorLocations().get(actor);
+        if (location == null || location.condition().status() != io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.DEAD
+                || state.fencedRecovery().current().containsKey(
+                        io.farfrontier.palemirror.frontier.v3.model.FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(actor))) return false;
+        if (carriers.remove(actor) != null) setDirty();
+        forgetDeparture(actor);
+        return true;
+    }
+    /** Explicit resolved cleanup; mere reappearance must not discard contradictory evidence. */
+    void forgetDeparture(SubjectId actor) {
+        boolean changed = departures.remove(actor) != null;
+        changed |= departureConflicts.remove(actor) != null;
+        if (changed) setDirty();
+    }
+    /** Withdraw only this exact provisional fence when the same scene body returns before release. */
+    boolean resumeDeparture(FrontierV3SceneDeparture receipt) {
+        SubjectId actor = receipt.carrier().identity().actorId();
+        if (hasDepartureConflict(actor) || !receipt.equals(departures.get(actor))) return false;
+        Carrier fenced = carriers.get(actor);
+        if (fenced != null && !fenced.equals(receipt.carrier())) return false;
+        carriers.remove(actor);
+        forgetDeparture(actor);
+        return true;
+    }
     long reconstructionEpoch(SubjectId actorId) { Carrier carrier = carriers.get(actorId); if (carrier == null) throw new IllegalStateException("missing v3 ambient carrier"); return Math.addExact(carrier.identity.epoch(), 1L); }
-    boolean adopt(FrontierV3ActorCarrierComposition.Declaration live) { if (reconciliation(live) != Reconciliation.READY) return false; carriers.remove(live.actorId()); setDirty(); return true; }
+    boolean adopt(FrontierV3ActorCarrierComposition.Declaration live) { if (reconciliation(live) != Reconciliation.READY) return false; carriers.remove(live.actorId()); forgetDeparture(live.actorId()); setDirty(); return true; }
     int inactiveCount() { return carriers.size(); }
     List<FrontierDomainRelationships.CarrierEvidence> relationshipEvidence() {
         return carriers.values().stream().sorted(Comparator.comparing(value -> value.identity.actorId().value())).map(value ->
@@ -82,7 +129,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
     }
     static FrontierV3AmbientCarrierLedger load(CompoundTag tag, HolderLookup.Provider registries) {
         if (tag.getInt("format") != FORMAT) throw new IllegalStateException("incompatible v3 ambient carrier ledger");
-        ListTag values = tag.getList("carriers", Tag.TAG_COMPOUND); if (values.size() > MAX_CARRIERS) throw new IllegalStateException("v3 ambient carrier limit exceeded");
+        ListTag values = inventory(tag, "carriers");
         Map<SubjectId, Carrier> restored = new LinkedHashMap<>();
         for (Tag raw : values) {
             Carrier carrier = Carrier.load((CompoundTag) raw);
@@ -92,16 +139,46 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
                 throw new IllegalStateException("duplicate v3 ambient carrier evidence");
             }
         }
-        return new FrontierV3AmbientCarrierLedger(restored);
+        ListTag departures = inventory(tag, "departures");
+        var ledger = new FrontierV3AmbientCarrierLedger(restored);
+        for (Tag raw : departures) {
+            var departure = FrontierV3SceneDeparture.load((CompoundTag) raw);
+            if (ledger.departures.containsKey(departure.carrier().identity().actorId()) || !ledger.recordDeparture(departure)) {
+                throw new IllegalStateException("duplicate scene departure evidence");
+            }
+        }
+        for (Tag raw : inventory(tag, "departureConflicts")) {
+            var conflict = FrontierV3SceneDeparture.load((CompoundTag) raw);
+            var actor = conflict.carrier().identity().actorId();
+            var first = ledger.departures.get(actor);
+            if (first == null || first.equals(conflict) || ledger.departureConflicts.putIfAbsent(actor, conflict) != null)
+                throw new IllegalStateException("invalid scene departure conflict evidence");
+        }
+        ledger.setDirty(false);
+        return ledger;
+    }
+    private static ListTag inventory(CompoundTag tag, String key) {
+        if (!(tag.get(key) instanceof ListTag rows) || (!rows.isEmpty() && rows.getElementType() != Tag.TAG_COMPOUND)
+                || rows.size() > MAX_CARRIERS) throw new IllegalStateException("invalid carrier inventory: " + key);
+        return rows;
     }
     @Override public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
         tag.putInt("format", FORMAT); ListTag values = new ListTag();
         carriers.values().stream().sorted(Comparator.comparing(value -> value.identity.actorId().value())).forEach(value -> values.add(value.save()));
-        tag.put("carriers", values); return tag;
+        tag.put("carriers", values);
+        ListTag departureTags = new ListTag();
+        departures.values().stream().sorted(Comparator.comparing(value -> value.carrier().identity().actorId()))
+                .forEach(value -> departureTags.add(value.save()));
+        tag.put("departures", departureTags);
+        ListTag conflicts = new ListTag();
+        departureConflicts.values().stream().sorted(Comparator.comparing(value -> value.carrier().identity().actorId()))
+                .forEach(value -> conflicts.add(value.save()));
+        tag.put("departureConflicts", conflicts);
+        return tag;
     }
     enum Reconciliation {
         NO_FENCED_CARRIER, READY, UUID_MISMATCH, KIND_MISMATCH, REPRESENTATION_MISMATCH,
-        STALE_REVISION, CONCURRENT_CUSTODY
+        STALE_REVISION, CONCURRENT_CUSTODY, DEPARTURE_CONFLICT
     }
     record Carrier(FrontierV3ActorCarrierComposition.Declaration identity, long physicalRevision, long ambientRevision) {
         Carrier { if (identity.representation() != FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER || physicalRevision < 1L || ambientRevision < 0L) throw new IllegalArgumentException("invalid ambient carrier evidence"); }

@@ -23,21 +23,13 @@ final class FrontierDevelopmentScenarios {
     private FrontierDevelopmentScenarios() { }
 
     static FrontierWorldState hotSceneStrikeState(WorldId worldId, long seed) {
-        var configuration = FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(worldId, seed);
-        var engine = FrontierEngines.create(configuration);
-        var codec = new FrontierWorldStateCodec(configuration.initialState().bootstrap());
-        FrontierWorldState state = null; RouteOperation operation = null;
-        for (long tick = 1L; tick <= 12_000L; tick++) {
-            engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
-            state = codec.decode(engine.checkpoint().canonicalState());
-            RouteOperation candidate = state.operations().get(new SubjectId("operation:supply-1-2"));
-            if (candidate != null && candidate.stage() == OperationStage.EN_ROUTE && candidate.activeTravel().isPresent()
-                    && candidate.activeTravel().orElseThrow().cursor() == 0) {
-                operation = candidate;
-                break;
-            }
-        }
-        if (state == null || operation == null) throw new IllegalStateException("development scene needs one en-route operation");
+        return hotSceneStrikeFixture(worldId, seed).state();
+    }
+
+    static RouteSceneReturnFixture hotSceneStrikeFixture(WorldId worldId, long seed) {
+        var base = routeSceneReturnFixture(worldId, seed);
+        FrontierWorldState state = base.state();
+        RouteOperation operation = initialNorthwatchShipment(state).orElseThrow();
         BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor().surface().support();
         SubjectId operationId = operation.id();
         List<Bioform> bioforms = state.bootstrap().hive().bioforms();
@@ -64,16 +56,16 @@ final class FrontierDevelopmentScenarios {
                 List.of(StrategicTaskRequirement.AVAILABLE_HIVE_GUARD), List.of(), StrategicTaskStatus.PENDING, Optional.of(intercept));
         state = state.withStrategicPlans(plans.addObjective(objective).addTask(task));
         Bioform scout = state.bootstrap().hive().bioforms().stream().filter(Bioform::isScout).findFirst().orElseThrow();
-        HiveOperationKnowledge.Sighting sighting = new HiveOperationKnowledge.Sighting(operation.id(), scout.id(), intercept, 2_600L);
+        HiveOperationKnowledge.Sighting sighting = new HiveOperationKnowledge.Sighting(operation.id(), scout.id(), intercept, base.instant().ticks());
         state = state.withStrategicPlans(state.strategicPlans().withHiveOperationKnowledge(state.strategicPlans().hiveOperationKnowledge().observe(sighting)));
-        ScheduledAction action = HiveRouteEngagementProcess.start(task, 2_600L);
+        ScheduledAction action = HiveRouteEngagementProcess.start(task, base.instant().ticks());
         for (ProposedEvent event : HiveRouteEngagementProcess.planStart(state, action)) {
             if (event.payload() instanceof StrategicTaskTransition transition) state = StrategicObjectiveProcess.reduceTaskTransition(state, hive, transition);
             if (event.payload() instanceof RouteEngagementStarted started) state = HiveRouteEngagementProcess.reduceStarted(state, hive, started);
             if (event.payload() instanceof RouteEngagementTransition transition) state = HiveRouteEngagementProcess.reduceTransition(state, hive, transition);
         }
         if (state.coldEngagementSceneCandidates().isEmpty()) throw new IllegalStateException("development scene did not enter COLD engagement");
-        return state;
+        return new RouteSceneReturnFixture(state, base.instant(), List.of());
     }
 
     /**
@@ -364,6 +356,18 @@ final class FrontierDevelopmentScenarios {
      */
     static RouteSceneReturnFixture routeSceneReturnFixture(WorldId worldId, long seed) {
         var configuration = FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(worldId, seed);
+        // This fixture isolates route custody/recovery, not competition with population
+        // growth. With real production labor, Northwatch's birth review can now consume
+        // the exact export surplus before cargo admission. Keep ordinary reserve rules and
+        // production timing; exclude only this independent initial workload in the fixture.
+        var schedulesWithoutBirth = configuration.initialSchedules().stream()
+                .filter(action -> !action.subject().equals(new SubjectId("settlement:1"))
+                        || !action.kind().equals("frontier.population.birth.review")).toList();
+        configuration = new io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<>(
+                configuration.worldId(), configuration.initialState(), configuration.initialInstant(), configuration.commandPlanner(),
+                configuration.scheduledPlanner(), configuration.reducer(), configuration.stateCodec(), configuration.projectionMapper(),
+                configuration.limits(), schedulesWithoutBirth, configuration.transactionCommitter(), configuration.stateValidator(),
+                configuration.executionMetrics(), configuration.kernelQuarantineReporter());
         var engine = FrontierEngines.create(configuration);
         var codec = new FrontierWorldStateCodec(configuration.initialState().bootstrap());
         io.farfrontier.palemirror.frontier.v3.api.CheckpointImage checkpoint = null;
@@ -372,7 +376,7 @@ final class FrontierDevelopmentScenarios {
             engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
             if (tick % 20L != 0L) continue;
             checkpoint = engine.checkpoint(); state = codec.decode(checkpoint.canonicalState());
-            RouteOperation candidate = state.operations().get(new SubjectId("operation:supply-1-2"));
+            RouteOperation candidate = initialNorthwatchShipment(state).orElse(null);
             if (candidate != null && candidate.stage() == OperationStage.EN_ROUTE && candidate.routeIndex() == 0
                     && candidate.activeTravel().isPresent() && candidate.activeTravel().orElseThrow().cursor() == 0) {
                 operation = candidate; break;
@@ -382,7 +386,9 @@ final class FrontierDevelopmentScenarios {
         BlockPosition next = new BlockPosition(-366, 64, -304);
         if (checkpoint == null || state == null || operation == null || !operation.route().getFirst().equals(start) || !operation.route().get(1).equals(next)
                 || !operation.participantIds().equals(List.of(new SubjectId("resident:1-30"), new SubjectId("resident:1-16"), new SubjectId("resident:1-28")))) {
-            throw new IllegalStateException("development route-return fixture did not retain its exact assembled Northwatch shipment");
+            throw new IllegalStateException("development route-return fixture did not retain its exact assembled Northwatch shipment: instant="
+                    + (checkpoint == null ? "none" : checkpoint.instant()) + ", operation="
+                    + (operation == null ? "absent" : operation.id() + ", route=" + operation.route() + ", participants=" + operation.participantIds()));
         }
         RouteOperation activeOperation = operation;
         var schedules = checkpoint.schedules().stream()
@@ -478,7 +484,7 @@ final class FrontierDevelopmentScenarios {
      */
     static RouteSceneReturnFixture hotScoutSightingFixture(WorldId worldId, long seed) {
         RouteSceneReturnFixture base = routeSceneReturnFixture(worldId, seed);
-        RouteOperation operation = base.state().operations().get(new SubjectId("operation:supply-1-2"));
+        RouteOperation operation = initialNorthwatchShipment(base.state()).orElseThrow();
         Bioform scout = base.state().bootstrap().hive().bioforms().stream().filter(value -> value.id().equals(new SubjectId("bioform:west-1")))
                 .filter(Bioform::isScout).findFirst().orElseThrow();
         if (operation == null || operation.activeTravel().isEmpty()) throw new IllegalStateException("hot scout fixture has no active exact cargo route");
@@ -499,7 +505,7 @@ final class FrontierDevelopmentScenarios {
      */
     static RouteSceneReturnFixture hotScoutInterceptFixture(WorldId worldId, long seed) {
         RouteSceneReturnFixture base = hotScoutSightingFixture(worldId, seed);
-        RouteOperation operation = base.state().operations().get(new SubjectId("operation:supply-1-2"));
+        RouteOperation operation = initialNorthwatchShipment(base.state()).orElseThrow();
         if (operation == null || operation.activeTravel().isEmpty()) throw new IllegalStateException("hot scout intercept fixture has no active exact cargo route");
         BlockPosition intercept = operation.activeTravel().orElseThrow().cargoAnchor().surface().support();
         FrontierWorldState state = base.state();
@@ -931,6 +937,15 @@ final class FrontierDevelopmentScenarios {
 
     record HiveNutrientTransferFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules, SubjectId transferId) {
         HiveNutrientTransferFixture { schedules = List.copyOf(schedules); }
+    }
+
+    /** Test-only admission query; the selected operation retains its actual canonical identity. */
+    static Optional<RouteOperation> initialNorthwatchShipment(FrontierWorldState state) {
+        return state.operations().values().stream()
+                .filter(operation -> operation.settlementId().equals(new SubjectId("settlement:1")))
+                .filter(operation -> operation.stage() == OperationStage.EN_ROUTE && operation.routeIndex() == 0)
+                .filter(operation -> operation.activeTravel().isPresent() && operation.activeTravel().orElseThrow().cursor() == 0)
+                .reduce((left, right) -> { throw new IllegalStateException("route fixture has ambiguous initial Northwatch shipments"); });
     }
 
     record RouteSceneReturnFixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules) {

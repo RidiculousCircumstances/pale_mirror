@@ -80,7 +80,17 @@ final class FrontierV3ActorCarrierComposition {
 
     /** Validates only an already complete producer declaration; it deliberately derives nothing. */
     static boolean owns(Entity entity, Declaration declaration) {
-        if (entity == null || entity.isRemoved() || !declaration.entityId().equals(entity.getUUID())) return false;
+        return entity != null && !entity.isRemoved() && matchesDeclaration(entity, declaration);
+    }
+
+    /** Only an actual chunk-unload callback may inspect the already-removed final body. */
+    static boolean ownsUnloading(Entity entity, Declaration declaration) {
+        return entity != null && entity.getRemovalReason() == Entity.RemovalReason.UNLOADED_TO_CHUNK
+                && matchesDeclaration(entity, declaration);
+    }
+
+    private static boolean matchesDeclaration(Entity entity, Declaration declaration) {
+        if (!declaration.entityId().equals(entity.getUUID())) return false;
         if (declaration.kind() == ActorKind.BIOFORM ? !(entity instanceof Zombie) : !(entity instanceof Villager)) return false;
         return declaration.actorId().value().equals(entity.getPersistentData().getString(ACTOR_KEY))
                 && declaration.kind().name().equals(entity.getPersistentData().getString(KIND_KEY))

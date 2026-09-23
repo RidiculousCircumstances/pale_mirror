@@ -96,6 +96,9 @@ final class PhysicalEffectObservationPayloadCodec {
             output.writeByte(departure.remainingStacks().size());
             for (FungiblePhysicalObservation.Stack stack : departure.remainingStacks()) writeConsumedStack(output, stack);
         }
+        else if (observation instanceof FungibleProductionObservation production) {
+            output.writeByte(23); ids(output, production); FungibleProductionObservationCodec.write(output, production);
+        }
         else throw new IllegalArgumentException("unknown physical effect observation");
     }
 
@@ -139,6 +142,7 @@ final class PhysicalEffectObservationPayloadCodec {
             case 20 -> fungibleCargo(input);
             case 21 -> fungibleConsumed(input);
             case 22 -> fungibleNutrientDeparture(input);
+            case 23 -> FungibleProductionObservationCodec.read(input, id(input), intent(input));
             default -> throw new IllegalArgumentException("unknown physical effect observation kind");
         };
     }

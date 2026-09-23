@@ -7,6 +7,14 @@ import net.minecraft.core.BlockPos;
 final class FrontierV3PilotSemanticAnchors {
     private FrontierV3PilotSemanticAnchors() { }
 
+    static String visitAnchor(JsonObject action) {
+        String anchor = action.has("anchor") ? action.get("anchor").getAsString() : "travelCurrent";
+        if (!anchor.equals("travelCurrent") && !anchor.equals("travelCargo")) {
+            throw new IllegalArgumentException("unsupported operation visit anchor: " + anchor);
+        }
+        return anchor;
+    }
+
     static BlockPos operationAnchor(FrontierV3TestPilotClient.ObservedDiagnostic diagnostic, String operation, String anchor) {
         JsonObject value = diagnostic.value().getAsJsonObject(anchor);
         if (value == null || !value.has("x") || !value.has("y") || !value.has("z")) {

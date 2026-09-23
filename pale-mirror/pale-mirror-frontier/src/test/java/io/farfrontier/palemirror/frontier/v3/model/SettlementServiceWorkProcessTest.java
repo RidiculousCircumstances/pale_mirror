@@ -161,6 +161,18 @@ class SettlementServiceWorkProcessTest {
         assertFalse(complete.inventory().items().containsKey(ready.item()));
         assertEquals(SettlementServiceWorkPhase.COMPLETED, complete.serviceWorks().get(ready.work().id()).phase());
         assertEquals(observation.remainingRaw(), complete.infection().get(ready.cell()).value().raw());
+        var lease = complete.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isServiceWork)
+                .findFirst().orElseThrow();
+        var unknown = complete.transitionSceneLease(lease.id(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART);
+        unknown = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(unknown));
+        assertEquals(SceneLeaseStatus.DRAINING, FrontierSceneBehaviors.recoveredStatus(unknown, unknown.sceneLeases().get(lease.id())));
+        var draining = unknown.transitionSceneLease(lease.id(), SceneLeaseStatus.DRAINING);
+        var worker = draining.actorLocations().get(ready.work().workerId());
+        var closed = draining.releaseSceneLease(lease.id(), List.of(new SceneMemberPosition(ready.work().workerId(), worker.body(), worker.condition().health())));
+        assertEquals(SceneLeaseStatus.CLOSED, closed.sceneLeases().get(lease.id()).status());
+        assertEquals(complete.inventory(), closed.inventory());
+        assertEquals(complete.infection(), closed.infection());
+        assertEquals(complete.physicalObservations(), closed.physicalObservations());
     }
 
     @Test

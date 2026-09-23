@@ -53,7 +53,19 @@ public final class FrontierWorldRuntimeDefinition {
                                                                                                            FrontierRuleset ruleset, boolean autonomousInterception) {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(worldId, seed, ruleset); FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
         return new FrontierEngineConfiguration<>(worldId, initial, SimInstant.ZERO, FrontierWorldRuntimeDefinition::planCommand,
-                (state, action) -> planScheduled(state, action, autonomousInterception), FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(bootstrap), FrontierWorldProjectionCompiler::compile,
+                new io.farfrontier.palemirror.frontier.v3.kernel.ScheduledActionPlanner<FrontierWorldState>() {
+                    @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
+                        return planScheduled(state, action, autonomousInterception);
+                    }
+                    @Override public boolean held(FrontierWorldState state, ScheduledAction action) {
+                        return scheduledHeld(state, action);
+                    }
+                    @Override public List<ScheduledAction> retiredBy(FrontierWorldState previous, FrontierWorldState next,
+                                                                    io.farfrontier.palemirror.frontier.v3.api.FrontierEvent event,
+                                                                    java.util.function.Supplier<List<ScheduledAction>> pending) {
+                        return FrontierWorldProcessCatalog.retiredSchedules(PROCESS_REGISTRY, previous, next, event, pending);
+                    }
+                }, FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(bootstrap), FrontierWorldProjectionCompiler::compile,
                 new EngineLimits(4_096, 1_200L, 4_096, 4_096), FrontierWorldProcessCatalog.initialSchedule(bootstrap), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE)
                 .withKernelQuarantineReporter((state, world, causes, instant, boundary, failure) -> java.util.Optional.of(new ProposedEvent(
                         new SubjectId(world.value()), new io.farfrontier.palemirror.frontier.v3.model.KernelQuarantineObserved(new SubjectId(world.value()),
@@ -62,6 +74,10 @@ public final class FrontierWorldRuntimeDefinition {
                             case DUE_TRANSACTION -> io.farfrontier.palemirror.frontier.v3.model.KernelQuarantineObserved.Producer.DUE_TRANSACTION; },
                         failure.getClass().getSimpleName())))); }
     public static PayloadCodecs payloadCodecs() { return PAYLOAD_CODECS; }
+    public static boolean scheduledHeld(FrontierWorldState state, ScheduledAction action) {
+        return FrontierWorldProcessCatalog.scheduledHeld(PROCESS_REGISTRY, state, action);
+    }
+
     public static DeterministicProcessRegistry processRegistry() {
         FrontierWorldProcessCatalog.requirePhysicalLifecycleComposition();
         List<io.farfrontier.palemirror.frontier.v3.kernel.DeterministicProcessDescriptor> descriptors = FrontierWorldProcessCatalog.descriptors();

@@ -26,6 +26,10 @@ public final class FrontierWorldStateTransitionValidator implements StateValidat
         next.validateTransitionFrom(previous);
     }
 
+    @Override public void validateScheduleChanges(FrontierWorldState state, List<ScheduledAction> retainedChanges) {
+        FrontierReferenceClosure.validateScheduledSubjects(state, retainedChanges);
+    }
+
     @Override public void validateTransaction(FrontierWorldState previous, FrontierWorldState next, List<FrontierEvent> events,
                                               List<ScheduledAction> schedulesBefore, List<ScheduledAction> schedulesAfter) {
         validateTransition(previous, next);

@@ -17,7 +17,9 @@ public final class FrontierProductionWorkSceneSupport {
                 .map(job -> candidate(state, job)).flatMap(Optional::stream).toList();
     }
     public static Optional<Candidate> candidate(FrontierWorldState state, ProductionJob job) {
-        if (hasScene(state, job.id()) || !hasExactMaterializedInput(state, job) || job.workProgress().terminalEffectEligible()) return Optional.empty();
+        if (hasScene(state, job.id()) || !hasPhysicalInput(state, job) || job.workProgress().terminalEffectEligible()) return Optional.empty();
+        SubjectId depot = FrontierWorldState.depotId(job.settlementId());
+        if (ReferenceContainerCustody.hasLiveCustody(state, depot) && !ReferenceContainerCustody.hasOperationalCustody(state, depot)) return Optional.empty();
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), job.settlementId());
         SettlementStructure workshop = settlement.structures().stream().filter(value -> value.id().equals(job.facilityId())).findFirst().orElse(null);
         ActorLocation worker = state.actorLocations().get(job.workerId());
@@ -34,6 +36,7 @@ public final class FrontierProductionWorkSceneSupport {
     }
     /** Requires the sole live lease that may turn a Minecraft body observation into this job's fact. */
     public static SceneLease requireHotLease(FrontierWorldState state, ProductionJob job, io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId leaseId) {
+        if (!hasPhysicalInput(state, job)) throw new IllegalArgumentException("production work has no current physical input custody");
         SceneLease lease = state.sceneLeases().get(leaseId);
         if (lease == null || lease.status() != SceneLeaseStatus.HOT || !FrontierSceneBehaviors.isProductionWork(lease)
                 || !FrontierSceneBehaviors.productionWork(lease).jobId().equals(job.id()) || lease.members().size() != 1
@@ -99,7 +102,16 @@ public final class FrontierProductionWorkSceneSupport {
         return state.withChanges(FrontierWorldStateUpdate.begin().productionJobs(jobs).sceneLeases(leases));
     }
     /** The worker may not continue a visual cycle after its named player-observable input departed. */
-    public static boolean hasExactMaterializedInput(FrontierWorldState state, ProductionJob job) {
+    public static boolean hasPhysicalInput(FrontierWorldState state, ProductionJob job) {
+        if (job.inputHold() instanceof ProductionInputHold.FungibleBound bound) {
+            SubjectId depot = FrontierWorldState.depotId(job.settlementId());
+            if (!ReferenceContainerCustody.hasOperationalCustody(state, depot)) return false;
+            PhysicalCustodyLease custody = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(depot));
+            if (custody.authorityEpoch() != bound.authorityEpoch()) return false;
+            List<PhysicalStackBinding> bindings = state.inventory().fungibleResources().bindings().values().stream()
+                    .filter(binding -> binding.accountId().equals(bound.accountId())).toList();
+            return !bindings.isEmpty() && bindings.stream().allMatch(binding -> binding.authorityEpoch() == bound.authorityEpoch());
+        }
         if (!(job.inputHold() instanceof ProductionInputHold.Materialized)) return false;
         ExactItemStack input = state.inventory().items().get(job.consumedItemId());
         return input != null && input.economicOwnerId().equals(job.settlementId()) && "minecraft:wheat".equals(input.itemKind())

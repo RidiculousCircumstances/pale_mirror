@@ -56,7 +56,8 @@ public final class ReferenceContainerCustody {
     /** A retained unresolved epoch blocks its object but never authorizes another physical write. */
     public static boolean hasOperationalCustody(FrontierWorldState state, SubjectId containerId) {
         if (!hasLiveCustody(state, containerId)) return false;
-        return state.replicaCustody().custodyByScope().get(scopeId(containerId)).status() != PhysicalCustodyLeaseStatus.UNRESOLVED;
+        PhysicalCustodyLeaseStatus status = state.replicaCustody().custodyByScope().get(scopeId(containerId)).status();
+        return status == PhysicalCustodyLeaseStatus.ACQUIRED || status == PhysicalCustodyLeaseStatus.CHECKPOINTED;
     }
 
     public static boolean hasConflict(FrontierWorldState state, SubjectId containerId) {
@@ -75,12 +76,24 @@ public final class ReferenceContainerCustody {
         return isReferenceContainer(state, containerId) && hasConflict(state, containerId);
     }
 
+    /** Releases a checkpointed scope together with its unstarted exact production actuators. */
+    public static FrontierWorldState release(FrontierWorldState state, PhysicalReplicaCustodyPayloads.CustodyReleased transition) {
+        var lease = state.replicaCustody().custodyByScope().get(transition.scopeId());
+        var custody = state.replicaCustody().release(transition.scopeId(), transition.expectedEpoch(),
+                transition.expectedCanonicalRevision(), transition.expectedReplicaRevision());
+        if (lease == null) throw new IllegalArgumentException("container release has no current custody");
+        if (!boundFungibleSlots(state, lease.objectId()).isEmpty()) {
+            throw new IllegalArgumentException("container release must first close its bound resource layout");
+        }
+        var released = ProductionTransformationStateSupport.releasePreparedForContainer(state, lease.objectId());
+        return released.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(custody));
+    }
+
     /**
      * Reduces one complete reference transition after an already-confirmed physical mutation.
-     * The retained pre-mutation observation remains the fence for checkpoint/release; the
-     * successor fingerprint is checked against the changed canonical inventory before its new
-     * EXPECTED boundary is published.  If a fungible layout shares the scope, releasing that
-     * layout is inseparable from the custody release rather than a separate command window.
+     * The retained pre-mutation observation fences checkpoint/release; the successor fingerprint
+     * is checked against canonical inventory. Shared resource layout and unstarted production
+     * actuators are closed in the same transaction before the EXPECTED boundary is published.
      */
     public static FrontierWorldState closeConfirmedMutation(FrontierWorldState state, ReferenceMutationClosed transition) {
         Objects.requireNonNull(state, "reference mutation state"); Objects.requireNonNull(transition, "reference mutation transition");
@@ -111,9 +124,9 @@ public final class ReferenceContainerCustody {
                 .release(transition.scopeId(), transition.expectedEpoch(), transition.expectedCanonicalRevision(), transition.expectedReplicaRevision())
                 .emit(containerId, transition.expectedCanonicalRevision(), transition.expectedReplicaRevision(), transition.emittedCanonicalRevision(),
                         transition.fingerprint(), transition.provenance());
-        ExactInventory inventory = accountId.map(id -> state.inventory().withFungibleResources(
-                state.inventory().fungibleResources().releaseBindings(id, transition.expectedEpoch()))).orElse(state.inventory());
-        return state.withChanges(FrontierWorldStateUpdate.begin().inventory(inventory).replicaCustody(closed));
+        FrontierWorldState released = accountId.map(id -> ProductionResourceCustody.release(state, id, transition.expectedEpoch())).orElse(state);
+        released = ProductionTransformationStateSupport.releasePreparedForContainer(released, containerId);
+        return released.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(closed));
     }
 
     /** Family-owned construction of the complete legal successor disposition. */

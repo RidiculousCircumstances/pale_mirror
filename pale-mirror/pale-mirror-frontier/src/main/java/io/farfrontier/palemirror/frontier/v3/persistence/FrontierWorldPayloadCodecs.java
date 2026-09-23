@@ -747,16 +747,18 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         return new CargoHandoffObservation(id, intentId, cargoId.value(), placements);
     }
     private static final int TYPED_BODY_LEASE_MARKER = 0xfffe;
+    private static final int CARRIER_DISPOSITION_LEASE_MARKER = 0xfffd;
     private static void writeSceneLease(DataOutputStream output, SceneLease lease) throws IOException {
         if (!FrontierSceneBehaviors.isLogistics(lease)) {
             throw new IllegalArgumentException("logistics scene WAL payload requires its typed cause");
         }
         LogisticsSceneCause logistics = FrontierSceneBehaviors.logistics(lease);
-        output.writeShort(TYPED_BODY_LEASE_MARKER);
+        output.writeShort(CARRIER_DISPOSITION_LEASE_MARKER);
         writeString(output, lease.id().value()); writeString(output, lease.worldId().value()); writeSubject(output, logistics.operationId()); writeSubject(output, logistics.cargoId());
         output.writeBoolean(logistics.engagementId().isPresent()); if (logistics.engagementId().isPresent()) writeSubject(output, logistics.engagementId().orElseThrow());
         output.writeInt(lease.handoffPosition().x()); output.writeInt(lease.handoffPosition().y()); output.writeInt(lease.handoffPosition().z());
         output.writeInt(logistics.cargoPosition().x()); output.writeInt(logistics.cargoPosition().y()); output.writeInt(logistics.cargoPosition().z());
+        output.writeByte(logistics.carrierDisposition().wireTag());
         output.writeLong(lease.handoffInstant().ticks()); output.writeLong(lease.revision()); output.writeByte(lease.status().wireTag()); output.writeByte(lease.members().size());
         for (SceneMember member : lease.members()) {
             writeSubject(output, member.actorId());
@@ -767,12 +769,13 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         output.writeByte(lease.ambientHandoffActorIds().size()); for (io.farfrontier.palemirror.frontier.v3.api.SubjectId actor : lease.ambientHandoffActorIds().stream().sorted().toList()) writeSubject(output, actor);
     }
     private static SceneLease readSceneLease(DataInputStream input) throws IOException {
-        if (input.readUnsignedShort() != TYPED_BODY_LEASE_MARKER) throw new IllegalArgumentException("scene lease payload requires the current typed-body envelope");
+        if (input.readUnsignedShort() != CARRIER_DISPOSITION_LEASE_MARKER) throw new IllegalArgumentException("scene lease payload requires explicit carrier disposition");
         var id = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(readString(input));
         var world = new io.farfrontier.palemirror.frontier.v3.api.WorldId(readString(input)); SubjectIdHolder operation = readSubject(input); SubjectIdHolder cargo = readSubject(input);
         java.util.Optional<io.farfrontier.palemirror.frontier.v3.api.SubjectId> engagement = input.readBoolean() ? java.util.Optional.of(readSubject(input).value()) : java.util.Optional.empty();
         BlockPosition position = new BlockPosition(input.readInt(), input.readInt(), input.readInt());
         BlockPosition cargoPosition = new BlockPosition(input.readInt(), input.readInt(), input.readInt());
+        var disposition = io.farfrontier.palemirror.frontier.v3.model.CargoProjectionRetirement.Disposition.fromWireTag(input.readUnsignedByte());
         long handoff = input.readLong(); long revision = input.readLong(); int status = input.readUnsignedByte();
         if (status >= SceneLeaseStatus.values().length) throw new IllegalArgumentException("unknown scene lease status");
         java.util.ArrayList<SceneMember> members = new java.util.ArrayList<>();
@@ -785,7 +788,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         }
         java.util.Set<io.farfrontier.palemirror.frontier.v3.api.SubjectId> handoffActors = new java.util.LinkedHashSet<>();
         for (int actor = 0, actorCount = input.readUnsignedByte(); actor < actorCount; actor++) handoffActors.add(readSubject(input).value());
-        return SceneLease.forCause(id, world, new LogisticsSceneCause(operation.value(), cargo.value(), engagement, cargoPosition), position, new io.farfrontier.palemirror.frontier.v3.api.SimInstant(handoff), revision,
+        return SceneLease.forCause(id, world, new LogisticsSceneCause(operation.value(), cargo.value(), engagement, cargoPosition, disposition), position, new io.farfrontier.palemirror.frontier.v3.api.SimInstant(handoff), revision,
                 FrontierWireTags.require(SceneLeaseStatus.class, status), members, memberPositions, handoffActors,
                 java.util.Optional.empty());
     }

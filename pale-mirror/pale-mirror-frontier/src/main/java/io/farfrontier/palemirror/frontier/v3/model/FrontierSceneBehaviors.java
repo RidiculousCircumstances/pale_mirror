@@ -138,6 +138,15 @@ public final class FrontierSceneBehaviors {
         return behavior(lease).afterActorDeath(state, lease, actorId, atTick);
     }
 
+    /** Recovery resumes owned work only when the registered owner still has work to run. */
+    public static SceneLeaseStatus recoveredStatus(FrontierWorldState state, SceneLease lease) {
+        if (lease.members().stream().anyMatch(member ->
+                state.actorLocations().get(member.actorId()).condition().status() == ActorLifeStatus.DEAD)) {
+            return SceneLeaseStatus.DRAINING;
+        }
+        return behavior(lease).recoveredStatus(state, lease);
+    }
+
     record SceneDeathOutcome(HumanPopulation humanPopulation, ResourceSiteState resourceSites, StrategicPlanState strategicPlans,
                              Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent> physicalIntents,
                              Map<SubjectId, SettlementServiceWork> serviceWorks) {
@@ -199,6 +208,7 @@ public final class FrontierSceneBehaviors {
         BodyPosition releasedBody(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed);
         SceneReleasePlan releasePlan(FrontierWorldState state, SceneLease lease, long submittedAt, SceneLeaseReleased released);
         SceneRecoveryPlan recoveryUnresolvedPlan(FrontierWorldState state, SceneLease lease, SceneLeaseRecoveryUnresolved unresolved);
+        SceneLeaseStatus recoveredStatus(FrontierWorldState state, SceneLease lease);
         default SceneDeathOutcome afterActorDeath(FrontierWorldState state, SceneLease lease, SubjectId actorId, long atTick) {
             return SceneDeathOutcome.unchanged(state);
         }
@@ -206,8 +216,22 @@ public final class FrontierSceneBehaviors {
 
     private static final class LogisticsBehavior implements SceneBehavior<LogisticsSceneCause> {
         @Override public SceneCauseKind kind() { return SceneCauseKind.LOGISTICS; }
+        @Override public SceneLeaseStatus recoveredStatus(FrontierWorldState state, SceneLease lease) {
+            LogisticsSceneCause cause = cause(lease);
+            RouteOperation operation = state.operations().get(cause.operationId());
+            if (operation == null || !operation.cargoId().equals(cause.cargoId())) {
+                throw new IllegalArgumentException("scene recovery has no exact owning operation");
+            }
+            if (operation.stage() == OperationStage.INTERRUPTED) return SceneLeaseStatus.DRAINING;
+            if (operation.stage() == OperationStage.FAILED && cause.engagementId().isEmpty()) return SceneLeaseStatus.DRAINING;
+            if (operation.stage() == OperationStage.EN_ROUTE
+                    && cause.carrierDisposition() == CargoProjectionRetirement.Disposition.REMOVE_PROJECTION) {
+                return SceneLeaseStatus.HOT;
+            }
+            throw new IllegalArgumentException("scene recovery cannot resume a terminal operation");
+        }
         @Override public Class<LogisticsSceneCause> causeType() { return LogisticsSceneCause.class; }
-        @Override public LogisticsSceneCause sampleCause() { return new LogisticsSceneCause(new SubjectId("operation:registry"), new SubjectId("cargo:registry"), java.util.Optional.empty(), new BlockPosition(0, 0, 0)); }
+        @Override public LogisticsSceneCause sampleCause() { return new LogisticsSceneCause(new SubjectId("operation:registry"), new SubjectId("cargo:registry"), java.util.Optional.empty(), new BlockPosition(0, 0, 0), CargoProjectionRetirement.Disposition.REMOVE_PROJECTION); }
         @Override public LogisticsSceneCause logistics(SceneLease lease) { return cause(lease); }
         @Override public boolean owns(SceneLease lease, SubjectId subjectId) {
             LogisticsSceneCause cause = cause(lease);
@@ -243,7 +267,8 @@ public final class FrontierSceneBehaviors {
                     && operation.activeTravel().map(travel -> travel.cargoAnchor().surface().support().equals(cause.cargoPosition())).orElse(true);
             boolean interrupted = operation.stage() == OperationStage.INTERRUPTED
                     && (lease.status() == SceneLeaseStatus.DRAINING || lease.status() == SceneLeaseStatus.UNKNOWN_AFTER_RESTART);
-            boolean unresolved = operation.stage() == OperationStage.FAILED && lease.status() == SceneLeaseStatus.UNKNOWN_AFTER_RESTART && lease.recoveryEvidence().isPresent();
+            boolean unresolved = operation.stage() == OperationStage.FAILED && cause.engagementId().isEmpty()
+                    && (lease.status() == SceneLeaseStatus.UNKNOWN_AFTER_RESTART || lease.status() == SceneLeaseStatus.DRAINING);
             if (lease.status() != SceneLeaseStatus.CLOSED && !enRoute && !interrupted && !unresolved) throw new IllegalArgumentException("active scene lease must bind its current en-route operation state");
             if (lease.status() != SceneLeaseStatus.CLOSED && !leasedOperations.add(cause.operationId())) throw new IllegalArgumentException("operation cannot have multiple active scene leases");
             if (cause.engagementId().isEmpty()) return Set.copyOf(operation.participantIds());
@@ -264,6 +289,10 @@ public final class FrontierSceneBehaviors {
             SubjectId engagementId = cause.engagementId().orElseThrow();
             RouteEngagement engagement = state.strategicPlans().routeEngagements().get(engagementId);
             if (engagement == null) throw new IllegalArgumentException("scene lease has no canonical engagement");
+            if (nextStatus == SceneLeaseStatus.DRAINING && engagement.status() == RouteEngagementStatus.UNKNOWN_AFTER_RESTART) {
+                // Recovered physical custody is being released, not authorized to attack.
+                return state.strategicPlans().transitionEngagement(engagementId, RouteEngagementStatus.HOT);
+            }
             if (nextStatus == SceneLeaseStatus.HOT) {
                 if (engagement.status() == RouteEngagementStatus.RESOLVED) throw new IllegalArgumentException("an aborted engagement cannot reclaim a HOT scene");
                 if (!engagement.commandAuthority().permitsCoordinatedAdvance()) {
@@ -303,6 +332,9 @@ public final class FrontierSceneBehaviors {
                 }
                 throw new IllegalArgumentException("scene lease cannot resume its interrupted engagement");
             }
+            if (operation.stage() == OperationStage.FAILED || operation.stage() == OperationStage.INTERRUPTED) {
+                return new SceneReleasePlan(operation.settlementId(), released, new SceneContinuation.None());
+            }
             if (operation.participantIds().stream().anyMatch(actor -> state.actorLocations().get(actor).condition().status() == ActorLifeStatus.DEAD)) {
                 return new SceneReleasePlan(operation.settlementId(), released,
                         new SceneContinuation.FailOperation(operation.id(), "actor-death"));
@@ -312,8 +344,29 @@ public final class FrontierSceneBehaviors {
         }
         @Override public SceneRecoveryPlan recoveryUnresolvedPlan(FrontierWorldState state, SceneLease lease, SceneLeaseRecoveryUnresolved unresolved) {
             LogisticsSceneCause cause = cause(lease);
-            if (cause.engagementId().isPresent()) throw new IllegalArgumentException("engagement scene recovery needs its own outcome policy");
             RouteOperation operation = state.operations().get(cause.operationId());
+            if (cause.engagementId().isPresent()) {
+                RouteEngagement engagement = state.strategicPlans().routeEngagements().get(cause.engagementId().orElseThrow());
+                if (operation == null || !operation.cargoId().equals(cause.cargoId())
+                        || engagement == null || !engagement.operationId().equals(operation.id())
+                        || !engagement.intercept().equals(cause.cargoPosition())) {
+                    throw new IllegalArgumentException("scene recovery evidence has no exact owning engagement");
+                }
+                boolean active = operation.stage() == OperationStage.EN_ROUTE
+                        && engagement.status() == RouteEngagementStatus.UNKNOWN_AFTER_RESTART;
+                boolean aborted = operation.stage() == OperationStage.INTERRUPTED
+                        && engagement.status() == RouteEngagementStatus.RESOLVED
+                        && engagement.outcome().filter(value -> value == RouteEngagementOutcome.ABORTED).isPresent();
+                if (!active && !aborted) {
+                    throw new IllegalArgumentException("scene recovery evidence has no recoverable engagement");
+                }
+                // Missing physical members are uncertainty, not a combat result or cargo loss.
+                return new SceneRecoveryPlan(operation.settlementId(), unresolved, new SceneContinuation.None());
+            }
+            if (operation != null && operation.cargoId().equals(cause.cargoId())
+                    && (operation.stage() == OperationStage.FAILED || operation.stage() == OperationStage.INTERRUPTED)) {
+                return new SceneRecoveryPlan(operation.settlementId(), unresolved, new SceneContinuation.None());
+            }
             if (operation == null || operation.stage() != OperationStage.EN_ROUTE) {
                 throw new IllegalArgumentException("scene recovery evidence has no active route operation");
             }
@@ -323,6 +376,10 @@ public final class FrontierSceneBehaviors {
     }
 
     private static final class SettlementAssaultBehavior implements SceneBehavior<SettlementAssaultSceneCause> {
+        @Override public SceneLeaseStatus recoveredStatus(FrontierWorldState state, SceneLease lease) {
+            FrontierSettlementAssaultSceneSupport.require(state, cause(lease));
+            return SceneLeaseStatus.HOT;
+        }
         @Override public SceneCauseKind kind() { return SceneCauseKind.SETTLEMENT_ASSAULT; }
         @Override public Class<SettlementAssaultSceneCause> causeType() { return SettlementAssaultSceneCause.class; }
         @Override public SettlementAssaultSceneCause sampleCause() { return new SettlementAssaultSceneCause(new SubjectId("assault:registry"), new SubjectId("settlement:registry")); }
@@ -358,6 +415,9 @@ public final class FrontierSceneBehaviors {
             SettlementAssault assault = FrontierSettlementAssaultSceneSupport.require(state, cause(lease));
             return switch (nextStatus) {
                 case HOT -> state.strategicPlans().transitionSettlementAssault(assault.id(), SettlementAssaultStatus.HOT);
+                case DRAINING -> assault.status() == SettlementAssaultStatus.UNKNOWN_AFTER_RESTART
+                        ? state.strategicPlans().transitionSettlementAssault(assault.id(), SettlementAssaultStatus.HOT)
+                        : state.strategicPlans();
                 case UNKNOWN_AFTER_RESTART -> state.strategicPlans().transitionSettlementAssault(assault.id(), SettlementAssaultStatus.UNKNOWN_AFTER_RESTART);
                 case CONFLICT -> state.strategicPlans().transitionSettlementAssault(assault.id(), SettlementAssaultStatus.CONFLICT);
                 default -> state.strategicPlans();
@@ -404,6 +464,15 @@ public final class FrontierSceneBehaviors {
     }
 
     private static final class EngineeringWorksiteBehavior implements SceneBehavior<EngineeringWorkSceneCause> {
+        @Override public SceneLeaseStatus recoveredStatus(FrontierWorldState state, SceneLease lease) {
+            EngineeringWorkSceneCause cause = cause(lease);
+            EngineeringWorkOrder project = EngineeringWorkOrderSupport.require(state, cause.projectId());
+            if (project.confirmedCells() == cause.workCellIndex()) {
+                return project.building() ? SceneLeaseStatus.HOT : SceneLeaseStatus.DRAINING;
+            }
+            if (project.confirmedCells() == cause.workCellIndex() + 1) return SceneLeaseStatus.DRAINING;
+            throw new IllegalArgumentException("engineering recovery has no exact retained work cell");
+        }
         @Override public SceneCauseKind kind() { return SceneCauseKind.ENGINEERING_WORKSITE; }
         @Override public Class<EngineeringWorkSceneCause> causeType() { return EngineeringWorkSceneCause.class; }
         @Override public EngineeringWorkSceneCause sampleCause() { return new EngineeringWorkSceneCause(new SubjectId("construction:registry"), 0); }
@@ -427,9 +496,11 @@ public final class FrontierSceneBehaviors {
             boolean currentCell = project.confirmedCells() == cause.workCellIndex();
             boolean activeCurrentCell = currentCell && project.building();
             boolean confirmedCellDraining = project.confirmedCells() == cause.workCellIndex() + 1
-                    && (lease.status() == SceneLeaseStatus.DRAINING || lease.status() == SceneLeaseStatus.CLOSED);
+                    && (lease.status() == SceneLeaseStatus.DRAINING || lease.status() == SceneLeaseStatus.CLOSED
+                    || lease.status() == SceneLeaseStatus.UNKNOWN_AFTER_RESTART);
             boolean interruptedCurrentCellDraining = currentCell && !project.building()
-                    && (lease.status() == SceneLeaseStatus.DRAINING || lease.status() == SceneLeaseStatus.CLOSED);
+                    && (lease.status() == SceneLeaseStatus.DRAINING || lease.status() == SceneLeaseStatus.CLOSED
+                    || lease.status() == SceneLeaseStatus.UNKNOWN_AFTER_RESTART);
             if (!activeCurrentCell && !confirmedCellDraining && !interruptedCurrentCellDraining) {
                 throw new IllegalArgumentException("engineering scene cursor differs from its owner lifecycle: project="
                         + project.id().value() + " causeCell=" + cause.workCellIndex() + " confirmedCells=" + project.confirmedCells()
@@ -456,6 +527,12 @@ public final class FrontierSceneBehaviors {
 
     /** The care owner itself, rather than a synthetic medic mob, owns every treatment scene. */
     private static final class MedicalTreatmentBehavior implements SceneBehavior<MedicalTreatmentSceneCause> {
+        @Override public SceneLeaseStatus recoveredStatus(FrontierWorldState state, SceneLease lease) {
+            return switch (FrontierMedicalTreatmentSceneSupport.require(state, cause(lease)).status()) {
+                case COMPLETED, BLOCKED -> SceneLeaseStatus.DRAINING;
+                case PREPARED, TREATING, UNKNOWN_AFTER_RESTART -> SceneLeaseStatus.HOT;
+            };
+        }
         @Override public SceneCauseKind kind() { return SceneCauseKind.MEDICAL_TREATMENT; }
         @Override public Class<MedicalTreatmentSceneCause> causeType() { return MedicalTreatmentSceneCause.class; }
         @Override public MedicalTreatmentSceneCause sampleCause() { return new MedicalTreatmentSceneCause(new SubjectId("medical:registry")); }
@@ -476,7 +553,8 @@ public final class FrontierSceneBehaviors {
                         || operation.status() == MedicalEvacuationStatus.UNKNOWN_AFTER_RESTART || operation.status() == MedicalEvacuationStatus.COMPLETED
                         || operation.status() == MedicalEvacuationStatus.BLOCKED;
                 case UNKNOWN_AFTER_RESTART -> operation.status() == MedicalEvacuationStatus.PREPARED || operation.status() == MedicalEvacuationStatus.TREATING
-                        || operation.status() == MedicalEvacuationStatus.UNKNOWN_AFTER_RESTART;
+                        || operation.status() == MedicalEvacuationStatus.UNKNOWN_AFTER_RESTART
+                        || operation.status() == MedicalEvacuationStatus.COMPLETED || operation.status() == MedicalEvacuationStatus.BLOCKED;
                 case CONFLICT -> operation.active();
                 // A pre-effect scene may close when no player remains.  Its retained COLD
                 // operation is intentionally eligible for a later naturally loaded scene.
@@ -510,6 +588,10 @@ public final class FrontierSceneBehaviors {
     private static final class ResourceSiteHarvestBehavior implements SceneBehavior<ResourceSiteHarvestSceneCause> {
         @Override public SceneCauseKind kind() { return SceneCauseKind.RESOURCE_SITE_HARVEST; }
         @Override public Class<ResourceSiteHarvestSceneCause> causeType() { return ResourceSiteHarvestSceneCause.class; }
+        @Override public SceneLeaseStatus recoveredStatus(FrontierWorldState state, SceneLease lease) {
+            return FrontierResourceSiteHarvestSceneSupport.isTerminalReceiptRelease(state, cause(lease))
+                    ? SceneLeaseStatus.DRAINING : SceneLeaseStatus.HOT;
+        }
         @Override public ResourceSiteHarvestSceneCause sampleCause() { return new ResourceSiteHarvestSceneCause(new SubjectId("job:site-harvest-registry")); }
         @Override public ResourceSiteHarvestSceneCause resourceSiteHarvest(SceneLease lease) { return cause(lease); }
         @Override public boolean owns(SceneLease lease, SubjectId subjectId) { return cause(lease).jobId().equals(subjectId); }
@@ -530,14 +612,19 @@ public final class FrontierSceneBehaviors {
             // A CLOSED lease is retained evidence.  Its matching harvest job is deliberately
             // consumed by the immediately subsequent exact depot receipt, so requiring that
             // transient active record here would make the valid close -> receipt sequence
-            // impossible.  DRAINING is the one in-flight body-exit receipt; the lease itself
-            // retains the exact historical worker identity.  Every other nonterminal
-            // field-work scene still requires its live job.
+            // impossible. DRAINING and its unresolved recovery/conflict states retain the
+            // body-exit obligation through the exact terminal lineage. PREPARED/HOT still
+            // require live work; completed work cannot be replayed by recovery.
             if (job == null) {
                 if (lease.status() != SceneLeaseStatus.CLOSED
-                        && !(lease.status() == SceneLeaseStatus.DRAINING
+                        && !((lease.status() == SceneLeaseStatus.DRAINING || lease.status() == SceneLeaseStatus.UNKNOWN_AFTER_RESTART
+                        || lease.status() == SceneLeaseStatus.CONFLICT)
                         && FrontierResourceSiteHarvestSceneSupport.isTerminalReceiptRelease(bootstrap, resourceSites, cause(lease)))) {
                     throw new IllegalArgumentException("resource-site scene has no exact active harvest");
+                }
+                if (lease.status() != SceneLeaseStatus.CLOSED) {
+                    var site = FrontierResourceSiteHarvestSceneSupport.terminalReceiptSite(bootstrap, resourceSites, cause(lease));
+                    return Set.of(resourceSites.site(site.id()).harvestLineage().orElseThrow().workerId());
                 }
                 return lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toUnmodifiableSet());
             }
@@ -582,6 +669,15 @@ public final class FrontierSceneBehaviors {
             return new SceneRecoveryPlan(owner(state, lease), unresolved, new SceneContinuation.None());
         }
         @Override public SceneDeathOutcome afterActorDeath(FrontierWorldState state, SceneLease lease, SubjectId actorId, long atTick) {
+            if (FrontierResourceSiteHarvestSceneSupport.isTerminalReceiptRelease(state, cause(lease))) {
+                var site = FrontierResourceSiteHarvestSceneSupport.site(state, cause(lease));
+                if (!state.resourceSites().site(site.id()).harvestLineage().orElseThrow().workerId().equals(actorId)) {
+                    throw new IllegalArgumentException("terminal harvest death has a foreign worker");
+                }
+                // The common death owner retires body custody. Completed economic work and
+                // its already confirmed output must not be reopened as an UNKNOWN effect.
+                return SceneDeathOutcome.unchanged(state);
+            }
             ResourceSiteHarvestJob job = FrontierResourceSiteHarvestSceneSupport.require(state, cause(lease));
             if (!job.workerId().equals(actorId)) return SceneDeathOutcome.unchanged(state);
             ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId());
@@ -602,6 +698,17 @@ public final class FrontierSceneBehaviors {
 
     /** One named industrial worker, never an ambient Villager substituted at the workshop. */
     private static final class ProductionWorkBehavior implements SceneBehavior<ProductionWorkSceneCause> {
+        @Override public SceneLeaseStatus recoveredStatus(FrontierWorldState state, SceneLease lease) {
+            ProductionJob job = FrontierProductionWorkSceneSupport.require(state, cause(lease));
+            return blocked(state, job) || job.workProgress().terminalEffectEligible()
+                    ? SceneLeaseStatus.DRAINING : SceneLeaseStatus.HOT;
+        }
+        private boolean blocked(FrontierWorldState state, ProductionJob job) {
+            return state.companies().market().workOrders().values().stream()
+                    .filter(value -> value.jobId().equals(job.id())).findFirst()
+                    .map(value -> state.strategicPlans().tasks().get(value.taskId()))
+                    .map(task -> task.status() == StrategicTaskStatus.BLOCKED).orElse(false);
+        }
         @Override public SceneCauseKind kind() { return SceneCauseKind.PRODUCTION_WORK; }
         @Override public Class<ProductionWorkSceneCause> causeType() { return ProductionWorkSceneCause.class; }
         @Override public ProductionWorkSceneCause sampleCause() { return new ProductionWorkSceneCause(new SubjectId("job:production-registry")); }
@@ -627,11 +734,7 @@ public final class FrontierSceneBehaviors {
         }
         @Override public SceneReleasePlan releasePlan(FrontierWorldState state, SceneLease lease, long submittedAt, SceneLeaseReleased released) {
             ProductionJob job = FrontierProductionWorkSceneSupport.require(state, cause(lease));
-            java.util.Optional<MarketWorkOrder> order = state.companies().market().workOrders().values().stream()
-                    .filter(value -> value.jobId().equals(job.id())).findFirst();
-            boolean blocked = order.map(value -> state.strategicPlans().tasks().get(value.taskId()))
-                    .map(task -> task.status() == StrategicTaskStatus.BLOCKED).orElse(false);
-            SceneContinuation continuation = blocked ? new SceneContinuation.FinalizeProductionWork(lease.id(), job.id())
+            SceneContinuation continuation = blocked(state, job) ? new SceneContinuation.FinalizeProductionWork(lease.id(), job.id())
                     : job.workProgress().terminalEffectEligible()
                     ? new SceneContinuation.ResumeProductionCompletion(job.id(), Math.addExact(submittedAt, 1L))
                     : new SceneContinuation.None();
@@ -644,6 +747,13 @@ public final class FrontierSceneBehaviors {
 
     /** One named resident and one retained field/workshop station, never an ambient substitute. */
     private static final class SettlementServiceWorkBehavior implements SceneBehavior<SettlementServiceWorkSceneCause> {
+        @Override public SceneLeaseStatus recoveredStatus(FrontierWorldState state, SceneLease lease) {
+            return switch (FrontierSettlementServiceWorkSceneSupport.require(state, cause(lease)).phase()) {
+                case COMPLETED, BLOCKED -> SceneLeaseStatus.DRAINING;
+                case PREPARED, APPROACH_INPUT, INPUT_ISSUE_PENDING, APPROACH_WORK, WORKING,
+                        EFFECT_READY, UNKNOWN_AFTER_RESTART -> SceneLeaseStatus.HOT;
+            };
+        }
         @Override public SceneCauseKind kind() { return SceneCauseKind.SERVICE_WORK; }
         @Override public Class<SettlementServiceWorkSceneCause> causeType() { return SettlementServiceWorkSceneCause.class; }
         @Override public SettlementServiceWorkSceneCause sampleCause() { return new SettlementServiceWorkSceneCause(new SubjectId("service:registry")); }
@@ -681,7 +791,8 @@ public final class FrontierSceneBehaviors {
                 // unstarted input/work/effect changed.  Preserve its retained cursor and
                 // stage while the lease is UNKNOWN; a physical-intent inspector separately
                 // moves the work itself to UNKNOWN_AFTER_RESTART if an effect was in flight.
-                case UNKNOWN_AFTER_RESTART -> work.phase().active();
+                case UNKNOWN_AFTER_RESTART -> work.phase().active() || work.phase() == SettlementServiceWorkPhase.COMPLETED
+                        || work.phase() == SettlementServiceWorkPhase.BLOCKED;
                 case CONFLICT -> work.phase().active();
                 case CLOSED -> work.phase() == SettlementServiceWorkPhase.COMPLETED || work.phase() == SettlementServiceWorkPhase.BLOCKED
                         || work.phase() == SettlementServiceWorkPhase.UNKNOWN_AFTER_RESTART;
@@ -728,6 +839,10 @@ public final class FrontierSceneBehaviors {
 
     /** Class-D route patrol: generic guard motion never substitutes for this retained formation. */
     private static final class RoutePatrolBehavior implements SceneBehavior<RoutePatrolSceneCause> {
+        @Override public SceneLeaseStatus recoveredStatus(FrontierWorldState state, SceneLease lease) {
+            return FrontierRoutePatrolSceneSupport.require(state, cause(lease)).active()
+                    ? SceneLeaseStatus.HOT : SceneLeaseStatus.DRAINING;
+        }
         @Override public SceneCauseKind kind() { return SceneCauseKind.ROUTE_PATROL; }
         @Override public Class<RoutePatrolSceneCause> causeType() { return RoutePatrolSceneCause.class; }
         @Override public RoutePatrolSceneCause sampleCause() { return new RoutePatrolSceneCause(new SubjectId("task:route-patrol-registry")); }
@@ -760,7 +875,8 @@ public final class FrontierSceneBehaviors {
                         || patrol.status() == RoutePatrolStatus.OBSTRUCTION_CONFIRMED || patrol.status() == RoutePatrolStatus.BLOCKED
                         || patrol.status() == RoutePatrolStatus.FAILED;
                 case UNKNOWN_AFTER_RESTART, CONFLICT -> patrol.active() || patrol.status() == RoutePatrolStatus.BLOCKED
-                        || patrol.status() == RoutePatrolStatus.FAILED;
+                        || patrol.status() == RoutePatrolStatus.FAILED || patrol.status() == RoutePatrolStatus.ROUTE_CLEAR
+                        || patrol.status() == RoutePatrolStatus.OBSTRUCTION_CONFIRMED;
                 case CLOSED -> true;
             };
             if (!allowed) throw new IllegalArgumentException("route-patrol scene and retained patrol lifecycle disagree");

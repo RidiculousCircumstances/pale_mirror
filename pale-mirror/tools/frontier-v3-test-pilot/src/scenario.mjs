@@ -199,6 +199,7 @@ export function validateScenario(scenario) {
         throw new Error('visit needs a namespaced dimension, block position and settleMs 0..120000');
       }
       if (action.type === 'visit_operation' && (!requiredId(action.operationId, 'operation:') || !validDimension(action.dimension)
+          || (action.anchor !== undefined && !['travelCurrent', 'travelCargo'].includes(action.anchor))
           || !validPosition(action.offset) || Math.abs(action.offset.x) > 32 || Math.abs(action.offset.y) > 8 || Math.abs(action.offset.z) > 32
           || !Number.isInteger(action.settleMs) || action.settleMs < 0 || action.settleMs > 120_000
           || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 120_000)) {
@@ -294,6 +295,7 @@ export function validateScenario(scenario) {
       if (action.type === 'attack_nearest_entity' && (!validItemKind(action.entityType) || !Number.isInteger(action.timeoutMs)
           || action.timeoutMs < 0 || action.timeoutMs > 120_000 || !Number.isInteger(action.maxAttacks)
           || action.maxAttacks < 1 || action.maxAttacks > 40
+          || (action.requireRemoval !== undefined && typeof action.requireRemoval !== 'boolean')
           || (action.nameContains !== undefined && (typeof action.nameContains !== 'string' || !action.nameContains || action.nameContains.length > 72))
           || (action.maxDistance !== undefined && (!Number.isFinite(action.maxDistance) || action.maxDistance < 1 || action.maxDistance > 64)))) {
         throw new Error('attack_nearest_entity needs a namespaced entity type, bounded local range and 1..40 attacks');

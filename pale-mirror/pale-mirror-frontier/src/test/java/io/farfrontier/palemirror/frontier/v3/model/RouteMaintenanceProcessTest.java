@@ -521,12 +521,35 @@ class RouteMaintenanceProcessTest {
                 candidate.memberPositions().keySet().stream().sorted().map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(world, leaseId, actor))).toList(),
                 SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), java.util.Set.of(), Optional.empty());
         FrontierWorldState hot = assembled.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+        // Completed-cell input isolates recovery policy; this does not claim a physical repair receipt.
+        var completedInput = hot.withChanges(FrontierWorldStateUpdate.begin()
+                .routeMaintenances(Map.of(maintenance.id(), hot.routeMaintenances().get(maintenance.id()).ready()))
+                .sceneLeases(Map.of(leaseId, hot.sceneLeases().get(leaseId).withStatus(SceneLeaseStatus.DRAINING))));
+        var completedUnknown = completedInput.transitionSceneLease(leaseId, SceneLeaseStatus.UNKNOWN_AFTER_RESTART);
+        completedUnknown = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(completedUnknown));
+        assertEquals(SceneLeaseStatus.DRAINING,
+                FrontierSceneBehaviors.recoveredStatus(completedUnknown, completedUnknown.sceneLeases().get(leaseId)));
+        var completedDrain = completedUnknown.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING);
+        var completedClosed = completedDrain.releaseSceneLease(leaseId, lease.members().stream().map(member ->
+                new SceneMemberPosition(member.actorId(), completedDrain.actorLocations().get(member.actorId()).body(),
+                        completedDrain.actorLocations().get(member.actorId()).condition().health())).toList());
+        assertEquals(completedInput.routeMaintenances(), completedClosed.routeMaintenances());
+        assertEquals(SceneLeaseStatus.CLOSED, completedClosed.sceneLeases().get(leaseId).status());
         PhysicalIntent intent = RouteMaintenanceProcess.workIntent(maintenance, maintenance.plannedCargoId(), maintenance.plannedCargoItemId());
         FrontierWorldState conflicted = RouteMaintenanceStateSupport.conflict(hot, intent, new java.util.LinkedHashMap<>(hot.physicalIntents()));
 
         assertEquals(RouteMaintenanceStatus.CONFLICT, conflicted.routeMaintenances().get(maintenance.id()).status());
         assertEquals(SceneLeaseStatus.DRAINING, conflicted.sceneLeases().get(leaseId).status(),
                 "a terminal physical conflict must atomically revoke HOT authority before the bodies are released");
+        var unknown = conflicted.transitionSceneLease(leaseId, SceneLeaseStatus.UNKNOWN_AFTER_RESTART);
+        unknown = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(unknown));
+        assertEquals(SceneLeaseStatus.DRAINING, FrontierSceneBehaviors.recoveredStatus(unknown, unknown.sceneLeases().get(leaseId)));
+        var recoveredDrain = unknown.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING);
+        var closed = recoveredDrain.releaseSceneLease(leaseId, lease.members().stream().map(member ->
+                new SceneMemberPosition(member.actorId(), recoveredDrain.actorLocations().get(member.actorId()).body(),
+                        recoveredDrain.actorLocations().get(member.actorId()).condition().health())).toList());
+        assertEquals(SceneLeaseStatus.CLOSED, closed.sceneLeases().get(leaseId).status());
+        assertEquals(conflicted.routeMaintenances(), closed.routeMaintenances());
         assertDoesNotThrow(() -> conflicted.releaseSceneLease(leaseId, lease.members().stream().map(member ->
                 new SceneMemberPosition(member.actorId(), conflicted.actorLocations().get(member.actorId()).body(),
                         conflicted.actorLocations().get(member.actorId()).condition().health())).toList()));

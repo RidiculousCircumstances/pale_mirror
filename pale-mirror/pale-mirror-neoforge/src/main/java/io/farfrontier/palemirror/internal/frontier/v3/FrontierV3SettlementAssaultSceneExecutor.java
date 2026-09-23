@@ -21,12 +21,10 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierSettlementAssaultScen
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseRecoveryUnresolved;
-import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseReleased;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseTransition;
 import io.farfrontier.palemirror.frontier.v3.model.SceneMember;
 import io.farfrontier.palemirror.frontier.v3.model.SceneMemberPosition;
-import io.farfrontier.palemirror.frontier.v3.model.SceneStrikeObservation;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssault;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCandidate;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultCauseIdentity;
@@ -62,10 +60,8 @@ import java.util.function.Predicate;
  */
 final class FrontierV3SettlementAssaultSceneExecutor {
     private static final int DRAIN_SAFE_RADIUS_BLOCKS = 64;
-    private static final int MAX_OBSERVED_SCENES = 4_096;
+    private static final int MAX_RECOVERY_INSPECTIONS = 4_096;
     private static final long RECOVERY_INSPECTION_WINDOW_TICKS = 400L;
-    /** Same-runtime hand-off evidence only; restart deliberately clears it before inspection. */
-    private static final Map<FrontierV3ServerRuntime<?, ?>, Map<SceneLeaseId, List<SceneMemberPosition>>> LAST_OBSERVED = new IdentityHashMap<>();
     /** Volatile inspection start only; canonical evidence is emitted after the bounded window. */
     private static final Map<FrontierV3ServerRuntime<?, ?>, Map<SceneLeaseId, Long>> RECOVERY_INSPECTION_STARTED = new IdentityHashMap<>();
 
@@ -73,10 +69,6 @@ final class FrontierV3SettlementAssaultSceneExecutor {
 
     /** @return true when a typed assault scene owns this materialization turn. */
     static boolean tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
-        FrontierWorldState current = state(runtime);
-        if (current != null && current.sceneLeases().values().stream().noneMatch(lease -> isAssault(lease)
-                && lease.status() != SceneLeaseStatus.CLOSED && lease.status() != SceneLeaseStatus.CONFLICT)
-                && admitMarch(level, runtime, current)) return true;
         return tick(runtime, new Turn() {
             @Override public boolean demanded(io.farfrontier.palemirror.frontier.v3.model.BlockPosition position) {
                 return FrontierV3SceneExecutor.demandExists(level, position);
@@ -84,6 +76,11 @@ final class FrontierV3SettlementAssaultSceneExecutor {
 
             @Override public void execute(FrontierWorldState state, SceneLease lease) {
                 FrontierV3SettlementAssaultSceneExecutor.execute(level, runtime, state, lease);
+            }
+
+            @Override public void prepareMarch(SceneLease lease) {
+                FrontierV3DiagnosticTrace.recordScene(level.getServer(), "expedition_march_prepared", lease,
+                        submit(runtime, "expedition-march-prepare", new SettlementAssaultSceneLeasePrepared(lease)));
             }
 
             @Override public void prepare(SettlementAssaultSceneCandidate candidate,
@@ -107,36 +104,17 @@ final class FrontierV3SettlementAssaultSceneExecutor {
         FrontierWorldState state = state(runtime);
         if (state == null) return false;
         forgetInactive(runtime, state);
-        Optional<SceneLease> active = state.sceneLeases().values().stream().filter(FrontierV3SettlementAssaultSceneExecutor::isAssault)
-                .filter(lease -> lease.status() != SceneLeaseStatus.CLOSED && lease.status() != SceneLeaseStatus.CONFLICT)
-                .sorted(Comparator.comparing(SceneLease::id)).findFirst();
-        if (active.isPresent()) {
-            turn.execute(state, active.orElseThrow());
-            return true;
-        }
-        return admit(runtime, state, turn::demanded, (battle, lease, provider) -> {
-            if (FrontierSceneAdmission.available(state, battle.memberPositions().keySet())) turn.prepare(battle, provider, lease);
-            else turn.handoff(state, provider, lease);
-        });
-    }
-
-    /** Demand may materialize the retained approach before contact; it cannot manufacture a battlefield. */
-    private static boolean admitMarch(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state) {
-        Optional<SettlementAssaultSceneCandidate> candidate = state.strategicPlans().settlementAssaults().values().stream()
-                .sorted(Comparator.comparing(SettlementAssault::id)).map(assault -> FrontierSettlementAssaultSceneSupport.marchCandidate(state, assault))
-                .flatMap(Optional::stream).filter(value -> FrontierV3SceneExecutor.demandExists(level, value.handoffPosition())).findFirst();
-        if (candidate.isEmpty()) return false;
-        SettlementAssaultSceneCandidate march = candidate.orElseThrow();
-        if (!FrontierSceneAdmission.available(state, march.memberPositions().keySet())) return false;
-        SceneLease lease = lease(runtime, march);
-        FrontierV3DiagnosticTrace.recordScene(level.getServer(), "expedition_march_prepared", lease,
-                submit(runtime, "expedition-march-prepare", new SettlementAssaultSceneLeasePrepared(lease)));
-        return true;
+        return FrontierV3SceneTurnScheduler.run(runtime, state, io.farfrontier.palemirror.frontier.v3.model.SceneCauseKind.SETTLEMENT_ASSAULT,
+                lease -> turn.execute(state, lease), () -> admit(runtime, state, turn::demanded, (battle, lease, provider) -> {
+                    if (FrontierSceneAdmission.available(state, battle.memberPositions().keySet())) turn.prepare(battle, provider, lease);
+                    else turn.handoff(state, provider, lease);
+                }, turn::prepareMarch));
     }
 
     interface Turn {
         boolean demanded(io.farfrontier.palemirror.frontier.v3.model.BlockPosition position);
         void execute(FrontierWorldState state, SceneLease lease);
+        void prepareMarch(SceneLease lease);
         void prepare(SettlementAssaultSceneCandidate candidate, FrontierSettlementAssaultBattlefield.Provider provider, SceneLease lease);
         void handoff(FrontierWorldState state, FrontierSettlementAssaultBattlefield.Provider provider, SceneLease lease);
     }
@@ -149,18 +127,38 @@ final class FrontierV3SettlementAssaultSceneExecutor {
      */
     static boolean admit(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
                          Predicate<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> demanded,
-                         CandidateAdmission admission) {
+                         CandidateAdmission admission, java.util.function.Consumer<SceneLease> marchAdmission) {
         return FrontierGrayboxPlan.withoutStructuralDerivation(() -> {
+            List<AssaultAdmission> candidates = new ArrayList<>();
+            state.strategicPlans().settlementAssaults().values().stream()
+                    .map(assault -> FrontierSettlementAssaultSceneSupport.marchCandidate(state, assault))
+                    .flatMap(Optional::stream).filter(value -> !hasRetainedScene(state, value.assaultId()))
+                    .filter(value -> demanded.test(value.handoffPosition()))
+                    .filter(value -> FrontierSceneAdmission.available(state, value.memberPositions().keySet()))
+                    .forEach(value -> candidates.add(new AssaultAdmission(value.assaultId(),
+                            () -> marchAdmission.accept(lease(runtime, value)))));
             FrontierSettlementAssaultBattlefield.Provider provider = FrontierV3GrayboxExecutor.admissionProvider(runtime, state).orElse(null);
-            if (provider == null) return false;
-            Optional<SettlementAssaultSceneCandidate> candidate = FrontierSceneAdmission.settlementAssaultCandidates(state,
-                            ignored -> Optional.of(provider)).stream()
-                    .filter(value -> demanded.test(value.handoffPosition())).findFirst();
-            if (candidate.isEmpty()) return false;
-            SettlementAssaultSceneCandidate battle = candidate.orElseThrow();
-            admission.admit(battle, lease(runtime, battle), provider);
+            if (provider != null) {
+                FrontierSceneAdmission.settlementAssaultCandidates(state, ignored -> Optional.of(provider)).stream()
+                        .filter(value -> !hasRetainedScene(state, value.assaultId()))
+                        .filter(value -> demanded.test(value.handoffPosition()))
+                        .forEach(value -> candidates.add(new AssaultAdmission(value.assaultId(),
+                                () -> admission.admit(value, lease(runtime, value), provider))));
+            }
+            var selected = FrontierV3SceneTurnScheduler.candidate(runtime,
+                    io.farfrontier.palemirror.frontier.v3.model.SceneCauseKind.SETTLEMENT_ASSAULT, candidates, AssaultAdmission::id);
+            if (selected.isEmpty()) return false;
+            selected.orElseThrow().admit().run();
             return true;
         });
+    }
+
+    private record AssaultAdmission(SubjectId id, Runnable admit) { }
+
+    private static boolean hasRetainedScene(FrontierWorldState state, SubjectId assaultId) {
+        return state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isSettlementAssault)
+                .anyMatch(lease -> lease.status() != SceneLeaseStatus.CLOSED
+                        && FrontierSceneBehaviors.settlementAssault(lease).assaultId().equals(assaultId));
     }
 
     @FunctionalInterface
@@ -245,7 +243,7 @@ final class FrontierV3SettlementAssaultSceneExecutor {
         switch (lease.status()) {
             case PREPARED -> materializePrepared(level, runtime, state, lease);
             case HOT -> executeHot(level, runtime, state, lease);
-            case DRAINING -> release(level, runtime, state, lease);
+            case DRAINING -> FrontierV3SceneExecutor.release(level, runtime, lease);
             case UNKNOWN_AFTER_RESTART -> reclaim(level, runtime, state, lease);
             case CONFLICT, CLOSED -> { }
         }
@@ -286,15 +284,14 @@ final class FrontierV3SettlementAssaultSceneExecutor {
             // One HOT lease owns one exact COLD epoch.  Its durable receipt remains visible
             // across restart while ordinary demand loss decides when the completed lease drains;
             // only the next COLD admission may select the following epoch.
-            rememberObserved(level, runtime, state, lease);
+
             return;
         }
         if (level.getGameTime() % 20L == 0L) {
-            forgetObserved(runtime, lease.id());
             FrontierV3SceneExecutor.executeStrike(level, runtime, state, lease,
                     io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
         }
-        rememberObserved(level, runtime, state, lease);
+
     }
 
     private static void executeMarch(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
@@ -342,7 +339,7 @@ final class FrontierV3SettlementAssaultSceneExecutor {
             CommandResult result = submit(runtime, "expedition-march-observed", new SettlementAssaultFormationObserved(assault.id(), lease.id(), targets));
             FrontierV3DiagnosticTrace.recordScene(level.getServer(), "expedition_march_formation", lease, result);
         }
-        rememberObserved(level, runtime, state, lease);
+
     }
 
     /** The durable ID is an exact lease association; a shared cause alone cannot fence a replay. */
@@ -379,36 +376,6 @@ final class FrontierV3SettlementAssaultSceneExecutor {
                                                 FrontierWorldState state, SceneLease lease) {
         return lease.members().stream().filter(member -> state.actorLocations().get(member.actorId()).condition().status() == ActorLifeStatus.ALIVE)
                 .allMatch(member -> owns(runtime, level.getEntity(member.entityId()), member));
-    }
-
-    private static void release(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                FrontierWorldState state, SceneLease lease) {
-        List<SceneMemberPosition> captured = new ArrayList<>();
-        boolean unavailable = false;
-        for (SceneMember member : lease.members()) {
-            if (state.actorLocations().get(member.actorId()).condition().status() == ActorLifeStatus.DEAD) continue;
-            Entity entity = level.getEntity(member.entityId());
-            if (entity == null) {
-                unavailable = true;
-                continue;
-            }
-            if (!(entity instanceof Mob mob) || !mob.isAlive() || !owns(runtime, entity, member)) {
-                conflict(level, runtime, lease, "release-body-unavailable");
-                return;
-            }
-            captured.add(new SceneMemberPosition(member.actorId(), at(mob), fixed(mob.getHealth())));
-        }
-        if (unavailable) {
-            // A restart or ordinary demand loss can unload a remote member while the hand-off
-            // chunk remains loaded.  That is not contradictory body evidence: use the durable
-            // scene checkpoint (plus the already-confirmed exact strike health) rather than
-            // force-loading, replaying, or treating absence as a foreign actor.
-            captured = lastObserved(runtime, lease.id());
-            if (captured == null) captured = durableReleaseCheckpoint(state, lease);
-        }
-        FrontierV3DiagnosticTrace.recordScene(level.getServer(), "settlement_assault_released", lease,
-                submit(runtime, "settlement-assault-release", new SceneLeaseReleased(lease.id(), captured)));
-        forgetObserved(runtime, lease.id());
     }
 
     private static List<Body> bodies(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
@@ -483,73 +450,11 @@ final class FrontierV3SettlementAssaultSceneExecutor {
                 .anyMatch(value -> value.id().equals(actor));
     }
 
-    private static void rememberObserved(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                         FrontierWorldState state, SceneLease lease) {
-        if (!level.hasChunkAt(new BlockPos(lease.handoffPosition().x(), lease.handoffPosition().y(), lease.handoffPosition().z()))) return;
-        List<SceneMemberPosition> captured = new ArrayList<>();
-        for (SceneMember member : lease.members()) {
-            if (state.actorLocations().get(member.actorId()).condition().status() == ActorLifeStatus.DEAD) continue;
-            Entity entity = level.getEntity(member.entityId());
-            if (!(entity instanceof Mob mob) || !mob.isAlive() || !owns(runtime, mob, member)) {
-                forgetObserved(runtime, lease.id());
-                return;
-            }
-            captured.add(new SceneMemberPosition(member.actorId(), at(mob), fixed(mob.getHealth())));
-        }
-        Map<SceneLeaseId, List<SceneMemberPosition>> retained = LAST_OBSERVED.computeIfAbsent(runtime, ignored -> new LinkedHashMap<>());
-        if (retained.size() < MAX_OBSERVED_SCENES || retained.containsKey(lease.id())) retained.put(lease.id(), List.copyOf(captured));
-    }
-
-    private static void releaseWhenUnloaded(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease) {
-        List<SceneMemberPosition> captured = lastObserved(runtime, lease.id());
-        if (captured == null) return;
-        FrontierV3DiagnosticTrace.recordScene(level.getServer(), "settlement_assault_released_unloaded", lease,
-                submit(runtime, "settlement-assault-release-unloaded", new SceneLeaseReleased(lease.id(), captured)));
-        forgetObserved(runtime, lease.id());
-    }
-
-    /**
-     * Retains only durable COLD positions. HOT local motion is presentation state, while one
-     * confirmed strike is an exact canonical health effect and must survive this fallback.
-     */
-    static List<SceneMemberPosition> durableReleaseCheckpoint(FrontierWorldState state, SceneLease lease) {
-        Map<SubjectId, FixedScalar> health = new LinkedHashMap<>();
-        for (SceneMember member : lease.members()) health.put(member.actorId(), state.actorLocations().get(member.actorId()).condition().health());
-        state.physicalIntents().values().stream().filter(intent -> intent.kind() == PhysicalIntentKind.SCENE_STRIKE
-                        && intent.status() == PhysicalIntentStatus.CONFIRMED
-                        && FrontierV3SettlementAssaultReceiptBinding.belongsToLease(state, lease, intent))
-                .map(PhysicalIntent::postconditionObservationId).flatMap(Optional::stream)
-                .map(state.physicalObservations()::get).filter(SceneStrikeObservation.class::isInstance).map(SceneStrikeObservation.class::cast)
-                .forEach(receipt -> health.put(receipt.targetId(), receipt.targetHealthAfter()));
-        return lease.members().stream().filter(member -> state.actorLocations().get(member.actorId()).condition().status() == ActorLifeStatus.ALIVE)
-                .map(member -> new SceneMemberPosition(member.actorId(), lease.memberPosition(member.actorId()), health.get(member.actorId()))).toList();
-    }
-
-    private static List<SceneMemberPosition> lastObserved(FrontierV3ServerRuntime<?, ?> runtime, SceneLeaseId leaseId) {
-        Map<SceneLeaseId, List<SceneMemberPosition>> retained = LAST_OBSERVED.get(runtime);
-        return retained == null ? null : retained.get(leaseId);
-    }
-
-    private static void forgetObserved(FrontierV3ServerRuntime<?, ?> runtime, SceneLeaseId leaseId) {
-        Map<SceneLeaseId, List<SceneMemberPosition>> retained = LAST_OBSERVED.get(runtime);
-        if (retained == null) return;
-        retained.remove(leaseId);
-        if (retained.isEmpty()) LAST_OBSERVED.remove(runtime);
-    }
-
     static void forget(FrontierV3ServerRuntime<?, ?> runtime) {
-        LAST_OBSERVED.remove(runtime); RECOVERY_INSPECTION_STARTED.remove(runtime);
+        RECOVERY_INSPECTION_STARTED.remove(runtime);
     }
 
     private static void forgetInactive(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state) {
-        Map<SceneLeaseId, List<SceneMemberPosition>> retained = LAST_OBSERVED.get(runtime);
-        if (retained != null) {
-            retained.keySet().removeIf(id -> {
-                SceneLease lease = state.sceneLeases().get(id);
-                return lease == null || !isAssault(lease) || (lease.status() != SceneLeaseStatus.HOT && lease.status() != SceneLeaseStatus.DRAINING);
-            });
-            if (retained.isEmpty()) LAST_OBSERVED.remove(runtime);
-        }
         Map<SceneLeaseId, Long> inspections = RECOVERY_INSPECTION_STARTED.get(runtime);
         if (inspections == null) return;
         inspections.keySet().removeIf(id -> {
@@ -563,7 +468,7 @@ final class FrontierV3SettlementAssaultSceneExecutor {
         Map<SceneLeaseId, Long> inspections = RECOVERY_INSPECTION_STARTED.computeIfAbsent(runtime, ignored -> new LinkedHashMap<>());
         Long started = inspections.get(leaseId);
         if (started != null) return started;
-        if (inspections.size() >= MAX_OBSERVED_SCENES) return gameTime;
+        if (inspections.size() >= MAX_RECOVERY_INSPECTIONS) return gameTime;
         inspections.put(leaseId, gameTime);
         return gameTime;
     }

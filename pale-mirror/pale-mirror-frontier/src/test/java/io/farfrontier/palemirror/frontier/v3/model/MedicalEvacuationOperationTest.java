@@ -11,10 +11,15 @@ import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
+import io.farfrontier.palemirror.frontier.v3.api.EventId;
+import io.farfrontier.palemirror.frontier.v3.api.TransactionId;
+import io.farfrontier.palemirror.frontier.v3.api.Revision;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.process.HumanHealthProcess;
 import io.farfrontier.palemirror.frontier.v3.process.FrontierWorldProcessCatalog;
 import io.farfrontier.palemirror.frontier.v3.process.MedicalTreatmentProcess;
+import io.farfrontier.palemirror.frontier.v3.process.PhysicalIntentLifecycleFixture;
 import io.farfrontier.palemirror.frontier.v3.process.StrategicObjectiveProcess;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration;
@@ -113,10 +118,12 @@ class MedicalEvacuationOperationTest {
         assertEquals(started, io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.payloadCodecs()
                 .decode(started.type(), io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.payloadCodecs().encode(started)));
         state = MedicalTreatmentProcess.reduceStarted(state, settlement.id(), started);
-        state = state.preparePhysicalIntent(prepared.intent());
+        state = PhysicalIntentLifecycleFixture.prepare(state, settlement.id(), prepared.intent());
+        state = admitTreatmentScene(state, started.operation()).state();
         var running = new PhysicalIntentTransition(prepared.intent().id(), PhysicalIntentStatus.RUNNING, java.util.Optional.empty());
         var runningEvents = MedicalTreatmentProcess.planTransition(state, prepared.intent(), running, 300L);
-        state = state.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.RUNNING, java.util.Optional.empty());
+        state = PhysicalIntentLifecycleFixture.transition(state, settlement.id(), prepared.intent(),
+                PhysicalIntentStatus.RUNNING, java.util.Optional.empty());
         MedicalTreatmentTransition treating = runningEvents.stream().map(event -> event.payload()).filter(MedicalTreatmentTransition.class::isInstance)
                 .map(MedicalTreatmentTransition.class::cast).findFirst().orElseThrow();
         state = MedicalTreatmentProcess.reduceTransition(state, settlement.id(), 300L, treating);
@@ -125,7 +132,8 @@ class MedicalEvacuationOperationTest {
                 started.operation().supplyItemId(), 1, 0);
         var confirmed = new PhysicalIntentTransition(prepared.intent().id(), PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(receipt));
         var confirmedEvents = MedicalTreatmentProcess.planTransition(state, prepared.intent(), confirmed, 400L);
-        state = state.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(receipt));
+        state = PhysicalIntentLifecycleFixture.transition(state, settlement.id(), prepared.intent(),
+                PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(receipt));
         ResidentHealthTransition recovering = confirmedEvents.stream().map(event -> event.payload()).filter(ResidentHealthTransition.class::isInstance)
                 .map(ResidentHealthTransition.class::cast).findFirst().orElseThrow();
         state = HumanHealthProcess.reduceResidentTransition(state, settlement.id(), 400L, recovering);
@@ -142,16 +150,20 @@ class MedicalEvacuationOperationTest {
                 .map(MedicalTreatmentStarted.class::cast).findFirst().orElseThrow();
         PhysicalIntentPrepared unknownPrepared = unknownPlan.stream().map(event -> event.payload()).filter(PhysicalIntentPrepared.class::isInstance)
                 .map(PhysicalIntentPrepared.class::cast).findFirst().orElseThrow();
-        unknownState = MedicalTreatmentProcess.reduceStarted(unknownState, settlement.id(), unknownStart).preparePhysicalIntent(unknownPrepared.intent())
-                .transitionPhysicalIntent(unknownPrepared.intent().id(), PhysicalIntentStatus.RUNNING, java.util.Optional.empty());
+        unknownState = PhysicalIntentLifecycleFixture.prepare(
+                MedicalTreatmentProcess.reduceStarted(unknownState, settlement.id(), unknownStart), settlement.id(), unknownPrepared.intent());
+        unknownState = admitTreatmentScene(unknownState, unknownStart.operation()).state();
         MedicalTreatmentTransition unknownRunning = MedicalTreatmentProcess.planTransition(unknownState, unknownPrepared.intent(),
                 new PhysicalIntentTransition(unknownPrepared.intent().id(), PhysicalIntentStatus.RUNNING, java.util.Optional.empty()), 300L).stream()
                 .map(event -> event.payload()).filter(MedicalTreatmentTransition.class::isInstance).map(MedicalTreatmentTransition.class::cast).findFirst().orElseThrow();
+        unknownState = PhysicalIntentLifecycleFixture.transition(unknownState, settlement.id(), unknownPrepared.intent(),
+                PhysicalIntentStatus.RUNNING, java.util.Optional.empty());
         unknownState = MedicalTreatmentProcess.reduceTransition(unknownState, settlement.id(), 300L, unknownRunning);
         MedicalTreatmentTransition unknown = MedicalTreatmentProcess.planTransition(unknownState, unknownPrepared.intent(),
                 new PhysicalIntentTransition(unknownPrepared.intent().id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, java.util.Optional.empty()), 400L).stream()
                 .map(event -> event.payload()).filter(MedicalTreatmentTransition.class::isInstance).map(MedicalTreatmentTransition.class::cast).findFirst().orElseThrow();
-        unknownState = unknownState.transitionPhysicalIntent(unknownPrepared.intent().id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, java.util.Optional.empty());
+        unknownState = PhysicalIntentLifecycleFixture.transition(unknownState, settlement.id(), unknownPrepared.intent(),
+                PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, java.util.Optional.empty());
         unknownState = MedicalTreatmentProcess.reduceTransition(unknownState, settlement.id(), 400L, unknown);
         assertEquals(MedicalEvacuationStatus.UNKNOWN_AFTER_RESTART, unknownState.humanPopulation().medicalOperations().get(unknownStart.operation().id()).status());
         assertEquals(HumanAssignmentKind.MEDICAL_EVACUATION, HumanAssignmentProjection.compile(unknownState)
@@ -235,7 +247,8 @@ class MedicalEvacuationOperationTest {
                 .map(MedicalTreatmentStarted.class::cast).findFirst().orElseThrow();
         PhysicalIntentPrepared prepared = planned.stream().map(event -> event.payload()).filter(PhysicalIntentPrepared.class::isInstance)
                 .map(PhysicalIntentPrepared.class::cast).findFirst().orElseThrow();
-        state = MedicalTreatmentProcess.reduceStarted(state, settlement.id(), started).preparePhysicalIntent(prepared.intent());
+        state = PhysicalIntentLifecycleFixture.prepare(MedicalTreatmentProcess.reduceStarted(state, settlement.id(), started),
+                settlement.id(), prepared.intent());
         FrontierMedicalTreatmentSceneSupport.Candidate candidate = FrontierMedicalTreatmentSceneSupport.candidates(state).stream().findFirst().orElseThrow();
         SceneLeaseId leaseId = new SceneLeaseId("lease:medical-hot");
         List<SceneMember> members = candidate.memberPositions().keySet().stream().sorted()
@@ -246,15 +259,45 @@ class MedicalEvacuationOperationTest {
         state = state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         assertTrue(FrontierMedicalTreatmentSceneSupport.permitsCurrentConsumptionIntent(state, prepared.intent()));
 
-        state = state.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, java.util.Optional.empty());
+        state = PhysicalIntentLifecycleFixture.transition(state, settlement.id(), prepared.intent(),
+                PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, java.util.Optional.empty());
+        assertEquals(DiagnosticReason.PHYSICAL_CUSTODY_UNRESOLVED,
+                state.physicalIntents().get(prepared.intent().id()).diagnostic().orElseThrow().reason());
         MedicalTreatmentTransition unknown = MedicalTreatmentProcess.planTransition(state, prepared.intent(),
                 new PhysicalIntentTransition(prepared.intent().id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, java.util.Optional.empty()), 400L).stream()
                 .map(event -> event.payload()).filter(MedicalTreatmentTransition.class::isInstance).map(MedicalTreatmentTransition.class::cast).findFirst().orElseThrow();
         state = MedicalTreatmentProcess.reduceTransition(state, settlement.id(), 400L, unknown);
 
+        var unknownIntent = state.physicalIntents().get(prepared.intent().id());
+        assertFalse(FrontierMedicalTreatmentSceneSupport.permitsCurrentConsumptionIntent(state, unknownIntent),
+                "ambiguous treatment cannot consume a second supply");
+        assertTrue(FrontierMedicalTreatmentSceneSupport.permitsConsumptionReceipt(state, unknownIntent),
+                "its exact late receipt may resolve the retained ambiguity");
+        var ambiguous = state;
+        assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleFixture.transition(ambiguous,
+                settlement.id(), unknownIntent, PhysicalIntentStatus.RUNNING, java.util.Optional.empty()),
+                "recovery must not replay physical consumption");
+        var withoutHotAuthority = state.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING);
+        assertFalse(FrontierMedicalTreatmentSceneSupport.permitsConsumptionReceipt(withoutHotAuthority, unknownIntent));
+        var codec = new FrontierWorldStateCodec();
+        state = codec.decode(codec.encode(state));
+        assertEquals(ambiguous, state, "recovery must retain the exact ambiguity, team, supply and fence");
         ExactItemConsumedObservation receipt = new ExactItemConsumedObservation(new PhysicalObservationId("observation:medical-hot"), prepared.intent().id(),
                 started.operation().supplyItemId(), 1, 0);
-        state = state.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(receipt));
+        var admittedReceipt = plannedMedicalTransition(state,
+                new PhysicalIntentTransition(unknownIntent.id(), PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(receipt)));
+        var rejectedReplay = assertThrows(IllegalArgumentException.class, () -> replayMedicalTransition(withoutHotAuthority, settlement.id(),
+                admittedReceipt),
+                "decoded receipts cannot bypass the owning HOT scene");
+        assertTrue(rejectedReplay.getMessage().contains("HOT"), rejectedReplay.getMessage());
+        assertThrows(IllegalArgumentException.class, () -> replayMedicalTransition(ambiguous, settlement.id(),
+                new PhysicalIntentTransition(unknownIntent.id(), PhysicalIntentStatus.RUNNING, java.util.Optional.empty())),
+                "decoded transitions cannot replay ambiguous consumption");
+        var replayedConfirmation = replayMedicalTransition(state, settlement.id(),
+                admittedReceipt);
+        state = PhysicalIntentLifecycleFixture.transition(state, settlement.id(), prepared.intent(),
+                PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(receipt));
+        assertEquals(state, replayedConfirmation, "valid live and decoded-event receipt reduction must agree");
         List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> completion = MedicalTreatmentProcess.planTransition(state, prepared.intent(),
                 new PhysicalIntentTransition(prepared.intent().id(), PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(receipt)), 500L);
         state = HumanHealthProcess.reduceResidentTransition(state, settlement.id(), 500L, completion.stream().map(event -> event.payload())
@@ -263,6 +306,24 @@ class MedicalEvacuationOperationTest {
                 .filter(MedicalTreatmentTransition.class::isInstance).map(MedicalTreatmentTransition.class::cast).findFirst().orElseThrow());
         assertEquals(MedicalEvacuationStatus.COMPLETED, state.humanPopulation().medicalOperations().get(started.operation().id()).status());
         assertTrue(!state.inventory().items().containsKey(started.operation().supplyItemId()));
+    }
+
+    @Test void completedTreatmentCanRecoverItsBodiesForReleaseWithoutRepeatingTreatment() {
+        TreatmentSceneFixture fixture = hotTreatmentFixture(new WorldId("frontier:medical-completed-recovery"));
+        // Terminal owner-state input; actual treatment receipts are verified in the preceding test.
+        var completed = fixture.state().withHumanPopulation(fixture.state().humanPopulation()
+                .transitionMedicalOperation(fixture.operation().id(), MedicalEvacuationStatus.COMPLETED, 500L));
+        var leaseId = fixture.lease().id();
+        var unknownScene = completed.transitionSceneLease(leaseId, SceneLeaseStatus.UNKNOWN_AFTER_RESTART);
+        unknownScene = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(unknownScene));
+        assertEquals(SceneLeaseStatus.DRAINING, FrontierSceneBehaviors.recoveredStatus(unknownScene, unknownScene.sceneLeases().get(leaseId)));
+        var draining = unknownScene.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING);
+        var captured = fixture.lease().members().stream().map(member -> new SceneMemberPosition(member.actorId(),
+                draining.actorLocations().get(member.actorId()).body(), draining.actorLocations().get(member.actorId()).condition().health())).toList();
+        var released = draining.releaseSceneLease(leaseId, captured);
+        assertEquals(SceneLeaseStatus.CLOSED, released.sceneLeases().get(leaseId).status());
+        assertEquals(completed.inventory(), released.inventory());
+        assertEquals(completed.humanPopulation(), released.humanPopulation());
     }
 
     @Test void participantDeathBlocksCareBeforeTheDeathFactAndLeavesPreEffectSupplyUntouched() {
@@ -311,6 +372,27 @@ class MedicalEvacuationOperationTest {
                 candidate.memberPositions().keySet());
     }
 
+    private static PhysicalIntentTransition plannedMedicalTransition(FrontierWorldState state, PhysicalIntentTransition transition) {
+        var id = new CommandId("command:medical-replay-admission");
+        var command = new FrontierCommand(1, id, state.bootstrap().worldId(), Revision.ZERO, new SimInstant(500),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id), transition);
+        var plan = FrontierWorldRuntimeDefinition.configuration(state.bootstrap().worldId(), 42L).commandPlanner().plan(state, command);
+        var accepted = assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan.Accepted.class, plan);
+        return accepted.events().stream().map(event -> event.payload()).filter(PhysicalIntentTransition.class::isInstance)
+                .map(PhysicalIntentTransition.class::cast).findFirst().orElseThrow();
+    }
+
+    private static FrontierWorldState replayMedicalTransition(FrontierWorldState state, SubjectId subject,
+                                                              PhysicalIntentTransition transition) {
+        var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
+        var decoded = codecs.decode(transition.type(), codecs.encode(transition));
+        var command = new CommandId("command:medical-replay-test");
+        var event = new FrontierEvent(1, new EventId("event:medical-replay-test"),
+                new TransactionId("transaction:medical-replay-test"), state.bootstrap().worldId(),
+                new Revision(1), new SimInstant(500), subject, CauseChain.root(command), decoded);
+        return FrontierWorldRuntimeDefinition.configuration(state.bootstrap().worldId(), 42L).reducer().apply(state, event);
+    }
+
     private static FrontierWorldState treatmentReadyState() {
         return treatmentReadyState(new WorldId("frontier:medical-lifecycle"));
     }
@@ -334,15 +416,22 @@ class MedicalEvacuationOperationTest {
                 .map(MedicalTreatmentStarted.class::cast).findFirst().orElseThrow();
         PhysicalIntentPrepared prepared = planned.stream().map(event -> event.payload()).filter(PhysicalIntentPrepared.class::isInstance)
                 .map(PhysicalIntentPrepared.class::cast).findFirst().orElseThrow();
-        state = MedicalTreatmentProcess.reduceStarted(state, settlement.id(), started).preparePhysicalIntent(prepared.intent());
-        FrontierMedicalTreatmentSceneSupport.Candidate candidate = FrontierMedicalTreatmentSceneSupport.candidates(state).stream().findFirst().orElseThrow();
+        state = PhysicalIntentLifecycleFixture.prepare(MedicalTreatmentProcess.reduceStarted(state, settlement.id(), started),
+                settlement.id(), prepared.intent());
+        return admitTreatmentScene(state, started.operation());
+    }
+
+    private static TreatmentSceneFixture admitTreatmentScene(FrontierWorldState state, MedicalEvacuationOperation operation) {
+        WorldId world = state.bootstrap().worldId();
+        FrontierMedicalTreatmentSceneSupport.Candidate candidate = FrontierMedicalTreatmentSceneSupport.candidates(state).stream()
+                .filter(value -> value.operationId().equals(operation.id())).findFirst().orElseThrow();
         SceneLeaseId leaseId = new SceneLeaseId("lease:medical-" + world.value().substring("frontier:".length()));
         List<SceneMember> members = candidate.memberPositions().keySet().stream().sorted()
                 .map(actor -> new SceneMember(actor, SceneLease.deterministicEntityId(world, leaseId, actor))).toList();
-        SceneLease lease = SceneLease.forCause(leaseId, world, new MedicalTreatmentSceneCause(started.operation().id()), candidate.infirmaryAnchor(),
+        SceneLease lease = SceneLease.forCause(leaseId, world, new MedicalTreatmentSceneCause(operation.id()), candidate.infirmaryAnchor(),
                 new SimInstant(300L), 1L, SceneLeaseStatus.PREPARED, members,
                 SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), java.util.Set.of(), java.util.Optional.empty());
-        return new TreatmentSceneFixture(world, state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT), started.operation(), lease);
+        return new TreatmentSceneFixture(world, state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT), operation, lease);
     }
 
     private record TreatmentSceneFixture(WorldId world, FrontierWorldState state, MedicalEvacuationOperation operation, SceneLease lease) { }

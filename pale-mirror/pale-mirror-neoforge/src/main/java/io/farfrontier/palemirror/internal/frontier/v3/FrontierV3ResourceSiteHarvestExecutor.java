@@ -198,7 +198,8 @@ final class FrontierV3ResourceSiteHarvestExecutor {
         if (intent.status() == PhysicalIntentStatus.RUNNING) {
             if (target.deferredReceipt() && FrontierV3ResourceSiteDeferredTerminalPrefix.awaitingProjection(level, state, target.site(), intent)) return;
             if (completeRunning(level, target.site(), ledger, chest, target.output())) { confirm(runtime, intent, target); }
-            else { fail(level, runtime, ledger, target, "completion-postcondition-conflict"); }
+            else { fail(level, runtime, ledger, target, "completion-postcondition-conflict-"
+                    + receiptDisposition(level, target.site(), ledger, chest, target.output()).name().toLowerCase(java.util.Locale.ROOT)); }
             return;
         }
         // A completed cursor with a PREPARED intent is not an invitation to reconstruct a
@@ -239,6 +240,15 @@ final class FrontierV3ResourceSiteHarvestExecutor {
         if (receiptRecorded) return exactExistingOutput ? ReceiptDisposition.ALREADY_CONFIRMED : ReceiptDisposition.CONFLICT;
         if (exactExistingOutput) return ReceiptDisposition.ACKNOWLEDGE_EXISTING_OUTPUT;
         return outputSlotEmpty ? ReceiptDisposition.APPLY_NEW_OUTPUT : ReceiptDisposition.CONFLICT;
+    }
+
+    private static ReceiptDisposition receiptDisposition(ServerLevel level, ResourceSite site, FrontierV3ResourceSiteLedger ledger,
+                                                          ChestBlockEntity chest, ExactItemStack output) {
+        if (!(output.custody() instanceof io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.ContainerSlot slot)) {
+            return ReceiptDisposition.CONFLICT;
+        }
+        return receiptDisposition(fullyHarvested(level, site, ledger), ledger.hasHarvestReceipt(site.id(), output),
+                FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(slot.slot()), output), chest.getItem(slot.slot()).isEmpty());
     }
 
     private static boolean fullyHarvested(ServerLevel level, ResourceSite site, FrontierV3ResourceSiteLedger ledger) {

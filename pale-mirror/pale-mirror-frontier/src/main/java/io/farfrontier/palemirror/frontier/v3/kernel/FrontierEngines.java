@@ -63,7 +63,8 @@ public final class FrontierEngines {
         if (receipts.size() > configuration.limits().maxReceipts()) throw new IllegalStateException("recovery checkpoint exceeds bounded receipt retention");
 
         TransactionReplayer.ReplayResult<S> replay = TransactionReplayer.replayFrom(configuration.worldId(), state, revision, instant,
-                schedules, image.walTail(), configuration.reducer(), configuration.stateCodec(), configuration.stateValidator());
+                schedules, image.walTail(), configuration.reducer(), configuration.stateCodec(), configuration.stateValidator(),
+                configuration.scheduledPlanner()::held);
         return InMemoryFrontierEngine.recovered(configuration, replay, receipts, image.walTail());
     }
 }

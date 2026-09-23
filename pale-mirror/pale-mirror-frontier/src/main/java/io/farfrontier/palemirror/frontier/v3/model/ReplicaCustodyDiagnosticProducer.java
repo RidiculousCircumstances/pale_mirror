@@ -5,6 +5,11 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 /** First-boundary stamps for exact replica and custody reconciliation failures. */
 public final class ReplicaCustodyDiagnosticProducer {
     private ReplicaCustodyDiagnosticProducer() { }
+    public static PhysicalReplicaCustodyPayloads.ProjectionConflictObserved projectionConflict(SubjectId scopeId, long epoch,
+            long canonical, long replica, String fingerprint, String provenance) {
+        return new PhysicalReplicaCustodyPayloads.ProjectionConflictObserved(scopeId, epoch, canonical, replica, fingerprint, provenance,
+                unresolved(scopeId, epoch, canonical, replica, PhysicalCustodyUnresolvedReason.OBSERVATION_MISMATCH).diagnostic());
+    }
     public static PhysicalReplicaCustodyPayloads.ReplicaConflictObserved conflict(SubjectId objectId, long canonical, long replica,
                                                                                    String fingerprint, String provenance) {
         return new PhysicalReplicaCustodyPayloads.ReplicaConflictObserved(objectId, canonical, replica, fingerprint, provenance,

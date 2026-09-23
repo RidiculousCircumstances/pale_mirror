@@ -55,6 +55,24 @@ class ScheduledActionQueueTest {
     }
 
     @Test
+    void eligibleHeadStillFencesEarlierWorkCreatedAfterBatchAdmission() {
+        ScheduledActionQueue queue = new ScheduledActionQueue();
+        ScheduledAction held = action("schedule:held", 1L, 0, "settlement:a", 1);
+        ScheduledAction later = action("schedule:later", 10L, 0, "settlement:b", 1);
+        ScheduledAction inserted = action("schedule:inserted", 5L, 0, "settlement:c", 1);
+        java.util.function.Predicate<ScheduledAction> eligible = action -> !action.equals(held);
+        queue.schedule(held); queue.schedule(later);
+        assertEquals(List.of(later), queue.selectDue(new SimInstant(10L), new WorkBudget(1, 1), eligible).admitted());
+        queue.schedule(inserted);
+        assertFalse(queue.isEligibleHead(later, eligible), "snapshot membership is not execution authority");
+        assertTrue(queue.isEligibleHead(inserted, eligible));
+        queue.cancel(inserted.id());
+        queue.cancel(later.id());
+        assertFalse(queue.isEligibleHead(later, eligible), "cancelled snapshot entries cannot run");
+        assertEquals(List.of(held), queue.snapshot());
+    }
+
+    @Test
     void transactionOverlayLeavesFutureWorkUntouchedUntilItsCanonicalCommit() {
         ScheduledActionQueue queue = new ScheduledActionQueue();
         ScheduledAction first = action("schedule:first", 10L, 0, "settlement:a", 1);
@@ -77,5 +95,23 @@ class ScheduledActionQueueTest {
     private static ScheduledAction action(String id, long dueAt, int priority, String subject, int weight) {
         return new ScheduledAction(new ScheduleId(id), new SimInstant(dueAt), priority,
                 new SubjectId(subject), "process.tick", weight);
+    }
+
+    @Test
+    void referenceDeltaContainsOnlyFinalRetainedCreationsAndReplacements() {
+        ScheduledActionQueue queue = new ScheduledActionQueue();
+        ScheduledAction original = action("schedule:original", 10L, 0, "settlement:a", 1);
+        ScheduledAction transientAction = action("schedule:temporary", 20L, 0, "settlement:b", 1);
+        ScheduledAction replacement = action("schedule:original", 30L, 0, "settlement:c", 1);
+        queue.schedule(original);
+        var mutation = queue.beginMutation();
+        mutation.schedule(transientAction);
+        mutation.cancel(transientAction.id());
+        mutation.cancel(original.id());
+        mutation.schedule(replacement);
+        assertEquals(List.of(replacement), mutation.retainedChanges());
+        assertEquals(List.of(original), queue.snapshot());
+        mutation.commit();
+        assertEquals(List.of(replacement), queue.snapshot());
     }
 }

@@ -121,8 +121,12 @@ class PhysicalIntentLifecycleRetentionIntegrationTest {
 
     private static PhysicalIntent copyWithStatus(PhysicalIntent source, PhysicalIntentId id, PhysicalIntentStatus status,
                                                  Optional<PhysicalObservationId> observationId) {
-        return new PhysicalIntent(id, source.kind(), status, source.causeSubjectId(), source.roles(), source.origin(), source.radiusBlocks(),
+        PhysicalIntent copy = new PhysicalIntent(id, source.kind(), status == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
+                ? PhysicalIntentStatus.PREPARED : status, source.causeSubjectId(), source.roles(), source.origin(), source.radiusBlocks(),
                 source.postcondition(), observationId, source.targetSlot(), source.semanticTarget(), source.lifecycleOwner());
+        assertEquals(PhysicalIntentLifecycleOwner.ROUTE_OPERATION, copy.lifecycleOwner());
+        return status == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
+                ? copy.withRecoveryUnknown(PhysicalIntentRecoveryDiagnosticProducer.ROUTE_OPERATION.stamp(copy)) : copy;
     }
 
     private static FixedPosition siteOrigin(FrontierWorldState state, SubjectId site) {

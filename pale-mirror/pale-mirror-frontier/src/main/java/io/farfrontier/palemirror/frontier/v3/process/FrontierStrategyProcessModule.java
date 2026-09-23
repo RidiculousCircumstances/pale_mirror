@@ -15,6 +15,12 @@ import java.util.Set;
 
 /** Exact reducer owner for settlement strategic facts. */
 final class FrontierStrategyProcessModule implements FrontierWorldProcessModule {
+    @Override public List<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction> retiredSchedules(
+            FrontierWorldState previous, FrontierWorldState next,
+            java.util.function.Supplier<List<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction>> pending) {
+        return StrategicScheduleRetirement.retiredBy(previous, next, pending);
+    }
+
     @Override public List<PhysicalIntentLifecycleCapability> physicalIntentLifecycleCapabilities() {
         return List.of(new FunctionalPhysicalIntentLifecycleCapability(
                 PhysicalIntentLifecycleDeclaration.physical(PhysicalIntentLifecycleOwner.DECONTAMINATION,

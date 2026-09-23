@@ -26,7 +26,8 @@ final class SceneCauseStateCodec {
             output.writeByte(0); FrontierWorldStateCodec.writeString(output, logistics.operationId().value());
             FrontierWorldStateCodec.writeString(output, logistics.cargoId().value()); output.writeBoolean(logistics.engagementId().isPresent());
             if (logistics.engagementId().isPresent()) FrontierWorldStateCodec.writeString(output, logistics.engagementId().orElseThrow().value());
-            FrontierWorldStateCodec.writePosition(output, logistics.cargoPosition()); return;
+            FrontierWorldStateCodec.writePosition(output, logistics.cargoPosition());
+            output.writeByte(logistics.carrierDisposition().wireTag()); return;
         }
         if (cause instanceof SettlementAssaultSceneCause assault) {
             output.writeByte(1); FrontierWorldStateCodec.writeString(output, assault.assaultId().value());
@@ -46,7 +47,8 @@ final class SceneCauseStateCodec {
     static SceneCause read(DataInputStream input) throws IOException {
         return switch (input.readUnsignedByte()) {
             case 0 -> new LogisticsSceneCause(new SubjectId(FrontierWorldStateCodec.readString(input)),
-                    new SubjectId(FrontierWorldStateCodec.readString(input)), readOptionalSubject(input), FrontierWorldStateCodec.readPosition(input));
+                    new SubjectId(FrontierWorldStateCodec.readString(input)), readOptionalSubject(input), FrontierWorldStateCodec.readPosition(input),
+                    io.farfrontier.palemirror.frontier.v3.model.CargoProjectionRetirement.Disposition.fromWireTag(input.readUnsignedByte()));
             case 1 -> new SettlementAssaultSceneCause(new SubjectId(FrontierWorldStateCodec.readString(input)), new SubjectId(FrontierWorldStateCodec.readString(input)));
             case 2 -> new EngineeringWorkSceneCause(new SubjectId(FrontierWorldStateCodec.readString(input)), input.readInt());
             case 3 -> new MedicalTreatmentSceneCause(new SubjectId(FrontierWorldStateCodec.readString(input)));

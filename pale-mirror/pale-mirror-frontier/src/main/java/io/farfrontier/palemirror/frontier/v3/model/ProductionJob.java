@@ -60,6 +60,18 @@ public record ProductionJob(
         return new ProductionJob(id, settlementId, facilityId, workerId, consumedItemId, next, outputItemId, outputItemKind, outputCount,
                 workProgress, workTraversal, traversalCursor);
     }
+    /** Resource representation cannot bypass labor or a live physical custodian. */
+    public void requireColdCompletion(FrontierWorldState state) {
+        var actor = state.actorLocations().get(workerId);
+        SubjectId depot = FrontierWorldState.depotId(settlementId);
+        if (ReferenceContainerCustody.hasLiveCustody(state, depot) || ReferenceContainerCustody.blocksCanonicalUse(state, depot)
+                || !workProgress.terminalEffectEligible() || traversalCursor != workTraversal.linearCorridorSurfaces().size() - 1
+                || actor == null || actor.condition().status() != ActorLifeStatus.ALIVE
+                || !FrontierSceneAdmission.available(state, java.util.List.of(workerId))
+                || state.sceneLeases().values().stream().anyMatch(lease -> lease.retainsMemberCustody(workerId))) {
+            throw new IllegalArgumentException("production completion requires finished work and exclusive COLD worker and resource custody");
+        }
+    }
 
     public ProductionJob withWorkProgress(ProductionWorkProgress next) {
         return new ProductionJob(id, settlementId, facilityId, workerId, consumedItemId, inputHold, outputItemId, outputItemKind, outputCount,

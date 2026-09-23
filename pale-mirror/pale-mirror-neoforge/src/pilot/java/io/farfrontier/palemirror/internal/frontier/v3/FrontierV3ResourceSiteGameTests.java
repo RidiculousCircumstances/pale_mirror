@@ -25,6 +25,80 @@ import java.util.List;
 public final class FrontierV3ResourceSiteGameTests {
     private FrontierV3ResourceSiteGameTests() { }
 
+    @GameTest(batch = "pm-frontier-v3-resource-site-prefix", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 20)
+    public static void blankInitialProjectionDoesNotInferSoilAuthority(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); ResourceSite site = field(fixtureOrigin(helper));
+        site.managedSlots().forEach(slot -> level.setBlock(minecraft(slot), Blocks.AIR.defaultBlockState(), 2));
+        FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.fixture();
+        ledger.reserve(site.id(), new PhysicalIntentId("intent:site-prefix-blank"));
+        ledger.beginProjection(site.id(), new FrontierV3ResourceSiteLedger.ProjectionTransition(
+                "job:site-prefix-cold-harvest", 0, 0, 7, 10, 0, 132, FrontierV3ResourceSiteLedger.ProjectionMode.INITIAL));
+        ledger = FrontierV3ResourceSiteLedger.load(ledger.save(new CompoundTag(), level.registryAccess()), level.registryAccess());
+        helper.assertTrue(FrontierV3ResourceSiteExecutor.matchesPersistedProjectionPrefix(level, site, ledger.claim(site.id())),
+                "explicit blank predecessor survives reload without becoming a soil predecessor");
+        BlockPos soil = minecraft(site.soilSlots().getFirst());
+        level.setBlock(soil.below(), Blocks.STONE.defaultBlockState(), 2);
+        level.setBlock(soil, Blocks.DIRT.defaultBlockState(), 2);
+        helper.assertFalse(FrontierV3ResourceSiteExecutor.matchesPersistedProjectionPrefix(level, site, ledger.claim(site.id())),
+                "even supported dirt is foreign when the retained predecessor was AIR");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-resource-site-prefix", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 20)
+    public static void partialInitialProjectionRetainsSoilAndRejectsForeignSuffixAfterReload(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); ResourceSite site = field(fixtureOrigin(helper));
+        prepareGrayboxBaseline(level, site);
+        FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.fixture();
+        ledger.reserve(site.id(), new PhysicalIntentId("intent:site-prefix-initial"));
+        var order = FrontierV3ResourceSiteExecutor.initialProjectionSlotOrder(site);
+        ledger.beginProjection(site.id(), new FrontierV3ResourceSiteLedger.ProjectionTransition(
+                "growth:site:resource-site-game-test:e1", 0, 0, 0, 0, 0, order.size(),
+                FrontierV3ResourceSiteLedger.ProjectionMode.INITIAL_SOIL));
+        helper.assertTrue(FrontierV3ResourceSiteExecutor.matchesPersistedProjectionPrefix(level, site, ledger.claim(site.id())),
+                "initial cursor starts on supported neutral soil, not AIR in every slot");
+        for (int index = 0; index < 8; index++) {
+            BlockPosition slot = order.get(index);
+            var block = site.irrigationSlots().contains(slot) ? Blocks.WATER.defaultBlockState()
+                    : site.soilSlots().contains(slot) ? Blocks.FARMLAND.defaultBlockState().setValue(net.minecraft.world.level.block.FarmBlock.MOISTURE, 7)
+                    : Blocks.WHEAT.defaultBlockState();
+            level.setBlock(minecraft(slot), block, 2); ledger.advanceProjection(site.id(), index + 1);
+        }
+        ledger = FrontierV3ResourceSiteLedger.load(ledger.save(new CompoundTag(), level.registryAccess()), level.registryAccess());
+        helper.assertTrue(FrontierV3ResourceSiteExecutor.matchesPersistedProjectionPrefix(level, site, ledger.claim(site.id())),
+                "saved partial cursor accepts its hydrated prefix and untouched supported suffix");
+        BlockPos changed = minecraft(order.get(10)); level.setBlock(changed, Blocks.DIAMOND_BLOCK.defaultBlockState(), 2);
+        helper.assertFalse(FrontierV3ResourceSiteExecutor.matchesPersistedProjectionPrefix(level, site, ledger.claim(site.id())),
+                "a later foreign suffix is not permission to resume cached writes");
+        helper.assertTrue(level.getBlockState(changed).is(Blocks.DIAMOND_BLOCK), "validation preserves foreign evidence");
+        helper.assertValueEqual(ledger.claim(site.id()).projection().nextWrite(), 8, "validation never consumes progress");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-resource-site-prefix", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 20)
+    public static void partialGrowthProjectionAcceptsHydrationButRejectsChangedCommittedCrop(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); ResourceSite site = field(fixtureOrigin(helper));
+        prepareGrayboxBaseline(level, site);
+        helper.assertTrue(FrontierV3ResourceSiteExecutor.placeWholeField(level, site), "initial physical field exists");
+        FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.fixture();
+        ledger.reserve(site.id(), new PhysicalIntentId("intent:site-prefix-growth")); ledger.activate(site.id());
+        ledger.beginProjection(site.id(), new FrontierV3ResourceSiteLedger.ProjectionTransition(
+                "growth:site:resource-site-game-test:e1", 0, 0, 3, 0, 0, 64,
+                FrontierV3ResourceSiteLedger.ProjectionMode.ADVANCE));
+        for (int index = 0; index < 8; index++) {
+            level.setBlock(minecraft(site.cropSlots().get(index)), Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 3), 2);
+            ledger.advanceProjection(site.id(), index + 1);
+        }
+        level.setBlock(minecraft(site.soilSlots().getFirst()), Blocks.FARMLAND.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.FarmBlock.MOISTURE, 7), 2);
+        ledger = FrontierV3ResourceSiteLedger.load(ledger.save(new CompoundTag(), level.registryAccess()), level.registryAccess());
+        helper.assertTrue(FrontierV3ResourceSiteExecutor.matchesPersistedProjectionPrefix(level, site, ledger.claim(site.id())),
+                "growth cursor distinguishes hydration from crop-stage drift");
+        level.setBlock(minecraft(site.cropSlots().getFirst()), Blocks.AIR.defaultBlockState(), 2);
+        helper.assertFalse(FrontierV3ResourceSiteExecutor.matchesPersistedProjectionPrefix(level, site, ledger.claim(site.id())),
+                "removing a committed crop invalidates continuation without repairing it");
+        helper.succeed();
+    }
+
     @GameTest(batch = "pm-frontier-v3-resource-site-harvest-standing", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 20)
     public static void harvestStandingAdmitsOnlyItsOwnPassThroughCropCell(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();

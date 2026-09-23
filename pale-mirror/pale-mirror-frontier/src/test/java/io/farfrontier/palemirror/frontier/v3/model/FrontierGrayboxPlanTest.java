@@ -173,7 +173,7 @@ class FrontierGrayboxPlanTest {
     void activeConvoyFormationAndCargoHaveExactPlannedSupportAcrossTheWholeCarriageway() {
         FrontierWorldState state = FrontierDevelopmentScenarios.routeSceneReturnFixture(
                 new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:carriageway-support"), 91L).state();
-        RouteOperation operation = state.operations().get(new io.farfrontier.palemirror.frontier.v3.api.SubjectId("operation:supply-1-2"));
+        RouteOperation operation = FrontierDevelopmentScenarios.initialNorthwatchShipment(state).orElseThrow();
         OperationTravel travel = operation.activeTravel().orElseThrow();
         FrontierGrayboxPlan plan = FrontierGrayboxPlan.compile(state);
 

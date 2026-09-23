@@ -25,7 +25,7 @@ public final class SceneStrikeStateSupport {
     public static void validateIntent(Map<SubjectId, RouteOperation> operations, Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> leases,
                                Map<SubjectId, ActorLocation> actors, PhysicalIntent intent) {
         if (intent.kind() != PhysicalIntentKind.SCENE_STRIKE) return;
-        SceneLease lease = leases.values().stream().filter(value -> value.status() == SceneLeaseStatus.HOT).filter(value -> FrontierSceneBehaviors.owns(value, intent.causeSubjectId()))
+        SceneLease lease = leases.values().stream().filter(value -> value.status() == SceneLeaseStatus.HOT).filter(value -> matches(value, intent))
                 .findFirst().orElseThrow(() -> new IllegalArgumentException("scene strike requires one HOT owned lease"));
         if (FrontierSceneBehaviors.isLogistics(lease)) {
             RouteOperation operation = operations.get(intent.causeSubjectId());
@@ -43,13 +43,18 @@ public final class SceneStrikeStateSupport {
     }
 
     public static void validateObservation(FrontierWorldState state, PhysicalIntent intent, SceneStrikeObservation observation) {
+        if (!intent.equals(state.physicalIntents().get(intent.id()))) {
+            throw new IllegalArgumentException("scene strike observation lacks its exact admitted intent");
+        }
         SceneLease lease = matchingLease(state, intent);
         if (!lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet()).containsAll(members(intent))) {
             throw new IllegalArgumentException("scene strike receipt has no matching exact scene lease");
         }
         validateMembers(intent, observation);
         validateObservedWound(state.actorLocations(), intent, observation);
-        validateSettlementSelection(state.strategicPlans(), state.actorLocations(), state.physicalIntents().values(), lease, intent);
+        // Admission already fixed the exact participants. Death or another ordinary
+        // physical consequence must not select a new living target for this old hit.
+        // matchingLease above retains the exact epoch; the receipt retains both roles.
         validateSettlementLeaseBinding(state, lease, intent);
     }
 
@@ -66,20 +71,76 @@ public final class SceneStrikeStateSupport {
         return FrontierSceneOwnerSupport.owner(state, matchingHotLease(state, intent));
     }
 
+    public static SubjectId transitionOwner(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentTransition transition) {
+        if (intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
+                && transition.status() == PhysicalIntentStatus.CONFLICTED) {
+            var fence = state.fencedRecovery().current().get(FencedRecoveryPhysicalIntentSupport.bindingId(intent));
+            if (fence == null || fence.phase() != FencedRecoveryPhase.AMBIGUOUS
+                    || fence.asset() != FencedRecoveryAsset.EFFECT
+                    || !fence.ownerId().equals(intent.causeSubjectId())
+                    || fence.recoveryAttempts() < FencedRecoveryBinding.MAX_RECOVERY_ATTEMPTS) {
+                throw new IllegalArgumentException("unknown strike requires bounded inspection before abandonment");
+            }
+        }
+        SceneLease lease = matchingLease(state, intent);
+        boolean permitted = switch (transition.status()) {
+            case RUNNING -> lease.status() == SceneLeaseStatus.HOT;
+            case CONFIRMED -> lease.status() == SceneLeaseStatus.HOT || lease.status() == SceneLeaseStatus.DRAINING;
+            case UNKNOWN_AFTER_RESTART, CONFLICTED -> lease.status() != SceneLeaseStatus.CLOSED;
+            case PREPARED -> false;
+        };
+        if (!permitted) throw new IllegalArgumentException("scene strike transition lacks current bound scene permission");
+        return FrontierSceneOwnerSupport.owner(state, lease);
+    }
+
+    public static boolean boundTo(SceneLease lease, PhysicalIntent intent) {
+        var binding = intent.roles().scene().orElseThrow(() -> new IllegalArgumentException("scene strike lacks explicit scene binding"));
+        boolean family = switch (intent.lifecycleOwner()) {
+            case ROUTE_ENGAGEMENT -> FrontierSceneBehaviors.isLogistics(lease);
+            case SETTLEMENT_ASSAULT -> FrontierSceneBehaviors.isSettlementAssault(lease);
+            default -> false;
+        };
+        return family && binding.leaseId().equals(lease.id()) && binding.revision() == lease.revision();
+    }
+
+    /** Atomic release revokes only effects whose durable start was never admitted. */
+    public static FrontierWorldState prepareRelease(FrontierWorldState state, SceneLease lease) {
+        var intents = new java.util.LinkedHashMap<>(state.physicalIntents());
+        var recovery = state.fencedRecovery();
+        for (PhysicalIntent intent : state.physicalIntents().values()) {
+            if (intent.kind() != PhysicalIntentKind.SCENE_STRIKE || !boundTo(lease, intent)) continue;
+            switch (intent.status()) {
+                case CONFIRMED, CONFLICTED -> { }
+                case RUNNING, UNKNOWN_AFTER_RESTART -> throw new IllegalArgumentException("unresolved scene strike retains its exact scene custody");
+                case PREPARED -> {
+                    FencedRecoveryPhysicalIntentSupport.requirePreparedExecutionAuthority(recovery, intent, FencedRecoveryAsset.EFFECT);
+                    SubjectId id = FencedRecoveryPhysicalIntentSupport.bindingId(intent);
+                    recovery = recovery.conflict(id, recovery.current().get(id).authorityEpoch(), "scene-release-unstarted-strike");
+                    intents.remove(intent.id());
+                }
+            }
+        }
+        return state.withChanges(FrontierWorldStateUpdate.begin().physicalIntents(intents).fencedRecovery(recovery));
+    }
+
     static boolean isSettlementAssaultCause(StrategicPlanState plans, PhysicalIntent intent) {
         return intent.kind() == PhysicalIntentKind.SCENE_STRIKE && plans.settlementAssaults().values().stream()
                 .anyMatch(assault -> SettlementAssaultCauseIdentity.belongsTo(assault.id(), intent.causeSubjectId()));
     }
 
     private static SceneLease matchingHotLease(FrontierWorldState state, PhysicalIntent intent) {
-        return state.sceneLeases().values().stream().filter(value -> value.status() == SceneLeaseStatus.HOT)
-                .filter(value -> matches(state, value, intent)).findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("scene strike has no HOT owned lease"));
+        SceneLease lease = matchingLease(state, intent);
+        if (lease.status() != SceneLeaseStatus.HOT) throw new IllegalArgumentException("scene strike has no HOT owned lease");
+        return lease;
     }
 
     private static SceneLease matchingLease(FrontierWorldState state, PhysicalIntent intent) {
-        return state.sceneLeases().values().stream().filter(value -> matches(state, value, intent)).findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("scene strike receipt has no matching exact scene lease"));
+        var binding = intent.roles().scene().orElseThrow(() -> new IllegalArgumentException("scene strike lacks explicit scene binding"));
+        SceneLease lease = state.sceneLeases().get(binding.leaseId());
+        if (lease == null || !boundTo(lease, intent) || !matches(state, lease, intent)) {
+            throw new IllegalArgumentException("scene strike receipt has no matching exact scene lease");
+        }
+        return lease;
     }
 
     private static boolean matches(FrontierWorldState state, SceneLease lease, PhysicalIntent intent) {
@@ -87,6 +148,7 @@ public final class SceneStrikeStateSupport {
     }
 
     private static boolean matches(SceneLease lease, PhysicalIntent intent) {
+        if (!boundTo(lease, intent)) return false;
         if (FrontierSceneBehaviors.owns(lease, intent.causeSubjectId())) return true;
         if (!FrontierSceneBehaviors.isSettlementAssault(lease)) return false;
         SettlementAssaultSceneCause cause = FrontierSceneBehaviors.settlementAssault(lease);
@@ -96,6 +158,7 @@ public final class SceneStrikeStateSupport {
     }
 
     private static boolean matches(StrategicPlanState plans, Iterable<PhysicalIntent> intents, SceneLease lease, PhysicalIntent intent) {
+        if (!boundTo(lease, intent)) return false;
         if (FrontierSceneBehaviors.owns(lease, intent.causeSubjectId())) return true;
         if (!FrontierSceneBehaviors.isSettlementAssault(lease) || !isSettlementAssaultCause(plans, intent)) return false;
         SettlementAssault assault = plans.settlementAssaults().get(FrontierSceneBehaviors.settlementAssault(lease).assaultId());
@@ -174,7 +237,7 @@ public final class SceneStrikeStateSupport {
         if (attackers.isEmpty() || targets.isEmpty()) throw new IllegalArgumentException("settlement scene strike has no living exact combatants");
         SubjectId expectedAttacker = attackers.get(Math.floorMod(epoch, attackers.size()));
         SubjectId expectedTarget = targets.get(Math.floorMod(epoch, targets.size()));
-        if (!intent.roles().equals(PhysicalIntentRoleBinding.assaultSceneStrike(expectedAttacker, expectedTarget))) {
+        if (!intent.roles().equals(PhysicalIntentRoleBinding.assaultSceneStrike(expectedAttacker, expectedTarget, lease.id(), lease.revision()))) {
             throw new IllegalArgumentException("settlement scene strike does not match the exact COLD attacker and target");
         }
     }

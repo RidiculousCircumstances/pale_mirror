@@ -36,6 +36,7 @@ final class ProductionJobStateSupport {
     static FrontierWorldState complete(FrontierWorldState state, SubjectId jobId, ExactItemStack output) {
         ProductionJob job = state.productionJobs().get(Objects.requireNonNull(jobId, "production job id"));
         if (job == null) throw new IllegalArgumentException("unknown production job: " + jobId.value());
+        job.requireColdCompletion(state);
         if (!job.outputItemId().equals(output.id()) || !job.outputItemKind().equals(output.itemKind()) || job.outputCount() != output.count()) {
             throw new IllegalArgumentException("production output does not match durable job result");
         }
@@ -75,6 +76,7 @@ final class ProductionJobStateSupport {
                 || job.outputCount() != output.quantity() || !job.settlementId().equals(output.economicOwnerId())) {
             throw new IllegalArgumentException("fungible production output does not match durable job result");
         }
+        job.requireColdCompletion(state);
         FungibleResourceLedger resources = state.inventory().fungibleResources().transformCold(cold.accountId(),
                 Map.of(cold.itemId(), job.outputCount()), Map.of(cold.claimId(), job.outputCount()), output);
         Map<SubjectId, ProductionJob> next = new LinkedHashMap<>(state.productionJobs()); next.remove(jobId);
@@ -90,9 +92,11 @@ final class ProductionJobStateSupport {
         ClaimAllocation claim;
         FungibleResourceLedger reserved;
         if (hold instanceof ProductionInputHold.FungibleCold cold) {
+            ProductionResourceCustody.requireNewHold(state, job, cold.accountId(), cold.claimId());
             claim = new ClaimAllocation(cold.claimId(), job.id(), job.settlementId(), "minecraft:wheat", job.outputCount());
             reserved = resources.reserve(claim, cold.accountId());
         } else if (hold instanceof ProductionInputHold.FungibleBound bound) {
+            ProductionResourceCustody.requireNewHold(state, job, bound.accountId(), bound.claimId());
             claim = new ClaimAllocation(bound.claimId(), job.id(), job.settlementId(), "minecraft:wheat", job.outputCount());
             reserved = resources.reserveBound(claim, bound.accountId(), bound.authorityEpoch());
         } else {
@@ -116,7 +120,8 @@ final class ProductionJobStateSupport {
             case ProductionInputHold.Materialized ignored -> state.inventory();
             case ProductionInputHold.FungibleCold cold -> state.inventory().withFungibleResources(state.inventory().fungibleResources()
                     .releaseClaim(cold.accountId(), cold.claimId()));
-            case ProductionInputHold.FungibleBound ignored -> throw new IllegalArgumentException("bound fungible production must await physical recovery");
+            case ProductionInputHold.FungibleBound bound -> state.inventory().withFungibleResources(
+                    ProductionResourceCustody.cancelBound(state, job, bound));
         };
         Map<PhysicalIntentId, PhysicalIntent> nextIntents = new LinkedHashMap<>(state.physicalIntents());
         for (PhysicalIntent intent : state.physicalIntents().values()) if (intent.causeSubjectId().equals(job.id())) {

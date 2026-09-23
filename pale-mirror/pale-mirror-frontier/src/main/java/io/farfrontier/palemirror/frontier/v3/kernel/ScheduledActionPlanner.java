@@ -13,4 +13,18 @@ import java.util.List;
 @FunctionalInterface
 public interface ScheduledActionPlanner<S> {
     List<ProposedEvent> plan(S state, ScheduledAction action);
+
+    /** Canonical owner-declared hold; excludes work before budget admission without changing its deadline. */
+    default boolean held(S state, ScheduledAction action) { return false; }
+
+    /**
+     * Exact pending actions retired by the owning domain transition. The kernel records
+     * ordinary cancellation events in the same WAL transaction, before reference validation.
+     * This is not permission to discard arbitrary dangling references or repair recovery.
+     */
+    default List<ScheduledAction> retiredBy(S previous, S next,
+            io.farfrontier.palemirror.frontier.v3.api.FrontierEvent event,
+            java.util.function.Supplier<List<ScheduledAction>> pending) {
+        return List.of();
+    }
 }

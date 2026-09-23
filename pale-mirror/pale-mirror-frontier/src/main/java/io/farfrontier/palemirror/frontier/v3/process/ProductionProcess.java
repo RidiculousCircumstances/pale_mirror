@@ -42,7 +42,6 @@ public final class ProductionProcess {
     private static final String WHEAT = "minecraft:wheat";
     private static final String BREAD = "minecraft:bread";
     /** One COLD checkpoint may retain this many already-stationary processing ticks. */
-    private static final int COLD_PROCESSING_TICKS_PER_CADENCE = 8;
     private ProductionProcess() { }
 
     public static ScheduledAction start(StrategicTask task, long dueAt) {
@@ -70,6 +69,13 @@ public final class ProductionProcess {
         if (current == null || current.condition().status() != ActorLifeStatus.ALIVE) {
             throw new IllegalArgumentException("production-work hand-off has no living worker");
         }
+        if (job.traversalCursor() != 0 || !job.workProgress().equals(ProductionWorkProgress.notStarted())) {
+            BodyPosition retained = job.workTraversal().linearCorridorSurfaces().get(job.traversalCursor()).standingBody();
+            if (!retained.equals(current.body()) || !retained.equals(capture.body())) {
+                throw new IllegalArgumentException("production-work hand-off must retain its exact COLD/HOT cursor station");
+            }
+            return state;
+        }
         TraversalTopology rebased = ProductionWorkTraversal.compile(state, workshop, job.workerId(),
                 new ActorLocation(capture.body(), current.condition()), job.id());
         return FrontierProductionWorkSceneSupport.replaceJob(state, job.rebaseUnstartedTraversal(rebased));
@@ -91,13 +97,12 @@ public final class ProductionProcess {
         Optional<ExactItemStack> input = wheat(state, settlement);
         if (fungible.isEmpty() && input.isEmpty()) return blocked(task, settlement, workshop, workshop.id(), ProductionDiagnosticProducer.INPUT_UNAVAILABLE);
         int ordinal = state.strategicPlans().objectives().get(task.objectiveId()).decisionOrdinal();
-        if (fungible.isPresent() && input.isEmpty() && physicalCustody) {
-            return blocked(task, settlement, workshop, depot, ProductionDiagnosticProducer.INPUT_UNAVAILABLE);
+        if (physicalCustody && !ReferenceContainerCustody.hasOperationalCustody(state, depot)
+                || fungible.isPresent() && input.isEmpty() && !ProductionResourceCustody.canStart(state, fungible.orElseThrow(), 64)) {
+            return List.of(reschedule(action, start(task, Math.addExact(action.dueAt().ticks(), 20L))));
         }
-        // A live reference-depot lease makes the exact stack the only admissible input
-        // representation.  The fungible mirror may coexist with that stack, but it cannot
-        // consume while the chest is physically owned; selecting it first would permanently
-        // block an otherwise materialized production successor.
+        // Exact and fungible stock remain distinct representations. A resource job admitted
+        // under physical custody reserves the current bound epoch, never a COLD mirror.
         ProductionJob job = physicalCustody && input.isPresent()
                 ? job(state, settlement, workshop, input.orElseThrow(), ordinal, false)
                 : fungible.map(value -> fungibleJob(state, settlement, workshop, value, ordinal)).orElseGet(() ->
@@ -109,6 +114,16 @@ public final class ProductionProcess {
             return blocked(task, settlement, workshop, workshop.id(), ProductionDiagnosticProducer.FINANCE_UNAVAILABLE);
         }
         return List.of(transition(task, StrategicTaskStatus.ACTIVE), new ProposedEvent(settlement.id(), new ProductionStarted(job, job.consumedItemId())), schedule(complete(job, action.dueAt().ticks() + 100L)));
+    }
+
+    /** Restores the consumed completion action when an unstarted physical effect returns to COLD. */
+    public static List<ProposedEvent> resumeReleasedEffects(FrontierWorldState before, FrontierWorldState after, long now) {
+        return before.productionJobs().values().stream().sorted(Comparator.comparing(ProductionJob::id))
+                .filter(job -> after.productionJobs().containsKey(job.id()))
+                .filter(job -> before.physicalIntents().values().stream().anyMatch(intent -> intent.causeSubjectId().equals(job.id())
+                        && !after.physicalIntents().containsKey(intent.id())))
+                .map(job -> new ProposedEvent(job.settlementId(), new ScheduleEffect.Created(complete(job, Math.addExact(now, 1L)))))
+                .toList();
     }
 
     public static List<ProposedEvent> planCompletion(FrontierWorldState state, ScheduledAction action) {
@@ -128,6 +143,13 @@ public final class ProductionProcess {
         }
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
         boolean physicalCustody = ReferenceContainerCustody.hasLiveCustody(state, depot);
+        if (job.workProgress().terminalEffectEligible() && (!FrontierSceneAdmission.available(state, List.of(job.workerId()))
+                || state.sceneLeases().values().stream().anyMatch(lease -> lease.retainsMemberCustody(job.workerId())))) {
+            return List.of(reschedule(action, complete(job, Math.addExact(action.dueAt().ticks(), 20L))));
+        }
+        if (physicalCustody && !ReferenceContainerCustody.hasOperationalCustody(state, depot)) {
+            return List.of(reschedule(action, complete(job, Math.addExact(action.dueAt().ticks(), 20L))));
+        }
         if (job.inputHold() instanceof ProductionInputHold.Materialized) {
             // A materialized hold is exclusive only while the reference-container adapter has
             // a current lease.  Once that lease is gone, the retained route and exact input
@@ -155,10 +177,22 @@ public final class ProductionProcess {
                 return List.of(reschedule(action, complete(job, Math.addExact(action.dueAt().ticks(), 20L))));
             }
         }
+        if (job.inputHold() instanceof ProductionInputHold.FungibleBound held) {
+            if (!job.workProgress().terminalEffectEligible() || hasOpenWorkScene(state, job.id())) {
+                return List.of(reschedule(action, complete(job, Math.addExact(action.dueAt().ticks(), 20L))));
+            }
+            PhysicalIntent intent = new PhysicalIntent(new PhysicalIntentId("intent:production-resource-" + job.id().value().replace(':', '-')),
+                    PhysicalIntentKind.PRODUCTION_TRANSFORMATION, PhysicalIntentStatus.PREPARED, job.id(),
+                    PhysicalIntentRoleBinding.productionResources(job.id(), held.itemId(), job.outputItemId(), held.claimId(), held.accountId(), depot),
+                    fixed(state.actorLocations().get(job.workerId()).supportingSurface().support()), 0,
+                    PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.PRODUCTION_WORK);
+            return List.of(new ProposedEvent(settlement.id(), new PhysicalIntentPrepared(intent)));
+        }
         if (job.inputHold() instanceof ProductionInputHold.FungibleCold held) {
             if (ReferenceContainerCustody.hasLiveCustody(state, FrontierWorldState.depotId(settlement.id()))) {
                 return List.of(reschedule(action, complete(job, Math.addExact(action.dueAt().ticks(), 20L))));
             }
+            if (!job.workProgress().terminalEffectEligible()) return planColdWorkAdvance(state, job, action);
             ResourceLot input = state.inventory().fungibleResources().lots().get(held.itemId());
             if (input == null || !WHEAT.equals(input.itemKind()) || input.quantity() < job.outputCount()) {
                 return failActiveJob(state, task, settlement, workshop, job, ProductionDiagnosticProducer.INPUT_UNAVAILABLE);
@@ -246,7 +280,10 @@ public final class ProductionProcess {
         if (!workshop.id().equals(job.facilityId()) || state.structureConditions().get(workshop.id()) != StructureCondition.INTACT) throw new IllegalArgumentException("production start facility is unavailable");
         if (!crafter(state, settlement).id().equals(job.workerId())) throw new IllegalArgumentException("production start worker is not the deterministic facility crafter");
         if (job.inputHold() instanceof ProductionInputHold.FungibleCold held) {
-            return reduceFungibleStarted(state, subject, started, job, held);
+            return reduceFungibleStarted(state, subject, started, job, held.accountId(), held.claimId());
+        }
+        if (job.inputHold() instanceof ProductionInputHold.FungibleBound held) {
+            return reduceFungibleStarted(state, subject, started, job, held.accountId(), held.claimId());
         }
         ExactItemStack input = state.inventory().items().get(started.inputItemId());
         if (input == null || !WHEAT.equals(input.itemKind()) || !(input.custody() instanceof InventoryCustody.ContainerSlot slot)
@@ -269,6 +306,7 @@ public final class ProductionProcess {
     public static FrontierWorldState reduceCompleted(FrontierWorldState state, SubjectId subject, ProductionCompleted completed) {
         ProductionJob job = state.productionJobs().get(completed.jobId());
         if (job == null) throw new IllegalArgumentException("production completion has no active job");
+        job.requireColdCompletion(state);
         requireOwner(subject, job.settlementId()); Settlement settlement = settlement(state, job.settlementId()); SettlementStructure workshop = workshop(settlement);
         if (state.structureConditions().get(workshop.id()) != StructureCondition.INTACT) throw new IllegalArgumentException("production completion facility is unavailable");
         if (!(completed.output().custody() instanceof InventoryCustody.ContainerSlot slot) || !slot.containerId().equals(FrontierWorldState.depotId(settlement.id()))) {
@@ -298,6 +336,7 @@ public final class ProductionProcess {
         if (job == null || !(job.inputHold() instanceof ProductionInputHold.FungibleCold held) || !subject.equals(job.settlementId())) {
             throw new IllegalArgumentException("fungible production completion has no owned COLD job");
         }
+        job.requireColdCompletion(state);
         Settlement settlement = settlement(state, job.settlementId()); SettlementStructure workshop = workshop(settlement);
         if (state.structureConditions().get(workshop.id()) != StructureCondition.INTACT
                 || ReferenceContainerCustody.blocksCanonicalUse(state, FrontierWorldState.depotId(settlement.id()))
@@ -318,16 +357,16 @@ public final class ProductionProcess {
     }
 
     private static FrontierWorldState reduceFungibleStarted(FrontierWorldState state, SubjectId subject, ProductionStarted started,
-                                                             ProductionJob job, ProductionInputHold.FungibleCold held) {
+                                                             ProductionJob job, SubjectId accountId, SubjectId claimId) {
         SubjectId depot = FrontierWorldState.depotId(job.settlementId());
-        if (ReferenceContainerCustody.hasLiveCustody(state, depot) || ReferenceContainerCustody.blocksCanonicalUse(state, depot)) {
+        FungibleResourceCustodySupport.LotAtContainer input = FungibleResourceCustodySupport.firstAtContainer(state, depot, WHEAT, job.outputCount())
+                .filter(candidate -> candidate.accountId().equals(accountId) && candidate.lot().id().equals(job.consumedItemId()))
+                .orElseThrow(() -> new IllegalArgumentException("fungible production start has no exact depot wheat lot"));
+        if (!job.inputHold().equals(ProductionResourceCustody.holdForStart(state, input, claimId, job.outputCount()))) {
             throw new IllegalArgumentException("fungible production start cannot bypass its current depot custody");
         }
-        FungibleResourceCustodySupport.LotAtContainer input = FungibleResourceCustodySupport.firstAtContainer(state, depot, WHEAT, job.outputCount())
-                .filter(candidate -> candidate.accountId().equals(held.accountId()) && candidate.lot().id().equals(held.itemId()))
-                .orElseThrow(() -> new IllegalArgumentException("fungible production start has no exact depot wheat lot"));
-        if (!started.inputItemId().equals(held.itemId()) || input.quantity() < job.outputCount() || !BREAD.equals(job.outputItemKind())
-                || state.inventory().fungibleResources().claims().containsKey(held.claimId())) {
+        if (!started.inputItemId().equals(job.consumedItemId()) || input.quantity() < job.outputCount() || !BREAD.equals(job.outputItemKind())
+                || state.inventory().fungibleResources().claims().containsKey(claimId)) {
             throw new IllegalArgumentException("fungible production start does not retain one unreserved exact input portion");
         }
         Settlement settlement = settlement(state, job.settlementId()); SettlementStructure workshop = workshop(settlement);
@@ -405,14 +444,18 @@ public final class ProductionProcess {
             throw new IllegalArgumentException("production cold work cursor is not retained");
         }
         ProductionWorkProgress expected;
-        if (job.traversalCursor() < last) {
+        if (job.workProgress().stage() == ProductionWorkProgress.Stage.APPROACH && job.traversalCursor() == last - 1) {
+            expected = ProductionWorkProgress.inputReady();
+            if (advanced.nextCursor() != job.traversalCursor() || !advanced.next().equals(expected))
+                throw new IllegalArgumentException("production cold input handoff must use its retained input station");
+        } else if (job.traversalCursor() < last) {
             if (advanced.nextCursor() != job.traversalCursor() + 1 || !advanced.next().equals(job.workProgress())) {
                 throw new IllegalArgumentException("production cold work must advance one retained edge");
             }
             expected = job.workProgress();
         } else {
             if (advanced.nextCursor() != last) throw new IllegalArgumentException("production cold work may not move beyond its terminal station");
-            expected = coldNext(job.workProgress(), coldWorkTicks(job));
+            expected = coldNext(job.workProgress(), 1);
             if (!advanced.next().equals(expected)) throw new IllegalArgumentException("production cold work phase is not the retained successor");
         }
         ProductionJob replacement = job.withWorkTraversal(job.workTraversal(), advanced.nextCursor()).withWorkProgress(expected);
@@ -454,19 +497,13 @@ public final class ProductionProcess {
             return List.of(reschedule(action, complete(job, Math.addExact(action.dueAt().ticks(), 20L))));
         }
         int last = job.workTraversal().linearCorridorSurfaces().size() - 1;
-        int nextCursor = job.traversalCursor() < last ? job.traversalCursor() + 1 : last;
-        int workTicks = coldWorkTicks(job);
-        ProductionWorkProgress next = job.traversalCursor() < last ? job.workProgress() : coldNext(job.workProgress(), workTicks);
-        long nextDue = Math.addExact(action.dueAt().ticks(), Math.multiplyExact(20L, workTicks));
+        boolean inputHandoff = job.workProgress().stage() == ProductionWorkProgress.Stage.APPROACH && job.traversalCursor() == last - 1;
+        int nextCursor = inputHandoff ? job.traversalCursor() : job.traversalCursor() < last ? job.traversalCursor() + 1 : last;
+        ProductionWorkProgress next = inputHandoff ? ProductionWorkProgress.inputReady()
+                : job.traversalCursor() < last ? job.workProgress() : coldNext(job.workProgress(), 1);
+        long nextDue = Math.addExact(action.dueAt().ticks(), ProductionWorkProgress.SIMULATION_TICKS_PER_WORK_UNIT);
         return List.of(new ProposedEvent(job.settlementId(), new ProductionColdWorkAdvanced(job.id(), nextCursor, next)),
                 reschedule(action, complete(job, nextDue)));
-    }
-
-    private static int coldWorkTicks(ProductionJob job) {
-        if (job.traversalCursor() != job.workTraversal().linearCorridorSurfaces().size() - 1
-                || job.workProgress().stage() != ProductionWorkProgress.Stage.PROCESSING) return 1;
-        return Math.min(COLD_PROCESSING_TICKS_PER_CADENCE,
-                ProductionWorkProgress.REQUIRED_PROCESSING_TICKS - job.workProgress().completedTicks());
     }
 
     private static ProductionWorkProgress coldNext(ProductionWorkProgress current, int workTicks) {
@@ -561,8 +598,9 @@ public final class ProductionProcess {
             case INPUT_UNAVAILABLE -> {
                 ProductionJob job = state.productionJobs().get(blocked.workId());
                 if (job != null) {
-                    if (!job.settlementId().equals(settlement.id()) || !(job.inputHold() instanceof ProductionInputHold.Materialized)
-                            || materializedInputMatches(state, job)) {
+                    boolean unavailable = ReferenceContainerCustody.blocksCanonicalUse(state, depot)
+                            || (job.inputHold() instanceof ProductionInputHold.Materialized && !materializedInputMatches(state, job));
+                    if (!job.settlementId().equals(settlement.id()) || !unavailable) {
                         throw new IllegalArgumentException("materialized production input block precondition does not hold");
                     }
                     break;
@@ -826,6 +864,11 @@ public final class ProductionProcess {
         return input != null && input.economicOwnerId().equals(job.settlementId()) && WHEAT.equals(input.itemKind()) && input.count() == job.outputCount()
                 && input.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(FrontierWorldState.depotId(job.settlementId()));
     }
+    public static boolean completionHeld(FrontierWorldState state, ScheduledAction action) {
+        ProductionJob job = state.productionJobs().get(action.subject());
+        return job != null && action.equals(complete(job, action.dueAt().ticks())) && hasOpenWorkScene(state, job.id());
+    }
+
     private static boolean hasOpenWorkScene(FrontierWorldState state, SubjectId jobId) {
         return state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isProductionWork)
                 .anyMatch(lease -> lease.status() != SceneLeaseStatus.CLOSED && FrontierSceneBehaviors.productionWork(lease).jobId().equals(jobId));
@@ -856,8 +899,8 @@ public final class ProductionProcess {
                                              FungibleResourceCustodySupport.LotAtContainer input, int ordinal) {
         ResidentProfile worker = crafter(state, settlement); String number = settlement.id().value().substring("settlement:".length());
         SubjectId jobId = jobId(settlement, ordinal);
-        ProductionInputHold hold = new ProductionInputHold.FungibleCold(input.lot().id(), input.accountId(),
-                new SubjectId("claim:production-" + number + "-" + ordinal));
+        ProductionInputHold hold = ProductionResourceCustody.holdForStart(state, input,
+                new SubjectId("claim:production-" + number + "-" + ordinal), 64);
         TraversalTopology traversal = ProductionWorkTraversal.compile(state, workshop, worker.id(), state.actorLocations().get(worker.id()), jobId);
         return new ProductionJob(jobId, settlement.id(), workshop.id(), worker.id(), input.lot().id(), hold,
                 new SubjectId("lot:production-" + number + "-" + ordinal + "-bread"), BREAD, 64,

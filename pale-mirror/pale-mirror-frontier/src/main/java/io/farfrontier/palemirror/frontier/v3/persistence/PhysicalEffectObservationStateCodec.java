@@ -113,6 +113,9 @@ final class PhysicalEffectObservationStateCodec {
                     if (!(stack.address() instanceof PhysicalStackAddress.ContainerSlot slot)) throw new IllegalArgumentException("fungible nutrient departure receipt has no container slot");
                     FrontierWorldStateCodec.writeCustody(output, slot.slot()); string(output, stack.itemKind()); output.writeByte(stack.quantity());
                 }
+            } else if (observation instanceof FungibleProductionObservation production) {
+                output.writeByte(23); string(output, production.id().value()); string(output, production.intentId().value());
+                FungibleProductionObservationCodec.write(output, production);
             } else throw new IllegalArgumentException("unknown physical effect observation");
         }
     }
@@ -147,6 +150,7 @@ final class PhysicalEffectObservationStateCodec {
                 case 20 -> fungibleCargo(input, id, intentId);
                 case 21 -> fungibleConsumed(input, id, intentId);
                 case 22 -> fungibleNutrientDeparture(input, id, intentId);
+                case 23 -> FungibleProductionObservationCodec.read(input, id, intentId);
                 default -> throw new IllegalArgumentException("unknown physical observation kind");
             };
             if (observations.put(id, observation) != null) throw new IllegalArgumentException("duplicate physical observation id");

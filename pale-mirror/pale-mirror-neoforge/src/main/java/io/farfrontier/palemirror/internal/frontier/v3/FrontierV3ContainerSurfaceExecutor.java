@@ -75,9 +75,10 @@ final class FrontierV3ContainerSurfaceExecutor {
 
     private static void executeLifecycle(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                          FrontierWorldState state, ContainerSurface surface) {
-        // Do not surface a partial COLD hold: the canonical job completes first, then this
-        // materializer writes one coherent exact inventory snapshot into the owned chest.
-        if (ContainerSurfaceActivationStateSupport.blockedByColdProduction(state, surface.containerId())) return;
+        // Reference preparation transfers held input and establishes exclusive before-write
+        // custody atomically. Other surface families retain their existing admission guard.
+        if (!ReferenceContainerCustody.isReferenceContainer(state, surface.containerId())
+                && ContainerSurfaceActivationStateSupport.blockedByColdProduction(state, surface.containerId())) return;
         BlockPos target = position(surface);
         if (surface.status() == ContainerSurfaceStatus.UNMATERIALIZED) {
             SocketReadiness readiness = socketReadiness(level, FrontierV3GrayboxLedger.get(level), target,
@@ -87,7 +88,11 @@ final class FrontierV3ContainerSurfaceExecutor {
                 transition(runtime, surface.containerId(), ContainerSurfaceStatus.CONFLICT);
                 return;
             }
-            if (!transition(runtime, surface.containerId(), ContainerSurfaceStatus.PREPARED)) return;
+            if (ReferenceContainerCustody.isReferenceContainer(state, surface.containerId())) {
+                if (!FrontierV3ReferenceContainerCustodyExecutor.prepareInitialProjection(runtime, state, surface.containerId())) return;
+                state = state(runtime);
+                if (state == null) return;
+            } else if (!transition(runtime, surface.containerId(), ContainerSurfaceStatus.PREPARED)) return;
             ChestBlockEntity chest = claimFreshChest(level, target, surface.containerId());
             if (chest == null || !writeCanonicalSlots(chest, state, surface.containerId())) {
                 transition(runtime, surface.containerId(), ContainerSurfaceStatus.CONFLICT);

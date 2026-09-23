@@ -490,7 +490,15 @@ final class FrontierV3ControlledMobMotion {
         if (delta.y > (exactEndpoint ? 0.0D : ARRIVAL_DISTANCE)) {
             observeMotion(actor, "ASCENDING", target);
             settleExactAscent(level, actor, target, delta.y);
-            return;
+            // Gravity runs before this actuator. Once the retained lift reaches the target
+            // height, take the collision-checked lateral half in this same turn. Returning
+            // unconditionally makes an exact endpoint oscillate: gravity lowers the body,
+            // ascent restores it, and the next turn repeats without ever walking forward.
+            // Recompute from the actual collision result; a blocked/incomplete lift must not
+            // authorize lateral travel or a fabricated arrival.
+            delta = target.subtract(actor.position());
+            if (delta.y > (exactEndpoint ? 0.0D : ARRIVAL_DISTANCE)) return;
+            horizontalDistance = Math.sqrt(delta.x * delta.x + delta.z * delta.z);
         }
         if (exactEndpoint ? horizontalDistance == 0.0D : horizontalDistance <= 1.0E-8D) {
             observeMotion(actor, "DESCENDING", target);

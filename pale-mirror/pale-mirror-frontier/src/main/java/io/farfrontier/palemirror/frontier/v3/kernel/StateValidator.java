@@ -26,6 +26,13 @@ public interface StateValidator<S> {
     void validateTransition(S previous, S next);
 
     /**
+     * Checks only newly retained schedule references when the aggregate is unchanged.
+     * The kernel supplies the final mutation delta, excluding cancelled intermediate actions.
+     * This must not require revalidating the unchanged aggregate or copying the whole queue.
+     */
+    default void validateScheduleChanges(S state, List<ScheduledAction> retainedChanges) { }
+
+    /**
      * Transaction boundary with the complete committed batch and engine-owned schedule result.
      * Implementations that only validate aggregate state retain their existing transition audit.
      */

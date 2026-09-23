@@ -126,6 +126,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
             throw new IllegalArgumentException("initial scheduled-action capacity exceeded: " + initial.size() + ">" + limits.maxPendingSchedules());
         }
         initial.forEach(schedules::schedule);
+        this.stateValidator.validateScheduleChanges(initialState, initial);
         encodedState = stateCodec.encode(initialState);
         if (encodedState == null) throw new IllegalStateException("state codec returned null");
     }
@@ -223,20 +224,24 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         }
         ScheduledWork work;
         try (FrontierExecutionMetrics.Span ignored = measure(FrontierExecutionMetrics.Stage.SCHEDULE_ALLOCATION, "due-actions", worldId.value())) {
-            work = schedules.selectDue(target, budget);
+            work = schedules.selectDue(target, budget, action -> !scheduledPlanner.held(state, action));
+        } catch (RuntimeException error) {
+            quarantine(CauseChain.root(new CommandId("scheduler:allocation")),
+                    KernelQuarantineReporter.Boundary.DUE_TRANSACTION, error);
+            return advanceResult(List.of(), Optional.empty());
         }
         observeQueue(target, schedules.size(), work.blockedActionOptional());
         List<TransactionId> completed = new ArrayList<>();
         for (ScheduledAction action : work.admitted()) {
-            if (!schedules.isHead(action)) {
-                continue;
-            }
-            if (transactions.size() == limits.maxTransactions()) {
-                quarantine(CauseChain.root(new CommandId("scheduler:" + action.id().value().replace(':', '/'))),
-                        KernelQuarantineReporter.Boundary.DUE_CAPACITY, new IllegalStateException("transaction retention capacity exhausted during due work"));
-                return advanceResult(completed, Optional.of(action));
-            }
             try {
+                if (!schedules.isEligibleHead(action, candidate -> !scheduledPlanner.held(state, candidate))) {
+                    continue;
+                }
+                if (transactions.size() == limits.maxTransactions()) {
+                    quarantine(CauseChain.root(new CommandId("scheduler:" + action.id().value().replace(':', '/'))),
+                            KernelQuarantineReporter.Boundary.DUE_CAPACITY, new IllegalStateException("transaction retention capacity exhausted during due work"));
+                    return advanceResult(completed, Optional.of(action));
+                }
                 List<ProposedEvent> planned;
                 try (FrontierExecutionMetrics.Span ignored = measure(FrontierExecutionMetrics.Stage.SCHEDULE_PLAN, action.kind(), action.subject().value())) {
                     planned = List.copyOf(scheduledPlanner.plan(state, action));
@@ -357,13 +362,15 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         S nextState = state;
         ScheduledActionQueue.Mutation nextSchedules = schedules.beginMutation();
         for (int index = 0; index < proposed.size(); index++) {
+            S beforeEvent = nextState;
             ProposedEvent next = proposed.get(index);
             FrontierEvent event = new FrontierEvent(
                     FrontierEvent.SCHEMA_VERSION,
-                    new EventId("event:revision-" + nextRevision.value() + "-" + index),
+                    new EventId("event:revision-" + nextRevision.value() + "-" + events.size()),
                     transactionId, worldId, nextRevision, eventInstant, next.subject(), causes, next.payload());
             if (event.payload() instanceof ScheduleEffect effect) {
-                ScheduleEffectApplier.apply(nextSchedules, effect);
+                S scheduleState = nextState;
+                ScheduleEffectApplier.apply(nextSchedules, effect, action -> scheduledPlanner.held(scheduleState, action));
             } else {
                 try {
                     try (FrontierExecutionMetrics.Span ignored = measure(FrontierExecutionMetrics.Stage.REDUCTION, event.payload().type(), event.subject().value())) {
@@ -374,6 +381,18 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                 }
             }
             events.add(event);
+            if (nextState != beforeEvent) {
+                var retirements = scheduledPlanner.retiredBy(beforeEvent, nextState, event, nextSchedules::snapshot);
+                List<ScheduledAction> pending = retirements.isEmpty() ? List.of() : nextSchedules.snapshot();
+                for (ScheduledAction retired : retirements) {
+                    if (!pending.contains(retired)) throw new IllegalArgumentException("retirement requires an exact pending action");
+                    var cancellation = new ScheduleEffect.Cancelled(retired.id());
+                    ScheduleEffectApplier.apply(nextSchedules, cancellation);
+                    events.add(new FrontierEvent(FrontierEvent.SCHEMA_VERSION,
+                            new EventId("event:revision-" + nextRevision.value() + "-" + events.size()),
+                            transactionId, worldId, nextRevision, eventInstant, retired.subject(), causes, cancellation));
+                }
+            }
         }
         nextSchedules.requireCapacity(limits.maxPendingSchedules());
         // Reducers may construct several transient immutable aggregate snapshots for one
@@ -383,6 +402,13 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         if (nextState != state) {
             try (FrontierExecutionMetrics.Span ignored = measure(FrontierExecutionMetrics.Stage.VALIDATION, "canonical-state", worldId.value())) {
                 stateValidator.validateTransaction(state, nextState, List.copyOf(events), schedules.snapshot(), nextSchedules.snapshot());
+            }
+        } else {
+            List<ScheduledAction> retainedChanges = nextSchedules.retainedChanges();
+            if (!retainedChanges.isEmpty()) {
+                try (FrontierExecutionMetrics.Span ignored = measure(FrontierExecutionMetrics.Stage.VALIDATION, "schedule-references", worldId.value())) {
+                    stateValidator.validateScheduleChanges(state, retainedChanges);
+                }
             }
         }
         // WAL commits are already durable before the state becomes authoritative. A complete

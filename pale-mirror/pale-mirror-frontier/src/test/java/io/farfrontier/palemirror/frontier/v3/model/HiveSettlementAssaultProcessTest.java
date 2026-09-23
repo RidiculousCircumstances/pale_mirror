@@ -256,8 +256,14 @@ class HiveSettlementAssaultProcessTest {
         SubjectId defender = started.defenderIds().getFirst();
         state = state.withActorBody(defender, BodyPosition.above(new SurfaceAnchor(started.settlementAnchor().offset(43, 0, 0))));
         List<ProposedEvent> conflict = HiveSettlementAssaultProcess.planProgress(state, next);
-        assertEquals(List.of(new SettlementAssaultTransition(started.id(), SettlementAssaultStatus.CONFLICT)),
+        assertEquals(List.of(TerminalDiagnosticProducer.assaultConflict(started.id())),
                 conflict.stream().map(ProposedEvent::payload).toList());
+        var transition = (SettlementAssaultTransition) conflict.getFirst().payload();
+        assertEquals(DiagnosticReason.SETTLEMENT_ASSAULT_CONFLICT, transition.diagnostic().orElseThrow().reason());
+        assertEquals(started.id(), transition.diagnostic().orElseThrow().subject().id());
+        var retained = HiveSettlementAssaultProcess.reduceTransition(state, fixture.hive(), transition);
+        assertEquals(state.actorLocations().get(defender), retained.actorLocations().get(defender),
+                "local conflict must not teleport the separated defender back into battle");
     }
 
     @Test void battlefieldEnvelopeComesFromTheResidentApronRatherThanTheFormerThirtyTwoBlockCircle() {

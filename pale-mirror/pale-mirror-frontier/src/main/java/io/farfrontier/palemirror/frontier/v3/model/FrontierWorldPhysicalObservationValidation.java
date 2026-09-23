@@ -81,6 +81,8 @@ final class FrontierWorldPhysicalObservationValidation {
                 ResourceSitePhysicalIntentStateSupport.validateReceipt(intent, preparation);
             } else if (observation instanceof ProductionTransformationObservation production) {
                 ProductionTransformationStateSupport.validateReceipt(intent, production);
+            } else if (observation instanceof FungibleProductionObservation production) {
+                FungibleProductionStateSupport.validateReceipt(intent, production);
             } else if (observation instanceof CargoLoadObservation loading) {
                 CargoLoadingStateSupport.validateReceipt(intent, loading);
             } else if (observation instanceof HiveNutrientDepartureObservation departure) {

@@ -84,10 +84,13 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         Objects.requireNonNull(replicaCustody, "replica custody"); Objects.requireNonNull(deferredAftermath, "deferred aftermath");
         Objects.requireNonNull(fencedRecovery, "fenced recovery");
         Objects.requireNonNull(diagnosticIncidents, "diagnostic incidents");
-        if (!fullValidationDeferred()) validateFullState(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs,
+        if (!fullValidationDeferred()) {
+            fencedRecovery.cargoRetirements().validateContext(bootstrap.worldId(), sceneLeases);
+            validateFullState(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs,
                 serviceWorks, contracts, operations, logisticsHistory, physicalIntents, physicalObservations, sceneLeases, hiveColony,
                 structureDamage, physicalDeltas, ambientLeases, routeConstructions, routeMaintenances, routeTopology, strategicPlans,
                 humanPopulation, companies, resourceSites);
+        }
     }
     /** Keeps the high-frequency immutable-state constructor below the JIT's large-method threshold. */
     private static void validateFullState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocation> actorLocations,
@@ -364,7 +367,12 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                         && (subject.equals(routeConstruction.plannedCargoId())
                         || subject.equals(routeConstruction.plannedCargoItemId()));
                 boolean reservedRouteMaintenanceCargo = RouteMaintenanceStateSupport.reservesSubject(routeMaintenances, intent, subject);
-                if (!hiveNutrientSubject && !expectedActors.contains(subject) && !inventory.cargo().containsKey(subject) && !operations.containsKey(subject) && !expectedStructures.contains(subject) && !inventory.items().containsKey(subject)
+                boolean productionResourceSubject = intent.roles().schema() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleSchema.PRODUCTION_RESOURCES
+                        && (subject.equals(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.CUSTODY_ACCOUNT))
+                        && inventory.fungibleResources().accounts().containsKey(subject)
+                        || subject.equals(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.RESOURCE_CONTAINER))
+                        && inventory.containers().containsKey(subject));
+                if (!productionResourceSubject && !hiveNutrientSubject && !expectedActors.contains(subject) && !inventory.cargo().containsKey(subject) && !operations.containsKey(subject) && !expectedStructures.contains(subject) && !inventory.items().containsKey(subject)
                         && !hiveColony.growthJobs().containsKey(subject) && !humanPopulation.birthJobs().containsKey(subject) && !productionJobs.containsKey(subject) && !contracts.containsKey(subject)
                         && !inventory.fungibleResources().lots().containsKey(subject) && !inventory.fungibleResources().claims().containsKey(subject)
                         && !humanPopulation.provisions().containsKey(subject) && !humanPopulation.medicalOperations().containsKey(subject)
@@ -791,8 +799,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
     public FrontierWorldState recordActorDeath(ActorDied death, long atTick) {
         Objects.requireNonNull(death, "actor death");
         SceneLease lease = sceneLeases.get(death.leaseId());
-        if (lease == null || (lease.status() != SceneLeaseStatus.HOT && lease.status() != SceneLeaseStatus.DRAINING)
-                || lease.members().stream().noneMatch(member -> member.actorId().equals(death.actorId()))) {
+        if (lease == null || !lease.retainsMemberCustody(death.actorId())) {
             throw new IllegalArgumentException("actor death is not evidence for an active scene member");
         }
         ActorLocation current = actorLocations.get(death.actorId());
@@ -804,8 +811,9 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         FencedRecoveryState recovery = fencedRecovery;
         SubjectId recoveryBinding = FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(death.actorId());
         FencedRecoveryBinding binding = recovery.current().get(recoveryBinding);
-        if (binding != null && binding.phase() == FencedRecoveryPhase.RUNNING) {
-            recovery = recovery.observed(recoveryBinding, binding.authorityEpoch()).confirm(recoveryBinding, binding.authorityEpoch());
+        if (binding != null) {
+            recovery = recovery.retireObservedBodyDeath(recoveryBinding, binding.authorityEpoch(),
+                    FrontierSceneLeaseStateSupport.recoveryOwner(lease), lease.revision());
         }
         return withChanges(FrontierWorldStateUpdate.begin().actorLocations(nextActors).humanPopulation(outcome.humanPopulation())
                 .resourceSites(outcome.resourceSites()).strategicPlans(outcome.strategicPlans()).physicalIntents(outcome.physicalIntents())

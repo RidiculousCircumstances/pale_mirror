@@ -39,7 +39,7 @@ final class CargoCarrierReleaseStateSupport {
         operations.put(operation.id(), new RouteOperation(operation.id(), operation.contractId(), operation.settlementId(), operation.cargoId(), operation.destinationId(),
                 operation.unit(), operation.route(), operation.routeIndex(), OperationStage.INTERRUPTED, java.util.Optional.empty(), java.util.Optional.empty(),
                 operation.tacticalPlan().withPhase(TacticalPlanPhase.ABORTED)));
-        Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases()); leases.put(lease.id(), lease.withStatus(SceneLeaseStatus.DRAINING));
+        Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases()); leases.put(lease.id(), lease.withReleasedCargoCarrier());
         StrategicPlanState plans = state.strategicPlans().interruptRouteOperation(operation.id(), operation.settlementId());
         // The carrier has become ordinary world/player-visible custody. Persist that observation
         // before the interruption is visible; a restart may inspect or retain it, never roll it

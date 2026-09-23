@@ -22,6 +22,24 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FrontierPersistenceCodecTest {
     @Test
+    void preFootprintWorldsAreRejectedBeforeHeaderSelectionOrHydration() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:footprint-version"), 91L));
+        var codec = new FrontierWorldStateCodec();
+        var encoded = codec.encode(state);
+        assertEquals(180, Byte.toUnsignedInt(encoded[4]));
+        assertArrayEquals(encoded, codec.encode(codec.decode(encoded)));
+        for (int legacy : new int[]{177, 178, 179}) {
+            var old = encoded.clone(); old[4] = (byte) legacy;
+            var before = old.clone();
+            org.junit.jupiter.api.Assertions.assertTrue(assertThrows(IllegalArgumentException.class,
+                    () -> FrontierWorldSnapshotHeader.read(old)).getMessage().contains("schema " + legacy));
+            org.junit.jupiter.api.Assertions.assertTrue(assertThrows(IllegalArgumentException.class,
+                    () -> codec.decode(old)).getMessage().contains("schema " + legacy));
+            assertArrayEquals(before, old, "rejection must not rewrite an old world");
+        }
+    }
+
+    @Test
     void snapshotRoundTripsWithCompleteKernelStateAndChecksum() {
         CheckpointImage image = new CheckpointImage(new WorldId("frontier:persistence"), new Revision(3L), new SimInstant(10L),
                 new byte[] {1, 2, 3}, List.of(new ScheduledAction(new ScheduleId("schedule:one"), new SimInstant(12L), 0,

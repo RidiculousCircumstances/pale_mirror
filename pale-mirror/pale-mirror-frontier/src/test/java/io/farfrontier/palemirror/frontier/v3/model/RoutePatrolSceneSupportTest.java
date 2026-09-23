@@ -124,6 +124,19 @@ class RoutePatrolSceneSupportTest {
         state = state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         SubjectId dead = state.strategicPlans().routePatrols().get(candidate.taskId()).memberIds().getFirst();
 
+        var blockedAlive = state.withStrategicPlans(state.strategicPlans()
+                .blockPatrol(candidate.taskId(), RoutePatrolBlockReason.MISSING_OWNED_BODY)
+                .transitionTask(candidate.taskId(), StrategicTaskStatus.BLOCKED));
+        var unknown = blockedAlive.transitionSceneLease(leaseId, SceneLeaseStatus.UNKNOWN_AFTER_RESTART);
+        unknown = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(unknown));
+        assertEquals(SceneLeaseStatus.DRAINING, FrontierSceneBehaviors.recoveredStatus(unknown, unknown.sceneLeases().get(leaseId)));
+        var draining = unknown.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING);
+        var captured = lease.members().stream().map(member -> new SceneMemberPosition(member.actorId(),
+                draining.actorLocations().get(member.actorId()).body(), draining.actorLocations().get(member.actorId()).condition().health())).toList();
+        var closed = draining.releaseSceneLease(leaseId, captured);
+        assertEquals(SceneLeaseStatus.CLOSED, closed.sceneLeases().get(leaseId).status());
+        assertEquals(blockedAlive.strategicPlans(), closed.strategicPlans());
+
         FrontierWorldState result = state.recordActorDeath(new ActorDied(leaseId, dead,
                 state.sceneLeases().get(leaseId).memberPosition(dead), "test-owned-body-loss"), 11L);
 
@@ -177,6 +190,43 @@ class RoutePatrolSceneSupportTest {
             return binding.phase() == FencedRecoveryPhase.AMBIGUOUS && binding.nextAction() == FencedRecoveryDisposition.INSPECT;
         }));
         assertEquals(state.actorLocations(), conflicted.actorLocations(), "one local physical ambiguity cannot rewrite unrelated canonical positions");
+    }
+
+    @Test
+    void suspendedOrUnstartedSceneStillRecordsDeathAndRetiresExactRecoveryAuthority() {
+        for (SceneLeaseStatus status : List.of(SceneLeaseStatus.PREPARED, SceneLeaseStatus.HOT,
+                SceneLeaseStatus.DRAINING, SceneLeaseStatus.CONFLICT, SceneLeaseStatus.UNKNOWN_AFTER_RESTART)) {
+            WorldId world = new WorldId("frontier:patrol-death-" + status.name().toLowerCase(java.util.Locale.ROOT));
+            FrontierWorldState initial = patrolState(world);
+            var candidate = FrontierRoutePatrolSceneSupport.candidates(initial).stream().findFirst().orElseThrow();
+            SceneLease lease = patrolLease(initial, new SceneLeaseId("lease:patrol-retained-death"), candidate, 1L);
+            var base = FrontierWorldRuntimeDefinition.configuration(world, 41L);
+            FrontierEngine<FrontierWorldProjection> engine = FrontierEngines.create(new FrontierEngineConfiguration<>(world, initial,
+                    base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(),
+                    base.projectionMapper(), base.limits(), base.initialSchedules(), base.transactionCommitter()));
+            submit(engine, world, "prepare", new RoutePatrolSceneLeasePrepared(lease));
+            if (status != SceneLeaseStatus.PREPARED) submit(engine, world, "hot", new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT));
+            if (status != SceneLeaseStatus.PREPARED && status != SceneLeaseStatus.HOT)
+                submit(engine, world, "suspend", new SceneLeaseTransition(lease.id(), status));
+            var member = lease.members().getFirst();
+            var death = new ActorDied(lease.id(), member.actorId(), lease.memberPosition(member.actorId()), "test:retained-body-death");
+            submit(engine, world, "death", death);
+            var after = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+            assertEquals(ActorLifeStatus.DEAD, after.actorLocations().get(member.actorId()).condition().status(), status.name());
+            var binding = FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(member.actorId());
+            assertFalse(after.fencedRecovery().current().containsKey(binding), status.name());
+            assertEquals(FencedRecoveryDisposition.REJECT_STALE, after.fencedRecovery().tombstones().get(binding).disposition());
+            assertEquals(status == SceneLeaseStatus.HOT ? SceneLeaseStatus.DRAINING
+                    : status == SceneLeaseStatus.PREPARED ? SceneLeaseStatus.CONFLICT : status, after.sceneLeases().get(lease.id()).status());
+            assertFalse(lease.withStatus(SceneLeaseStatus.CLOSED).retainsMemberCustody(member.actorId()));
+            assertThrows(IllegalArgumentException.class, () -> after.recordActorDeath(death, 20L));
+            var checkpoint = engine.checkpoint();
+            var duplicateId = new CommandId("command:duplicate-retained-death");
+            assertInstanceOf(CommandResult.Rejected.class, engine.submit(new FrontierCommand(1, duplicateId, world,
+                    checkpoint.revision(), checkpoint.instant(), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,
+                    CauseChain.root(duplicateId), death)));
+            assertEquals(checkpoint.revision(), engine.checkpoint().revision(), "duplicate death must reject before reduction");
+        }
     }
 
     @Test

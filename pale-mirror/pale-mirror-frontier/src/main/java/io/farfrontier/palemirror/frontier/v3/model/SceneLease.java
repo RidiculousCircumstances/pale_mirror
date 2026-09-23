@@ -27,6 +27,11 @@ public record SceneLease(SceneLeaseId id, WorldId worldId, SceneCause cause, Blo
         if (revision < 0) throw new IllegalArgumentException("scene lease revision must be non-negative");
         Objects.requireNonNull(status, "scene lease status");
         cause = Objects.requireNonNull(cause, "scene cause");
+        if (cause instanceof LogisticsSceneCause logistics
+                && logistics.carrierDisposition() == CargoProjectionRetirement.Disposition.RETAIN_WORLD_CUSTODY
+                && (status == SceneLeaseStatus.PREPARED || status == SceneLeaseStatus.HOT)) {
+            throw new IllegalArgumentException("released world carrier cannot regain prepared or HOT scene custody");
+        }
         members = List.copyOf(members);
         Map<SubjectId, BodyPosition> positions = new LinkedHashMap<>();
         memberPositions.forEach((actor, position) -> positions.put(Objects.requireNonNull(actor, "scene member position actor"),
@@ -54,7 +59,8 @@ public record SceneLease(SceneLeaseId id, WorldId worldId, SceneCause cause, Blo
                                               BlockPosition handoffPosition, BlockPosition cargoPosition, SimInstant handoffInstant, long revision,
                                               SceneLeaseStatus status, Optional<SubjectId> engagementId, List<SceneMember> members,
                                               Map<SubjectId, BodyPosition> memberPositions) {
-        return new SceneLease(id, worldId, new LogisticsSceneCause(operationId, cargoId, engagementId, cargoPosition), handoffPosition, handoffInstant,
+        return new SceneLease(id, worldId, new LogisticsSceneCause(operationId, cargoId, engagementId, cargoPosition,
+                CargoProjectionRetirement.Disposition.REMOVE_PROJECTION), handoffPosition, handoffInstant,
                 revision, status, members, memberPositions, Set.of(), Optional.empty());
     }
 
@@ -81,6 +87,19 @@ public record SceneLease(SceneLeaseId id, WorldId worldId, SceneCause cause, Blo
     public SceneLease withStatus(SceneLeaseStatus nextStatus) {
         return new SceneLease(id, worldId, cause, handoffPosition, handoffInstant, revision, nextStatus, members, memberPositions,
                 ambientHandoffActorIds, nextStatus == SceneLeaseStatus.UNKNOWN_AFTER_RESTART ? recoveryEvidence : Optional.empty());
+    }
+    /** The accepted handoff owns this irreversible decision, independent of later item custody. */
+    SceneLease withReleasedCargoCarrier() {
+        var logistics = FrontierSceneBehaviors.logistics(this);
+        if (status != SceneLeaseStatus.HOT) throw new IllegalArgumentException("only HOT carrier can be released");
+        return new SceneLease(id, worldId, new LogisticsSceneCause(logistics.operationId(), logistics.cargoId(),
+                logistics.engagementId(), logistics.cargoPosition(), CargoProjectionRetirement.Disposition.RETAIN_WORLD_CUSTODY),
+                handoffPosition, handoffInstant, revision, SceneLeaseStatus.DRAINING, members, memberPositions,
+                ambientHandoffActorIds, Optional.empty());
+    }
+    /** Work may be suspended while this lease still owns physical consequences. */
+    public boolean retainsMemberCustody(SubjectId actorId) {
+        return status != SceneLeaseStatus.CLOSED && memberPositions.containsKey(actorId);
     }
     public SceneLease withAmbientHandoff(Set<SubjectId> actorIds) {
         return new SceneLease(id, worldId, cause, handoffPosition, handoffInstant, revision, status, members, memberPositions, actorIds, recoveryEvidence);
@@ -111,7 +130,7 @@ public record SceneLease(SceneLeaseId id, WorldId worldId, SceneCause cause, Blo
             throw new IllegalArgumentException("HOT logistics scene does not match its current operation travel");
         }
         return new SceneLease(id, worldId,
-                new LogisticsSceneCause(logistics.operationId(), logistics.cargoId(), logistics.engagementId(), next.cargoAnchor().surface().support()),
+                new LogisticsSceneCause(logistics.operationId(), logistics.cargoId(), logistics.engagementId(), next.cargoAnchor().surface().support(), logistics.carrierDisposition()),
                 next.currentPosition(), handoffInstant, revision, status, members, next.formation(), ambientHandoffActorIds, recoveryEvidence);
     }
     public SceneLease withRecoveryEvidence(SceneRecoveryEvidence evidence) {

@@ -7,9 +7,9 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSite;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestLineage;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestProgress;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteLifecycle;
-import io.farfrontier.palemirror.frontier.v3.model.ResourceSitePhase;
 import net.minecraft.server.level.ServerLevel;
 
 /** Exact ownership boundary between a retained HOT prefix and its COLD terminal receipt. */
@@ -18,20 +18,36 @@ final class FrontierV3ResourceSiteDeferredTerminalPrefix {
 
     static boolean matches(ServerLevel level, FrontierWorldState state, ResourceSite site,
                            int desiredStage, int completedCropSlots, FrontierV3ResourceSiteLedger.Claim claim) {
-        if (claim == null || !FrontierV3ResourceSiteExecutor.matchesHarvestProgress(level, site, claim.harvestedCropSlots())) return false;
+        if (claim == null) return false;
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(site.id());
         ResourceSiteHarvestLineage lineage = lifecycle.harvestLineage().filter(ResourceSiteHarvestLineage::receiptPending)
                 .filter(candidate -> !candidate.composedIntoCanonicalSuccessor(state)).orElse(null);
         PhysicalIntent intent = lineage == null ? null : state.physicalIntents().get(lineage.predecessorIntentId());
-        return ownsExactPrefix(site, lineage, claim, intent)
-                && admits(lifecycle, claim, intent.status(), desiredStage, completedCropSlots);
+        if (!ownsExactPrefix(site, lineage, claim, intent)) return false;
+        var projection = claim.projection();
+        if (projection != null) {
+            // The durable harvest count is committed only when this bounded projection
+            // finishes. Between batches the physical prefix is intentionally ahead of it.
+            // Its exact persisted write cursor, not the old whole-field count, is the witness.
+            if (projection.mode() != FrontierV3ResourceSiteLedger.ProjectionMode.ADVANCE
+                    || projection.targetStage() != ResourceSiteLifecycle.MATURE_STAGE
+                    || projection.targetHarvestedCropSlots() != ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS) return false;
+            var origin = new FrontierV3ResourceSiteLedger.Claim(claim.intentId(), claim.status(),
+                    projection.fromStage(), projection.fromHarvestedCropSlots());
+            return admits(lifecycle, origin, intent.status(), desiredStage, completedCropSlots)
+                    && FrontierV3ResourceSiteExecutor.matchesPersistedProjectionPrefix(level, site, claim);
+        }
+        return admits(lifecycle, claim, intent.status(), desiredStage, completedCropSlots)
+                && FrontierV3ResourceSiteExecutor.matchesHarvestProgress(level, site, claim.harvestedCropSlots());
     }
 
     static boolean awaitingProjection(ServerLevel level, FrontierWorldState state, ResourceSite site, PhysicalIntent intent) {
         if (intent == null) return false;
         FrontierV3ResourceSiteLedger.Claim claim = FrontierV3ResourceSiteLedger.get(level).claim(site.id());
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(site.id());
-        return matches(level, state, site, lifecycle.growthStage(), 0, claim)
+        int completed = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
+                .map(ResourceSiteHarvestJob.class::cast).map(job -> job.progress().completedCropSlots()).orElse(0);
+        return matches(level, state, site, lifecycle.growthStage(), completed, claim)
                 && lifecycle.harvestLineage().map(ResourceSiteHarvestLineage::predecessorIntentId)
                 .filter(intent.id()::equals).isPresent();
     }
@@ -41,8 +57,8 @@ final class FrontierV3ResourceSiteDeferredTerminalPrefix {
         return lifecycle != null && claim != null && claim.status() == FrontierV3ResourceSiteLedger.Status.ACTIVE
                 && claim.stage() == ResourceSiteLifecycle.MATURE_STAGE && claim.harvestedCropSlots() > 0
                 && claim.harvestedCropSlots() < ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS
-                && intentStatus == PhysicalIntentStatus.RUNNING && lifecycle.phase() == ResourceSitePhase.GROWING
-                && desiredStage == lifecycle.growthStage() && completedCropSlots == 0
+                && intentStatus == PhysicalIntentStatus.RUNNING
+                && FrontierV3ResourceSiteExecutor.matchesCanonicalProjectionTarget(lifecycle, desiredStage, completedCropSlots)
                 && lifecycle.harvestLineage().filter(ResourceSiteHarvestLineage::receiptPending).isPresent();
     }
 

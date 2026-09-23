@@ -30,7 +30,7 @@ public record PhysicalCustodyLease(SubjectId scopeId, SubjectId objectId, Subjec
                 PhysicalCustodyLeaseStatus.UNRESOLVED, Objects.requireNonNull(reason, "unresolved reason"));
     }
     public PhysicalCustodyLease release(long canonicalRevision, long replicaRevision) {
-        if (!live() || status == PhysicalCustodyLeaseStatus.UNRESOLVED || canonicalRevision != expectedCanonicalRevision
+        if (!live() || status == PhysicalCustodyLeaseStatus.UNRESOLVED || status == PhysicalCustodyLeaseStatus.PREPARING || canonicalRevision != expectedCanonicalRevision
                 || replicaRevision != expectedReplicaRevision) throw new IllegalArgumentException("custody release fence is stale, forged, or unresolved");
         return new PhysicalCustodyLease(scopeId, objectId, providerId, authorityEpoch, expectedCanonicalRevision, expectedReplicaRevision,
                 PhysicalCustodyLeaseStatus.RELEASED, null);

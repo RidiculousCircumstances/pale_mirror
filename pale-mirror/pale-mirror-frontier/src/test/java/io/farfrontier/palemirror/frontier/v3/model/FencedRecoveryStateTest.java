@@ -19,6 +19,20 @@ class FencedRecoveryStateTest {
     private static final SubjectId OWNER = new SubjectId("operation:recovery-a");
 
     @Test
+    void observedDeathCannotRetireCargoForeignOwnerRevisionOrEpoch() {
+        var state = FencedRecoveryState.empty().prepare(binding(BODY, FencedRecoveryAsset.BODY, 1L, true))
+                .prepare(binding(CARGO, FencedRecoveryAsset.CARGO, 1L, false));
+        long revision = state.current().get(BODY).ownerRevision();
+        assertThrows(IllegalArgumentException.class, () -> state.retireObservedBodyDeath(CARGO, 1L, OWNER, revision));
+        assertThrows(IllegalArgumentException.class, () -> state.retireObservedBodyDeath(BODY, 2L, OWNER, revision));
+        assertThrows(IllegalArgumentException.class, () -> state.retireObservedBodyDeath(BODY, 1L, CARGO, revision));
+        assertThrows(IllegalArgumentException.class, () -> state.retireObservedBodyDeath(BODY, 1L, OWNER, revision + 1));
+        var retired = state.retireObservedBodyDeath(BODY, 1L, OWNER, revision);
+        assertEquals(state.current().get(CARGO), retired.current().get(CARGO));
+        assertFalse(retired.current().containsKey(BODY));
+    }
+
+    @Test
     void noVisitRevocationFencesLateBodyWhileUnrelatedCargoRemainsCurrent() {
         FencedRecoveryState state = FencedRecoveryState.empty().prepare(binding(BODY, FencedRecoveryAsset.BODY, 1L, true))
                 .running(BODY, 1L).revokeToCold(BODY, 1L)
@@ -46,6 +60,22 @@ class FencedRecoveryStateTest {
         FencedRecoveryState abandoned = ambiguous.abandon(CONTAINER, 1L);
         assertTrue(abandoned.current().isEmpty());
         assertEquals(FencedRecoveryDisposition.ABANDON, abandoned.tombstones().get(CONTAINER).disposition());
+    }
+
+    @Test
+    void exactInspectionMayResolveExhaustedAttemptsUntilAbandonmentCommits() {
+        var state = FencedRecoveryState.empty()
+                .prepare(binding(EFFECT, FencedRecoveryAsset.EFFECT, 1L, false)).running(EFFECT, 1L);
+        for (int attempt = 0; attempt < FencedRecoveryBinding.MAX_RECOVERY_ATTEMPTS; attempt++) {
+            state = state.ambiguous(EFFECT, 1L, "missing-witness", FencedRecoveryDisposition.INSPECT);
+        }
+        var exhausted = state;
+        assertEquals(FencedRecoveryDisposition.ABANDON, exhausted.current().get(EFFECT).nextAction());
+        var confirmed = exhausted.inspectedObserved(EFFECT, 1L).confirm(EFFECT, 1L);
+        assertEquals(FencedRecoveryDisposition.REJECT_STALE, confirmed.tombstones().get(EFFECT).disposition());
+        var abandoned = exhausted.abandon(EFFECT, 1L);
+        assertThrows(IllegalArgumentException.class, () -> abandoned.inspectedObserved(EFFECT, 1L));
+        assertThrows(IllegalArgumentException.class, () -> exhausted.inspectedObserved(EFFECT, 2L));
     }
 
     @Test

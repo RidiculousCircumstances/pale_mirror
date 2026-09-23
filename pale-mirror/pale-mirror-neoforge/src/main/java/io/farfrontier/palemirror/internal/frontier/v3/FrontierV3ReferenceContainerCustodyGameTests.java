@@ -38,6 +38,86 @@ import java.util.Optional;
 public final class FrontierV3ReferenceContainerCustodyGameTests {
     private FrontierV3ReferenceContainerCustodyGameTests() { }
 
+    @GameTest(batch = "pm-frontier-v3-reference-projection", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    public static void pendingProjectionUsesActualChestAndRetainsMismatchAcrossRuntimeRecovery(GameTestHelper helper) {
+        WorldId world = new WorldId("frontier:reference-pending-projection");
+        FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(world, 91L));
+        SubjectId depot = FrontierWorldState.depotId(initial.bootstrap().settlements().getFirst().id());
+        BlockPos local = helper.absolutePos(new BlockPos(2, 2, 2));
+        BlockPosition original = initial.inventory().surfaces().get(depot).position();
+        initial = FrontierWorldState.initial(FrontierV3CargoLoadingGameTests.translatedBootstrap(initial.bootstrap(),
+                local.getX() - original.x(), local.getY() - original.y(), local.getZ() - original.z()));
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(world, initial);
+        helper.assertTrue(runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE, "fixture startup: " + runtime.status());
+        helper.assertTrue(FrontierV3ReferenceContainerCustodyExecutor.prepareInitialProjection(runtime, initial, depot), "durable preparation must succeed");
+        FrontierWorldState prepared = runtime.decodedState().orElseThrow();
+        SubjectId scope = ReferenceContainerCustody.scopeId(depot);
+        PhysicalCustodyLease lease = prepared.replicaCustody().custodyByScope().get(scope);
+        helper.assertTrue(lease.status() == PhysicalCustodyLeaseStatus.PREPARING && !ReferenceContainerCustody.hasOperationalCustody(prepared, depot),
+                "before-write custody does not grant HOT operation permission");
+        ChestBlockEntity chest = chest(helper, local, depot);
+        FrontierV3ContainerSurfaceExecutor.replaceCanonicalSlots(chest, prepared, depot);
+        helper.assertTrue(!chest.isEmpty(), "fixture must project real canonical wheat before simulating physical loss");
+        var pendingRevision = runtime.canonicalState().orElseThrow().revision();
+        helper.assertTrue(!FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedMutation(runtime, depot, chest)
+                        && runtime.canonicalState().orElseThrow().revision().equals(pendingRevision),
+                "an effect checkpoint cannot reclassify pending projection as provider loss");
+        chest.getItem(0).shrink(1); chest.setChanged();
+        helper.assertTrue(FrontierV3ReferenceContainerCustodyExecutor.reconcilePreparedProjection(runtime, prepared, lease, chest),
+                "actual mismatching chest must produce a retained local conflict");
+        var checkpoint = runtime.checkpointImage().orElseThrow();
+        runtime.shutdown();
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> recovered = recovered(world, checkpoint, initial.bootstrap());
+        helper.assertTrue(recovered.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE, "fixture recovery: " + recovered.status());
+        FrontierWorldState conflicted = recovered.decodedState().orElseThrow();
+        PhysicalCustodyLease retained = conflicted.replicaCustody().custodyByScope().get(scope);
+        helper.assertTrue(retained.status() == PhysicalCustodyLeaseStatus.UNRESOLVED && retained.authorityEpoch() == lease.authorityEpoch()
+                        && conflicted.replicaCustody().replicas().get(depot).observedFingerprint().isPresent(),
+                "runtime recovery keeps actual mismatch and the same exclusive epoch");
+        helper.assertTrue(FrontierV3ReferenceContainerCustodyExecutor.eligibleReferenceSurfaces(conflicted,
+                        List.of(conflicted.inventory().surfaces().get(depot))).size() == 1,
+                "pending-write conflict remains eligible for later exact observation");
+        helper.assertTrue(!FrontierV3ReferenceContainerCustodyExecutor.reconcilePreparedProjection(recovered, conflicted, retained, chest)
+                        && chest.getItem(0).getCount() == 63 && recovered.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE,
+                "a repeated observation neither overwrites loss nor quarantines the instance");
+        recovered.shutdown(); helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-reference-projection", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    public static void releasedProjectionRequiresFreshWriteFenceAndActualConfirmation(GameTestHelper helper) {
+        WorldId world = new WorldId("frontier:reference-released-projection");
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(world, 91L));
+        SubjectId depot = FrontierWorldState.depotId(state.bootstrap().settlements().getFirst().id());
+        BlockPos local = helper.absolutePos(new BlockPos(2, 2, 2));
+        BlockPosition original = state.inventory().surfaces().get(depot).position();
+        state = FrontierWorldState.initial(FrontierV3CargoLoadingGameTests.translatedBootstrap(state.bootstrap(),
+                local.getX() - original.x(), local.getY() - original.y(), local.getZ() - original.z()));
+        state = held(state.withInventory(state.inventory().withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED)
+                .withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE)), depot);
+        SubjectId scope = ReferenceContainerCustody.scopeId(depot);
+        state = state.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(state.replicaCustody()
+                .checkpoint(scope, 1L, 0L, 2L).release(scope, 1L, 0L, 2L)));
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(world, state);
+        helper.assertTrue(runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE, "released fixture startup: " + runtime.status());
+        var prior = state.replicaCustody().replicas().get(depot);
+        helper.assertTrue(FrontierV3ReferenceContainerCustodyExecutor.prepareReleasedProjection(runtime, state, prior),
+                "unchanged released slots still acquire a durable pending-write fence");
+        FrontierWorldState prepared = runtime.decodedState().orElseThrow();
+        PhysicalCustodyLease lease = prepared.replicaCustody().custodyByScope().get(scope);
+        helper.assertTrue(lease.authorityEpoch() == 2L && lease.status() == PhysicalCustodyLeaseStatus.PREPARING
+                        && !ReferenceContainerCustody.hasOperationalCustody(prepared, depot),
+                "catch-up must not grant work permission before actual observation");
+        ChestBlockEntity chest = chest(helper, local, depot);
+        FrontierV3ContainerSurfaceExecutor.replaceCanonicalSlots(chest, prepared, depot);
+        helper.assertTrue(FrontierV3ReferenceContainerCustodyExecutor.reconcilePreparedProjection(runtime, prepared, lease, chest),
+                "real projected slots confirm the same fresh epoch");
+        FrontierWorldState confirmed = runtime.decodedState().orElseThrow();
+        helper.assertTrue(ReferenceContainerCustody.hasOperationalCustody(confirmed, depot)
+                        && confirmed.replicaCustody().custodyByScope().get(scope).authorityEpoch() == 2L,
+                "only actual confirmation enables the next custody cycle");
+        runtime.shutdown(); helper.succeed();
+    }
+
     @GameTest(batch = "pm-frontier-v3-reference-conflict-restart", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void foreignAndMissingProvenanceRemainActualEvidence(GameTestHelper helper) {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:reference-observation"), 91L));
@@ -412,7 +492,7 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
                 FencedRecoveryPhysicalIntentSupport.prepared(prepared.fencedRecovery(), intent, FencedRecoveryAsset.EFFECT)));
     }
 
-    private static ChestBlockEntity chest(GameTestHelper helper, BlockPos position, SubjectId containerId) {
+    static ChestBlockEntity chest(GameTestHelper helper, BlockPos position, SubjectId containerId) {
         ServerLevel level = helper.getLevel(); level.setBlock(position, Blocks.CHEST.defaultBlockState(), 3);
         ChestBlockEntity chest = (ChestBlockEntity) level.getBlockEntity(position);
         chest.getPersistentData().putString(FrontierV3CargoHandoffExecutor.CONTAINER_ID_KEY, containerId.value());
@@ -420,10 +500,10 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
         return chest;
     }
 
-    private static FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime(WorldId world, FrontierWorldState state) {
+    static FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime(WorldId world, FrontierWorldState state) {
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration = new FrontierEngineConfiguration<>(base.worldId(), state,
-                base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(),
+                base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(state.bootstrap()), base.projectionMapper(), base.limits(),
                 List.of(), base.transactionCommitter(), base.stateValidator(), base.executionMetrics());
         return FrontierV3ServerRuntime.start(configuration, new EphemeralStore(), 10_000);
     }
@@ -431,6 +511,15 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
     private static FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> recovered(WorldId world,
                                                                                                      io.farfrontier.palemirror.frontier.v3.api.CheckpointImage checkpoint) {
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration = FrontierWorldRuntimeDefinition.configuration(world, 91L);
+        return FrontierV3ServerRuntime.start(configuration, new SnapshotStore(world, checkpoint), 10_000);
+    }
+
+    private static FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> recovered(WorldId world,
+            io.farfrontier.palemirror.frontier.v3.api.CheckpointImage checkpoint, FrontierBootstrap bootstrap) {
+        var base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
+        var configuration = new FrontierEngineConfiguration<>(world, FrontierWorldState.initial(bootstrap), base.initialInstant(),
+                base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(bootstrap), base.projectionMapper(),
+                base.limits(), List.of(), base.transactionCommitter(), base.stateValidator(), base.executionMetrics());
         return FrontierV3ServerRuntime.start(configuration, new SnapshotStore(world, checkpoint), 10_000);
     }
 

@@ -1,6 +1,8 @@
 package io.farfrontier.palemirror.frontier.v3.persistence;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.WorldId;
+import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 
 import java.io.DataInputStream;
@@ -9,6 +11,7 @@ import java.io.IOException;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.UUID;
 
 /** Exact current authority and stale-binding rejection facts for fresh F0.5 worlds. */
 final class FencedRecoveryStateCodec {
@@ -25,6 +28,27 @@ final class FencedRecoveryStateCodec {
             FrontierWorldStateCodec.writeString(output, tombstone.ownerId().value()); output.writeLong(tombstone.ownerRevision()); output.writeLong(tombstone.retiredEpoch());
             output.writeByte(tombstone.disposition().wireTag()); FrontierWorldStateCodec.writeString(output, tombstone.reason());
         }
+        FrontierWorldStateCodec.writeCount(output, state.cargoRetirements().pending().size());
+        for (var retirement : state.cargoRetirements().pending().values().stream()
+                .sorted(Comparator.comparing(CargoProjectionRetirement::entityId)).toList()) {
+            writeRetirement(output, retirement);
+        }
+    }
+
+    static void writeRetirement(DataOutputStream output, CargoProjectionRetirement retirement) throws IOException {
+            FrontierWorldStateCodec.writeString(output, retirement.worldId().value());
+            FrontierWorldStateCodec.writeString(output, retirement.leaseId().value());
+            FrontierWorldStateCodec.writeString(output, retirement.cargoId().value());
+            output.writeLong(retirement.entityId().getMostSignificantBits());
+            output.writeLong(retirement.entityId().getLeastSignificantBits());
+            var proof = retirement.authorization();
+            FrontierWorldStateCodec.writeString(output, proof.bindingId().value());
+            output.writeByte(proof.asset().wireTag());
+            FrontierWorldStateCodec.writeString(output, proof.ownerId().value());
+            output.writeLong(proof.ownerRevision()); output.writeLong(proof.retiredEpoch());
+            output.writeByte(proof.disposition().wireTag());
+            FrontierWorldStateCodec.writeString(output, proof.reason());
+            output.writeByte(retirement.disposition().wireTag());
     }
 
     static FencedRecoveryState read(DataInputStream input) throws IOException {
@@ -41,7 +65,29 @@ final class FencedRecoveryStateCodec {
                     disposition(input.readUnsignedByte()), FrontierWorldStateCodec.readString(input));
             if (tombstones.put(id, tombstone) != null) throw new IllegalArgumentException("duplicate fenced recovery tombstone");
         }
-        return new FencedRecoveryState(current, tombstones);
+        Map<UUID, CargoProjectionRetirement> pending = new LinkedHashMap<>();
+        int retirementCount = FrontierWorldStateCodec.readCount(input);
+        if (retirementCount > CargoProjectionRetirements.MAX_PENDING) {
+            throw new IllegalArgumentException("cargo cleanup obligation limit exceeded");
+        }
+        for (int index = 0; index < retirementCount; index++) {
+            var retirement = readRetirement(input);
+            if (pending.put(retirement.entityId(), retirement) != null) throw new IllegalArgumentException("duplicate cargo retirement");
+        }
+        return new FencedRecoveryState(current, tombstones, new CargoProjectionRetirements(pending));
+    }
+
+    static CargoProjectionRetirement readRetirement(DataInputStream input) throws IOException {
+            var world = new WorldId(FrontierWorldStateCodec.readString(input));
+            var scene = new SceneLeaseId(FrontierWorldStateCodec.readString(input));
+            var cargo = new SubjectId(FrontierWorldStateCodec.readString(input));
+            var entity = new UUID(input.readLong(), input.readLong());
+            var proof = new FencedRecoveryTombstone(new SubjectId(FrontierWorldStateCodec.readString(input)),
+                    asset(input.readUnsignedByte()), new SubjectId(FrontierWorldStateCodec.readString(input)),
+                    input.readLong(), input.readLong(), disposition(input.readUnsignedByte()),
+                    FrontierWorldStateCodec.readString(input));
+            return new CargoProjectionRetirement(world, scene, cargo, entity, proof,
+                    CargoProjectionRetirement.Disposition.fromWireTag(input.readUnsignedByte()));
     }
 
     private static void writeBinding(DataOutputStream output, FencedRecoveryBinding binding) throws IOException {

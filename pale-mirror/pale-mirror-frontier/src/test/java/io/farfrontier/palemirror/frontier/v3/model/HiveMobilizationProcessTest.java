@@ -72,11 +72,12 @@ class HiveMobilizationProcessTest {
         SubjectId defender = assault.defenderIds().stream().sorted().findFirst().orElseThrow();
         SubjectId cause = SettlementAssaultCauseIdentity.strike(assault.id(), attacker, assault.nextStrikeEpoch());
         PhysicalIntent intent = new PhysicalIntent(SettlementAssaultStrikeReceiptBinding.intentId(state, lease, cause), PhysicalIntentKind.SCENE_STRIKE,
-                PhysicalIntentStatus.PREPARED, cause, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.routeSceneStrike(attacker, defender), new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO),
+                PhysicalIntentStatus.PREPARED, cause, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.assaultSceneStrike(attacker, defender, lease.id(), lease.revision()), new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO),
                 0, io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition.SCENE_STRIKE_OBSERVED,
-                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ROUTE_ENGAGEMENT);
-        state = state.preparePhysicalIntent(intent).transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
-        state = state.transitionPhysicalIntent(intent.id(), PhysicalIntentStatus.CONFIRMED,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
+        state = io.farfrontier.palemirror.frontier.v3.process.PhysicalIntentLifecycleFixture.prepare(state, hive, intent);
+        state = io.farfrontier.palemirror.frontier.v3.process.PhysicalIntentLifecycleFixture.transition(state, hive, intent, PhysicalIntentStatus.RUNNING, Optional.empty());
+        state = io.farfrontier.palemirror.frontier.v3.process.PhysicalIntentLifecycleFixture.transition(state, hive, intent, PhysicalIntentStatus.CONFIRMED,
                 Optional.of(new SceneStrikeObservation(new PhysicalObservationId("observation:integrated-expedition-parent"), intent.id(), attacker,
                         defender, FixedScalar.whole(20), FixedScalar.whole(18))));
         FrontierWorldState draining = state.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING);

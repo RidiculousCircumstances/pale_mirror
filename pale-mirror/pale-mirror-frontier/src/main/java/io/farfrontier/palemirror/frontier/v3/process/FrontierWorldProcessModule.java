@@ -15,6 +15,13 @@ import java.util.List;
  * composition never rediscovers a domain by payload classpath scanning.</p>
  */
 interface FrontierWorldProcessModule {
+    /** Same registered event owner closes exact scheduled references removed by its reduction. */
+    default List<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction> retiredSchedules(
+            FrontierWorldState previous, FrontierWorldState next,
+            java.util.function.Supplier<List<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction>> pending) {
+        return List.of();
+    }
+
     /**
      * Family-owned physical lifecycle behavior.  The process catalog composes these declarations
      * without selecting a family from an intent kind.

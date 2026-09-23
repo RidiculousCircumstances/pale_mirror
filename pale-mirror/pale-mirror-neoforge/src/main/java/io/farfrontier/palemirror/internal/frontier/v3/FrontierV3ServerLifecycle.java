@@ -497,6 +497,7 @@ public final class FrontierV3ServerLifecycle {
     }
     static void releaseRuntime(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         Objects.requireNonNull(runtime, "runtime");
+        FrontierV3CargoCleanupPersistence.forget(runtime);
         FrontierV3GrayboxExecutor.forgetFirstVisibility(runtime);
         FrontierV3GrayboxExecutor.forget(runtime);
         FrontierV3ResourceSiteExecutor.forget(runtime);
@@ -724,14 +725,17 @@ public final class FrontierV3ServerLifecycle {
         if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) {
             return new JoinFirewallProof(EntityJoinAdmission.NOT_MANAGED, false);
         }
-        return observeSourceJoin(runtime, entity);
+        JoinFirewallProof proof = observeSourceJoin(runtime, entity);
+        FrontierV3CargoDepartureObserver.observeJoin(level, runtime, entity);
+        if (proof.verifiedV3Carrier()) FrontierV3SceneDepartureObserver.observeJoin(level, runtime, entity);
+        return proof;
     }
     static JoinFirewallProof observeSourceJoin(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity) {
         Objects.requireNonNull(runtime, "runtime"); Objects.requireNonNull(entity, "entity");
         return composeSourceJoin(() -> observeEntityJoin(runtime, entity),
                 () -> FrontierV3AmbientActorExecutor.retainsPendingJoin(runtime, entity)
                         || recognizesManagedAmbientCarrier(runtime, FrontierV3AmbientCarrierRecognition.ManagedCarrier.from(entity))
-                        || FrontierV3SceneExecutor.recognizes(runtime, entity));
+                        || FrontierV3SceneExecutor.recognizesDeclaration(runtime, entity));
     }
     static JoinFirewallProof observeSourceJoin(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                FrontierV3AmbientCarrierRecognition.ManagedCarrier carrier,
@@ -755,7 +759,7 @@ public final class FrontierV3ServerLifecycle {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
         return FrontierV3PhysicalWorld.isPhysical(level) && runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
                 && (recognizesManagedAmbientCarrier(runtime, FrontierV3AmbientCarrierRecognition.ManagedCarrier.from(entity))
-                || FrontierV3SceneExecutor.recognizes(runtime, entity));
+                || FrontierV3SceneExecutor.recognizesDeclaration(runtime, entity));
     }
     static boolean recognizesManagedAmbientCarrier(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                    FrontierV3AmbientCarrierRecognition.ManagedCarrier carrier) {
@@ -765,7 +769,7 @@ public final class FrontierV3ServerLifecycle {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
         if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return false;
-        boolean sceneBody = FrontierV3SceneExecutor.recognizes(runtime, entity);
+        boolean sceneBody = FrontierV3SceneExecutor.recognizesDeclaration(runtime, entity);
         boolean ambientBody = FrontierV3AmbientCarrierRecognition.recognizes(runtime, entity);
         if (!sceneBody && !ambientBody) return false;
         FrontierV3ActorEquipmentDeathExecutor.resolve(level, runtime, entity);
@@ -777,6 +781,63 @@ public final class FrontierV3ServerLifecycle {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
         return FrontierV3PhysicalWorld.isPhysical(level) && runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
                 && FrontierV3AmbientActorExecutor.observeLeave(runtime, entity, stopping(level.getServer()));
+    }
+    /** Tracking-end precedes removal for hidden chunks and cannot certify final departure. */
+    public static boolean observeFinalChunkDeparture(ServerLevel level, Entity entity) {
+        Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity");
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
+        if (FrontierV3PhysicalWorld.isPhysical(level) && runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
+            runtime.decodedState().ifPresent(state -> FrontierV3CargoFootprintObserver.observeRemoval(level, state.bootstrap().worldId(), entity,
+                    state.fencedRecovery().cargoRetirements().pending().get(entity.getUUID())));
+        }
+        if (entity.getRemovalReason() != Entity.RemovalReason.UNLOADED_TO_CHUNK) return false;
+        return FrontierV3PhysicalWorld.isPhysical(level) && runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
+                && (FrontierV3SceneDepartureObserver.observeLeave(level, runtime, entity)
+                    || FrontierV3CargoDepartureObserver.observeLeave(level, runtime, entity));
+    }
+
+    /** Observes the exact vanilla entity-storage write; never requests a save or a chunk. */
+    public static java.util.concurrent.CompletableFuture<Void> writeEntityChunkWithFootprint(ServerLevel level,
+            net.minecraft.world.level.ChunkPos chunk, net.minecraft.nbt.CompoundTag data,
+            java.util.function.Supplier<java.util.concurrent.CompletableFuture<Void>> write) {
+        if (FrontierV3PhysicalWorld.isPhysical(level)) {
+            try {
+                FrontierV3CargoFootprintObserver.beforeWrite(level, chunk, data);
+            } catch (java.io.IOException failure) {
+                return java.util.concurrent.CompletableFuture.failedFuture(failure);
+            }
+        }
+        return write.get();
+    }
+
+    public static void observeEntityChunkWrite(ServerLevel level, net.minecraft.world.level.ChunkPos chunk,
+                                               net.minecraft.nbt.CompoundTag data,
+                                               java.util.concurrent.CompletableFuture<Void> written) {
+        var runtime = RUNTIMES.get(level.getServer());
+        if (FrontierV3PhysicalWorld.isPhysical(level) && runtime != null
+                && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
+            FrontierV3CargoCleanupPersistence.observeWrite(level, runtime, chunk, data, written);
+        }
+    }
+
+    public static void completeEntitySavePass(ServerLevel level, boolean complete,
+                                              java.util.function.Supplier<java.util.concurrent.CompletableFuture<Void>> synchronize) {
+        var runtime = RUNTIMES.get(level.getServer());
+        if (FrontierV3PhysicalWorld.isPhysical(level) && runtime != null
+                && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
+            FrontierV3CargoCleanupPersistence.completeSavePass(level, runtime, complete, synchronize);
+        }
+    }
+
+    public static java.util.concurrent.CompletableFuture<java.util.Optional<net.minecraft.nbt.CompoundTag>> observeEntityChunkRead(
+            ServerLevel level, net.minecraft.world.level.ChunkPos chunk,
+            java.util.concurrent.CompletableFuture<java.util.Optional<net.minecraft.nbt.CompoundTag>> read) {
+        var runtime = RUNTIMES.get(level.getServer());
+        if (FrontierV3PhysicalWorld.isPhysical(level) && runtime != null
+                && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
+            return FrontierV3CargoCleanupPersistence.observeRead(level, runtime, chunk, read);
+        }
+        return read;
     }
     private static boolean stopping(MinecraftServer server) {
         return STOPPING.containsKey(server);
@@ -808,7 +869,10 @@ public final class FrontierV3ServerLifecycle {
     public static CargoCarrierInteraction releaseCargoCarrier(ServerLevel level, ServerPlayer player, Entity entity) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(player, "player"); Objects.requireNonNull(entity, "entity");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
-        if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return CargoCarrierInteraction.NOT_MANAGED;
+        if (!FrontierV3PhysicalWorld.isPhysical(level)) return CargoCarrierInteraction.NOT_MANAGED;
+        if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) {
+            return FrontierV3CargoCarrierExecutor.hasDeclaration(entity) ? CargoCarrierInteraction.REJECTED : CargoCarrierInteraction.NOT_MANAGED;
+        }
         return releaseCargoCarrier(level, runtime, entity, java.util.Optional.of(player.getUUID()));
     }
     public static boolean presentObjectBoard(ServerLevel level, ServerPlayer player, Entity entity) {
@@ -824,16 +888,32 @@ public final class FrontierV3ServerLifecycle {
         PaleMirrorPlayerPresentation.inspect(player, "frontier-v3:board:" + owner, FrontierV3ObjectBoardCard.fromBoard(board));
         return true;
     }
-    private static CargoCarrierInteraction releaseCargoCarrier(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+    static CargoCarrierInteraction releaseCargoCarrier(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                                 Entity entity, java.util.Optional<java.util.UUID> observerPlayerId) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity"); Objects.requireNonNull(observerPlayerId, "observer player id");
         Objects.requireNonNull(runtime, "runtime");
-        if (runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return CargoCarrierInteraction.NOT_MANAGED;
+        if (runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) {
+            return FrontierV3CargoCarrierExecutor.hasDeclaration(entity) ? CargoCarrierInteraction.REJECTED : CargoCarrierInteraction.NOT_MANAGED;
+        }
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return CargoCarrierInteraction.REJECTED;
         var lease = FrontierV3CargoCarrierExecutor.activeLease(state, entity);
-        if (lease.isEmpty()) return CargoCarrierInteraction.NOT_MANAGED;
-        if (!FrontierV3CargoCarrierExecutor.markReleasedCarrier(state, lease.orElseThrow(), entity)) return CargoCarrierInteraction.REJECTED;
+        if (lease.isEmpty()) {
+            // An accepted handoff can survive a torn save of the old cart declaration.
+            // Canonical world custody allows ordinary interaction, not a second release.
+            if (entity instanceof MinecartChest && FrontierV3CargoCarrierExecutor.hasWorldCustody(state, entity.getUUID())) {
+                if (FrontierV3CargoCarrierExecutor.hasDeclaration(entity)) {
+                    if (!FrontierV3CargoCarrierExecutor.hasCurrentDeclaration(state, entity)) return CargoCarrierInteraction.REJECTED;
+                    if (!FrontierV3CargoCarrierProvenance.restore(state.inventory().items(), entity.getUUID(), (MinecartChest) entity)) {
+                        return CargoCarrierInteraction.REJECTED;
+                    }
+                    FrontierV3CargoCarrierExecutor.relinquishDeclaration(entity);
+                }
+                return CargoCarrierInteraction.NOT_MANAGED;
+            }
+            return FrontierV3CargoCarrierExecutor.hasDeclaration(entity)
+                    ? CargoCarrierInteraction.REJECTED : CargoCarrierInteraction.NOT_MANAGED;
+        }
         io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = runtime.canonicalState().orElse(null);
         if (checkpoint == null) return CargoCarrierInteraction.REJECTED;
         CommandId commandId = FrontierV3CommandIds.physical("cargo-carrier-release", checkpoint.revision().value());
@@ -841,7 +921,17 @@ public final class FrontierV3ServerLifecycle {
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId),
                 new CargoCarrierReleased(lease.orElseThrow().id(), io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.logistics(lease.orElseThrow()).cargoId(), entity.getUUID(), observerPlayerId)))
                 .orElse(null);
-        return result instanceof CommandResult.Accepted ? CargoCarrierInteraction.RELEASED : CargoCarrierInteraction.REJECTED;
+        if (result instanceof CommandResult.Accepted) {
+            // activeLease validated this exact physical carrier without mutation. The
+            // server-thread handoff must commit before captions or item provenance change.
+            // Keep the pre-command state solely to validate the already admitted contents.
+            if (!FrontierV3CargoCarrierExecutor.markReleasedCarrier(state, lease.orElseThrow(), entity)) {
+                throw new IllegalStateException("accepted cargo handoff lost its validated physical carrier");
+            }
+            FrontierV3CargoCarrierExecutor.relinquishDeclaration(entity);
+            return CargoCarrierInteraction.RELEASED;
+        }
+        return CargoCarrierInteraction.REJECTED;
     }
     public enum CargoCarrierInteraction { NOT_MANAGED, RELEASED, REJECTED }
     public static void observeTerminalVehicleDamage(ServerLevel level, Entity entity, DamageSource source) {
@@ -990,6 +1080,7 @@ public final class FrontierV3ServerLifecycle {
             runtime.quarantine(new IllegalStateException(cause + " has no canonical state"));
             return;
         }
+        if (!FrontierV3CargoCarrierExecutor.hasWorldCustody(state, entity.getUUID())) return;
         try {
             FrontierV3CargoCarrierImpactLedger.get(level).capture(level.getGameTime(), entity, state);
         } catch (RuntimeException error) {

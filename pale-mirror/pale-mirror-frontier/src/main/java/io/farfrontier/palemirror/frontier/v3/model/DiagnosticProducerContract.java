@@ -40,6 +40,7 @@ public final class DiagnosticProducerContract {
             diagnostic("frontier.inventory_conflict_observed", DiagnosticReason.INVENTORY_CONFLICT, Admission.REQUIRED_TUPLE),
             diagnostic("frontier.physical_replica_conflict_observed", DiagnosticReason.REPLICA_CUSTODY_CONFLICT, Admission.REQUIRED_TUPLE),
             diagnostic("frontier.physical_custody_unresolved", DiagnosticReason.PHYSICAL_CUSTODY_UNRESOLVED, Admission.REQUIRED_TUPLE),
+            diagnostic("frontier.projection_conflict_observed", DiagnosticReason.PHYSICAL_CUSTODY_UNRESOLVED, Admission.REQUIRED_TUPLE),
             diagnostic("frontier.fenced_recovery_ambiguous", DiagnosticReason.FENCED_RECOVERY_AMBIGUOUS, Admission.REQUIRED_TUPLE),
             diagnostic("frontier.kernel_quarantine_observed", kernelReasons(), Admission.REQUIRED_TUPLE),
             diagnostic("frontier.scene_lease_recovery_unresolved", DiagnosticReason.SCENE_LEASE_RECOVERY_UNRESOLVED, Admission.REQUIRED_TUPLE),
@@ -49,6 +50,7 @@ public final class DiagnosticProducerContract {
             diagnostic("frontier.physical_intent_transition", DiagnosticReason.PHYSICAL_CUSTODY_UNRESOLVED, Admission.OWNER_STAMPS_TRANSITION));
 
     private static final Set<String> ORDINARY = Set.of(
+        "frontier.cargo_cleanup_saved",
         "frontier.actor_died", "frontier.ambient_actor_died", "frontier.ambient_actor_observed", "frontier.ambient_lease_prepared",
         "frontier.ambient_lease_released", "frontier.ambient_lease_transition",
         "frontier.cargo_carrier_released", "frontier.cargo_delivered", "frontier.cargo_loaded", "frontier.company_registered",
@@ -72,6 +74,8 @@ public final class DiagnosticProducerContract {
         "frontier.operation_assembly_deferred", "frontier.operation_cold_suspended", "frontier.operation_created",
         "frontier.operation_travel_advanced", "frontier.operation_travel_segment_completed", "frontier.operation_travel_started",
         "frontier.physical_custody_acquired", "frontier.physical_custody_checkpointed", "frontier.physical_custody_released",
+        "frontier.projection_custody_prepared", "frontier.projection_custody_confirmed",
+        "frontier.reference_projection_prepared",
         "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared",
         "frontier.physical_replica_declared", "frontier.physical_replica_emitted", "frontier.physical_replica_observed", "frontier.reference_mutation_closed",
         "frontier.production_cold_work_advanced", "frontier.production_completed", "frontier.production_interrupted", "frontier.production_started",

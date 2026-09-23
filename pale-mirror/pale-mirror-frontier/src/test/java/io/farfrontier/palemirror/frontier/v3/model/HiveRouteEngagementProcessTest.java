@@ -245,34 +245,51 @@ class HiveRouteEngagementProcessTest {
         SubjectId target = candidate.actorIds().stream().filter(actor -> !actor.equals(attacker) && !hot.strategicPlans().routeEngagements().get(engagementId).attackerIds().contains(actor)).findFirst().orElseThrow();
         FixedPosition strikeOrigin = new FixedPosition(FixedScalar.whole(candidate.handoffPosition().x()), FixedScalar.whole(candidate.handoffPosition().y()), FixedScalar.whole(candidate.handoffPosition().z()));
         PhysicalIntent strikeIntent = new PhysicalIntent(new PhysicalIntentId("intent:scene-strike-test"), PhysicalIntentKind.SCENE_STRIKE, PhysicalIntentStatus.PREPARED,
-                operation.id(), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.routeSceneStrike(attacker, target), strikeOrigin, 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED,
+                operation.id(), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.routeSceneStrike(attacker, target, lease.id(), lease.revision()), strikeOrigin, 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ROUTE_ENGAGEMENT);
+        for (var binding : List.of(
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.routeSceneStrike(attacker, target, lease.id(), lease.revision() + 1),
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.routeSceneStrike(attacker, target, new SceneLeaseId("lease:foreign-strike"), lease.revision()))) {
+            var foreignBinding = new PhysicalIntent(strikeIntent.id(), strikeIntent.kind(), strikeIntent.status(), operation.id(), binding,
+                    strikeOrigin, 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED, strikeIntent.lifecycleOwner());
+            assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleFixture.prepare(hot, operation.settlementId(), foreignBinding),
+                    "a matching cause and pair cannot replace the explicit lease/revision");
+        }
         PhysicalIntent foreignTarget = new PhysicalIntent(new PhysicalIntentId("intent:scene-strike-foreign"), PhysicalIntentKind.SCENE_STRIKE, PhysicalIntentStatus.PREPARED,
-                operation.id(), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.routeSceneStrike(attacker, new SubjectId("resident:12-1")), strikeOrigin, 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED,
+                operation.id(), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.routeSceneStrike(attacker, new SubjectId("resident:12-1"), lease.id(), lease.revision()), strikeOrigin, 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ROUTE_ENGAGEMENT);
-        assertThrows(IllegalArgumentException.class, () -> hot.preparePhysicalIntent(foreignTarget));
+        assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleFixture.prepare(hot, operation.settlementId(), foreignTarget));
         PhysicalIntent unknownTarget = new PhysicalIntent(new PhysicalIntentId("intent:scene-strike-unknown"), PhysicalIntentKind.SCENE_STRIKE, PhysicalIntentStatus.PREPARED,
-                operation.id(), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.routeSceneStrike(attacker, new SubjectId("actor:unknown")), strikeOrigin, 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED,
+                operation.id(), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.routeSceneStrike(attacker, new SubjectId("actor:unknown"), lease.id(), lease.revision()), strikeOrigin, 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ROUTE_ENGAGEMENT);
-        assertThrows(IllegalArgumentException.class, () -> hot.preparePhysicalIntent(unknownTarget));
+        assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleFixture.prepare(hot, operation.settlementId(), unknownTarget));
         SceneStrikeObservation strikeReceipt = new SceneStrikeObservation(new PhysicalObservationId("observation:scene-strike-test"), strikeIntent.id(), attacker, target,
                 FixedScalar.whole(20), FixedScalar.ZERO);
-        FrontierWorldState struck = hot.preparePhysicalIntent(strikeIntent)
-                .transitionPhysicalIntent(strikeIntent.id(), PhysicalIntentStatus.RUNNING, Optional.empty())
+        FrontierWorldState struck = PhysicalIntentLifecycleFixture.prepare(hot, operation.settlementId(), strikeIntent);
+        struck = PhysicalIntentLifecycleFixture.transition(struck, operation.settlementId(), strikeIntent,
+                PhysicalIntentStatus.RUNNING, Optional.empty())
                 .recordActorDeath(new ActorDied(leaseId, target, hot.actorLocations().get(target).body(), "scene-strike-test"), 0L)
-                .transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING)
-                .transitionPhysicalIntent(strikeIntent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(strikeReceipt));
-        assertEquals(strikeReceipt, struck.physicalObservations().get(strikeReceipt.id()));
-        assertEquals(struck, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(struck)));
+                .transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING);
+        FrontierWorldState drainingStrike = struck;
+        assertThrows(IllegalArgumentException.class, () -> SceneStrikeStateSupport.transitionOwner(drainingStrike, strikeIntent,
+                new PhysicalIntentTransition(strikeIntent.id(), PhysicalIntentStatus.RUNNING, Optional.empty())),
+                "DRAINING permits an existing receipt, never starting another effect");
+        FrontierWorldState confirmedStrike = PhysicalIntentLifecycleFixture.transition(struck, operation.settlementId(), strikeIntent,
+                PhysicalIntentStatus.CONFIRMED, Optional.of(strikeReceipt));
+        assertEquals(strikeReceipt, confirmedStrike.physicalObservations().get(strikeReceipt.id()));
+        assertEquals(confirmedStrike, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(confirmedStrike)));
         PhysicalIntentTransition strikeTransition = new PhysicalIntentTransition(strikeIntent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(strikeReceipt));
         assertEquals(strikeTransition, FrontierWorldRuntimeDefinition.payloadCodecs().decode(strikeTransition.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(strikeTransition)));
         List<SceneMemberPosition> postStrikeSurvivors = candidate.actorIds().stream().filter(actor -> !actor.equals(target))
                 .map(actor -> {
-                    ActorLocation location = struck.actorLocations().get(actor);
+                    ActorLocation location = confirmedStrike.actorLocations().get(actor);
                     return new SceneMemberPosition(actor, FrontierTestPositions.bodyCellOf(location), location.condition().health());
                 }).toList();
-        FrontierWorldState closedStrike = struck.releaseSceneLease(leaseId, postStrikeSurvivors);
+        FrontierWorldState closedStrike = confirmedStrike.releaseSceneLease(leaseId, postStrikeSurvivors);
         assertEquals(strikeReceipt, closedStrike.physicalObservations().get(strikeReceipt.id()));
+        assertThrows(IllegalArgumentException.class, () -> SceneStrikeStateSupport.transitionOwner(closedStrike,
+                closedStrike.physicalIntents().get(strikeIntent.id()), strikeTransition),
+                "a retained closed receipt is history, not renewed scene authority");
         FrontierWorldState recovered = hot.transitionSceneLease(leaseId, SceneLeaseStatus.UNKNOWN_AFTER_RESTART)
                 .transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
         assertEquals(RouteEngagementStatus.HOT, recovered.strategicPlans().routeEngagements().get(engagementId).status());

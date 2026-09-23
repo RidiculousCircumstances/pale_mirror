@@ -1,0 +1,34 @@
+{
+  "schema": 1,
+  "id": "disposable_sa_fields_demand_return",
+  "isolation": { "mode": "disposable_lite", "seed": 47 },
+  "server": { "host": "127.0.0.1", "port": 25585, "profile": "world", "viewDistance": 6 },
+  "zeroPlayerPrelude": { "kind": "cold_duty_cycle", "advanceTicks": 24000, "timeoutMs": 240000, "expectTerminalStatus": "COMPLETED" },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "summary", "id": "", "expect": { "status": "ok", "settlements": 12, "sites": 12 } }
+    ] }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "diagnostic": { "view": "site", "id": "site:7-wheat-field", "field": "lastCrop" } }, "settleMs": 0, "causalMilestone": "demand_a" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "diagnostic": { "view": "site", "id": "site:1-wheat-field", "field": "lastCrop" } }, "settleMs": 0, "causalMilestone": "leave_a_demand_b" },
+    { "type": "inspect", "view": "site", "id": "site:1-wheat-field", "causalMilestone": "b_current_canonical" },
+    { "type": "assert_complete_resource_site", "siteId": "site:1-wheat-field", "completedCropSlots": 0, "timeoutMs": 30000, "causalMilestone": "b_complete_physical" },
+    { "type": "look", "at": { "diagnostic": { "view": "site", "id": "site:1-wheat-field", "field": "firstCrop" } } },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "diagnostic": { "view": "site", "id": "site:7-wheat-field", "field": "lastCrop" } }, "settleMs": 0, "causalMilestone": "return_a" },
+    { "type": "inspect", "view": "site", "id": "site:7-wheat-field", "causalMilestone": "a_current_canonical" },
+    { "type": "assert_complete_resource_site", "siteId": "site:7-wheat-field", "completedCropSlots": 0, "timeoutMs": 30000, "causalMilestone": "a_complete_physical_after_return" },
+    { "type": "look", "at": { "diagnostic": { "view": "site", "id": "site:7-wheat-field", "field": "firstCrop" } } },
+    { "type": "inspect", "view": "summary", "id": "" }
+  ],
+  "assertions": [
+    { "after": 3, "view": "site", "id": "site:1-wheat-field", "expect": { "status": "ok", "phase": "GROWING", "growthEpoch": 2 } },
+    { "after": 7, "view": "site", "id": "site:7-wheat-field", "expect": { "status": "ok", "phase": "GROWING", "growthEpoch": 2 } },
+    { "after": 10, "view": "summary", "id": "", "expect": { "status": "ok", "requiredConflicts": 0 } }
+  ],
+  "frames": [
+    { "after": 5, "name": "field-b-complete" },
+    { "after": 9, "name": "field-a-complete-after-return" }
+  ]
+}

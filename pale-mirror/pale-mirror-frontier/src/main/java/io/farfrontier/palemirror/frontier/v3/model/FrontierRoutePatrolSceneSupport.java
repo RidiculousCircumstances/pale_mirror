@@ -84,6 +84,12 @@ public final class FrontierRoutePatrolSceneSupport {
 
     public static BodyPosition releasedBody(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed) {
         RoutePatrol patrol = require(state, FrontierSceneBehaviors.routePatrol(lease));
+        if (!patrol.active()) {
+            if (!patrol.memberIds().contains(actorId)) throw new IllegalArgumentException("terminal patrol release has a foreign member");
+            // A stopped formation may be between checkpoints (including assembly).
+            // Releasing its observed bodies must not teleport them onto the travel route.
+            return observed;
+        }
         requireCurrentPlan(state, patrol);
         BodyPosition expected = bodies(patrol).get(actorId);
         if (expected == null || !expected.equals(observed)) throw new IllegalArgumentException("route-patrol scene release diverged from its retained formation");

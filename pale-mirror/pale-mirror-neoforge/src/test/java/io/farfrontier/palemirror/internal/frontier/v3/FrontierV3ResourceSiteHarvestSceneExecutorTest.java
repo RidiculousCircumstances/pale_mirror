@@ -26,6 +26,41 @@ class FrontierV3ResourceSiteHarvestSceneExecutorTest {
     private static final SubjectId JOB = new SubjectId("job:test");
 
     @Test
+    void independentSceneFenceIncidentsCannotShareAnIdempotencyKey() {
+        for (var fence : FrontierV3AmbientActorExecutor.SceneCarrierFenceResult.values()) {
+            var firstId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("scene:first");
+            var secondId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("scene:second");
+            var first = FrontierV3ResourceSiteHarvestSceneExecutor.carrierFenceCommandId(firstId, 3L, fence);
+            var second = FrontierV3ResourceSiteHarvestSceneExecutor.carrierFenceCommandId(secondId, 3L, fence);
+            org.junit.jupiter.api.Assertions.assertNotEquals(first, second);
+            assertEquals(first, FrontierV3ResourceSiteHarvestSceneExecutor.carrierFenceCommandId(firstId, 3L, fence));
+            org.junit.jupiter.api.Assertions.assertNotEquals(first,
+                    FrontierV3ResourceSiteHarvestSceneExecutor.carrierFenceCommandId(firstId, 4L, fence));
+        }
+    }
+
+    @Test
+    void carrierFenceFailureHasAnExactWitnessBeforeAndAfterTheLastCrop() {
+        var slots = new java.util.ArrayList<io.farfrontier.palemirror.frontier.v3.model.BlockPosition>();
+        for (int x = 0; x < 8; x++) for (int z = 0; z < 8; z++) {
+            slots.add(new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(x + 140, 66, z - 340));
+        }
+        var site = new io.farfrontier.palemirror.frontier.v3.model.ResourceSite(new SubjectId("site:1-wheat-field"),
+                new SubjectId("settlement:1"), new SubjectId("structure:1-farm"),
+                io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.WHEAT_FIELD, slots);
+        var progress = io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestProgress.notStarted();
+        for (int index = 0; index < slots.size(); index++) {
+            assertEquals(slots.get(index), FrontierV3ResourceSiteHarvestSceneExecutor.carrierFenceWitness(site, progress));
+            progress = progress.prepareNextCrop();
+            assertEquals(slots.get(index), FrontierV3ResourceSiteHarvestSceneExecutor.carrierFenceWitness(site, progress));
+            progress = progress.confirmPreparedCrop();
+        }
+        assertTrue(progress.complete());
+        assertEquals(slots.getLast(), FrontierV3ResourceSiteHarvestSceneExecutor.carrierFenceWitness(site, progress),
+                "a terminal diagnostic must not ask completed work for a nonexistent next crop");
+    }
+
+    @Test
     void observedHotTraversalKeepsMovingUnderItsOneSharedContinuationBeforeItsDueTurn() {
         assertTrue(FrontierV3TraversalScheduleGate.traversalCheckpointBound(checkpoint(100L, 102L), JOB));
         assertTrue(FrontierV3TraversalScheduleGate.traversalCheckpointBound(checkpoint(100L, 101L), JOB));

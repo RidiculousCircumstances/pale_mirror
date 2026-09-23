@@ -1,6 +1,8 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
 import com.mojang.math.Transformation;
+import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.CargoBatch;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneLabels;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
@@ -52,10 +54,14 @@ final class FrontierV3CargoCarrierPresentation {
     }
 
     static void discard(Entity carrier, SceneLease lease) {
-        carrier.getPassengers().stream().filter(passenger -> owned(passenger, lease)).forEach(Entity::discard);
+        discard(carrier, lease.id(), FrontierSceneBehaviors.logistics(lease).cargoId());
+    }
+
+    static void discard(Entity carrier, SceneLeaseId lease, SubjectId cargo) {
+        carrier.getPassengers().stream().filter(passenger -> owned(passenger, lease, cargo)).forEach(Entity::discard);
         if (carrier.level() instanceof ServerLevel level) {
             Entity detached = level.getEntity(id(lease));
-            if (owned(detached, lease)) detached.discard();
+            if (owned(detached, lease, cargo)) detached.discard();
         }
     }
 
@@ -64,13 +70,21 @@ final class FrontierV3CargoCarrierPresentation {
     }
 
     private static boolean owned(Entity entity, SceneLease lease) {
+        return owned(entity, lease.id(), FrontierSceneBehaviors.logistics(lease).cargoId());
+    }
+
+    private static boolean owned(Entity entity, SceneLeaseId lease, SubjectId cargo) {
         return entity instanceof Display.TextDisplay && !entity.isRemoved() && entity.getUUID().equals(id(lease))
-                && lease.id().value().equals(entity.getPersistentData().getString(LEASE_KEY))
-                && FrontierSceneBehaviors.logistics(lease).cargoId().value().equals(entity.getPersistentData().getString(CARGO_KEY));
+                && lease.value().equals(entity.getPersistentData().getString(LEASE_KEY))
+                && cargo.value().equals(entity.getPersistentData().getString(CARGO_KEY));
     }
 
     private static UUID id(SceneLease lease) {
-        return UUID.nameUUIDFromBytes(("pale-mirror-frontier-v3-cargo-caption:" + lease.id().value()).getBytes(StandardCharsets.UTF_8));
+        return id(lease.id());
+    }
+
+    private static UUID id(SceneLeaseId lease) {
+        return UUID.nameUUIDFromBytes(("pale-mirror-frontier-v3-cargo-caption:" + lease.value()).getBytes(StandardCharsets.UTF_8));
     }
 
     private static void configure(Display.TextDisplay display, String text) {

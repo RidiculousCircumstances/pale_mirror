@@ -29,7 +29,8 @@ public final class FencedRecoveryPhysicalIntentSupport {
             case CONFIRMED -> (binding.phase() == FencedRecoveryPhase.AMBIGUOUS
                     ? recovery.inspectedObserved(id, epoch) : recovery.observed(id, epoch)).confirm(id, epoch);
             case UNKNOWN_AFTER_RESTART -> recovery.ambiguous(id, epoch, "intent-restart-uninspected", FencedRecoveryDisposition.INSPECT);
-            case CONFLICTED -> recovery.conflict(id, epoch, "terminal-physical-conflict");
+            case CONFLICTED -> binding.phase() == FencedRecoveryPhase.AMBIGUOUS
+                    ? recovery.abandon(id, epoch) : recovery.conflict(id, epoch, "terminal-physical-conflict");
             case PREPARED -> throw new IllegalArgumentException("physical intent cannot transition back to prepared");
         };
     }

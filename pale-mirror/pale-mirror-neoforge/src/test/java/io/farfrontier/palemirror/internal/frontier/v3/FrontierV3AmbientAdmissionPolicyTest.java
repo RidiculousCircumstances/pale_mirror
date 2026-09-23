@@ -1,6 +1,9 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
 import io.farfrontier.palemirror.frontier.v3.api.CommandId;
@@ -235,6 +238,25 @@ class FrontierV3AmbientAdmissionPolicyTest {
             assertEquals(1, retained.providerAcquisitions());
             assertEquals(0, retained.pointQueries(), "an active runtime-installed scene does not re-enumerate provider geometry");
 
+            // The first scene deliberately does no work. It must not prevent a second
+            // independent canonical assault from being admitted and receiving its own turn.
+            AtomicReference<SceneLease> secondPrepared = new AtomicReference<>();
+            var serviced = new java.util.ArrayList<SceneLeaseId>();
+            var fairTurn = assaultTurn((candidate, provider, lease) -> {
+                assertNull(secondPrepared.get(), "each admitted assault must retain one scene, not be prepared twice");
+                secondPrepared.set(lease);
+                assertTrue(FrontierV3SettlementAssaultSceneExecutor.submitPrepared(candidate, provider, lease,
+                        () -> submit(runtime, state.bootstrap().worldId(), new SettlementAssaultSceneLeasePrepared(lease),
+                                "command:fair-second-assault-prepare")));
+            }, lease -> serviced.add(lease.id()));
+            assertTrue(FrontierV3SettlementAssaultSceneExecutor.tick(runtime, fairTurn));
+            assertNotNull(secondPrepared.get(), "waiting first scene may not own every admission turn");
+            assertNotEquals(prepared.get().id(), secondPrepared.get().id());
+            for (int tick = 0; tick < 3; tick++) assertTrue(FrontierV3SettlementAssaultSceneExecutor.tick(runtime, fairTurn));
+            assertTrue(serviced.contains(prepared.get().id()));
+            assertTrue(serviced.contains(secondPrepared.get().id()), "waiting first scene may not suppress the second scene");
+            assertEquals(3, serviced.size(), "without new candidates each tick services exactly one active scene");
+
             FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> structuralRuntime = runtime(state);
             try {
                 FrontierV3GrayboxExecutor.tick(new FullyLoadedPhysicalWorld(), structuralRuntime);
@@ -458,11 +480,20 @@ class FrontierV3AmbientAdmissionPolicyTest {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(state,
                 List.of(io.farfrontier.palemirror.frontier.v3.process.HiveGrowthProcess.start(task, 1L)));
         try {
+            assertEquals(FrontierV3RuntimeStatus.Kind.ACTIVE, runtime.status().kind(), runtime.status().toString());
             FrontierV3GrayboxExecutor.tick(new FullyLoadedPhysicalWorld(), runtime);
-            runtime.advance(1, new io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget(128, 512)).orElseThrow();
+            runtime.advance(1, new io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget(128, 512))
+                    .orElseThrow(() -> new IllegalStateException(runtime.status().toString()));
+            assertEquals(FrontierV3RuntimeStatus.Kind.ACTIVE, runtime.status().kind(), runtime.status().toString());
             FrontierWorldState nutrientReplacement = runtime.decodedState().orElseThrow();
             assertEquals(1, nutrientReplacement.hiveColony().nutrientTransfers().size(),
                     "the ordinary scheduled runtime transition must install its nutrient-only colony replacement");
+            var retained = runtime.checkpointImage().orElseThrow().schedules();
+            var validator = FrontierWorldRuntimeDefinition.configuration(state.bootstrap().worldId(), state.bootstrap().seed()).stateValidator();
+            validator.validateScheduleChanges(nutrientReplacement, retained);
+            org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                    () -> validator.validateScheduleChanges(state, retained),
+                    "the transfer continuation must fail when its exact transfer is absent, even while its task exists");
 
             FrontierV3GrayboxExecutor.resetProjectionWork(runtime);
             FrontierV3AmbientCarrierRecognition.ManagedCarrier carrier = new FrontierV3AmbientCarrierRecognition.ManagedCarrier(
@@ -671,9 +702,17 @@ class FrontierV3AmbientAdmissionPolicyTest {
 
     /** Exact delegate of the registered assault turn, without a fake {@code ServerLevel}. */
     private static FrontierV3SettlementAssaultSceneExecutor.Turn assaultTurn(PreparedAdmission prepared) {
+        return assaultTurn(prepared, ignored -> { });
+    }
+
+    private static FrontierV3SettlementAssaultSceneExecutor.Turn assaultTurn(PreparedAdmission prepared,
+                                                                          java.util.function.Consumer<SceneLease> executed) {
         return new FrontierV3SettlementAssaultSceneExecutor.Turn() {
             @Override public boolean demanded(io.farfrontier.palemirror.frontier.v3.model.BlockPosition position) { return true; }
-            @Override public void execute(FrontierWorldState state, SceneLease lease) { }
+            @Override public void execute(FrontierWorldState state, SceneLease lease) { executed.accept(lease); }
+            @Override public void prepareMarch(SceneLease lease) {
+                throw new AssertionError("the battle fixture must not select a march admission");
+            }
             @Override public void prepare(io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultSceneCandidate candidate,
                                           FrontierSettlementAssaultBattlefield.Provider provider, SceneLease lease) {
                 prepared.prepare(candidate, provider, lease);

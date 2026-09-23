@@ -186,17 +186,11 @@ public final class ResourceSiteHarvestProcess {
         // scheduler turn could recreate field-work after the sole player disposition.
         if (state.resourceSites().site(job.siteId()).phase() != ResourceSitePhase.HARVESTING) return List.of();
         long nextDue = Math.addExact(action.dueAt().ticks(), continuationInterval(state, job));
-        if (FrontierResourceSiteHarvestSceneSupport.hasNonClosedScene(state, job.id())) {
+        if (coldProgressHeld(state, action)) {
             // The current engine action is also the HOT checkpoint's only binding.  Advancing its
             // due instant while the scene owns the worker makes a physically observed arrival
             // wait for an unrelated new cadence turn, so preserve it byte-for-byte until the
             // HOT command either consumes the semantic step or the scene releases it.
-            return List.of(reschedule(action, action));
-        }
-        // An ambient lease is already a physical-authority hand-off in progress.  Even a
-        // PREPARED body cannot coexist with speculative COLD cursor movement: the registered
-        // HOT behavior must either adopt that exact body or leave the retained cursor intact.
-        if (!FrontierSceneAdmission.available(state, List.of(job.workerId()))) {
             return List.of(reschedule(action, action));
         }
         // COLD owns the same recurrent duty cycle as HOT while no physical scene owns this
@@ -218,6 +212,14 @@ public final class ResourceSiteHarvestProcess {
         // HOT-only crop boundary, recreating the observed crop-0 first-lease defect.
         if (nextCursor == job.cropCursor()) return coldCropReceipt(state, action, job, traversal);
         return List.of(traversal, reschedule(action, coldProgress(job, nextDue)));
+    }
+
+    public static boolean coldProgressHeld(FrontierWorldState state, ScheduledAction action) {
+        ResourceSiteHarvestJob job = activeJob(state, action.subject());
+        return job != null && action.id().equals(coldProgress(job, action.dueAt().ticks()).id())
+                && state.resourceSites().site(job.siteId()).phase() == ResourceSitePhase.HARVESTING
+                && (FrontierResourceSiteHarvestSceneSupport.hasNonClosedScene(state, job.id())
+                    || !FrontierSceneAdmission.available(state, List.of(job.workerId())));
     }
 
     private static List<ProposedEvent> coldCropReceipt(FrontierWorldState state, ScheduledAction action, ResourceSiteHarvestJob job, ProposedEvent... prefix) {

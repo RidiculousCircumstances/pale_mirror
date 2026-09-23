@@ -11,7 +11,6 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -25,10 +24,13 @@ final class FrontierV3ProductionWorkSceneExecutor {
 
     static boolean tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         FrontierWorldState state = runtime.decodedState().orElse(null); if (state == null) return false;
-        Optional<SceneLease> active = state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isProductionWork)
-                .filter(lease -> lease.status() != SceneLeaseStatus.CLOSED && lease.status() != SceneLeaseStatus.CONFLICT).min(Comparator.comparing(SceneLease::id));
-        if (active.isPresent()) { execute(level, runtime, state, active.orElseThrow()); return true; }
-        Optional<FrontierProductionWorkSceneSupport.Candidate> candidate = FrontierProductionWorkSceneSupport.candidates(state).stream()
+        return FrontierV3SceneTurnScheduler.run(runtime, state, SceneCauseKind.PRODUCTION_WORK,
+                lease -> execute(level, runtime, state, lease), () -> admit(level, runtime, state));
+    }
+
+    private static boolean admit(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state) {
+        Optional<FrontierProductionWorkSceneSupport.Candidate> candidate = FrontierV3SceneTurnScheduler.candidate(
+                runtime, SceneCauseKind.PRODUCTION_WORK, FrontierProductionWorkSceneSupport.candidates(state).stream()
                 // A current exact depot custody epoch is physical eligibility, not presentation
                 // demand.  It may therefore admit the same retained worker/workshop cycle while
                 // the naturally loaded depot is ticking without a nearby player.  Both anchors
@@ -37,7 +39,7 @@ final class FrontierV3ProductionWorkSceneExecutor {
                         || ReferenceContainerCustody.hasOperationalCustody(state, FrontierWorldState.depotId(value.settlementId())))
                 .filter(value -> level.hasChunkAt(new net.minecraft.core.BlockPos(value.demandPosition().x(), value.demandPosition().y(), value.demandPosition().z()))
                         && level.hasChunkAt(new net.minecraft.core.BlockPos(value.handoffPosition().x(), value.handoffPosition().y(), value.handoffPosition().z())))
-                .findFirst();
+                .toList(), FrontierProductionWorkSceneSupport.Candidate::jobId);
         if (candidate.isEmpty()) return false;
         FrontierProductionWorkSceneSupport.Candidate work = candidate.orElseThrow(); SceneLease lease = lease(runtime, work);
         if (FrontierSceneAdmission.available(state, work.memberPositions().keySet())) prepare(level, runtime, lease); else handoff(level, runtime, state, lease);
@@ -70,7 +72,7 @@ final class FrontierV3ProductionWorkSceneExecutor {
         FrontierV3SceneExecutor.BodyMaterialization result = FrontierV3ActorCarrierFactory.materializeSceneBodies(FrontierV3ActorCarrierComposition.InventoryEntry.PRODUCTION_WORK, level, state, lease);
         if (result == FrontierV3SceneExecutor.BodyMaterialization.CONFLICT) { conflict(level, runtime, lease, "prepared-body-conflict"); return; }
         if (result != FrontierV3SceneExecutor.BodyMaterialization.COMPLETE) return;
-        FrontierV3SceneExecutor.rememberObserved(level, runtime, state, lease);
+
         ProductionJob job = FrontierProductionWorkSceneSupport.require(state, FrontierSceneBehaviors.productionWork(lease));
         FrontierV3DiagnosticTrace.recordProductionScene(level.getServer(), "production_work_hot", lease, job,
                 submit(runtime, "production-work-hot", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT)));
@@ -80,10 +82,9 @@ final class FrontierV3ProductionWorkSceneExecutor {
         Entity entity = level.getEntity(member.entityId());
         if (ambient == null || ambient.status() != AmbientLeaseStatus.HOT || !(entity instanceof Mob body) || !body.isAlive()
                 || !FrontierV3AmbientActorExecutor.owned(body, member.actorId(), false)) return;
-        // The durable production reducer accepts this exact observed body only while its workshop
-        // traversal has not started, and recompiles that traversal from this position. Requiring
-        // the ambient body to return to the job's earlier canonical surface would deadlock a
-        // legitimately retained WORK body before that reducer can preserve the hand-off.
+        // An unstarted traversal may rebase to this observed body. Once work has progressed,
+        // the same hand-off must match its retained station and preserve the topology/cursor;
+        // the reducer rejects drift rather than restarting work or teleporting the worker.
         SceneMemberPosition capture = new SceneMemberPosition(member.actorId(), new BodyPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ()),
                 new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(Math.round(body.getHealth() * io.farfrontier.palemirror.frontier.v3.api.FixedScalar.SCALE)));
         // Integer Minecraft cells are not themselves an observation of standing: a body in the
@@ -117,7 +118,7 @@ final class FrontierV3ProductionWorkSceneExecutor {
         if (job.workProgress().terminalEffectEligible()) { drain(level, runtime, lease, DrainReason.TERMINAL_EFFECT_READY); return; }
         SettlementStructure workshop = state.bootstrap().settlements().stream().filter(s -> s.id().equals(job.settlementId())).findFirst().orElseThrow().structures().stream()
                 .filter(s -> s.id().equals(job.facilityId())).findFirst().orElseThrow();
-        if (state.structureConditions().get(workshop.id()) != StructureCondition.INTACT || !FrontierProductionWorkSceneSupport.hasExactMaterializedInput(state, job)) {
+        if (state.structureConditions().get(workshop.id()) != StructureCondition.INTACT || !FrontierProductionWorkSceneSupport.hasPhysicalInput(state, job)) {
             drain(level, runtime, lease, DrainReason.FACILITY_OR_INPUT_UNAVAILABLE); return;
         }
         FrontierV3SceneDemand.Snapshot demand = FrontierV3SceneExecutor.demandSnapshot(level, workshop.anchor());
@@ -165,6 +166,10 @@ final class FrontierV3ProductionWorkSceneExecutor {
             else pursueRetainedTraversalEdge(level, worker, current, next);
             return;
         }
+        var checkpoint = runtime.checkpointImage().orElseThrow();
+        var binding = FrontierV3ContinuationBinding.require(checkpoint, job.id(), "frontier.settlement.production.task.complete");
+        if (job.workProgress().stage() == ProductionWorkProgress.Stage.PROCESSING
+                && checkpoint.instant().compareTo(binding.dueAt()) < 0) return;
         ProductionWorkProgress next = switch (job.workProgress().stage()) {
             case APPROACH -> ProductionWorkProgress.inputReady();
             case INPUT_READY -> ProductionWorkProgress.processing(0);
@@ -173,7 +178,8 @@ final class FrontierV3ProductionWorkSceneExecutor {
             case OUTPUT_READY -> throw new IllegalStateException("terminal work may not continue");
         };
         worker.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
-        submit(runtime, "production-work-progress", lease.id().value(), new ProductionWorkProgressed(job.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, current), next));
+        FrontierV3CommandSubmission.submitBound(runtime, "production-work-progress", lease.id().value(),
+                new ProductionWorkProgressed(job.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, current), next), binding);
     }
     /**
      * Keeps one admitted production body inside the fixed neighborhood of its current and next
@@ -268,21 +274,13 @@ final class FrontierV3ProductionWorkSceneExecutor {
      */
     private static void release(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                 FrontierWorldState state, SceneLease lease) {
+        if (FrontierV3SceneReleaseReadiness.awaitingEntityStorage(level, state, lease)) return;
         SceneMember member = lease.members().getFirst();
-        // A whole unloaded hand-off chunk has no living physical custodian to fence.  The
-        // shared scene release owns the already-retained HOT observation and turns that exact
-        // scene back into COLD.  Treating the absent entity as deletion here instead made a
-        // normal player departure irreversibly CONFLICT an otherwise valid production job.
-        // A loaded chunk with a missing or foreign entity still takes the fail-closed fence
-        // below; this is not a coordinate, support, or admission relaxation.
-        if (!level.hasChunkAt(lease.handoffPosition().x(), lease.handoffPosition().z())) {
-            FrontierV3SceneExecutor.release(level, runtime, lease);
-            return;
-        }
+        // Release requires current physical evidence, never a historical HOT sample.
         Entity retained = level.getEntity(member.entityId());
         FrontierV3AmbientActorExecutor.SceneCarrierFenceResult fence =
                 FrontierV3AmbientActorExecutor.fenceDrainingSceneBody(level, state, lease, member, retained);
-        if (fence != FrontierV3AmbientActorExecutor.SceneCarrierFenceResult.FENCED) {
+        if (!fence.permitsRelease()) {
             // Preserve the live exact worker and its durable job rather than allowing closed
             // cleanup to erase provenance.  This is an owned local failure, never a substitute
             // worker or a permissive re-materialization path.
@@ -290,7 +288,8 @@ final class FrontierV3ProductionWorkSceneExecutor {
             return;
         }
         FrontierV3SceneExecutor.release(level, runtime, lease);
-        if (runtime.decodedState().map(current -> current.sceneLeases().get(lease.id()))
+        if (fence == FrontierV3AmbientActorExecutor.SceneCarrierFenceResult.FENCED
+                && runtime.decodedState().map(current -> current.sceneLeases().get(lease.id()))
                 .filter(current -> current.status() == SceneLeaseStatus.CLOSED).isPresent()
                 && retained instanceof Mob body
                 && FrontierV3AmbientActorExecutor.hasInactiveCarrier(level, state, member.actorId())) {

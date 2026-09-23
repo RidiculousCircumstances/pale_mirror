@@ -269,7 +269,8 @@ final class FrontierV3ResourceSiteLedger extends SavedData {
     }
 
     enum Status { PENDING, ACTIVE, CONFLICT }
-    enum ProjectionMode { INITIAL, ADVANCE, SUCCESSOR_RESTORE }
+    // Serialized names are stable tags. INITIAL retains its original all-AIR meaning.
+    enum ProjectionMode { INITIAL, INITIAL_SOIL, ADVANCE, SUCCESSOR_RESTORE }
     record HarvestReceipt(SubjectId outputId, String itemKind, int count, SubjectId containerId, int slot) {
         HarvestReceipt {
             if (outputId == null || itemKind == null || itemKind.isBlank() || count < 1 || containerId == null || slot < 0) {

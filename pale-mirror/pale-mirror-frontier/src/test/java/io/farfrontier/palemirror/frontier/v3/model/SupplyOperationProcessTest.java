@@ -64,7 +64,7 @@ class SupplyOperationProcessTest {
         var engine = FrontierEngines.create(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(
                 new WorldId("frontier:supply-unknown-scene"), 91L));
         FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        RouteOperation operation = before.operations().get(new SubjectId("operation:supply-1-2"));
+        RouteOperation operation = FrontierDevelopmentScenarios.initialNorthwatchShipment(before).orElseThrow();
         SceneLeaseId leaseId = new SceneLeaseId("lease:supply-unknown-scene");
         SceneLease lease = FrontierTestSceneLeases.exact(before, leaseId, operation.id(), operation.cargoId(),
                 operation.currentPosition(), engine.checkpoint().instant(), engine.checkpoint().revision().value(),
@@ -84,7 +84,7 @@ class SupplyOperationProcessTest {
         var engine = FrontierEngines.create(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(
                 new WorldId("frontier:supply-unresolved-scene"), 91L));
         FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        RouteOperation operation = before.operations().get(new SubjectId("operation:supply-1-2"));
+        RouteOperation operation = FrontierDevelopmentScenarios.initialNorthwatchShipment(before).orElseThrow();
         SceneLeaseId leaseId = new SceneLeaseId("lease:supply-unresolved-scene");
         SceneLease lease = FrontierTestSceneLeases.exact(before, leaseId, operation.id(), operation.cargoId(),
                 operation.currentPosition(), engine.checkpoint().instant(), engine.checkpoint().revision().value(),
@@ -97,7 +97,7 @@ class SupplyOperationProcessTest {
                 SupplyOperationProcess.operationProgress(operation, engine.checkpoint().instant().ticks() + 1L));
 
         assertEquals(List.of(TerminalDiagnosticProducer.operationFailed(operation.id(), "scene-recovery-unresolved"),
-                new StrategicTaskTransition(new SubjectId("task:settlement-1-settlement_deliver_bread_to_hive-2-deliver"), StrategicTaskStatus.BLOCKED)),
+                new StrategicTaskTransition(SupplyOperationProcess.deliveryTaskForOperation(before, operation, StrategicTaskStatus.ACTIVE).id(), StrategicTaskStatus.BLOCKED)),
                 planned.stream().map(ProposedEvent::payload).toList());
         assertEquals(unresolved, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(unresolved)));
         SceneLeaseRecoveryUnresolved payload = new SceneLeaseRecoveryUnresolved(leaseId, Set.of(operation.participantIds().getFirst()), false);
@@ -109,7 +109,7 @@ class SupplyOperationProcessTest {
         var engine = FrontierEngines.create(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(
                 new WorldId("frontier:supply-terminal-progress"), 91L));
         FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        RouteOperation operation = before.operations().get(new SubjectId("operation:supply-1-2"));
+        RouteOperation operation = FrontierDevelopmentScenarios.initialNorthwatchShipment(before).orElseThrow();
         SceneLeaseId leaseId = new SceneLeaseId("lease:supply-terminal-progress");
         SceneLease lease = FrontierTestSceneLeases.exact(before, leaseId, operation.id(), operation.cargoId(),
                 operation.currentPosition(), engine.checkpoint().instant(), engine.checkpoint().revision().value(),
@@ -278,6 +278,13 @@ class SupplyOperationProcessTest {
                 new SimInstant(1L), 0, new SubjectId("contract:retired-owner"), "frontier.supply.cargo.load", 1);
         assertThrows(IllegalArgumentException.class, () -> FrontierReferenceClosure.validate(oneOwner, List.of(retired)),
                 "a retiring owner must dispose its actual scheduled work in the same transaction");
+        assertThrows(IllegalArgumentException.class,
+                () -> FrontierWorldStateTransitionValidator.INSTANCE.validateScheduleChanges(oneOwner, List.of(retired)),
+                "unchanged world state must not bypass scheduled reference validation");
+        FrontierWorldStateTransitionValidator.INSTANCE.validateScheduleChanges(oneOwner, List.of(actionFor(contract)));
+        assertThrows(IllegalArgumentException.class,
+                () -> FrontierWorldStateTransitionValidator.INSTANCE.validateRecoveryInitial(oneOwner, List.of(retired)),
+                "recovery must reject the same absent schedule owner");
     }
 
     @Test

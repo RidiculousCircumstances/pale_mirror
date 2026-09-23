@@ -25,6 +25,15 @@ public final class PhysicalIntentTransitionStorage {
     public static FrontierWorldState reduce(FrontierWorldState state, PhysicalIntent intent,
                                             PhysicalIntentTransition transition,
                                             Confirmed confirmed, RecoveryUnknown recoveryUnknown) {
+        return reduce(state, intent, transition, confirmed, recoveryUnknown, RecoveryEdges.CONFIRM_ONLY);
+    }
+
+    /** The registered family explicitly supplies its permitted ambiguous-state edges. */
+    public static FrontierWorldState reduce(FrontierWorldState state, PhysicalIntent intent,
+                                            PhysicalIntentTransition transition,
+                                            Confirmed confirmed, RecoveryUnknown recoveryUnknown,
+                                            RecoveryEdges recoveryEdges) {
+        Objects.requireNonNull(recoveryEdges, "owner recovery edges");
         Objects.requireNonNull(state, "state");
         Objects.requireNonNull(intent, "intent");
         Objects.requireNonNull(transition, "physical transition");
@@ -35,7 +44,9 @@ public final class PhysicalIntentTransitionStorage {
             throw new IllegalArgumentException("physical transition has no exact prepared intent");
         }
         PhysicalIntentStatus status = transition.status();
-        if (!allowed(current.status(), status)) {
+        if (!allowed(current.status(), status) && !(recoveryEdges == RecoveryEdges.INSPECT_AND_ABANDON
+                && current.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
+                && (status == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART || status == PhysicalIntentStatus.CONFLICTED))) {
             throw new IllegalArgumentException("physical intent transition is not allowed: " + current.id().value()
                     + " " + current.status() + "->" + status);
         }
@@ -88,6 +99,8 @@ public final class PhysicalIntentTransitionStorage {
                 || next == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART || next == PhysicalIntentStatus.CONFLICTED)
                 || current == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART && next == PhysicalIntentStatus.CONFIRMED;
     }
+
+    public enum RecoveryEdges { CONFIRM_ONLY, INSPECT_AND_ABANDON }
 
     @FunctionalInterface public interface Confirmed {
         FrontierWorldState reduce(FrontierWorldState state, PhysicalIntent intent, PhysicalEffectObservation evidence,

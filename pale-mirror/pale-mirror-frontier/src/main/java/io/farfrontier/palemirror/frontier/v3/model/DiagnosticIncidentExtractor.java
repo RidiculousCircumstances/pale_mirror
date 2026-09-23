@@ -27,6 +27,7 @@ public final class DiagnosticIncidentExtractor {
             case InventoryConflictObserved value -> Optional.of(value.conflict().diagnostic());
             case PhysicalReplicaCustodyPayloads.ReplicaConflictObserved value -> Optional.of(value.diagnostic());
             case PhysicalReplicaCustodyPayloads.CustodyUnresolved value -> Optional.of(value.diagnostic());
+            case PhysicalReplicaCustodyPayloads.ProjectionConflictObserved value -> Optional.of(value.diagnostic());
             case FencedRecoveryPayloads.Ambiguous value -> Optional.of(value.diagnostic());
             case PhysicalIntentTransition value -> value.diagnostic();
             case SceneLeaseRecoveryUnresolved value -> Optional.of(value.diagnostic());

@@ -30,8 +30,21 @@ public final class FrontierV3GameTestSlice {
                     || batchName.equals("pm-frontier-v3-player-withdrawal")
                     || batchName.equals("pm-frontier-v3-object-boards") || batchName.equals("pm-frontier-v3-equipment-issue")
                     || batchName.equals("pm-frontier-v3-equipment-return") || batchName.equals("pm-frontier-v3-equipment-death")
-                    || batchName.equals("pm-frontier-v3-resource-recovery") || batchName.equals("pm-frontier-v3-reference-custody");
+                    || batchName.equals("pm-frontier-v3-resource-recovery") || batchName.equals("pm-frontier-v3-reference-custody")
+                    || batchName.equals("pm-frontier-v3-reference-projection");
             case AMBIENT_PHYSICS -> batchName.equals("pm-frontier-v3-ambient-physics");
+            case "cargo" -> batchName.equals("pm-frontier-v3-scene-cargo") || batchName.equals("pm-frontier-v3-scene-cargo-authority")
+                    || batchName.equals("pm-frontier-v3-scene-cargo-interaction");
+            case "cargo-authority" -> batchName.equals("pm-frontier-v3-scene-cargo-authority");
+            case "cargo-interaction" -> batchName.equals("pm-frontier-v3-scene-cargo-interaction");
+            case "scene-departure" -> batchName.equals("pm-frontier-v3-scene-departure") || batchName.equals("pm-frontier-v3-scene-deaths");
+            case "scene-strikes" -> batchName.equals("pm-frontier-v3-scene-strikes");
+            case "production-work" -> batchName.equals("pm-frontier-v3-scene-production-work");
+            case "local-navigation" -> batchName.equals("pm-frontier-v3-scene-local-navigation");
+            case "route-construction" -> batchName.equals("pm-frontier-v3-scene-route-construction");
+            case "production-effect" -> batchName.equals("pm-frontier-v3-production");
+            case "resource-prefix" -> batchName.equals("pm-frontier-v3-resource-site-prefix");
+            case "field-turns" -> batchName.equals("pm-frontier-v3-field-turns");
             case ADAPTER_MIRRORS -> batchName.equals("pm-frontier-v3-graybox")
                     || batchName.equals("pm-frontier-v3-infection-overlay");
             case "reference-depot-never-visited" -> batchName.equals("pm-frontier-v3-reference-depot-never-visited");
@@ -39,6 +52,7 @@ public final class FrontierV3GameTestSlice {
             case "reference-hive-zero-player" -> batchName.equals("pm-frontier-v3-reference-hive-zero-player");
             case "reference-conflict-restart" -> batchName.equals("pm-frontier-v3-reference-conflict-restart");
             case "reference-all" -> batchName.startsWith("pm-frontier-v3-reference-");
+            case "reference-projection" -> batchName.equals("pm-frontier-v3-reference-projection");
             default -> throw new IllegalArgumentException("unsupported Frontier v3 GameTest slice: " + configuredSlice);
         };
     }

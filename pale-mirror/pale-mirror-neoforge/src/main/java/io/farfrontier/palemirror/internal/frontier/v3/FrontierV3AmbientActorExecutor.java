@@ -448,7 +448,7 @@ final class FrontierV3AmbientActorExecutor {
                         existing instanceof Mob mob ? FrontierV3MobMotionLifecycle.trackerObservation(mob) : new FrontierV3ControlledMobMotion.TrackerObservation(0, 0),
                         existing instanceof Mob mob ? FrontierV3ControlledMobMotion.motionObservation(mob) : FrontierV3ControlledMobMotion.MotionObservation.idle());
             }
-            if (FrontierV3SceneExecutor.recognizes(runtime, existing)) {
+            if (FrontierV3SceneExecutor.recognizesDeclaration(runtime, existing)) {
                 return FrontierV3AmbientAdmissionDiagnostic.sceneOwned(expectedId, observedPosition, observedExact,
                         existing instanceof Mob mob ? FrontierV3MobMotionLifecycle.trackerObservation(mob) : new FrontierV3ControlledMobMotion.TrackerObservation(0, 0),
                         existing instanceof Mob mob ? FrontierV3ControlledMobMotion.motionObservation(mob) : FrontierV3ControlledMobMotion.MotionObservation.idle());
@@ -710,7 +710,24 @@ final class FrontierV3AmbientActorExecutor {
     }
     static SceneCarrierFenceResult fenceDrainingSceneBody(ServerLevel level, FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.model.SceneLease lease,
                                                            io.farfrontier.palemirror.frontier.v3.model.SceneMember member, Entity entity) {
+        if (recordedSceneDeath(state, lease, member)) return SceneCarrierFenceResult.RETIRED_BY_DEATH;
+        if (entity == null) {
+            var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
+            if (ledger.departure(member.actorId()).isPresent()) {
+                return FrontierV3SceneDepartureObserver.fenceDeparture(state, lease, member, ledger)
+                        ? SceneCarrierFenceResult.FENCED : SceneCarrierFenceResult.CARRIER_CONFLICT;
+            }
+        }
         return fenceSceneBodyResult(level, state, lease, member, entity, false);
+    }
+
+    /** Recorded canonical death retires custody; absence of a Minecraft entity does not. */
+    static boolean recordedSceneDeath(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.model.SceneLease lease,
+                                      io.farfrontier.palemirror.frontier.v3.model.SceneMember member) {
+        if (lease.status() != io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.DRAINING
+                || !lease.equals(state.sceneLeases().get(lease.id())) || !lease.members().contains(member)) return false;
+        var actor = state.actorLocations().get(member.actorId());
+        return actor != null && actor.condition().status() == ActorLifeStatus.DEAD;
     }
     private static boolean fenceSceneBody(ServerLevel level, FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.model.SceneLease lease,
                                           io.farfrontier.palemirror.frontier.v3.model.SceneMember member, Entity entity, boolean closed) {
@@ -739,8 +756,10 @@ final class FrontierV3AmbientActorExecutor {
         return SceneCarrierFenceResult.FENCED;
     }
     enum SceneCarrierFenceResult {
-        FENCED, ENTITY_UNAVAILABLE, ENTITY_DEAD, SCENE_OWNERSHIP_MISMATCH, UUID_MISMATCH,
-        ACTOR_UNAVAILABLE, AMBIENT_AUTHORITY_OPEN, CARRIER_CONFLICT
+        FENCED, RETIRED_BY_DEATH, ENTITY_UNAVAILABLE, ENTITY_DEAD, SCENE_OWNERSHIP_MISMATCH, UUID_MISMATCH,
+        ACTOR_UNAVAILABLE, AMBIENT_AUTHORITY_OPEN, CARRIER_CONFLICT;
+
+        boolean permitsRelease() { return this == FENCED || this == RETIRED_BY_DEATH; }
     }
     static boolean hasInactiveCarrier(ServerLevel level, FrontierWorldState state, SubjectId actorId) {
         return FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId()).hasCarrier(actorId);

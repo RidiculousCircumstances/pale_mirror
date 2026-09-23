@@ -63,7 +63,20 @@ public final class FrontierMedicalTreatmentSceneSupport {
     /** Exact supply consumption is allowed only during the operation's own HOT lease. */
     public static boolean permitsCurrentConsumptionIntent(FrontierWorldState state, PhysicalIntent intent) {
         MedicalEvacuationOperation operation = state.humanPopulation().medicalOperations().get(intent.causeSubjectId());
-        return operation != null && operation.requiresSupply() && operation.consumptionIntentId().equals(intent.id()) && state.sceneLeases().values().stream()
+        return operation != null && operation.requiresSupply() && hasExactHotConsumption(state, operation, intent);
+    }
+
+    /** A retained UNKNOWN may accept its observed result, never start another consumption. */
+    public static boolean permitsConsumptionReceipt(FrontierWorldState state, PhysicalIntent intent) {
+        MedicalEvacuationOperation operation = state.humanPopulation().medicalOperations().get(intent.causeSubjectId());
+        return operation != null && (operation.requiresSupply()
+                || operation.status() == MedicalEvacuationStatus.UNKNOWN_AFTER_RESTART
+                && intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART)
+                && hasExactHotConsumption(state, operation, intent);
+    }
+
+    private static boolean hasExactHotConsumption(FrontierWorldState state, MedicalEvacuationOperation operation, PhysicalIntent intent) {
+        return operation.consumptionIntentId().equals(intent.id()) && state.sceneLeases().values().stream()
                 .filter(FrontierSceneBehaviors::isMedicalTreatment).filter(lease -> lease.status() == SceneLeaseStatus.HOT)
                 .anyMatch(lease -> FrontierSceneBehaviors.medicalTreatment(lease).operationId().equals(operation.id()));
     }

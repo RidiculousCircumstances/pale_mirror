@@ -312,6 +312,7 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
         if (command.payload() instanceof SceneLeaseTransition transition) {
             SceneLease lease = state.sceneLeases().get(transition.leaseId());
             if (lease == null) return FrontierWorldCommandPlanner.rejected("scene lease is unknown");
+            if (!transition.appliesTo(lease)) return FrontierWorldCommandPlanner.rejected("scene lease transition is not allowed from its current status");
             try { return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierSceneOwnerSupport.owner(state, lease), transition))); }
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
@@ -381,8 +382,9 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
 
     private static CommandPlan planActorDied(FrontierWorldState state, ActorDied death) {
         SceneLease lease = state.sceneLeases().get(death.leaseId());
-        if (lease == null || (lease.status() != SceneLeaseStatus.HOT && lease.status() != SceneLeaseStatus.DRAINING)
-                || lease.members().stream().noneMatch(member -> member.actorId().equals(death.actorId()))) {
+        if (lease == null || !lease.retainsMemberCustody(death.actorId())
+                || state.actorLocations().get(death.actorId()) == null
+                || state.actorLocations().get(death.actorId()).condition().status() != ActorLifeStatus.ALIVE) {
             return FrontierWorldCommandPlanner.rejected("actor death is not evidence for an active scene member");
         }
         SubjectId owner;
@@ -393,6 +395,7 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
         CompanyFoundationProcess.terminationForDeath(state, death.actorId()).ifPresent(events::add);
         events.addAll(ProductionProcess.failPreEffectWorkForDeath(state, death.actorId()));
         if (lease.status() == SceneLeaseStatus.HOT) events.add(new ProposedEvent(owner, new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING)));
+        if (lease.status() == SceneLeaseStatus.PREPARED) events.add(new ProposedEvent(owner, new SceneLeaseTransition(lease.id(), SceneLeaseStatus.CONFLICT)));
         return new CommandPlan.Accepted(List.copyOf(events));
     }
 

@@ -305,6 +305,8 @@ final class FrontierV3TestPilotScenario {
     /** A semantic camera may read one current operation projection, then perform only ordinary player travel. */
     private static boolean validOperationVisit(JsonObject action) {
         return requiredId(action, "operationId", "operation:") && action.has("dimension") && action.get("dimension").isJsonPrimitive()
+                && (!action.has("anchor") || action.get("anchor").isJsonPrimitive()
+                && (action.get("anchor").getAsString().equals("travelCurrent") || action.get("anchor").getAsString().equals("travelCargo")))
                 && action.get("dimension").getAsString().matches("[a-z0-9_.-]+:[a-z0-9_./-]+")
                 && offset(action) && timeout(action, 120_000L, "settleMs") && timeout(action, 120_000L);
     }
@@ -357,6 +359,8 @@ final class FrontierV3TestPilotScenario {
     /** Bounded ordinary local attacks; the scenario deliberately contains no entity identity. */
     private static boolean validEntityAttack(JsonObject action) {
         return validEntityInteraction(action) && wholeWithin(action, "maxAttacks", 1, 40)
+                && (!action.has("requireRemoval") || action.get("requireRemoval").isJsonPrimitive()
+                    && action.get("requireRemoval").getAsJsonPrimitive().isBoolean())
                 && (!action.has("nameContains") || action.get("nameContains").isJsonPrimitive()
                 && !action.get("nameContains").getAsString().isBlank() && action.get("nameContains").getAsString().length() <= 72);
     }

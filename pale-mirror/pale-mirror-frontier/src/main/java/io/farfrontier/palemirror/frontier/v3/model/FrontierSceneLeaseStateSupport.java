@@ -35,13 +35,18 @@ public final class FrontierSceneLeaseStateSupport {
         Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases());
         int requiredCompaction = leases.size() - MAX_SCENE_LEASES + 1;
         if (requiredCompaction > 0) {
-            List<SceneLease> terminal = leases.values().stream().filter(existing -> existing.status() == SceneLeaseStatus.CLOSED)
+            List<SceneLease> terminal = leases.values().stream().filter(existing -> mayCompact(state, existing))
                     .sorted(Comparator.comparing(SceneLease::handoffInstant).thenComparing(existing -> existing.id().value())).toList();
             if (terminal.size() < requiredCompaction) throw new IllegalArgumentException("scene lease retention limit has no terminal leases to compact");
             terminal.stream().limit(requiredCompaction).forEach(existing -> leases.remove(existing.id()));
         }
         leases.put(lease.id(), lease);
         return leases;
+    }
+
+    static boolean mayCompact(FrontierWorldState state, SceneLease lease) {
+        return lease.status() == SceneLeaseStatus.CLOSED && state.physicalIntents().values().stream()
+                .noneMatch(intent -> intent.roles().scene().filter(binding -> binding.leaseId().equals(lease.id())).isPresent());
     }
 
     static FrontierWorldState handoff(FrontierWorldState state, SceneLeaseHandoff handoff) {
@@ -95,8 +100,8 @@ public final class FrontierSceneLeaseStateSupport {
 
     /**
      * Records a naturally loaded recovery observation without inventing a death, body, cargo
-     * hand-off or COLD continuation.  The owning operation is subsequently blocked by the same
-     * transaction, so an uninspectable old scene cannot monopolize its settlement forever.
+     * hand-off or COLD continuation. The registered scene owner selects any accompanying
+     * continuation; combat preserves uncertainty rather than manufacturing an outcome.
      */
     public static FrontierWorldState recoveryUnresolved(FrontierWorldState state, SceneLeaseRecoveryUnresolved unresolved) {
         SceneLease current = state.sceneLeases().get(unresolved.leaseId());
@@ -135,6 +140,7 @@ public final class FrontierSceneLeaseStateSupport {
     static FrontierWorldState release(FrontierWorldState state, SceneLeaseId leaseId, List<SceneMemberPosition> positions) {
         SceneLease current = state.sceneLeases().get(leaseId);
         if (current == null || current.status() != SceneLeaseStatus.DRAINING) throw new IllegalArgumentException("only a draining scene lease can be released");
+        FrontierWorldState releaseReady = SceneStrikeStateSupport.prepareRelease(state, current);
         Set<SubjectId> expected = current.members().stream().map(SceneMember::actorId).filter(actor -> state.actorLocations().get(actor).condition().status() == ActorLifeStatus.ALIVE)
                 .collect(java.util.stream.Collectors.toSet());
         Set<SubjectId> observed = positions.stream().map(SceneMemberPosition::actorId).collect(java.util.stream.Collectors.toSet());
@@ -151,7 +157,7 @@ public final class FrontierSceneLeaseStateSupport {
         }
         StrategicPlanState plans = FrontierSceneBehaviors.releasePlans(state, current);
         Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases()); leases.put(leaseId, current.withStatus(SceneLeaseStatus.CLOSED));
-        return copy(state, actors, leases, state.ambientLeases(), plans, confirmRecovery(state, state.fencedRecovery(), current));
+        return copy(releaseReady, actors, leases, state.ambientLeases(), plans, confirmRecovery(releaseReady, releaseReady.fencedRecovery(), current));
     }
 
     /** A PREPARED lease has not transferred authority to its provisional Minecraft bodies. */
@@ -237,7 +243,7 @@ public final class FrontierSceneLeaseStateSupport {
         return binding.phase() == FencedRecoveryPhase.PREPARED ? recovery.running(id, binding.authorityEpoch()) : recovery;
     }
     private static FencedRecoveryState confirmRecovery(FrontierWorldState state, FencedRecoveryState recovery, SceneLease lease) {
-        return confirmCargo(confirmBodies(state, recovery, lease), lease);
+        return confirmCargo(state, confirmBodies(state, recovery, lease), lease);
     }
     private static FencedRecoveryState confirmBodies(FrontierWorldState state, FencedRecoveryState recovery, SceneLease lease) {
         FencedRecoveryState next = recovery;
@@ -250,13 +256,16 @@ public final class FrontierSceneLeaseStateSupport {
         }
         return next;
     }
-    private static FencedRecoveryState confirmCargo(FencedRecoveryState recovery, SceneLease lease) {
+    private static FencedRecoveryState confirmCargo(FrontierWorldState state, FencedRecoveryState recovery, SceneLease lease) {
         if (!FrontierSceneBehaviors.isLogistics(lease)) return recovery;
         SubjectId id = cargoRecoveryBindingId(FrontierSceneBehaviors.logistics(lease).cargoId()); FencedRecoveryBinding binding = recovery.current().get(id);
         if (binding == null) throw new IllegalArgumentException("scene cargo recovery authority is absent at release");
         long epoch = binding.authorityEpoch();
         FencedRecoveryState observed = binding.phase() == FencedRecoveryPhase.OBSERVED ? recovery : recovery.observed(id, epoch);
-        return observed.confirm(id, epoch);
+        FencedRecoveryState confirmed = observed.confirm(id, epoch);
+        return confirmed.retainCargoRetirement(CargoProjectionRetirement.confirmed(
+                lease.withStatus(SceneLeaseStatus.CLOSED), confirmed.tombstones().get(id),
+                FrontierSceneBehaviors.logistics(lease).carrierDisposition()));
     }
     static FencedRecoveryState observeCargoCarrier(FencedRecoveryState recovery, SceneLease lease) {
         if (!FrontierSceneBehaviors.isLogistics(lease)) throw new IllegalArgumentException("cargo recovery requires logistics scene");

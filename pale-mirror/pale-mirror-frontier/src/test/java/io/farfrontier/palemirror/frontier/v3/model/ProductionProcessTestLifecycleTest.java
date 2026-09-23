@@ -1,4 +1,6 @@
 package io.farfrontier.palemirror.frontier.v3.model;
+
+import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.process.*;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.persistence.RecoveryImage;
@@ -40,6 +42,24 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ProductionProcessLifecycleTest extends ProductionProcessTest {
+    /** Follow the retained work schedule, bounded by the fixture's remaining route and labor. */
+    private static void finishRetainedColdWork(io.farfrontier.palemirror.frontier.v3.api.FrontierEngine<FrontierWorldProjection> engine) {
+        var codec = new FrontierWorldStateCodec();
+        var state = codec.decode(engine.checkpoint().canonicalState());
+        int budget = state.productionJobs().values().stream().mapToInt(job ->
+                job.workTraversal().linearCorridorSurfaces().size() + ProductionWorkProgress.REQUIRED_PROCESSING_TICKS + 4).sum();
+        for (int step = 0; !state.productionJobs().isEmpty() && step < budget; step++) {
+            var jobs = state.productionJobs().keySet();
+            var due = engine.checkpoint().schedules().stream().filter(action -> jobs.contains(action.subject())
+                            && action.kind().equals("frontier.settlement.production.task.complete"))
+                    .map(ScheduledAction::dueAt).min(java.util.Comparator.naturalOrder()).orElseThrow();
+            assertTrue(due.compareTo(engine.checkpoint().instant()) > 0, "COLD work must retain a future continuation");
+            engine.advanceTo(due, new WorkBudget(256, 1_024));
+            state = codec.decode(engine.checkpoint().canonicalState());
+        }
+        assertTrue(state.productionJobs().isEmpty(), "retained route and labor budget must reach terminal production");
+    }
+
     @Test
     void nextProductionJobRetainsACompletedWorkersWorkshopReturnCorridor() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:production-return"), 91L));
@@ -102,13 +122,90 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
                 assertInstanceOf(StrategicTaskTransition.class, planned.getFirst().payload()));
         FrontierWorldState reserved = ProductionProcess.reduceStarted(active, settlement, started);
         assertEquals(64, reserved.inventory().fungibleResources().accounts().get(accountId).claimQuantities().get(hold.claimId()));
-        List<ProposedEvent> completion = ProductionProcess.planCompletion(reserved, ProductionProcess.complete(started.job(), 200L));
+        List<PhysicalStackBinding> bindings = FungiblePhysicalObservation.bind(reserved.inventory().fungibleResources(), accountId, 3L,
+                List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                        new InventoryCustody.ContainerSlot(depot, 0)), "minecraft:wheat", 64)));
+        FrontierWorldState bound = ProductionResourceCustody.bind(reserved, accountId, 3L, bindings);
+        ProductionJob boundJob = bound.productionJobs().get(started.job().id());
+        assertEquals(started.job().withInputHold(new ProductionInputHold.FungibleBound(hold.itemId(), accountId, hold.claimId(), 3L)), boundJob);
+        FrontierWorldState recoveredBound = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(bound));
+        assertEquals(boundJob, recoveredBound.productionJobs().get(boundJob.id()));
+        assertFalse(FrontierProductionWorkSceneSupport.hasPhysicalInput(recoveredBound, boundJob),
+                "account bindings alone do not grant reference-container authority");
+        PhysicalReplicaRecord expected = PhysicalReplicaRecord.expected(depot, ReferenceContainerCustody.semanticKind(recoveredBound, depot),
+                0L, ReferenceContainerCustody.canonicalFingerprint(recoveredBound, depot), ReferenceContainerCustody.provenance(depot));
+        PhysicalReplicaCustodyState custody = recoveredBound.replicaCustody().declare(expected)
+                .observe(depot, 0L, 1L, expected.fingerprint(), expected.provenance(), 0L)
+                .acquire(new PhysicalCustodyLease(ReferenceContainerCustody.scopeId(depot), depot, ReferenceContainerCustody.PROVIDER_ID,
+                        3L, 0L, 2L, PhysicalCustodyLeaseStatus.ACQUIRED, null));
+        FrontierWorldState physical = recoveredBound.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(custody));
+        var candidate = FrontierProductionWorkSceneSupport.candidate(physical, boundJob).orElseThrow();
+        SceneLease lease = SceneLease.forCause(new SceneLeaseId("lease:fungible-production-work"), physical.bootstrap().worldId(),
+                new ProductionWorkSceneCause(boundJob.id()), candidate.handoffPosition(), SimInstant.ZERO, 1L, SceneLeaseStatus.PREPARED,
+                List.of(new SceneMember(boundJob.workerId(), SceneLease.deterministicEntityId(physical.bootstrap().worldId(), boundJob.workerId()))),
+                SceneLease.bodiesAboveSupportCells(candidate.memberPositions()), java.util.Set.of(), Optional.empty());
+        FrontierWorldState hot = physical.prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT);
+        ProductionWorkTraversalAdvanced arrived = new ProductionWorkTraversalAdvanced(boundJob.id(), lease.id(),
+                boundJob.workTraversal().linearCorridorSurfaces().get(1).standingBody(), 1);
+        FrontierWorldState moved = ProductionProcess.reduceWorkTraversalAdvanced(hot, settlement, arrived);
+        assertEquals(1, moved.productionJobs().get(boundJob.id()).traversalCursor());
+        assertEquals(boundJob.inputHold(), moved.productionJobs().get(boundJob.id()).inputHold());
+        FrontierWorldState releasedWhileHot = ProductionResourceCustody.release(hot, accountId, 3L);
+        assertThrows(IllegalArgumentException.class,
+                () -> ProductionProcess.reduceWorkTraversalAdvanced(releasedWhileHot, settlement, arrived),
+                "a retained body lease cannot continue work after its input custody was released");
+        assertThrows(IllegalArgumentException.class, () -> ProductionResourceCustody.release(recoveredBound, accountId, 4L));
+        FrontierWorldState unbound = ProductionResourceCustody.release(recoveredBound, accountId, 3L);
+        assertEquals(reserved.productionJobs(), unbound.productionJobs());
+        assertEquals(reserved.inventory().fungibleResources(), unbound.inventory().fungibleResources());
+        FungibleResourceLedger cancelled = ProductionResourceCustody.cancelBound(bound, boundJob,
+                assertInstanceOf(ProductionInputHold.FungibleBound.class, boundJob.inputHold()));
+        assertFalse(cancelled.claims().containsKey(hold.claimId()));
+        assertEquals(64, cancelled.totalQuantity(settlement, "minecraft:wheat"));
+        assertEquals(3L, cancelled.bindings().values().iterator().next().authorityEpoch());
+        assertInstanceOf(ScheduleEffect.Rescheduled.class,
+                ProductionProcess.planCompletion(bound, ProductionProcess.complete(boundJob, 200L)).getFirst().payload(),
+                "bound stock must not fall through into exact-item failure or COLD completion");
+        FrontierWorldState cancelledJob = bound.cancelProductionJob(boundJob.id());
+        assertFalse(cancelledJob.productionJobs().containsKey(boundJob.id()));
+        assertEquals(cancelled, cancelledJob.inventory().fungibleResources());
+        ResourceLot expectedOutput = new ResourceLot(started.job().outputItemId(), settlement,
+                "minecraft:bread", 64, "recipe:bread", List.of(lotId));
+        assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceFungibleCompleted(reserved, settlement,
+                new FungibleProductionCompleted(started.job().id(), expectedOutput)));
+        assertThrows(IllegalArgumentException.class, () -> reserved.completeFungibleProductionJob(started.job().id(), expectedOutput));
+        FrontierWorldState progressed = reserved;
+        ScheduledAction action = ProductionProcess.complete(started.job(), 200L);
+        int workUnits = 0;
+        while (!progressed.productionJobs().get(started.job().id()).workProgress().terminalEffectEligible()) {
+            var before = progressed.productionJobs().get(started.job().id());
+            var step = ProductionProcess.planCompletion(progressed, action);
+            var advance = assertInstanceOf(ProductionColdWorkAdvanced.class, step.getFirst().payload());
+            progressed = ProductionProcess.reduceColdWorkAdvanced(progressed, settlement, advance);
+            action = assertInstanceOf(ScheduleEffect.Rescheduled.class, step.get(1).payload()).replacement();
+            if (before.workProgress().stage() == ProductionWorkProgress.Stage.PROCESSING) workUnits++;
+            assertEquals(64, progressed.inventory().fungibleResources().accounts().get(accountId).claimQuantities().get(hold.claimId()));
+            assertFalse(progressed.inventory().fungibleResources().lots().containsKey(started.job().outputItemId()));
+            var assignment = HumanAssignmentProjection.compile(progressed).assignments().get(started.job().workerId());
+            assertEquals(HumanAssignmentKind.INDUSTRIAL_WORK, assignment.kind());
+            assertEquals(started.job().id(), assignment.ownerId().orElseThrow());
+        }
+        assertEquals(ProductionWorkProgress.REQUIRED_PROCESSING_TICKS, workUnits);
+        assertEquals(started.job().workTraversal().linearCorridorSurfaces().getLast().standingBody(),
+                progressed.actorLocations().get(started.job().workerId()).body());
+        List<ProposedEvent> completion = ProductionProcess.planCompletion(progressed, action);
         FungibleProductionCompleted completed = assertInstanceOf(FungibleProductionCompleted.class, completion.getFirst().payload());
-        FrontierWorldState transformed = ProductionProcess.reduceFungibleCompleted(reserved, settlement, completed);
+        FrontierWorldState preparing = ReferenceProjectionStateSupport.prepare(progressed,
+                new PhysicalReplicaCustodyPayloads.ReferenceProjectionPrepared(depot, 1L, 0L, "", ""), 1L);
+        assertThrows(IllegalArgumentException.class, () -> preparing.completeFungibleProductionJob(started.job().id(), expectedOutput),
+                "the direct model API must not spend unbound stock during pending physical projection");
+        assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceFungibleCompleted(preparing, settlement, completed));
+        FrontierWorldState transformed = ProductionProcess.reduceFungibleCompleted(progressed, settlement, completed);
         assertTrue(transformed.productionJobs().isEmpty());
         assertFalse(transformed.inventory().items().containsKey(completed.output().id()));
         assertEquals(64, transformed.inventory().fungibleResources().totalQuantity(settlement, "minecraft:bread"));
         assertFalse(transformed.inventory().fungibleResources().claims().containsKey(hold.claimId()));
+        assertTrue(HumanAssignmentProjection.compile(transformed).idle(started.job().workerId()));
         assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceFungibleCompleted(reserved, settlement,
                 new FungibleProductionCompleted(started.job().id(), new ResourceLot(new SubjectId("lot:forged-bread"), settlement,
                         "minecraft:bread", 63, "recipe:bread", List.of(lotId)))));
@@ -174,6 +271,7 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
     void coldProductionStillAdvancesWithoutMaterializingAnUnloadedContainer() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:production"), 91L));
         for (long tick = 100L; tick <= 2_200L; tick += 100L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
+        finishRetainedColdWork(engine);
         FrontierWorldState completed = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         assertTrue(completed.productionJobs().isEmpty());
         assertEquals(64, completed.inventory().fungibleResources().totalQuantity(new SubjectId("settlement:1"), "minecraft:bread"));
@@ -219,6 +317,7 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
     void terminalProductionReceiptRejectsThePriorSchemaBeforeItsExtendedWireLayoutCanBeRead() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:production-terminal-schema"), 91L));
         for (long tick = 100L; tick <= 2_200L; tick += 100L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
+        finishRetainedColdWork(engine);
         FrontierWorldStateCodec codec = new FrontierWorldStateCodec();
         byte[] current = codec.encode(new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState()));
         byte[] prior = current.clone();
@@ -231,6 +330,7 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
     void terminalFungibleBreadProvisionConnectsItsNamedFarmerToTheExactHarvestSuccessorWithoutReselection() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:production-harvest-relation"), 91L));
         for (long tick = 100L; tick <= 2_200L; tick += 100L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
+        finishRetainedColdWork(engine);
         FrontierWorldState terminal = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         MarketWorkOrder order = terminal.companies().market().workOrders().values().stream()
                 .filter(value -> value.status() == MarketWorkOrderStatus.FULFILLED).findFirst().orElseThrow();
@@ -354,7 +454,7 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
                 PhysicalIntentStatus.PREPARED, prepared.job().id(), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.production(prepared.job().id(), prepared.job().consumedItemId(), prepared.job().outputItemId()),
                 new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0, PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.PRODUCTION_WORK);
-        assertThrows(IllegalArgumentException.class, () -> prepared.state().preparePhysicalIntent(early));
+        assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleFixture.prepare(prepared.state(), prepared.settlementId(), early));
     }
 
     @Test
@@ -373,6 +473,20 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
                 List.of(new SceneMember(prepared.job().workerId(), SceneLease.deterministicEntityId(prepared.state().bootstrap().worldId(), prepared.job().workerId()))),
                 java.util.Map.of(prepared.job().workerId(), worker.body()), java.util.Set.of(), Optional.empty());
         FrontierWorldState hot = prepared.state().prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+        // OUTPUT_READY is input to this recovery-policy test, not a fabricated production receipt.
+        int outputCursor = workJob.workTraversal().linearCorridorSurfaces().size() - 1;
+        var outputBody = workJob.workTraversal().linearCorridorSurfaces().get(outputCursor).standingBody();
+        var outputJob = workJob.withWorkTraversal(workJob.workTraversal(), outputCursor).withWorkProgress(ProductionWorkProgress.outputReady());
+        var outputState = hot.withChanges(FrontierWorldStateUpdate.begin().productionJobs(Map.of(outputJob.id(), outputJob))
+                .sceneLeases(Map.of(leaseId, hot.sceneLeases().get(leaseId).withMemberPositions(Map.of(outputJob.workerId(), outputBody)))));
+        var outputUnknown = outputState.transitionSceneLease(leaseId, SceneLeaseStatus.UNKNOWN_AFTER_RESTART);
+        outputUnknown = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(outputUnknown));
+        assertEquals(SceneLeaseStatus.DRAINING, FrontierSceneBehaviors.recoveredStatus(outputUnknown, outputUnknown.sceneLeases().get(leaseId)));
+        var outputDrain = outputUnknown.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING);
+        var outputClosed = outputDrain.releaseSceneLease(leaseId, List.of(new SceneMemberPosition(outputJob.workerId(), outputBody, worker.condition().health())));
+        assertEquals(outputState.inventory(), outputClosed.inventory());
+        assertEquals(outputJob, outputClosed.productionJobs().get(outputJob.id()));
+        assertEquals(SceneLeaseStatus.CLOSED, outputClosed.sceneLeases().get(leaseId).status());
         int nextCursor = 1;
         BodyPosition nextStation = workJob.workTraversal().linearCorridorSurfaces().get(nextCursor).standingBody();
         assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceWorkTraversalAdvanced(hot, settlementId,
@@ -399,6 +513,10 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
                 "a malformed recovered HOT lease must fail closed rather than advance a split worker cursor");
         FrontierWorldState blocked = hot.withStrategicPlans(hot.strategicPlans().transitionTask(prepared.taskId(), StrategicTaskStatus.BLOCKED))
                 .transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING);
+        var unknown = blocked.transitionSceneLease(leaseId, SceneLeaseStatus.UNKNOWN_AFTER_RESTART);
+        unknown = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(unknown));
+        assertEquals(SceneLeaseStatus.DRAINING, FrontierSceneBehaviors.recoveredStatus(unknown, unknown.sceneLeases().get(leaseId)));
+        blocked = unknown.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING);
         FrontierWorldState closed = blocked.releaseSceneLease(leaseId, List.of(new SceneMemberPosition(prepared.job().workerId(), worker.body(), worker.condition().health())));
         assertTrue(closed.productionJobs().containsKey(prepared.job().id()), "closed lease remains the durable hand-off before job retirement");
         FrontierWorldState finalized = ProductionProcess.reduceWorkSceneFinalized(closed, prepared.settlementId(), new ProductionWorkSceneFinalized(leaseId, prepared.job().id()));
@@ -459,10 +577,12 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         WorldId world = new WorldId("frontier:production-route-blocked");
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
         var engine = FrontierEngines.create(new FrontierEngineConfiguration<>(world, hot, SimInstant.ZERO,
-                base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(), base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter()));
+                base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(), base.projectionMapper(), base.limits(),
+                List.of(ProductionProcess.complete(job, 200L)), base.transactionCommitter()));
         List<io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord> mismatchTransactions = new java.util.ArrayList<>();
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> mismatchConfiguration = new FrontierEngineConfiguration<>(world, hot, SimInstant.ZERO,
-                base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(), base.projectionMapper(), base.limits(), List.of(),
+                base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(), base.projectionMapper(), base.limits(),
+                List.of(ProductionProcess.complete(job, 200L)),
                 (transaction, durability) -> mismatchTransactions.add(transaction));
         var mismatch = FrontierEngines.create(mismatchConfiguration);
         var mismatchCheckpoint = mismatch.checkpoint(); CommandId mismatchId = new CommandId("command:production-route-mismatch");
@@ -641,13 +761,13 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
     void activeMaterializedProductionRetainsInputUntilOneDurablePhysicalTransformationConfirmsOutput() {
         PreparedProduction prepared = activePhysicalProduction();
         ExactItemStack input = prepared.state().inventory().items().get(prepared.job().consumedItemId());
-        FrontierWorldState running = prepared.state().transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.RUNNING, Optional.empty());
+        FrontierWorldState running = PhysicalIntentLifecycleFixture.transition(prepared.state(), prepared.settlementId(), prepared.intent(), PhysicalIntentStatus.RUNNING, Optional.empty());
         ProductionTransformationObservation receipt = new ProductionTransformationObservation(new PhysicalObservationId("observation:test-production"), prepared.intent().id(),
                 input.id(), prepared.job().outputItemId(), input.count(), prepared.job().outputCount());
         PhysicalIntentTransition transition = new PhysicalIntentTransition(prepared.intent().id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
         assertEquals(receipt, ((PhysicalIntentTransition) FrontierWorldRuntimeDefinition.payloadCodecs().decode(transition.type(),
                 FrontierWorldRuntimeDefinition.payloadCodecs().encode(transition))).observation().orElseThrow());
-        FrontierWorldState completed = running.transitionPhysicalIntent(prepared.intent().id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
+        FrontierWorldState completed = PhysicalIntentLifecycleFixture.transition(running, prepared.settlementId(), prepared.intent(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
         assertTrue(completed.productionJobs().isEmpty());
         assertEquals("minecraft:bread", completed.inventory().items().get(prepared.job().outputItemId()).itemKind());
         assertEquals(FixedScalar.ONE, completed.inventory().economics().require(prepared.job().workerId()).balance());
@@ -699,8 +819,11 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
                 java.util.Map.of(workJob.workerId(), worker.body()), java.util.Set.of(), Optional.empty());
         FrontierWorldState hot = prepared.state().withChanges(FrontierWorldStateUpdate.begin().productionJobs(java.util.Map.of(workJob.id(), workJob)))
                 .prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
-        ProductionJob outputReady = workJob.withWorkProgress(ProductionWorkProgress.outputReady());
-        hot = hot.withChanges(FrontierWorldStateUpdate.begin().productionJobs(java.util.Map.of(outputReady.id(), outputReady)));
+        ProductionJob outputReady = workJob.withWorkTraversal(workJob.workTraversal(), workJob.workTraversal().linearCorridorSurfaces().size() - 1)
+                .withWorkProgress(ProductionWorkProgress.outputReady());
+        BodyPosition completedBody = outputReady.workTraversal().linearCorridorSurfaces().getLast().standingBody();
+        hot = hot.withChanges(FrontierWorldStateUpdate.begin().productionJobs(java.util.Map.of(outputReady.id(), outputReady))
+                .sceneLeases(Map.of(leaseId, hot.sceneLeases().get(leaseId).withMemberPositions(Map.of(outputReady.workerId(), completedBody)))));
         StrategicTask unrelatedBlockedBread = new StrategicTask(new SubjectId("task:unrelated-blocked-bread"), prepared.state().strategicPlans()
                 .tasks().get(prepared.taskId()).objectiveId(), prepared.settlementId(), StrategicTaskKind.PRODUCE_BREAD, Optional.empty(),
                 List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT), List.of(), StrategicTaskStatus.BLOCKED);
@@ -718,7 +841,7 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         assertTrue(hot.physicalIntents().isEmpty());
 
         FrontierWorldState draining = hot.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING);
-        SceneLeaseReleased released = new SceneLeaseReleased(leaseId, List.of(new SceneMemberPosition(outputReady.workerId(), worker.body(), worker.condition().health())));
+        SceneLeaseReleased released = new SceneLeaseReleased(leaseId, List.of(new SceneMemberPosition(outputReady.workerId(), completedBody, worker.condition().health())));
         List<ProposedEvent> continuation = FrontierSceneContinuationPlanner.releaseEvents(draining, lease, 1_000L, released);
         assertEquals(2, continuation.size());
         ScheduleEffect.Rescheduled scheduled = assertInstanceOf(ScheduleEffect.Rescheduled.class, continuation.get(1).payload());

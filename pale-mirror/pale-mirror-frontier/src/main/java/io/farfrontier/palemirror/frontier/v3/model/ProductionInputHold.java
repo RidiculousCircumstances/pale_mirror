@@ -9,6 +9,24 @@ public sealed interface ProductionInputHold permits ProductionInputHold.Cold, Pr
         ProductionInputHold.FungibleCold, ProductionInputHold.FungibleBound {
     SubjectId itemId();
 
+    /** Closed resource schema; changing custody does not change the resource's identity kind. */
+    default TerminalProductionReceipt.ResourceRepresentation resourceRepresentation() {
+        return switch (this) {
+            case Cold ignored -> TerminalProductionReceipt.ResourceRepresentation.EXACT_ITEM;
+            case Materialized ignored -> TerminalProductionReceipt.ResourceRepresentation.EXACT_ITEM;
+            case FungibleCold ignored -> TerminalProductionReceipt.ResourceRepresentation.RESOURCE_LOT;
+            case FungibleBound ignored -> TerminalProductionReceipt.ResourceRepresentation.RESOURCE_LOT;
+        };
+    }
+
+    /** Read-only relationship projection of the same closed resource schema. */
+    default FrontierDomainRelationships.EntityKind resourceEntityKind() {
+        return switch (resourceRepresentation()) {
+            case EXACT_ITEM -> FrontierDomainRelationships.EntityKind.EXACT_ITEM;
+            case RESOURCE_LOT -> FrontierDomainRelationships.EntityKind.RESOURCE_LOT;
+        };
+    }
+
     /** The COLD job is its item's sole canonical holder; the stack is not in ExactInventory. */
     public record Cold(ExactItemStack item) implements ProductionInputHold {
         public Cold { Objects.requireNonNull(item, "cold production input"); }
