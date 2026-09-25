@@ -409,7 +409,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 var work = FrontierV3ResourceFieldWorkExecutor.advance(level, state, lease, job, worker);
                 if (work.disposition() == FrontierV3ResourceFieldWorkExecutor.Disposition.PENDING) return;
                 if (work.disposition() == FrontierV3ResourceFieldWorkExecutor.Disposition.CONFLICT) {
-                    conflict(level, runtime, lease, "pending-cell-hand-postcondition"); return;
+                    conflict(level, runtime, lease, "pending-cell-hand-postcondition:" + work.failure()); return;
                 }
                 outcome = work.outcome();
                 observedHand = work.hand();

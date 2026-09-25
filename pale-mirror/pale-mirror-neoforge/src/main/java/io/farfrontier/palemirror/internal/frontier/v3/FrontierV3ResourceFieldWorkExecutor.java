@@ -27,11 +27,11 @@ import java.util.Optional;
 final class FrontierV3ResourceFieldWorkExecutor {
     enum Disposition { PENDING, READY, CONFLICT }
     record Result(Disposition disposition, ResourceFieldCycle.WorkOutcome outcome,
-                  Optional<ResourceSiteHarvestProgressed.HandObservation> hand) {
-        static Result pending() { return new Result(Disposition.PENDING, null, Optional.empty()); }
-        static Result conflict() { return new Result(Disposition.CONFLICT, null, Optional.empty()); }
+                  Optional<ResourceSiteHarvestProgressed.HandObservation> hand, String failure) {
+        static Result pending() { return new Result(Disposition.PENDING, null, Optional.empty(), ""); }
+        static Result conflict(String failure) { return new Result(Disposition.CONFLICT, null, Optional.empty(), failure); }
         static Result ready(ResourceFieldCycle.WorkOutcome outcome, ResourceSiteHarvestProgressed.HandObservation hand) {
-            return new Result(Disposition.READY, outcome, Optional.of(hand));
+            return new Result(Disposition.READY, outcome, Optional.of(hand), "");
         }
     }
 
@@ -46,23 +46,24 @@ final class FrontierV3ResourceFieldWorkExecutor {
         if (!job.progress().hasPendingCrop() || lease.members().size() != 1
                 || !lease.members().getFirst().actorId().equals(job.workerId())
                 || !lease.members().getFirst().entityId().equals(worker.getUUID())
-                || !FrontierV3ActorHandObservation.ownsCurrentHarvest(state, lease, job)) return Result.conflict();
+                || !FrontierV3ActorHandObservation.ownsCurrentHarvest(state, lease, job))
+            return Result.conflict("harvest-owner-mismatch");
         ResourceFieldCycle cycle = state.resourceSites().cycle(job.siteId());
         if (state.resourceSites().hasPendingWorldChange(job.siteId())) return Result.pending();
         ResourceFieldLayout.Cell cell = cycle.layout().cells().get(job.progress().pendingCropSlotIndex());
         ResourceFieldLayout.CellId id = cell.id();
-        if (cycle.pendingPlayerBreaks().containsKey(id)) return Result.conflict();
+        if (cycle.pendingPlayerBreaks().containsKey(id)) return Result.conflict("player-break-pending");
         ResourceFieldCycle.WorkOutcome outcome;
         try { outcome = cycle.expectedWorkOutcome(id); }
-        catch (IllegalArgumentException invalid) { return Result.conflict(); }
+        catch (IllegalArgumentException invalid) { return Result.conflict("work-outcome-invalid"); }
         FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
         if (!(ledger.fieldClaim(job.siteId()) instanceof FrontierV3ResourceSiteLedger.FieldOwnership owner)
                 || owner.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE
-                || !owner.witness().matchesCycle(cycle)) return Result.conflict();
+                || !owner.witness().matchesCycle(cycle)) return Result.conflict("field-owner-mismatch");
         FrontierV3ResourceFieldWitness witness = owner.witness();
         FrontierV3ResourceFieldWitness.Cell retained = witness.cell(id);
         if (retained.foreign().isPresent() && outcome != ResourceFieldCycle.WorkOutcome.SKIPPED_BLOCKED)
-            return Result.conflict();
+            return Result.conflict("foreign-cell-with-owned-outcome");
         Optional<ResourceFieldCellTransition> transition = cycle.physicalWorkTransition(id);
         if (transition.isEmpty()) {
             var observed = FrontierV3ResourceFieldObservation.observe(level, cycle, witness, id, cause(job, cycle, id));
@@ -72,21 +73,23 @@ final class FrontierV3ResourceFieldWorkExecutor {
                         || retained.foreign().isEmpty()
                         || !retained.foreign().orElseThrow().observedSoil().equals(foreign.incident().observedSoil())
                         || !retained.foreign().orElseThrow().observedCrop().equals(foreign.incident().observedCrop()))
-                    return Result.conflict();
+                    return Result.conflict("blocked-cell-foreign-witness-mismatch");
             } else if (retained.pending().isPresent()
                     || observed.disposition() != FrontierV3ResourceFieldObservation.Disposition.CURRENT)
-                return Result.conflict();
+                return Result.conflict("unprepared-cell-" + observed.disposition().name().toLowerCase(java.util.Locale.ROOT));
             return handResult(level, state, lease, job, outcome, job.carriedYieldQuantity(cycle.harvestedCount()));
         }
         if (retained.pending().isEmpty()) {
             var before = FrontierV3ResourceFieldObservation.observe(level, cycle, witness, id, cause(job, cycle, id));
             if (before.disposition() == FrontierV3ResourceFieldObservation.Disposition.UNLOADED) return Result.pending();
-            if (before.disposition() != FrontierV3ResourceFieldObservation.Disposition.CURRENT) return Result.conflict();
+            if (before.disposition() != FrontierV3ResourceFieldObservation.Disposition.CURRENT)
+                return Result.conflict("cell-before-" + before.disposition().name().toLowerCase(java.util.Locale.ROOT));
             if (outcome == ResourceFieldCycle.WorkOutcome.HARVESTED) {
                 var handBefore = FrontierV3ActorHandObservation.observe(level, state, lease, job);
                 var effect = new FrontierV3ResourceFieldWitness.HandEffect(job.siteId(), job.id(), job.workerId(),
                         lease.members().getFirst().entityId(), lease.revision(), job.carriedYieldQuantity(cycle.harvestedCount()));
-                if (!handBefore.matchesBefore(effect)) return Result.conflict();
+                if (!handBefore.matchesBefore(effect))
+                    return Result.conflict("hand-before-" + handBefore.disposition().name().toLowerCase(java.util.Locale.ROOT));
                 witness = witness.beginHarvest(transition.orElseThrow(), cause(job, cycle, id), effect, before, handBefore);
             } else {
                 witness = witness.begin(transition.orElseThrow(), cause(job, cycle, id));
@@ -100,7 +103,7 @@ final class FrontierV3ResourceFieldWorkExecutor {
                 || !pending.transition().equals(transition.orElseThrow())
                 || pending.canonicalSource().isPresent()
                 || pending.handEffect().isPresent() != (outcome == ResourceFieldCycle.WorkOutcome.HARVESTED))
-            return Result.conflict();
+            return Result.conflict("pending-cell-cause-or-transition-mismatch");
         var review = FrontierV3ResourceFieldObservation.observe(level, cycle, witness, id, cause(job, cycle, id));
         if (review.disposition() == FrontierV3ResourceFieldObservation.Disposition.UNLOADED) return Result.pending();
         if (review.disposition() == FrontierV3ResourceFieldObservation.Disposition.NEXT_STEP_APPLIED
@@ -110,7 +113,8 @@ final class FrontierV3ResourceFieldWorkExecutor {
             ledger.persist(level);
             return Result.pending();
         }
-        if (review.disposition() != FrontierV3ResourceFieldObservation.Disposition.CURRENT) return Result.conflict();
+        if (review.disposition() != FrontierV3ResourceFieldObservation.Disposition.CURRENT)
+            return Result.conflict("completed-cell-" + review.disposition().name().toLowerCase(java.util.Locale.ROOT));
         if (pending.completedSteps() < pending.transition().steps().size()) {
             ResourceFieldCellTransition.Step step = pending.transition().steps().get(pending.completedSteps());
             BlockPos position = step.part() == ResourceFieldCellTransition.Part.SOIL
@@ -118,7 +122,7 @@ final class FrontierV3ResourceFieldWorkExecutor {
             if (!level.setBlock(position, block(step), 3)) return Result.pending();
             var afterWrite = FrontierV3ResourceFieldObservation.observe(level, cycle, witness, id, cause(job, cycle, id));
             if (afterWrite.disposition() != FrontierV3ResourceFieldObservation.Disposition.NEXT_STEP_APPLIED)
-                return Result.conflict();
+                return Result.conflict("written-cell-step-unconfirmed");
             witness = witness.confirm(id, afterWrite);
             ledger.replaceFieldClaim(owner, owner.withWitness(witness));
             ledger.persist(level);
@@ -134,14 +138,16 @@ final class FrontierV3ResourceFieldWorkExecutor {
                 }
                 if (!hand.matches(effect)
                         || hand.disposition() != FrontierV3ActorHandObservation.Disposition.WHEAT
-                        || hand.stack().orElseThrow().quantity() != effect.afterCount()) return Result.conflict();
+                        || hand.stack().orElseThrow().quantity() != effect.afterCount())
+                    return Result.conflict("unconfirmed-hand-" + hand.disposition().name().toLowerCase(java.util.Locale.ROOT));
                 witness = witness.confirmHand(id, hand);
                 ledger.replaceFieldClaim(owner, owner.withWitness(witness));
                 ledger.persist(level);
                 return Result.pending();
             }
             if (!hand.matches(effect) || hand.disposition() != FrontierV3ActorHandObservation.Disposition.WHEAT
-                    || hand.stack().orElseThrow().quantity() != effect.afterCount()) return Result.conflict();
+                    || hand.stack().orElseThrow().quantity() != effect.afterCount())
+                return Result.conflict("confirmed-hand-" + hand.disposition().name().toLowerCase(java.util.Locale.ROOT));
             return handResult(level, state, lease, job, outcome, effect.afterCount());
         }
         return handResult(level, state, lease, job, outcome, job.carriedYieldQuantity(cycle.harvestedCount()));
@@ -192,7 +198,8 @@ final class FrontierV3ResourceFieldWorkExecutor {
         var observed = FrontierV3ActorHandObservation.observe(level, state, lease, job);
         if (count == 0 && observed.disposition() != FrontierV3ActorHandObservation.Disposition.EMPTY
                 || count > 0 && (observed.disposition() != FrontierV3ActorHandObservation.Disposition.WHEAT
-                || observed.stack().orElseThrow().quantity() != count)) return Result.conflict();
+                || observed.stack().orElseThrow().quantity() != count))
+            return Result.conflict("hand-result-" + observed.disposition().name().toLowerCase(java.util.Locale.ROOT));
         return Result.ready(outcome, new ResourceSiteHarvestProgressed.HandObservation(
                 new PhysicalStackAddress.ActorHand(job.workerId(), lease.members().getFirst().entityId()),
                 lease.revision(), count));
