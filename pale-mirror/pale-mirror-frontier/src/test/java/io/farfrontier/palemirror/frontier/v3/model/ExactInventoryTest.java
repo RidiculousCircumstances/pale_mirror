@@ -227,7 +227,11 @@ class ExactInventoryTest {
         ExactInventory fungibleCargo = new ExactInventory(fullExact.containers(), fullExact.items(),
                 Map.of(fungibleCargoId, CargoBatch.fungible(fungibleCargoId, owner)), Map.of(), Map.of(), Map.of(),
                 fullExact.surfaces(), economics, carried);
+        assertFalse(fungibleCargo.canReceiveFungibleCargo(fungibleCargoId, container),
+                "a full receiver must reject the arrival before its reducer can quarantine the world");
         assertThrows(IllegalArgumentException.class, () -> fungibleCargo.completeFungibleCargoHandoff(fungibleCargoId, container));
+        assertTrue(fungibleCargo.withoutItem(secondId).canReceiveFungibleCargo(fungibleCargoId, container),
+                "the same retained cargo becomes admissible after capacity is released");
 
         // A format-compatible old image may be decoded and reduced; an unrelated
         // no-op must not make historical overcommit an unrecoverable world.

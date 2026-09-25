@@ -555,6 +555,36 @@ class FrontierWorldRuntimeDefinitionTest {
     }
 
     @Test
+    void fullHiveReceiverRetainsArrivedCargoWithoutQuarantiningTheWorld() {
+        var base = travelingSupplyConfiguration(new WorldId("frontier:full-supply-receiver"), 91L);
+        SubjectId receiver = new SubjectId("container:hive-west-store");
+        SubjectId lotId = new SubjectId("lot:full-hive-receiver-bread");
+        int bread = base.initialState().inventory().availableSlots(receiver).size() * 64;
+        FungibleResourceLedger full = base.initialState().inventory().fungibleResources().issue(
+                new ResourceLot(lotId, base.initialState().bootstrap().hive().id(), "minecraft:bread", bread,
+                        "full-receiver-regression", List.of()),
+                new CustodyAccount(new SubjectId("custody:full-hive-receiver-bread"), new ResourceCustody.Container(receiver),
+                        Map.of(lotId, bread), Map.of()));
+        FrontierWorldState initial = base.initialState().withInventory(base.initialState().inventory().withFungibleResources(full));
+        var configuration = new io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<>(base.worldId(), initial,
+                base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(),
+                base.projectionMapper(), base.limits(), base.initialSchedules(), base.transactionCommitter(),
+                base.stateValidator(), base.executionMetrics(), base.kernelQuarantineReporter());
+        var engine = FrontierEngines.create(configuration);
+        SubjectId operationId = new SubjectId("operation:supply-1-11");
+        FrontierWorldState arrived = advanceUntil(engine, 12_000L, candidate -> candidate.operations().get(operationId) != null
+                && candidate.operations().get(operationId).stage() == OperationStage.ARRIVED);
+        engine.advanceTo(new SimInstant(engine.checkpoint().instant().ticks() + 300L), new WorkBudget(64, 512));
+        FrontierWorldState retained = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+
+        assertEquals(io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.ACTIVE, engine.status().kind(),
+                engine.status().failureDetail().orElse(""));
+        assertEquals(OperationStage.ARRIVED, retained.operations().get(operationId).stage());
+        assertEquals(ContractStatus.LOADED, retained.contracts().get(arrived.operations().get(operationId).contractId()).status());
+        assertTrue(retained.inventory().cargo().containsKey(arrived.operations().get(operationId).cargoId()));
+    }
+
+    @Test
     void routeReducerRejectsASkippedRoutePoint() {
         var engine = FrontierEngines.create(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(new WorldId("frontier:route-negative"), 91L));
         FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());

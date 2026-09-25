@@ -323,6 +323,11 @@ public final class SupplyOperationProcess {
         SubjectId receiver = FrontierCargoValidation.receiverStore(state.bootstrap(), operation);
         CargoBatch cargo = state.inventory().cargo().get(operation.cargoId());
         if (cargo == null) throw new IllegalStateException("arrived operation has no cargo");
+        // A full receiver is a local logistics wait, not a malformed world transition.
+        // Retain the arrived operation and its cargo until consumption frees capacity.
+        if (cargo.fungibleContents() && !state.inventory().canReceiveFungibleCargo(cargo.id(), receiver)) {
+            return List.of(schedule(operationProgress(operation, Math.addExact(now, 100L))));
+        }
         if (state.inventory().surfaces().get(receiver).status() == ContainerSurfaceStatus.ACTIVE) {
             PhysicalIntentId intentId = cargoHandoffIntent(operation).id();
             return state.physicalIntents().containsKey(intentId) ? List.of() : List.of(new ProposedEvent(operation.settlementId(), new PhysicalIntentPrepared(cargoHandoffIntent(operation))));

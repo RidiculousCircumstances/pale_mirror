@@ -371,9 +371,10 @@ public final class StrategicObjectiveProcess {
         }
         if (workshop && wheat) return Optional.of(new Candidate(StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, Optional.empty(),
                 reserveShort ? Long.MAX_VALUE - 1L : FixedScalar.SCALE));
-        return (SettlementProvisionProcess.exportableBread(state, settlement.id()).isPresent()
-                || SettlementProvisionProcess.exportableFungibleBread(state, settlement.id()).isPresent()) && !state.humanPopulation().quarantined(settlement.id())
-                ? Optional.of(new Candidate(StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE, Optional.empty(), FixedScalar.SCALE)) : Optional.empty();
+        // The development cargo/escort fixture targets the hive, but ordinary settlements
+        // have no treaty, trade demand or recipient-side use for such a shipment. Surplus
+        // bread stays in its owned depot until a real settlement-to-settlement trade policy exists.
+        return Optional.empty();
     }
     private static Optional<Candidate> hiveCandidate(FrontierWorldState state, boolean allowInterception, long now,
                                                       Optional<HiveOperationKnowledge.Sighting> interceptSighting) {

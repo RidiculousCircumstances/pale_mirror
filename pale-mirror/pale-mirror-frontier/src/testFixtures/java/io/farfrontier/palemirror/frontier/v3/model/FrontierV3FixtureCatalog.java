@@ -468,7 +468,8 @@ public final class FrontierV3FixtureCatalog {
                     new InventoryCustody.ContainerSlot(depot, ordinal + 1)));
             remaining -= count; ordinal++;
         }
-        return configured(base.worldId(), base.initialState().withInventory(inventory), base.initialInstant(), base.initialSchedules(), autonomousInterception);
+        return configured(base.worldId(), base.initialState().withInventory(inventory), base.initialInstant(), base.initialSchedules(),
+                autonomousInterception, java.util.Optional.empty(), true);
     }
 
     private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configured(WorldId worldId, FrontierWorldState state,
@@ -480,11 +481,19 @@ public final class FrontierV3FixtureCatalog {
     private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configured(WorldId worldId, FrontierWorldState state,
                                                                                                          SimInstant instant, List<ScheduledAction> schedules,
                                                                                                          boolean autonomousInterception, java.util.Optional<SubjectId> frozenOperation) {
+        return configured(worldId, state, instant, schedules, autonomousInterception, frozenOperation, false);
+    }
+
+    private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configured(WorldId worldId, FrontierWorldState state,
+                                                                                                         SimInstant instant, List<ScheduledAction> schedules,
+                                                                                                         boolean autonomousInterception, java.util.Optional<SubjectId> frozenOperation,
+                                                                                                         boolean explicitDevelopmentSupply) {
         return new FrontierEngineConfiguration<>(worldId, state, instant, FrontierWorldRuntimeDefinition::planCommand,
                 new io.farfrontier.palemirror.frontier.v3.kernel.ScheduledActionPlanner<FrontierWorldState>() {
                     @Override public List<ProposedEvent> plan(FrontierWorldState candidate, ScheduledAction action) {
-                        return frozenOperation.isPresent() ? frozenScoutSightingProgress(candidate, action, frozenOperation.orElseThrow())
+                        List<ProposedEvent> planned = frozenOperation.isPresent() ? frozenScoutSightingProgress(candidate, action, frozenOperation.orElseThrow())
                                 : FrontierWorldRuntimeDefinition.planScheduled(candidate, action, autonomousInterception);
+                        return explicitDevelopmentSupply ? withDevelopmentSupplyOrder(candidate, action, planned) : planned;
                     }
                     @Override public boolean held(FrontierWorldState candidate, ScheduledAction action) {
                         return FrontierWorldRuntimeDefinition.scheduledHeld(candidate, action);
@@ -504,6 +513,49 @@ public final class FrontierV3FixtureCatalog {
             return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id())));
         }
         return FrontierWorldRuntimeDefinition.planScheduled(state, action, false);
+    }
+
+    /** Explicit test demand; production settlement policy never invents tribute to the hive. */
+    private static List<ProposedEvent> withDevelopmentSupplyOrder(FrontierWorldState state, ScheduledAction action,
+                                                                   List<ProposedEvent> planned) {
+        SubjectId owner = state.bootstrap().settlements().getFirst().id();
+        if (!action.kind().equals("frontier.objective.review") || !action.subject().equals(owner)
+                || state.strategicPlans().hasActiveObjective(owner, StrategicObjectiveLane.STRATEGIC)
+                || planned.stream().anyMatch(event -> event.payload() instanceof StrategicObjectiveSelected)
+                || state.strategicPlans().objectives().values().stream().anyMatch(objective -> objective.ownerId().equals(owner)
+                        && objective.kind() == StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE)
+                || state.humanPopulation().quarantined(owner)
+                || SettlementProvisionProcess.exportableBread(state, owner).isEmpty()
+                        && SettlementProvisionProcess.exportableFungibleBread(state, owner).isEmpty()) return planned;
+
+        int ordinal = FrontierWorldScheduleSupport.ordinal(action.id().value());
+        String suffix = owner.value().substring("settlement:".length()) + "-" + ordinal;
+        DecisionAuthority authority = state.strategicPlans().requireDecisionAuthority(owner);
+        StrategicObjective objective = new StrategicObjective(new SubjectId("objective:development-supply-" + suffix), owner,
+                StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE, java.util.Optional.empty(), java.util.Optional.empty(),
+                ordinal, StrategicObjectiveStatus.ACTIVE, authority.ownerId(), authority.reconsiderationEpoch());
+        List<SubjectId> predecessor = state.strategicPlans().tasks().values().stream()
+                .filter(task -> task.ownerId().equals(owner) && task.kind() == StrategicTaskKind.PRODUCE_BREAD
+                        && task.status() == StrategicTaskStatus.COMPLETED)
+                .sorted(java.util.Comparator.comparing((StrategicTask task) -> state.strategicPlans().objectives()
+                        .get(task.objectiveId()).decisionOrdinal()).reversed().thenComparing(StrategicTask::id))
+                .map(StrategicTask::id).limit(1).toList();
+        StrategicTask preparation = new StrategicTask(new SubjectId("task:development-supply-" + suffix + "-prepare"),
+                objective.id(), owner, StrategicTaskKind.PREPARE_BREAD_CARGO, java.util.Optional.empty(),
+                java.util.Optional.empty(), java.util.Optional.empty(), List.of(StrategicTaskRequirement.EXACT_BREAD_CARGO),
+                predecessor, StrategicTaskStatus.PENDING, java.util.Optional.empty(), authority.ownerId(), authority.reconsiderationEpoch());
+        StrategicTask delivery = new StrategicTask(new SubjectId("task:development-supply-" + suffix + "-deliver"),
+                objective.id(), owner, StrategicTaskKind.DELIVER_BREAD_TO_HIVE, java.util.Optional.empty(),
+                java.util.Optional.empty(), java.util.Optional.empty(), List.of(StrategicTaskRequirement.PASSABLE_SUPPLY_ROUTE,
+                        StrategicTaskRequirement.AVAILABLE_HAULER, StrategicTaskRequirement.AVAILABLE_GUARD),
+                List.of(preparation.id()), StrategicTaskStatus.PENDING, java.util.Optional.empty(), authority.ownerId(), authority.reconsiderationEpoch());
+        List<ProposedEvent> result = new ArrayList<>(planned);
+        result.add(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)));
+        result.add(new ProposedEvent(owner, new StrategicTaskPlanned(preparation)));
+        result.add(new ProposedEvent(owner, new StrategicTaskPlanned(delivery)));
+        result.add(new ProposedEvent(owner, new ScheduleEffect.Created(SupplyOperationProcess.start(preparation,
+                Math.addExact(action.dueAt().ticks(), 100L)))));
+        return List.copyOf(result);
     }
 
     public record Profile(String id, String provider, String rulesetId, String sourceProfile, String allowedRunner, String requiredAssertion,

@@ -168,6 +168,10 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
     }
 
     private ContainerSlotBudget slotBudget(SubjectId containerId) {
+        return slotBudget(containerId, Map.of());
+    }
+
+    private ContainerSlotBudget slotBudget(SubjectId containerId, Map<String, Long> incomingByKind) {
         var occupied = new java.util.HashSet<Integer>();
         occupiedSlots.keySet().stream().filter(slot -> slot.containerId().equals(containerId))
                 .map(InventoryCustody.ContainerSlot::slot).forEach(occupied::add);
@@ -183,8 +187,27 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
                         && location.containerId().equals(containerId))
                 .forEach(account -> account.lotQuantities().forEach((lotId, quantity) ->
                         stockByKind.merge(fungibleResources.lots().get(lotId).itemKind(), quantity.longValue(), Math::addExact)));
+        incomingByKind.forEach((kind, quantity) -> stockByKind.merge(kind, quantity, Math::addExact));
         long packedStacks = stockByKind.values().stream().mapToLong(quantity -> ((long) quantity + 63) / 64).sum();
         return new ContainerSlotBudget(occupied, bound, packedStacks);
+    }
+
+    /** Capacity admission for an arrived fungible shipment, including partially filled stacks. */
+    public boolean canReceiveFungibleCargo(SubjectId cargoId, SubjectId targetContainerId) {
+        CargoBatch batch = cargo.get(Objects.requireNonNull(cargoId, "fungible cargo id"));
+        ContainerRecord target = containers.get(Objects.requireNonNull(targetContainerId, "target container id"));
+        if (batch == null || !batch.fungibleContents() || target == null) {
+            throw new IllegalArgumentException("fungible cargo capacity check has no target container");
+        }
+        CustodyAccount source = fungibleResources.accounts().values().stream()
+                .filter(account -> account.custody() instanceof ResourceCustody.Cargo custody && custody.cargoId().equals(cargoId))
+                .findFirst().orElseThrow(() -> new IllegalArgumentException("fungible cargo account is absent"));
+        Map<String, Long> incomingByKind = new HashMap<>();
+        source.lotQuantities().forEach((lotId, quantity) -> incomingByKind.merge(
+                fungibleResources.lots().get(lotId).itemKind(), quantity.longValue(), Math::addExact));
+        long before = slotBudget(targetContainerId).requiredSlots();
+        long after = slotBudget(targetContainerId, incomingByKind).requiredSlots();
+        return after <= Math.max(target.slotCount(), before);
     }
 
     /** Restored old overcommit may be inspected and reduced, but no transition may make it worse. */

@@ -124,6 +124,27 @@ class StrategicObjectiveProcessTest {
     }
 
     @Test
+    void ordinarySettlementDoesNotSendItsSurplusBreadToEnemyHive() {
+        FrontierWorldState state = initial("frontier:no-hive-tribute", 407L);
+        Settlement settlement = state.bootstrap().settlements().getFirst();
+        SubjectId depot = FrontierWorldState.depotId(settlement.id());
+        SubjectId breadLot = new SubjectId("lot:surplus-bread");
+        FungibleResourceLedger resources = state.inventory().fungibleResources()
+                .destroy(new SubjectId("custody:container-1-depot"), Map.of(new SubjectId("lot:bootstrap-1-wheat"), 64), Map.of())
+                .issue(new ResourceLot(breadLot, settlement.id(), "minecraft:bread", 512, "test-surplus", List.of()),
+                        new CustodyAccount(new SubjectId("custody:surplus-bread"), new ResourceCustody.Container(depot),
+                                Map.of(breadLot, 512), Map.of()));
+        state = state.withInventory(state.inventory().withFungibleResources(resources));
+        assertTrue(SettlementProvisionProcess.exportableFungibleBread(state, settlement.id()).isPresent());
+
+        List<ProposedEvent> planned = StrategicObjectiveProcess.plan(state,
+                StrategicObjectiveProcess.review(settlement.id(), 1, 60L));
+
+        assertTrue(planned.stream().noneMatch(event -> event.payload() instanceof StrategicObjectiveSelected),
+                "surplus alone cannot authorize an invented shipment to the hive");
+    }
+
+    @Test
     void foreignPlannerIdentityAndForgedTaskDecompositionFailClosed() {
         FrontierWorldState state = initial("frontier:strategic-rejection", 403L);
         assertThrows(IllegalArgumentException.class, () -> StrategicObjectiveProcess.plan(state, StrategicObjectiveProcess.review(new SubjectId("settlement:foreign"), 1, 1L)));
