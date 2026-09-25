@@ -8,7 +8,6 @@ import io.farfrontier.palemirror.frontier.v3.model.*;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -276,7 +275,9 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
         if (chestState == ChestState.AFTER && handBefore) {
             if (level.getEntity(witness.entityId()) instanceof Mob farmer
                     && FrontierV3SceneExecutor.owned(farmer, state, scene, scene.members().getFirst())) {
-                farmer.setItemInHand(InteractionHand.OFF_HAND, ItemStack.EMPTY);
+                if (!FrontierV3VillagerHandMutation.setOffhand(farmer, ItemStack.EMPTY))
+                    FrontierV3ResourceSiteHarvestSceneExecutor.conflict(level, runtime, scene,
+                            "field-delivery-hand-clear-rejected");
                 return true;
             }
             return false;

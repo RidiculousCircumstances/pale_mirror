@@ -609,8 +609,9 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             if (!(entity instanceof Mob worker) || !FrontierV3SceneExecutor.owned(entity, state, lease, lease.members().getFirst())) {
                 conflict(level, runtime, lease, "cold-carried-hand-body-foreign"); return true;
             }
-            worker.setItemInHand(net.minecraft.world.InteractionHand.OFF_HAND,
-                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.WHEAT, part.quantity()));
+            if (!FrontierV3VillagerHandMutation.setOffhand(worker,
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.WHEAT, part.quantity())))
+                conflict(level, runtime, lease, "cold-carried-hand-write-rejected");
             return true;
         }
         if (hand.disposition() == FrontierV3ActorHandObservation.Disposition.EMPTY) {

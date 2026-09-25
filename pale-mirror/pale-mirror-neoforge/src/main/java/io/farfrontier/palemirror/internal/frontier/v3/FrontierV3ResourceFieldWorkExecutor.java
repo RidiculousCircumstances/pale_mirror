@@ -13,7 +13,6 @@ import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestProgressed
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -133,7 +132,9 @@ final class FrontierV3ResourceFieldWorkExecutor {
             var hand = FrontierV3ActorHandObservation.observe(level, state, lease, job);
             if (!pending.handConfirmed()) {
                 if (hand.matchesBefore(effect)) {
-                    worker.setItemInHand(InteractionHand.OFF_HAND, new ItemStack(Items.WHEAT, effect.afterCount()));
+                    if (!FrontierV3VillagerHandMutation.setOffhand(worker,
+                            new ItemStack(Items.WHEAT, effect.afterCount())))
+                        return Result.conflict("hand-write-rejected");
                     hand = FrontierV3ActorHandObservation.observe(level, state, lease, job);
                 }
                 if (!hand.matches(effect)
