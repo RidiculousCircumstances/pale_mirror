@@ -11,16 +11,24 @@ import java.io.IOException;
 
 /** Wire codecs owned by the human-population boundary. */
 final class HumanPopulationPayloadCodecs {
+    private static final int BORN_FORMAT = 0x52424f32;
     private HumanPopulationPayloadCodecs() { }
 
     static PayloadCodec born() {
         return new PayloadCodec() {
             @Override public String type() { return "frontier.resident_born"; }
             @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
-                ResidentBorn birth = (ResidentBorn) payload; writeProfile(output, birth.resident()); FrontierWorldPayloadCodecs.writePosition(output, birth.position());
+                ResidentBorn birth = (ResidentBorn) payload; ActorBirthIdentityCodec.write(output, birth.birth());
+                output.writeInt(BORN_FORMAT); FrontierWorldPayloadCodecs.writeSubject(output, birth.jobId());
+                writeProfile(output, birth.resident()); FrontierWorldPayloadCodecs.writePosition(output, birth.position());
             }); }
             @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes,
-                    input -> new ResidentBorn(readProfile(input), FrontierWorldPayloadCodecs.readPosition(input))); }
+                    input -> {
+                        var birth = ActorBirthIdentityCodec.read(input);
+                        if (input.readInt() != BORN_FORMAT) throw new IllegalArgumentException("resident birth lacks current job envelope");
+                        var jobId = FrontierWorldPayloadCodecs.readSubject(input).value();
+                        return new ResidentBorn(jobId, readProfile(input), FrontierWorldPayloadCodecs.readPosition(input), birth);
+                    }); }
         };
     }
 

@@ -6,7 +6,15 @@ import net.minecraft.world.entity.Mob;
 public final class FrontierV3MobMotionLifecycle {
     private FrontierV3MobMotionLifecycle() { }
 
-    public static void advanceAtEntityBoundary(Mob mob) { FrontierV3ControlledMobMotion.advanceAtEntityBoundary(mob); }
+    /** Mixin guard: only a body with a retained HOT Minecraft path may travel under NoAI. */
+    public static boolean usesMinecraftGoalNavigation(Mob mob) {
+        return FrontierV3GoalNavigation.controls(mob);
+    }
+
+    public static void advanceAtEntityBoundary(Mob mob) {
+        if (!FrontierV3GoalNavigation.advanceAtEntityBoundary(mob))
+            FrontierV3ControlledMobMotion.advanceAtEntityBoundary(mob);
+    }
     public static void observeVanillaTracker(Mob mob) { FrontierV3ControlledMobMotion.observeVanillaTracker(mob); }
     public static FrontierV3ControlledMobMotion.TrackerObservation trackerObservation(Mob mob) {
         return FrontierV3ControlledMobMotion.trackerObservation(mob);

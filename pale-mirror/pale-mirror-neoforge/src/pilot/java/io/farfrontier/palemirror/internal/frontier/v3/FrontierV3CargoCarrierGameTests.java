@@ -527,6 +527,10 @@ public final class FrontierV3CargoCarrierGameTests {
                 helper.assertTrue(cart.save(saved), "retain the actual cart for the separate natural-return boundary");
                 cart.remove(Entity.RemovalReason.UNLOADED_TO_CHUNK);
                 var receipt = FrontierV3CargoCarrierExecutor.captureDeparture(state, cart, lease).orElseThrow();
+                helper.assertTrue(!receipt.inventory().getFirst().isEmpty(), "fixture must exercise a nonempty physical cargo slot");
+                helper.assertTrue(FrontierV3CargoDeparturePersistence.SavedCart.from(saved, level.registryAccess())
+                        .filter(candidate -> candidate.matches(receipt)).isPresent(),
+                        "the actual chest-minecart NBT must normalize to the exact departure inventory and owner");
                 helper.assertValueEqual(FrontierV3CargoDeparture.load(receipt.save()), receipt, "exact final inventory survives serialization");
                 helper.assertTrue(FrontierV3CargoCarrierExecutor.currentDeparture(state, lease, receipt, level.registryAccess()),
                         "release can revalidate the exact inventory and attempt without a loaded cart");
@@ -556,6 +560,29 @@ public final class FrontierV3CargoCarrierGameTests {
                 });
             } catch (RuntimeException failure) { if (cart != null) cart.discard(); runtime.shutdown(); throw failure; }
         });
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-departure", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 100)
+    public static void storedEntityProviderReadsWithoutLoadingARemoteChunk(GameTestHelper helper) {
+        // Exercise the real mixed-in provider, not a synthetic NBT reader. The
+        // ordinary GameTest level is intentionally not v3's physical dimension;
+        // this only proves the no-load storage capability, not recovery authority.
+        ServerLevel level = helper.getLevel();
+        var remote = new net.minecraft.world.level.ChunkPos(1_000_000, 1_000_000);
+        helper.assertFalse(level.areEntitiesLoaded(remote.toLong()), "remote entity chunk starts unloaded");
+        var manager = ((io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3ServerEntityManagerAccessor) level)
+                .frontierV3$getEntityManager();
+        var storage = ((io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3EntityPermanentStorageAccessor) manager)
+                .frontierV3$getPermanentStorage();
+        helper.assertTrue(storage instanceof FrontierV3StoredEntityInventoryAccess,
+                "vanilla entity storage must expose the no-load read capability");
+        ((FrontierV3StoredEntityInventoryAccess) storage).frontierV3$readStoredEntityChunk(remote)
+                .whenComplete((saved, failure) -> level.getServer().execute(() -> {
+                    if (failure != null) { helper.fail("remote entity-region read failed: " + failure); return; }
+                    if (saved.isPresent()) { helper.fail("unwritten remote entity region appeared"); return; }
+                    if (level.areEntitiesLoaded(remote.toLong())) { helper.fail("stored read loaded the entity chunk"); return; }
+                    helper.succeed();
+                }));
     }
 
     @GameTest(batch = "pm-frontier-v3-scene-departure", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 30)

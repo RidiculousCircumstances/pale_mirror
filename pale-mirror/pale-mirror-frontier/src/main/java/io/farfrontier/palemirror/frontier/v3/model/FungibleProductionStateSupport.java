@@ -33,13 +33,14 @@ public final class FungibleProductionStateSupport {
         validateIntent(state, intent); validateReceipt(intent, observation);
         ProductionJob job = state.productionJobs().get(intent.causeSubjectId());
         ProductionInputHold.FungibleBound held = (ProductionInputHold.FungibleBound) job.inputHold();
-        if (observation.authorityEpoch() != held.authorityEpoch() || observation.quantity() != job.outputCount()) {
+        if (observation.authorityEpoch() != held.authorityEpoch() || observation.quantity() != job.outputCount()
+                || !observation.inputLots().equals(held.inputLots())) {
             throw new IllegalArgumentException("resource production receipt has a foreign epoch or quantity");
         }
         ResourceLot output = new ResourceLot(job.outputItemId(), job.settlementId(), job.outputItemKind(), job.outputCount(),
-                "recipe:bread", List.of(job.consumedItemId()));
+                "recipe:bread", held.inputLots().keySet().stream().sorted().toList());
         FungibleResourceLedger resources = state.inventory().fungibleResources().transformObserved(held.accountId(), held.authorityEpoch(),
-                Map.of(held.itemId(), job.outputCount()), Map.of(held.claimId(), job.outputCount()), output, observation.observedStacks());
+                held.inputLots(), Map.of(held.claimId(), job.outputCount()), output, observation.observedStacks());
         FrontierWorldState paid = CompanyWorkPaymentStateSupport.settleCommittedPhysicalWork(state, job);
         Optional<MarketWorkOrder> order = paid.companies().market().acceptedForJob(job.id());
         CompanyRegistry companies = order.map(value -> paid.companies().withMarket(paid.companies().market().complete(value.id(), job)))
@@ -63,11 +64,15 @@ public final class FungibleProductionStateSupport {
             throw new IllegalArgumentException("ambiguous production lost its exact lot/claim/work commitment");
         }
         if (status == PhysicalIntentStatus.CONFIRMED) {
-            ResourceLot remaining = next.lots().get(hold.itemId()), output = next.lots().get(job.outputItemId());
+            ResourceLot output = next.lots().get(job.outputItemId());
             if (after.productionJobs().containsKey(job.id()) || next.claims().containsKey(hold.claimId()) || output == null
                     || output.quantity() != job.outputCount() || !output.itemKind().equals(job.outputItemKind())
                     || !output.economicOwnerId().equals(job.settlementId())
-                    || prior.lots().get(hold.itemId()).quantity() - (remaining == null ? 0 : remaining.quantity()) != job.outputCount()) {
+                    || !output.lineage().equals(hold.inputLots().keySet().stream().sorted().toList())
+                    || hold.inputLots().entrySet().stream().anyMatch(entry -> {
+                        ResourceLot beforeLot = prior.lots().get(entry.getKey()), afterLot = next.lots().get(entry.getKey());
+                        return beforeLot == null || beforeLot.quantity() - (afterLot == null ? 0 : afterLot.quantity()) != entry.getValue();
+                    })) {
                 throw new IllegalArgumentException("production retirement did not conserve its declared lot conversion");
             }
         }

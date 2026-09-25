@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec
 import io.farfrontier.palemirror.frontier.v3.process.PhysicalIntentLifecycleFixture;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import org.junit.jupiter.api.Test;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -36,7 +37,16 @@ class FungibleProductionLifecycleTest {
         assertReleasedContinuation(true);
     }
 
+    @Test
+    void checkpointedContainerReleaseCompletesBeforeAnotherLoadedTickOrRecovery() {
+        assertReleasedContinuation(false, true);
+    }
+
     private static void assertReleasedContinuation(boolean closeMutation) {
+        assertReleasedContinuation(closeMutation, false);
+    }
+
+    private static void assertReleasedContinuation(boolean closeMutation, boolean checkpointFirst) {
         Fixture f = fixture();
         var prepared = PhysicalIntentLifecycleFixture.prepare(f.state(), f.job().settlementId(), f.intent());
         var world = prepared.bootstrap().worldId();
@@ -45,6 +55,12 @@ class FungibleProductionLifecycleTest {
                 base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(),
                 base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter());
         var engine = FrontierEngines.create(configuration);
+        if (checkpointFirst) {
+            var lease = prepared.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(f.depot()));
+            assertInstanceOf(CommandResult.Accepted.class, submit(engine, "checkpoint-before-layout-release",
+                    new PhysicalReplicaCustodyPayloads.CustodyCheckpointed(lease.scopeId(), lease.authorityEpoch(),
+                            lease.expectedCanonicalRevision(), lease.expectedReplicaRevision())));
+        }
         FrontierPayload release = closeMutation
                 ? ReferenceContainerCustody.confirmedMutationTransition(prepared, f.depot(), 2L)
                 : new FungibleStackBindingsReleased(f.account(), 1L);
@@ -59,12 +75,9 @@ class FungibleProductionLifecycleTest {
         if (!closeMutation) {
             var scope = ReferenceContainerCustody.scopeId(f.depot());
             var lease = state.replicaCustody().custodyByScope().get(scope);
-            var checkpointed = submit(engine, "checkpoint-input", new PhysicalReplicaCustodyPayloads.CustodyCheckpointed(scope,
-                    1L, lease.expectedCanonicalRevision(), lease.expectedReplicaRevision()));
-            assertInstanceOf(CommandResult.Accepted.class, checkpointed, checkpointed.toString());
-            var closed = submit(engine, "release-custody", new PhysicalReplicaCustodyPayloads.CustodyReleased(scope,
-                    1L, lease.expectedCanonicalRevision(), lease.expectedReplicaRevision()));
-            assertInstanceOf(CommandResult.Accepted.class, closed, closed.toString());
+            assertEquals(PhysicalCustodyLeaseStatus.RELEASED, lease.status(),
+                    "resource release must not publish a COLD input behind live reference custody");
+            assertTrue(state.inventory().fungibleResources().bindings().isEmpty());
         }
         var image = new io.farfrontier.palemirror.frontier.v3.persistence.RecoveryImage(world,
                 Optional.of(new io.farfrontier.palemirror.frontier.v3.persistence.SnapshotRecord(engine.checkpoint(), 1L)), List.of());
@@ -170,6 +183,51 @@ class FungibleProductionLifecycleTest {
     }
 
     @Test
+    void twoLotBoundRecipeSurvivesSnapshotAndRetiresBothInputsIntoOneOutput() {
+        Fixture original = fixture();
+        var old = original.state().inventory().fungibleResources().releaseBindings(original.account(), 1L);
+        SubjectId first = original.job().consumedItemId();
+        SubjectId second = new SubjectId("lot:production-second-field");
+        Map<SubjectId, Integer> portions = Map.of(first, 32, second, 32);
+        var lots = new HashMap<>(old.lots());
+        ResourceLot previous = lots.get(first);
+        lots.put(first, previous.withQuantity(32));
+        lots.put(second, new ResourceLot(second, previous.economicOwnerId(), previous.itemKind(), 32, "harvest:second-field", List.of()));
+        var claims = new HashMap<>(old.claims());
+        claims.put(original.claim(), new ClaimAllocation(original.claim(), original.job().id(), original.job().settlementId(),
+                "minecraft:wheat", 64, portions, ClaimPurpose.PRODUCTION_WORK));
+        var accounts = new HashMap<>(old.accounts());
+        accounts.put(original.account(), new CustodyAccount(original.account(), new ResourceCustody.Container(original.depot()),
+                portions, Map.of(original.claim(), 64)));
+        var cold = new FungibleResourceLedger(lots, claims, accounts, old.bindings());
+        var stacks = List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                        new InventoryCustody.ContainerSlot(original.depot(), 0)), "minecraft:wheat", 32),
+                new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                        new InventoryCustody.ContainerSlot(original.depot(), 1)), "minecraft:wheat", 32));
+        var bound = cold.rebind(original.account(), 1L, FungiblePhysicalObservation.bind(cold, original.account(), 1L, stacks));
+        var job = original.job().withInputHold(new ProductionInputHold.FungibleBound(first, original.account(), original.claim(), 1L, portions));
+        var state = original.state().withChanges(FrontierWorldStateUpdate.begin()
+                .inventory(original.state().inventory().withFungibleResources(bound)).productionJobs(Map.of(job.id(), job)));
+        var recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+        assertEquals(portions, recovered.productionJobs().get(job.id()).inputQuantities());
+        assertEquals(Map.of(0, new ReferenceContainerCustody.ProjectedFungibleSlot("minecraft:bread", 64)),
+                FungibleProductionLayout.plan(recovered, job).after());
+        var prepared = PhysicalIntentLifecycleFixture.prepare(recovered, job.settlementId(), original.intent());
+        var running = PhysicalIntentLifecycleFixture.transition(prepared, job.settlementId(), original.intent(), PhysicalIntentStatus.RUNNING, Optional.empty());
+        var receipt = new FungibleProductionObservation(new PhysicalObservationId("observation:two-lot-production"), original.intent().id(),
+                original.account(), original.depot(), first, portions, original.claim(), job.outputItemId(), 64, 1L,
+                List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                        new InventoryCustody.ContainerSlot(original.depot(), 0)), "minecraft:bread", 64)));
+        var completed = PhysicalIntentLifecycleFixture.transition(running, job.settlementId(), original.intent(), PhysicalIntentStatus.CONFIRMED,
+                Optional.of(receipt));
+        assertFalse(completed.productionJobs().containsKey(job.id()));
+        assertFalse(completed.inventory().fungibleResources().lots().containsKey(first));
+        assertFalse(completed.inventory().fungibleResources().lots().containsKey(second));
+        assertEquals(List.of(first, second), completed.inventory().fungibleResources().lots().get(job.outputItemId()).lineage());
+        assertEquals(portions, completed.companies().market().workOrders().get(original.order()).terminalReceipt().orElseThrow().inputLots());
+    }
+
+    @Test
     void foreignEpochAndWrongActualProductCannotConsumeTheReservation() {
         Fixture f = fixture();
         FrontierWorldState prepared = PhysicalIntentLifecycleFixture.prepare(f.state(), f.job().settlementId(), f.intent());
@@ -195,7 +253,8 @@ class FungibleProductionLifecycleTest {
         var resources = base.state().inventory().fungibleResources().issue(new ResourceLot(input.id(), base.job().settlementId(),
                         "minecraft:wheat", inputQuantity, "test:nominal-lot", List.of()),
                 new CustodyAccount(account, new ResourceCustody.Container(depot), Map.of(input.id(), inputQuantity), Map.of()))
-                .reserve(new ClaimAllocation(claim, base.job().id(), base.job().settlementId(), "minecraft:wheat", 64), account);
+                .reserve(new ClaimAllocation(claim, base.job().id(), base.job().settlementId(), "minecraft:wheat", 64,
+                        Map.of(input.id(), 64), ClaimPurpose.PRODUCTION_WORK), account);
         var stacks = inputQuantity == 64
                 ? List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, 0)), "minecraft:wheat", 64))
                 : List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, 0)), "minecraft:wheat", inputQuantity - 64),

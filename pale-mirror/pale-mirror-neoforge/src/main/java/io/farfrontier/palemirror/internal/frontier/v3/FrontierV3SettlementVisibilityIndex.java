@@ -19,7 +19,7 @@ final class FrontierV3SettlementVisibilityIndex {
     static Map<ChunkPos, List<ChunkPos>> compile(FrontierWorldState state, FrontierGrayboxPlan plan) {
         if (state == null || plan == null) return Map.of();
         Map<ChunkPos, java.util.LinkedHashSet<ChunkPos>> byIngress = new java.util.HashMap<>();
-        Map<SubjectId, ResourceSite> sites = FrontierResourceSitePlan.compile(state.bootstrap());
+        Map<SubjectId, ResourceSite> sites = state.resourceSiteDescriptors();
         for (Settlement settlement : state.bootstrap().settlements()) {
             java.util.Set<SubjectId> owners = new java.util.HashSet<>();
             owners.add(settlement.id()); settlement.structures().forEach(structure -> owners.add(structure.id()));

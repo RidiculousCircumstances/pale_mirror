@@ -8,7 +8,7 @@ import { createConnection } from 'node:net';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defaultPilotProfile, jfrCaptureRequest, loadScenario, pilotCrashBoundary, restartSegments } from './scenario.mjs';
-import { requestRconCommand, requestRconQuery, requestRconStop } from './rcon.mjs';
+import { requestRconCommand, requestRconQuery, requestRconSaveFlush, requestRconStop } from './rcon.mjs';
 import { PhaseTiming } from './timing.mjs';
 import { writeFailureBundle } from './failure-bundle.mjs';
 import { boundedCleanupFailures, finalizeFailurePath } from './failure-finalization.mjs';
@@ -151,6 +151,7 @@ let secondaryRestartZeroPlayerInterlude = null;
 const usePersistentClient = process.env.FRONTIER_V3_PILOT_USE_PERSISTENT_CLIENT !== 'false' && scenario.crash === undefined
   && scenario.restart?.secondary === undefined;
 let crashEvidence = null;
+let preStopSaveAllFlush = null;
 let failure = null;
 let terminalCleanup = null;
 let zeroPlayerPrelude = null;
@@ -213,6 +214,11 @@ try {
         await publishLifecycleBarrier(lifecycle, LifecycleBarrier.GAME_PORT_CLOSED, { port });
       }
       else {
+        if (scenario.restart.preStopSaveAllFlush === true) {
+          const reply = await requestRconSaveFlush({ port: server.rconPort, password: server.rconPassword });
+          preStopSaveAllFlush = Object.freeze({ serverRunId: server.serverRunId,
+            serverPid: server.serverPid, reply, at: new Date().toISOString() });
+        }
         abruptStopAttempted = true;
         await timedStop('abrupt_exact_jvm_stop', () => stopServerAbruptly(server, port));
         await publishLifecycleBarrier(lifecycle, LifecycleBarrier.GAME_PORT_CLOSED, { port });
@@ -223,6 +229,11 @@ try {
     server = await startServer(false);
     if (recoveryCarrier) recoveryCheckpoints.recovered = server.recoveryCheckpoint;
     console.log('PMV3_ISOLATED recovery=server-restarted');
+    // A saved HOT body's no-demand recovery must be observed before a returning
+    // pilot can create a fresh scene demand. This is only a bounded, declared
+    // zero-player observation interval; it does not fast-forward canonical time.
+    if (scenario.restart.postRestartZeroPlayerSettleMs !== undefined)
+      await noPlayerSettle(scenario.restart.postRestartZeroPlayerSettleMs);
     // The replacement server is a normal live JVM and must receive the
     // ordinary durable stop path if the after-restart pilot fails.
     abruptStopAttempted = false;
@@ -250,6 +261,7 @@ try {
     recoveryMetadata = { mode: recovery.mode, world, splitAfterAction: scenario.restart.afterAction, beforeRestartManifest,
       ...(recovery.middle === undefined ? {} : { middleRestartManifest, secondarySplitAfterAction: recovery.secondary.afterAction }),
       ...(recoveryCarrier ? { checkpoints: recoveryCheckpoints } : {}),
+      ...(preStopSaveAllFlush === null ? {} : { preStopSaveAllFlush }),
       crash: crashEvidence };
   } else {
     await mkdir(sessionDirectory, { recursive: true });
@@ -285,6 +297,11 @@ try {
       await publishLifecycleBarrier(lifecycle, LifecycleBarrier.DURABLE_SERVER_SAVE, { serverRunId: server.serverRunId });
       await publishLifecycleBarrier(lifecycle, LifecycleBarrier.GAME_PORT_CLOSED, { port });
     } else {
+      if (scenario.restart.preStopSaveAllFlush === true) {
+        const reply = await requestRconSaveFlush({ port: server.rconPort, password: server.rconPassword });
+        preStopSaveAllFlush = Object.freeze({ serverRunId: server.serverRunId,
+          serverPid: server.serverPid, reply, at: new Date().toISOString() });
+      }
       abruptStopAttempted = true;
       await timedStop('abrupt_exact_jvm_stop', () => stopServerAbruptly(server, port));
       await publishLifecycleBarrier(lifecycle, LifecycleBarrier.GAME_PORT_CLOSED, { port });
@@ -294,6 +311,8 @@ try {
     server = await startServer(false);
     console.log('PMV3_ISOLATED recovery=server-restarted');
     abruptStopAttempted = false;
+    if (scenario.restart.postRestartZeroPlayerSettleMs !== undefined)
+      await noPlayerSettle(scenario.restart.postRestartZeroPlayerSettleMs);
     if (scenario.assertNoServerTickStallDuringIngress === true) {
       persistentPilot.restartServerLogStart = await logByteLength(serverLog);
     }
@@ -315,8 +334,9 @@ try {
     // the one-client branch.  It is the only evidence-bearing record of the ordinary HOT
     // departure, so omitting it made a later carrier silently unable to bind release to its
     // recovered COLD result.
-    recoveryMetadata = persistentRecoveryMetadata({ mode: recovery.mode, world, splitAfterAction: scenario.restart.afterAction,
-      beforeRestartManifest, runId, controlDirectory: sessionDirectory });
+    recoveryMetadata = Object.freeze({ ...persistentRecoveryMetadata({ mode: recovery.mode, world,
+      splitAfterAction: scenario.restart.afterAction, beforeRestartManifest, runId, controlDirectory: sessionDirectory }),
+      ...(preStopSaveAllFlush === null ? {} : { preStopSaveAllFlush }) });
   }
   if (jfr !== undefined) await awaitJfrEvidence(jfr);
   completed = true;

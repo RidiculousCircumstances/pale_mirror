@@ -27,10 +27,29 @@ class FrontierV3SceneDepartureTest {
         var receipt = receipt(4, 9);
         assertTrue(ledger.recordDeparture(receipt));
         assertFalse(ledger.hasCarrier(ACTOR), "evidence is not an authority transfer");
+        assertFalse(ledger.savedDeparture(receipt), "unload alone does not prove an entity-region save");
         var recovered = FrontierV3AmbientCarrierLedger.load(ledger.save(new CompoundTag(), null), null);
         assertEquals(receipt, recovered.departure(ACTOR).orElseThrow());
+        assertFalse(recovered.savedDeparture(receipt));
         assertFalse(recovered.hasCarrier(ACTOR));
         assertFalse(recovered.isDirty(), "reading current evidence must not manufacture a mutation");
+    }
+
+    @Test
+    void exactStorageConfirmationIsDurableAndOldFormatDoesNotInventIt() {
+        var receipt = receipt(4, 9);
+        var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
+        assertTrue(ledger.recordDeparture(receipt));
+        assertTrue(ledger.confirmSavedDeparture(receipt));
+        var saved = ledger.save(new CompoundTag(), null);
+        assertTrue(FrontierV3AmbientCarrierLedger.load(saved, null).savedDeparture(receipt));
+        saved.putInt("format", 5);
+        saved.remove("savedDepartures");
+        assertFalse(FrontierV3AmbientCarrierLedger.load(saved, null).savedDeparture(receipt));
+        saved.putInt("format", 6);
+        assertThrows(IllegalStateException.class, () -> FrontierV3AmbientCarrierLedger.load(saved, null));
+        ledger.forgetDeparture(ACTOR);
+        assertFalse(ledger.savedDeparture(receipt));
     }
 
     @Test
@@ -84,7 +103,7 @@ class FrontierV3SceneDepartureTest {
                 first.carrier().identity().owner(), first.carrier().identity().entityId(),
                 FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 8, 5);
         assertEquals(FrontierV3AmbientCarrierLedger.Reconciliation.DEPARTURE_CONFLICT, recovered.reconciliation(live));
-        assertFalse(recovered.adopt(live));
+        assertFalse(recovered.adopt(FrontierV3ActorAdoptionFixture.binding(live)));
         assertEquals(first, recovered.departure(ACTOR).orElseThrow());
         recovered.forgetDeparture(ACTOR);
         assertFalse(recovered.hasDepartureConflict(ACTOR));

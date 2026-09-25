@@ -6,7 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
 /** Immutable postcondition evidence for one durable physical intent. */
 public sealed interface PhysicalEffectObservation permits CargoHandoffObservation, FungibleCargoHandoffObservation,
         FungibleResourceConsumedObservation, FungibleNutrientDepartureObservation, CargoLoadObservation, DecontaminationObservation, ExactItemConsumedObservation,
-        ExplosionObservation, ProductionTransformationObservation, FungibleProductionObservation, ResourceSiteHarvestObservation, ResourceSitePreparationObservation,
+        ExplosionObservation, ProductionTransformationObservation, FungibleProductionObservation, ResourceSiteHarvestObservation, ResourceSiteHarvestDeliveryObservation, ResourceSiteHarvestDeferredObservation, ResourceSitePreparationObservation,
         RouteConstructionMaterialLoadObservation, RouteConstructionObservation, SceneStrikeObservation, StructuralRepairObservation,
         HiveNutrientDepartureObservation, HiveNutrientArrivalObservation, EquipmentIssueObservation, EquipmentReturnObservation,
         RouteMaintenanceObservation, RouteMaintenanceMaterialLoadObservation, SettlementServiceInputIssueObservation {

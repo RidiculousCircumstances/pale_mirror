@@ -59,7 +59,7 @@ final class FrontierV3ProductionWorkSceneExecutor {
         switch (lease.status()) {
             case PREPARED -> materialize(level, runtime, state, lease);
             case HOT -> work(level, runtime, state, lease);
-            case DRAINING -> release(level, runtime, state, lease);
+            case DRAINING -> FrontierV3SceneExecutor.release(level, runtime, lease);
             case UNKNOWN_AFTER_RESTART -> FrontierV3SceneExecutor.reclaim(level, runtime, state, lease);
             case CONFLICT, CLOSED -> { }
         }
@@ -265,40 +265,6 @@ final class FrontierV3ProductionWorkSceneExecutor {
         String traceName() { return traceName; }
     }
 
-    /**
-     * A production release has exactly the same physical-custody boundary as a harvested field:
-     * the retained worker body is about to leave its closed scene, so its same actor UUID must
-     * first become one durable inactive carrier.  Generic closed-scene cleanup deliberately
-     * discards the old projection; doing that without this fence is indistinguishable from a
-     * player/world deletion on the next ambient pre-lease and must remain fail-closed.
-     */
-    private static void release(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                FrontierWorldState state, SceneLease lease) {
-        if (FrontierV3SceneReleaseReadiness.awaitingEntityStorage(level, state, lease)) return;
-        SceneMember member = lease.members().getFirst();
-        // Release requires current physical evidence, never a historical HOT sample.
-        Entity retained = level.getEntity(member.entityId());
-        FrontierV3AmbientActorExecutor.SceneCarrierFenceResult fence =
-                FrontierV3AmbientActorExecutor.fenceDrainingSceneBody(level, state, lease, member, retained);
-        if (!fence.permitsRelease()) {
-            // Preserve the live exact worker and its durable job rather than allowing closed
-            // cleanup to erase provenance.  This is an owned local failure, never a substitute
-            // worker or a permissive re-materialization path.
-            conflict(level, runtime, lease, "release-carrier-" + fence.name().toLowerCase(java.util.Locale.ROOT));
-            return;
-        }
-        FrontierV3SceneExecutor.release(level, runtime, lease);
-        if (fence == FrontierV3AmbientActorExecutor.SceneCarrierFenceResult.FENCED
-                && runtime.decodedState().map(current -> current.sceneLeases().get(lease.id()))
-                .filter(current -> current.status() == SceneLeaseStatus.CLOSED).isPresent()
-                && retained instanceof Mob body
-                && FrontierV3AmbientActorExecutor.hasInactiveCarrier(level, state, member.actorId())) {
-            // The release receipt is durable and the inactive carrier now owns reconstruction
-            // proof only.  Remove the former physical custodian before ambient return can adopt
-            // the same UUID under its newer lease revision.
-            body.discard();
-        }
-    }
     private static void conflict(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease, String reason) {
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "production_work_conflict:" + reason, lease,
                 submit(runtime, "production-work-conflict", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.CONFLICT)));

@@ -46,10 +46,19 @@ export function requestRconQuery({ port, password, command, timeoutMs = 10_000 }
   return requestRconCommand({ port, password, command, timeoutMs, awaitResponse: true });
 }
 
+/** The vanilla command reply is issued only after the server-thread flush completed. */
+export function requestRconSaveFlush({ port, password, timeoutMs = 90_000 }) {
+  return requestRconCommand({ port, password, command: 'save-all flush', timeoutMs,
+    awaitResponse: true, responseKind: 'save_flush' });
+}
+
 /** Authenticated transport handoff for one exact server command, never a lifecycle acknowledgement. */
-export function requestRconCommand({ port, password, command, timeoutMs = 10_000, awaitResponse = false }) {
+export function requestRconCommand({ port, password, command, timeoutMs = 10_000,
+  awaitResponse = false, responseKind = 'diagnostic' }) {
   if (!Number.isInteger(port) || port < 1024 || port > 65535 || typeof password !== 'string' || !password
-      || typeof command !== 'string' || !/^[a-z0-9_ -]{1,160}$/.test(command) || typeof awaitResponse !== 'boolean') {
+      || typeof command !== 'string' || !/^[a-z0-9_ -]{1,160}$/.test(command) || typeof awaitResponse !== 'boolean'
+      || !['diagnostic', 'save_flush'].includes(responseKind)
+      || (responseKind === 'save_flush' && (!awaitResponse || command !== 'save-all flush'))) {
     return Promise.reject(new Error('invalid disposable RCON endpoint'));
   }
   return new Promise((resolveStop, rejectStop) => {
@@ -85,14 +94,19 @@ export function requestRconCommand({ port, password, command, timeoutMs = 10_000
           // not delimit them or close the connection. This runner has exactly one query
           // family: bounded PMV3 JSON. Its complete parse is the semantic frame fence.
           if (accepted && awaitResponse && frame.id === COMMAND_ID) responseFrames.push(frame.payload);
-          if (accepted && awaitResponse && completeDiagnosticResponse(responseFrames.join(''))) finish(null, responseFrames.join(''));
+          const reply = responseFrames.join('');
+          if (accepted && awaitResponse && responseKind === 'diagnostic' && completeDiagnosticResponse(reply)) finish(null, reply);
+          if (accepted && awaitResponse && responseKind === 'save_flush') {
+            if (reply.includes('Unable to save the game')) finish(new Error('vanilla save-all flush failed'));
+            else if (reply.includes('Saved the game')) finish(null, reply);
+          }
         }
       } catch (error) { finish(error); }
     });
     socket.once('error', (error) => finish(error));
     socket.once('close', () => {
       if (settled) return;
-      if (awaitResponse && accepted && responseFrames.length > 0) finish(null, responseFrames.join(''));
+      if (awaitResponse && accepted && responseFrames.length > 0 && responseKind === 'diagnostic') finish(null, responseFrames.join(''));
       else finish(new Error('disposable RCON closed before accepting command'));
     });
   });

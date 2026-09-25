@@ -195,14 +195,19 @@ public final class ReferenceContainerCustody {
      * slot is already canonical; once binding exists, only that exact transient address counts.
      */
     public static Optional<ProjectedFungibleSlot> expectedFungibleSlot(FrontierWorldState state, SubjectId containerId, int slot) {
-        ContainerRecord container = state.inventory().containers().get(Objects.requireNonNull(containerId, "container id"));
-        if (container == null || slot < 0 || slot >= container.slotCount()) throw new IllegalArgumentException("fungible reference slot is invalid");
-        return Optional.ofNullable(expectedFungibleSlots(state, containerId).get(slot));
+        return expectedFungibleSlot(state.inventory(), containerId, slot);
     }
 
-    private static Map<Integer, ProjectedFungibleSlot> expectedFungibleSlots(FrontierWorldState state, SubjectId containerId) {
+    /** The reservation owner can inspect an inventory's current projected slots during state construction. */
+    static Optional<ProjectedFungibleSlot> expectedFungibleSlot(ExactInventory inventory, SubjectId containerId, int slot) {
+        ContainerRecord container = inventory.containers().get(Objects.requireNonNull(containerId, "container id"));
+        if (container == null || slot < 0 || slot >= container.slotCount()) throw new IllegalArgumentException("fungible reference slot is invalid");
+        return Optional.ofNullable(expectedFungibleSlots(inventory, containerId).get(slot));
+    }
+
+    private static Map<Integer, ProjectedFungibleSlot> expectedFungibleSlots(ExactInventory inventory, SubjectId containerId) {
         Map<Integer, ProjectedFungibleSlot> slots = new LinkedHashMap<>();
-        List<PhysicalStackBinding> bindings = state.inventory().fungibleResources().bindings().values().stream()
+        List<PhysicalStackBinding> bindings = inventory.fungibleResources().bindings().values().stream()
                 .filter(candidate -> candidate.address() instanceof PhysicalStackAddress.ContainerSlot address
                         && address.slot().containerId().equals(containerId)).toList();
         if (!bindings.isEmpty()) {
@@ -212,12 +217,12 @@ public final class ReferenceContainerCustody {
             }
             return Map.copyOf(slots);
         }
-        List<CustodyAccount> accounts = state.inventory().fungibleResources().accounts().values().stream()
+        List<CustodyAccount> accounts = inventory.fungibleResources().accounts().values().stream()
                 .filter(account -> account.custody() instanceof ResourceCustody.Container custody && custody.containerId().equals(containerId)).toList();
         if (accounts.size() != 1) return Map.of();
         Map<String, Integer> quantities = new LinkedHashMap<>();
         accounts.getFirst().lotQuantities().entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
-            ResourceLot lot = state.inventory().fungibleResources().lots().get(entry.getKey());
+            ResourceLot lot = inventory.fungibleResources().lots().get(entry.getKey());
             if (lot == null) throw new IllegalStateException("reference custody account has unknown lot");
             quantities.merge(lot.itemKind(), entry.getValue(), Integer::sum);
         });
@@ -225,7 +230,7 @@ public final class ReferenceContainerCustody {
         for (Map.Entry<String, Integer> entry : quantities.entrySet()) {
             int remaining = entry.getValue();
             while (remaining > 0) {
-                while (state.inventory().itemAt(containerId, next).isPresent()) next++;
+                while (inventory.itemAt(containerId, next).isPresent()) next++;
                 int quantity = Math.min(64, remaining);
                 slots.put(next++, new ProjectedFungibleSlot(entry.getKey(), quantity));
                 remaining -= quantity;

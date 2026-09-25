@@ -68,8 +68,11 @@ class HumanPopulationProcessTest {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(world, 91L));
         FrontierWorldState initial = state(engine);
         ResidentProfile existing = initial.humanPopulation().resident(new SubjectId("resident:1-1"));
-        ResidentBorn forged = new ResidentBorn(new ResidentProfile(new SubjectId("resident:forged"), existing.householdId(), existing.settlementId(), ResidentRole.FARMER,
-                0L, existing.skills()), initial.bootstrap().settlements().getFirst().anchor());
+        ResidentBorn forged = new ResidentBorn(new SubjectId("job:resident-birth-forged"),
+                new ResidentProfile(new SubjectId("resident:forged"), existing.householdId(), existing.settlementId(), ResidentRole.FARMER,
+                0L, existing.skills()), initial.bootstrap().settlements().getFirst().anchor(),
+                new io.farfrontier.palemirror.frontier.v3.api.ActorBirthIdentity(new SubjectId("resident:forged"),
+                        io.farfrontier.palemirror.frontier.v3.api.ActorBirthIdentity.Kind.RESIDENT));
         assertInstanceOf(CommandResult.Rejected.class, engine.submit(command(world, engine, "command:forged-birth", forged)));
 
         FrontierWorldState active = stateWithBread(initial, initial.bootstrap().settlements().getFirst().id());
@@ -93,9 +96,26 @@ class HumanPopulationProcessTest {
         assertTrue(active.physicalIntents().isEmpty(), "birth food is a COLD semantic commitment, not an unfenced physical intent");
         assertEquals(active, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(active)));
 
-        var completion = PopulationBirthProcess.planCompletion(active, new ScheduledAction(new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:resident-birth-complete-test"),
-                new io.farfrontier.palemirror.frontier.v3.api.SimInstant(300L), 0, started.job().id(), "frontier.population.birth.complete", 1));
+        ScheduledAction completionAction = proposed.stream().map(event -> event.payload())
+                .filter(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created.class::isInstance)
+                .map(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created.class::cast)
+                .map(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created::action)
+                .filter(action -> action.kind().equals("frontier.population.birth.complete")).findFirst().orElseThrow();
+        FrontierWorldState stillActive = active;
+        assertThrows(IllegalArgumentException.class, () -> PopulationBirthProcess.planCompletion(stillActive,
+                new ScheduledAction(new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:resident-birth-complete-foreign"),
+                        completionAction.dueAt(), 0, started.job().id(), completionAction.kind(), 1)));
+        assertThrows(IllegalArgumentException.class, () -> PopulationBirthProcess.planCompletion(stillActive,
+                new ScheduledAction(completionAction.id(), new SimInstant(completionAction.dueAt().ticks() + 1L),
+                        0, started.job().id(), completionAction.kind(), 1)));
+        var completion = PopulationBirthProcess.planCompletion(active, completionAction);
         ResidentBorn born = (ResidentBorn) completion.getFirst().payload();
+        assertEquals(started.job().id(), born.jobId());
+        ResidentBorn foreignJob = new ResidentBorn(new SubjectId("job:resident-birth-foreign"), born.resident(), born.position(), born.birth());
+        ResidentBorn replayedForeignJob = (ResidentBorn) FrontierWorldRuntimeDefinition.payloadCodecs().decode(
+                foreignJob.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(foreignJob));
+        assertThrows(IllegalArgumentException.class, () -> PopulationBirthProcess.reduceBorn(stillActive,
+                started.job().settlementId(), replayedForeignJob));
         FrontierWorldState completed = PopulationBirthProcess.reduceBorn(active, started.job().settlementId(), born);
         assertEquals(born.resident(), completed.humanPopulation().resident(born.resident().id()));
         assertEquals(born.position(), FrontierTestPositions.supportOf(completed.actorLocations().get(born.resident().id())));
@@ -206,9 +226,12 @@ class HumanPopulationProcessTest {
         state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
         assertEquals(63, state.inventory().items().get(started.job().foodItemId()).count());
         assertTrue(state.physicalIntents().isEmpty());
-        ResidentBorn born = (ResidentBorn) PopulationBirthProcess.planCompletion(state, new ScheduledAction(
-                new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:resident-birth-complete-restart"), new SimInstant(300L), 0,
-                started.job().id(), "frontier.population.birth.complete", 1)).getFirst().payload();
+        ScheduledAction completionAction = planned.stream().map(event -> event.payload())
+                .filter(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created.class::isInstance)
+                .map(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created.class::cast)
+                .map(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created::action)
+                .filter(action -> action.kind().equals("frontier.population.birth.complete")).findFirst().orElseThrow();
+        ResidentBorn born = (ResidentBorn) PopulationBirthProcess.planCompletion(state, completionAction).getFirst().payload();
         state = PopulationBirthProcess.reduceBorn(state, started.job().settlementId(), born);
         assertEquals(born.resident(), state.humanPopulation().resident(born.resident().id()));
     }

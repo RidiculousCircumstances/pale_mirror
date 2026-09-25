@@ -256,7 +256,9 @@ class HiveRouteEngagementProcessTest {
                     "a matching cause and pair cannot replace the explicit lease/revision");
         }
         PhysicalIntent foreignTarget = new PhysicalIntent(new PhysicalIntentId("intent:scene-strike-foreign"), PhysicalIntentKind.SCENE_STRIKE, PhysicalIntentStatus.PREPARED,
-                operation.id(), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.routeSceneStrike(attacker, new SubjectId("resident:12-1"), lease.id(), lease.revision()), strikeOrigin, 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED,
+                operation.id(), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.routeSceneStrike(
+                        attacker, new SubjectId("resident:12-1"), lease.id(), lease.revision()),
+                strikeOrigin, 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ROUTE_ENGAGEMENT);
         assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleFixture.prepare(hot, operation.settlementId(), foreignTarget));
         PhysicalIntent unknownTarget = new PhysicalIntent(new PhysicalIntentId("intent:scene-strike-unknown"), PhysicalIntentKind.SCENE_STRIKE, PhysicalIntentStatus.PREPARED,
@@ -420,14 +422,25 @@ class HiveRouteEngagementProcessTest {
     }
 
     @Test void autonomousSupplyProfileCreatesOnlyAnExactScoutBoundInterceptionBeforeTheMobilizationOwnerExists() {
-        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.autonomousSupplyInterceptionConfiguration(new WorldId("frontier:production-intercept"), 91L));
+        var engine = FrontierEngines.createCanonicalStateAccess(FrontierV3FixtureCatalog.autonomousSupplyInterceptionConfiguration(new WorldId("frontier:production-intercept"), 91L));
         FrontierWorldState latest = null;
         boolean sighted = false;
         boolean interceptedFromBoundPosition = false;
+        java.util.List<String> supplyHistory = new java.util.ArrayList<>();
 
         for (long tick = 20L; tick <= 10_000L; tick++) {
             engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
-            latest = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+            // This is an autonomous behavior test, not a codec round-trip test at every
+            // tick. Read the same immutable canonical state without serializing the world.
+            latest = engine.canonicalState().state();
+            if (tick % 1_000L == 0L) {
+                SubjectId settlement = latest.bootstrap().settlements().getFirst().id();
+                supplyHistory.add(tick + ": food=" + SettlementProvisionProcess.availableFood(latest, settlement)
+                        + ", reserve=" + SettlementProvisionProcess.reserveRequirement(latest, settlement)
+                        + ", provision=" + latest.humanPopulation().provision(settlement).status()
+                        + ", operations=" + latest.operations().keySet() + ", jobs=" + latest.productionJobs().values().stream()
+                                .map(job -> job.id().value() + ":" + job.workProgress()).toList());
+            }
             sighted |= !latest.strategicPlans().hiveOperationKnowledge().entries().isEmpty();
             interceptedFromBoundPosition |= latest.strategicPlans().tasks().values().stream().anyMatch(task -> task.kind() == StrategicTaskKind.INTERCEPT_ROUTE_OPERATION
                     && task.operationTarget().isPresent() && task.operationObservationPosition().isPresent());
@@ -435,7 +448,9 @@ class HiveRouteEngagementProcessTest {
 
         FrontierWorldState finalState = latest;
         assertEquals(io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.ACTIVE, engine.status().kind(), engine.status().failureDetail().orElse(""));
-        assertTrue(sighted, "an interception must first retain a Scout-owned sighting");
+        assertTrue(sighted, () -> "an interception must first retain a Scout-owned sighting; operations="
+                + finalState.operations() + ", contracts=" + finalState.contracts()
+                + ", production=" + finalState.productionJobs() + ", history=" + supplyHistory);
         assertTrue(interceptedFromBoundPosition, "the durable intercept task must retain the exact Scout-observed position");
         assertTrue(finalState.strategicPlans().routeEngagements().values().stream().allMatch(engagement -> engagement.attackerIds().stream()
                         .allMatch(actor -> HivePhysiologySupport.permitsAmbientLease(finalState.hiveColony(), actor))),

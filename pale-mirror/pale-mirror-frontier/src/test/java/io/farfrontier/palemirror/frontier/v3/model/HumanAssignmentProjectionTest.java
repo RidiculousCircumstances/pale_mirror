@@ -18,11 +18,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class HumanAssignmentProjectionTest {
     @Test
     void supplyOperationOwnsTheSameExactTransportAndEscortAssignmentsAcrossRecovery() {
-        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(
+        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(
                 new WorldId("frontier:human-assignment"), 91L));
-        for (long tick = 100L; tick <= 2_750L; tick++) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
         FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        RouteOperation operation = state.operations().get(new SubjectId("operation:supply-1-2"));
+        RouteOperation operation = FrontierDevelopmentScenarios.initialNorthwatchShipment(state).orElseThrow();
 
         HumanAssignmentProjection assignments = HumanAssignmentProjection.compile(state);
         assertFalse(operation.unit().legacyUnderstrength());

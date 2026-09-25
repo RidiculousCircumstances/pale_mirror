@@ -119,9 +119,8 @@ public final class AmbientLeaseStateProcess {
                 .reduce((left, right) -> { throw new IllegalArgumentException("ambient farmer belongs to more than one active field job"); })
                 .orElse(null);
         if (harvest != null) {
-            BodyPosition cursor = harvest.traversal().linearCorridorSurfaces().get(harvest.traversalCursor()).standingBody();
-            if (!release.body().equals(cursor)) {
-                throw new IllegalArgumentException("HOT field worker may return to COLD only at its exact retained cursor");
+            if (current.goal() != AmbientGoalKind.PATROL && current.goal() != AmbientGoalKind.WORK) {
+                throw new IllegalArgumentException("HOT field worker has a foreign ambient purpose");
             }
         }
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
@@ -131,7 +130,8 @@ public final class AmbientLeaseStateProcess {
     }
 
     /**
-     * A naturally loaded anchor proved that the one expected pre-restart body is absent.
+     * The physical recovery owner has retained exact custody and observed no live body.
+     * An empty loaded anchor alone is not sufficient evidence for this command.
      * The canonical actor remains alive; this only completes the failed physical hand-off so
      * ordinary demand can make a fresh PREPARED lease.  It deliberately does not infer death
      * or synthesize a position/health observation.

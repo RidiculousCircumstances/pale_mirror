@@ -3,10 +3,12 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestGoal;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteLifecycle;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSitePhase;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
+import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess;
 
 /** Bounded read-only settlement aggregate distinguishing COLD work from observer admission. */
 final class FrontierV3ProcessInventoryDiagnostic {
@@ -25,14 +27,22 @@ final class FrontierV3ProcessInventoryDiagnostic {
         ResourceSiteHarvestJob job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast).orElse(null);
         if (job == null) return new Entry(false, "{\"site\":\"" + quote(lifecycle.siteId().value()) + "\",\"phase\":\"" + lifecycle.phase()
                 + "\",\"waitReason\":\"" + waitReason(lifecycle, null) + "\"}");
-        long dueAt = checkpoint.schedules().stream().filter(value -> value.subject().equals(job.id())).mapToLong(value -> value.dueAt().ticks()).min().orElse(-1L);
+        long dueAt = checkpoint.schedules().stream()
+                .filter(value -> ResourceSiteHarvestProcess.coldProgress(job, value.dueAt().ticks()).equals(value))
+                .mapToLong(value -> value.dueAt().ticks()).min().orElse(-1L);
         boolean hotOwned = state.sceneLeases().values().stream().anyMatch(lease -> lease.status() != SceneLeaseStatus.CLOSED
                 && FrontierSceneBehaviors.isResourceSiteHarvest(lease)
+                && FrontierSceneBehaviors.resourceSiteHarvest(lease).siteId().equals(job.siteId())
                 && FrontierSceneBehaviors.resourceSiteHarvest(lease).jobId().equals(job.id()));
         boolean coldEligible = lifecycle.phase() == ResourceSitePhase.HARVESTING && !job.progress().complete() && !hotOwned;
+        ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state, job);
+        var actor = state.actorLocations().get(job.workerId());
+        String actorBody = actor == null ? "null" : "{\"x\":" + actor.body().x()
+                + ",\"y\":" + actor.body().y() + ",\"z\":" + actor.body().z() + "}";
         return new Entry(coldEligible, "{\"site\":\"" + quote(lifecycle.siteId().value()) + "\",\"phase\":\"" + lifecycle.phase()
-                + "\",\"job\":\"" + quote(job.id().value()) + "\",\"worker\":\"" + quote(job.workerId().value()) + "\",\"cursor\":"
-                + job.traversalCursor() + ",\"cursorLength\":" + job.traversal().linearCorridorSurfaces().size() + ",\"cropCursor\":" + job.cropCursor()
+                + "\",\"job\":\"" + quote(job.id().value()) + "\",\"worker\":\"" + quote(job.workerId().value())
+                + "\",\"goal\":{\"kind\":\"" + goal.kind() + "\",\"nextWorkSlot\":" + goal.nextWorkSlot()
+                + ",\"layoutRevision\":" + goal.layoutRevision() + "},\"actorBody\":" + actorBody
                 + ",\"completedCropSlots\":" + job.progress().completedCropSlots() + ",\"pendingCropSlot\":" + job.progress().pendingCropSlotIndex()
                 + ",\"nextCropSlot\":" + (job.progress().complete() ? -1 : job.progress().nextCropSlotIndex())
                 + ",\"deferredMaterializationSlots\":" + job.progress().completedCropSlots()

@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -230,7 +231,7 @@ class RoutePatrolSceneSupportTest {
     }
 
     @Test
-    void noVisitRestartRevokesOnlyThePatrolPoseThenFencesItsLateBodyBeforeNewColdAdmission() {
+    void noVisitRestartCannotDiscardAnUninspectedPatrolBodyAndItsPossibleInjury() {
         WorldId world = new WorldId("frontier:route-patrol-no-visit-recovery");
         FrontierWorldState state = patrolState(world);
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(world, 41L);
@@ -243,19 +244,36 @@ class RoutePatrolSceneSupportTest {
         submit(engine, world, "prepare", new RoutePatrolSceneLeasePrepared(first));
         submit(engine, world, "hot", new SceneLeaseTransition(first.id(), SceneLeaseStatus.HOT));
         submit(engine, world, "unknown", new SceneLeaseTransition(first.id(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART));
-        submit(engine, world, "revoke", new SceneLeaseRecoveryRevoked(first.id()));
-        FrontierWorldState revoked = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        assertEquals(SceneLeaseStatus.CLOSED, revoked.sceneLeases().get(first.id()).status());
-        for (SceneMember member : first.members()) {
-            SubjectId binding = FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(member.actorId());
-            assertEquals(FencedRecoveryDisposition.REJECT_STALE, revoked.fencedRecovery().lateLoad(binding,
-                    FencedRecoveryAsset.BODY, FrontierSceneLeaseStateSupport.recoveryOwner(first), 1L));
-        }
+        var before = engine.checkpoint();
+        CommandId id = new CommandId("command:route-patrol-no-visit-revoke");
+        assertInstanceOf(CommandResult.Rejected.class, engine.submit(new FrontierCommand(
+                FrontierCommand.SCHEMA_VERSION, id, world, before.revision(), before.instant(),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id),
+                new SceneLeaseRecoveryRevoked(first.id()))));
+        assertEquals(before.revision(), engine.checkpoint().revision());
+        FrontierWorldState retained = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertEquals(SceneLeaseStatus.UNKNOWN_AFTER_RESTART, retained.sceneLeases().get(first.id()).status());
+        assertArrayEquals(before.canonicalState(), engine.checkpoint().canonicalState());
+    }
 
-        SceneLease next = patrolLease(revoked, new SceneLeaseId("lease:route-patrol-no-visit-next"), candidate, 2L);
-        FrontierWorldState resumedCold = revoked.prepareSceneLease(next);
-        assertTrue(next.members().stream().allMatch(member -> resumedCold.fencedRecovery().current()
-                .get(FrontierSceneLeaseStateSupport.bodyRecoveryBindingId(member.actorId())).authorityEpoch() == 2L));
+    @Test
+    void savedPatrolInjuryCanBecomeCanonicalOnlyThroughExactRelease() {
+        FrontierWorldState state = patrolState(new WorldId("frontier:route-patrol-stored-injury"));
+        FrontierRoutePatrolSceneSupport.Candidate candidate = FrontierRoutePatrolSceneSupport.candidates(state).stream().findFirst().orElseThrow();
+        SceneLease lease = patrolLease(state, new SceneLeaseId("lease:route-patrol-stored-injury"), candidate, 1L);
+        state = state.prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT)
+                .transitionSceneLease(lease.id(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART)
+                .transitionSceneLease(lease.id(), SceneLeaseStatus.DRAINING);
+        FrontierWorldState draining = state;
+        SubjectId injured = lease.members().getFirst().actorId();
+        var captured = lease.members().stream().map(member -> new SceneMemberPosition(member.actorId(),
+                lease.memberPosition(member.actorId()), member.actorId().equals(injured)
+                        ? io.farfrontier.palemirror.frontier.v3.api.FixedScalar.whole(18)
+                        : draining.actorLocations().get(member.actorId()).condition().health())).toList();
+        FrontierWorldState released = draining.releaseSceneLease(lease.id(), captured);
+        assertEquals(SceneLeaseStatus.CLOSED, released.sceneLeases().get(lease.id()).status());
+        assertEquals(io.farfrontier.palemirror.frontier.v3.api.FixedScalar.whole(18),
+                released.actorLocations().get(injured).condition().health());
     }
 
     private static SceneLease patrolLease(FrontierWorldState state, SceneLeaseId leaseId,

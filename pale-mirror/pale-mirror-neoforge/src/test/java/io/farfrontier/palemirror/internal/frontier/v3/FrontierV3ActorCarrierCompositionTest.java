@@ -39,7 +39,7 @@ class FrontierV3ActorCarrierCompositionTest {
                         "io.farfrontier.palemirror.internal.world.SourceGrayboxActorMaterializer"),
                 directResidentOrBioformConstructionBoundaries(),
                 "a production class cannot directly create a resident or bioform body outside the closed carrier boundary or a declared non-XACT adapter");
-        assertThrows(IllegalArgumentException.class, () -> FrontierV3ActorCarrierFactory.create(null, null, null),
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3ActorCarrierFactory.create(null, null, null, null),
                 "an unregistered helper cannot construct an actor carrier outside the closed inventory");
         assertThrows(IllegalArgumentException.class, () -> FrontierV3ActorCarrierFactory.materializeSceneBodies(null, null, null, null),
                 "an unregistered helper cannot adopt an actor carrier through another boundary");

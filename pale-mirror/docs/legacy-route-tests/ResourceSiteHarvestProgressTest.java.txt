@@ -1,0 +1,153 @@
+package io.farfrontier.palemirror.frontier.v3.model;
+
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.ScheduleId;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
+import io.farfrontier.palemirror.frontier.v3.api.WorldId;
+import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.IntStream;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+class ResourceSiteHarvestProgressTest {
+    @Test void boundedSegmentKeepsItsExactCropRouteCursorAndDepotTail() {
+        FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:field-segment-route"), 91L);
+        ResourceSite site = FrontierResourceSitePlan.compile(bootstrap).values().stream().findFirst().orElseThrow();
+        ActorLocation farmer = ActorLocation.standingOn(site.layout().cells().get(62).workstation());
+        ResourceSiteHarvestTraversal.Plan plan = ResourceSiteHarvestTraversal.compileSegmentPlan(bootstrap, site, farmer,
+                new SubjectId("job:site-harvest-segment-route"), 63, 63);
+        assertEquals(63, plan.segmentStartCropSlot());
+        assertEquals(64, plan.segmentEndCropSlot());
+        assertEquals(List.of(plan.firstCropCursor()), plan.cropRouteCursors());
+        assertTrue(plan.topology().linearCorridorSurfaces().size() > plan.firstCropCursor() + 1,
+                "a full hand retains an actual return leg, not a synthetic depot jump");
+    }
+
+    @Test void deliveredBatchCursorBoundsTheActualHandAndSurvivesStartedPayload() {
+        SubjectId site = new SubjectId("site:large-field-1");
+        List<SurfaceAnchor> surfaces = IntStream.range(63, 66).mapToObj(x -> SurfaceAnchor.at(x, 64, 0)).toList();
+        TraversalTopology route = TraversalTopology.corridor(new TraversalTopologyId("topology:field-batch-test"),
+                1L, site, TraversalKind.PEDESTRIAN, Set.of(TraversalCapability.PEDESTRIAN), surfaces);
+        ResourceSiteHarvestJob job = new ResourceSiteHarvestJob(new SubjectId("job:site-harvest-large-field-1"),
+                new SubjectId("task:large-field-1"), site, new SubjectId("resident:large-field-1"),
+                new SubjectId("custody:field-actor-large-field-1"), new SubjectId("custody:container-large-field-1"),
+                new SubjectId("item:site-harvest-large-field-1"),
+                new InventoryCustody.ContainerSlot(new SubjectId("container:large-field-1"), 0),
+                new PhysicalIntentId("intent:site-harvest-large-field-1"),
+                new ResourceSiteHarvestProgress(65, 65, -1), route, 1, 1, 64, 64, 65, false);
+
+        assertEquals(1, job.carriedYieldQuantity(65));
+        assertEquals(0, job.carriedYieldQuantity(64));
+        assertThrows(IllegalArgumentException.class, () -> job.carriedYieldQuantity(129));
+        assertEquals(64, job.withProgress(job.progress()).deliveredYieldQuantity());
+        ResourceSiteHarvestStarted started = new ResourceSiteHarvestStarted(job);
+        assertEquals(started, FrontierWorldRuntimeDefinition.payloadCodecs().decode(started.type(),
+                FrontierWorldRuntimeDefinition.payloadCodecs().encode(started)));
+        assertThrows(IllegalArgumentException.class, () -> new ResourceSiteHarvestJob(job.id(), job.taskId(), site,
+                job.workerId(), job.actorAccountId(), job.depotAccountId(), job.outputItemId(), job.outputSlot(),
+                job.intentId(), job.progress(), route, 1, 1, 63, 64, 65, false));
+    }
+
+    @Test void fullPartMovesTheSameWorkerFromDepotToNextStableCellWithoutReusingItsSlot() {
+        SubjectId site = new SubjectId("site:large-field-2");
+        SubjectId depot = new SubjectId("container:large-field-2");
+        SubjectId jobId = new SubjectId("job:site-harvest-large-field-2");
+        List<SurfaceAnchor> firstSurfaces = IntStream.range(0, 64)
+                .mapToObj(x -> SurfaceAnchor.at(x, 64, 0)).collect(java.util.stream.Collectors.toCollection(java.util.ArrayList::new));
+        firstSurfaces.add(SurfaceAnchor.at(63, 64, 1));
+        firstSurfaces.add(SurfaceAnchor.at(63, 64, 2));
+        TraversalTopology firstRoute = TraversalTopology.corridor(new TraversalTopologyId("topology:field-batch-first"),
+                1L, site, TraversalKind.PEDESTRIAN, Set.of(TraversalCapability.PEDESTRIAN), firstSurfaces);
+        ResourceSiteHarvestJob first = new ResourceSiteHarvestJob(jobId, new SubjectId("task:large-field-2"), site,
+                new SubjectId("resident:large-field-2"), new SubjectId("custody:field-actor-large-field-2"),
+                new SubjectId("custody:container-large-field-2"), new SubjectId("item:site-harvest-large-field-2"),
+                new InventoryCustody.ContainerSlot(depot, 0), new PhysicalIntentId("intent:site-harvest-large-field-2"),
+                new ResourceSiteHarvestProgress(65, 64, -1), firstRoute, 0, 63, 0, 0, 64, false,
+                IntStream.range(0, 64).boxed().toList());
+        ResourceSiteHarvestJob returned = first.withFullBatchReturn(64).advanceTraversal(64).advanceTraversal(65);
+        assertTrue(returned.atWorkReturnStation());
+        InventoryCustody.ContainerSlot successor = new InventoryCustody.ContainerSlot(depot, 1);
+        ResourceSiteHarvestJob reserved = returned.reserveBatchSuccessorSlot(successor, 64);
+        TraversalTopology nextRoute = TraversalTopology.corridor(new TraversalTopologyId("topology:field-batch-next"),
+                2L, site, TraversalKind.PEDESTRIAN, Set.of(TraversalCapability.PEDESTRIAN), List.of(
+                        firstSurfaces.getLast(), SurfaceAnchor.at(64, 64, 2), SurfaceAnchor.at(64, 64, 3)));
+        ResourceSiteHarvestTraversal.Plan next = new ResourceSiteHarvestTraversal.Plan(nextRoute, 1, 64, 65, List.of(1));
+        ResourceSiteHarvestJob continued = reserved.afterFullBatchDelivery(next, successor, 64,
+                firstSurfaces.getLast().standingBody());
+        assertEquals(64, continued.progress().completedCropSlots());
+        assertEquals(64, continued.deliveredYieldQuantity());
+        assertEquals(successor, continued.outputSlot());
+        assertEquals(firstSurfaces.getLast(), continued.traversal().linearCorridorSurfaces().getFirst());
+        assertEquals(0, continued.carriedYieldQuantity(64));
+        assertFalse(continued.atWorkReturnStation());
+        assertThrows(IllegalArgumentException.class, () -> reserved.afterFullBatchDelivery(next,
+                new InventoryCustody.ContainerSlot(depot, 2), 64, firstSurfaces.getLast().standingBody()));
+        assertThrows(IllegalArgumentException.class, () -> reserved.afterFullBatchDelivery(next,
+                successor, 64, new BodyPosition(0, 65, 0)),
+                "a new segment must start at the actual returned farmer, not an obsolete depot cursor");
+    }
+
+    @Test void cropReceiptCannotCrossAWorkstationThatTheCanonicalFarmerHasNotReached() {
+        SubjectId site = new SubjectId("site:station-proof");
+        TraversalTopology route = TraversalTopology.corridor(new TraversalTopologyId("topology:field-station-proof"),
+                1L, site, TraversalKind.PEDESTRIAN, Set.of(TraversalCapability.PEDESTRIAN), List.of(
+                        SurfaceAnchor.at(0, 64, 0), SurfaceAnchor.at(1, 64, 0), SurfaceAnchor.at(2, 64, 0)));
+        ResourceSiteHarvestJob approaching = new ResourceSiteHarvestJob(new SubjectId("job:site-harvest-station-proof"),
+                new SubjectId("task:station-proof"), site, new SubjectId("resident:station-proof"),
+                new SubjectId("custody:field-actor-station-proof"), new SubjectId("custody:container-station-proof"),
+                new SubjectId("item:site-harvest-station-proof"),
+                new InventoryCustody.ContainerSlot(new SubjectId("container:station-proof"), 0),
+                new PhysicalIntentId("intent:site-harvest-station-proof"),
+                ResourceSiteHarvestProgress.notStarted(1), route, 1, 0);
+        ResourceSiteLifecycle before = new ResourceSiteLifecycle(site, ResourceSitePhase.HARVESTING,
+                1L, ResourceSiteLifecycle.MATURE_STAGE, Optional.of(approaching));
+        SurfaceAnchor station = SurfaceAnchor.at(1, 64, 0);
+        ResourceSiteHarvestGoal goal = new ResourceSiteHarvestGoal(approaching.id(), site, approaching.workerId(),
+                1L, 0, ResourceSiteHarvestGoal.Kind.WORK_CELL, Optional.of(new ResourceFieldLayout.CellId(1)),
+                List.of(station), TraversalCapability.PEDESTRIAN,
+                ResourceSiteHarvestGoal.ArrivalContract.EXACT_WORK_STATION);
+        assertThrows(IllegalArgumentException.class,
+                () -> before.prepareHarvestCrop(approaching, 0, goal, SurfaceAnchor.at(0, 64, 0)),
+                "a different observed station cannot authorize crop work");
+
+        ResourceSiteLifecycle atStation = new ResourceSiteLifecycle(site, ResourceSitePhase.HARVESTING,
+                1L, ResourceSiteLifecycle.MATURE_STAGE, Optional.of(approaching));
+        ResourceSiteHarvestJob prepared = (ResourceSiteHarvestJob) atStation.prepareHarvestCrop(approaching, 0, goal, station)
+                .activeWork().orElseThrow();
+        assertEquals(1, atStation.prepareHarvestCrop(approaching, 0, goal, station).advanceHarvest(prepared, 1, goal, station)
+                .activeWork().map(ResourceSiteHarvestJob.class::cast).orElseThrow().progress().completedCropSlots());
+    }
+
+    @Test void completionUsesTheAdmittedFieldSizeNotTheLegacySixtyFourCells() {
+        ResourceSiteHarvestProgress one = ResourceSiteHarvestProgress.notStarted(1);
+        assertFalse(one.complete());
+        assertTrue(one.prepareNextCrop().confirmPreparedCrop().complete());
+
+        ResourceSiteHarvestProgress sixtyFive = new ResourceSiteHarvestProgress(65, 64, -1);
+        assertFalse(sixtyFive.complete());
+        assertTrue(sixtyFive.prepareNextCrop().confirmPreparedCrop().complete());
+        assertThrows(IllegalArgumentException.class, () -> new ResourceSiteHarvestProgress(65, 66, -1));
+        assertThrows(IllegalArgumentException.class, () -> new ResourceSiteHarvestProgress(65, 64, 63));
+    }
+
+    @Test void largeCellIndexesRoundTripThroughCurrentWalPayloadsWithoutByteTruncation() {
+        SubjectId job = new SubjectId("job:site-harvest-large-field-1");
+        ResourceSiteHarvestCropPrepared prepared = new ResourceSiteHarvestCropPrepared(job, 256);
+        ResourceSiteHarvestProgressed progressed = new ResourceSiteHarvestProgressed(new SubjectId("site:large-field-1"), 3,
+                job, 257, 2,
+                new ResourceFieldLayout.CellId(257), ResourceFieldCycle.WorkOutcome.HARVESTED,
+                new ScheduleId("schedule:resource-site-harvest-cold-progress-site-harvest-large-field-1"), 22_301L);
+        assertEquals(prepared, FrontierWorldRuntimeDefinition.payloadCodecs().decode(prepared.type(),
+                FrontierWorldRuntimeDefinition.payloadCodecs().encode(prepared)));
+        assertEquals(progressed, FrontierWorldRuntimeDefinition.payloadCodecs().decode(progressed.type(),
+                FrontierWorldRuntimeDefinition.payloadCodecs().encode(progressed)));
+    }
+}

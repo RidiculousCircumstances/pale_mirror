@@ -49,7 +49,8 @@ class FungibleObservedTransformationTest {
     private static FungibleResourceLedger fixture() {
         var resources = FungibleResourceLedger.empty().issue(new ResourceLot(WHEAT, OWNER, "minecraft:wheat", 64, "test", List.of()),
                 new CustodyAccount(ACCOUNT, new ResourceCustody.Container(DEPOT), Map.of(WHEAT, 64), Map.of()))
-                .reserve(new ClaimAllocation(CLAIM, new SubjectId("job:recipe"), OWNER, "minecraft:wheat", 32), ACCOUNT);
+                .reserve(new ClaimAllocation(CLAIM, new SubjectId("job:recipe"), OWNER, "minecraft:wheat", 32,
+                        Map.of(), ClaimPurpose.EXTERNAL_RESERVATION), ACCOUNT);
         return resources.rebind(ACCOUNT, 7L, FungiblePhysicalObservation.bind(resources, ACCOUNT, 7L,
                 List.of(stack(0, "minecraft:wheat", 64))));
     }

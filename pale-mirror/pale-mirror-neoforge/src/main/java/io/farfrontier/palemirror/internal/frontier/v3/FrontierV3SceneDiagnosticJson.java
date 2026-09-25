@@ -62,7 +62,9 @@ final class FrontierV3SceneDiagnosticJson {
         var cargoRetirement = logistics == null ? null : state.fencedRecovery().cargoRetirements().pending()
                 .get(io.farfrontier.palemirror.frontier.v3.model.CargoCarrierIdentity.id(lease));
         String cargoCleanup = ",\"cargoCleanupPending\":" + (logistics == null ? "null" : Boolean.toString(cargoRetirement != null))
-                + ",\"cargoCleanupEpoch\":" + (cargoRetirement == null ? "null" : cargoRetirement.authorization().retiredEpoch());
+                + ",\"cargoCleanupEpoch\":" + (cargoRetirement == null ? "null" : cargoRetirement.authorization().retiredEpoch())
+                + ",\"cargoPendingRetirements\":" + (logistics == null ? "null" : Long.toString(state.fencedRecovery().cargoRetirements().pending()
+                        .values().stream().filter(value -> value.cargoId().equals(logistics.cargoId())).count()));
         String recovery = lease.recoveryEvidence().map(value -> ",\"recoveryMissingActors\":" + FrontierV3DiagnosticJson.strings(value.missingActorIds().stream().map(SubjectId::value).sorted().toList())
                 + ",\"recoveryMissingCarrier\":" + value.missingCargoCarrier()).orElse("");
         return FrontierV3DiagnosticJson.base("scene", id, checkpoint) + ",\"status\":\"ok\",\"leaseId\":\"" + FrontierV3DiagnosticJson.quote(lease.id().value())

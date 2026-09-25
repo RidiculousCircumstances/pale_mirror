@@ -14,11 +14,34 @@ public final class ResourceSiteHarvestTrace {
                 .map(lineage -> lineage.causality().trace()).filter(trace -> trace.correlation().equals(correlation)).findFirst();
     }
     public static FrontierWorldState retain(FrontierWorldState state, FrontierEvent event) {
-        if (event.payload() instanceof ResourceSiteHarvestProgressed progressed && progressed.completedCropSlots() == ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS) {
+        // The lineage is created by the COLD terminal itself. Earlier crop events cannot
+        // attach to a lineage that did not exist yet; retain the actual terminal event as
+        // the cold causal boundary once that reducer has published it.
+        if (event.payload() instanceof ResourceSiteHarvestReturned returned) {
+            return update(state, "resource-site-harvest:" + returned.jobId().value(), trace -> trace.cold(event));
+        }
+        if (event.payload() instanceof ResourceSiteHarvestColdTraversalAdvanced advanced) {
+            return update(state, "resource-site-harvest:" + advanced.jobId().value(), trace -> trace.cold(event));
+        }
+        if (event.payload() instanceof ResourceSiteHarvestColdGoalAdvanced advanced) {
+            return update(state, "resource-site-harvest:" + advanced.jobId().value(), trace -> trace.cold(event));
+        }
+        if (event.payload() instanceof ResourceSiteHarvestProgressed progressed
+                && state.resourceSites().sites().values().stream()
+                        .anyMatch(lifecycle -> lifecycle.harvestLineage().isPresent()
+                                && lifecycle.harvestLineage().orElseThrow().predecessorJobId().equals(progressed.jobId()))) {
             return update(state, "resource-site-harvest:" + progressed.jobId().value(), trace -> trace.cold(event));
         }
         if (event.payload() instanceof PhysicalIntentTransition transition
                 && transition.observation().orElse(null) instanceof ResourceSiteHarvestObservation observation) {
+            return updateIntent(state, observation.intentId(), trace -> trace.observed(observation.id(), event));
+        }
+        if (event.payload() instanceof PhysicalIntentTransition transition
+                && transition.observation().orElse(null) instanceof ResourceSiteHarvestDeliveryObservation observation) {
+            return updateIntent(state, observation.intentId(), trace -> trace.observed(observation.id(), event));
+        }
+        if (event.payload() instanceof PhysicalIntentTransition transition
+                && transition.observation().orElse(null) instanceof ResourceSiteHarvestDeferredObservation observation) {
             return updateIntent(state, observation.intentId(), trace -> trace.observed(observation.id(), event));
         }
         return state;

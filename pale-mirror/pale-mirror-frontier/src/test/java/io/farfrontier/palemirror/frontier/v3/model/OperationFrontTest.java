@@ -20,7 +20,7 @@ class OperationFrontTest {
         var engine = FrontierEngines.create(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(
                 new WorldId("frontier:operation-front"), 91L));
         FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        RouteOperation operation = state.operations().get(new SubjectId("operation:supply-1-2"));
+        RouteOperation operation = FrontierDevelopmentScenarios.initialNorthwatchShipment(state).orElseThrow();
 
         OperationFront front = OperationFront.logistics(operation);
         assertEquals(operation.participantIds().stream().sorted().toList(), front.movements().keySet().stream().sorted().toList());

@@ -1,0 +1,49 @@
+{
+  "schema": 1,
+  "id": "disposable_sa_player_crop_partial_harvest",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 26577, "profile": "world", "viewDistance": 6 },
+  "zeroPlayerPrelude": { "kind": "cold_duty_cycle", "advanceTicks": 5000, "timeoutMs": 180000, "expectTerminalStatus": "COMPLETED" },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/time set day" },
+    { "type": "command", "command": "/gamerule doDaylightCycle false" },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "summary", "id": "", "expect": { "status": "ok", "settlements": 12, "sites": 12 } }
+    ] }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 388, "y": 64, "z": -355 }, "settleMs": 1000 },
+    { "type": "wait_until_block", "position": { "diagnostic": { "view": "site", "id": "site:4-wheat-field", "field": "lastCrop" } }, "block": "minecraft:wheat", "timeoutMs": 90000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "diagnostic": { "view": "site", "id": "site:4-wheat-field", "field": "lastCrop" } }, "offset": { "x": 1, "y": 0, "z": -3 }, "settleMs": 1000 },
+    { "type": "break", "position": { "diagnostic": { "view": "site", "id": "site:4-wheat-field", "field": "lastCrop" } }, "timeoutMs": 15000 },
+    { "type": "wait", "ms": 2000 },
+    { "type": "wait_until_block", "position": { "diagnostic": { "view": "site", "id": "site:4-wheat-field", "field": "lastCrop" } }, "block": "minecraft:air", "timeoutMs": 30000 },
+    { "type": "inspect", "view": "site", "id": "site:4-wheat-field" },
+    { "type": "inspect", "view": "trace", "id": "field-player-break:site:4-wheat-field" },
+    { "type": "wait_until_block", "position": { "diagnostic": { "view": "site", "id": "site:4-wheat-field", "field": "lastCrop" } }, "block": "minecraft:air", "timeoutMs": 30000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 0, "y": 64, "z": 0 }, "settleMs": 1000 },
+    { "type": "fast_forward", "ticks": 24000, "timeoutMs": 180000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 388, "y": 64, "z": -355 }, "settleMs": 1000 },
+    { "type": "wait_until_diagnostic", "view": "site", "id": "site:4-wheat-field", "expect": { "status": "ok", "phase": "GROWING", "growthEpoch": 2, "terminalHarvest": { "physicalReceiptResolved": true } }, "timeoutMs": 180000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "diagnostic": { "view": "container", "id": "container:4-depot", "field": "position" } }, "offset": { "x": 2, "y": 0, "z": 2 }, "settleMs": 1000 },
+    { "type": "wait_until_container_item", "containerId": "container:4-depot", "item": "minecraft:wheat", "count": 63, "timeoutMs": 120000 },
+    { "type": "inspect", "view": "site", "id": "site:4-wheat-field" }
+  ],
+  "restart": {
+    "mode": "graceful", "afterAction": 8,
+    "resumeSetup": [
+      { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "diagnostic": { "view": "site", "id": "site:4-wheat-field", "field": "lastCrop" } }, "offset": { "x": 1, "y": 0, "z": -3 }, "settleMs": 1000 }
+    ]
+  },
+  "assertions": [
+    { "after": 7, "view": "site", "id": "site:4-wheat-field", "expect": { "status": "ok", "phase": "GROWING" } },
+    { "after": 8, "view": "trace", "id": "field-player-break:site:4-wheat-field", "expect": { "status": "ok", "eventKind": "resource_field_cell_observed", "subject": "site:4-wheat-field" } },
+    { "after": 13, "view": "site", "id": "site:4-wheat-field", "expect": { "status": "ok", "phase": "GROWING", "growthEpoch": 2 } }
+  ],
+  "frames": [
+    { "after": 2, "name": "partial-field-before-player-break", "presentation": "player" },
+    { "after": 9, "name": "partial-field-air-after-restart", "presentation": "player" },
+    { "after": 16, "name": "partial-field-next-epoch", "presentation": "player" }
+  ]
+}

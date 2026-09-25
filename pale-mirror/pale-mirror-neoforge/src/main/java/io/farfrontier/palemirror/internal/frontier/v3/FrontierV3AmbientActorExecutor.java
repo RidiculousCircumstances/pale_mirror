@@ -127,17 +127,44 @@ final class FrontierV3AmbientActorExecutor {
                 continue;
             }
             var lease = state.ambientLeases().get(actorId);
+            FrontierV3ActorHandoffRecovery.resume(level, state, level.getEntity(entityId(state, actorId)));
+            if (lease != null && (lease.status() == AmbientLeaseStatus.HOT || lease.status() == AmbientLeaseStatus.DRAINING
+                    || lease.status() == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART)) {
+                var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
+                if (ledger.ambientDeparture(actorId).isPresent()) {
+                    Entity returned = level.getEntity(entityId(state, actorId));
+                    if (returned != null) FrontierV3AmbientDepartureObserver.observeJoin(level, runtime, returned);
+                    if (ledger.ambientDeparture(actorId).isPresent()) {
+                        if (releaseUnloadedReservedColdContinuation(level, runtime, state, actorId, lease)) admitted++;
+                    // A returned mismatching body or unresolved witness must never resume a
+                    // physical writer. Exact matching returns clear the witness at join.
+                        continue;
+                    }
+                }
+            }
             boolean successorSceneOwnsActor = state.sceneLeases().values().stream()
                     .filter(scene -> scene.status() != SceneLeaseStatus.CLOSED)
                     .anyMatch(scene -> scene.members().stream().anyMatch(member -> member.actorId().equals(actorId)));
             if (lease != null && lease.status() == AmbientLeaseStatus.CLOSED && !successorSceneOwnsActor) {
                 Entity stale = level.getEntity(entityId(state, actorId));
-                if (stale != null && owned(stale, actorId, bioform(state, actorId))) stale.discard();
+                if (stale != null && owned(stale, actorId, bioform(state, actorId))) {
+                    var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
+                    if (!FrontierV3AmbientCarrierRecognition.retainedClosedRelease(state,
+                            FrontierV3AmbientCarrierRecognition.ManagedCarrier.from(stale), ledger)) continue;
+                    ledger.persist(level, state.bootstrap().worldId());
+                    stale.discard();
+                }
                 FrontierV3AmbientActorCaches.forgetObserved(runtime, actorId);
             }
             if (successorSceneOwnsActor) {
                 forgetColdDemand(runtime, actorId);
                 FrontierV3AmbientActorCaches.forgetObserved(runtime, actorId);
+                continue;
+            }
+            if (lease != null && lease.status() == AmbientLeaseStatus.DRAINING) {
+                Entity body = level.getEntity(entityId(state, actorId));
+                if (body instanceof Mob mob && release(runtime, mob).isPresent()) admitted++;
+                // A draining owner cannot return to motion or prepare another authority.
                 continue;
             }
             // A restart-unknown lease remains the exact physical owner until its declared
@@ -148,7 +175,13 @@ final class FrontierV3AmbientActorExecutor {
             // owner first, then let the next ordinary turn prepare/adopt the same farmer.
             if (lease != null && lease.status() == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART) {
                 Entity body = level.getEntity(entityId(state, actorId));
-                if (body != null && owned(body, actorId, bioform(state, actorId))) {
+                if (body instanceof Mob mob && release(runtime, mob).isPresent()) {
+                    // A pre-release fence survives independently of the entity
+                    // region. Finish that exact transfer rather than reactivating it.
+                    admitted++;
+                } else if (body != null && FrontierV3AmbientCarrierRecognition.recoverableOwnership(state,
+                        FrontierV3AmbientCarrierRecognition.ManagedCarrier.from(body),
+                        FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId()))) {
                     submit(runtime, "ambient-recovered", actorId.value(), new AmbientLeaseTransition(actorId, AmbientLeaseStatus.HOT));
                     admitted++;
                 } else if (body == null && restartAbsenceIsObserved(level, runtime, state, actorId, lease)) {
@@ -207,7 +240,7 @@ final class FrontierV3AmbientActorExecutor {
                     // deliberately not treated as a release observation.
                     else if (body == null && !level.hasChunkAt(lease.handoffBody().supportingSurface().support().x(),
                             lease.handoffBody().supportingSurface().support().z())
-                            && releaseUnloadedReservedColdContinuation(runtime, state, actorId, lease)) admitted++;
+                            && releaseUnloadedReservedColdContinuation(level, runtime, state, actorId, lease)) admitted++;
                 } else if (lease != null && lease.status() == AmbientLeaseStatus.PREPARED
                         && abandonPreparedForReservation(level, runtime, state, actorId, lease).isPresent()) {
                     admitted++;
@@ -231,13 +264,17 @@ final class FrontierV3AmbientActorExecutor {
                     } else if (drainObservedAfterDemandHysteresis(level, runtime, actorId)) {
                         admitted++;
                     }
+                } else if (lease != null && lease.status() == AmbientLeaseStatus.PREPARED
+                        && abandonUndemandedPrepared(level, runtime, state, actorId, lease)) {
+                    admitted++;
+                    forgetColdDemand(runtime, actorId);
                 } else {
                     forgetColdDemand(runtime, actorId);
                 }
                 continue;
             }
             forgetColdDemand(runtime, actorId);
-            FrontierV3SceneExecutor.ClosedSceneReturnRecovery closedReturn = FrontierV3SceneExecutor.fenceObservedAbsentHarvestReturn(level, state, actorId);
+            FrontierV3SceneExecutor.ClosedSceneReturnRecovery closedReturn = FrontierV3SceneExecutor.inspectClosedHarvestReturn(level, state, actorId);
             if (closedReturn == FrontierV3SceneExecutor.ClosedSceneReturnRecovery.LIVE_BODY
                     || closedReturn == FrontierV3SceneExecutor.ClosedSceneReturnRecovery.PENDING
                     || closedReturn == FrontierV3SceneExecutor.ClosedSceneReturnRecovery.CONFLICT) {
@@ -309,6 +346,11 @@ final class FrontierV3AmbientActorExecutor {
     }
     private static Result materialize(ServerLevel level, FrontierWorldState state, SubjectId actorId, BodyPosition canonicalBody,
                                       FrontierV3SceneBehaviorRegistry.StandingPositionProvider standingPositionProvider) {
+        return materialize(level, state, actorId, canonicalBody, standingPositionProvider, 1L, level::addFreshEntity);
+    }
+    private static Result materialize(ServerLevel level, FrontierWorldState state, SubjectId actorId, BodyPosition canonicalBody,
+                                      FrontierV3SceneBehaviorRegistry.StandingPositionProvider standingPositionProvider,
+                                      long custodyEpoch, java.util.function.Predicate<Mob> admission) {
         FrontierV3ActorCarrierComposition.requireRole(FrontierV3ActorCarrierComposition.InventoryEntry.AMBIENT_BODY,
                 FrontierV3ActorCarrierComposition.Role.PRODUCER);
         if (!state.actorLocations().containsKey(actorId)) return Result.CONFLICT;
@@ -327,17 +369,18 @@ final class FrontierV3AmbientActorExecutor {
         long ambientRevision = state.ambientLeases().containsKey(actorId) ? state.ambientLeases().get(actorId).revision() : 1L;
         FrontierV3ActorCarrierComposition.Declaration declaration = carrierDeclaration(state, actorId,
                 FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, entityId,
-                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, ambientRevision, 1L);
-        Mob body = FrontierV3ActorCarrierFactory.create(FrontierV3ActorCarrierComposition.InventoryEntry.AMBIENT_BODY, level, declaration);
+                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, ambientRevision, custodyEpoch);
+        Mob body = FrontierV3ActorCarrierFactory.create(FrontierV3ActorCarrierComposition.InventoryEntry.AMBIENT_BODY, level, declaration,
+                state.actorLocations().get(actorId).condition());
         body.setPos(position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D); body.setPersistenceRequired();
-        body.getPersistentData().putLong(CUSTODY_EPOCH_KEY, 1L);
+        body.getPersistentData().putLong(CUSTODY_EPOCH_KEY, custodyEpoch);
         body.setNoAi(true);
         if (body instanceof Zombie zombie) configureBioform(zombie, bioformProfile(state, actorId));
         hydrateExactHeldEquipment(body, state, actorId);
         FrontierV3ScenePresentation.applyAmbientActorPresentation(body, state, actorId, bioform);
         body.getPersistentData().putString(ACTOR_KEY, actorId.value()); body.getPersistentData().putString(KIND_KEY, bioform ? "BIOFORM" : "RESIDENT");
         if (!level.noCollision(body, body.getBoundingBox()) || admissionColumnOccupied(level, body, body.getBoundingBox())) return Result.DEFERRED;
-        return level.addFreshEntity(body) ? Result.APPLIED : Result.CONFLICT;
+        return admission.test(body) ? Result.APPLIED : Result.CONFLICT;
     }
     private static boolean admissionColumnOccupied(ServerLevel level, Mob candidate, AABB body) {
         return !level.getEntities(candidate, body.inflate(0.001D), entity -> entity instanceof LivingEntity living
@@ -358,11 +401,14 @@ final class FrontierV3AmbientActorExecutor {
                                       FrontierWorldState state, SubjectId actorId, BodyPosition canonicalBody,
                                       FrontierV3SceneBehaviorRegistry.StandingPositionProvider standingPositionProvider) {
         Entity pending = FrontierV3AmbientPendingAdmissions.get(runtime, entityId(state, actorId));
-        if (pending != null && owned(pending, actorId, bioform(state, actorId))) return Result.PENDING;
         AmbientActorLease ambient = state.ambientLeases().get(actorId);
         if (ambient == null) return Result.CONFLICT;
         Entity existing = level.getEntity(entityId(state, actorId));
         FrontierV3AmbientCarrierLedger ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
+        if (pending != null) {
+            return FrontierV3AmbientCarrierRecognition.recoverableOwnership(state,
+                    FrontierV3AmbientCarrierRecognition.ManagedCarrier.from(pending), ledger) ? Result.PENDING : Result.CONFLICT;
+        }
         FrontierV3AmbientCarrierLedger.Reconciliation carrier = ledger.reconciliation(carrierDeclaration(state, actorId,
                 FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, entityId(state, actorId), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY,
                 ambient.revision(), 1L), existing != null);
@@ -370,29 +416,33 @@ final class FrontierV3AmbientActorExecutor {
             if (carrier != FrontierV3AmbientCarrierLedger.Reconciliation.NO_FENCED_CARRIER) return Result.CONFLICT;
             if (!owned(existing, actorId, bioform(state, actorId))
                     && !FrontierV3SceneExecutor.adoptRetainedClosedBodyForAmbient(existing, state, actorId)) return Result.CONFLICT;
+            if (!FrontierV3AmbientCarrierRecognition.recoverableOwnership(state,
+                    FrontierV3AmbientCarrierRecognition.ManagedCarrier.from(existing), ledger)) return Result.CONFLICT;
             return materialize(level, state, actorId, canonicalBody, standingPositionProvider);
         }
+        // An unacknowledged creation is not a new inactive-carrier admission.
+        // Its missing body needs recovery, never another attempt at creation.
+        if (ledger.pendingAdoption(actorId).isPresent() || ledger.pendingHandoff(actorId).isPresent()) return Result.CONFLICT;
         BlockPos position = standingPositionProvider.resolve(level, minecraftFloor(canonicalBody.supportingSurface().support()));
         if (position == null || !position.equals(minecraftBody(canonicalBody))
                 || !mayCreateFreshBody(level.hasChunkAt(position), level.areEntitiesLoaded(ChunkPos.asLong(position)), true)) return Result.DEFERRED;
         if (existing == null && carrier != FrontierV3AmbientCarrierLedger.Reconciliation.NO_FENCED_CARRIER
                 && carrier != FrontierV3AmbientCarrierLedger.Reconciliation.READY) return Result.CONFLICT;
-        if (existing == null && carrier == FrontierV3AmbientCarrierLedger.Reconciliation.NO_FENCED_CARRIER
-                && state.ambientLeases().get(actorId).revision() > 1L) return Result.CONFLICT;
-        Result result = materialize(level, state, actorId, canonicalBody, standingPositionProvider);
-        if (result != Result.APPLIED || carrier != FrontierV3AmbientCarrierLedger.Reconciliation.READY) return result;
-        Entity reconstructed = level.getEntity(entityId(state, actorId));
-        long reconstructionEpoch = ledger.reconstructionEpoch(actorId);
-        if (!(reconstructed instanceof Mob) || !ledger.adopt(carrierDeclaration(state, actorId,
-                FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, reconstructed.getUUID(), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, ambient.revision(), reconstructionEpoch))) {
-            if (reconstructed != null) reconstructed.discard();
-            return Result.CONFLICT;
+        if (carrier != FrontierV3AmbientCarrierLedger.Reconciliation.READY) {
+            var first = carrierDeclaration(state, actorId, FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
+                    entityId(state, actorId), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, ambient.revision(), 1L);
+            if (!hasUnusedFirstAdmission(ledger, first)) return Result.CONFLICT;
+            return materialize(level, state, actorId, canonicalBody, standingPositionProvider, 1L,
+                    body -> FrontierV3ActorFirstAdmissionBoundary.admit(ledger, FrontierV3ActorOwnerBinding.ambient(first),
+                            () -> ledger.persist(level, state.bootstrap().worldId()), () -> level.addFreshEntity(body)));
         }
-        reconstructed.getPersistentData().putLong(CUSTODY_EPOCH_KEY, reconstructionEpoch);
-        FrontierV3ActorCarrierComposition.stamp(reconstructed, carrierDeclaration(state, actorId,
-                FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, reconstructed.getUUID(),
-                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, ambient.revision(), reconstructionEpoch));
-        return result;
+        long reconstructionEpoch = ledger.reconstructionEpoch(actorId);
+        var declaration = carrierDeclaration(state, actorId, FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
+                entityId(state, actorId), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY,
+                ambient.revision(), reconstructionEpoch);
+        return materialize(level, state, actorId, canonicalBody, standingPositionProvider, reconstructionEpoch,
+                body -> FrontierV3ActorAdoptionAdmission.admit(ledger, FrontierV3ActorOwnerBinding.ambient(declaration),
+                        () -> ledger.persist(level, state.bootstrap().worldId()), () -> level.addFreshEntity(body)));
     }
     static UUID entityId(FrontierWorldState state, SubjectId actorId) { return io.farfrontier.palemirror.frontier.v3.model.SceneLease.deterministicEntityId(state.bootstrap().worldId(), actorId); }
     static FrontierV3ActorCarrierComposition.Declaration carrierDeclaration(FrontierWorldState state, SubjectId actorId,
@@ -415,7 +465,23 @@ final class FrontierV3AmbientActorExecutor {
                 && lease.status() == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART
                 && location.body().equals(lease.handoffBody())
                 && level.hasChunkAt(minecraftBody(lease.handoffBody()))
+                && level.areEntitiesLoaded(ChunkPos.asLong(minecraftBody(lease.handoffBody())))
+                && restartCustodyIsRetained(state, actorId, lease,
+                    FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId()))
                 && level.getEntity(entityId(state, actorId)) == null;
+    }
+    static boolean restartCustodyIsRetained(FrontierWorldState state, SubjectId actorId, AmbientActorLease lease,
+                                            FrontierV3AmbientCarrierLedger ledger) {
+        // An empty loaded anchor is not proof that an old body never existed in
+        // another saved chunk. Only a retained release fence permits closure here.
+        // Historical lost custody needs the explicit offline all-dimension recovery.
+        if (!lease.equals(state.ambientLeases().get(actorId)) || lease.status() != AmbientLeaseStatus.UNKNOWN_AFTER_RESTART
+                || !ledger.hasCarrier(actorId) || ledger.departure(actorId).isPresent()
+                || ledger.ambientDeparture(actorId).isPresent() || ledger.hasDepartureConflict(actorId)) return false;
+        var inactive = carrierDeclaration(state, actorId, FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
+                entityId(state, actorId), FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER,
+                lease.revision(), ledger.reconstructionEpoch(actorId) - 1L);
+        return ledger.matchesCarrier(inactive, lease.revision(), lease.revision());
     }
     static FrontierV3AmbientAdmissionDiagnostic admissionDiagnostic(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                                      FrontierWorldState state, SubjectId actorId) {
@@ -425,6 +491,11 @@ final class FrontierV3AmbientActorExecutor {
         if (location.condition().status() != ActorLifeStatus.ALIVE) return FrontierV3AmbientAdmissionDiagnostic.terminal(expectedId);
         Entity existing = level.getEntity(expectedId);
         AmbientActorLease lease = state.ambientLeases().get(actorId);
+        var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
+        var unresolved = FrontierV3AmbientAdmissionDiagnostic.unresolvedCreationReason(ledger, actorId);
+        if (existing == null && unresolved.isPresent()) {
+            return FrontierV3AmbientAdmissionDiagnostic.carrierAmbiguity(expectedId, unresolved.orElseThrow());
+        }
         if (lease != null && lease.status() == AmbientLeaseStatus.PREPARED) {
             FrontierV3AmbientCarrierLedger.Reconciliation carrier = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId())
                     .reconciliation(carrierDeclaration(state, actorId, FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, expectedId,
@@ -436,7 +507,10 @@ final class FrontierV3AmbientActorExecutor {
                     || carrier == FrontierV3AmbientCarrierLedger.Reconciliation.STALE_REVISION)) {
                 return FrontierV3AmbientAdmissionDiagnostic.carrierAmbiguity(expectedId, carrier.name());
             }
-            if (existing == null && carrier == FrontierV3AmbientCarrierLedger.Reconciliation.NO_FENCED_CARRIER && lease.revision() > 1L) {
+            if (existing == null && carrier == FrontierV3AmbientCarrierLedger.Reconciliation.NO_FENCED_CARRIER
+                    && !hasUnusedFirstAdmission(ledger, carrierDeclaration(state, actorId,
+                        FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, expectedId,
+                        FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, lease.revision(), 1L))) {
                 return FrontierV3AmbientAdmissionDiagnostic.carrierAmbiguity(expectedId, "MISSING");
             }
         }
@@ -682,25 +756,10 @@ final class FrontierV3AmbientActorExecutor {
         return false;
     }
     static boolean drain(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Mob body) {
-        FrontierWorldState before = runtime.decodedState().orElse(null);
-        if (before == null) return false;
-        SubjectId actorId;
-        try { actorId = new SubjectId(body.getPersistentData().getString(ACTOR_KEY)); } catch (IllegalArgumentException invalid) { return false; }
-        AmbientActorLease lease = before.ambientLeases().get(actorId);
-        if (lease == null) return false;
-        long epoch = Math.max(1L, body.getPersistentData().getLong(CUSTODY_EPOCH_KEY));
-        FrontierV3AmbientCarrierLedger ledger = FrontierV3AmbientCarrierLedger.get(level, before.bootstrap().worldId());
-        FrontierV3ActorCarrierComposition.Declaration carrier = carrierDeclaration(before, actorId, FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
-                body.getUUID(), FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, lease.revision(), epoch);
-        if (!ledger.canFence(carrier, lease.revision(), lease.revision())) return false;
-        if (!ledger.fence(carrier, lease.revision(), lease.revision())) return false;
-        Optional<FrontierV3AmbientAdmissionPolicy.EffectResult> released = release(runtime, body, false);
-        if (released.isEmpty()) return false;
-        body.discard();
-        return true;
+        return body.level() == level && release(runtime, body).isPresent();
     }
     static Optional<FrontierV3AmbientAdmissionPolicy.EffectResult> drainForAdmission(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Mob body) {
-        return release(runtime, body, true);
+        return release(runtime, body);
     }
     static boolean fenceClosedSceneBody(ServerLevel level, FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.model.SceneLease lease,
                                         io.farfrontier.palemirror.frontier.v3.model.SceneMember member, Entity entity) {
@@ -714,7 +773,7 @@ final class FrontierV3AmbientActorExecutor {
         if (entity == null) {
             var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
             if (ledger.departure(member.actorId()).isPresent()) {
-                return FrontierV3SceneDepartureObserver.fenceDeparture(state, lease, member, ledger)
+                return FrontierV3SceneDepartureObserver.fenceDeparture(level, state, lease, member, ledger)
                         ? SceneCarrierFenceResult.FENCED : SceneCarrierFenceResult.CARRIER_CONFLICT;
             }
         }
@@ -751,8 +810,10 @@ final class FrontierV3AmbientActorExecutor {
         FrontierV3AmbientCarrierLedger ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
         FrontierV3ActorCarrierComposition.Declaration carrier = carrierDeclaration(state, member.actorId(), FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE,
                 body.getUUID(), FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, physicalRevision, epoch);
-        if (ledger.matchesCarrier(carrier, physicalRevision, priorAmbientRevision)) return SceneCarrierFenceResult.FENCED;
-        if (!ledger.canFence(carrier, physicalRevision, priorAmbientRevision) || !ledger.fence(carrier, physicalRevision, priorAmbientRevision)) return SceneCarrierFenceResult.CARRIER_CONFLICT;
+        if (!ledger.matchesCarrier(carrier, physicalRevision, priorAmbientRevision)
+                && (!ledger.canFence(carrier, physicalRevision, priorAmbientRevision)
+                    || !ledger.fence(carrier, physicalRevision, priorAmbientRevision))) return SceneCarrierFenceResult.CARRIER_CONFLICT;
+        ledger.persist(level, state.bootstrap().worldId());
         return SceneCarrierFenceResult.FENCED;
     }
     enum SceneCarrierFenceResult {
@@ -764,8 +825,7 @@ final class FrontierV3AmbientActorExecutor {
     static boolean hasInactiveCarrier(ServerLevel level, FrontierWorldState state, SubjectId actorId) {
         return FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId()).hasCarrier(actorId);
     }
-    private static Optional<FrontierV3AmbientAdmissionPolicy.EffectResult> release(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Mob body,
-                                                                                      boolean discard) {
+    private static Optional<FrontierV3AmbientAdmissionPolicy.EffectResult> release(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Mob body) {
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return Optional.empty();
         String rawActorId = body.getPersistentData().getString(ACTOR_KEY);
@@ -775,7 +835,11 @@ final class FrontierV3AmbientActorExecutor {
         var current = state.actorLocations().get(actorId);
         if (current == null || current.condition().status() != ActorLifeStatus.ALIVE || !entityId(state, actorId).equals(body.getUUID())
                 || !owned(body, actorId, bioform(state, actorId)) || body.getHealth() <= 0.0F
-                || state.ambientLeases().get(actorId) == null || state.ambientLeases().get(actorId).status() != AmbientLeaseStatus.HOT) return Optional.empty();
+                || state.ambientLeases().get(actorId) == null
+                || (state.ambientLeases().get(actorId).status() != AmbientLeaseStatus.HOT
+                    && state.ambientLeases().get(actorId).status() != AmbientLeaseStatus.DRAINING
+                    && state.ambientLeases().get(actorId).status() != AmbientLeaseStatus.PREPARED
+                    && state.ambientLeases().get(actorId).status() != AmbientLeaseStatus.UNKNOWN_AFTER_RESTART)) return Optional.empty();
         BodyPosition position = observedBody(body);
         ResidentMigrationJourney journey = state.humanPopulation().migration(actorId);
         if (state.ambientLeases().get(actorId).goal() == AmbientGoalKind.TRANSIT) {
@@ -811,7 +875,26 @@ final class FrontierV3AmbientActorExecutor {
             position = observedBody(body);
         }
         FixedScalar health = new FixedScalar(Math.round((double) body.getHealth() * FixedScalar.SCALE));
-        if (!(submit(runtime, "ambient-draining", actorId.value(), new AmbientLeaseTransition(actorId, AmbientLeaseStatus.DRAINING))
+        // All physical releases, including reservation hand-offs, retain the same exact
+        // inactive-carrier evidence before closing canonical custody or removing the body.
+        if (!(body.level() instanceof ServerLevel level)) return Optional.empty();
+        AmbientActorLease lease = state.ambientLeases().get(actorId);
+        long epoch = body.getPersistentData().getLong(CUSTODY_EPOCH_KEY);
+        if (epoch < 1L || !FrontierV3ActorCarrierComposition.owns(body,
+                carrierDeclaration(state, actorId, FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
+                        body.getUUID(), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, lease.revision(), epoch))) return Optional.empty();
+        var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
+        if (ledger.ambientDeparture(actorId).isPresent() || ledger.departure(actorId).isPresent()
+                || ledger.hasDepartureConflict(actorId)) return Optional.empty();
+        var carrier = carrierDeclaration(state, actorId, FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
+                body.getUUID(), FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, lease.revision(), epoch);
+        boolean retained = ledger.matchesCarrier(carrier, lease.revision(), lease.revision());
+        if ((lease.status() == AmbientLeaseStatus.DRAINING || lease.status() == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART)
+                && !retained) return Optional.empty();
+        if (!retained && !ledger.fence(carrier, lease.revision(), lease.revision())) return Optional.empty();
+        ledger.persist(level, state.bootstrap().worldId());
+        if (lease.status() != AmbientLeaseStatus.DRAINING && !(submit(runtime, "ambient-draining", actorId.value(),
+                new AmbientLeaseTransition(actorId, AmbientLeaseStatus.DRAINING))
                 instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) return Optional.empty();
         FrontierWorldState drained = runtime.decodedState().orElse(null);
         if (drained == null || drained.ambientLeases().get(actorId) == null
@@ -821,14 +904,56 @@ final class FrontierV3AmbientActorExecutor {
         FrontierWorldState released = runtime.decodedState().orElse(null);
         if (released == null || released.ambientLeases().get(actorId) == null
                 || released.ambientLeases().get(actorId).status() != AmbientLeaseStatus.CLOSED) return Optional.empty();
-        if (discard) body.discard();
+        body.discard();
         return Optional.of(new FrontierV3AmbientAdmissionPolicy.EffectResult(drained, released));
     }
+    /** Cancel admission, not a physical owner: historical bodies require their retained carrier. */
+    static boolean abandonUndemandedPrepared(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                             FrontierWorldState state, SubjectId actorId, AmbientActorLease lease) {
+        if (lease.status() != AmbientLeaseStatus.PREPARED || !lease.equals(state.ambientLeases().get(actorId))) return false;
+        UUID id = entityId(state, actorId);
+        if (level.getEntity(id) != null || FrontierV3AmbientPendingAdmissions.get(runtime, id) != null) return false;
+        return abandonPreparedForReservation(level, runtime, state, actorId, lease).isPresent();
+    }
+
+    static boolean hasUnusedFirstAdmission(FrontierV3AmbientCarrierLedger ledger,
+                                           FrontierV3ActorCarrierComposition.Declaration declaration) {
+        return ledger.firstAdmission(declaration.actorId()).filter(value ->
+                value.identity().matches(declaration) && (value.phase() == FrontierV3ActorFirstAdmission.Phase.NEVER_CREATED
+                    || value.phase() == FrontierV3ActorFirstAdmission.Phase.PROVEN_ABSENT
+                        && value.attempt().orElseThrow().declaration().equals(declaration))).isPresent();
+    }
+    static boolean hasNeverCreatedFirstAdmission(FrontierV3AmbientCarrierLedger ledger,
+                                                 FrontierV3ActorCarrierComposition.Declaration declaration) {
+        return ledger.firstAdmission(declaration.actorId()).filter(value ->
+                value.phase() == FrontierV3ActorFirstAdmission.Phase.NEVER_CREATED
+                        && value.identity().matches(declaration)).isPresent();
+    }
+    static boolean preparedCancellationHasEvidence(FrontierV3AmbientCarrierLedger.Reconciliation carrier,
+                                                   boolean hasNeverCreatedPermit) {
+        return carrier == FrontierV3AmbientCarrierLedger.Reconciliation.READY
+                || (hasNeverCreatedPermit && carrier == FrontierV3AmbientCarrierLedger.Reconciliation.NO_FENCED_CARRIER);
+    }
+
     static Optional<FrontierV3AmbientAdmissionPolicy.EffectResult> abandonPreparedForReservation(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                                                                     FrontierWorldState state, SubjectId actorId, AmbientActorLease lease) {
+        if (lease.status() != AmbientLeaseStatus.PREPARED || !lease.equals(state.ambientLeases().get(actorId))
+                || !state.equals(runtime.decodedState().orElse(null))) return Optional.empty();
         Entity body = level.getEntity(entityId(state, actorId));
-        if (body != null && (!(body instanceof Mob mob) || !owned(mob, actorId, bioform(state, actorId))
-                || !observedBody(mob).equals(lease.handoffBody()))) return Optional.empty();
+        if (body != null) {
+            if (!(body instanceof Mob mob) || !observedBody(mob).equals(lease.handoffBody())) return Optional.empty();
+            return release(runtime, mob);
+        }
+        UUID id = entityId(state, actorId);
+        if (FrontierV3AmbientPendingAdmissions.get(runtime, id) != null) return Optional.empty();
+        var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
+        if (ledger.pendingAdoption(actorId).isPresent() || ledger.pendingHandoff(actorId).isPresent()) return Optional.empty();
+        var declaration = carrierDeclaration(state, actorId,
+                FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, id,
+                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, lease.revision(), 1L);
+        var carrier = ledger.reconciliation(declaration, false);
+        if (!preparedCancellationHasEvidence(carrier, hasNeverCreatedFirstAdmission(ledger, declaration))) return Optional.empty();
+        ledger.persist(level, state.bootstrap().worldId());
         if (!(submit(runtime, "ambient-reserved-draining", actorId.value(),
                 new AmbientLeaseTransition(actorId, AmbientLeaseStatus.DRAINING)) instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) {
             return Optional.empty();
@@ -845,7 +970,6 @@ final class FrontierV3AmbientActorExecutor {
         FrontierWorldState resulting = runtime.decodedState().orElse(null);
         if (resulting == null || resulting.ambientLeases().get(actorId) == null
                 || resulting.ambientLeases().get(actorId).status() != AmbientLeaseStatus.CLOSED) return Optional.empty();
-        if (body != null) body.discard();
         return Optional.of(new FrontierV3AmbientAdmissionPolicy.EffectResult(drained, resulting));
     }
     private static boolean drainReservedColdContinuation(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
@@ -853,41 +977,31 @@ final class FrontierV3AmbientActorExecutor {
                                                           AmbientActorLease lease) {
         if (!lease.equals(state.ambientLeases().get(actorId))
                 || !FrontierV3SurfaceObservation.at(body, lease.handoffBody().supportingSurface())) return false;
-        if (!(submit(runtime, "ambient-reserved-cold-draining", actorId.value(),
-                new AmbientLeaseTransition(actorId, AmbientLeaseStatus.DRAINING))
-                instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) return false;
-        FrontierWorldState draining = runtime.decodedState().orElse(null);
-        if (draining == null || draining.ambientLeases().get(actorId) == null
-                || draining.ambientLeases().get(actorId).status() != AmbientLeaseStatus.DRAINING) return false;
-        var condition = draining.actorLocations().get(actorId);
-        if (condition == null || condition.condition().status() != ActorLifeStatus.ALIVE) return false;
-        if (!(submit(runtime, "ambient-reserved-cold-release", actorId.value(),
-                new AmbientLeaseReleased(actorId, lease.handoffBody(), condition.condition().health()))
-                instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) return false;
-        FrontierWorldState released = runtime.decodedState().orElse(null);
-        if (released == null || released.ambientLeases().get(actorId) == null
-                || released.ambientLeases().get(actorId).status() != AmbientLeaseStatus.CLOSED) return false;
-        body.discard();
-        return true;
+        return release(runtime, body).isPresent();
     }
     /** Releases an exact ambient hand-off only once Minecraft has unloaded its whole chunk. */
-    private static boolean releaseUnloadedReservedColdContinuation(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+    static boolean releaseUnloadedReservedColdContinuation(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                                     FrontierWorldState state, SubjectId actorId,
                                                                     AmbientActorLease lease) {
-        var actor = state.actorLocations().get(actorId);
-        if (!lease.equals(state.ambientLeases().get(actorId)) || actor == null
-                || actor.condition().status() != ActorLifeStatus.ALIVE || !actor.body().equals(lease.handoffBody())) return false;
-        if (!(submit(runtime, "ambient-unloaded-reserved-draining", actorId.value(),
+        if (!lease.equals(state.ambientLeases().get(actorId)) || level.getEntity(entityId(state, actorId)) != null
+                || FrontierV3AmbientPendingAdmissions.get(runtime, entityId(state, actorId)) != null) return false;
+        var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
+        var receipt = ledger.ambientDeparture(actorId).filter(value -> value.current(state)).orElse(null);
+        if (receipt == null || ledger.hasDepartureConflict(actorId)
+                || level.hasChunkAt(minecraftBody(receipt.observed().body()))
+                || (lease.goal() != AmbientGoalKind.PATROL && !receipt.observed().body().equals(lease.handoffBody()))) return false;
+        var carrier = receipt.carrier();
+        if (!ledger.fence(carrier.identity(), carrier.physicalRevision(), carrier.ambientRevision())) return false;
+        ledger.persist(level, state.bootstrap().worldId());
+        if (lease.status() != AmbientLeaseStatus.DRAINING && !(submit(runtime, "ambient-unloaded-reserved-draining", actorId.value(),
                 new AmbientLeaseTransition(actorId, AmbientLeaseStatus.DRAINING))
                 instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) return false;
         FrontierWorldState draining = runtime.decodedState().orElse(null);
         if (draining == null || draining.ambientLeases().get(actorId) == null
                 || draining.ambientLeases().get(actorId).status() != AmbientLeaseStatus.DRAINING) return false;
-        var condition = draining.actorLocations().get(actorId);
-        if (condition == null || condition.condition().status() != ActorLifeStatus.ALIVE
-                || !condition.body().equals(lease.handoffBody())) return false;
+        if (!receipt.current(draining)) return false;
         return submit(runtime, "ambient-unloaded-reserved-release", actorId.value(),
-                new AmbientLeaseReleased(actorId, lease.handoffBody(), condition.condition().health()))
+                new AmbientLeaseReleased(actorId, receipt.observed().body(), receipt.observed().health()))
                 instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted;
     }
     static void forget(FrontierV3ServerRuntime<?, ?> runtime) {

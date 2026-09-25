@@ -45,7 +45,7 @@ public final class FrontierReadabilityPlan {
                     settlement.displayName() + "\n" + structureName(structure.kind()) + "\n" + withContamination(facilityText(state, settlement, structure, condition), stage)));
         }));
         state.bootstrap().hive().organs().forEach(organ -> addOrgan(values, state, organ, contamination.get(organ.id())));
-        FrontierResourceSitePlan.compile(state.bootstrap()).values().forEach(site -> addResourceSite(values, state, site));
+        state.resourceSiteDescriptors().values().forEach(site -> addResourceSite(values, state, site));
         addRouteNetwork(values, state);
         return new FrontierReadabilityPlan(values);
     }
@@ -212,7 +212,7 @@ public final class FrontierReadabilityPlan {
     private static void addResourceSite(Map<SubjectId, FrontierObjectBoard> values, FrontierWorldState state, ResourceSite site) {
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), site.settlementId());
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(site.id());
-        add(values, new FrontierObjectBoard(site.id(), fieldBoardPosition(state, site), fieldTone(lifecycle.phase()), FrontierObjectBoard.Scope.LOCAL,
+        add(values, new FrontierObjectBoard(site.id(), fieldBoardPosition(state, site), fieldTone(lifecycle), FrontierObjectBoard.Scope.LOCAL,
                 settlement.displayName() + "\nWHEAT FIELD\n" + fieldStateText(state, site, lifecycle)));
     }
 
@@ -281,8 +281,11 @@ public final class FrontierReadabilityPlan {
         return kind == StructureKind.HALL ? FrontierObjectBoard.Scope.LANDMARK : FrontierObjectBoard.Scope.LOCAL;
     }
 
-    private static FrontierObjectBoard.Tone fieldTone(ResourceSitePhase phase) {
-        return switch (phase) {
+    private static FrontierObjectBoard.Tone fieldTone(ResourceSiteLifecycle lifecycle) {
+        if (lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
+                .map(ResourceSiteHarvestJob.class::cast).flatMap(ResourceSiteHarvestJob::navigationBlock).isPresent())
+            return FrontierObjectBoard.Tone.WARNING;
+        return switch (lifecycle.phase()) {
             case CONFLICT, DESTROYED -> FrontierObjectBoard.Tone.WARNING;
             case UNPREPARED, GROWING, READY, HARVESTING -> FrontierObjectBoard.Tone.SETTLEMENT;
         };
@@ -326,7 +329,20 @@ public final class FrontierReadabilityPlan {
             case UNPREPARED -> "PREPARING SOIL · KEEP CLEAR";
             case GROWING -> "GROWING · STAGE " + lifecycle.growthStage() + "/" + ResourceSiteLifecycle.MATURE_STAGE;
             case READY -> readyFieldText(state, site);
-            case HARVESTING -> "HARVEST IN PROGRESS";
+            case HARVESTING -> lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
+                    .map(ResourceSiteHarvestJob.class::cast).flatMap(ResourceSiteHarvestJob::navigationBlock)
+                    .map(block -> "HARVEST PAUSED · ROUTE BLOCKED\n" + switch (block.reason()) {
+                        case TARGET_SUPPORT -> "SUPPORT MISSING";
+                        case TARGET_CLEARANCE -> "PATH OBSTRUCTED";
+                        case TARGET_MEDIUM -> "UNSUPPORTED MEDIUM";
+                        case PATH_UNAVAILABLE -> "NO SAFE PATH";
+                        case PATH_STALLED -> "FARMER STALLED";
+                        case TARGET_CHUNK_UNLOADED -> "TARGET NOT LOADED";
+                        case CONTINUATION_UNAVAILABLE -> "NO SAFE ROUTE TO NEXT WORK GOAL";
+                        case OFF_CONTRACT -> "FARMER OUTSIDE SAFE ROUTE";
+                        case UNSUPPORTED_CAPABILITY -> "NO PEDESTRIAN NAVIGATOR";
+                        case KNOWN_GEOMETRY_UNAVAILABLE -> "AWAITING OBSERVED ROUTE";
+                    }).orElse("HARVEST IN PROGRESS");
             case CONFLICT -> conflictFieldText(lifecycle);
             case DESTROYED -> "LOST · REBUILD NEEDED";
         };

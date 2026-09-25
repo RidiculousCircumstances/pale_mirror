@@ -187,8 +187,12 @@ class HiveNutrientTransferProcessTest {
         ExactItemStack biomass = baseline.inventory().items().get(new SubjectId("item:bootstrap-hive-biomass"));
         HiveNutrientTransfer transfer = HiveNutrientTransferProcess.create(baseline, task, biomass, new SubjectId("container:hive-west-store"), 0);
 
+        byte[] encodedTransfer = FrontierWorldRuntimeDefinition.payloadCodecs().encode(new HiveNutrientTransferStarted(transfer));
         assertEquals(new HiveNutrientTransferStarted(transfer), FrontierWorldRuntimeDefinition.payloadCodecs().decode(
-                "frontier.hive_nutrient_transfer_started", FrontierWorldRuntimeDefinition.payloadCodecs().encode(new HiveNutrientTransferStarted(transfer))));
+                "frontier.hive_nutrient_transfer_started", encodedTransfer));
+        assertThrows(IllegalArgumentException.class, () -> FrontierWorldRuntimeDefinition.payloadCodecs().decode(
+                "frontier.hive_nutrient_transfer_started", java.util.Arrays.copyOf(encodedTransfer, encodedTransfer.length - 1)),
+                "current-format nutrient transfer must declare even an absent endpoint intent");
 
         FrontierWorldState started = HiveNutrientTransferProcess.reduceStarted(baseline, baseline.bootstrap().hive().id(), transfer);
         assertSame(baseline.hiveColony().addedOrgans(), started.hiveColony().addedOrgans());

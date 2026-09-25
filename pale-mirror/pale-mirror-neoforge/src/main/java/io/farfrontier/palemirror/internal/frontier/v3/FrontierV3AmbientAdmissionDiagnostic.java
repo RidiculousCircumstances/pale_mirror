@@ -42,6 +42,15 @@ record FrontierV3AmbientAdmissionDiagnostic(String status, UUID entityId, boolea
     static FrontierV3AmbientAdmissionDiagnostic carrierAmbiguity(UUID entityId, String reason) {
         return new FrontierV3AmbientAdmissionDiagnostic("CARRIER_" + reason, entityId, false, null, null, null);
     }
+    /** Read-only history explanation; never authorization to create or discard a body. */
+    static java.util.Optional<String> unresolvedCreationReason(FrontierV3AmbientCarrierLedger ledger,
+            io.farfrontier.palemirror.frontier.v3.api.SubjectId actor) {
+        if (ledger.pendingHandoff(actor).isPresent()) return java.util.Optional.of("HANDOFF_SAVE_PENDING");
+        if (ledger.pendingAdoption(actor).isPresent()) return java.util.Optional.of("ADOPTION_SAVE_PENDING");
+        return ledger.firstAdmission(actor)
+                .filter(first -> first.phase() == FrontierV3ActorFirstAdmission.Phase.PENDING)
+                .map(first -> "FIRST_CREATION_PENDING");
+    }
     static FrontierV3AmbientAdmissionDiagnostic pendingUnindexed(UUID entityId, BlockPosition observedPosition, FrontierV3AmbientActorExecutor.ObservedPosition observedExact) {
         return new FrontierV3AmbientAdmissionDiagnostic("PENDING_UNINDEXED", entityId, true, null, observedPosition, observedExact);
     }

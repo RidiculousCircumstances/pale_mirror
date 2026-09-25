@@ -10,7 +10,7 @@ public record ResourceSiteHarvestCropPrepared(SubjectId jobId, int cropSlotIndex
     public ResourceSiteHarvestCropPrepared {
         Objects.requireNonNull(jobId, "resource-site harvest crop job");
         if (!jobId.value().startsWith("job:site-harvest-") || cropSlotIndex < 0
-                || cropSlotIndex >= ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS) {
+                || cropSlotIndex >= ResourceFieldLayout.MAX_CELLS) {
             throw new IllegalArgumentException("resource-site harvest crop preparation is invalid");
         }
     }

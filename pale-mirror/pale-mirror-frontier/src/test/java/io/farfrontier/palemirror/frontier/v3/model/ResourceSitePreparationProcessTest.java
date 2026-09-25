@@ -60,8 +60,12 @@ class ResourceSitePreparationProcessTest {
         ResourceSiteHarvestJob job = (ResourceSiteHarvestJob) lifecycle.activeWork().orElseThrow(() ->
                 new AssertionError("site seven has no partial harvest at 21140: " + lifecycle));
         assertEquals("job:site-harvest-7-wheat-field-1", job.id().value());
+        String navigation;
+        try { navigation = "knownPath=" + ResourceSiteHarvestKnownNavigation.path(state, job).size(); }
+        catch (IllegalArgumentException unavailable) { navigation = "unavailable=" + unavailable.getMessage(); }
         assertTrue(job.progress().completedCropSlots() > 0,
-                "the natural ingress discriminator must retain actual COLD work before arrival");
+                "the natural ingress discriminator must retain actual COLD work before arrival; actor="
+                        + state.actorLocations().get(job.workerId()) + " " + navigation);
         assertTrue(job.progress().completedCropSlots() < ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS - 1,
                 "the natural ingress discriminator must not pre-complete the farmer's whole field");
     }

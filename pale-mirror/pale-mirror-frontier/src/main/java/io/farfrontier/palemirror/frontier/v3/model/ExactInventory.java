@@ -144,12 +144,66 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         return Optional.ofNullable(occupiedSlots.get(new InventoryCustody.ContainerSlot(containerId, slot))).map(items::get);
     }
 
-    /** Lowest available semantic slot; callers must still validate the container's owner and use. */
-    public OptionalInt firstFreeSlot(SubjectId containerId) {
+    /** A slot already carrying a fungible HOT stack is not free for an exact output. */
+    public boolean slotVacant(InventoryCustody.ContainerSlot slot) {
+        Objects.requireNonNull(slot, "container slot");
+        return availableSlots(slot.containerId()).contains(slot.slot());
+    }
+
+    /** Any candidate slot may be used if the remaining total capacity still fits COLD stock. */
+    public List<Integer> availableSlots(SubjectId containerId) {
         ContainerRecord container = containers.get(Objects.requireNonNull(containerId, "container id"));
         if (container == null) throw new IllegalArgumentException("unknown container: " + containerId.value());
-        for (int slot = 0; slot < container.slotCount(); slot++) if (itemAt(containerId, slot).isEmpty()) return OptionalInt.of(slot);
-        return OptionalInt.empty();
+        ContainerSlotBudget budget = slotBudget(containerId);
+        if (budget.requiredSlots() >= container.slotCount()) return List.of();
+        var available = new java.util.ArrayList<Integer>();
+        for (int slot = 0; slot < container.slotCount(); slot++) {
+            if (!budget.occupied().contains(slot) && !budget.bound().contains(slot)) available.add(slot);
+        }
+        return List.copyOf(available);
+    }
+
+    private record ContainerSlotBudget(java.util.Set<Integer> occupied, java.util.Set<Integer> bound, long packedStacks) {
+        long requiredSlots() { return occupied.size() + Math.max(packedStacks, bound.size()); }
+    }
+
+    private ContainerSlotBudget slotBudget(SubjectId containerId) {
+        var occupied = new java.util.HashSet<Integer>();
+        occupiedSlots.keySet().stream().filter(slot -> slot.containerId().equals(containerId))
+                .map(InventoryCustody.ContainerSlot::slot).forEach(occupied::add);
+        var bound = new java.util.HashSet<Integer>();
+        fungibleResources.bindings().values().stream()
+                .filter(binding -> binding.address() instanceof PhysicalStackAddress.ContainerSlot address
+                        && address.slot().containerId().equals(containerId))
+                .map(binding -> ((PhysicalStackAddress.ContainerSlot) binding.address()).slot().slot())
+                .forEach(bound::add);
+        Map<String, Long> stockByKind = new HashMap<>();
+        fungibleResources.accounts().values().stream()
+                .filter(account -> account.custody() instanceof ResourceCustody.Container location
+                        && location.containerId().equals(containerId))
+                .forEach(account -> account.lotQuantities().forEach((lotId, quantity) ->
+                        stockByKind.merge(fungibleResources.lots().get(lotId).itemKind(), quantity.longValue(), Math::addExact)));
+        long packedStacks = stockByKind.values().stream().mapToLong(quantity -> ((long) quantity + 63) / 64).sum();
+        return new ContainerSlotBudget(occupied, bound, packedStacks);
+    }
+
+    /** Restored old overcommit may be inspected and reduced, but no transition may make it worse. */
+    private ExactInventory admitNoNewContainerOvercommit(ExactInventory next) {
+        for (ContainerRecord container : containers.values()) {
+            long before = slotBudget(container.id()).requiredSlots();
+            long after = next.slotBudget(container.id()).requiredSlots();
+            if (after > Math.max(container.slotCount(), before)) {
+                throw new IllegalArgumentException("canonical container capacity would be overcommitted: "
+                        + container.id().value() + " requires " + after + "/" + container.slotCount() + " slots");
+            }
+        }
+        return next;
+    }
+
+    /** Lowest available semantic slot; callers must still validate the container's owner and use. */
+    public OptionalInt firstFreeSlot(SubjectId containerId) {
+        List<Integer> available = availableSlots(containerId);
+        return available.isEmpty() ? OptionalInt.empty() : OptionalInt.of(available.getFirst());
     }
 
     /** Exact equipment/cargo retained by one actor; this is derived from single-source item custody. */
@@ -172,7 +226,8 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         Map<SubjectId, ExactItemStack> nextItems = new HashMap<>(items);
         nextItems.remove(consumedItemId);
         nextItems.put(producedItem.id(), producedItem);
-        return new ExactInventory(containers, nextItems, cargo, playerItems, worldCarrierItems, conflicts, surfaces, economics, fungibleResources);
+        return admitNoNewContainerOvercommit(new ExactInventory(containers, nextItems, cargo, playerItems, worldCarrierItems,
+                conflicts, surfaces, economics, fungibleResources));
     }
 
     /** Removes one exact item only after the caller has recorded the durable process which owns it. */
@@ -257,8 +312,9 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
     public ExactInventory store(ExactItemStack item) {
         Objects.requireNonNull(item, "item");
         if (items.containsKey(item.id())) throw new IllegalArgumentException("stored item identity already exists: " + item.id().value());
-        if (!(item.custody() instanceof InventoryCustody.ContainerSlot)) throw new IllegalArgumentException("stored item must enter a container slot");
+        if (!(item.custody() instanceof InventoryCustody.ContainerSlot slot)) throw new IllegalArgumentException("stored item must enter a container slot");
         requireContainerClaim(item);
+        if (!slotVacant(slot)) throw new IllegalArgumentException("stored item has no available physical container slot");
         Map<SubjectId, ExactItemStack> nextItems = new HashMap<>(items);
         nextItems.put(item.id(), item);
         return new ExactInventory(containers, nextItems, cargo, playerItems, worldCarrierItems, conflicts, surfaces, economics, fungibleResources);
@@ -361,7 +417,8 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         }
         Map<SubjectId, CargoBatch> nextCargo = new HashMap<>(cargo);
         nextCargo.remove(cargoId);
-        return new ExactInventory(containers, nextItems, nextCargo, playerItems, worldCarrierItems, conflicts, surfaces, economics, fungibleResources);
+        return admitNoNewContainerOvercommit(new ExactInventory(containers, nextItems, nextCargo, playerItems,
+                worldCarrierItems, conflicts, surfaces, economics, fungibleResources));
     }
 
     /** Exact and fungible custody share one world-carrier ownership predicate. */
@@ -388,7 +445,8 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
                 source.lotQuantities(), Map.of()) : targetAccount;
         FungibleResourceLedger resources = fungibleResources.deliverCargoToContainer(source.id(), receiving, target.ownerId());
         Map<SubjectId, CargoBatch> nextCargo = new HashMap<>(cargo); nextCargo.remove(cargoId);
-        return new ExactInventory(containers, items, nextCargo, playerItems, worldCarrierItems, conflicts, surfaces, economics, resources);
+        return admitNoNewContainerOvercommit(new ExactInventory(containers, items, nextCargo, playerItems,
+                worldCarrierItems, conflicts, surfaces, economics, resources));
     }
 
     /** Commits an observed HOT cargo arrival and its complete target-stack layout as one transaction. */
@@ -417,7 +475,8 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
             resources = fungibleResources.deliverObservedCargoToBoundContainer(source.id(), receivingAccount, target.ownerId(), authorityEpoch, observedStacks);
         }
         Map<SubjectId, CargoBatch> nextCargo = new HashMap<>(cargo); nextCargo.remove(cargoId);
-        return new ExactInventory(containers, items, nextCargo, playerItems, worldCarrierItems, conflicts, surfaces, economics, resources);
+        return admitNoNewContainerOvercommit(new ExactInventory(containers, items, nextCargo, playerItems,
+                worldCarrierItems, conflicts, surfaces, economics, resources));
     }
 
     /**
@@ -497,7 +556,8 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         Map<SubjectId, ExactItemStack> nextItems = new HashMap<>(items);
         SubjectId nextOwner = to instanceof InventoryCustody.ContainerSlot target ? containers.get(target.containerId()).ownerId() : current.economicOwnerId();
         nextItems.put(itemId, new ExactItemStack(current.id(), nextOwner, current.itemKind(), current.count(), to));
-        return new ExactInventory(containers, nextItems, cargo, nextPlayers, nextCarriers, conflicts, surfaces, economics, fungibleResources);
+        return admitNoNewContainerOvercommit(new ExactInventory(containers, nextItems, cargo, nextPlayers,
+                nextCarriers, conflicts, surfaces, economics, fungibleResources));
     }
 
     public ExactInventory recordConflict(InventoryConflict conflict) {
@@ -525,8 +585,9 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
 
     /** Replaces the one canonical fungible-resource ledger without altering stable equipment/cargo identities. */
     public ExactInventory withFungibleResources(FungibleResourceLedger nextResources) {
-        return new ExactInventory(containers, items, cargo, playerItems, worldCarrierItems, conflicts, surfaces, economics,
-                Objects.requireNonNull(nextResources, "fungible resource ledger"));
+        return admitNoNewContainerOvercommit(new ExactInventory(containers, items, cargo, playerItems,
+                worldCarrierItems, conflicts, surfaces, economics,
+                Objects.requireNonNull(nextResources, "fungible resource ledger")));
     }
 
     private static Map<UUID, List<SubjectId>> mutableCustody(Map<UUID, List<SubjectId>> values) {

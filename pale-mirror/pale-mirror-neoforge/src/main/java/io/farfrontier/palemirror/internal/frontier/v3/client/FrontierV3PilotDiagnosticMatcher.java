@@ -51,10 +51,24 @@ final class FrontierV3PilotDiagnosticMatcher {
     }
 
     static boolean containerContains(JsonObject container, JsonObject action) {
-        if (!"ok".equals(string(container, "status")) || !container.has("occupied") || !container.get("occupied").isJsonArray()) return false;
+        if (!"ok".equals(string(container, "status"))) return false;
         String item = action.get("item").getAsString(); int count = action.get("count").getAsInt();
         Integer slot = action.has("slot") ? action.get("slot").getAsInt() : null;
-        for (JsonElement element : container.getAsJsonArray("occupied")) {
+        if (containsStack(container, "occupied", item, count, slot)) return true;
+        // Field output is a fungible lot bound to a real chest slot, not an
+        // ExactItemStack. Require current observed physical custody as well as
+        // the binding; a canonical-only or stale slot is not a client oracle.
+        if (!container.has("replica") || !container.get("replica").isJsonObject()
+                || !"OBSERVED_CURRENT".equals(string(container.getAsJsonObject("replica"), "state"))
+                || !container.has("physicalSocket") || !container.get("physicalSocket").isJsonObject()) return false;
+        JsonObject socket = container.getAsJsonObject("physicalSocket");
+        return "OWNED".equals(string(socket, "chest")) && "CURRENT".equals(string(socket, "slots"))
+                && containsStack(container, "fungibleOccupied", item, count, slot);
+    }
+
+    private static boolean containsStack(JsonObject container, String member, String item, int count, Integer slot) {
+        if (!container.has(member) || !container.get(member).isJsonArray()) return false;
+        for (JsonElement element : container.getAsJsonArray(member)) {
             if (!element.isJsonObject()) continue;
             JsonObject value = element.getAsJsonObject();
             if (item.equals(string(value, "itemKind")) && value.has("count") && value.get("count").getAsInt() == count

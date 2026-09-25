@@ -25,7 +25,14 @@ public record DiagnosticIncident(String id, DiagnosticTuple diagnostic, String f
     }
     public static String idFor(DiagnosticTuple tuple) {
         Objects.requireNonNull(tuple, "incident tuple");
-        return "diagnostic:" + tuple.reason().wireTag() + ":" + DiagnosticWireTags.subjectTag(tuple.subject().kind()) + ":" + tuple.subject().id().value();
+        // A facility can be involved in many independent jobs. Subject identity
+        // alone must never alias their owner-stamped facts. Length-prefix the
+        // arbitrary identifiers so embedded delimiters cannot create collisions.
+        String owner = tuple.owner().id().value(), subject = tuple.subject().id().value();
+        return "diagnostic:v2:" + tuple.reason().wireTag() + ":" + tuple.category().wireTag()
+                + ":" + DiagnosticWireTags.ownerTag(tuple.owner().kind()) + ":" + owner.length() + ":" + owner
+                + ":" + DiagnosticWireTags.subjectTag(tuple.subject().kind()) + ":" + subject.length() + ":" + subject
+                + ":" + tuple.disposition().wireTag();
     }
     public static boolean terminal(DiagnosticCategory category) {
         return category == DiagnosticCategory.RECONCILIATION_CONFLICT || category == DiagnosticCategory.RECOVERY_UNKNOWN

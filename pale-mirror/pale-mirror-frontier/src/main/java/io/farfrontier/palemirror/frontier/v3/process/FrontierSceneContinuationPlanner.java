@@ -49,6 +49,7 @@ public final class FrontierSceneContinuationPlanner {
                                                     SceneLeaseReleased released, Optional<ScheduledAction> binding) {
         // The reducer repeats this atomic disposition; do not journal an impossible release.
         io.farfrontier.palemirror.frontier.v3.model.SceneStrikeStateSupport.prepareRelease(state, lease);
+        io.farfrontier.palemirror.frontier.v3.model.FrontierSceneLeaseStateSupport.requireNoBoundActorHand(state, lease);
         SceneReleasePlan plan = FrontierSceneBehaviors.releasePlan(state, lease, submittedAt, released);
         return events(state, plan.owner(), plan.released(), plan.continuation(), submittedAt, binding);
     }
@@ -57,6 +58,16 @@ public final class FrontierSceneContinuationPlanner {
     public static List<ProposedEvent> releaseEvents(FrontierWorldState state, SceneLease lease, long submittedAt,
                                                     SceneLeaseReleased released) {
         return releaseEvents(state, lease, submittedAt, released, Optional.empty());
+    }
+
+    /** The typed hand release has already validated a single atomic unbind + body exit. */
+    public static List<ProposedEvent> harvestHandReleaseEvents(FrontierWorldState state, SceneLease lease,
+                                                               long submittedAt,
+                                                               io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestHandRelease released,
+                                                               Optional<ScheduledAction> binding) {
+        SceneReleasePlan plan = FrontierSceneBehaviors.releasePlan(state, lease, submittedAt, released.sceneRelease());
+        FrontierWorldState after = ResourceSiteHarvestProcess.reduceHandRelease(state, plan.owner(), released);
+        return events(after, plan.owner(), released, plan.continuation(), submittedAt, binding);
     }
 
     public static List<ProposedEvent> recoveryUnresolvedEvents(FrontierWorldState state, SceneLease lease, long submittedAt,
@@ -212,10 +223,15 @@ public final class FrontierSceneContinuationPlanner {
         @Override public List<ProposedEvent> events(FrontierWorldState state, SceneContinuation continuation, long submittedAt,
                                                     Optional<ScheduledAction> binding) {
             if (!(continuation instanceof SceneContinuation.ResumeResourceSiteHarvest resume)) throw invalid(continuation, kind());
+            ScheduledAction retained = binding.orElseThrow(
+                    () -> new IllegalArgumentException("resource-site harvest release has no engine schedule binding"));
+            if (!retained.kind().equals(ResourceSiteHarvestProcess.COLD_PROGRESS_KIND))
+                throw new IllegalArgumentException("resource-site harvest release has a foreign owner declaration kind");
+            if (!retained.subject().equals(resume.siteId()))
+                throw new IllegalArgumentException("resource-site harvest release binding names another site owner");
             ResourceSiteHarvestJob job = FrontierResourceSiteHarvestSceneSupport.require(state,
-                    new ResourceSiteHarvestSceneCause(resume.jobId()));
-            ResourceSiteHarvestProcess.requireContinuationBinding(job, binding.orElseThrow(
-                    () -> new IllegalArgumentException("resource-site harvest release has no engine schedule binding")));
+                    new ResourceSiteHarvestSceneCause(resume.siteId(), resume.jobId()));
+            ResourceSiteHarvestProcess.requireContinuationBinding(job, retained);
             // A drain performs no semantic traversal. The validated engine action remains in its
             // queue untouched, so its identity and bytes cannot be reconstructed from release time.
             return List.of();

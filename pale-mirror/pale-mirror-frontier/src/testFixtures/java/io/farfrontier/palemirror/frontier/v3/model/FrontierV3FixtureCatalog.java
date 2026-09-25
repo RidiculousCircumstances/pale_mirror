@@ -69,7 +69,11 @@ public final class FrontierV3FixtureCatalog {
             Map.entry("serviceDecontamination", FrontierV3FixtureCatalog::serviceDecontaminationConfiguration),
             Map.entry("residentTransit", FrontierV3FixtureCatalog::residentTransitConfiguration),
             Map.entry("productionWork", FrontierV3FixtureCatalog::productionWorkConfiguration),
+            Map.entry("fungibleProductionWork", FrontierV3FixtureCatalog::fungibleProductionWorkConfiguration),
+            Map.entry("fungibleProductionTwoLotWork", FrontierV3FixtureCatalog::fungibleProductionTwoLotWorkConfiguration),
             Map.entry("resourceSiteHarvest", FrontierV3FixtureCatalog::resourceSiteHarvestConfiguration),
+            Map.entry("resourceSiteHarvest65", FrontierV3FixtureCatalog::resourceSiteHarvest65Configuration),
+            Map.entry("resourceSiteHarvest65AfterColdPart", FrontierV3FixtureCatalog::resourceSiteHarvest65AfterColdPartConfiguration),
             Map.entry("productionInputTheft", FrontierV3FixtureCatalog::productionInputTheftConfiguration),
             Map.entry("productionObstructionLiveness", FrontierV3FixtureCatalog::productionObstructionLivenessConfiguration),
             Map.entry("productionWorkerDeath", FrontierV3FixtureCatalog::productionWorkerDeathConfiguration),
@@ -107,8 +111,17 @@ public final class FrontierV3FixtureCatalog {
         return withReserve(FrontierWorldRuntimeDefinition.configuration(worldId, seed, false), false);
     }
 
+    /** Test-only COLD supply path without an unrelated initial birth consuming the exact export reserve. */
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> coldSupplyDeliveryConfiguration(WorldId worldId, long seed) {
+        return FrontierDevelopmentScenarios.routeCustodyConfiguration(worldId, seed);
+    }
+
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> autonomousSupplyInterceptionConfiguration(WorldId worldId, long seed) {
-        return withReserve(FrontierWorldRuntimeDefinition.configuration(worldId, seed, true), true);
+        // This profile exercises autonomous perception, including ordinary birth schedules.
+        // One admission before departure consumes a ration and adds two reserve rations.
+        // Keep those real economic consequences funded rather than disabling population
+        // growth or requiring the export planner to spend the settlement's reserve.
+        return withReserve(FrontierWorldRuntimeDefinition.configuration(worldId, seed, true), true, 3);
     }
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> hotSceneStrikeConfiguration(WorldId worldId, long seed) {
@@ -260,6 +273,74 @@ public final class FrontierV3FixtureCatalog {
         return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
     }
 
+    /** Ordinary fungible admission and COLD labor; no job/progress/output is injected. */
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> fungibleProductionWorkConfiguration(WorldId worldId, long seed) {
+        return fungibleProductionWorkConfiguration(worldId, seed, false);
+    }
+
+    /** The same ordinary work path, with two distinct 32-unit wheat lots in COLD depot custody. */
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> fungibleProductionTwoLotWorkConfiguration(WorldId worldId, long seed) {
+        return fungibleProductionWorkConfiguration(worldId, seed, true);
+    }
+
+    private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> fungibleProductionWorkConfiguration(WorldId worldId, long seed,
+                                                                                                                                    boolean twoLots) {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(worldId, seed));
+        if (twoLots) state = splitFixtureWheat(state);
+        SubjectId settlement = new SubjectId("settlement:1");
+        for (ProposedEvent event : CompanyFoundationProcess.plan(state, CompanyFoundationProcess.review(settlement, 1, 4_000L))) {
+            if (event.payload() instanceof CompanyRegistered registered) state = CompanyFoundationProcess.reduce(state, settlement, registered);
+            if (event.payload() instanceof EmploymentContractOpened opened) state = CompanyFoundationProcess.reduceEmployment(state, settlement, opened);
+        }
+        StrategicObjective objective = new StrategicObjective(new SubjectId("objective:development-fungible-production"), settlement,
+                StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, java.util.Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
+        StrategicTask task = new StrategicTask(new SubjectId("task:development-fungible-production"), objective.id(), settlement,
+                StrategicTaskKind.PRODUCE_BREAD, java.util.Optional.empty(),
+                List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT), List.of(), StrategicTaskStatus.PENDING);
+        state = state.withStrategicPlans(state.strategicPlans().addObjective(objective).addTask(task));
+        var engine = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.createCanonicalStateAccess(
+                configured(worldId, state, SimInstant.ZERO, List.of(ProductionProcess.start(task, 200L)), false));
+        for (int step = 0; step < 300; step++) {
+            var checkpoint = engine.checkpoint();
+            if (checkpoint.schedules().isEmpty()) break;
+            engine.advanceTo(checkpoint.schedules().getFirst().dueAt(),
+                    new io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget(100, 100));
+            var current = engine.canonicalState().state();
+            if (current.productionJobs().size() == 1 && current.productionJobs().values().iterator().next()
+                    .workProgress().equals(ProductionWorkProgress.processing(17))) {
+                var boundary = engine.checkpoint();
+                return configured(worldId, current, boundary.instant(), boundary.schedules(), false);
+            }
+        }
+        throw new IllegalStateException("fungible production fixture did not reach ordinary COLD labor boundary");
+    }
+
+    private static FrontierWorldState splitFixtureWheat(FrontierWorldState state) {
+        SubjectId accountId = new SubjectId("custody:container-1-depot");
+        FungibleResourceLedger resources = state.inventory().fungibleResources();
+        CustodyAccount account = resources.accounts().get(accountId);
+        if (account == null || account.lotQuantities().size() != 1 || !account.claimQuantities().isEmpty())
+            throw new IllegalStateException("two-lot fixture lacks its exact unclaimed depot stock");
+        SubjectId originalId = account.lotQuantities().keySet().iterator().next();
+        ResourceLot original = resources.lots().get(originalId);
+        if (original == null || !original.itemKind().equals("minecraft:wheat") || original.quantity() != 64
+                || account.lotQuantities().get(originalId) != 64)
+            throw new IllegalStateException("two-lot fixture cannot split foreign wheat stock");
+        SubjectId firstId = new SubjectId("lot:production-two-field-first");
+        SubjectId secondId = new SubjectId("lot:production-two-field-second");
+        Map<SubjectId, Integer> portions = Map.of(firstId, 32, secondId, 32);
+        Map<SubjectId, ResourceLot> lots = new LinkedHashMap<>(resources.lots());
+        lots.remove(originalId);
+        lots.put(firstId, new ResourceLot(firstId, original.economicOwnerId(), "minecraft:wheat", 32,
+                "fixture:two-field-first", List.of()));
+        lots.put(secondId, new ResourceLot(secondId, original.economicOwnerId(), "minecraft:wheat", 32,
+                "fixture:two-field-second", List.of()));
+        Map<SubjectId, CustodyAccount> accounts = new LinkedHashMap<>(resources.accounts());
+        accounts.put(accountId, new CustodyAccount(accountId, account.custody(), portions, Map.of()));
+        return state.withInventory(state.inventory().withFungibleResources(
+                new FungibleResourceLedger(lots, resources.claims(), accounts, resources.bindings())));
+    }
+
     /**
      * A mature field at its first retained crop station. The fixture establishes only ordinary
      * canonical preparation and COLD traversal; a real player visit must still admit the exact
@@ -267,6 +348,16 @@ public final class FrontierV3FixtureCatalog {
      */
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> resourceSiteHarvestConfiguration(WorldId worldId, long seed) {
         FrontierResourceSiteHarvestFixture.Fixture fixture = FrontierResourceSiteHarvestFixture.create(worldId, seed);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
+    }
+
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> resourceSiteHarvest65Configuration(WorldId worldId, long seed) {
+        FrontierResourceSiteHarvestFixture.Fixture fixture = FrontierResourceSiteHarvestFixture.createWithOneExtraCell(worldId, seed);
+        return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
+    }
+
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> resourceSiteHarvest65AfterColdPartConfiguration(WorldId worldId, long seed) {
+        FrontierResourceSiteHarvestFixture.Fixture fixture = FrontierResourceSiteHarvestFixture.createWithOneExtraCellAfterColdPart(worldId, seed);
         return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
     }
 
@@ -363,8 +454,14 @@ public final class FrontierV3FixtureCatalog {
 
     private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> withReserve(FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base,
                                                                                                            boolean autonomousInterception) {
+        return withReserve(base, autonomousInterception, 0);
+    }
+
+    private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> withReserve(FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base,
+                                                                                                           boolean autonomousInterception, int birthFoodAllowance) {
         Settlement settlement = base.initialState().bootstrap().settlements().getFirst(); SubjectId depot = FrontierWorldState.depotId(settlement.id());
-        int remaining = SettlementProvisionProcess.reserveRequirement(base.initialState(), settlement.id()); ExactInventory inventory = base.initialState().inventory(); int ordinal = 0;
+        int remaining = Math.addExact(SettlementProvisionProcess.reserveRequirement(base.initialState(), settlement.id()), birthFoodAllowance);
+        ExactInventory inventory = base.initialState().inventory(); int ordinal = 0;
         while (remaining > 0) {
             int count = Math.min(63, remaining);
             inventory = inventory.store(new ExactItemStack(new SubjectId("item:development-supply-reserve-" + ordinal), settlement.id(), "minecraft:bread", count,
@@ -391,6 +488,11 @@ public final class FrontierV3FixtureCatalog {
                     }
                     @Override public boolean held(FrontierWorldState candidate, ScheduledAction action) {
                         return FrontierWorldRuntimeDefinition.scheduledHeld(candidate, action);
+                    }
+                    @Override public List<ScheduledAction> retiredBy(FrontierWorldState previous, FrontierWorldState next,
+                            io.farfrontier.palemirror.frontier.v3.api.FrontierEvent event,
+                            java.util.function.Supplier<List<ScheduledAction>> pending) {
+                        return FrontierWorldRuntimeDefinition.retiredSchedules(previous, next, event, pending);
                     }
                 },
                 FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(state.bootstrap()), FrontierWorldProjectionCompiler::compile,

@@ -33,12 +33,16 @@ final class FrontierV3PhysicalExecutors {
             // physical effect before the generic surface drift audit: otherwise the audit
             // mistakes its own known recovery window for player/world tampering.
             executor("production-transformation", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("cargo-loading"), "production-transformation-effect", FrontierV3ProductionTransformationExecutor::tick),
+            // Resume an already-fenced farmer hand/chest pair before any generic observer
+            // can misclassify its crash window as an unrelated fungible or reference drift.
+            executor("resource-site-delivery", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT,
+                    Set.of("production-transformation"), "resource-site-hand-depot-delivery", FrontierV3ResourceSiteDeliveryExecutor::tick),
             // A restart can retain an ordinary player/container split in vanilla storage before
             // its typed handoff reaches the canonical WAL.  Read that fenced HOT evidence
             // before the generic surface audit: the latter only knows the older canonical
             // layout and would otherwise mark the source CONFLICT, permanently hiding the
             // one recoverable player departure.
-            executor("fungible-resource-observation", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("production-transformation"), "fungible-resource-custody-observation", FrontierV3FungibleResourceObservationExecutor::tick),
+            executor("fungible-resource-observation", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("resource-site-delivery"), "fungible-resource-custody-observation", FrontierV3FungibleResourceObservationExecutor::tick),
             // The generic audit has two independently durable predecessors: a
             // RUNNING production receipt and a fungible HOT handoff recovered
             // from physical storage.  Keep both graph edges explicit so a
@@ -48,9 +52,11 @@ final class FrontierV3PhysicalExecutors {
                     Set.of("production-transformation", "fungible-resource-observation"),
                     "container-surface-effect", FrontierV3ContainerSurfaceExecutor::tick),
             executor("reference-container-custody", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("fungible-resource-observation"), "reference-container-custody", FrontierV3ReferenceContainerCustodyExecutor::tick),
+            executor("resource-site-deferred-receipt", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT,
+                    Set.of("reference-container-custody"), "resource-site-deferred-receipt", FrontierV3ResourceSiteDeliveryExecutor::confirmDeferredOne),
             // Harvest changes both one PM-owned field and its exact chest slot, so it is an
             // effect after the container owner has established ACTIVE provenance, not projection.
-            executor("resource-site-harvest", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("reference-container-custody"), "resource-site-harvest-effect", FrontierV3ResourceSiteHarvestExecutor::tick),
+            executor("resource-site-harvest", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("resource-site-deferred-receipt"), "resource-site-harvest-effect", FrontierV3ResourceSiteHarvestExecutor::tick),
             executor("hive-nutrient-endpoints", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("resource-site-harvest"), "hive-nutrient-endpoint-effect", FrontierV3HiveNutrientEndpointExecutor::tick),
             executor("defender-equipment-issue", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("hive-nutrient-endpoints"), "defender-equipment-issue-effect", FrontierV3EquipmentIssueExecutor::tick),
             executor("settlement-service-input-issue", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("defender-equipment-issue"), "settlement-service-input-issue-effect", FrontierV3SettlementServiceInputIssueExecutor::tick),

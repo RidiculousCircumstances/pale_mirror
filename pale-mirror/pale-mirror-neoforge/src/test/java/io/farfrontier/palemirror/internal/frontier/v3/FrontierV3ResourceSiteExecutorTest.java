@@ -110,7 +110,7 @@ class FrontierV3ResourceSiteExecutorTest {
         ArrayList<BlockPosition> slots = new ArrayList<>();
         for (int x = 160; x < 168; x++) for (int z = 320; z < 328; z++) slots.add(new BlockPosition(x, 64, z));
         ResourceSite site = new ResourceSite(new SubjectId("site:99-wheat-field"), new SubjectId("settlement:99"),
-                new SubjectId("structure:99-farm"), ResourceSiteKind.WHEAT_FIELD, slots);
+                new SubjectId("structure:99-farm"), ResourceSiteKind.WHEAT_FIELD, io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSitePlan.initialGrayboxLayout(slots));
 
         assertTrue(FrontierV3GrayboxExecutor.resourceSiteIngressMatches(new ChunkPos(9, 19), site),
                 "a player at the adjacent farm shell is an ordinary field ingress");
@@ -129,7 +129,7 @@ class FrontierV3ResourceSiteExecutorTest {
         ArrayList<BlockPosition> slots = new ArrayList<>();
         for (int x = 160; x < 168; x++) for (int z = 320; z < 328; z++) slots.add(new BlockPosition(x, 64, z));
         ResourceSite site = new ResourceSite(new SubjectId("site:99-wheat-field"), new SubjectId("settlement:99"),
-                new SubjectId("structure:99-farm"), ResourceSiteKind.WHEAT_FIELD, slots);
+                new SubjectId("structure:99-farm"), ResourceSiteKind.WHEAT_FIELD, io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSitePlan.initialGrayboxLayout(slots));
 
         var order = FrontierV3ResourceSiteExecutor.initialProjectionSlotOrder(site);
         assertEquals(132, order.size(), "the durable initial cursor retains the same exact footprint");
@@ -214,7 +214,9 @@ class FrontierV3ResourceSiteExecutorTest {
                 FrontierV3ResourceSiteLedger.Status.ACTIVE, ResourceSiteLifecycle.MATURE_STAGE, 1);
         ResourceSiteHarvestLineage composed = new ResourceSiteHarvestLineage(
                 new SubjectId("job:site-harvest-1-wheat-field-2"), new SubjectId("task:settlement-1-harvest"),
-                new SubjectId("resident:1-31"), new SubjectId("item:site-harvest-1-wheat-field-2-wheat"), 2L,
+                new SubjectId("resident:1-31"),
+                new SubjectId("custody:field-actor-site-harvest-1-wheat-field-2"), new SubjectId("custody:container-1"),
+                new SubjectId("item:site-harvest-1-wheat-field-2-wheat"), 2L,
                 new BodyPosition(0, 64, 0), new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:site-harvest-1-wheat-field-2"),
                 new InventoryCustody.ContainerSlot(new SubjectId("container:1"), 1), true, Optional.empty(), Optional.empty());
         ResourceSiteLifecycle regrowth = new ResourceSiteLifecycle(siteId, ResourceSitePhase.GROWING, 3L, 2,
@@ -274,10 +276,12 @@ class FrontierV3ResourceSiteExecutorTest {
         ArrayList<BlockPosition> slots = new ArrayList<>();
         for (int x = 0; x < 8; x++) for (int z = 0; z < 8; z++) slots.add(new BlockPosition(x, 64, z));
         ResourceSite site = new ResourceSite(siteId, new SubjectId("settlement:1"),
-                new SubjectId("structure:1-farm"), ResourceSiteKind.WHEAT_FIELD, slots);
+                new SubjectId("structure:1-farm"), ResourceSiteKind.WHEAT_FIELD, io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSitePlan.initialGrayboxLayout(slots));
         ResourceSiteHarvestLineage pending = new ResourceSiteHarvestLineage(
                 new SubjectId("job:site-harvest-1-wheat-field-3"), new SubjectId("task:settlement-1-harvest"),
-                new SubjectId("resident:1-31"), new SubjectId("item:site-harvest-1-wheat-field-3-wheat"), 3L,
+                new SubjectId("resident:1-31"),
+                new SubjectId("custody:field-actor-site-harvest-1-wheat-field-3"), new SubjectId("custody:container-1"),
+                new SubjectId("item:site-harvest-1-wheat-field-3-wheat"), 3L,
                 new BodyPosition(0, 64, 0), new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:site-harvest-1-wheat-field-3"),
                 new InventoryCustody.ContainerSlot(new SubjectId("container:1"), 2), false, Optional.empty(), Optional.empty());
         ResourceSiteLifecycle successor = new ResourceSiteLifecycle(siteId, ResourceSitePhase.GROWING, 4L, 2,
@@ -291,7 +295,7 @@ class FrontierV3ResourceSiteExecutorTest {
         PhysicalIntent running = new PhysicalIntent(pending.predecessorIntentId(), PhysicalIntentKind.RESOURCE_SITE_HARVEST,
                 PhysicalIntentStatus.RUNNING, siteId,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.siteHarvest(siteId,
-                        pending.predecessorJobId(), pending.workerId(), pending.outputItemId()),
+                        pending.predecessorJobId(), pending.workerId(), pending.actorAccountId(), pending.depotAccountId()),
                 new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0,
                 PhysicalPostcondition.RESOURCE_SITE_HARVESTED_OBSERVED,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.RESOURCE_SITE_HARVEST);

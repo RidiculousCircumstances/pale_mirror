@@ -53,6 +53,8 @@ class FrontierV3GameTestSliceTest {
     void sceneSliceIncludesOnlyTheFastHotColdBatches() {
         assertTrue(FrontierV3GameTestSlice.includes("scene", "pm-frontier-v3-scene-handoff"));
         assertTrue(FrontierV3GameTestSlice.includes("scene", "pm-frontier-v3-scene-restart-reclaim"));
+        assertTrue(FrontierV3GameTestSlice.includes("scene-restart-reclaim", "pm-frontier-v3-scene-restart-reclaim"));
+        assertFalse(FrontierV3GameTestSlice.includes("scene-restart-reclaim", "pm-frontier-v3-scene-strikes"));
         assertTrue(FrontierV3GameTestSlice.includes("scene", "pm-frontier-v3-assembly-grade"));
         assertTrue(FrontierV3GameTestSlice.includes("scene", "pm-frontier-v3-route-maintenance"));
         assertTrue(FrontierV3GameTestSlice.includes("scene", "pm-frontier-v3-graybox"));

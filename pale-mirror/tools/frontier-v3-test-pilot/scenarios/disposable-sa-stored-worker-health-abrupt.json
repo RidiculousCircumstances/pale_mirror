@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "id": "disposable_sa_stored_worker_health_abrupt",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25586, "profile": "production-work", "viewDistance": 4 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/gamemode creative PMTestPilot" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
+      "position": { "x": -388, "y": 64, "z": -326 }, "settleMs": 0 },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "actor", "id": "resident:1-15", "expect": {
+        "status": "ok", "life": "ALIVE", "healthRaw": 20000000 } }
+    ] }
+  ],
+  "actions": [
+    { "type": "wait_until_diagnostic", "view": "scene", "id": "job:production-development-input-theft",
+      "expect": { "status": "ok", "leaseStatus": "HOT", "primaryActor": "resident:1-15" },
+      "timeoutMs": 60000, "causalMilestone": "worker_hot_before_crash" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": {
+      "diagnostic": { "view": "scene", "id": "job:production-development-input-theft", "field": "productionCurrent" }
+      }, "offset": { "x": 2, "y": 1, "z": 0 }, "settleMs": 0 },
+    { "type": "attack_nearest_entity", "entityType": "minecraft:villager",
+      "nameContains": "INDUSTRIAL WORKER", "maxDistance": 4, "maxAttacks": 1,
+      "requireRemoval": false, "requireDamage": true, "timeoutMs": 30000,
+      "causalMilestone": "physical_worker_injured_before_crash" },
+    { "type": "wait_until_diagnostic", "view": "actor", "id": "resident:1-15",
+      "expect": { "status": "ok", "life": "ALIVE", "healthRaw": 19000000 },
+      "timeoutMs": 30000, "causalMilestone": "stored_injury_returned_after_crash" },
+    { "type": "inspect", "view": "scene", "id": "job:production-development-input-theft" }
+  ],
+  "restart": { "mode": "abrupt", "afterAction": 3, "preStopSaveAllFlush": true,
+    "postRestartZeroPlayerSettleMs": 20000 },
+  "assertions": [
+    { "after": 4, "view": "actor", "id": "resident:1-15",
+      "expect": { "status": "ok", "life": "ALIVE", "healthRaw": 19000000 } }
+  ]
+}

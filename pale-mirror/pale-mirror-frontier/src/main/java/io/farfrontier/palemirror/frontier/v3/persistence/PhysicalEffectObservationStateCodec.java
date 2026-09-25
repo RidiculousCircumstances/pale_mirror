@@ -54,7 +54,7 @@ final class PhysicalEffectObservationStateCodec {
                 output.writeByte(consumed.countBefore()); output.writeByte(consumed.countAfter());
             } else if (observation instanceof ResourceSitePreparationObservation preparation) {
                 output.writeByte(7); string(output, preparation.id().value()); string(output, preparation.intentId().value()); string(output, preparation.siteId().value());
-                output.writeByte(preparation.preparedSoilSlots()); output.writeByte(preparation.preparedCropSlots());
+                output.writeInt(preparation.preparedSoilSlots()); output.writeInt(preparation.preparedCropSlots());
             } else if (observation instanceof ResourceSiteHarvestObservation harvest) {
                 output.writeByte(8); string(output, harvest.id().value()); string(output, harvest.intentId().value()); string(output, harvest.siteId().value());
                 string(output, harvest.workerId().value()); string(output, harvest.output().id().value()); string(output, harvest.output().economicOwnerId().value());
@@ -114,8 +114,14 @@ final class PhysicalEffectObservationStateCodec {
                     FrontierWorldStateCodec.writeCustody(output, slot.slot()); string(output, stack.itemKind()); output.writeByte(stack.quantity());
                 }
             } else if (observation instanceof FungibleProductionObservation production) {
-                output.writeByte(23); string(output, production.id().value()); string(output, production.intentId().value());
+                output.writeByte(production.inputLots().size() == 1 ? 23 : 24); string(output, production.id().value()); string(output, production.intentId().value());
                 FungibleProductionObservationCodec.write(output, production);
+            } else if (observation instanceof ResourceSiteHarvestDeliveryObservation delivery) {
+                output.writeByte(25); string(output, delivery.id().value()); string(output, delivery.intentId().value());
+                ResourceSiteHarvestDeliveryObservationCodec.write(output, delivery);
+            } else if (observation instanceof ResourceSiteHarvestDeferredObservation deferred) {
+                output.writeByte(26); string(output, deferred.id().value()); string(output, deferred.intentId().value());
+                ResourceSiteHarvestDeferredObservationCodec.write(output, deferred);
             } else throw new IllegalArgumentException("unknown physical effect observation");
         }
     }
@@ -132,7 +138,7 @@ final class PhysicalEffectObservationStateCodec {
                 case 4 -> new SceneStrikeObservation(id, intentId, new SubjectId(text(input)), new SubjectId(text(input)), new FixedScalar(input.readLong()), new FixedScalar(input.readLong()));
                 case 5 -> explosion(input, id, intentId);
                 case 6 -> new ExactItemConsumedObservation(id, intentId, new SubjectId(text(input)), input.readUnsignedByte(), input.readUnsignedByte());
-                case 7 -> new ResourceSitePreparationObservation(id, intentId, new SubjectId(text(input)), input.readUnsignedByte(), input.readUnsignedByte());
+                case 7 -> new ResourceSitePreparationObservation(id, intentId, new SubjectId(text(input)), input.readInt(), input.readInt());
                 case 8 -> harvest(input, id, intentId);
                 case 9 -> new ProductionTransformationObservation(id, intentId, new SubjectId(text(input)), new SubjectId(text(input)), input.readUnsignedByte(), input.readUnsignedByte());
                 case 10 -> new CargoLoadObservation(id, intentId, new SubjectId(text(input)), new SubjectId(text(input)), new SubjectId(text(input)), input.readUnsignedByte());
@@ -151,6 +157,9 @@ final class PhysicalEffectObservationStateCodec {
                 case 21 -> fungibleConsumed(input, id, intentId);
                 case 22 -> fungibleNutrientDeparture(input, id, intentId);
                 case 23 -> FungibleProductionObservationCodec.read(input, id, intentId);
+                case 24 -> FungibleProductionObservationCodec.read(input, id, intentId, true);
+                case 25 -> ResourceSiteHarvestDeliveryObservationCodec.read(input, id, intentId);
+                case 26 -> ResourceSiteHarvestDeferredObservationCodec.read(input, id, intentId);
                 default -> throw new IllegalArgumentException("unknown physical observation kind");
             };
             if (observations.put(id, observation) != null) throw new IllegalArgumentException("duplicate physical observation id");

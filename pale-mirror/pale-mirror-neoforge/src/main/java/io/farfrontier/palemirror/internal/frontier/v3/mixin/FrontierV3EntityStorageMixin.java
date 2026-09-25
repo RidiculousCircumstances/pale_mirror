@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.internal.frontier.v3.mixin;
 
 import io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle;
 import io.farfrontier.palemirror.internal.frontier.v3.FrontierV3EntitySaveBoundary;
+import io.farfrontier.palemirror.internal.frontier.v3.FrontierV3StoredEntityInventoryAccess;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.ChunkPos;
@@ -24,7 +25,7 @@ import java.util.Optional;
 
 /** Observes vanilla's actual write future, including the empty-chunk deletion branch. */
 @Mixin(EntityStorage.class)
-abstract class FrontierV3EntityStorageMixin implements FrontierV3EntitySaveBoundary {
+abstract class FrontierV3EntityStorageMixin implements FrontierV3EntitySaveBoundary, FrontierV3StoredEntityInventoryAccess {
     @Shadow @Final private ServerLevel level;
     @Shadow @Final private SimpleRegionStorage simpleRegionStorage;
     @Shadow @Final private LongSet emptyChunks;
@@ -48,6 +49,25 @@ abstract class FrontierV3EntityStorageMixin implements FrontierV3EntitySaveBound
 
     @Override public void frontierV3$completeSavePass(boolean complete) {
         FrontierV3ServerLifecycle.completeEntitySavePass(level, complete, () -> simpleRegionStorage.synchronize(true));
+    }
+
+    @Override public void frontierV3$storedChunk() {
+        FrontierV3ServerLifecycle.persistRawEntityDepartures(level);
+    }
+
+    @Override public CompletableFuture<Optional<CompoundTag>> frontierV3$readStoredEntityChunk(ChunkPos chunk) {
+        // The storage worker orders this after its pending writes. The caller
+        // receives a detached immutable-by-convention snapshot, not a chunk load.
+        return frontierV3$synchronizeStoredEntities().thenCompose(ignored -> frontierV3$readStoredEntityChunkAfterSync(chunk));
+    }
+
+    @Override public CompletableFuture<Void> frontierV3$synchronizeStoredEntities() {
+        return simpleRegionStorage.synchronize(true);
+    }
+
+    @Override public CompletableFuture<Optional<CompoundTag>> frontierV3$readStoredEntityChunkAfterSync(ChunkPos chunk) {
+        return simpleRegionStorage.read(chunk)
+                .thenApply(value -> value.map(CompoundTag::copy));
     }
 
     @Redirect(method = "storeEntities", at = @At(value = "INVOKE",

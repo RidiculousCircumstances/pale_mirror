@@ -37,17 +37,22 @@ public record FungibleProductionLayout(SubjectId containerId, SubjectId accountI
         var before = new TreeMap<Integer, ReferenceContainerCustody.ProjectedFungibleSlot>();
         bindings.forEach((slot, binding) -> before.put(slot, new ReferenceContainerCustody.ProjectedFungibleSlot(binding.itemKind(), binding.quantity())));
         var after = new TreeMap<>(before);
-        int required = job.outputCount();
+        var requiredLots = new TreeMap<SubjectId, Integer>(held.inputLots());
         for (var entry : bindings.entrySet()) {
             var binding = entry.getValue();
-            int take = Math.min(required, binding.lotQuantities().getOrDefault(held.itemId(), 0));
+            int take = 0;
+            for (var lotId : new java.util.ArrayList<>(requiredLots.keySet())) {
+                int portion = Math.min(requiredLots.get(lotId), binding.lotQuantities().getOrDefault(lotId, 0));
+                take += portion;
+                if (portion == requiredLots.get(lotId)) requiredLots.remove(lotId);
+                else requiredLots.put(lotId, requiredLots.get(lotId) - portion);
+            }
             if (take == 0) continue;
             int remaining = binding.quantity() - take;
             if (remaining == 0) after.remove(entry.getKey());
             else after.put(entry.getKey(), new ReferenceContainerCustody.ProjectedFungibleSlot(binding.itemKind(), remaining));
-            required -= take;
         }
-        if (required != 0) throw new IllegalArgumentException("production layout lacks its retained input lot quantity");
+        if (!requiredLots.isEmpty()) throw new IllegalArgumentException("production layout lacks its retained input lot quantities");
         int output = job.outputCount();
         for (int slot = 0; slot < capacity && output > 0; slot++) {
             if (state.inventory().itemAt(container, slot).isPresent()) continue;

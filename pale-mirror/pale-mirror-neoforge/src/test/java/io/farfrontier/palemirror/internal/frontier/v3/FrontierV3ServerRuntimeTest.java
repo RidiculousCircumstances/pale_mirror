@@ -156,7 +156,7 @@ class FrontierV3ServerRuntimeTest {
         var runtime = FrontierV3ServerRuntime.start(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(world, 91L),
                 new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
         FrontierWorldState before = worldState(runtime);
-        RouteOperation operation = before.operations().get(new SubjectId("operation:supply-1-2"));
+        RouteOperation operation = initialNorthwatchOperation(before);
         SubjectId participant = operation.participantIds().getFirst();
         submitAmbient(runtime, world, new AmbientLeasePrepared(AmbientActorProcess.nextLease(before, participant,
                 runtime.checkpointImage().orElseThrow().instant())), "command:ambient-scene-overlap-prepare");
@@ -174,7 +174,7 @@ class FrontierV3ServerRuntimeTest {
         var runtime = FrontierV3ServerRuntime.start(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(world, 91L),
                 new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
         FrontierWorldState before = worldState(runtime);
-        RouteOperation operation = before.operations().get(new SubjectId("operation:supply-1-2"));
+        RouteOperation operation = initialNorthwatchOperation(before);
         SubjectId participant = operation.participantIds().getFirst();
         submitAmbient(runtime, world, new AmbientLeasePrepared(AmbientActorProcess.nextLease(before, participant,
                 runtime.checkpointImage().orElseThrow().instant())), "command:ambient-scene-transfer-prepare");
@@ -213,7 +213,7 @@ class FrontierV3ServerRuntimeTest {
         var runtime = FrontierV3ServerRuntime.start(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(world, 91L),
                 new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
         FrontierWorldState state = worldState(runtime);
-        RouteOperation operation = state.operations().get(new SubjectId("operation:supply-1-2"));
+        RouteOperation operation = initialNorthwatchOperation(state);
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
         SceneLeaseId leaseId = new SceneLeaseId("lease:scene-recovery-unresolved");
         SceneLease lease = FrontierV3TestSceneLeases.exact(state, checkpoint, leaseId, operation.id(), operation.cargoId(),
@@ -380,6 +380,21 @@ class FrontierV3ServerRuntimeTest {
     }
 
     @Test
+    void quarantineRetainsNativeGrowthVetoOwnershipWithoutReopeningExecution(@TempDir Path directory) {
+        var runtime = FrontierV3ServerRuntime.start(configuration(), new FrontierFileStore(directory, codecs()), 20);
+        assertInstanceOf(CommandResult.Accepted.class,
+                runtime.submit(command("command:before-quarantine", Revision.ZERO, SimInstant.ZERO, 3)).orElseThrow());
+        Counter retained = runtime.decodedState().orElseThrow();
+        runtime.quarantine(new IllegalStateException("test physical executor failure"));
+        assertTrue(runtime.decodedState().isEmpty());
+        assertTrue(runtime.canonicalState().isEmpty());
+        assertSame(retained, runtime.stateForNativeGrowthFence().orElseThrow());
+        assertTrue(runtime.submit(command("command:after-quarantine", new Revision(1), SimInstant.ZERO, 7)).isEmpty());
+        assertSame(retained, runtime.stateForNativeGrowthFence().orElseThrow());
+        assertEquals(FrontierV3RuntimeStatus.Kind.QUARANTINED, runtime.status().kind());
+    }
+
+    @Test
     void decodedStateIsSharedUntilACommittedRevisionChangesIt(@TempDir Path directory) {
         FrontierV3ServerRuntime<Counter, CounterProjection> runtime = FrontierV3ServerRuntime.start(configuration(), new FrontierFileStore(directory, codecs()), 20);
         Counter first = runtime.decodedState().orElseThrow();
@@ -447,32 +462,40 @@ class FrontierV3ServerRuntimeTest {
 
         assertEquals(FrontierV3RuntimeStatus.Kind.QUARANTINED, failed.status().kind());
         assertTrue(failed.projection(ProjectionQuery.summary()).isEmpty());
+        assertTrue(failed.stateForNativeGrowthFence().isEmpty(),
+                "failed recovery must not fabricate field ownership from initial state");
     }
 
     @Test
     void restartRetainsAnUnloadedColdCargoDeliveryWithoutAStalledMaterializationIntent(@TempDir Path directory) {
         WorldId world = new WorldId("frontier:restart-safety");
         FrontierStore store = new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs());
-        var configuration = FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(world, 91L);
+        var configuration = FrontierV3FixtureCatalog.coldSupplyDeliveryConfiguration(world, 91L);
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
                 FrontierV3ServerRuntime.start(configuration, store, 10_000);
-        SubjectId contractId = new SubjectId("contract:supply-1-2");
+        SubjectId settlementId = new SubjectId("settlement:1");
         for (int tick = 0; tick < 12_000; tick++) {
-            var contract = runtime.decodedState().orElseThrow().contracts().get(contractId);
-            if (contract != null && contract.status() == ContractStatus.DELIVERED) break;
+            boolean delivered = runtime.decodedState().orElseThrow().contracts().values().stream()
+                    .anyMatch(contract -> contract.settlementId().equals(settlementId) && contract.status() == ContractStatus.DELIVERED);
+            if (delivered) break;
             runtime.tick(new WorkBudget(64, 512));
         }
 
         FrontierWorldState delivered = new FrontierWorldStateCodec().decode(runtime.checkpointImage().orElseThrow().canonicalState());
+        SubjectId contractId = delivered.contracts().values().stream()
+                .filter(contract -> contract.settlementId().equals(settlementId) && contract.status() == ContractStatus.DELIVERED)
+                .map(contract -> contract.id()).findFirst().orElseThrow(() -> new AssertionError("Northwatch never delivered its COLD cargo: contracts="
+                        + delivered.contracts() + ", operations=" + delivered.operations()));
+        String suffix = contractId.value().substring("contract:".length());
         assertEquals(ContractStatus.DELIVERED, delivered.contracts().get(contractId).status());
-        assertFalse(delivered.physicalIntents().containsKey(new PhysicalIntentId("intent:cargo-handoff-supply-1-2")),
+        assertFalse(delivered.physicalIntents().containsKey(new PhysicalIntentId("intent:cargo-handoff-" + suffix)),
                 "unloaded COLD delivery may not create an intent that requires a materializer to finish");
 
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> recovered =
                 FrontierV3ServerRuntime.start(configuration, store, 10_000);
         FrontierWorldState state = new FrontierWorldStateCodec().decode(recovered.checkpointImage().orElseThrow().canonicalState());
         assertEquals(ContractStatus.DELIVERED, state.contracts().get(contractId).status());
-        assertFalse(state.physicalIntents().containsKey(new PhysicalIntentId("intent:cargo-handoff-supply-1-2")));
+        assertFalse(state.physicalIntents().containsKey(new PhysicalIntentId("intent:cargo-handoff-" + suffix)));
         assertEquals(0, recovered.projection(ProjectionQuery.summary()).orElseThrow().unknownPhysicalIntentCount());
     }
 
@@ -555,7 +578,8 @@ class FrontierV3ServerRuntimeTest {
         PhysicalIntent harvest = new PhysicalIntent(new PhysicalIntentId("intent:restart-harvest"), PhysicalIntentKind.RESOURCE_SITE_HARVEST,
                 PhysicalIntentStatus.RUNNING, new SubjectId("site:1-wheat-field"),
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.siteHarvest(new SubjectId("site:1-wheat-field"), new SubjectId("job:site-harvest-1-wheat-field-1"),
-                        new SubjectId("resident:1-1"), new SubjectId("item:site-harvest-1-wheat-field-1-wheat")),
+                        new SubjectId("resident:1-1"), new SubjectId("custody:field-actor-site-harvest-1-wheat-field-1"),
+                        new SubjectId("custody:container-1-depot")),
                 new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0,
                 PhysicalPostcondition.RESOURCE_SITE_HARVESTED_OBSERVED,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.RESOURCE_SITE_HARVEST);
@@ -644,7 +668,7 @@ class FrontierV3ServerRuntimeTest {
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
                 FrontierV3ServerRuntime.start(configuration, store, 10_000);
         FrontierWorldState before = new FrontierWorldStateCodec().decode(runtime.checkpointImage().orElseThrow().canonicalState());
-        RouteOperation operation = before.operations().get(new SubjectId("operation:supply-1-2"));
+        RouteOperation operation = initialNorthwatchOperation(before);
         SceneLeaseId leaseId = new SceneLeaseId("lease:recovery-supply-1-2");
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
         SceneLease lease = FrontierV3TestSceneLeases.exact(before, checkpoint, leaseId, operation.id(), operation.cargoId(),
@@ -780,6 +804,15 @@ class FrontierV3ServerRuntimeTest {
 
     private static FrontierWorldState worldState(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         return new FrontierWorldStateCodec().decode(runtime.checkpointImage().orElseThrow().canonicalState());
+    }
+
+    private static RouteOperation initialNorthwatchOperation(FrontierWorldState state) {
+        return state.operations().values().stream()
+                .filter(operation -> operation.settlementId().equals(new SubjectId("settlement:1")))
+                .filter(operation -> operation.stage() == OperationStage.EN_ROUTE && operation.routeIndex() == 0)
+                .filter(operation -> operation.activeTravel().isPresent() && operation.activeTravel().orElseThrow().cursor() == 0)
+                .reduce((left, right) -> { throw new AssertionError("ambiguous initial Northwatch route operations"); })
+                .orElseThrow(() -> new AssertionError("initial Northwatch route operation is absent"));
     }
 
     private static void submitWorld(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, String phase, FrontierPayload payload) {

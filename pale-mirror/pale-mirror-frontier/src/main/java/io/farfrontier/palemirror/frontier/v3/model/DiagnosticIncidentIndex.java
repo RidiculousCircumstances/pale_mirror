@@ -27,6 +27,7 @@ public record DiagnosticIncidentIndex(Map<String, DiagnosticIncident> incidents,
     public Optional<DiagnosticIncident> incident(String id) { return Optional.ofNullable(incidents.get(id)); }
     /** Exact, automatic bundle lookup.  There is exactly one bundle for one retained incident identity. */
     public Optional<DiagnosticIncidentBundle> bundle(String id) { return incident(id).map(DiagnosticIncident::bundle); }
+    /** Latest retained observation for a subject, not exclusive ownership of that subject. */
     public Optional<DiagnosticIncident> why(DiagnosticSubject subject) { return Optional.ofNullable(bySubject.get(SubjectKey.of(subject))).map(incidents::get); }
     public DiagnosticIncidentIndex retain(DiagnosticTuple tuple, String eventId, String causeId, long revision, long instant) {
         return retain(DiagnosticIncident.idFor(tuple), tuple, eventId, causeId, revision, instant, DiagnosticIncidentContext.unavailable());
@@ -39,15 +40,13 @@ public record DiagnosticIncidentIndex(Map<String, DiagnosticIncident> incidents,
     }
     public DiagnosticIncidentIndex retain(String id, DiagnosticTuple tuple, String eventId, String causeId, long revision, long instant, DiagnosticIncidentContext context) {
         Objects.requireNonNull(tuple, "producer tuple"); Objects.requireNonNull(context, "incident context");
-        id = Objects.requireNonNull(id, "producer incident id"); SubjectKey key = SubjectKey.of(tuple.subject());
+        id = Objects.requireNonNull(id, "producer incident id");
         DiagnosticIncident existing = incidents.get(id);
         if (existing != null) {
             if (!existing.diagnostic().equals(tuple)) throw new IllegalArgumentException("same diagnostic incident identity has a different tuple");
             Map<String, DiagnosticIncident> next = new LinkedHashMap<>(incidents); next.put(id, existing.repeated(revision, instant));
-            return new DiagnosticIncidentIndex(next, bySubject, droppedOptional);
+            return new DiagnosticIncidentIndex(next, subjectIndex(next), droppedOptional);
         }
-        String retainedSubjectId = bySubject.get(key);
-        if (retainedSubjectId != null) throw new IllegalStateException("diagnostic subject already has a different retained incident identity");
         // A new terminal account must be admitted or reject its canonical transaction. Optional
         // nonterminal detail degrades visibly; it can never make a terminal summary green.
         if (!DiagnosticIncident.terminal(tuple.category()) && optionalCount() >= MAX_OPTIONAL) {
@@ -59,8 +58,7 @@ public record DiagnosticIncidentIndex(Map<String, DiagnosticIncident> incidents,
         DiagnosticIncident created = new DiagnosticIncident(id, tuple, eventId, causeId, revision, instant, revision, instant, 1,
                 DiagnosticIncident.terminal(tuple.category()), context);
         Map<String, DiagnosticIncident> next = new LinkedHashMap<>(incidents); next.put(id, created);
-        Map<SubjectKey, String> nextSubjects = new LinkedHashMap<>(bySubject); nextSubjects.put(key, id);
-        return new DiagnosticIncidentIndex(next, nextSubjects, droppedOptional);
+        return new DiagnosticIncidentIndex(next, subjectIndex(next), droppedOptional);
     }
     private int optionalCount() { return (int) incidents.values().stream().filter(value -> !value.awaitingReview()).count(); }
     /** Closed nonterminal detail is compacted by retained logical coordinates, never by map iteration. */
@@ -69,8 +67,14 @@ public record DiagnosticIncidentIndex(Map<String, DiagnosticIncident> incidents,
                 .min(java.util.Comparator.comparingLong(DiagnosticIncident::lastRevision).thenComparingLong(DiagnosticIncident::lastInstant).thenComparing(DiagnosticIncident::id))
                 .orElseThrow(() -> new IllegalStateException("diagnostic optional compaction has no evictable detail"));
         Map<String, DiagnosticIncident> next = new LinkedHashMap<>(incidents); next.remove(evicted.id());
-        Map<SubjectKey, String> subjects = new LinkedHashMap<>(bySubject); subjects.entrySet().removeIf(entry -> entry.getValue().equals(evicted.id()));
-        return new DiagnosticIncidentIndex(next, subjects, Math.addExact(droppedOptional, 1));
+        return new DiagnosticIncidentIndex(next, subjectIndex(next), Math.addExact(droppedOptional, 1));
+    }
+    private static Map<SubjectKey, String> subjectIndex(Map<String, DiagnosticIncident> incidents) {
+        Map<SubjectKey, String> result = new LinkedHashMap<>();
+        incidents.values().stream().sorted(java.util.Comparator.comparingLong(DiagnosticIncident::lastRevision)
+                .thenComparingLong(DiagnosticIncident::lastInstant).thenComparing(DiagnosticIncident::id))
+                .forEach(value -> result.put(SubjectKey.of(value.diagnostic().subject()), value.id()));
+        return result;
     }
     public record SubjectKey(DiagnosticSubjectKind kind, SubjectId id) {
         public SubjectKey { kind = Objects.requireNonNull(kind, "diagnostic subject key kind"); id = Objects.requireNonNull(id, "diagnostic subject key id"); }

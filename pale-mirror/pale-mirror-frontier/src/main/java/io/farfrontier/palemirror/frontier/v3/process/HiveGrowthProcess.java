@@ -71,7 +71,7 @@ public final class HiveGrowthProcess {
         }
         SubjectId sourceStore = fungibleBiomass.map(ignored -> targetStore).orElseGet(() -> ((InventoryCustody.ContainerSlot) biomass.orElseThrow().custody()).containerId());
         if (ReferenceContainerCustody.blocksCanonicalUse(state, sourceStore)) return List.of(transition(task, StrategicTaskStatus.BLOCKED));
-        HiveGrowthJob job = fungibleBiomass.map(value -> growthJob(hive, nest, value, ordinal)).orElseGet(() -> growthJob(hive, nest, biomass.orElseThrow(), ordinal));
+        HiveGrowthJob job = fungibleBiomass.map(value -> growthJob(task, hive, nest, value, ordinal)).orElseGet(() -> growthJob(task, hive, nest, biomass.orElseThrow(), ordinal));
         // A serialized surface is only prior projection evidence.  COLD remains eligible until
         // the exact currently observed store has a live custody epoch.
         if (!ReferenceContainerCustody.hasLiveCustody(state, sourceStore)) {
@@ -89,7 +89,7 @@ public final class HiveGrowthProcess {
     public static List<ProposedEvent> planCompletion(FrontierWorldState state, ScheduledAction action) {
         HiveGrowthJob job = state.hiveColony().growthJobs().get(action.subject());
         if (job == null) throw new IllegalStateException("hive growth completion has no active job: " + action.subject().value());
-        StrategicTask task = activeTask(state, job.hiveId());
+        StrategicTask task = activeTask(state, job);
         PhysicalIntent consumption = state.physicalIntents().get(job.consumptionIntentId());
         if (consumption == null) {
             if (job.inputHold() instanceof HiveGrowthInputHold.FungibleCold && state.inventory().fungibleResources().lots().containsKey(job.consumedItemId())) {
@@ -101,7 +101,9 @@ public final class HiveGrowthProcess {
         } else if (consumption.status() != PhysicalIntentStatus.CONFIRMED) {
             throw new IllegalStateException("hive growth completion has no confirmed biomass receipt");
         }
-        return List.of(new ProposedEvent(job.hiveId(), new HiveGrowthCompleted(job.id())), transition(task, StrategicTaskStatus.COMPLETED));
+        return List.of(new ProposedEvent(job.hiveId(), new HiveGrowthCompleted(job.id(),
+                new io.farfrontier.palemirror.frontier.v3.api.ActorBirthIdentity(job.bioform().id(),
+                        io.farfrontier.palemirror.frontier.v3.api.ActorBirthIdentity.Kind.BIOFORM))), transition(task, StrategicTaskStatus.COMPLETED));
     }
 
     public static FrontierWorldState reduceStarted(FrontierWorldState state, SubjectId subject, HiveGrowthStarted started) {
@@ -114,7 +116,7 @@ public final class HiveGrowthProcess {
             throw new IllegalArgumentException("hive growth start crosses nest-local biomass custody");
         }
         if (ReferenceContainerCustody.blocksCanonicalUse(state, slot.containerId())) throw new IllegalArgumentException("hive growth start cannot use conflicted store evidence");
-        activeTask(state, job.hiveId()); return state.startHiveGrowth(job);
+        activeTask(state, job); return state.startHiveGrowth(job);
     }
 
     public static FrontierWorldState reduceConsumed(FrontierWorldState state, SubjectId subject, HiveGrowthBiomassConsumed consumed) {
@@ -132,7 +134,7 @@ public final class HiveGrowthProcess {
         if (!HiveStorageSupport.operationalNestForStore(state, slot.containerId()).id().equals(job.nestId())) {
             throw new IllegalArgumentException("cold hive growth consumption crosses nest-local biomass custody");
         }
-        activeTask(state, job.hiveId()); return state.consumeHiveGrowthBiomass(job.id(), item.id());
+        activeTask(state, job); return state.consumeHiveGrowthBiomass(job.id(), item.id());
     }
 
     private static FrontierWorldState reduceFungibleStarted(FrontierWorldState state, SubjectId subject, HiveGrowthJob job,
@@ -147,7 +149,7 @@ public final class HiveGrowthProcess {
                 || state.inventory().fungibleResources().claims().containsKey(held.claimId())) {
             throw new IllegalArgumentException("fungible hive growth start lacks inactive nest-local biomass custody");
         }
-        activeTask(state, job.hiveId()); return state.startFungibleHiveGrowth(job);
+        activeTask(state, job); return state.startFungibleHiveGrowth(job);
     }
 
     private static FrontierWorldState reduceFungibleConsumed(FrontierWorldState state, SubjectId subject, HiveGrowthJob job,
@@ -159,18 +161,20 @@ public final class HiveGrowthProcess {
         ClaimAllocation claim = state.inventory().fungibleResources().claims().get(held.claimId());
         ResourceLot lot = state.inventory().fungibleResources().lots().get(held.itemId());
         if (account == null || lot == null || claim == null || !(account.custody() instanceof ResourceCustody.Container store)
-                || !BIOMASS.equals(lot.itemKind()) || lot.quantity() < 64 || claim.quantity() != 64 || !claim.claimantId().equals(job.id())
+                || !BIOMASS.equals(lot.itemKind()) || lot.quantity() < 64 || claim.quantity() != 64
+                || claim.purpose() != ClaimPurpose.HIVE_GROWTH || !claim.claimantId().equals(job.id())
                 || !state.isHiveStore(store.containerId()) || ReferenceContainerCustody.hasLiveCustody(state, store.containerId())
                 || !HiveStorageSupport.operationalNestForStore(state, store.containerId()).id().equals(job.nestId())) {
             throw new IllegalArgumentException("fungible hive biomass consumption bypasses its inactive nest-local allocation");
         }
-        activeTask(state, job.hiveId()); return state.consumeFungibleHiveGrowthBiomass(job.id());
+        activeTask(state, job); return state.consumeFungibleHiveGrowthBiomass(job.id());
     }
 
     public static FrontierWorldState reduceCompleted(FrontierWorldState state, SubjectId subject, HiveGrowthCompleted completed) {
         HiveGrowthJob job = state.hiveColony().growthJobs().get(completed.jobId());
-        if (job == null || !subject.equals(job.hiveId())) throw new IllegalArgumentException("hive growth completion lacks its owning hive");
-        activeTask(state, job.hiveId()); return state.completeHiveGrowth(completed.jobId());
+        if (job == null || !subject.equals(job.hiveId()) || !job.bioform().id().equals(completed.birth().actorId()))
+            throw new IllegalArgumentException("hive growth completion lacks its owning hive or exact newborn");
+        activeTask(state, job); return state.completeHiveGrowth(completed.jobId());
     }
 
     public static FrontierWorldState reduceBlocked(FrontierWorldState state, SubjectId subject, HiveGrowthBlocked blocked) {
@@ -210,7 +214,7 @@ public final class HiveGrowthProcess {
     public static List<ProposedEvent> planTransition(FrontierWorldState state, PhysicalIntent intent, PhysicalIntentTransition transition, long now) {
         HiveGrowthJob job = state.hiveColony().growthJobs().get(intent.causeSubjectId());
         if (job == null || !intent.id().equals(job.consumptionIntentId())) throw new IllegalArgumentException("hive growth consumption has no active job");
-        StrategicTask task = activeTask(state, job.hiveId()); ProposedEvent physical = new ProposedEvent(job.hiveId(), transition);
+        StrategicTask task = activeTask(state, job); ProposedEvent physical = new ProposedEvent(job.hiveId(), transition);
         if (transition.status() == PhysicalIntentStatus.CONFIRMED) return List.of(physical, schedule(complete(job, now + 200L)));
         if (transition.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) return List.of(physical,
                 new ProposedEvent(job.hiveId(), HiveGrowthDiagnosticProducer.PHYSICAL_CONSUMPTION_UNKNOWN.create(job.hiveId(), job.nestId(), job.id())),
@@ -226,11 +230,11 @@ public final class HiveGrowthProcess {
         return task;
     }
 
-    private static StrategicTask activeTask(FrontierWorldState state, SubjectId hive) {
-        return state.strategicPlans().tasks().values().stream().filter(task -> task.ownerId().equals(hive)
-                && task.kind() == StrategicTaskKind.GROW_HIVE_ORGANISM && task.status() == StrategicTaskStatus.ACTIVE)
-                .reduce((left, right) -> { throw new IllegalArgumentException("hive growth task binding is ambiguous"); })
-                .orElseThrow(() -> new IllegalArgumentException("hive growth has no active strategic task"));
+    private static StrategicTask activeTask(FrontierWorldState state, HiveGrowthJob job) {
+        StrategicTask task = task(state, job.taskId(), StrategicTaskStatus.ACTIVE);
+        if (!task.ownerId().equals(job.hiveId()))
+            throw new IllegalArgumentException("hive growth job declares a foreign strategic task owner");
+        return task;
     }
 
     private static ProposedEvent transition(StrategicTask task, StrategicTaskStatus status) { return new ProposedEvent(task.ownerId(), new StrategicTaskTransition(task.id(), status)); }
@@ -249,19 +253,19 @@ public final class HiveGrowthProcess {
                 job.id(), "frontier.hive.growth.task.complete", 1);
     }
     private static ProposedEvent schedule(ScheduledAction action) { return new ProposedEvent(action.subject(), new ScheduleEffect.Created(action)); }
-    private static HiveGrowthJob growthJob(SubjectId hive, HiveNest nest, ExactItemStack input, int ordinal) {
+    private static HiveGrowthJob growthJob(StrategicTask task, SubjectId hive, HiveNest nest, ExactItemStack input, int ordinal) {
         int column = (ordinal - 1) % 8; int row = (ordinal - 1) / 8; int x = nest.anchor().x() + 12 + column * 8; int z = nest.anchor().z() + 12 + row * 8;
         SubjectId jobId = new SubjectId("job:hive-growth-" + ordinal);
         String nestSuffix = nest.id().value().substring("nest:seed-".length());
-        return new HiveGrowthJob(jobId, hive, nest.id(), input.id(), new PhysicalIntentId("intent:hive-growth-biomass-" + ordinal),
+        return new HiveGrowthJob(jobId, task.id(), hive, nest.id(), input.id(), new PhysicalIntentId("intent:hive-growth-biomass-" + ordinal),
                 new HiveOrgan(new SubjectId("organ:" + nestSuffix + "-grown-relay-" + ordinal), hive, nest.id(), HiveOrganKind.RELAY, new BlockPosition(x, nest.anchor().y(), z), Optional.empty()),
                 new Bioform(new SubjectId("bioform:" + nestSuffix + "-grown-" + ordinal), hive, nest.id(), BioformChassis.RUNT,
                         java.util.Set.of(BioformMutation.ARMORED), BioformAssignment.DEFEND, new BlockPosition(x + 4, nest.anchor().y(), z)));
     }
-    private static HiveGrowthJob growthJob(SubjectId hive, HiveNest nest, FungibleResourceCustodySupport.LotAtContainer input, int ordinal) {
+    private static HiveGrowthJob growthJob(StrategicTask task, SubjectId hive, HiveNest nest, FungibleResourceCustodySupport.LotAtContainer input, int ordinal) {
         int column = (ordinal - 1) % 8; int row = (ordinal - 1) / 8; int x = nest.anchor().x() + 12 + column * 8; int z = nest.anchor().z() + 12 + row * 8;
         SubjectId jobId = new SubjectId("job:hive-growth-" + ordinal); String nestSuffix = nest.id().value().substring("nest:seed-".length());
-        return new HiveGrowthJob(jobId, hive, nest.id(), input.lot().id(), new HiveGrowthInputHold.FungibleCold(input.lot().id(), input.accountId(),
+        return new HiveGrowthJob(jobId, task.id(), hive, nest.id(), input.lot().id(), new HiveGrowthInputHold.FungibleCold(input.lot().id(), input.accountId(),
                 new SubjectId("claim:hive-growth-" + ordinal)), new PhysicalIntentId("intent:hive-growth-biomass-" + ordinal),
                 new HiveOrgan(new SubjectId("organ:" + nestSuffix + "-grown-relay-" + ordinal), hive, nest.id(), HiveOrganKind.RELAY,
                         new BlockPosition(x, nest.anchor().y(), z), Optional.empty()),

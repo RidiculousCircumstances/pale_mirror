@@ -114,9 +114,10 @@ class OperationAssemblyTest {
 
     @Test
     void everyCompiledOperationApproachCellRetainsTwoClearSemanticBodyCells() {
-        FrontierWorldState state = FrontierDevelopmentScenarios.operationAssemblyFixture(
-                new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:assembly-clearance"), 91L).state();
-        RouteOperation operation = state.operations().get(new SubjectId("operation:supply-1-2"));
+        var fixture = FrontierDevelopmentScenarios.operationAssemblyFixture(
+                new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:assembly-clearance"), 91L);
+        FrontierWorldState state = fixture.state();
+        RouteOperation operation = state.operations().get(fixture.operationId());
         java.util.Set<BlockPosition> geometry = FrontierGrayboxPlan.compile(state).cells().keySet();
 
         operation.activeAssembly().orElseThrow().members().forEach((actor, member) -> member.corridor().forEach(floor -> {

@@ -34,6 +34,29 @@ public final class FrontierV3PilotCrashHooks {
         PROBE.cropEffectBecameVisible(job, cropSlot);
     }
 
+    /** Observe the new cell-owned writer only after its exact crop step is durably acknowledged. */
+    public static void afterResourceFieldWorkStep(ServerLevel level, Object runtime, FrontierWorldState state,
+                                                   ResourceSiteHarvestJob job) {
+        if (!PROBE.armed()) return;
+        if (!job.progress().hasPendingCrop()) return;
+        var cycle = state.resourceSites().cycle(job.siteId());
+        var cell = cycle.layout().cells().get(job.progress().pendingCropSlotIndex());
+        var ledger = FrontierV3ResourceSiteLedger.get(level);
+        if (!(ledger.fieldClaim(job.siteId()) instanceof FrontierV3ResourceSiteLedger.FieldOwnership owner)
+                || owner.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE
+                || !owner.witness().matchesCycle(cycle)) return;
+        var pending = owner.witness().cell(cell.id()).pending().orElse(null);
+        if (pending == null || pending.canonicalSource().isPresent()
+                || !pending.causationId().equals(FrontierV3ResourceFieldWorkExecutor.cause(job, cycle, cell.id()))
+                || pending.completedSteps() == 0) return;
+        boolean cropWritten = pending.transition().steps().subList(0, pending.completedSteps()).stream()
+                .anyMatch(step -> step.part() == io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCellTransition.Part.CROP);
+        if (!cropWritten || FrontierV3ResourceFieldObservation.observe(level, cycle, owner.witness(), cell.id(),
+                pending.causationId()).disposition() != FrontierV3ResourceFieldObservation.Disposition.CURRENT) return;
+        cropEffectBecameVisible(job, cell.crop());
+        afterVisibleCropEffectBeforeObservation(runtime, job);
+    }
+
     public static void afterVisibleCropEffectBeforeObservation(Object runtime, ResourceSiteHarvestJob job) {
         if (!(runtime instanceof FrontierV3ServerRuntime<?, ?>)) {
             throw new IllegalArgumentException("pilot crash hook requires the Frontier v3 server runtime");

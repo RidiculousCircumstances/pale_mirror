@@ -459,6 +459,12 @@ class FrontierV3TestPilotScenarioTest {
 
     @Test
     void permitsBoundedOrdinaryAttacksWithoutEntityIdentityAuthority() {
+        assertEquals(1, FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"attack_nearest_entity","entityType":"minecraft:villager",
+                "maxDistance":4,"maxAttacks":1,"timeoutMs":30000,"requireDamage":true}]}""").actionCount());
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse("""
+                {"schema":1,"actions":[{"type":"attack_nearest_entity","entityType":"minecraft:villager",
+                "maxDistance":4,"maxAttacks":1,"timeoutMs":30000,"requireDamage":true,"requireRemoval":true}]}"""));
         String terminal = """
                 {"schema":1,"actions":[{"type":"attack_nearest_entity","entityType":"minecraft:chest_minecart",
                 "maxDistance":8,"maxAttacks":4,"timeoutMs":30000,"requireRemoval":true}]}""";

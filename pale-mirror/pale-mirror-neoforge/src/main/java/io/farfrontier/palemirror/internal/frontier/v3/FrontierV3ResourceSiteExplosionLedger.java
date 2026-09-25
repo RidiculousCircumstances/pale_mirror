@@ -79,6 +79,12 @@ final class FrontierV3ResourceSiteExplosionLedger extends SavedData {
         return Optional.empty();
     }
 
+    boolean hasPendingSite(SubjectId siteId) {
+        Objects.requireNonNull(siteId, "resource-site explosion site");
+        return pending.values().stream().flatMap(effect -> effect.candidates().stream())
+                .anyMatch(candidate -> candidate.siteId().equals(siteId));
+    }
+
     void resolve(Ready ready) {
         Pending effect = pending.get(ready.effectId());
         if (effect == null || effect.candidates().isEmpty() || !effect.candidates().getFirst().equals(ready.candidate())) {
@@ -92,15 +98,22 @@ final class FrontierV3ResourceSiteExplosionLedger extends SavedData {
 
     private static Optional<Candidate> candidate(ServerLevel level, List<BlockPos> affected, ResourceSite site,
                                                   FrontierV3ResourceSiteLedger claims) {
+        // Most blasts do not touch this site. In particular, never ask the legacy API to
+        // interpret an unrelated cell-owned field: that API deliberately rejects it.
+        BlockPos witness = affected.stream().distinct().sorted(Comparator.comparingLong(BlockPos::asLong))
+                .filter(position -> contains(site, position)).findFirst().orElse(null);
+        if (witness == null) return Optional.empty();
+        // The stage/prefix blast witness belongs only to legacy fields. Cell-owned field
+        // loss is fenced by its exact block-write/world-cell path, not this old stage API.
+        if (!(claims.siteClaim(site.id()) instanceof FrontierV3ResourceSiteLedger.LegacySiteClaim)) return Optional.empty();
         FrontierV3ResourceSiteLedger.Claim claim = claims.claim(site.id());
         if (claim == null || claim.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE || !FrontierV3ResourceSiteExecutor.loaded(level, site)
                 || !FrontierV3ResourceSiteExecutor.matches(level, site, claim.stage())) return Optional.empty();
-        return affected.stream().distinct().sorted(Comparator.comparingLong(BlockPos::asLong)).filter(position -> contains(site, position)).findFirst()
-                .map(position -> new Candidate(site.id(), claim.stage(), position.asLong()));
+        return Optional.of(new Candidate(site.id(), claim.stage(), witness.asLong()));
     }
 
     private static boolean contains(ResourceSite site, BlockPos position) {
-        return site.managedSlots().stream().map(slot -> new BlockPos(slot.x(), slot.y(), slot.z())).anyMatch(position::equals);
+        return site.layout().contains(new BlockPosition(position.getX(), position.getY(), position.getZ()));
     }
 
     static FrontierV3ResourceSiteExplosionLedger load(CompoundTag tag, HolderLookup.Provider registries) {

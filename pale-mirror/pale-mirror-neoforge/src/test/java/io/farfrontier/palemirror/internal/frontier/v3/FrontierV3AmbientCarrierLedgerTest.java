@@ -20,7 +20,57 @@ class FrontierV3AmbientCarrierLedgerTest {
         var live = declaration(FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 8L, 4L);
         assertTrue(ledger.canFence(inactive, 7L, 7L)); assertTrue(ledger.fence(inactive, 7L, 7L));
         assertEquals(FrontierV3AmbientCarrierLedger.Reconciliation.READY, ledger.reconciliation(live)); assertEquals(4L, ledger.reconstructionEpoch(ACTOR));
-        assertTrue(ledger.adopt(live)); assertEquals(0, ledger.inactiveCount());
+        assertTrue(ledger.adopt(FrontierV3ActorAdoptionFixture.binding(live))); assertEquals(0, ledger.inactiveCount());
+        assertTrue(ledger.pendingAdoption(ACTOR).orElseThrow().matches(FrontierV3ActorAdoptionFixture.binding(live)));
+        assertFalse(ledger.adopt(FrontierV3ActorAdoptionFixture.binding(live)));
+    }
+    @Test void adoptionSurvivesSerializationAndOnlyExactAcknowledgementRetiresIt() {
+        var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
+        var inactive = declaration(FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
+                FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 7L, 3L);
+        var live = inactive.liveBody(FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, 8L, 4L);
+        assertTrue(ledger.fence(inactive, 7L, 7L)); assertTrue(ledger.adopt(FrontierV3ActorAdoptionFixture.binding(live)));
+        var restored = FrontierV3AmbientCarrierLedger.load(ledger.save(new CompoundTag(), null), null);
+        var pending = restored.pendingAdoption(ACTOR).orElseThrow();
+        assertEquals(inactive, pending.predecessor().identity());
+        assertFalse(restored.hasCarrier(ACTOR), "a recovery obligation is not concurrent inactive custody");
+        assertFalse(restored.acknowledgeAdoption(pending, FrontierV3ActorAdoptionFixture.binding(live.liveBody(live.owner(), 9L, 4L))));
+        assertFalse(restored.acknowledgeAdoption(pending, FrontierV3ActorAdoptionFixture.binding(live.liveBody(live.owner(), 8L, 5L))));
+        assertEquals(pending, restored.pendingAdoption(ACTOR).orElseThrow());
+        assertTrue(restored.acknowledgeAdoption(pending, FrontierV3ActorAdoptionFixture.binding(live)));
+        assertFalse(restored.acknowledgeAdoption(pending, FrontierV3ActorAdoptionFixture.binding(live)));
+        assertTrue(restored.pendingAdoptions().isEmpty());
+    }
+    @Test void sameBodySuccessorFenceSupersedesAdoptionButLateSaveCannotEraseIt() {
+        var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
+        var inactive = declaration(FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
+                FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 7L, 3L);
+        var live = inactive.liveBody(FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, 8L, 4L);
+        assertTrue(ledger.fence(inactive, 7L, 7L)); assertTrue(ledger.adopt(FrontierV3ActorAdoptionFixture.binding(live)));
+        var pending = ledger.pendingAdoption(ACTOR).orElseThrow();
+        var successor = live.liveBody(FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, 17L, 4L).inactiveCarrier();
+        var staleBody = live.liveBody(FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, 17L, 3L).inactiveCarrier();
+        assertFalse(ledger.canFence(staleBody, 17L, 8L));
+        assertFalse(ledger.fence(staleBody, 17L, 8L));
+        assertTrue(ledger.fence(successor, 17L, 8L));
+        assertTrue(ledger.pendingAdoptions().isEmpty());
+        assertFalse(ledger.acknowledgeAdoption(pending, FrontierV3ActorAdoptionFixture.binding(live)));
+        assertTrue(ledger.matchesCarrier(successor, 17L, 8L));
+    }
+    @Test void persistedDuplicateAndConcurrentAdoptionAreRejected() {
+        var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
+        var inactive = declaration(FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
+                FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 7L, 3L);
+        var live = inactive.liveBody(FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, 8L, 4L);
+        assertTrue(ledger.fence(inactive, 7L, 7L)); assertTrue(ledger.adopt(FrontierV3ActorAdoptionFixture.binding(live)));
+        var duplicate = ledger.save(new CompoundTag(), null);
+        var rows = duplicate.getList("pendingAdoptions", net.minecraft.nbt.Tag.TAG_COMPOUND);
+        rows.add(rows.getCompound(0).copy());
+        assertThrows(IllegalStateException.class, () -> FrontierV3AmbientCarrierLedger.load(duplicate, null));
+        var concurrent = ledger.save(new CompoundTag(), null);
+        concurrent.getList("carriers", net.minecraft.nbt.Tag.TAG_COMPOUND)
+                .add(new FrontierV3AmbientCarrierLedger.Carrier(inactive, 7L, 7L).save());
+        assertThrows(IllegalStateException.class, () -> FrontierV3AmbientCarrierLedger.load(concurrent, null));
     }
     @Test void missingForeignStaleKindAndRepresentationAllFailClosed() {
         FrontierV3AmbientCarrierLedger ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
@@ -35,7 +85,7 @@ class FrontierV3AmbientCarrierLedgerTest {
         assertEquals(FrontierV3AmbientCarrierLedger.Reconciliation.KIND_MISMATCH, ledger.reconciliation(wrongKind));
         assertEquals(FrontierV3AmbientCarrierLedger.Reconciliation.REPRESENTATION_MISMATCH, ledger.reconciliation(inactive));
         assertEquals(FrontierV3AmbientCarrierLedger.Reconciliation.STALE_REVISION, ledger.reconciliation(declaration(FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 7L, 2L)));
-        assertFalse(ledger.adopt(foreign)); assertEquals(1, ledger.inactiveCount());
+        assertFalse(ledger.adopt(FrontierV3ActorAdoptionFixture.binding(foreign))); assertEquals(1, ledger.inactiveCount());
     }
     @Test void carrierCannotBeReplacedDuplicatedOrConcurrentWithALiveBody() {
         FrontierV3AmbientCarrierLedger ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
@@ -52,21 +102,26 @@ class FrontierV3AmbientCarrierLedgerTest {
                 ledger.reconciliation(live, true));
         assertEquals(1, ledger.inactiveCount());
     }
-    @Test void observedAbsentClosedSceneMayFenceOnlyItsExactNextAmbientReturn() {
+    @Test void closedSceneReturnNeedsRetainedGenerationAndCannotManufactureItFromAbsence() {
         FrontierV3AmbientCarrierLedger ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
         var closedScene = declaration(FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE,
-                FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 17L, 1L);
+                FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 17L, 5L);
         var nextAmbient = declaration(FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
-                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 9L, 2L);
-        assertFalse(ledger.fenceObservedAbsentClosedScene(closedScene, 17L, 8L, false),
-                "an unobserved closed scene may not manufacture an inactive carrier");
-        assertTrue(ledger.fenceObservedAbsentClosedScene(closedScene, 17L, 8L, true),
-                "one naturally observed absent exact scene body fences the closed scene authority");
-        assertEquals(FrontierV3AmbientCarrierLedger.Reconciliation.READY, ledger.reconciliation(nextAmbient),
-                "only the newer exact ambient lease may reconstruct the fenced scene actor");
-        assertFalse(ledger.fenceObservedAbsentClosedScene(declaration(FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
-                FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 18L, 1L), 18L, 9L, true),
-                "an ambient or foreign owner cannot impersonate the closed-scene recovery edge");
+                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 9L, 6L);
+        assertEquals(FrontierV3SceneExecutor.ClosedSceneReturnRecovery.CONFLICT,
+                FrontierV3SceneExecutor.retainedClosedReturnAdmission(ledger, nextAmbient));
+        assertEquals(0, ledger.inactiveCount(), "absence must not manufacture evidence");
+        assertTrue(ledger.fence(closedScene, 17L, 8L));
+        var before = ledger.save(new CompoundTag(), null);
+        assertEquals(FrontierV3SceneExecutor.ClosedSceneReturnRecovery.FENCED,
+                FrontierV3SceneExecutor.retainedClosedReturnAdmission(ledger, nextAmbient));
+        for (var invalid : java.util.List.of(nextAmbient.liveBody(nextAmbient.owner(), 9L, 2L),
+                nextAmbient.liveBody(nextAmbient.owner(), 8L, 6L),
+                nextAmbient.liveBody(FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, 18L, 6L))) {
+            assertEquals(FrontierV3SceneExecutor.ClosedSceneReturnRecovery.CONFLICT,
+                    FrontierV3SceneExecutor.retainedClosedReturnAdmission(ledger, invalid));
+        }
+        assertEquals(before, ledger.save(new CompoundTag(), null), "return inspection must be read-only");
     }
     @Test void legacySchemaAndDuplicatePersistedCarrierFailBeforeRecovery() {
         CompoundTag legacy = new CompoundTag(); legacy.putInt("format", 2);

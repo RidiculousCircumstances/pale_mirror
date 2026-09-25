@@ -32,7 +32,7 @@ class RouteSceneReturnRepairTest {
         WorldId world = new WorldId("frontier:route-scene-return-repair");
         var engine = FrontierEngines.create(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(world, 41L));
         FrontierWorldState initial = state(engine);
-        RouteOperation operation = initial.operations().get(new SubjectId("operation:supply-1-2"));
+        RouteOperation operation = FrontierDevelopmentScenarios.initialNorthwatchShipment(initial).orElseThrow();
         SceneLease lease = lease(initial, engine.checkpoint(), operation);
 
         submit(engine, world, new SceneLeasePrepared(lease));
@@ -80,7 +80,7 @@ class RouteSceneReturnRepairTest {
     void laterHotRouteLossStillStartsTheExactInPlaceMaintenance() {
         WorldId world = new WorldId("frontier:route-scene-return-repair-later-edge");
         var engine = FrontierEngines.create(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(world, 41L));
-        RouteOperation operation = state(engine).operations().get(new SubjectId("operation:supply-1-2"));
+        RouteOperation operation = FrontierDevelopmentScenarios.initialNorthwatchShipment(state(engine)).orElseThrow();
         SceneLease lease = lease(state(engine), engine.checkpoint(), operation);
 
         submit(engine, world, new SceneLeasePrepared(lease));

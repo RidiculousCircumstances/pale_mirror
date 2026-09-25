@@ -63,6 +63,40 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class FrontierV3DiagnosticJsonTest {
     @Test
+    void authored65CellHarvestDiagnosticReportsItsSemanticGoalAndYield() {
+        var configuration = FrontierV3FixtureCatalog.configuration("resource-site-harvest-65",
+                new WorldId("frontier:diagnostic-65-cell-field"), 125L);
+        var checkpoint = FrontierEngines.create(configuration).checkpoint();
+        var json = JsonParser.parseString(FrontierV3DiagnosticJson.render("process",
+                "job:site-harvest-1-wheat-field-1", checkpoint, configuration.initialState(), Optional.empty())
+                .substring(FrontierV3DiagnosticJson.PREFIX.length())).getAsJsonObject();
+        var conservation = json.getAsJsonObject("conservation");
+        assertEquals(65, conservation.get("totalCropSlots").getAsInt());
+        assertEquals(0, conservation.get("deliveredYield").getAsInt());
+        assertEquals("WORK_CELL", json.getAsJsonObject("semanticGoal").get("kind").getAsString());
+        assertEquals(0, json.getAsJsonObject("semanticGoal").get("nextWorkSlot").getAsInt());
+        assertFalse(conservation.get("returningForBatch").getAsBoolean());
+    }
+
+    @Test
+    void referenceCompositionCannotMasqueradeAsAnArbitraryContainer() {
+        var configuration = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:reference-view-scope"), 91L);
+        var engine = FrontierEngines.create(configuration);
+        var checkpoint = engine.checkpoint();
+        var state = configuration.initialState();
+        var accepted = JsonParser.parseString(FrontierV3DiagnosticJson.render("reference_container", "f02b",
+                checkpoint, state, Optional.empty()).substring(FrontierV3DiagnosticJson.PREFIX.length())).getAsJsonObject();
+        assertEquals("ok", accepted.get("status").getAsString());
+        for (String id : List.of("container:7-depot", "container:1-depot", "unknown")) {
+            var rejected = JsonParser.parseString(FrontierV3DiagnosticJson.render("reference_container", id,
+                    checkpoint, state, Optional.empty()).substring(FrontierV3DiagnosticJson.PREFIX.length())).getAsJsonObject();
+            assertEquals("not_found", rejected.get("status").getAsString());
+            assertFalse(rejected.has("tasks"));
+        }
+        assertEquals(checkpoint, engine.checkpoint());
+    }
+
+    @Test
     void playerCustodyConflictKeepsTheSameStampedCauseForWhyIncidentAndBlockedAggregate() {
         var configuration = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:diagnostic-player-conflict"), 91L);
         FrontierWorldState baseline = configuration.initialState();
@@ -133,8 +167,10 @@ class FrontierV3DiagnosticJsonTest {
 
     @Test
     void terminalMarketOrderDiagnosticRetainsItsExactInputOutputLineage() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:diagnostic-terminal-order"), 91L));
-        for (long tick = 100L; tick <= 2_200L; tick += 100L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
+        // Ordinary route admission follows completed bread production; use that semantic
+        // boundary instead of the old pre-labor assumption that work finishes at tick2200.
+        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(
+                new WorldId("frontier:diagnostic-terminal-order"), 91L));
         FrontierWorldState state = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec()
                 .decode(engine.checkpoint().canonicalState());
         var order = state.companies().market().workOrders().values().stream()
@@ -399,13 +435,26 @@ class FrontierV3DiagnosticJsonTest {
                 "one named settlement view exposes bounded health policy facts without resident histories");
         assertTrue(settlementJson.contains("\"food\":{\"status\":\"IDLE\",\"available\":0,\"reserve\":"),
                 "one named settlement view exposes exact available food and its derived reserve without creating a second ledger");
+        var food = JsonParser.parseString(settlementJson.substring(FrontierV3DiagnosticJson.PREFIX.length()))
+                .getAsJsonObject().getAsJsonObject("food");
+        long due = checkpoint.schedules().stream().filter(action -> action.subject().equals(settlement)
+                && action.kind().equals("frontier.settlement.provision.review")).findFirst().orElseThrow().dueAt().ticks();
+        assertEquals(due, food.get("nextReviewAt").getAsLong());
+        assertEquals(0L, food.get("reviewOverdueTicks").getAsLong());
+        var noReview = new CheckpointImage(checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
+                checkpoint.canonicalState(), checkpoint.schedules().stream().filter(action -> !action.subject().equals(settlement)).toList(), checkpoint.receipts());
+        var missingReviewFood = JsonParser.parseString(FrontierV3DiagnosticJson.render("settlement", settlement.value(),
+                noReview, state, Optional.empty()).substring(FrontierV3DiagnosticJson.PREFIX.length())).getAsJsonObject().getAsJsonObject("food");
+        assertTrue(missingReviewFood.get("nextReviewAt").isJsonNull(), "never invent a review from cadence when the actual schedule is missing");
+        assertTrue(missingReviewFood.get("reviewOverdueTicks").isJsonNull());
         assertTrue(settlementJson.contains("\"nourished\":" + state.bootstrap().settlements().getFirst().residents().size()
                         + ",\"hungry\":0,\"starving\":0"),
                 "one named settlement view exposes bounded individual nutrition totals without a separate aggregate owner");
         assertTrue(hiveJson.contains("\"infectionCells\":18") && hiveJson.contains("\"addedOrgans\":0"),
                 "one named hive diagnostic exposes bounded canonical expansion state without materializing it");
-        assertTrue(containerJson.contains("\"surface\":") && containerJson.contains("\"position\":{") && containerJson.contains("\"occupiedCount\":") && containerJson.contains("\"occupied\":["),
-                "one diagnostic must expose only the exact occupied slot projection of one named container");
+        assertTrue(containerJson.contains("\"surface\":") && containerJson.contains("\"position\":{") && containerJson.contains("\"occupiedCount\":") && containerJson.contains("\"occupied\":[")
+                        && containerJson.contains("\"fungibleOccupiedCount\":") && containerJson.contains("\"fungibleOccupied\":["),
+                "one diagnostic must distinguish exact occupied slots from currently bound fungible stock");
         assertTrue(resourceJson.contains("\"account\":\"" + resource.value() + "\"") && resourceJson.contains("\"custody\":{\"kind\":\"CONTAINER\"")
                         && resourceJson.contains("\"lots\":[{\"id\":\"lot:bootstrap-") && resourceJson.contains("\"bindingCount\":0")
                         && resourceJson.contains("\"bindings\":[]"),
@@ -575,7 +624,10 @@ class FrontierV3DiagnosticJsonTest {
                 new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
         FrontierWorldState state = runtime.decodedState().orElseThrow();
-        var operation = state.operations().get(new SubjectId("operation:supply-1-2"));
+        var operations = state.operations().values().stream()
+                .filter(value -> value.settlementId().equals(new SubjectId("settlement:1")) && value.activeTravel().isPresent()).toList();
+        assertEquals(1, operations.size(), "fixture must expose one exact initial shipment");
+        var operation = operations.getFirst();
         var travel = operation.activeTravel().orElseThrow();
 
         String operationJson = FrontierV3DiagnosticJson.render("operation", operation.id().value(), checkpoint, state, Optional.empty());

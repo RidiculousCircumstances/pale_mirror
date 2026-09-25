@@ -110,7 +110,9 @@ public final class FrontierProductionWorkSceneSupport {
             if (custody.authorityEpoch() != bound.authorityEpoch()) return false;
             List<PhysicalStackBinding> bindings = state.inventory().fungibleResources().bindings().values().stream()
                     .filter(binding -> binding.accountId().equals(bound.accountId())).toList();
-            return !bindings.isEmpty() && bindings.stream().allMatch(binding -> binding.authorityEpoch() == bound.authorityEpoch());
+            return !bindings.isEmpty() && bindings.stream().allMatch(binding -> binding.authorityEpoch() == bound.authorityEpoch())
+                    && bound.inputLots().entrySet().stream().allMatch(entry -> bindings.stream()
+                            .mapToInt(binding -> binding.lotQuantities().getOrDefault(entry.getKey(), 0)).sum() >= entry.getValue());
         }
         if (!(job.inputHold() instanceof ProductionInputHold.Materialized)) return false;
         ExactItemStack input = state.inventory().items().get(job.consumedItemId());

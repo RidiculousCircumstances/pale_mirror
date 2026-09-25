@@ -5,23 +5,48 @@ import io.farfrontier.palemirror.frontier.v3.api.ScheduleId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.Objects;
+import java.util.Optional;
 
 /** One durable exact-farmer crop receipt: observed in HOT or semantically completed by bounded COLD work. */
-public record ResourceSiteHarvestProgressed(SubjectId jobId, int completedCropSlots, String coldScheduleId, long coldDueAt) implements FrontierPayload {
-    public ResourceSiteHarvestProgressed {
-        Objects.requireNonNull(jobId, "resource-site harvest progress job");
-        if (!jobId.value().startsWith("job:site-harvest-") || completedCropSlots < 1
-                || completedCropSlots > ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS) {
-            throw new IllegalArgumentException("resource-site harvest progress is invalid");
-        }
-        coldScheduleId = Objects.requireNonNull(coldScheduleId, "resource-site harvest progress COLD schedule");
-        if ((coldScheduleId.equals("not_captured")) != (coldDueAt == -1L) || coldDueAt < -1L) {
-            throw new IllegalArgumentException("resource-site harvest progress has invalid COLD schedule evidence");
+public record ResourceSiteHarvestProgressed(SubjectId siteId, long epoch, SubjectId jobId, int completedCropSlots,
+                                            long layoutRevision, ResourceFieldLayout.CellId cellId,
+                                            ResourceFieldCycle.WorkOutcome outcome,
+                                            ScheduleId coldScheduleId, long coldDueAt,
+                                            Optional<HandObservation> observedHand) implements FrontierPayload {
+    /** Only a trusted HOT adapter may supply this exact observed actor body and OFFHAND count. */
+    public record HandObservation(PhysicalStackAddress.ActorHand address, long authorityEpoch, int quantity) {
+        public HandObservation {
+            Objects.requireNonNull(address, "harvest observed actor hand");
+            if (authorityEpoch < 1 || quantity < 0 || quantity > 64)
+                throw new IllegalArgumentException("harvest observed hand has invalid authority or quantity");
         }
     }
-    public ResourceSiteHarvestProgressed(SubjectId jobId, int completedCropSlots) { this(jobId, completedCropSlots, "not_captured", -1L); }
-    public ResourceSiteHarvestProgressed(SubjectId jobId, int completedCropSlots, ScheduleId coldScheduleId, long coldDueAt) {
-        this(jobId, completedCropSlots, Objects.requireNonNull(coldScheduleId, "resource-site harvest progress COLD schedule").value(), coldDueAt);
+
+    /** COLD work has no loaded Minecraft hand to observe. */
+    public ResourceSiteHarvestProgressed(SubjectId siteId, long epoch, SubjectId jobId, int completedCropSlots,
+                                         long layoutRevision, ResourceFieldLayout.CellId cellId,
+                                         ResourceFieldCycle.WorkOutcome outcome,
+                                         ScheduleId coldScheduleId, long coldDueAt) {
+        this(siteId, epoch, jobId, completedCropSlots, layoutRevision, cellId, outcome,
+                coldScheduleId, coldDueAt, Optional.empty());
+    }
+
+    public ResourceSiteHarvestProgressed {
+        Objects.requireNonNull(siteId, "resource-site harvest progress site");
+        Objects.requireNonNull(jobId, "resource-site harvest progress job");
+        if (!siteId.value().startsWith("site:") || epoch < 1
+                || !jobId.value().startsWith("job:site-harvest-") || completedCropSlots < 1
+                || completedCropSlots > ResourceFieldLayout.MAX_CELLS) {
+            throw new IllegalArgumentException("resource-site harvest progress is invalid");
+        }
+        if (layoutRevision < 1) throw new IllegalArgumentException("resource-site harvest progress has no field layout revision");
+        Objects.requireNonNull(cellId, "resource-site harvest progress cell");
+        Objects.requireNonNull(outcome, "resource-site harvest progress outcome");
+        coldScheduleId = Objects.requireNonNull(coldScheduleId, "resource-site harvest progress COLD schedule");
+        observedHand = Objects.requireNonNull(observedHand, "resource-site observed worker hand");
+        if (coldDueAt < 0L) {
+            throw new IllegalArgumentException("resource-site harvest progress has invalid COLD schedule evidence");
+        }
     }
 
     @Override public String type() { return "frontier.resource_site_harvest_progressed"; }

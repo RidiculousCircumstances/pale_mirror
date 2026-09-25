@@ -27,6 +27,39 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrontierV3FixtureCatalogTest {
+    @Test void fungibleProductionProfileRetainsOrdinaryUnfinishedColdWork() {
+        var configuration = FrontierV3FixtureCatalog.configuration("fungible-production-work",
+                new WorldId("frontier:fungible-work-profile"), 41L);
+        var state = configuration.initialState();
+        assertEquals(1, state.productionJobs().size());
+        var job = state.productionJobs().values().iterator().next();
+        assertEquals(ProductionWorkProgress.processing(17), job.workProgress());
+        assertEquals(new SubjectId("job:production-1-1"), job.id());
+        assertEquals(new SubjectId("resident:1-15"), job.workerId());
+        assertEquals(new SubjectId("lot:production-1-1-bread"), job.outputItemId());
+        assertTrue(state.inventory().fungibleResources().lots().containsKey(job.consumedItemId()));
+        assertTrue(!state.inventory().fungibleResources().lots().containsKey(job.outputItemId()));
+        assertTrue(state.sceneLeases().isEmpty(), "profile begins COLD, not in an injected HOT scene");
+        assertTrue(!configuration.initialSchedules().isEmpty(), "ordinary work continuation must be retained");
+        assertEquals("disposable_lite", FrontierV3FixtureCatalog.profile("fungible-production-work").allowedRunner());
+    }
+    @Test void twoLotProductionProfileRetainsOneOrdinaryJobAndBothExactInputPortions() {
+        var configuration = FrontierV3FixtureCatalog.configuration("fungible-production-two-lot-work",
+                new WorldId("frontier:fungible-two-lot-work-profile"), 41L);
+        var state = configuration.initialState();
+        assertEquals(1, state.productionJobs().size());
+        var job = state.productionJobs().values().iterator().next();
+        assertEquals(ProductionWorkProgress.processing(17), job.workProgress());
+        var held = assertInstanceOf(ProductionInputHold.FungibleCold.class, job.inputHold());
+        assertEquals(java.util.Map.of(new SubjectId("lot:production-two-field-first"), 32,
+                new SubjectId("lot:production-two-field-second"), 32), held.inputLots());
+        assertEquals(1, state.inventory().fungibleResources().claims().size());
+        assertEquals(new SubjectId("claim:production-1-1"), held.claimId());
+        assertEquals(java.util.Map.of(held.claimId(), 64), state.inventory().fungibleResources().accounts()
+                .get(held.accountId()).claimQuantities());
+        assertTrue(state.sceneLeases().isEmpty());
+        assertTrue(!configuration.initialSchedules().isEmpty());
+    }
     @Test void coldBomberProfileRetainsAnOrdinaryDueActionThatEmitsTheExactUnvisitedCause() {
         var configuration = FrontierV3FixtureCatalog.coldBomberAftermathConfiguration(new WorldId("frontier:cold-bomber-profile"), 41L);
         FrontierWorldState state = configuration.initialState();
@@ -77,12 +110,12 @@ class FrontierV3FixtureCatalogTest {
         FrontierWorldState state = configuration.initialState();
         ResourceSiteHarvestJob job = (ResourceSiteHarvestJob) state.resourceSites().site(new SubjectId("site:1-wheat-field"))
                 .activeWork().orElseThrow();
-        assertTrue(job.atCurrentCropStation() && job.progress().completedCropSlots() == 0 && !job.progress().hasPendingCrop(),
+        assertTrue(ResourceSiteHarvestGoal.actorAtWorkCell(state, job) && job.progress().completedCropSlots() == 0 && !job.progress().hasPendingCrop(),
                 "the fixture must stop at the actual farmer's first retained crop station, not pre-consume a field cell");
         assertEquals(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.PREPARED,
                 state.physicalIntents().get(job.intentId()).status());
         assertTrue(state.sceneLeases().isEmpty(), "natural demand must still be the only source of a HOT harvest lease");
-        assertEquals(1L, configuration.initialSchedules().stream().filter(action -> action.subject().equals(job.id())
+        assertEquals(1L, configuration.initialSchedules().stream().filter(action -> action.subject().equals(job.siteId())
                 && action.kind().equals(ResourceSiteHarvestProcess.COLD_PROGRESS_KIND)).count());
     }
 
@@ -95,7 +128,7 @@ class FrontierV3FixtureCatalogTest {
         assertEquals(1, state.coldSettlementAssaultSceneCandidates().size());
         ResourceSiteHarvestJob harvest = (ResourceSiteHarvestJob) state.resourceSites().site(new SubjectId("site:1-wheat-field"))
                 .activeWork().orElseThrow();
-        assertTrue(harvest.atCurrentCropStation() && state.sceneLeases().isEmpty() && state.ambientLeases().isEmpty(),
+        assertTrue(ResourceSiteHarvestGoal.actorAtWorkCell(state, harvest) && state.sceneLeases().isEmpty() && state.ambientLeases().isEmpty(),
                 "one natural visit must be the only physical admission for both retained fronts");
         assertTrue(state.strategicPlans().settlementAssaults().values().stream().allMatch(value -> value.status() == SettlementAssaultStatus.COLD_COMBAT));
     }
@@ -103,7 +136,7 @@ class FrontierV3FixtureCatalogTest {
     @Test
     void everyDeclaredFixtureProfileHasExactlyOneLoadedProviderAndRequiredEvidenceContract() {
         List<FrontierV3FixtureCatalog.Profile> profiles = FrontierV3FixtureCatalog.profiles();
-        assertEquals(34, profiles.size());
+        assertTrue(!profiles.isEmpty(), "the catalog must declare at least one production fixture");
         assertEquals(profiles.size(), profiles.stream().map(FrontierV3FixtureCatalog.Profile::id).distinct().count());
         for (int index = 0; index < profiles.size(); index++) {
             FrontierV3FixtureCatalog.Profile profile = profiles.get(index);

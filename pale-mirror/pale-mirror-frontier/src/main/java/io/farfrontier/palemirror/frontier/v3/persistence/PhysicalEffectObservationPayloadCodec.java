@@ -29,7 +29,7 @@ final class PhysicalEffectObservationPayloadCodec {
         }
         else if (observation instanceof ResourceSitePreparationObservation preparation) {
             output.writeByte(7); ids(output, preparation); FrontierWorldPayloadCodecs.writeSubject(output, preparation.siteId());
-            output.writeByte(preparation.preparedSoilSlots()); output.writeByte(preparation.preparedCropSlots());
+            output.writeInt(preparation.preparedSoilSlots()); output.writeInt(preparation.preparedCropSlots());
         }
         else if (observation instanceof ProductionTransformationObservation production) {
             output.writeByte(8); ids(output, production); FrontierWorldPayloadCodecs.writeSubject(output, production.inputItemId());
@@ -97,7 +97,13 @@ final class PhysicalEffectObservationPayloadCodec {
             for (FungiblePhysicalObservation.Stack stack : departure.remainingStacks()) writeConsumedStack(output, stack);
         }
         else if (observation instanceof FungibleProductionObservation production) {
-            output.writeByte(23); ids(output, production); FungibleProductionObservationCodec.write(output, production);
+            output.writeByte(production.inputLots().size() == 1 ? 23 : 24); ids(output, production); FungibleProductionObservationCodec.write(output, production);
+        }
+        else if (observation instanceof ResourceSiteHarvestDeliveryObservation delivery) {
+            output.writeByte(25); ids(output, delivery); ResourceSiteHarvestDeliveryObservationCodec.write(output, delivery);
+        }
+        else if (observation instanceof ResourceSiteHarvestDeferredObservation deferred) {
+            output.writeByte(26); ids(output, deferred); ResourceSiteHarvestDeferredObservationCodec.write(output, deferred);
         }
         else throw new IllegalArgumentException("unknown physical effect observation");
     }
@@ -111,7 +117,7 @@ final class PhysicalEffectObservationPayloadCodec {
             case 4 -> strike(input);
             case 5 -> explosion(input);
             case 6 -> new ExactItemConsumedObservation(id(input), intent(input), FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedByte(), input.readUnsignedByte());
-            case 7 -> new ResourceSitePreparationObservation(id(input), intent(input), FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedByte(), input.readUnsignedByte());
+            case 7 -> new ResourceSitePreparationObservation(id(input), intent(input), FrontierWorldPayloadCodecs.readSubject(input).value(), input.readInt(), input.readInt());
             case 8 -> new ProductionTransformationObservation(id(input), intent(input), FrontierWorldPayloadCodecs.readSubject(input).value(),
                     FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedByte(), input.readUnsignedByte());
             case 9 -> new CargoLoadObservation(id(input), intent(input), FrontierWorldPayloadCodecs.readSubject(input).value(),
@@ -143,6 +149,9 @@ final class PhysicalEffectObservationPayloadCodec {
             case 21 -> fungibleConsumed(input);
             case 22 -> fungibleNutrientDeparture(input);
             case 23 -> FungibleProductionObservationCodec.read(input, id(input), intent(input));
+            case 24 -> FungibleProductionObservationCodec.read(input, id(input), intent(input), true);
+            case 25 -> ResourceSiteHarvestDeliveryObservationCodec.read(input, id(input), intent(input));
+            case 26 -> ResourceSiteHarvestDeferredObservationCodec.read(input, id(input), intent(input));
             default -> throw new IllegalArgumentException("unknown physical effect observation kind");
         };
     }

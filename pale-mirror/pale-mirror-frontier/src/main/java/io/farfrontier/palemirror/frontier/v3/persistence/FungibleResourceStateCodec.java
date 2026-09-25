@@ -28,7 +28,8 @@ final class FungibleResourceStateCodec {
         writeCount(output, ledger.claims().size());
         for (ClaimAllocation claim : ledger.claims().values().stream().sorted(Comparator.comparing(ClaimAllocation::id)).toList()) {
             writeString(output, claim.id().value()); writeString(output, claim.claimantId().value()); writeString(output, claim.economicOwnerId().value());
-            writeString(output, claim.itemKind()); writeCount(output, claim.quantity());
+            writeString(output, claim.itemKind()); writeCount(output, claim.quantity()); writeQuantities(output, claim.lotQuantities());
+            output.writeByte(FrontierWireTags.tag(claim.purpose()));
         }
         writeCount(output, ledger.accounts().size());
         for (CustodyAccount account : ledger.accounts().values().stream().sorted(Comparator.comparing(CustodyAccount::id)).toList()) {
@@ -53,7 +54,9 @@ final class FungibleResourceStateCodec {
         }
         Map<SubjectId, ClaimAllocation> claims = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
-            SubjectId id = new SubjectId(readString(input)); ClaimAllocation claim = new ClaimAllocation(id, new SubjectId(readString(input)), new SubjectId(readString(input)), readString(input), readCount(input));
+            SubjectId id = new SubjectId(readString(input)); ClaimAllocation claim = new ClaimAllocation(id, new SubjectId(readString(input)),
+                    new SubjectId(readString(input)), readString(input), readCount(input), readQuantities(input),
+                    FrontierWireTags.require(ClaimPurpose.class, input.readUnsignedByte()));
             if (claims.put(id, claim) != null) throw new IllegalArgumentException("duplicate claim allocation id");
         }
         Map<SubjectId, CustodyAccount> accounts = new LinkedHashMap<>();
@@ -87,6 +90,7 @@ final class FungibleResourceStateCodec {
             case PhysicalStackAddress.PlayerSlot slot -> { output.writeByte(1); writeString(output, slot.playerId().toString()); output.writeByte(slot.slot()); }
             case PhysicalStackAddress.HopperSlot slot -> { output.writeByte(2); writePosition(output, slot.position()); output.writeByte(slot.slot()); }
             case PhysicalStackAddress.WorldEntity entity -> { output.writeByte(3); writeString(output, entity.entityId().toString()); }
+            case PhysicalStackAddress.ActorHand hand -> { output.writeByte(4); writeString(output, hand.actorId().value()); writeString(output, hand.entityId().toString()); }
         }
     }
 
@@ -100,6 +104,7 @@ final class FungibleResourceStateCodec {
             case 1 -> new PhysicalStackAddress.PlayerSlot(UUID.fromString(readString(input)), input.readUnsignedByte());
             case 2 -> new PhysicalStackAddress.HopperSlot(readPosition(input), input.readUnsignedByte());
             case 3 -> new PhysicalStackAddress.WorldEntity(UUID.fromString(readString(input)));
+            case 4 -> new PhysicalStackAddress.ActorHand(new SubjectId(readString(input)), UUID.fromString(readString(input)));
             default -> throw new IllegalArgumentException("unknown physical stack address");
         };
     }

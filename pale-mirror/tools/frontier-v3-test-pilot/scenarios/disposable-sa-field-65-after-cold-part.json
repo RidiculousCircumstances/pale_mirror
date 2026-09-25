@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "id": "disposable_sa_field_65_after_cold_part",
+  "isolation": { "mode": "disposable_lite", "seed": 125 },
+  "server": { "host": "127.0.0.1", "port": 25586, "profile": "resource-site-harvest-65-after-cold-part", "viewDistance": 6 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "summary", "id": "", "expect": { "status": "ok", "settlements": 12, "sites": 12 } },
+      { "view": "process", "id": "job:site-harvest-1-wheat-field-1", "expect": {
+        "status": "ok", "conservation": { "totalCropSlots": 65, "completedCropSlots": 64,
+          "deliveredYield": 64, "segmentStartCropSlot": 64, "segmentEndCropSlot": 65 }
+      } }
+    ] }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
+      "position": { "diagnostic": { "view": "site", "id": "site:1-wheat-field", "field": "lastCrop" } },
+      "offset": { "x": 4, "y": 0, "z": -6 }, "settleMs": 1000,
+      "causalMilestone": "cold_first_part_materialized_before_final_hot_work" },
+    { "type": "look", "at": { "diagnostic": { "view": "site", "id": "site:1-wheat-field", "field": "lastCrop" } } },
+    { "type": "assert_visible_block", "position": { "diagnostic": { "view": "site", "id": "site:1-wheat-field", "field": "lastCrop" } },
+      "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-1-wheat-field-1",
+      "expect": { "status": "ok", "claims": { "lease": { "status": "HOT", "members": 1 } },
+        "conservation": { "completedCropSlots": 64, "deliveredYield": 64, "segmentStartCropSlot": 64 } },
+      "timeoutMs": 120000, "causalMilestone": "post_batch_hot_admission" },
+    { "type": "release_fast_forward_hold" },
+    { "type": "inspect", "view": "process", "id": "job:site-harvest-1-wheat-field-1" },
+    { "type": "wait_until_diagnostic", "view": "site", "id": "site:1-wheat-field",
+      "expect": { "status": "ok", "phase": "GROWING", "growthEpoch": 2,
+        "terminalHarvest": { "physicalReceiptResolved": true } },
+      "timeoutMs": 60000, "causalMilestone": "last_physical_cell_terminal" },
+    { "type": "inspect", "view": "container", "id": "container:1-depot" }
+  ],
+  "assertions": [
+    { "after": 7, "view": "site", "id": "site:1-wheat-field", "expect": {
+      "status": "ok", "phase": "GROWING", "growthEpoch": 2 } }
+  ],
+  "frames": [
+    { "after": 3, "name": "last-cell-before-hot-work" },
+    { "after": 7, "name": "last-cell-terminal" }
+  ]
+}

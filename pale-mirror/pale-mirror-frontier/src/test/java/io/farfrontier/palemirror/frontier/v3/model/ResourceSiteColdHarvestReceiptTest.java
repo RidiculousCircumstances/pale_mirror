@@ -25,6 +25,42 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResourceSiteColdHarvestReceiptTest {
     @Test
+    void coldFieldCreditsOnlyActuallyHarvestedCellsAndCompletesZeroYield() {
+        SubjectId site = new SubjectId("site:1-wheat-field");
+        SubjectId owner = new SubjectId("settlement:1");
+        for (int lostCount : List.of(1, 64)) {
+            FrontierWorldState state = matureField();
+            ResourceFieldCycle cycle = state.resourceSites().cycle(site);
+            for (int index = 0; index < lostCount; index++)
+                cycle = cycle.cropRemoved(cycle.layout().cells().get(index).id());
+            state = state.withResourceSites(state.resourceSites().replace(state.resourceSites().site(site), cycle));
+            List<ProposedEvent> opportunity = StrategicObjectiveProcess.planResourceHarvestOpportunity(state,
+                    StrategicObjectiveProcess.resourceHarvestOpportunity(state, state.resourceSites().site(site), 22_000L));
+            state = StrategicObjectiveProcess.reduceObjective(state, owner,
+                    (StrategicObjectiveSelected) opportunity.getFirst().payload());
+            state = StrategicObjectiveProcess.reduceTask(state, owner,
+                    (StrategicTaskPlanned) opportunity.get(1).payload());
+            StrategicTask task = state.strategicPlans().tasks().values().stream()
+                    .filter(candidate -> candidate.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE).findFirst().orElseThrow();
+            List<ProposedEvent> planned = ResourceSiteHarvestProcess.plan(state,
+                    ResourceSiteHarvestProcess.start(task, 22_100L));
+            state = StrategicObjectiveProcess.reduceTaskTransition(state, owner,
+                    (StrategicTaskTransition) planned.getFirst().payload());
+            ResourceSiteHarvestJob job = ((ResourceSiteHarvestStarted) planned.get(1).payload()).job();
+            state = ResourceSiteHarvestProcess.reduceStarted(state, site, (ResourceSiteHarvestStarted) planned.get(1).payload());
+            state = prepareThroughRuntime(state, site, (PhysicalIntentPrepared) planned.get(2).payload());
+            state = completeColdHarvest(state, site, ((ScheduleEffect.Created) planned.get(3).payload()).action());
+            assertEquals(ResourceSitePhase.GROWING, state.resourceSites().site(site).phase());
+            assertEquals(128 - lostCount, state.inventory().fungibleResources().totalQuantity(owner, "minecraft:wheat"),
+                    "a lost crop cannot create a settlement unit");
+            assertFalse(state.inventory().items().containsKey(job.outputItemId()),
+                    "neither a partial nor zero-yield field may issue the former fixed stack");
+            assertFalse(state.inventory().fungibleResources().accounts().containsKey(job.actorAccountId()),
+                    "the terminal farmer cannot retain an already delivered or nonexistent part");
+        }
+    }
+
+    @Test
     void terminalOwnerAtomicallyRetiresItsExactIntentAndContinuationWhileUnknownOrExpiredRenewalTailsFailClosed() {
         SubjectId site = new SubjectId("site:1-wheat-field");
         FrontierWorldState state = matureField();
@@ -44,30 +80,108 @@ class ResourceSiteColdHarvestReceiptTest {
         state = prepareThroughRuntime(state, site, (PhysicalIntentPrepared) planned.get(2).payload());
         ScheduledAction firstAction = ((ScheduleEffect.Created) planned.get(3).payload()).action();
         ColdHarvestPendingTerminal pending = advanceBeforeTerminal(state, site, firstAction);
+        ResourceSiteHarvestJob beforeReturn = (ResourceSiteHarvestJob) pending.state().resourceSites().site(site).activeWork().orElseThrow();
+        assertTrue(beforeReturn.progress().complete());
+        assertFalse(ResourceSiteHarvestGoal.actorAtDepot(pending.state(), beforeReturn));
+        assertEquals(beforeReturn.progress().totalCropSlots() - 1,
+                FrontierResourceSiteHarvestSceneSupport.candidate(pending.state(), beforeReturn).orElseThrow().cropSlotIndex(),
+                "first player ingress during the return tail must re-admit the exact worker without reopening crop work");
+        BodyPosition returnIngressBody = pending.state().actorLocations().get(beforeReturn.workerId()).body();
+        assertEquals(new BlockPosition(returnIngressBody.x(), returnIngressBody.y(), returnIngressBody.z()),
+                FrontierResourceSiteHarvestSceneSupport.candidate(pending.state(), beforeReturn).orElseThrow().cropSlot(),
+                "delivery-tail demand must follow the canonical worker, not the distant final crop");
+        assertFalse(pending.state().inventory().items().containsKey(beforeReturn.outputItemId()),
+                "the last crop cannot issue output before the retained return path is walked");
+        BodyPosition penultimateBody = pending.state().actorLocations().get(beforeReturn.workerId()).body();
+        assertEquals(ResourceSiteHarvestKnownNavigation.path(pending.state(), beforeReturn).getFirst().standingBody(),
+                penultimateBody, "the last COLD step starts at the retained actual body, not a route cursor");
+        SubjectId depot = FrontierWorldState.depotId(new SubjectId("settlement:1"));
+        PhysicalReplicaRecord depotRecord = PhysicalReplicaRecord.expected(depot,
+                ReferenceContainerCustody.semanticKind(pending.state(), depot), 7L,
+                ReferenceContainerCustody.canonicalFingerprint(pending.state(), depot),
+                ReferenceContainerCustody.provenance(depot));
+        PhysicalReplicaCustodyState heldDepot = pending.state().replicaCustody().declare(depotRecord)
+                .observe(depot, 7L, 1L, depotRecord.fingerprint(), depotRecord.provenance(), 7L)
+                .acquire(new PhysicalCustodyLease(ReferenceContainerCustody.scopeId(depot), depot,
+                        ReferenceContainerCustody.PROVIDER_ID, 1L, 7L, 2L,
+                        PhysicalCustodyLeaseStatus.ACQUIRED, null));
+        FrontierWorldState withPhysicalDepot = pending.state().withChanges(FrontierWorldStateUpdate.begin()
+                .replicaCustody(heldDepot));
+        assertTrue(ResourceSiteHarvestProcess.coldProgressHeld(withPhysicalDepot, pending.action()),
+                "the returned COLD farmer may not deposit into a chest held by a live physical custodian");
+        assertEquals(List.of(new ScheduleEffect.Rescheduled(pending.action().id(), pending.action())),
+                ResourceSiteHarvestProcess.planColdProgress(withPhysicalDepot, pending.action()).stream()
+                        .map(ProposedEvent::payload).toList());
+        // One actual-body goal step reaches the authorized depot service station. It does
+        // not pretend that the old corridor's final node is the only legal port.
+        var approachEvents = ResourceSiteHarvestProcess.planColdProgress(pending.state(), pending.action());
+        ResourceSiteHarvestColdGoalAdvanced approach = (ResourceSiteHarvestColdGoalAdvanced) approachEvents.getFirst().payload();
+        FrontierWorldState hotReturned = ResourceSiteHarvestProcess.reduceColdGoalAdvanced(pending.state(), site, approach);
+        ScheduledAction returnAction = ((ScheduleEffect.Rescheduled) approachEvents.getLast().payload()).replacement();
+        ResourceSiteHarvestJob awaitingReceipt = (ResourceSiteHarvestJob) hotReturned.resourceSites().site(site).activeWork().orElseThrow();
+        assertFalse(ResourceSiteHarvestProcess.coldProgressHeld(hotReturned, returnAction));
+        var returnedEvents = ResourceSiteHarvestProcess.planColdProgress(hotReturned, returnAction);
+        assertTrue(returnedEvents.getFirst().payload() instanceof ResourceSiteHarvestReturned,
+                "expected exact returned receipt, got " + returnedEvents);
+        FrontierWorldState completedHotReturn = ResourceSiteHarvestProcess.reduceReturned(hotReturned, site,
+                (ResourceSiteHarvestReturned) returnedEvents.getFirst().payload());
+        assertEquals(ResourceSitePhase.GROWING, completedHotReturn.resourceSites().site(site).phase());
+        assertEquals(hotReturned.actorLocations().get(beforeReturn.workerId()).body(),
+                completedHotReturn.actorLocations().get(beforeReturn.workerId()).body(),
+                "semantic completion leaves the returned worker at its observed station");
+        assertFalse(completedHotReturn.physicalIntents().containsKey(beforeReturn.intentId()),
+                "an unstarted physical output request composes away with the COLD terminal");
+        FrontierWorldState startedHotReturn = hotReturned.transitionPhysicalIntent(beforeReturn.intentId(),
+                PhysicalIntentStatus.RUNNING, java.util.Optional.empty());
+        var pendingReceiptEvents = ResourceSiteHarvestProcess.planColdProgress(startedHotReturn, returnAction);
+        FrontierWorldState pendingReceipt = ResourceSiteHarvestProcess.reduceReturned(startedHotReturn, site,
+                (ResourceSiteHarvestReturned) pendingReceiptEvents.getFirst().payload());
+        assertEquals(ResourceSitePhase.GROWING, pendingReceipt.resourceSites().site(site).phase());
+        assertTrue(pendingReceipt.resourceSites().site(site).harvestLineage().orElseThrow().receiptPending(),
+                "a started physical effect retains exactly one deferred receipt while canonical work finishes");
+        assertEquals(PhysicalIntentStatus.RUNNING, pendingReceipt.physicalIntents().get(beforeReturn.intentId()).status());
+        assertTrue(FrontierResourceSiteHarvestSceneSupport.candidate(hotReturned, awaitingReceipt).isEmpty(),
+                "the final return station is a receipt boundary, not a new crop or traversal scene");
 
         var base = FrontierWorldRuntimeDefinition.configuration(pending.state().bootstrap().worldId(), 125L);
         var configuration = new FrontierEngineConfiguration<>(pending.state().bootstrap().worldId(), pending.state(), base.initialInstant(),
                 base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(),
                 List.of(pending.action()), base.transactionCommitter(), base.stateValidator(), base.executionMetrics());
         var engine = FrontierEngines.create(configuration);
-        var result = engine.advanceTo(pending.action().dueAt(), new WorkBudget(1, pending.action().weight()));
+        var target = new io.farfrontier.palemirror.frontier.v3.api.SimInstant(returnAction.dueAt().ticks() + 10L);
+        var result = engine.advanceTo(target, new WorkBudget(256, 2_048));
+        for (int turn = 0; turn < 8 && new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec()
+                .decode(engine.checkpoint().canonicalState()).resourceSites().site(site).phase() == ResourceSitePhase.HARVESTING; turn++)
+            result = engine.advanceTo(target, new WorkBudget(256, 2_048));
         FrontierWorldState terminal = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec()
                 .decode(engine.checkpoint().canonicalState());
 
         assertEquals(io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.ACTIVE, result.status().kind(), result.status().failureDetail().orElse(""));
+        BodyPosition returnedBody = terminal.actorLocations().get(beforeReturn.workerId()).body();
+        assertEquals(hotReturned.actorLocations().get(beforeReturn.workerId()).body(), returnedBody);
+        assertEquals(1, Math.abs(returnedBody.x() - penultimateBody.x()) + Math.abs(returnedBody.z() - penultimateBody.z()),
+                "the terminal transaction advances one retained horizontal edge, never snaps across the field");
+        assertTrue(Math.abs(returnedBody.y() - penultimateBody.y()) <= 1,
+                "the depot approach may grade by one block but cannot jump vertically");
         assertFalse(terminal.physicalIntents().containsKey(started.job().intentId()),
-                "the owner transition cannot retire its harvest job while retaining the associated physical request");
+                "the owner transition cannot retire its harvest job while retaining the associated physical request: phase="
+                        + terminal.resourceSites().site(site).phase() + " intent=" + terminal.physicalIntents().get(started.job().intentId())
+                        + " schedules=" + engine.checkpoint().schedules());
         assertFalse(engine.checkpoint().schedules().stream().anyMatch(action -> action.id().equals(pending.action().id())),
                 "the same WAL transaction must cancel the retired job's durable continuation");
         assertTrue(engine.checkpoint().schedules().stream().anyMatch(action -> action.kind().equals("frontier.resource_site.growth")),
                 "terminal retirement retains only the next lifecycle owner's growth continuation");
-        assertEquals(List.of(new ScheduleEffect.Consumed(pending.action().id())),
-                ResourceSiteHarvestProcess.planColdProgress(terminal, pending.action()).stream().map(ProposedEvent::payload).toList(),
+        assertEquals(List.of(new ScheduleEffect.Consumed(returnAction.id())),
+                ResourceSiteHarvestProcess.planColdProgress(terminal, returnAction).stream().map(ProposedEvent::payload).toList(),
                 "a recovery tail is consumable only through the retained resolved terminal lineage");
         ScheduledAction unknown = new ScheduledAction(new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:resource-site-harvest-cold-progress-site-harvest-forged"),
-                pending.action().dueAt(), 0, new SubjectId("job:site-harvest-forged"), ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, 1);
+                pending.action().dueAt(), 0, new SubjectId("site:forged"), ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, 1);
         assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestProcess.planColdProgress(terminal, unknown),
                 "an unclassified durable action must not be silently consumed as a late materialization tail");
+        ScheduledAction wrongOwner = new ScheduledAction(pending.action().id(), pending.action().dueAt(), 0,
+                new SubjectId("site:forged"), ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, 1);
+        assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestProcess.planColdProgress(terminal, wrongOwner),
+                "the correct retired job ID cannot borrow another site's terminal lineage");
 
         FrontierWorldState renewed = terminal;
         for (int stage = 0; stage < ResourceSiteLifecycle.MATURE_STAGE; stage++) {
@@ -122,6 +236,7 @@ class ResourceSiteColdHarvestReceiptTest {
         while (((ResourceSiteHarvestJob) state.resourceSites().site(site).activeWork().orElseThrow()).progress().completedCropSlots() == 0) {
             for (ProposedEvent event : ResourceSiteHarvestProcess.planColdProgress(state, action[0])) {
                 if (event.payload() instanceof ResourceSiteHarvestColdTraversalAdvanced traversal) state = ResourceSiteHarvestProcess.reduceColdTraversalAdvanced(state, site, traversal);
+                else if (event.payload() instanceof ResourceSiteHarvestColdGoalAdvanced advanced) state = ResourceSiteHarvestProcess.reduceColdGoalAdvanced(state, site, advanced);
                 else if (event.payload() instanceof ResourceSiteHarvestCropPrepared crop) state = ResourceSiteHarvestProcess.reduceCropPrepared(state, site, crop);
                 else if (event.payload() instanceof ResourceSiteHarvestProgressed secondProgress) state = ResourceSiteHarvestProcess.reduceProgressed(state, site, secondProgress);
                 else if (event.payload() instanceof ScheduleEffect.Rescheduled rescheduled) action[0] = rescheduled.replacement();
@@ -134,12 +249,18 @@ class ResourceSiteColdHarvestReceiptTest {
         assertEquals(-1, progressed.progress().pendingCropSlotIndex());
         assertEquals(PhysicalIntentStatus.PREPARED, state.physicalIntents().get(progressed.intentId()).status());
         assertFalse(state.inventory().items().containsKey(progressed.outputItemId()));
+        CustodyAccount carriedOne = state.inventory().fungibleResources().accounts()
+                .get(progressed.actorAccountId());
+        assertEquals(new ResourceCustody.Actor(progressed.workerId()), carriedOne.custody());
+        assertEquals(1, carriedOne.lotQuantities().values().stream().mapToInt(Integer::intValue).sum(),
+                "the first crop is held by the exact farmer, not issued in the depot");
         // A prior implementation deliberately retained the same action after crop one.  That
         // made elapsed zero-player time a semantic no-op and parked every first ingress at the
         // same slot.  Prove the next complete COLD station/receipt cycle is durable too.
         while (((ResourceSiteHarvestJob) state.resourceSites().site(site).activeWork().orElseThrow()).progress().completedCropSlots() == 1) {
             for (ProposedEvent event : ResourceSiteHarvestProcess.planColdProgress(state, action[0])) {
                 if (event.payload() instanceof ResourceSiteHarvestColdTraversalAdvanced traversal) state = ResourceSiteHarvestProcess.reduceColdTraversalAdvanced(state, site, traversal);
+                else if (event.payload() instanceof ResourceSiteHarvestColdGoalAdvanced advanced) state = ResourceSiteHarvestProcess.reduceColdGoalAdvanced(state, site, advanced);
                 else if (event.payload() instanceof ResourceSiteHarvestCropPrepared crop) state = ResourceSiteHarvestProcess.reduceCropPrepared(state, site, crop);
                 else if (event.payload() instanceof ResourceSiteHarvestProgressed continuingProgress) state = ResourceSiteHarvestProcess.reduceProgressed(state, site, continuingProgress);
                 else if (event.payload() instanceof ScheduleEffect.Rescheduled rescheduled) action[0] = rescheduled.replacement();
@@ -149,6 +270,11 @@ class ResourceSiteColdHarvestReceiptTest {
         ResourceSiteHarvestJob continued = (ResourceSiteHarvestJob) state.resourceSites().site(site).activeWork().orElseThrow();
         assertEquals(2, continued.progress().completedCropSlots());
         assertEquals(2, continued.progress().nextCropSlotIndex(), "the next ingress is no longer parked at crop one");
+        CustodyAccount carriedTwo = state.inventory().fungibleResources().accounts()
+                .get(continued.actorAccountId());
+        assertEquals(carriedOne.lotQuantities().keySet(), carriedTwo.lotQuantities().keySet(),
+                "the growing hand part retains one stable lot identity");
+        assertEquals(2, carriedTwo.lotQuantities().values().stream().mapToInt(Integer::intValue).sum());
     }
 
     @Test
@@ -174,6 +300,8 @@ class ResourceSiteColdHarvestReceiptTest {
         while (state.resourceSites().site(site).phase() == ResourceSitePhase.HARVESTING) {
             for (ProposedEvent event : ResourceSiteHarvestProcess.planColdProgress(state, action[0])) {
                 if (event.payload() instanceof ResourceSiteHarvestColdTraversalAdvanced traversal) state = ResourceSiteHarvestProcess.reduceColdTraversalAdvanced(state, site, traversal);
+                else if (event.payload() instanceof ResourceSiteHarvestColdGoalAdvanced advanced) state = ResourceSiteHarvestProcess.reduceColdGoalAdvanced(state, site, advanced);
+                else if (event.payload() instanceof ResourceSiteHarvestReturned returned) state = ResourceSiteHarvestProcess.reduceReturned(state, site, returned);
                 else if (event.payload() instanceof ResourceSiteHarvestCropPrepared crop) state = ResourceSiteHarvestProcess.reduceCropPrepared(state, site, crop);
                 else if (event.payload() instanceof ResourceSiteHarvestProgressed progressed) state = ResourceSiteHarvestProcess.reduceProgressed(state, site, progressed);
                 else if (event.payload() instanceof StrategicTaskTransition transition) {
@@ -188,8 +316,10 @@ class ResourceSiteColdHarvestReceiptTest {
         ResourceSiteHarvestLineage complete = state.resourceSites().site(site).harvestLineage().orElseThrow();
         assertEquals(ResourceSitePhase.GROWING, state.resourceSites().site(site).phase());
         assertFalse(complete.receiptPending(), "COLD composition closes the old physical request instead of retaining an unbounded pending receipt");
-        assertEquals(started.job().traversal().linearCorridorSurfaces().getLast().standingBody(),
-                state.actorLocations().get(complete.workerId()).body(), "first visibility retains the exact completed field station");
+        BodyPosition terminalBody = state.actorLocations().get(complete.workerId()).body();
+        assertTrue(ResourceSiteHarvestGoal.depotPort(state, started.job()).ownedAccessSurfaces().stream()
+                        .anyMatch(station -> station.standingBody().equals(terminalBody)),
+                "first visibility retains the exact reached depot service station");
         assertEquals(state.actorLocations().get(complete.workerId()).body(), complete.terminalBody(),
                 "the deferred receipt retains its exact terminal worker station across the lifecycle boundary");
         assertFalse(state.physicalIntents().containsKey(complete.predecessorIntentId()),
@@ -200,16 +330,24 @@ class ResourceSiteColdHarvestReceiptTest {
                         .findFirst().orElseThrow().disposition(),
                 "the exact composition owner fences any late old-wheat materialization without calling it observed");
         assertEquals(StrategicTaskStatus.COMPLETED, state.strategicPlans().tasks().get(started.job().taskId()).status());
-        ExactItemStack output = new ExactItemStack(complete.outputItemId(), new SubjectId("settlement:1"), "minecraft:wheat", 64, complete.outputSlot());
-        assertEquals(output, state.inventory().items().get(complete.outputItemId()),
-                "COLD closes the terminal crop into one exact canonical depot claim before any player loads the field");
+        SubjectId owner = new SubjectId("settlement:1");
+        SubjectId depotAccount = started.job().depotAccountId();
+        assertEquals(ReferenceContainerCustody.scopeId(FrontierWorldState.depotId(owner)), depotAccount);
+        assertFalse(state.inventory().items().containsKey(complete.outputItemId()),
+                "the former exact stack must not duplicate the field's fungible lot");
+        assertEquals(128, state.inventory().fungibleResources().totalQuantity(owner, "minecraft:wheat"));
+        assertEquals(128, state.inventory().fungibleResources().accounts().get(depotAccount).lotQuantities().values()
+                .stream().mapToInt(Integer::intValue).sum(),
+                "the completed field part joins the existing depot account exactly once");
+        assertFalse(state.inventory().fungibleResources().accounts().containsKey(started.job().actorAccountId()),
+                "the returned farmer no longer retains the delivered part");
         FrontierWorldState restored = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().decode(
                 new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().encode(state));
         assertEquals(complete, restored.resourceSites().site(site).harvestLineage().orElseThrow(), "restart retains the same exact terminal COLD receipt lineage");
         assertFalse(restored.physicalIntents().containsKey(complete.predecessorIntentId()),
                 "restart retains the retired composition boundary rather than replaying or falsely starting harvest work");
-        assertEquals(output, restored.inventory().items().get(complete.outputItemId()),
-                "restart retains the same output custody independently from later materialization");
+        assertEquals(state.inventory().fungibleResources(), restored.inventory().fungibleResources(),
+                "restart retains the same lot/account custody independently from later materialization");
 
         StrategicObjective breadObjective = new StrategicObjective(new SubjectId("objective:deferred-harvest-bread"),
                 new SubjectId("settlement:1"), StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, java.util.Optional.empty(), 98,
@@ -220,10 +358,10 @@ class ResourceSiteColdHarvestReceiptTest {
         FrontierWorldState beforeReceipt = state.withStrategicPlans(state.strategicPlans().addObjective(breadObjective).addTask(breadTask));
         List<ProposedEvent> downstream = ProductionProcess.planStart(beforeReceipt, ProductionProcess.start(breadTask, 30_000L));
         assertFalse(downstream.stream().map(ProposedEvent::payload).filter(ProductionStarted.class::isInstance)
-                        .map(ProductionStarted.class::cast).anyMatch(startedProduction -> startedProduction.inputItemId().equals(output.id())),
+                        .map(ProductionStarted.class::cast).anyMatch(startedProduction -> startedProduction.inputItemId().equals(complete.outputItemId())),
                 "this agricultural-only fixture has no admitted industrial worker; it must not manufacture a downstream owner");
-        assertEquals(output, beforeReceipt.inventory().items().get(complete.outputItemId()),
-                "the composed terminal output stays owned and projectable while the same farmer may admit a successor");
+        assertEquals(state.inventory().fungibleResources(), beforeReceipt.inventory().fungibleResources(),
+                "the composed terminal lot stays owned while the same farmer may admit a successor");
 
         FrontierWorldState composed = state;
         assertThrows(IllegalArgumentException.class,
@@ -248,8 +386,8 @@ class ResourceSiteColdHarvestReceiptTest {
                 .map(ProposedEvent::payload).filter(ResourceSiteHarvestStarted.class::isInstance).findFirst().orElseThrow();
         assertEquals(complete.workerId(), successor.job().workerId(),
                 "the already-owned output admits only the exact predecessor farmer to the successor job without a loaded receipt");
-        assertFalse(successor.job().outputSlot().equals(complete.outputSlot()),
-                "the canonical predecessor output reserves its depot slot while the successor owns a distinct future receipt");
+        assertFalse(successor.job().id().equals(started.job().id()),
+                "the successor has its own epoch-bound field part identity");
         state = StrategicObjectiveProcess.reduceTaskTransition(state, new SubjectId("settlement:1"),
                 (StrategicTaskTransition) successorPlan.getFirst().payload());
         state = ResourceSiteHarvestProcess.reduceStarted(state, site, successor);
@@ -270,17 +408,20 @@ class ResourceSiteColdHarvestReceiptTest {
                 new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().encode(state));
         assertEquals(successorComplete, twiceRestarted.resourceSites().site(site).harvestLineage().orElseThrow(),
                 "two zero-player harvest epochs survive restart with no orphan physical intent");
-        assertEquals(output, twiceRestarted.inventory().items().get(complete.outputItemId()),
-                "the first composed output remains exact canonical custody while a later epoch completes");
+        assertFalse(twiceRestarted.inventory().items().containsKey(complete.outputItemId()));
+        assertEquals(192, twiceRestarted.inventory().fungibleResources().totalQuantity(owner, "minecraft:wheat"),
+                "both completed epochs retain their distinct positive lots after restart");
     }
 
     private static FrontierWorldState completeColdHarvest(FrontierWorldState state, SubjectId site, ScheduledAction action) {
-        for (int step = 0; step < 256 && state.resourceSites().site(site).phase() == ResourceSitePhase.HARVESTING; step++) {
+        for (int step = 0; step < 1_024 && state.resourceSites().site(site).phase() == ResourceSitePhase.HARVESTING; step++) {
             List<ProposedEvent> planned = ResourceSiteHarvestProcess.planColdProgress(state, action);
             assertFalse(planned.isEmpty(), "COLD harvest must make one bounded durable disposition at step " + step);
             for (ProposedEvent event : planned) {
                 switch (event.payload()) {
                     case ResourceSiteHarvestColdTraversalAdvanced traversal -> state = ResourceSiteHarvestProcess.reduceColdTraversalAdvanced(state, site, traversal);
+                    case ResourceSiteHarvestColdGoalAdvanced advanced -> state = ResourceSiteHarvestProcess.reduceColdGoalAdvanced(state, site, advanced);
+                    case ResourceSiteHarvestReturned returned -> state = ResourceSiteHarvestProcess.reduceReturned(state, site, returned);
                     case ResourceSiteHarvestCropPrepared crop -> state = ResourceSiteHarvestProcess.reduceCropPrepared(state, site, crop);
                     case ResourceSiteHarvestProgressed progressed -> state = ResourceSiteHarvestProcess.reduceProgressed(state, site, progressed);
                     case StrategicTaskTransition transition -> state = StrategicObjectiveProcess.reduceTaskTransition(state, new SubjectId("settlement:1"), transition);
@@ -291,18 +432,26 @@ class ResourceSiteColdHarvestReceiptTest {
                 }
             }
         }
-        assertEquals(ResourceSitePhase.GROWING, state.resourceSites().site(site).phase());
+        ResourceSiteLifecycle remaining = state.resourceSites().site(site);
+        ResourceSiteHarvestJob remainingJob = remaining.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
+                .map(ResourceSiteHarvestJob.class::cast).orElse(null);
+        assertEquals(ResourceSitePhase.GROWING, remaining.phase(),
+                "COLD field did not finish from actual-body goals: " + remaining
+                        + " actor=" + (remainingJob == null ? null : state.actorLocations().get(remainingJob.workerId())));
         return state;
     }
 
     private static ColdHarvestPendingTerminal advanceBeforeTerminal(FrontierWorldState state, SubjectId site, ScheduledAction action) {
-        while (((ResourceSiteHarvestJob) state.resourceSites().site(site).activeWork().orElseThrow()).progress().completedCropSlots()
-                < ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS - 1) {
+        while (true) {
+            ResourceSiteHarvestJob current = (ResourceSiteHarvestJob) state.resourceSites().site(site).activeWork().orElseThrow();
+            if (current.progress().complete() && !ResourceSiteHarvestGoal.actorAtDepot(state, current)
+                    && ResourceSiteHarvestKnownNavigation.path(state, current).size() == 2) break;
             List<ProposedEvent> planned = ResourceSiteHarvestProcess.planColdProgress(state, action);
-            assertFalse(planned.isEmpty(), "COLD harvest must retain a bounded action before its final crop");
+            assertFalse(planned.isEmpty(), "COLD harvest must retain a bounded action before its final return edge");
             for (ProposedEvent event : planned) {
                 switch (event.payload()) {
                     case ResourceSiteHarvestColdTraversalAdvanced traversal -> state = ResourceSiteHarvestProcess.reduceColdTraversalAdvanced(state, site, traversal);
+                    case ResourceSiteHarvestColdGoalAdvanced advanced -> state = ResourceSiteHarvestProcess.reduceColdGoalAdvanced(state, site, advanced);
                     case ResourceSiteHarvestCropPrepared crop -> state = ResourceSiteHarvestProcess.reduceCropPrepared(state, site, crop);
                     case ResourceSiteHarvestProgressed progressed -> state = ResourceSiteHarvestProcess.reduceProgressed(state, site, progressed);
                     case ScheduleEffect.Rescheduled rescheduled -> action = rescheduled.replacement();

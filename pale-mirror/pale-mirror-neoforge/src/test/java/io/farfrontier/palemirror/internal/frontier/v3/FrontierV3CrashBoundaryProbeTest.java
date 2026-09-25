@@ -203,8 +203,8 @@ class FrontierV3CrashBoundaryProbeTest {
         probe = releaseProbe(7L, job);
         assertFalse(probe.matches(transaction(6L, List.of(
                 prepare(6L, "settlement:crash", job, "lease:one").events().getFirst(),
-                handoff(6L, "settlement:crash", job, "lease:two").events().getFirst(),
-                prepare(6L, "settlement:crash", job, "lease:three").events().getFirst()))));
+                withOrdinal(handoff(6L, "settlement:crash", job, "lease:two").events().getFirst(), 1),
+                withOrdinal(prepare(6L, "settlement:crash", job, "lease:three").events().getFirst(), 2)))));
         assertFalse(probe.matches(release(7L, "settlement:crash", job, "lease:three")),
                 "mixed in-transaction admissions remain sticky ambiguous");
 
@@ -222,7 +222,7 @@ class FrontierV3CrashBoundaryProbeTest {
         FrontierV3CrashBoundaryProbe probe = releaseProbe(7L, job);
         assertFalse(probe.matches(transaction(6L, List.of(
                 handoff(6L, "settlement:crash", job, "lease:crash").events().getFirst(),
-                prepare(6L, "settlement:crash", job, "lease:crash").events().getFirst()))));
+                withOrdinal(prepare(6L, "settlement:crash", job, "lease:crash").events().getFirst(), 1)))));
         assertFalse(probe.matches(release(7L, "settlement:crash", job, "lease:crash")),
                 "Handoff-first in-transaction duplicate evidence is ambiguous for the exact retained lease");
 
@@ -293,8 +293,8 @@ class FrontierV3CrashBoundaryProbeTest {
         FrontierV3CrashBoundaryProbe probe = releaseProbe(7L, job);
         assertFalse(probe.matches(transaction(6L, List.of(
                 prepare(6L, "settlement:crash", job, "lease:one").events().getFirst(),
-                prepare(6L, "settlement:crash", job, "lease:two").events().getFirst(),
-                prepare(6L, "settlement:crash", job, "lease:three").events().getFirst()))));
+                withOrdinal(prepare(6L, "settlement:crash", job, "lease:two").events().getFirst(), 1),
+                withOrdinal(prepare(6L, "settlement:crash", job, "lease:three").events().getFirst(), 2)))));
         assertFalse(probe.matches(release(7L, "settlement:crash", job, "lease:three")),
                 "a third in-transaction prepare must not restore a usable witness");
 
@@ -559,7 +559,8 @@ class FrontierV3CrashBoundaryProbeTest {
         WorldId world = new WorldId("frontier:crash-probe");
         SubjectId worker = worker();
         return SceneLease.forCause(new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(lease), world,
-                new ResourceSiteHarvestSceneCause(new SubjectId(job)), new BlockPosition(1, 64, 1), new SimInstant(revision), revision,
+                new ResourceSiteHarvestSceneCause(new SubjectId("site:crash-probe"), new SubjectId(job)),
+                new BlockPosition(1, 64, 1), new SimInstant(revision), revision,
                 SceneLeaseStatus.PREPARED, List.of(new SceneMember(worker, SceneLease.deterministicEntityId(world, worker))),
                 Map.of(worker, body()), java.util.Set.of(), java.util.Optional.empty());
     }
@@ -577,7 +578,15 @@ class FrontierV3CrashBoundaryProbeTest {
     }
 
     private static TransactionRecord withWorld(TransactionRecord original, String world) {
-        return new TransactionRecord(original.id(), new WorldId(world), original.revision(), original.instant(), original.events());
+        WorldId foreign = new WorldId(world);
+        List<FrontierEvent> events = original.events().stream().map(event -> new FrontierEvent(event.schemaVersion(), event.id(),
+                event.transactionId(), foreign, event.revision(), event.instant(), event.subject(), event.causes(), event.payload())).toList();
+        return new TransactionRecord(original.id(), foreign, original.revision(), original.instant(), events);
+    }
+
+    private static FrontierEvent withOrdinal(FrontierEvent event, int ordinal) {
+        return new FrontierEvent(event.schemaVersion(), new EventId("event:crash-probe-typed-" + event.revision().value() + '-' + ordinal),
+                event.transactionId(), event.worldId(), event.revision(), event.instant(), event.subject(), event.causes(), event.payload());
     }
 
     private static TransactionRecord withUnexpectedSchedule(TransactionRecord original) {

@@ -199,11 +199,10 @@ public final class AmbientActorProcess {
                     : null;
             if (harvest != null) {
                 // A generic lease may be prepared to materialize this registered field scene.
-                // Its fallback goal must retain the job's exact cursor, never revive the
-                // ordinary four-cell post-harvest departure from a prior lease.  The field
-                // process still owns progress; this only makes restart/release custody safe.
+                // Its fallback goal is the actor's actual retained support, never the
+                // obsolete route cursor or an earlier post-harvest departure.
                 return new AmbientGoal(AmbientGoalKind.WORK,
-                        harvest.traversal().linearCorridorSurfaces().get(harvest.traversalCursor()).support());
+                        state.actorLocations().get(harvest.workerId()).supportingSurface().support());
             }
             Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), resident.settlementId());
             if (resident.profession() == ResidentProfession.SECURITY_WORKER) return new AmbientGoal(AmbientGoalKind.GUARD, settlement.anchor());

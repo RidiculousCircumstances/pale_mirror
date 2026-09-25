@@ -3,6 +3,8 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.world.level.ChunkPos;
 import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Map;
@@ -35,9 +37,23 @@ class FrontierV3SceneDepartureConsumptionTest {
     }
 
     @Test
+    void readFencedUnloadWithoutCallbackSaveMarkerCanEnterOnlyIndependentDiskProof() {
+        var departure = valid();
+        var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
+        assertTrue(ledger.recordDeparture(departure));
+        assertTrue(ledger.noLoadProofCandidate(departure));
+        assertFalse(ledger.noLoadRecoverableDeparture(departure));
+        assertTrue(FrontierV3SceneDepartureObserver.validDeparture(STATE, LEASE, MEMBER, ledger).isEmpty(),
+                "an unload receipt without disk proof is not permission to release");
+        assertTrue(ledger.markReturnRead(departure));
+        assertFalse(ledger.noLoadProofCandidate(departure), "a loaded return revokes the no-load inspection candidate");
+    }
+
+    @Test
     void recoveredExactReceiptProvidesFinalHealthAndIdempotentFenceWithoutErasingEvidence() {
         var initial = FrontierV3AmbientCarrierLedger.emptyForTest();
         assertTrue(initial.recordDeparture(valid()));
+        assertTrue(initial.confirmSavedDeparture(valid()), "fixture supplies a completed entity-save acknowledgement");
         var ledger = FrontierV3AmbientCarrierLedger.load(initial.save(new CompoundTag(), null), null);
         assertEquals(FixedScalar.whole(9), FrontierV3SceneDepartureObserver.validDeparture(STATE, LEASE, MEMBER, ledger)
                 .orElseThrow().observed().health());
@@ -58,6 +74,7 @@ class FrontierV3SceneDepartureConsumptionTest {
         for (var receipt : invalid) {
             var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
             assertTrue(ledger.recordDeparture(receipt));
+            assertTrue(ledger.confirmSavedDeparture(receipt), "negative isolates the canonical binding from storage proof");
             assertTrue(FrontierV3SceneDepartureObserver.validDeparture(STATE, LEASE, MEMBER, ledger).isEmpty());
             assertFalse(FrontierV3SceneDepartureObserver.fenceDeparture(STATE, LEASE, MEMBER, ledger));
             assertFalse(ledger.hasCarrier(ACTOR));
@@ -70,12 +87,62 @@ class FrontierV3SceneDepartureConsumptionTest {
     void exactReturnWithdrawsOnlyItsOwnProvisionalFence() {
         var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
         ledger.recordDeparture(valid());
+        assertTrue(ledger.confirmSavedDeparture(valid()));
         assertTrue(FrontierV3SceneDepartureObserver.fenceDeparture(STATE, LEASE, MEMBER, ledger));
         assertFalse(ledger.resumeDeparture(receipt(LEASE.id(), 8, BASELINE, FrontierV3ActorCarrierComposition.ActorKind.RESIDENT)));
         assertTrue(ledger.hasCarrier(ACTOR));
         assertTrue(ledger.resumeDeparture(valid()));
         assertFalse(ledger.hasCarrier(ACTOR));
         assertTrue(ledger.departure(ACTOR).isEmpty());
+    }
+
+    @Test
+    void storedReturnReadRevokesOldSceneSaveUntilANewUnloadIsSaved() {
+        var receipt = valid();
+        var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
+        assertTrue(ledger.recordDeparture(receipt)); assertTrue(ledger.confirmSavedDeparture(receipt));
+        assertTrue(ledger.markReturnRead(receipt));
+        assertTrue(ledger.returnRead(ACTOR)); assertFalse(ledger.savedDeparture(receipt));
+        assertFalse(ledger.noLoadRecoverableDeparture(receipt));
+        assertFalse(ledger.confirmSavedDeparture(receipt));
+        var recovered = FrontierV3AmbientCarrierLedger.load(ledger.save(new CompoundTag(), null), null);
+        assertTrue(recovered.returnRead(ACTOR));
+        assertFalse(recovered.savedDeparture(receipt));
+        assertTrue(recovered.recordDeparture(receipt));
+        assertFalse(recovered.returnRead(ACTOR));
+        assertFalse(recovered.savedDeparture(receipt), "old save marker cannot certify the new unload");
+        assertTrue(recovered.confirmSavedDeparture(receipt));
+        assertTrue(recovered.noLoadRecoverableDeparture(receipt));
+    }
+
+    @Test
+    void exactStoredSceneBodyReadRevokesNoLoadRecoveryBeforeVanillaReturnsIt() {
+        var receipt = valid();
+        var actors = FrontierV3AmbientCarrierLedger.emptyForTest();
+        assertTrue(actors.recordDeparture(receipt)); assertTrue(actors.confirmSavedDeparture(receipt));
+        var chunk = new ChunkPos(Math.floorDiv(BODY.x(), 16), Math.floorDiv(BODY.z(), 16));
+        var stored = new CompoundTag(); stored.putIntArray("Position", new int[] {chunk.x, chunk.z});
+        var entities = new ListTag(); var body = new CompoundTag();
+        body.putUUID("UUID", MEMBER.entityId()); entities.add(body); stored.put("Entities", entities);
+        assertArrayEquals(new boolean[] {true, false}, FrontierV3DepartureReturnReadFence.fenceStoredInventory(
+                chunk, stored, actors, FrontierV3CargoDepartureLedger.emptyForTest()));
+        assertTrue(actors.returnRead(ACTOR)); assertFalse(actors.noLoadRecoverableDeparture(receipt));
+    }
+
+    @Test
+    void priorSavedSceneFormatLoadsWithoutInventingAReturnRead() {
+        var receipt = valid(); var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
+        assertTrue(ledger.recordDeparture(receipt)); assertTrue(ledger.confirmSavedDeparture(receipt));
+        var old = ledger.save(new CompoundTag(), null);
+        old.putInt("format", 6); old.remove("returnReads");
+        var recovered = FrontierV3AmbientCarrierLedger.load(old, null);
+        assertTrue(recovered.savedDeparture(receipt));
+        assertFalse(recovered.returnRead(ACTOR));
+        assertFalse(recovered.noLoadRecoverableDeparture(receipt), "old format did not fence pre-load returns");
+        var malformed = ledger.save(new CompoundTag(), null); malformed.remove("returnReads");
+        assertThrows(IllegalStateException.class, () -> FrontierV3AmbientCarrierLedger.load(malformed, null));
+        var unguarded = ledger.save(new CompoundTag(), null); unguarded.remove("readFencedDepartures");
+        assertThrows(IllegalStateException.class, () -> FrontierV3AmbientCarrierLedger.load(unguarded, null));
     }
 
     private static FrontierV3ActorCarrierComposition.Declaration live(long epoch) {

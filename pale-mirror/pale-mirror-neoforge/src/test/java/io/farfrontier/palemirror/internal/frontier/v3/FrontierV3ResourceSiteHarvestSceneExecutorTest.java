@@ -23,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FrontierV3ResourceSiteHarvestSceneExecutorTest {
-    private static final SubjectId JOB = new SubjectId("job:test");
+    private static final SubjectId SITE = new SubjectId("site:test");
 
     @Test
     void independentSceneFenceIncidentsCannotShareAnIdempotencyKey() {
@@ -47,8 +47,9 @@ class FrontierV3ResourceSiteHarvestSceneExecutorTest {
         }
         var site = new io.farfrontier.palemirror.frontier.v3.model.ResourceSite(new SubjectId("site:1-wheat-field"),
                 new SubjectId("settlement:1"), new SubjectId("structure:1-farm"),
-                io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.WHEAT_FIELD, slots);
-        var progress = io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestProgress.notStarted();
+                io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.WHEAT_FIELD,
+                io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSitePlan.initialGrayboxLayout(slots));
+        var progress = io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestProgress.notStarted(slots.size());
         for (int index = 0; index < slots.size(); index++) {
             assertEquals(slots.get(index), FrontierV3ResourceSiteHarvestSceneExecutor.carrierFenceWitness(site, progress));
             progress = progress.prepareNextCrop();
@@ -62,43 +63,43 @@ class FrontierV3ResourceSiteHarvestSceneExecutorTest {
 
     @Test
     void observedHotTraversalKeepsMovingUnderItsOneSharedContinuationBeforeItsDueTurn() {
-        assertTrue(FrontierV3TraversalScheduleGate.traversalCheckpointBound(checkpoint(100L, 102L), JOB));
-        assertTrue(FrontierV3TraversalScheduleGate.traversalCheckpointBound(checkpoint(100L, 101L), JOB));
-        assertTrue(FrontierV3TraversalScheduleGate.traversalCheckpointBound(checkpoint(100L, 100L), JOB));
-        assertTrue(FrontierV3TraversalScheduleGate.shouldCommitObservedTraversal(checkpoint(100L, 102L), JOB, true));
-        assertFalse(FrontierV3TraversalScheduleGate.shouldCommitObservedTraversal(checkpoint(100L, 101L), JOB, false));
-        assertTrue(FrontierV3TraversalScheduleGate.shouldCommitObservedTraversal(checkpoint(100L, 101L), JOB, true));
-        assertTrue(FrontierV3TraversalScheduleGate.shouldCommitObservedTraversal(checkpoint(100L, 100L), JOB, true));
+        assertTrue(FrontierV3TraversalScheduleGate.traversalCheckpointBound(checkpoint(100L, 102L), SITE));
+        assertTrue(FrontierV3TraversalScheduleGate.traversalCheckpointBound(checkpoint(100L, 101L), SITE));
+        assertTrue(FrontierV3TraversalScheduleGate.traversalCheckpointBound(checkpoint(100L, 100L), SITE));
+        assertTrue(FrontierV3TraversalScheduleGate.shouldCommitObservedTraversal(checkpoint(100L, 102L), SITE, true));
+        assertFalse(FrontierV3TraversalScheduleGate.shouldCommitObservedTraversal(checkpoint(100L, 101L), SITE, false));
+        assertTrue(FrontierV3TraversalScheduleGate.shouldCommitObservedTraversal(checkpoint(100L, 101L), SITE, true));
+        assertTrue(FrontierV3TraversalScheduleGate.shouldCommitObservedTraversal(checkpoint(100L, 100L), SITE, true));
     }
 
     @Test
     void missingOrAmbiguousContinuationCannotGrantHotProgressAuthority() {
-        assertFalse(FrontierV3TraversalScheduleGate.traversalCheckpointBound(emptyCheckpoint(100L), JOB));
+        assertFalse(FrontierV3TraversalScheduleGate.traversalCheckpointBound(emptyCheckpoint(100L), SITE));
         CheckpointImage duplicate = new CheckpointImage(new WorldId("frontier:test"), new Revision(1L), new SimInstant(100L), new byte[0], List.of(
                 action(101L), action(101L)), List.of());
-        assertFalse(FrontierV3TraversalScheduleGate.traversalCheckpointBound(duplicate, JOB));
+        assertFalse(FrontierV3TraversalScheduleGate.traversalCheckpointBound(duplicate, SITE));
     }
 
     @Test
     void typedBindingRejectsMissingAndDuplicateActionsButRetainsTheExactFutureAction() {
-        assertThrows(IllegalArgumentException.class, () -> FrontierV3ContinuationBinding.require(emptyCheckpoint(100L), JOB,
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3ContinuationBinding.require(emptyCheckpoint(100L), SITE,
                 ResourceSiteHarvestProcess.COLD_PROGRESS_KIND));
         CheckpointImage duplicate = new CheckpointImage(new WorldId("frontier:test"), new Revision(1L), new SimInstant(100L), new byte[0], List.of(
                 action(101L), action(102L)), List.of());
-        assertThrows(IllegalArgumentException.class, () -> FrontierV3ContinuationBinding.require(duplicate, JOB,
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3ContinuationBinding.require(duplicate, SITE,
                 ResourceSiteHarvestProcess.COLD_PROGRESS_KIND));
-        assertEquals(action(102L), FrontierV3ContinuationBinding.require(checkpoint(100L, 102L), JOB,
+        assertEquals(action(102L), FrontierV3ContinuationBinding.require(checkpoint(100L, 102L), SITE,
                 ResourceSiteHarvestProcess.COLD_PROGRESS_KIND));
-        assertEquals(action(101L), FrontierV3ContinuationBinding.require(checkpoint(100L, 101L), JOB,
+        assertEquals(action(101L), FrontierV3ContinuationBinding.require(checkpoint(100L, 101L), SITE,
                 ResourceSiteHarvestProcess.COLD_PROGRESS_KIND));
     }
 
     @Test
     void conflictedReleaseDoesNotRequireTheContinuationItsAcceptedConflictCancelled() {
         assertEquals(java.util.Optional.empty(), FrontierV3ResourceSiteHarvestReleaseBinding.forPhase(
-                emptyCheckpoint(100L), JOB, ResourceSitePhase.CONFLICT));
+                emptyCheckpoint(100L), SITE, ResourceSitePhase.CONFLICT));
         assertThrows(IllegalArgumentException.class, () -> FrontierV3ResourceSiteHarvestReleaseBinding.forPhase(
-                emptyCheckpoint(100L), JOB, ResourceSitePhase.HARVESTING));
+                emptyCheckpoint(100L), SITE, ResourceSitePhase.HARVESTING));
     }
 
     @Test
@@ -171,7 +172,7 @@ class FrontierV3ResourceSiteHarvestSceneExecutorTest {
     }
 
     private static ScheduledAction action(long dueAt) {
-        return new ScheduledAction(new ScheduleId("schedule:test"), new SimInstant(dueAt), 0, JOB,
+        return new ScheduledAction(new ScheduleId("schedule:test"), new SimInstant(dueAt), 0, SITE,
                 ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, 1);
     }
 }

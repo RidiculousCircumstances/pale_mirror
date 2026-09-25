@@ -24,6 +24,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierMarketOrderDiagnostic
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.DiagnosticIncident;
 import io.farfrontier.palemirror.frontier.v3.model.DiagnosticSubject;
+import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess;
 import io.farfrontier.palemirror.frontier.v3.model.DiagnosticSubjectKind;
 import io.farfrontier.palemirror.frontier.v3.process.HivePerceptionProcess;
 import io.farfrontier.palemirror.frontier.v3.process.SettlementProvisionProcess;
@@ -45,6 +46,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ResourceCustody;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceLot;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSite;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestGoal;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestLineage;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestProgress;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteLifecycle;
@@ -303,7 +305,8 @@ final class FrontierV3DiagnosticJson {
         // later PREPARED/HOT retry for the same job merely because its historical lease id sorts
         // first: F0.V's process view reports the current ownership fact, not an archive index.
         SceneLease lease = FrontierV3DiagnosticExecutorJson.currentLease(state, job.id());
-        var schedules = checkpoint.schedules().stream().filter(value -> value.subject().equals(job.id()))
+        var schedules = checkpoint.schedules().stream()
+                .filter(value -> ResourceSiteHarvestProcess.coldProgress(job, value.dueAt().ticks()).equals(value))
                 .sorted().limit(4).toList();
         String scheduleEntries = schedules.stream().map(value -> "{\"id\":\"" + quote(value.id().value())
                 + "\",\"dueAt\":" + value.dueAt().ticks() + ",\"kind\":\"" + quote(value.kind())
@@ -324,13 +327,18 @@ final class FrontierV3DiagnosticJson {
                 + "\",\"status\":\"" + lease.status() + "\",\"revision\":" + lease.revision()
                 + ",\"members\":" + lease.members().size() + "}";
         String intentStatus = intent == null ? "MISSING" : intent.status().name();
-        String dutyPhase = (job.hasNextTraversalStep() ? "TRAVELLING:" : "HARVESTING:") + intentStatus;
+        String dutyPhase = job.navigationBlock().isPresent() ? "ROUTE_BLOCKED:" + intentStatus
+                : (ResourceSiteHarvestGoal.actorAtWorkCell(state, job) ? "HARVESTING:" : "TRAVELLING:") + intentStatus;
         String intentKind = intent == null ? "MISSING" : intent.kind().name();
         String intentObservationId = intent == null || intent.postconditionObservationId().isEmpty() ? "null"
                 : "\"" + quote(intent.postconditionObservationId().orElseThrow().value()) + "\"";
         String obstruction = lifecycle.conflictDisposition().map(FrontierV3DiagnosticJson::conflict).orElse("null");
         String actorBody = actor == null ? "null" : position(actor.body());
-        int cursorLength = job.traversal().linearCorridorSurfaces().size();
+        var cycle = state.resourceSites().cycle(job.siteId());
+        ResourceSiteHarvestGoal semanticGoal = ResourceSiteHarvestGoal.current(state, job);
+        String goalStations = semanticGoal.legalStations().stream()
+                .map(station -> position(station.support()))
+                .collect(java.util.stream.Collectors.joining(",", "[", "]"));
         return base("process", job.id().value(), checkpoint) + ",\"status\":\"ok\",\"family\":\"frontier.resource-site-harvest\""
                 + ",\"identity\":{\"job\":\"" + quote(job.id().value()) + "\",\"worker\":\"" + quote(job.workerId().value())
                 + "\",\"workerPresentation\":\"" + quote(FrontierSceneLabels.actor(state, job.workerId(), false))
@@ -343,12 +351,24 @@ final class FrontierV3DiagnosticJson {
                 + job.progress().completedCropSlots() + ",\"pendingCropSlot\":" + job.progress().pendingCropSlotIndex()
                 + ",\"nextCropSlot\":" + (job.progress().complete() ? -1 : job.progress().nextCropSlotIndex())
                 + ",\"deferredMaterializationSlots\":" + job.progress().completedCropSlots()
-                + ",\"totalCropSlots\":" + ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS + "}"
-                + ",\"schedule\":{\"count\":" + checkpoint.schedules().stream().filter(value -> value.subject().equals(job.id())).count()
+                + ",\"totalCropSlots\":" + job.progress().totalCropSlots()
+                + ",\"harvestedYield\":" + cycle.harvestedCount()
+                + ",\"deliveredYield\":" + job.deliveredYieldQuantity()
+                + ",\"carriedYield\":" + job.carriedYieldQuantity(cycle.harvestedCount())
+                + ",\"returningForBatch\":" + job.returningForBatch() + "}"
+                + ",\"schedule\":{\"count\":" + checkpoint.schedules().stream()
+                        .filter(value -> ResourceSiteHarvestProcess.coldProgress(job, value.dueAt().ticks()).equals(value)).count()
                 + ",\"entries\":" + scheduleEntries + "}"
-                + ",\"cursor\":{\"index\":" + job.traversalCursor() + ",\"length\":" + cursorLength
-                + ",\"retainedBody\":" + position(job.traversal().linearCorridorSurfaces().get(job.traversalCursor()).standingBody())
+                + ",\"movement\":{\"goalBlock\":" + job.navigationBlock().map(block -> "{\"target\":" + position(block.target().support())
+                        + ",\"layoutRevision\":" + block.layoutRevision()
+                        + ",\"reason\":\"" + block.reason() + "\"}").orElse("null")
                 + ",\"actorBody\":" + actorBody + "}"
+                + ",\"semanticGoal\":{\"kind\":\"" + semanticGoal.kind() + "\",\"worker\":\""
+                + quote(semanticGoal.workerId().value()) + "\",\"arrivalContract\":\"" + semanticGoal.arrivalContract()
+                + "\",\"layoutRevision\":"
+                + semanticGoal.layoutRevision() + ",\"nextWorkSlot\":" + semanticGoal.nextWorkSlot()
+                + ",\"cellId\":" + semanticGoal.cellId().map(id -> Long.toString(id.value())).orElse("null")
+                + ",\"capability\":\"" + semanticGoal.capability() + "\",\"legalStations\":" + goalStations + "}"
                 + ",\"result\":{\"sitePhase\":\"" + lifecycle.phase() + "\",\"intentKind\":\"" + intentKind
                 + "\",\"intentStatus\":\"" + intentStatus + "\",\"dutyPhase\":\"" + dutyPhase + "\",\"intentObservationId\":" + intentObservationId
                 + ",\"obstruction\":" + obstruction + ",\"complete\":" + job.progress().complete() + "}}";
@@ -356,7 +376,7 @@ final class FrontierV3DiagnosticJson {
     private static String site(String id, CheckpointImage checkpoint, FrontierWorldState state) {
         SubjectId subject = subject(id).orElse(null);
         ResourceSiteLifecycle lifecycle = subject == null ? null : state.resourceSites().sites().get(subject);
-        ResourceSite site = subject == null ? null : FrontierResourceSitePlan.compile(state.bootstrap()).get(subject);
+        ResourceSite site = subject == null ? null : state.resourceSiteDescriptors().get(subject);
         if (lifecycle == null || site == null) return unavailable("site", id, checkpoint, "not_found");
         String work = lifecycle.activeWork().map(value -> value.id().value()).orElse("");
         // A generic CONFLICT phase cannot tell an operator whether restart reconciliation,
@@ -497,6 +517,9 @@ final class FrontierV3DiagnosticJson {
         SettlementProvision provision = state.humanPopulation().provision(subject);
         SubjectId depot = FrontierWorldState.depotId(subject);
         int availableFood = SettlementProvisionProcess.availableFood(state, subject);
+        var nextProvisionReview = checkpoint.schedules().stream()
+                .filter(action -> action.subject().equals(subject) && action.kind().equals("frontier.settlement.provision.review"))
+                .mapToLong(action -> action.dueAt().ticks()).min();
         int heldFood = state.inventory().fungibleResources().bindings().values().stream()
                 .filter(binding -> binding.itemKind().equals(SettlementProvisionProcess.BREAD))
                 .filter(binding -> {
@@ -532,7 +555,11 @@ final class FrontierV3DiagnosticJson {
                 + ",\"allocated\":" + allocatedFood + ",\"inTransfer\":" + inTransferFood + ",\"required\":" + provision.requiredRations()
                 + ",\"fulfilled\":" + provision.fulfilledRations() + ",\"nourished\":" + nourished + ",\"hungry\":" + hungry
                 + ",\"starving\":" + starving + ",\"intent\":\""
-                + quote(provision.activeIntentId().map(PhysicalIntentId::value).orElse("")) + "\"}"
+                + quote(provision.activeIntentId().map(PhysicalIntentId::value).orElse("")) + "\""
+                + ",\"cycleOrdinal\":" + provision.cycleOrdinal() + ",\"cycleStartedAt\":" + provision.startedAtTick()
+                + ",\"nextReviewAt\":" + (nextProvisionReview.isPresent() ? Long.toString(nextProvisionReview.getAsLong()) : "null")
+                + ",\"reviewOverdueTicks\":" + (nextProvisionReview.isPresent()
+                        ? Long.toString(Math.max(0L, checkpoint.instant().ticks() - nextProvisionReview.getAsLong())) : "null") + "}"
                 + ",\"farmAnchor\":" + position(geometry.farmAnchor())
                 + ",\"routeSurface\":" + position(geometry.routeSurface()) + "}";
     }
@@ -668,7 +695,7 @@ final class FrontierV3DiagnosticJson {
         if (job == null) return "UNOBSERVED";
         PhysicalIntent intent = state.physicalIntents().get(job.intentId());
         String status = intent == null ? "MISSING" : intent.status().name();
-        return (job.hasNextTraversalStep() ? "TRAVELLING:" : "HARVESTING:") + status;
+        return (ResourceSiteHarvestGoal.actorAtWorkCell(state, job) ? "HARVESTING:" : "TRAVELLING:") + status;
     }
 
     /** One exact resident's durable movement corridor; diagnostics never choose, advance or unblock it. */
@@ -761,6 +788,8 @@ final class FrontierV3DiagnosticJson {
                 + value.playerId() + "\",\"slot\":" + value.slot() + "}";
         if (address instanceof PhysicalStackAddress.HopperSlot value) return "{\"kind\":\"HOPPER_SLOT\",\"position\":"
                 + position(value.position()) + ",\"slot\":" + value.slot() + "}";
+        if (address instanceof PhysicalStackAddress.ActorHand value) return "{\"kind\":\"ACTOR_HAND\",\"actor\":\""
+                + quote(value.actorId().value()) + "\",\"entity\":\"" + value.entityId() + "\"}";
         PhysicalStackAddress.WorldEntity value = (PhysicalStackAddress.WorldEntity) address;
         return "{\"kind\":\"WORLD_ENTITY\",\"entity\":\"" + value.entityId() + "\"}";
     }
@@ -777,6 +806,21 @@ final class FrontierV3DiagnosticJson {
         String occupied = occupiedItems.stream().map(item -> "{\"slot\":" + ((InventoryCustody.ContainerSlot) item.custody()).slot() + ",\"item\":\"" + quote(item.id().value())
                         + "\",\"itemKind\":\"" + quote(item.itemKind()) + "\",\"count\":" + item.count() + "}")
                 .reduce((left, right) -> left + "," + right).map(value -> "[" + value + "]").orElse("[]");
+        // Exact-item occupancy alone hides the wheat/bread lots that now cross the same
+        // physical chest. Keep the legacy exact projection explicit and expose current
+        // fungible bindings separately; neither a missing exact item nor a fungible lot is
+        // inferred from a bare Vanilla stack.
+        var fungibleBindings = state.inventory().fungibleResources().bindings().values().stream()
+                .filter(binding -> binding.address() instanceof io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress.ContainerSlot slot
+                        && slot.slot().containerId().equals(subject))
+                .sorted(java.util.Comparator.comparingInt(binding -> ((io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress.ContainerSlot)
+                        binding.address()).slot().slot()))
+                .toList();
+        String fungibleOccupied = fungibleBindings.stream().map(binding -> {
+                    var slot = (io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress.ContainerSlot) binding.address();
+                    return "{\"slot\":" + slot.slot().slot() + ",\"account\":\"" + quote(binding.accountId().value())
+                            + "\",\"itemKind\":\"" + quote(binding.itemKind()) + "\",\"count\":" + binding.quantity() + "}";
+                }).reduce((left, right) -> left + "," + right).map(value -> "[" + value + "]").orElse("[]");
         String physical = readiness.map(value -> ",\"physicalSocket\":{\"chunk\":\"" + quote(value.chunk())
                 + "\",\"freshSocket\":\"" + quote(value.freshSocket()) + "\",\"support\":\"" + quote(value.support())
                 + "\",\"targetBlock\":\"" + quote(value.targetBlock()) + "\",\"chest\":\"" + quote(value.chest())
@@ -788,7 +832,9 @@ final class FrontierV3DiagnosticJson {
         String replica = referenceCustody(state, subject);
         return base("container", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(container.ownerId().value())
                 + "\",\"surface\":\"" + surface.status() + "\",\"position\":" + position(surface.position()) + ",\"slotCount\":" + container.slotCount()
-                + ",\"occupiedCount\":" + occupiedItems.size() + ",\"occupied\":" + occupied + replica + physical + "}";
+                + ",\"occupiedCount\":" + occupiedItems.size() + ",\"occupied\":" + occupied
+                + ",\"fungibleOccupiedCount\":" + fungibleBindings.size() + ",\"fungibleOccupied\":" + fungibleOccupied
+                + replica + physical + "}";
     }
 
     /** Reference scopes report canonical stock separately from replica evidence and temporary lease authority. */
@@ -813,6 +859,9 @@ final class FrontierV3DiagnosticJson {
      * second ledger or inferring history from a chest endpoint.
      */
     private static String referenceContainer(String id, CheckpointImage checkpoint, FrontierWorldState state) {
+        // Historical F0.2B composition report, not an arbitrary container lookup.
+        // Never label its fixed subjects with a caller-supplied container identity.
+        if (!"f02b".equals(id)) return unavailable("reference_container", id, checkpoint, "not_found");
         SubjectId settlement = new SubjectId("settlement:1");
         SubjectId hive = state.bootstrap().hive().id();
         java.util.List<StrategicTask> tasks = state.strategicPlans().tasks().values().stream()

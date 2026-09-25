@@ -38,6 +38,9 @@ public final class FrontierV3GameTestSlice {
             case "cargo-authority" -> batchName.equals("pm-frontier-v3-scene-cargo-authority");
             case "cargo-interaction" -> batchName.equals("pm-frontier-v3-scene-cargo-interaction");
             case "scene-departure" -> batchName.equals("pm-frontier-v3-scene-departure") || batchName.equals("pm-frontier-v3-scene-deaths");
+            case "scene-restart-reclaim" -> batchName.equals("pm-frontier-v3-scene-restart-reclaim");
+            case "first-admission" -> batchName.equals("pm-frontier-v3-scene-first-admission");
+            case "harvest-support" -> batchName.equals("pm-frontier-v3-scene-harvest-support");
             case "scene-strikes" -> batchName.equals("pm-frontier-v3-scene-strikes");
             case "production-work" -> batchName.equals("pm-frontier-v3-scene-production-work");
             case "local-navigation" -> batchName.equals("pm-frontier-v3-scene-local-navigation");
@@ -45,6 +48,8 @@ public final class FrontierV3GameTestSlice {
             case "production-effect" -> batchName.equals("pm-frontier-v3-production");
             case "resource-prefix" -> batchName.equals("pm-frontier-v3-resource-site-prefix");
             case "field-turns" -> batchName.equals("pm-frontier-v3-field-turns");
+            case "physical-ownership-fences" -> batchName.equals("pm-frontier-v3-object-boards")
+                    || batchName.equals("pm-frontier-v3-resource-harvest");
             case ADAPTER_MIRRORS -> batchName.equals("pm-frontier-v3-graybox")
                     || batchName.equals("pm-frontier-v3-infection-overlay");
             case "reference-depot-never-visited" -> batchName.equals("pm-frontier-v3-reference-depot-never-visited");

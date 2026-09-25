@@ -12,13 +12,14 @@ public record FungibleResourceHandoffObserved(SubjectId sourceAccountId, Custody
                                               long sourceEpoch, long destinationEpoch,
                                               Map<SubjectId, Integer> lotQuantities, Map<SubjectId, Integer> claimQuantities,
                                               List<PhysicalStackBinding> remainingSource, List<PhysicalStackBinding> destinationBindings,
-                                              java.util.Set<SubjectId> forfeitedClaimIds, String playerSaveFence)
+                                              java.util.Set<SubjectId> forfeitedClaimIds, String playerSaveFence,
+                                              java.util.Optional<DiagnosticTuple> retirementDiagnostic)
         implements FrontierPayload {
     public FungibleResourceHandoffObserved(SubjectId sourceAccountId, CustodyAccount destinationAccount, long sourceEpoch, long destinationEpoch,
                                             Map<SubjectId, Integer> lotQuantities, Map<SubjectId, Integer> claimQuantities,
                                             List<PhysicalStackBinding> remainingSource, List<PhysicalStackBinding> destinationBindings) {
         this(sourceAccountId, destinationAccount, sourceEpoch, destinationEpoch, lotQuantities, claimQuantities,
-                remainingSource, destinationBindings, java.util.Set.of(), "");
+                remainingSource, destinationBindings, java.util.Set.of(), "", java.util.Optional.empty());
     }
 
     public FungibleResourceHandoffObserved(SubjectId sourceAccountId, CustodyAccount destinationAccount, long sourceEpoch, long destinationEpoch,
@@ -26,7 +27,15 @@ public record FungibleResourceHandoffObserved(SubjectId sourceAccountId, Custody
                                             List<PhysicalStackBinding> remainingSource, List<PhysicalStackBinding> destinationBindings,
                                             java.util.Set<SubjectId> forfeitedClaimIds) {
         this(sourceAccountId, destinationAccount, sourceEpoch, destinationEpoch, lotQuantities, claimQuantities,
-                remainingSource, destinationBindings, forfeitedClaimIds, "");
+                remainingSource, destinationBindings, forfeitedClaimIds, "", java.util.Optional.empty());
+    }
+
+    public FungibleResourceHandoffObserved(SubjectId sourceAccountId, CustodyAccount destinationAccount, long sourceEpoch, long destinationEpoch,
+                                            Map<SubjectId, Integer> lotQuantities, Map<SubjectId, Integer> claimQuantities,
+                                            List<PhysicalStackBinding> remainingSource, List<PhysicalStackBinding> destinationBindings,
+                                            java.util.Set<SubjectId> forfeitedClaimIds, String playerSaveFence) {
+        this(sourceAccountId, destinationAccount, sourceEpoch, destinationEpoch, lotQuantities, claimQuantities,
+                remainingSource, destinationBindings, forfeitedClaimIds, playerSaveFence, java.util.Optional.empty());
     }
 
     public FungibleResourceHandoffObserved {
@@ -39,8 +48,13 @@ public record FungibleResourceHandoffObserved(SubjectId sourceAccountId, Custody
         if (remainingSource.stream().anyMatch(Objects::isNull) || destinationBindings.isEmpty() || destinationBindings.stream().anyMatch(Objects::isNull)) {
             throw new IllegalArgumentException("handoff requires current non-null destination binding evidence");
         }
-        if (!forfeitedClaimIds.isEmpty() && !forfeitedClaimIds.equals(claimQuantities.keySet())) {
-            throw new IllegalArgumentException("handoff forfeiture must name exactly its moved claim portions");
+        if (!forfeitedClaimIds.isEmpty() && !forfeitedClaimIds.containsAll(claimQuantities.keySet())) {
+            throw new IllegalArgumentException("handoff forfeiture must include every moved claim portion");
+        }
+        retirementDiagnostic = Objects.requireNonNull(retirementDiagnostic, "handoff retirement diagnostic");
+        if (retirementDiagnostic.isPresent() && (forfeitedClaimIds.isEmpty()
+                || retirementDiagnostic.orElseThrow().reason() != DiagnosticReason.SETTLEMENT_PROVISION_CONFLICT)) {
+            throw new IllegalArgumentException("handoff retirement diagnostic requires a forfeited provision claim");
         }
         playerSaveFence = Objects.requireNonNull(playerSaveFence, "player save fence");
         if (!playerSaveFence.isEmpty()) {
@@ -57,23 +71,56 @@ public record FungibleResourceHandoffObserved(SubjectId sourceAccountId, Custody
     /** Binds a physical departure of a reserved portion to the one owning-work forfeiture path. */
     public FungibleResourceHandoffObserved forfeitMovedClaims() {
         return claimQuantities.isEmpty() ? this : new FungibleResourceHandoffObserved(sourceAccountId, destinationAccount, sourceEpoch,
-                destinationEpoch, lotQuantities, claimQuantities, remainingSource, destinationBindings, claimQuantities.keySet(), playerSaveFence);
+                destinationEpoch, lotQuantities, claimQuantities, remainingSource, destinationBindings, claimQuantities.keySet(), playerSaveFence,
+                retirementDiagnostic);
+    }
+
+    /** A moved pinned lot also forfeits its owning work even if the stack's claim column did not move. */
+    public FungibleResourceHandoffObserved forfeitAffectedClaims(FungibleResourceLedger ledger) {
+        Objects.requireNonNull(ledger, "handoff claim authority");
+        CustodyAccount source = ledger.accounts().get(sourceAccountId);
+        if (source == null) throw new IllegalArgumentException("physical departure has no source account");
+        java.util.Set<SubjectId> affected = new java.util.HashSet<>(claimQuantities.keySet());
+        source.claimQuantities().keySet().forEach(claimId -> {
+            ClaimAllocation claim = ledger.claims().get(claimId);
+            if (claim == null) throw new IllegalArgumentException("physical departure has an unknown source claim");
+            if (claim.lotQuantities().keySet().stream().anyMatch(lotQuantities::containsKey)) affected.add(claimId);
+        });
+        return affected.isEmpty() ? this : new FungibleResourceHandoffObserved(sourceAccountId, destinationAccount, sourceEpoch,
+                destinationEpoch, lotQuantities, claimQuantities, remainingSource, destinationBindings, affected, playerSaveFence,
+                retirementDiagnostic);
     }
 
     /** Replays the same observed layout after its named allocations have been atomically released. */
     public FungibleResourceHandoffObserved withoutForfeitedClaims() {
-        if (forfeitedClaimIds.isEmpty()) return this;
+        return withoutReleasedClaims(forfeitedClaimIds);
+    }
+
+    /** Also clears a retired work owner's other unspent claims from the observed HOT layout. */
+    public FungibleResourceHandoffObserved withoutReleasedClaims(java.util.Set<SubjectId> releasedClaimIds) {
+        releasedClaimIds = java.util.Set.copyOf(Objects.requireNonNull(releasedClaimIds, "released handoff claims"));
+        if (!releasedClaimIds.containsAll(forfeitedClaimIds) || !releasedClaimIds.containsAll(claimQuantities.keySet())) {
+            throw new IllegalArgumentException("released handoff claims must cover every forfeited or moved allocation");
+        }
+        if (releasedClaimIds.isEmpty()) return this;
         return new FungibleResourceHandoffObserved(sourceAccountId,
                 new CustodyAccount(destinationAccount.id(), destinationAccount.custody(), destinationAccount.lotQuantities(), Map.of()),
-                sourceEpoch, destinationEpoch, lotQuantities, Map.of(), without(forfeitedClaimIds, remainingSource),
-                without(forfeitedClaimIds, destinationBindings), java.util.Set.of(), playerSaveFence);
+                sourceEpoch, destinationEpoch, lotQuantities, Map.of(), without(releasedClaimIds, remainingSource),
+                without(releasedClaimIds, destinationBindings), java.util.Set.of(), playerSaveFence, java.util.Optional.empty());
+    }
+
+    public FungibleResourceHandoffObserved withRetirementDiagnostic(DiagnosticTuple diagnostic) {
+        return new FungibleResourceHandoffObserved(sourceAccountId, destinationAccount, sourceEpoch, destinationEpoch,
+                lotQuantities, claimQuantities, remainingSource, destinationBindings, forfeitedClaimIds, playerSaveFence,
+                java.util.Optional.of(Objects.requireNonNull(diagnostic, "owner-stamped retirement diagnostic")));
     }
 
     /** Binds one newly observed player handoff to the later player-save durability fence. */
     public FungibleResourceHandoffObserved withPlayerSaveFence(java.util.UUID fence) {
         Objects.requireNonNull(fence, "player save fence");
         return new FungibleResourceHandoffObserved(sourceAccountId, destinationAccount, sourceEpoch, destinationEpoch,
-                lotQuantities, claimQuantities, remainingSource, destinationBindings, forfeitedClaimIds, fence.toString());
+                lotQuantities, claimQuantities, remainingSource, destinationBindings, forfeitedClaimIds, fence.toString(),
+                retirementDiagnostic);
     }
 
     private static List<PhysicalStackBinding> without(java.util.Set<SubjectId> claimIds, List<PhysicalStackBinding> values) {

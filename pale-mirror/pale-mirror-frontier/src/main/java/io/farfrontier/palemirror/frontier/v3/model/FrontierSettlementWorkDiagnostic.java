@@ -33,7 +33,7 @@ public record FrontierSettlementWorkDiagnostic(
     public static Optional<FrontierSettlementWorkDiagnostic> inspect(CheckpointImage checkpoint, FrontierWorldState state, SubjectId settlementId) {
         Objects.requireNonNull(checkpoint, "checkpoint"); Objects.requireNonNull(state, "state"); Objects.requireNonNull(settlementId, "settlement id");
         if (state.bootstrap().settlements().stream().noneMatch(value -> value.id().equals(settlementId))) return Optional.empty();
-        List<ResourceSite> sites = FrontierResourceSitePlan.compile(state.bootstrap()).values().stream()
+        List<ResourceSite> sites = state.resourceSiteDescriptors().values().stream()
                 .filter(site -> site.settlementId().equals(settlementId)).sorted(Comparator.comparing(ResourceSite::id)).toList();
         List<String> readySites = sites.stream().filter(site -> state.resourceSites().site(site.id()).phase() == ResourceSitePhase.READY)
                 .map(site -> site.id().value()).toList();

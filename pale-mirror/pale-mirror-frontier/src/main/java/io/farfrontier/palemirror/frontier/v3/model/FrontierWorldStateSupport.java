@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 
 import java.util.AbstractMap;
 import java.util.Collection;
@@ -180,9 +181,41 @@ public final class FrontierWorldStateSupport {
         return item.economicOwnerId();
     }
 
-    static void validateActorItemCustody(Set<SubjectId> actors, ExactInventory inventory) {
+    static void validateActorItemCustody(WorldId worldId, Set<SubjectId> actors, ExactInventory inventory,
+                                         Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> sceneLeases,
+                                         Map<SubjectId, AmbientActorLease> ambientLeases) {
         if (inventory.items().values().stream().anyMatch(item -> item.custody() instanceof InventoryCustody.Actor actor
                 && !actors.contains(actor.actorId()))) throw new IllegalArgumentException("actor-held item must retain one canonical actor");
+        for (CustodyAccount account : inventory.fungibleResources().accounts().values()) {
+            if (account.custody() instanceof ResourceCustody.Actor actor && !actors.contains(actor.actorId())) {
+                throw new IllegalArgumentException("actor-held resource must retain one canonical actor");
+            }
+        }
+        List<PhysicalStackAddress.ActorHand> hands = new java.util.ArrayList<>();
+        for (PhysicalStackBinding binding : inventory.fungibleResources().bindings().values()) {
+            if (binding.address() instanceof PhysicalStackAddress.ActorHand hand
+                    && (!actors.contains(hand.actorId())
+                    || !hand.entityId().equals(SceneLease.deterministicEntityId(worldId, hand.actorId())))) {
+                throw new IllegalArgumentException("actor-hand resource binding has a foreign actor or body");
+            }
+            if (binding.address() instanceof PhysicalStackAddress.ActorHand hand) hands.add(hand);
+        }
+        if (hands.isEmpty()) return;
+        Set<SubjectId> physicalOwners = new HashSet<>();
+        for (SceneLease lease : sceneLeases.values()) {
+            if (lease.status() != SceneLeaseStatus.CLOSED && lease.status() != SceneLeaseStatus.PREPARED) {
+                lease.members().forEach(member -> physicalOwners.add(member.actorId()));
+            }
+        }
+        for (AmbientActorLease lease : ambientLeases.values()) {
+            if (lease.status() != AmbientLeaseStatus.CLOSED && lease.status() != AmbientLeaseStatus.PREPARED)
+                physicalOwners.add(lease.actorId());
+        }
+        for (PhysicalStackAddress.ActorHand hand : hands) {
+            if (!physicalOwners.contains(hand.actorId())) {
+                throw new IllegalArgumentException("actor-hand resource binding lacks an admitted physical owner");
+            }
+        }
     }
 
     static void validateEconomicClaims(FrontierBootstrap bootstrap, ExactInventory inventory) {

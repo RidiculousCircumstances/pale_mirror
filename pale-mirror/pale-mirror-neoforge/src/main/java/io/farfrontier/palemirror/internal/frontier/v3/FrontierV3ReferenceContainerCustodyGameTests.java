@@ -39,6 +39,55 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
     private FrontierV3ReferenceContainerCustodyGameTests() { }
 
     @GameTest(batch = "pm-frontier-v3-reference-projection", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    public static void insufficientFungibleCapacityNeverWritesAPartialOwnedChest(GameTestHelper helper) {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:reference-capacity-atomic"), 91L));
+        SubjectId settlement = state.bootstrap().settlements().getFirst().id();
+        SubjectId depot = FrontierWorldState.depotId(settlement);
+        for (int ordinal = 0; state.inventory().firstFreeSlot(depot).isPresent(); ordinal++) {
+            int slot = state.inventory().firstFreeSlot(depot).orElseThrow();
+            state = state.withInventory(state.inventory().store(new ExactItemStack(
+                    new SubjectId("item:capacity-fixture-" + ordinal), settlement, "minecraft:cobblestone", 1,
+                    new InventoryCustody.ContainerSlot(depot, slot))));
+        }
+        // A recovered legacy image can still contain an impossible overcommit. Build that
+        // image explicitly: ordinary store now reserves the COLD wheat's physical slot.
+        ExactInventory fitted = state.inventory();
+        int reservedSlot = java.util.stream.IntStream.range(0, fitted.containers().get(depot).slotCount())
+                .filter(slot -> fitted.itemAt(depot, slot).isEmpty()).findFirst().orElseThrow();
+        Map<SubjectId, ExactItemStack> overfilledItems = new java.util.HashMap<>(fitted.items());
+        SubjectId overfillId = new SubjectId("item:legacy-capacity-overfill");
+        overfilledItems.put(overfillId, new ExactItemStack(overfillId, settlement, "minecraft:cobblestone", 1,
+                new InventoryCustody.ContainerSlot(depot, reservedSlot)));
+        state = state.withInventory(new ExactInventory(fitted.containers(), overfilledItems, fitted.cargo(),
+                fitted.playerItems(), fitted.worldCarrierItems(), fitted.conflicts(), fitted.surfaces(),
+                fitted.economics(), fitted.fungibleResources()));
+        ChestBlockEntity chest = chest(helper, helper.absolutePos(new BlockPos(2, 2, 2)), depot);
+        helper.assertTrue(!FrontierV3ContainerSurfaceExecutor.writeCanonicalSlots(chest, state, depot) && chest.isEmpty(),
+                "insufficient wheat capacity must reject before writing even the exact-item prefix");
+        chest.setItem(0, new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND, 3));
+        helper.assertTrue(!FrontierV3ContainerSurfaceExecutor.replaceCanonicalSlots(chest, state, depot)
+                        && chest.getItem(0).is(net.minecraft.world.item.Items.DIAMOND)
+                        && chest.getItem(0).getCount() == 3,
+                "an impossible replacement must preserve the complete prior physical chest");
+        chest.clearContent();
+        SubjectId released = state.inventory().itemAt(depot, 0).orElseThrow().id();
+        FrontierWorldState fitting = state.withInventory(state.inventory().withoutItem(released));
+        helper.assertTrue(FrontierV3ContainerSurfaceExecutor.writeCanonicalSlots(chest, fitting, depot)
+                        && chest.getItem(0).is(net.minecraft.world.item.Items.WHEAT) && !chest.isEmpty(),
+                "after one real slot is available, the complete canonical chest may be written once");
+        chest.clearContent();
+        ExactInventory smaller = fitting.inventory().withoutItem(fitting.inventory().itemAt(depot, 1).orElseThrow().id());
+        FrontierWorldState invalidExact = fitting.withInventory(smaller.store(new ExactItemStack(
+                new SubjectId("item:unstackable-overcount"), settlement, "minecraft:iron_pickaxe", 2,
+                new InventoryCustody.ContainerSlot(depot, 1))));
+        helper.assertTrue(!FrontierV3ContainerSurfaceExecutor.writeCanonicalSlots(chest, invalidExact, depot)
+                        && chest.isEmpty(),
+                "an exact stack beyond the real item's stack limit must fail before any physical write");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-reference-projection", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
     public static void pendingProjectionUsesActualChestAndRetainsMismatchAcrossRuntimeRecovery(GameTestHelper helper) {
         WorldId world = new WorldId("frontier:reference-pending-projection");
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(world, 91L));
@@ -115,6 +164,33 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
         helper.assertTrue(ReferenceContainerCustody.hasOperationalCustody(confirmed, depot)
                         && confirmed.replicaCustody().custodyByScope().get(scope).authorityEpoch() == 2L,
                 "only actual confirmation enables the next custody cycle");
+        runtime.shutdown(); helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-reference-projection", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    public static void loadedUnchangedCheckpointedChestFinishesItsRecordedDrain(GameTestHelper helper) {
+        WorldId world = new WorldId("frontier:reference-loaded-checkpointed");
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(world, 91L));
+        SubjectId depot = FrontierWorldState.depotId(state.bootstrap().settlements().getFirst().id());
+        BlockPos local = helper.absolutePos(new BlockPos(2, 2, 2));
+        BlockPosition original = state.inventory().surfaces().get(depot).position();
+        state = FrontierWorldState.initial(FrontierV3CargoLoadingGameTests.translatedBootstrap(state.bootstrap(),
+                local.getX() - original.x(), local.getY() - original.y(), local.getZ() - original.z()));
+        state = held(activated(state, depot), depot);
+        SubjectId scope = ReferenceContainerCustody.scopeId(depot);
+        state = state.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(state.replicaCustody()
+                .checkpoint(scope, 1L, 0L, 2L)));
+        ChestBlockEntity chest = chest(helper, local, depot);
+        FrontierV3ContainerSurfaceExecutor.replaceCanonicalSlots(chest, state, depot);
+        var runtime = runtime(world, state);
+        helper.assertTrue(runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE, "checkpoint fixture active");
+        var before = FrontierV3ReferenceContainerCustodyExecutor.observed(state, depot, chest);
+        FrontierV3ReferenceContainerCustodyExecutor.reconcile(helper.getLevel(), runtime, state, state.inventory().surfaces().get(depot));
+        var released = runtime.decodedState().orElseThrow();
+        helper.assertTrue(released.replicaCustody().custodyByScope().get(scope).status() == PhysicalCustodyLeaseStatus.RELEASED,
+                "a loaded matching chest must finish its prior drain, not strand a live checkpoint");
+        helper.assertTrue(before.equals(FrontierV3ReferenceContainerCustodyExecutor.observed(released, depot, chest)),
+                "closing retained custody must not overwrite physical contents or provenance");
         runtime.shutdown(); helper.succeed();
     }
 

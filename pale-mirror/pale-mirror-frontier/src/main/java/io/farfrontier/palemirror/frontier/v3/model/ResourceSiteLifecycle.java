@@ -101,82 +101,111 @@ public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, l
         Optional<ResourceSiteHarvestLineage> nextLineage = harvestLineage.map(lineage -> lineage.bindSuccessor(job));
         return next(ResourceSitePhase.HARVESTING, growthEpoch, growthStage, Optional.of(job), nextLineage);
     }
-    public ResourceSiteLifecycle advanceHarvest(ResourceSiteHarvestJob expected, int completedCropSlots) {
+    public ResourceSiteLifecycle advanceHarvest(ResourceSiteHarvestJob expected, int completedCropSlots,
+                                                ResourceSiteHarvestGoal goal, SurfaceAnchor observedStation) {
         ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
                 .orElseThrow(() -> new IllegalStateException("resource site has no active harvest"));
         if (phase != ResourceSitePhase.HARVESTING || !active.equals(expected)
+                || !active.matchesWorkGoal(goal, observedStation)
                 || completedCropSlots != active.progress().completedCropSlots() + 1) {
             throw new IllegalArgumentException("resource-site harvest progress is stale or invalid");
         }
         return next(phase, growthEpoch, growthStage, Optional.of(active.withProgress(active.progress().confirmPreparedCrop())));
     }
-    public ResourceSiteLifecycle advanceHarvestTraversal(ResourceSiteHarvestJob expected, int nextCursor) {
+    public ResourceSiteLifecycle returnFullHarvestBatch(ResourceSiteHarvestJob expected, int totalYield) {
         ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
                 .orElseThrow(() -> new IllegalStateException("resource site has no active harvest"));
-        if (phase != ResourceSitePhase.HARVESTING || !active.equals(expected)) {
-            throw new IllegalArgumentException("resource-site field-work traversal is stale or invalid");
-        }
-        return next(phase, growthEpoch, growthStage, Optional.of(active.advanceTraversal(nextCursor)));
+        if (phase != ResourceSitePhase.HARVESTING || !active.equals(expected))
+            throw new IllegalArgumentException("resource-site full-batch return has a stale job");
+        return next(phase, growthEpoch, growthStage, Optional.of(active.withFullBatchReturn(totalYield)));
     }
-    public ResourceSiteLifecycle rebaseUnstartedHarvestTraversal(ResourceSiteHarvestJob expected, TraversalTopology traversal) {
+    /** Obstruction accounts one work target; no physical action or worker movement occurs. */
+    public ResourceSiteLifecycle skipBlockedHarvestCell(ResourceSiteHarvestJob expected, int count, int totalYield) {
+        ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance)
+                .map(ResourceSiteHarvestJob.class::cast).orElseThrow(
+                        () -> new IllegalStateException("resource site has no active harvest"));
+        if (phase != ResourceSitePhase.HARVESTING || !active.equals(expected))
+            throw new IllegalArgumentException("blocked field cell has a stale harvest job");
+        return next(phase, growthEpoch, growthStage,
+                Optional.of(active.withBlockedCellsSkipped(count, totalYield)));
+    }
+    public ResourceSiteLifecycle deliverFullHarvestBatch(ResourceSiteHarvestJob expected,
+                                                         InventoryCustody.ContainerSlot nextSlot, int totalYield,
+                                                         Optional<ResourceSiteHarvestBatchDelivered> confirmedBatch) {
         ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
                 .orElseThrow(() -> new IllegalStateException("resource site has no active harvest"));
-        if (phase != ResourceSitePhase.HARVESTING || !active.equals(expected)) {
-            throw new IllegalArgumentException("resource-site field-work hand-off is stale or invalid");
-        }
-        return next(phase, growthEpoch, growthStage, Optional.of(active.rebaseUnstartedTraversal(traversal)));
+        if (phase != ResourceSitePhase.HARVESTING || !active.equals(expected))
+            throw new IllegalArgumentException("resource-site batch delivery has a stale job");
+        return next(phase, growthEpoch, growthStage,
+                Optional.of(active.afterFullBatchDelivery(nextSlot, totalYield, confirmedBatch)));
     }
-    public ResourceSiteLifecycle prepareHarvestCrop(ResourceSiteHarvestJob expected, int cropSlotIndex) {
+
+    public ResourceSiteLifecycle deliverFullHarvestBatch(ResourceSiteHarvestJob expected,
+                                                         InventoryCustody.ContainerSlot nextSlot, int totalYield) {
+        return deliverFullHarvestBatch(expected, nextSlot, totalYield, Optional.empty());
+    }
+    public ResourceSiteLifecycle reserveHarvestBatchSuccessor(ResourceSiteHarvestJob expected,
+                                                              InventoryCustody.ContainerSlot nextSlot, int totalYield) {
+        ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
+                .orElseThrow(() -> new IllegalStateException("resource site has no active harvest"));
+        if (phase != ResourceSitePhase.HARVESTING || !active.equals(expected))
+            throw new IllegalArgumentException("resource-site batch reservation has a stale job");
+        return next(phase, growthEpoch, growthStage, Optional.of(active.reserveBatchSuccessorSlot(nextSlot, totalYield)));
+    }
+    public ResourceSiteLifecycle arriveHarvestGoal(ResourceSiteHarvestJob expected, ResourceSiteHarvestGoal goal) {
+        ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance)
+                .map(ResourceSiteHarvestJob.class::cast).orElseThrow(
+                        () -> new IllegalStateException("resource site has no active harvest goal"));
+        if (phase != ResourceSitePhase.HARVESTING || !active.equals(expected))
+            throw new IllegalArgumentException("resource-site goal arrival has a stale job");
+        return next(phase, growthEpoch, growthStage, Optional.of(active.arriveAtSemanticGoal(goal)));
+    }
+    public ResourceSiteLifecycle blockHarvestRoute(ResourceSiteHarvestJob expected,
+                                                    ResourceSiteHarvestNavigationBlock block) {
+        ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance)
+                .map(ResourceSiteHarvestJob.class::cast).orElseThrow(
+                        () -> new IllegalStateException("resource site has no active harvest"));
+        if (phase != ResourceSitePhase.HARVESTING || !active.equals(expected))
+            throw new IllegalArgumentException("farmer route block has a stale job");
+        return next(phase, growthEpoch, growthStage, Optional.of(active.withNavigationBlock(block)));
+    }
+    public ResourceSiteLifecycle clearHarvestRouteBlock(ResourceSiteHarvestJob expected,
+                                                         ResourceSiteHarvestNavigationBlock blocked) {
+        ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance)
+                .map(ResourceSiteHarvestJob.class::cast).orElseThrow(
+                        () -> new IllegalStateException("resource site has no active harvest"));
+        if (phase != ResourceSitePhase.HARVESTING || !active.equals(expected))
+            throw new IllegalArgumentException("farmer route clearance has a stale job");
+        return next(phase, growthEpoch, growthStage, Optional.of(active.clearNavigationBlock(blocked)));
+    }
+    public ResourceSiteLifecycle prepareHarvestCrop(ResourceSiteHarvestJob expected, int cropSlotIndex,
+                                                     ResourceSiteHarvestGoal goal, SurfaceAnchor observedStation) {
         ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
                 .orElseThrow(() -> new IllegalStateException("resource site has no active harvest"));
         if (phase != ResourceSitePhase.HARVESTING || !active.equals(expected)
+                || !active.matchesWorkGoal(goal, observedStation)
                 || cropSlotIndex != active.progress().nextCropSlotIndex()) {
             throw new IllegalArgumentException("resource-site harvest crop preparation is stale or invalid");
         }
         return next(phase, growthEpoch, growthStage, Optional.of(active.withProgress(active.progress().prepareNextCrop())));
     }
-    public ResourceSiteLifecycle harvested() {
+
+    /** Closes an observed HOT harvest at its actual declared depot service station. */
+    public ResourceSiteLifecycle harvestedAt(ResourceSiteHarvestGoal goal, BodyPosition terminalBody) {
         ResourceSiteHarvestJob completed = activeWork.filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
                 .filter(job -> job.progress().complete()).orElse(null);
-        if (phase != ResourceSitePhase.HARVESTING || completed == null) {
-            throw new IllegalStateException("resource site has no fully observed harvest");
-        }
+        if (phase != ResourceSitePhase.HARVESTING || completed == null || goal.kind() != ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE
+                || !goal.jobId().equals(completed.id()) || !goal.workerId().equals(completed.workerId())
+                || !goal.arrivedAt(terminalBody.supportingSurface()))
+            throw new IllegalStateException("resource site has no fully observed returned harvest");
         return next(ResourceSitePhase.GROWING, Math.addExact(growthEpoch, 1L), 0, Optional.empty(),
-                Optional.of(ResourceSiteHarvestLineage.completed(completed, growthEpoch)));
+                Optional.of(ResourceSiteHarvestLineage.completed(completed, growthEpoch, true,
+                        ResourceSiteHarvestCausality.notCaptured(completed), terminalBody)));
     }
     /** Closes COLD semantic work after atomically composing and fencing its exact physical request. */
-    public ResourceSiteLifecycle harvestedDeferred() {
-        ResourceSiteHarvestJob completed = activeWork.filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
-                .filter(job -> job.progress().complete()).orElse(null);
-        if (phase != ResourceSitePhase.HARVESTING || completed == null) {
-            throw new IllegalStateException("resource site has no complete COLD harvest");
-        }
-        return harvestedDeferred(completed, true);
-    }
-    /** Retains a started exact physical effect as the one pending terminal receipt owner. */
-    public ResourceSiteLifecycle harvestedDeferred(boolean outputReceiptResolved) {
-        ResourceSiteHarvestJob completed = activeWork.filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
-                .filter(job -> job.progress().complete()).orElse(null);
-        if (phase != ResourceSitePhase.HARVESTING || completed == null) {
-            throw new IllegalStateException("resource site has no complete COLD harvest");
-        }
-        return next(ResourceSitePhase.GROWING, Math.addExact(growthEpoch, 1L), 0, Optional.empty(),
-                Optional.of(ResourceSiteHarvestLineage.completed(completed, growthEpoch, outputReceiptResolved)));
-    }
-    /** Plans the post-final-crop epoch before its crop events are reduced. */
-    public ResourceSiteLifecycle harvestedDeferred(ResourceSiteHarvestJob completed, boolean outputReceiptResolved) {
-        ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
-                .orElseThrow(() -> new IllegalStateException("resource site has no active harvest"));
-        if (phase != ResourceSitePhase.HARVESTING || !active.id().equals(completed.id()) || !completed.progress().complete()
-                || !(active.equals(completed) || completed.progress().completedCropSlots() == active.progress().completedCropSlots() + 1)) {
-            throw new IllegalArgumentException("resource site has no exact next complete COLD harvest");
-        }
-        return new ResourceSiteLifecycle(siteId, ResourceSitePhase.GROWING, Math.addExact(growthEpoch, 1L), 0, Optional.empty(), Optional.empty(),
-                Optional.of(ResourceSiteHarvestLineage.completed(completed, growthEpoch, outputReceiptResolved)));
-    }
-    /** Terminal COLD action evidence is retained with the same immutable receipt lineage. */
+    /** Retains the actual returned body, including an alternate legal depot service station. */
     public ResourceSiteLifecycle harvestedDeferred(ResourceSiteHarvestJob completed, boolean outputReceiptResolved,
-                                                   ResourceSiteHarvestCausality causality) {
+                                                   ResourceSiteHarvestCausality causality, BodyPosition terminalBody) {
         ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
                 .orElseThrow(() -> new IllegalStateException("resource site has no active harvest"));
         if (phase != ResourceSitePhase.HARVESTING || !active.id().equals(completed.id()) || !completed.progress().complete()
@@ -184,7 +213,7 @@ public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, l
             throw new IllegalArgumentException("resource site has no exact next complete COLD harvest");
         }
         return new ResourceSiteLifecycle(siteId, ResourceSitePhase.GROWING, Math.addExact(growthEpoch, 1L), 0, Optional.empty(), Optional.empty(),
-                Optional.of(ResourceSiteHarvestLineage.completed(completed, growthEpoch, outputReceiptResolved, causality)));
+                Optional.of(ResourceSiteHarvestLineage.completed(completed, growthEpoch, outputReceiptResolved, causality, terminalBody)));
     }
     public ResourceSiteLifecycle confirmDeferredHarvestReceipt(PhysicalIntentId intentId) {
         return confirmDeferredHarvestReceipt(intentId, null);

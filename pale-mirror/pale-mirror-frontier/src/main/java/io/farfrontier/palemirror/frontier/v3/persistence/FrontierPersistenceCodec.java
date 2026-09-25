@@ -30,7 +30,19 @@ public final class FrontierPersistenceCodec {
      * Fresh-world v3 envelope.  Bumping this rejects an entire old WAL tail before any payload
      * decoder runs, so a recreated world cannot accidentally replay a previous campaign.
      */
-    private static final int VERSION = 70;
+    // Version 73 changes the resource-harvest continuation's persisted subject
+    // from an ownerless job ID to its explicit site owner. Never replay v72
+    // actions under the new subject contract.
+    // Version 74 rejects job payloads without their explicit strategic task relationship.
+    // Version 77 also binds each field-work receipt to its declared site and growth epoch.
+    // Version 78 changes harvest traversal payloads and terminal replay semantics: the
+    // farmer must walk the retained return tail before output/successor admission.
+    // Version 79 retains the crop-start cursor independently of variable delivery-tail length.
+    // Version 80 distinguishes COLD crop receipts from HOT receipts with an exact observed hand.
+    // Version 81 retains the producer-declared harvest actor account in the start payload.
+    // Version 82 also retains the exact depot account declared by that producer.
+    // Version 86 retains the bounded field segment and successor-slot reservation in harvest starts.
+    private static final int VERSION = 91;
     private static final int MAX_STATE_BYTES = 16 * 1024 * 1024;
     private static final int MAX_ENTRIES = 65_535;
 
@@ -112,7 +124,7 @@ public final class FrontierPersistenceCodec {
     private static <T> T decode(byte[] encoded, int magic, Reader<T> reader) {
         try (DataInputStream input = new DataInputStream(new ByteArrayInputStream(encoded))) {
             if (input.readInt() != magic) throw new IllegalArgumentException("unknown persistence magic");
-            if (input.readUnsignedByte() != VERSION) throw new IllegalArgumentException("Frontier v3 persistence has no compatible physical-intent typed-role codec; fresh current-schema world required");
+            if (input.readUnsignedByte() != VERSION) throw new IllegalArgumentException("Frontier v3 persistence envelope is incompatible; fresh current-schema world required");
             byte[] body = readBytes(input, MAX_STATE_BYTES);
             byte[] checksum = input.readNBytes(32);
             if (checksum.length != 32 || !MessageDigest.isEqual(checksum, digest(body)) || input.available() != 0) {

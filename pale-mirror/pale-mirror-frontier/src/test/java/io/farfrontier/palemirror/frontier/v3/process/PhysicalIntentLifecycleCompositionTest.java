@@ -47,6 +47,21 @@ import org.junit.jupiter.api.Test;
 
 class PhysicalIntentLifecycleCompositionTest {
     @Test
+    void emptyQueuesDoNotReportSaturationForExplicitlyNonPhysicalOwners() {
+        FrontierWorldState state = FrontierWorldRuntimeDefinition.configuration(
+                new WorldId("frontier:empty-lifecycle-pressure"), 91L).initialState();
+        var diagnostic = FrontierWorldProcessCatalog.physicalLifecycles().diagnostic(state);
+        assertTrue(diagnostic.owners().stream().anyMatch(owner -> owner.schemaTags().isEmpty()));
+        for (var owner : diagnostic.owners()) {
+            assertEquals(0, owner.unresolved());
+            assertEquals(0, owner.resolvedRetained());
+            assertEquals(PhysicalIntentLifecycleCompositionDiagnostic.Pressure.OPEN, owner.pressure(), owner.owner().toString());
+            if (owner.schemaTags().isEmpty()) assertEquals(0, owner.maxUnresolved(),
+                    "no intent admission is granted by an empty pressure report");
+        }
+    }
+
+    @Test
     void installedCompositionSuppliesEveryDurableOwner() {
         assertDoesNotThrow(FrontierWorldProcessCatalog::physicalLifecycles);
         assertDoesNotThrow(() -> PhysicalIntentLifecycleCapabilities.compose(List.of(module(Arrays.stream(

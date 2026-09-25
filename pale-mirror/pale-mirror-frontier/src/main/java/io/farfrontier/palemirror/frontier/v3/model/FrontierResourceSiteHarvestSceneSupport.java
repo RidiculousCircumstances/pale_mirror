@@ -30,7 +30,8 @@ public final class FrontierResourceSiteHarvestSceneSupport {
         return candidate(state, job, true);
     }
     private static Optional<Candidate> candidate(FrontierWorldState state, ResourceSiteHarvestJob job, boolean rejectExistingScene) {
-        if ((rejectExistingScene && hasNonClosedScene(state, job.id())) || job.progress().complete()) return Optional.empty();
+        if ((rejectExistingScene && hasNonClosedScene(state, job))
+                || ResourceSiteHarvestGoal.actorAtDepot(state, job)) return Optional.empty();
         // An exact physical-effect lifecycle is not a scene-readiness bit.  Before F0.2, the
         // retained traversal may use a PREPARED intent but must leave its non-replayable effect
         // unbegun; after F0.2 the process-owned effect admission supplies RUNNING instead.
@@ -40,16 +41,24 @@ public final class FrontierResourceSiteHarvestSceneSupport {
         if (lifecycle.phase() != ResourceSitePhase.HARVESTING
                 || lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
                 .filter(job::equals).isEmpty()) return Optional.empty();
-        ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).get(job.siteId());
+        ResourceSite site = state.resourceSite(job.siteId());
         ActorLocation worker = state.actorLocations().get(job.workerId());
         if (site == null || state.structureConditions().get(site.facilityId()) != StructureCondition.INTACT
                 || worker == null || worker.condition().status() != ActorLifeStatus.ALIVE) return Optional.empty();
         HumanAssignment assignment = HumanAssignmentProjection.compile(state).assignment(job.workerId());
         if (assignment.kind() != HumanAssignmentKind.FIELD_HARVEST || !assignment.ownerId().equals(Optional.of(job.id()))) return Optional.empty();
-        BlockPosition crop = site.cropSlots().get(job.progress().nextCropSlotIndex());
+        // A completed crop cursor still owns the retained delivery journey. Demand follows
+        // that worker's canonical station, not the now-distant last crop. No crop work is
+        // reopened when a player first reaches the worker near the depot.
+        boolean workerSide = job.navigationBlock().isPresent() || job.progress().complete() || job.returningForBatch();
+        int demandCropIndex = workerSide
+                ? Math.max(0, job.progress().completedCropSlots() - 1) : job.progress().nextCropSlotIndex();
+        BodyPosition body = worker.body();
+        BlockPosition crop = workerSide
+                ? new BlockPosition(body.x(), body.y(), body.z()) : site.cropSlots().get(demandCropIndex);
         BlockPosition workerSurface = worker.supportingSurface().support();
-        if (!workerSurface.equals(job.traversal().linearCorridorSurfaces().get(job.traversalCursor()).support())) return Optional.empty();
-        return Optional.of(new Candidate(job.id(), job.siteId(), job.workerId(), job.progress().nextCropSlotIndex(), crop,
+        if (!state.bootstrap().bounds().contains(workerSurface)) return Optional.empty();
+        return Optional.of(new Candidate(job.id(), job.siteId(), job.workerId(), demandCropIndex, crop,
                 Map.of(job.workerId(), workerSurface)));
     }
 
@@ -72,16 +81,17 @@ public final class FrontierResourceSiteHarvestSceneSupport {
     /** Validation overload for the scene-state constructor, before a complete world state exists. */
     public static boolean isTerminalReceiptRelease(FrontierBootstrap bootstrap, ResourceSiteState resourceSites,
                                                    ResourceSiteHarvestSceneCause cause) {
-        return resourceSites.sites().values().stream().map(ResourceSiteLifecycle::activeWork).flatMap(Optional::stream)
-                .filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
-                .noneMatch(job -> job.id().equals(cause.jobId()))
+        ResourceSiteLifecycle lifecycle = resourceSites.sites().get(cause.siteId());
+        return lifecycle != null && lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
+                .map(ResourceSiteHarvestJob.class::cast).filter(job -> job.id().equals(cause.jobId())).isEmpty()
                 && terminalReceiptSite(bootstrap, resourceSites, cause) != null;
     }
 
     private static Optional<ResourceSiteHarvestJob> activeJob(FrontierWorldState state, ResourceSiteHarvestSceneCause cause) {
-        return state.resourceSites().sites().values().stream().map(ResourceSiteLifecycle::activeWork).flatMap(Optional::stream)
-                .filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
-                .filter(job -> job.id().equals(cause.jobId())).findFirst();
+        ResourceSiteLifecycle lifecycle = state.resourceSites().sites().get(cause.siteId());
+        return lifecycle == null ? Optional.empty() : lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
+                .map(ResourceSiteHarvestJob.class::cast)
+                .filter(job -> job.id().equals(cause.jobId()) && job.siteId().equals(cause.siteId()));
     }
 
     public static SubjectId owner(FrontierWorldState state, ResourceSiteHarvestSceneCause cause) {
@@ -92,7 +102,7 @@ public final class FrontierResourceSiteHarvestSceneSupport {
     public static ResourceSite site(FrontierWorldState state, ResourceSiteHarvestSceneCause cause) {
         ResourceSiteHarvestJob job = activeJob(state, cause).orElse(null);
         ResourceSite site = job == null ? terminalReceiptSite(state.bootstrap(), state.resourceSites(), cause)
-                : FrontierResourceSitePlan.compile(state.bootstrap()).get(job.siteId());
+                : state.resourceSite(job.siteId());
         if (site == null) throw new IllegalArgumentException("resource-site harvest scene has an unknown field");
         return site;
     }
@@ -105,70 +115,76 @@ public final class FrontierResourceSiteHarvestSceneSupport {
      */
     static ResourceSite terminalReceiptSite(FrontierBootstrap bootstrap, ResourceSiteState resourceSites,
                                                     ResourceSiteHarvestSceneCause cause) {
-        return resourceSites.sites().values().stream().filter(lifecycle ->
-                        (lifecycle.phase() == ResourceSitePhase.GROWING || lifecycle.phase() == ResourceSitePhase.READY
-                                || lifecycle.phase() == ResourceSitePhase.CONFLICT)
-                        && lifecycle.activeWork().isEmpty() && lifecycle.growthEpoch() > 0L)
-                .filter(lifecycle -> lifecycle.harvestLineage().filter(lineage ->
-                        lineage.predecessorJobId().equals(cause.jobId())
-                                && lineage.completedGrowthEpoch() == lifecycle.growthEpoch() - 1L).isPresent())
-                .map(ResourceSiteLifecycle::siteId).map(FrontierResourceSitePlan.compile(bootstrap)::get)
-                .filter(java.util.Objects::nonNull).reduce((first, second) -> {
-                    throw new IllegalArgumentException("resource-site terminal receipt is ambiguous");
-                }).orElse(null);
+        ResourceSiteLifecycle lifecycle = resourceSites.sites().get(cause.siteId());
+        if (lifecycle == null || (lifecycle.phase() != ResourceSitePhase.GROWING
+                && lifecycle.phase() != ResourceSitePhase.READY && lifecycle.phase() != ResourceSitePhase.CONFLICT)
+                || lifecycle.activeWork().isPresent() || lifecycle.growthEpoch() <= 0L
+                || lifecycle.harvestLineage().filter(lineage -> lineage.predecessorJobId().equals(cause.jobId())
+                        && lineage.completedGrowthEpoch() == lifecycle.growthEpoch() - 1L).isEmpty()) return null;
+        return resourceSites.descriptor(bootstrap, cause.siteId());
     }
 
     /**
-     * Requires the sole HOT lease whose recovery body is the job's current retained cursor.
+     * Requires the sole HOT lease whose recovery body is the canonical actor's retained body.
      * A different harvest lease, a second member or merely a similarly named HOT scene is not
      * evidence for this worker's checkpoint.
      */
     public static SceneLease requireHotLease(FrontierWorldState state, ResourceSiteHarvestJob job, SceneLeaseId leaseId) {
         SceneLease lease = state.sceneLeases().get(leaseId);
         if (lease == null || lease.status() != SceneLeaseStatus.HOT || !FrontierSceneBehaviors.isResourceSiteHarvest(lease)
+                || !FrontierSceneBehaviors.resourceSiteHarvest(lease).siteId().equals(job.siteId())
                 || !FrontierSceneBehaviors.resourceSiteHarvest(lease).jobId().equals(job.id())
                 || lease.members().size() != 1 || !lease.members().getFirst().actorId().equals(job.workerId())) {
             throw new IllegalArgumentException("resource-site HOT checkpoint has no matching exact farmer lease");
         }
-        BodyPosition retained = job.traversal().linearCorridorSurfaces().get(job.traversalCursor()).standingBody();
-        if (!retained.equals(lease.memberPosition(job.workerId()))) {
-            throw new IllegalArgumentException("resource-site HOT lease recovery body diverges from its retained cursor");
+        ActorLocation actor = state.actorLocations().get(job.workerId());
+        if (actor == null || !actor.body().equals(lease.memberPosition(job.workerId()))) {
+            throw new IllegalArgumentException("resource-site HOT lease recovery body diverges from its canonical worker");
         }
         return lease;
     }
 
-    /**
-     * Atomically installs one observed HOT step of this exact harvest job.  The process cursor,
-     * lease recovery body and canonical actor body all move together or none does.
-     */
-    public static FrontierWorldState advanceWorker(FrontierWorldState state, ResourceSiteLifecycle lifecycle,
-                                                   ResourceSiteHarvestJob current, ResourceSiteHarvestJob replacement,
-                                                   SceneLeaseId leaseId, BodyPosition observedWorker) {
-        java.util.Objects.requireNonNull(lifecycle, "resource-site harvest lifecycle");
-        java.util.Objects.requireNonNull(current, "current resource-site harvest job");
-        java.util.Objects.requireNonNull(replacement, "replacement resource-site harvest job");
-        java.util.Objects.requireNonNull(observedWorker, "observed resource-site harvest worker");
-        if (!replacement.id().equals(current.id()) || !replacement.workerId().equals(current.workerId())
-                || replacement.traversalCursor() != current.traversalCursor() + 1
-                || !replacement.traversal().equals(current.traversal()) || !replacement.progress().equals(current.progress())) {
-            throw new IllegalArgumentException("resource-site HOT checkpoint may advance only one retained job cursor");
-        }
-        SceneLease lease = requireHotLease(state, current, leaseId);
-        BodyPosition currentBody = current.traversal().linearCorridorSurfaces().get(current.traversalCursor()).standingBody();
-        BodyPosition expectedNext = replacement.traversal().linearCorridorSurfaces().get(replacement.traversalCursor()).standingBody();
-        ActorLocation actor = state.actorLocations().get(current.workerId());
-        if (actor == null || !actor.body().equals(currentBody) || !lease.memberPosition(current.workerId()).equals(currentBody)
-                || !observedWorker.equals(expectedNext)) {
-            throw new IllegalArgumentException("resource-site HOT checkpoint body does not match its exact retained edge");
-        }
+    /** Atomically retains one observed semantic arrival, actor body and HOT recovery body. */
+    public static FrontierWorldState arriveGoal(FrontierWorldState state, ResourceSiteLifecycle lifecycle,
+                                                 ResourceSiteHarvestJob job, ResourceSiteHarvestGoal goal,
+                                                 SceneLeaseId leaseId, BodyPosition observedWorker) {
+        java.util.Objects.requireNonNull(observedWorker, "observed field goal body");
+        if (!goal.jobId().equals(job.id()) || !goal.siteId().equals(job.siteId())
+                || !goal.workerId().equals(job.workerId())
+                || goal.legalStations().stream().noneMatch(station -> station.standingBody().equals(observedWorker)))
+            throw new IllegalArgumentException("field HOT arrival is not at a declared semantic station");
+        SceneLease lease = requireHotLease(state, job, leaseId);
+        ActorLocation actor = state.actorLocations().get(job.workerId());
+        if (actor == null || !actor.body().equals(lease.memberPosition(job.workerId())))
+            throw new IllegalArgumentException("field HOT arrival has no retained worker body");
+        if (job.arriveAtSemanticGoal(goal).equals(job) && actor.body().equals(observedWorker))
+            throw new IllegalArgumentException("field HOT goal arrival is already retained");
+        ResourceSiteLifecycle arrived = lifecycle.arriveHarvestGoal(job, goal);
         java.util.Map<SubjectId, ActorLocation> actors = new java.util.LinkedHashMap<>(state.actorLocations());
-        actors.put(current.workerId(), actor.withBody(observedWorker));
+        actors.put(job.workerId(), actor.withBody(observedWorker));
         java.util.Map<SceneLeaseId, SceneLease> leases = new java.util.LinkedHashMap<>(state.sceneLeases());
-        leases.put(leaseId, lease.withMemberPositions(Map.of(current.workerId(), observedWorker)));
-        return state.withChanges(FrontierWorldStateUpdate.begin()
-                .actorLocations(actors)
-                .resourceSites(state.resourceSites().replace(lifecycle.advanceHarvestTraversal(current, replacement.traversalCursor())))
-                .sceneLeases(leases));
+        leases.put(leaseId, lease.withMemberPositions(Map.of(job.workerId(), observedWorker)));
+        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors)
+                .resourceSites(state.resourceSites().replace(arrived)).sceneLeases(leases));
+    }
+
+    /** Retains an actual support at an interrupted HOT goal without advancing CellId work. */
+    public static FrontierWorldState observeTransit(FrontierWorldState state, ResourceSiteHarvestJob job,
+                                                     SceneLeaseId leaseId, BodyPosition observedWorker) {
+        SceneLease lease = requireHotLease(state, job, leaseId);
+        ActorLocation actor = state.actorLocations().get(job.workerId());
+        if (actor == null || actor.body().equals(observedWorker))
+            throw new IllegalArgumentException("interrupted field worker has no new observed support");
+        FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), observedWorker.supportingSurface().support());
+        long distance = Math.abs((long) actor.body().x() - observedWorker.x())
+                + Math.abs((long) actor.body().y() - observedWorker.y())
+                + Math.abs((long) actor.body().z() - observedWorker.z());
+        if (distance > 54L) throw new IllegalArgumentException("interrupted field worker moved beyond one bounded HOT goal");
+        java.util.Map<SubjectId, ActorLocation> actors = new java.util.LinkedHashMap<>(state.actorLocations());
+        actors.put(job.workerId(), actor.withBody(observedWorker));
+        java.util.Map<SceneLeaseId, SceneLease> leases = new java.util.LinkedHashMap<>(state.sceneLeases());
+        leases.put(leaseId, lease.withMemberPositions(Map.of(job.workerId(), observedWorker)));
+        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors).sceneLeases(leases));
     }
 
     public static void validatePrepared(FrontierWorldState state, SceneLease lease) {
@@ -182,12 +198,13 @@ public final class FrontierResourceSiteHarvestSceneSupport {
         }
     }
 
-    public static boolean hasNonClosedScene(FrontierWorldState state, SubjectId jobId) {
+    public static boolean hasNonClosedScene(FrontierWorldState state, ResourceSiteHarvestJob job) {
         // A retained conflict still owns this farmer until its explicit recovery path closes
         // it; do not create a second exact-worker lease while the first one remains visible.
         return state.sceneLeases().values().stream().filter(lease -> lease.status() != SceneLeaseStatus.CLOSED)
                 .filter(FrontierSceneBehaviors::isResourceSiteHarvest)
-                .anyMatch(lease -> FrontierSceneBehaviors.resourceSiteHarvest(lease).jobId().equals(jobId));
+                .anyMatch(lease -> FrontierSceneBehaviors.resourceSiteHarvest(lease).siteId().equals(job.siteId())
+                        && FrontierSceneBehaviors.resourceSiteHarvest(lease).jobId().equals(job.id()));
     }
 
     public record Candidate(SubjectId jobId, SubjectId siteId, SubjectId workerId, int cropSlotIndex, BlockPosition cropSlot,

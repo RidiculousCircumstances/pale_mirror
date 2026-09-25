@@ -40,6 +40,18 @@ final class FrontierV3ObjectBoardLedger extends SavedData {
         claims.put(owner, new Claim(prior.owner(), prior.position(), prior.uuid(), true)); setDirty();
     }
 
+    /** Called only after observing the exact retained display at its claimed position. */
+    void observeExactReturn(String owner, long position, String uuid) {
+        Claim prior = claims.get(owner);
+        if (prior == null || prior.position() != position || !prior.uuid().equals(uuid)) {
+            throw new IllegalStateException("returned board does not match retained custody");
+        }
+        if (prior.conflicted()) {
+            claims.put(owner, new Claim(prior.owner(), prior.position(), prior.uuid(), false));
+            setDirty();
+        }
+    }
+
     static FrontierV3ObjectBoardLedger load(CompoundTag tag, HolderLookup.Provider registries) {
         if (tag.getInt("format") != FORMAT) throw new IllegalStateException("incompatible v3 object board ledger");
         ListTag values = tag.getList("claims", Tag.TAG_COMPOUND);

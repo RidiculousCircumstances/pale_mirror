@@ -39,6 +39,26 @@ class FrontierProcessSceneSdkTest {
     }
 
     @Test
+    void newMovementGoalBlockCannotBeClearedByTheOldRoutePlanCommand() {
+        HarvestDescriptor descriptor = new HarvestDescriptor();
+        EngineContext engine = descriptor.acquireHot(descriptor.initial()).engine();
+        ResourceSiteHarvestJob job = harvest(engine, new SubjectId("site:1-wheat-field"));
+        SceneLease lease = activeHarvestLease(state(engine), job);
+        ScheduledAction action = scheduled(engine, ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, job.siteId());
+        assertRejectedBound(engine, new ResourceSiteHarvestHotTraversalAdvanced(job.id(), lease.id(),
+                job.workerId(), state(engine).actorLocations().get(job.workerId()).body(), 1), action);
+        ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state(engine), job);
+        var block = new ResourceSiteHarvestNavigationBlock(goal.representative(),
+                goal.layoutRevision(), ResourceSiteHarvestNavigationBlock.Reason.PATH_UNAVAILABLE);
+        engine = submitBound(engine, new ResourceSiteHarvestRouteBlocked(job.siteId(), job.id(),
+                job.workerId(), block, lease.id(), action.id(), action.dueAt().ticks()), action);
+        assertRejectedBound(engine, new ResourceSiteHarvestRouteCleared(job.siteId(), job.id(),
+                job.workerId(), block, lease.id(), action.id(), action.dueAt().ticks()), action);
+        assertEquals(Optional.of(block), harvest(engine, job.siteId()).navigationBlock());
+        assertEquals(EngineStatus.Kind.ACTIVE, engine.engine().status().kind());
+    }
+
+    @Test
     void existingExactTransitConformsThroughTheSameSdkWithoutBecomingAnEnforcedFamily() {
         FrontierProcessSceneSdk.Descriptor<TransitContext> descriptor = new TransitDescriptor();
         FrontierProcessSceneSdk.requireDistinctFamilies(List.of(new HarvestDescriptor(), descriptor));
@@ -115,7 +135,8 @@ class FrontierProcessSceneSdkTest {
             positions.put(actor, new BodyPosition(index * 16, 65, 0));
         }
         return SceneLease.forCause(new SceneLeaseId("lease:f0v-sdk-budget-" + count), world,
-                new ResourceSiteHarvestSceneCause(new SubjectId("job:site-harvest-f0v-sdk-budget")), new BlockPosition(0, 64, 0), new SimInstant(1L), 1L,
+                new ResourceSiteHarvestSceneCause(new SubjectId("site:f0v-sdk-budget"),
+                        new SubjectId("job:site-harvest-f0v-sdk-budget")), new BlockPosition(0, 64, 0), new SimInstant(1L), 1L,
                 SceneLeaseStatus.PREPARED, members, positions, Set.of(), Optional.empty());
     }
 
@@ -235,7 +256,7 @@ class FrontierProcessSceneSdkTest {
                     .filter(value -> value.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE).findFirst().orElseThrow();
             EngineContext engine = advance(launch(prepared, List.of(ResourceSiteHarvestProcess.start(task, 22_100L))), new SimInstant(22_100L), 8);
             ResourceSiteHarvestJob job = FrontierProcessSceneSdkTest.harvest(engine, site);
-            // F0.1 owns only traversal.  The real physical-command planner must reject both
+            // Travel alone cannot admit physical crop/output effects. The real planner must reject both
             // effect-bearing transitions before either can mutate the durable intent.
             assertRejected(engine, new PhysicalIntentTransition(job.intentId(), PhysicalIntentStatus.RUNNING, Optional.empty()));
             ExactItemStack output = new ExactItemStack(job.outputItemId(), new SubjectId("settlement:1"), "minecraft:wheat", 64, job.outputSlot());
@@ -245,67 +266,77 @@ class FrontierProcessSceneSdkTest {
             assertEquals(PhysicalIntentStatus.PREPARED, state(engine).physicalIntents().get(job.intentId()).status());
             assertEquals(EngineStatus.Kind.ACTIVE, engine.engine().status().kind(),
                     "closed F0.2 commands must reject locally without quarantining the active engine");
-            ScheduledAction retained = scheduled(engine, ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, job.id());
-            int cursor = job.traversalCursor();
+            ScheduledAction retained = scheduled(engine, ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, job.siteId());
+            BodyPosition body = state(engine).actorLocations().get(job.workerId()).body();
             engine = advance(engine, retained.dueAt(), 8);
             assertEquals(EngineStatus.Kind.ACTIVE, engine.engine().status().kind(),
                     "the same engine must remain available for an independent valid COLD command");
-            assertEquals(cursor + 1, FrontierProcessSceneSdkTest.harvest(engine, site).traversalCursor(),
-                    "the valid COLD edge must follow local rejection without recovery or a fork");
+            org.junit.jupiter.api.Assertions.assertNotEquals(body,
+                    state(engine).actorLocations().get(job.workerId()).body(),
+                    "the same farmer must take a real COLD goal step after local rejection");
+            assertEquals(job.progress(), FrontierProcessSceneSdkTest.harvest(engine, site).progress(),
+                    "one COLD travel step is not a crop outcome");
             return new HarvestContext(engine, site);
         }
         @Override public HarvestContext coldAdvance(HarvestContext context) {
-            ScheduledAction action = scheduled(context.engine(), ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, harvest(context).id());
+            ScheduledAction action = scheduled(context.engine(), ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, harvest(context).siteId());
             return context.with(advance(fork(context.engine()), action.dueAt(), 8));
         }
         @Override public HarvestContext acquireHot(HarvestContext context) {
             EngineContext engine = fork(context.engine()); ResourceSiteHarvestJob job = FrontierProcessSceneSdkTest.harvest(engine, context.site());
-            BodyPosition body = job.traversal().linearCorridorSurfaces().get(job.traversalCursor()).standingBody();
+            BodyPosition body = state(engine).actorLocations().get(job.workerId()).body();
             BlockPosition crop = FrontierResourceSitePlan.compile(state(engine).bootstrap()).get(context.site()).cropSlots().get(job.progress().nextCropSlotIndex());
             SceneLease lease = SceneLease.forCause(new SceneLeaseId("lease:f0v-sdk-harvest-" + revision(engine).value()), state(engine).bootstrap().worldId(),
-                    new ResourceSiteHarvestSceneCause(job.id()), crop, instant(engine), revision(engine).value(), SceneLeaseStatus.PREPARED,
+                    new ResourceSiteHarvestSceneCause(job.siteId(), job.id()), crop, instant(engine), revision(engine).value(), SceneLeaseStatus.PREPARED,
                     List.of(new SceneMember(job.workerId(), SceneLease.deterministicEntityId(state(engine).bootstrap().worldId(), job.workerId()))),
                     java.util.Map.of(job.workerId(), body), Set.of(job.workerId()), Optional.empty());
             engine = submitBound(engine, new ResourceSiteHarvestSceneLeasePrepared(lease),
-                    scheduled(engine, ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, job.id()));
+                    scheduled(engine, ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, job.siteId()));
             return context.with(submit(engine, new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT)));
         }
         @Override public HarvestContext hotCheckpoint(HarvestContext context) {
             EngineContext engine = fork(context.engine()); ResourceSiteHarvestJob job = FrontierProcessSceneSdkTest.harvest(engine, context.site());
             SceneLease lease = activeHarvestLease(state(engine), job);
-            return context.with(submitBound(engine, new ResourceSiteHarvestHotTraversalAdvanced(job.id(), lease.id(), job.workerId(),
-                    job.nextTraversalSurface().standingBody(), job.traversalCursor() + 1),
-                    scheduled(engine, ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, job.id())));
+            ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state(engine), job);
+            List<SurfaceAnchor> path = ResourceSiteHarvestKnownNavigation.path(state(engine), job);
+            return context.with(submitBound(engine, new ResourceSiteHarvestHotTransitObserved(job.id(), lease.id(), job.workerId(),
+                    goal.layoutRevision(), goal.nextWorkSlot(), goal.kind(), path.get(1).standingBody()),
+                    scheduled(engine, ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, job.siteId())));
         }
         @Override public HarvestContext releaseToCold(HarvestContext context) {
             EngineContext engine = fork(context.engine()); ResourceSiteHarvestJob job = FrontierProcessSceneSdkTest.harvest(engine, context.site()); SceneLease lease = activeHarvestLease(state(engine), job);
             engine = submit(engine, new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
             ActorLocation actor = state(engine).actorLocations().get(job.workerId());
             return context.with(submitBound(engine, new SceneLeaseReleased(lease.id(), List.of(new SceneMemberPosition(job.workerId(), actor.body(), actor.condition().health()))),
-                    scheduled(engine, ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, job.id())));
+                    scheduled(engine, ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, job.siteId())));
         }
         @Override public HarvestContext snapshotWalRecovery(HarvestContext context) { assertRecovery(context.engine()); return context; }
         @Override public FrontierProcessSceneSdk.SemanticCheckpoint checkpoint(HarvestContext context) {
             ResourceSiteHarvestJob job = harvest(context); SceneLease lease = activeOrClosedHarvestLease(state(context.engine()), job); boolean hot = lease != null && lease.status() == SceneLeaseStatus.HOT;
-            return new FrontierProcessSceneSdk.SemanticCheckpoint(family(), job.id().value(), job.workerId().value(), job.traversalCursor(), lease == null ? 0L : lease.revision(), hot,
+            BodyPosition body = state(context.engine()).actorLocations().get(job.workerId()).body();
+            return new FrontierProcessSceneSdk.SemanticCheckpoint(family(), job.id().value(), job.workerId().value(), job.progress().completedCropSlots(), lease == null ? 0L : lease.revision(), hot,
                     hot ? Set.of(job.workerId().value()) : Set.of(), schedules(context.engine()), job.intentId().value() + ":" + job.outputItemId().value(),
-                    job.id() + ":" + job.traversalCursor() + ":" + state(context.engine()).actorLocations().get(job.workerId()).body());
+                    job.id() + ":cell=" + job.progress().completedCropSlots() + ":body=" + body);
         }
         @Override public FrontierProcessSceneSdk.RejectedAttempt<HarvestContext> rejectStaleObservation(HarvestContext context) {
             ResourceSiteHarvestJob job = harvest(context); SceneLease lease = activeHarvestLease(state(context.engine()), job);
-            assertRejectedBound(context.engine(), new ResourceSiteHarvestHotTraversalAdvanced(job.id(), lease.id(), job.workerId(), state(context.engine()).actorLocations().get(job.workerId()).body(), job.traversalCursor()),
-                    scheduled(context.engine(), ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, job.id()));
+            ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state(context.engine()), job);
+            assertRejectedBound(context.engine(), new ResourceSiteHarvestHotTransitObserved(job.id(), lease.id(), job.workerId(),
+                            goal.layoutRevision(), goal.nextWorkSlot(), goal.kind(),
+                            state(context.engine()).actorLocations().get(job.workerId()).body()),
+                    scheduled(context.engine(), ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, job.siteId()));
             return rejected(context, "stale harvest checkpoint");
         }
         @Override public FrontierProcessSceneSdk.RejectedAttempt<HarvestContext> rejectSecondCursor(HarvestContext context) {
-            ResourceSiteHarvestJob job = harvest(context); SceneLease lease = activeHarvestLease(state(context.engine()), job); int skipped = job.traversalCursor() + 2;
-            if (skipped >= job.traversal().linearCorridorSurfaces().size()) skipped = 0;
-            assertRejectedBound(context.engine(), new ResourceSiteHarvestHotTraversalAdvanced(job.id(), lease.id(), job.workerId(), job.nextTraversalSurface().standingBody(), skipped),
-                    scheduled(context.engine(), ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, job.id()));
-            return rejected(context, "skipped harvest checkpoint");
+            ResourceSiteHarvestJob job = harvest(context); SceneLease lease = activeHarvestLease(state(context.engine()), job);
+            ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state(context.engine()), job);
+            assertRejectedBound(context.engine(), new ResourceSiteHarvestHotTransitObserved(job.id(), lease.id(), job.workerId(),
+                            goal.layoutRevision(), goal.nextWorkSlot(), goal.kind(), goal.representative().standingBody()),
+                    scheduled(context.engine(), ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, job.siteId()));
+            return rejected(context, "goal arrival cannot masquerade as an intermediate transit checkpoint");
         }
         @Override public FrontierProcessSceneSdk.RejectedAttempt<HarvestContext> rejectDuplicateSchedule(HarvestContext context) {
-            assertDuplicateSchedule(scheduled(context.engine(), ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, harvest(context).id())); return rejected(context, "duplicate harvest continuation");
+            assertDuplicateSchedule(scheduled(context.engine(), ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, harvest(context).siteId())); return rejected(context, "duplicate harvest continuation");
         }
         @Override public FrontierProcessSceneSdk.RejectedAttempt<HarvestContext> rejectUnregisteredPayload(HarvestContext context) {
             assertRejected(context.engine(), new UnregisteredF0vPayload());
@@ -314,10 +345,10 @@ class FrontierProcessSceneSdkTest {
         @Override public FrontierProcessSceneSdk.RejectedAttempt<HarvestContext> rejectMissingCodec(HarvestContext context) { assertMissingCodec(); return rejected(context, "missing harvest codec"); }
         @Override public FrontierProcessSceneSdk.RejectedAttempt<HarvestContext> rejectConcurrentAuthority(HarvestContext context) {
             ResourceSiteHarvestJob job = harvest(context); SceneLease current = activeHarvestLease(state(context.engine()), job);
-            SceneLease duplicate = SceneLease.forCause(new SceneLeaseId("lease:f0v-sdk-harvest-duplicate"), state(context.engine()).bootstrap().worldId(), new ResourceSiteHarvestSceneCause(job.id()),
+            SceneLease duplicate = SceneLease.forCause(new SceneLeaseId("lease:f0v-sdk-harvest-duplicate"), state(context.engine()).bootstrap().worldId(), new ResourceSiteHarvestSceneCause(job.siteId(), job.id()),
                     current.handoffPosition(), instant(context.engine()), revision(context.engine()).value(), SceneLeaseStatus.PREPARED, current.members(), current.memberPositions(), current.ambientHandoffActorIds(), Optional.empty());
             assertRejectedBound(context.engine(), new ResourceSiteHarvestSceneLeasePrepared(duplicate),
-                    scheduled(context.engine(), ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, job.id())); return rejected(context, "concurrent harvest lease");
+                    scheduled(context.engine(), ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, job.siteId())); return rejected(context, "concurrent harvest lease");
         }
         @Override public FrontierProcessSceneSdk.ProcessOwnedIntervention<HarvestContext> interventionOwnedByProcess(HarvestContext context) {
             EngineContext engine = fork(context.engine()); ResourceSiteHarvestJob job = FrontierProcessSceneSdkTest.harvest(engine, context.site()); SceneLease lease = activeHarvestLease(state(engine), job);

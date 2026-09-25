@@ -50,10 +50,11 @@ public record ResourceSiteHarvestCausality(String coldScheduleId, long coldDueAt
         Objects.requireNonNull(state, "harvest causality state");
         Objects.requireNonNull(job, "harvest causality job");
         Objects.requireNonNull(action, "harvest causality action");
-        if (!action.subject().equals(job.id())) throw new IllegalArgumentException("harvest causality has a foreign COLD action");
+        if (!action.subject().equals(job.siteId())) throw new IllegalArgumentException("harvest causality has a foreign COLD site owner");
         List<SceneLeaseId> hotLeases = state.sceneLeases().values().stream()
                 .filter(FrontierSceneBehaviors::isResourceSiteHarvest)
-                .filter(lease -> FrontierSceneBehaviors.resourceSiteHarvest(lease).jobId().equals(job.id()))
+                .filter(lease -> FrontierSceneBehaviors.resourceSiteHarvest(lease).jobId().equals(job.id())
+                        && FrontierSceneBehaviors.resourceSiteHarvest(lease).siteId().equals(job.siteId()))
                 .map(SceneLease::id).toList();
         return new ResourceSiteHarvestCausality(action.id().value(), action.dueAt().ticks(), hotLeases, job.intentId(), expected(job),
                 receiptPending ? "not_observed" : "not_applicable_intent_composed",

@@ -113,19 +113,15 @@ final class FrontierV3RoutePatrolSceneExecutor {
                 submit(runtime, "route-patrol-hot", lease.id().value(), new SceneLeaseTransition(lease.id(), SceneLeaseStatus.HOT)));
     }
 
-    /**
-     * A patrol's retained formation is a reversible COLD checkpoint.  A graceful restart starts
-     * before the ordinary client can reconnect, so retain UNKNOWN for one bounded demand grace;
-     * only then revoke the old pose.  Reclaim still accepts only the already loaded exact bodies.
-     */
+    /** A saved patrol body may retain injury; absent demand cannot discard that evidence. */
     private static void recover(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                 FrontierWorldState state, SceneLease lease) {
         if (!FrontierV3SceneExecutor.demandExists(level, lease.handoffPosition())) {
             if (!FrontierV3RestartDemandGrace.expired(runtime, lease.id(), level.getGameTime())) return;
-            FrontierV3DiagnosticTrace.recordScene(level.getServer(), "route_patrol_recovery_revoked", lease,
-                    submit(runtime, "route-patrol-recovery-revoked", lease.id().value(), new SceneLeaseRecoveryRevoked(lease.id())));
+            FrontierV3SceneStoredRecovery.progress(level, runtime, state, lease);
             return;
         }
+        FrontierV3SceneStoredRecovery.forget(runtime, lease.id());
         FrontierV3SceneExecutor.reclaim(level, runtime, state, lease);
     }
 

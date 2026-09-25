@@ -77,8 +77,16 @@ final class FrontierWorldPhysicalObservationValidation {
                 RouteMaintenanceStateSupport.validateMaterialLoadingReceiptForRecovery(inventory, maintenances, intents, observations, intent, loading);
             } else if (observation instanceof ResourceSiteHarvestObservation harvest) {
                 ResourceSitePhysicalIntentStateSupport.validateHarvestReceipt(bootstrap, intent, harvest);
+            } else if (observation instanceof ResourceSiteHarvestDeliveryObservation harvest) {
+                ResourceSitePhysicalIntentStateSupport.validateHarvestDeliveryReceipt(bootstrap, intent, harvest);
+            } else if (observation instanceof ResourceSiteHarvestDeferredObservation harvest) {
+                ResourceSitePhysicalIntentStateSupport.validateDeferredHarvestReceipt(bootstrap, intent, harvest);
             } else if (observation instanceof ResourceSitePreparationObservation preparation) {
                 ResourceSitePhysicalIntentStateSupport.validateReceipt(intent, preparation);
+                ResourceSite initial = FrontierResourceSitePlan.compile(bootstrap).get(preparation.siteId());
+                if (initial == null || preparation.preparedSoilSlots() != initial.soilSlots().size()
+                        || preparation.preparedCropSlots() != initial.cropSlots().size())
+                    throw new IllegalArgumentException("retained field preparation receipt has a foreign bootstrap layout");
             } else if (observation instanceof ProductionTransformationObservation production) {
                 ProductionTransformationStateSupport.validateReceipt(intent, production);
             } else if (observation instanceof FungibleProductionObservation production) {

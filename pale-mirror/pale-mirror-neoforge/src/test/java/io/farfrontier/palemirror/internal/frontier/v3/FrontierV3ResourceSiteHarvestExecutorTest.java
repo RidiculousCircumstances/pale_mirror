@@ -88,10 +88,11 @@ class FrontierV3ResourceSiteHarvestExecutorTest {
         SubjectId site = new SubjectId("site:" + settlement + "-wheat-field");
         SubjectId job = new SubjectId("job:site-harvest-" + settlement + "-wheat-field-1");
         SubjectId worker = new SubjectId("resident:" + settlement + "-1");
-        SubjectId output = new SubjectId("item:site-harvest-" + settlement + "-wheat-field-1-wheat");
+        SubjectId actorAccount = new SubjectId("custody:field-actor-site-harvest-" + settlement + "-wheat-field-1");
+        SubjectId depotAccount = new SubjectId("custody:container-" + settlement + "-depot");
         return new PhysicalIntent(new PhysicalIntentId("intent:site-harvest-" + settlement + "-wheat-field-1"),
                 PhysicalIntentKind.RESOURCE_SITE_HARVEST, PhysicalIntentStatus.PREPARED, site,
-                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.siteHarvest(site, job, worker, output), new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.siteHarvest(site, job, worker, actorAccount, depotAccount), new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0,
                 PhysicalPostcondition.RESOURCE_SITE_HARVESTED_OBSERVED,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.RESOURCE_SITE_HARVEST);
     }

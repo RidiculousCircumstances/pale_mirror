@@ -83,10 +83,19 @@ public final class FrontierWorldProcessCatalog {
             "frontier.resource_site_prepared", "frontier.resource_site_harvest_started",
             "frontier.resource_site_harvest_crop_prepared",
             "frontier.resource_site_harvest_progressed",
-            "frontier.resource_site_harvest_cold_traversal_advanced", "frontier.resource_site_harvest_hot_traversal_advanced",
+            "frontier.resource_site_harvest_hand_projected",
+            "frontier.resource_site_harvest_hand_release",
+            "frontier.resource_site_harvest_cold_traversal_advanced", "frontier.resource_site_harvest_cold_goal_advanced", "frontier.resource_site_harvest_cold_goal_held", "frontier.resource_site_harvest_returned",
+            "frontier.resource_site_harvest_segment_renewed", "frontier.resource_site_harvest_blocked_cell_skipped",
+            "frontier.resource_site_harvest_route_blocked", "frontier.resource_site_harvest_route_cleared", "frontier.resource_site_harvest_hot_traversal_advanced", "frontier.resource_site_harvest_hot_goal_arrived", "frontier.resource_site_harvest_hot_transit_observed",
+            "frontier.resource_site_harvest_batch_prepared", "frontier.resource_site_harvest_batch_delivered",
             "frontier.resource_site_harvest_scene_lease_prepared",
             "frontier.resource_site_harvest_scene_lease_handoff",
-            "frontier.resource_site_conflict_observed");
+            "frontier.resource_site_conflict_observed", "frontier.resource_field_cell_observed",
+            "frontier.resource_field_world_change_held", "frontier.resource_field_world_change_acknowledged",
+            "frontier.resource_field_foreign_change_held", "frontier.resource_field_foreign_cell_observed",
+            "frontier.resource_field_foreign_change_acknowledged",
+            "frontier.resource_field_player_break_prepared");
     private static final Set<String> HIVE = types(
             "frontier.infection_changed", "frontier.hive_growth_started", "frontier.hive_growth_biomass_consumed",
             "frontier.hive_growth_completed", "frontier.hive_growth_blocked", "frontier.hive_nutrient_transfer_started",
@@ -163,9 +172,25 @@ public final class FrontierWorldProcessCatalog {
             Map.entry("frontier.settlement.provision.progress", (state, action, autonomous) -> SettlementProvisionProcess.planProgress(state, action)),
             Map.entry("frontier.company.foundation.review", (state, action, autonomous) -> CompanyFoundationProcess.plan(state, action)),
             Map.entry("frontier.market.clear", (state, action, autonomous) -> MarketClearingProcess.plan(state, action)),
-            Map.entry("frontier.resource_site.growth", (state, action, autonomous) -> ResourceSiteProcess.planGrowth(state, action)),
+            Map.entry("frontier.resource_site.growth", new ScheduledPlanner() {
+                @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, boolean autonomous) {
+                    return ResourceSiteProcess.planGrowth(state, action);
+                }
+                @Override public boolean held(FrontierWorldState state, ScheduledAction action) {
+                    return state.resourceSites().hasPendingWorldChange(action.subject());
+                }
+            }),
             Map.entry("frontier.resource_site.prepare", (state, action, autonomous) -> ResourceSiteProcess.planPreparation(state, action)),
-            Map.entry("frontier.resource_site.harvest", (state, action, autonomous) -> ResourceSiteHarvestProcess.plan(state, action)),
+            Map.entry("frontier.resource_site.harvest", new ScheduledPlanner() {
+                @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, boolean autonomous) {
+                    return ResourceSiteHarvestProcess.plan(state, action);
+                }
+                @Override public boolean held(FrontierWorldState state, ScheduledAction action) {
+                    var task = state.strategicPlans().tasks().get(action.subject());
+                    return task != null && task.resourceSiteTarget().isPresent()
+                            && state.resourceSites().hasPendingWorldChange(task.resourceSiteTarget().orElseThrow());
+                }
+            }),
             Map.entry("frontier.resource_site.harvest.cold_progress", new ScheduledPlanner() {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, boolean autonomous) {
                     return ResourceSiteHarvestProcess.planColdProgress(state, action);
@@ -355,9 +380,19 @@ public final class FrontierWorldProcessCatalog {
             "frontier.production_work_scene_lease_prepared", "frontier.production_work_scene_lease_handoff"); }
     private static Set<String> resourceCommands() { return types(
             "frontier.resource_site_conflict_observed",
+            "frontier.resource_field_cell_observed",
+            "frontier.resource_field_world_change_held", "frontier.resource_field_world_change_acknowledged",
+            "frontier.resource_field_foreign_change_held", "frontier.resource_field_foreign_cell_observed",
+            "frontier.resource_field_foreign_change_acknowledged",
+            "frontier.resource_field_player_break_prepared",
             "frontier.resource_site_harvest_crop_prepared",
             "frontier.resource_site_harvest_progressed",
-            "frontier.resource_site_harvest_hot_traversal_advanced",
+            "frontier.resource_site_harvest_hand_projected",
+            "frontier.resource_site_harvest_hand_release",
+            "frontier.resource_site_harvest_segment_renewed", "frontier.resource_site_harvest_blocked_cell_skipped",
+            "frontier.resource_site_harvest_route_blocked", "frontier.resource_site_harvest_route_cleared",
+            "frontier.resource_site_harvest_batch_prepared", "frontier.resource_site_harvest_batch_delivered",
+            "frontier.resource_site_harvest_hot_traversal_advanced", "frontier.resource_site_harvest_hot_goal_arrived", "frontier.resource_site_harvest_hot_transit_observed",
             "frontier.resource_site_harvest_scene_lease_prepared",
             "frontier.resource_site_harvest_scene_lease_handoff"); }
     private static Set<String> hiveCommands() { return types("frontier.hot_scout_operation_observed", "frontier.scout_patrol_advanced", "frontier.scout_patrol_lease_recovered",
@@ -419,6 +454,7 @@ public final class FrontierWorldProcessCatalog {
         return switch (processId) {
             case "kernel-schedule" -> KERNEL;
             case "physical-observation" -> types(
+                    "frontier.physical_custody_checkpointed", "frontier.physical_custody_released",
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
                     "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
                     "frontier.resource_deposited", "frontier.fungible_stack_layout_observed", "frontier.fungible_resource_handoff_observed",
@@ -506,10 +542,19 @@ public final class FrontierWorldProcessCatalog {
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
                     "frontier.resource_site_growth_advanced", "frontier.resource_site_preparation_started", "frontier.resource_site_prepared",
                     "frontier.resource_site_harvest_started", "frontier.resource_site_harvest_crop_prepared",
-                    "frontier.resource_site_harvest_progressed", "frontier.resource_site_harvest_cold_traversal_advanced",
-                    "frontier.resource_site_harvest_hot_traversal_advanced", "frontier.resource_site_harvest_scene_lease_prepared",
+                    "frontier.resource_site_harvest_progressed", "frontier.resource_site_harvest_cold_traversal_advanced", "frontier.resource_site_harvest_cold_goal_advanced", "frontier.resource_site_harvest_cold_goal_held", "frontier.resource_site_harvest_returned",
+                    "frontier.resource_site_harvest_segment_renewed", "frontier.resource_site_harvest_blocked_cell_skipped",
+                    "frontier.resource_site_harvest_route_blocked", "frontier.resource_site_harvest_route_cleared",
+                    "frontier.resource_site_harvest_batch_prepared", "frontier.resource_site_harvest_batch_delivered",
+                    "frontier.resource_site_harvest_hand_projected",
+                    "frontier.resource_site_harvest_hand_release",
+                    "frontier.resource_site_harvest_hot_traversal_advanced", "frontier.resource_site_harvest_hot_goal_arrived", "frontier.resource_site_harvest_hot_transit_observed", "frontier.resource_site_harvest_scene_lease_prepared",
                     "frontier.resource_site_harvest_scene_lease_handoff",
-                    "frontier.resource_site_conflict_observed",
+                    "frontier.resource_site_conflict_observed", "frontier.resource_field_cell_observed",
+                    "frontier.resource_field_world_change_held", "frontier.resource_field_world_change_acknowledged",
+                    "frontier.resource_field_foreign_change_held", "frontier.resource_field_foreign_cell_observed",
+                    "frontier.resource_field_foreign_change_acknowledged",
+                    "frontier.resource_field_player_break_prepared",
                     "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
                     "frontier.resource_deposited", "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed",
                     "frontier.container_surface_transition", "frontier.cargo_carrier_released", "frontier.settlement_infection_observed", "frontier.strategic_objective_selected",

@@ -146,6 +146,9 @@ public final class FrontierWorldPhysicalObservationProcess {
     static FrontierWorldState reduceFungibleLayout(FrontierWorldState state, SubjectId subject, FungibleStackLayoutObserved observed) {
         FungibleResourceLedger ledger = state.inventory().fungibleResources(); CustodyAccount account = ledger.accounts().get(observed.accountId());
         if (account == null || !subject.equals(owner(state, account))) throw new IllegalArgumentException("fungible layout observation has no owning subject");
+        if (account.custody() instanceof ResourceCustody.Actor) {
+            throw new IllegalArgumentException("actor-hand layout requires its exact work/physical-effect owner");
+        }
         if (account.custody() instanceof ResourceCustody.Container container
                 && ReferenceContainerCustody.isReferenceContainer(state, container.containerId())) {
             PhysicalCustodyLease lease = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(container.containerId()));
@@ -171,6 +174,10 @@ public final class FrontierWorldPhysicalObservationProcess {
     static FrontierWorldState reduceFungibleHandoff(FrontierWorldState state, SubjectId subject, FungibleResourceHandoffObserved observed) {
         FungibleResourceLedger ledger = state.inventory().fungibleResources(); CustodyAccount source = ledger.accounts().get(observed.sourceAccountId());
         if (source == null || !subject.equals(owner(state, source))) throw new IllegalArgumentException("fungible handoff has no owning subject");
+        if (source.custody() instanceof ResourceCustody.Actor
+                || observed.destinationAccount().custody() instanceof ResourceCustody.Actor) {
+            throw new IllegalArgumentException("actor-hand transfer requires its exact work/physical-effect owner");
+        }
         if (!observed.claimQuantities().isEmpty() && observed.forfeitedClaimIds().isEmpty()) {
             throw new IllegalArgumentException("physical handoff cannot move a live claimed allocation without retiring its owner");
         }
@@ -198,11 +205,39 @@ public final class FrontierWorldPhysicalObservationProcess {
         if (account == null) return new CommandPlan.Rejected(new CommandRejection(RejectionCode.REJECTED_BY_POLICY,
                 "fungible binding release has an unknown custody account"));
         SubjectId owner = owner(state, account);
-        FrontierWorldState after;
-        try { after = reduceFungibleBindingRelease(state, owner, released); }
-        catch (IllegalArgumentException invalid) { return new CommandPlan.Rejected(new CommandRejection(RejectionCode.REJECTED_BY_POLICY, invalid.getMessage())); }
         var events = new ArrayList<ProposedEvent>();
-        events.add(new ProposedEvent(owner, released));
+        FrontierWorldState after;
+        try {
+            after = state;
+            PhysicalCustodyLease containerLease = null;
+            if (account.custody() instanceof ResourceCustody.Container container) {
+                containerLease = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(container.containerId()));
+                if (containerLease == null || !containerLease.objectId().equals(container.containerId())
+                        || !containerLease.providerId().equals(ReferenceContainerCustody.PROVIDER_ID)
+                        || containerLease.authorityEpoch() != released.authorityEpoch()) {
+                    throw new IllegalArgumentException("fungible container release requires its exact reference custody epoch");
+                }
+                if (containerLease.status() == PhysicalCustodyLeaseStatus.ACQUIRED) {
+                    var checkpoint = new PhysicalReplicaCustodyPayloads.CustodyCheckpointed(containerLease.scopeId(),
+                            containerLease.authorityEpoch(), containerLease.expectedCanonicalRevision(), containerLease.expectedReplicaRevision());
+                    after = after.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(after.replicaCustody().checkpoint(
+                            checkpoint.scopeId(), checkpoint.expectedEpoch(), checkpoint.expectedCanonicalRevision(), checkpoint.expectedReplicaRevision())));
+                    events.add(new ProposedEvent(checkpoint.scopeId(), checkpoint));
+                }
+            }
+            after = reduceFungibleBindingRelease(after, owner, released);
+            events.add(new ProposedEvent(owner, released));
+            if (containerLease != null) {
+                // One canonical transaction closes both layout and reference scope. Publishing
+                // between these facts strands COLD input behind a live scope if its chunk loads.
+                var closed = new PhysicalReplicaCustodyPayloads.CustodyReleased(containerLease.scopeId(),
+                        containerLease.authorityEpoch(), containerLease.expectedCanonicalRevision(), containerLease.expectedReplicaRevision());
+                after = ReferenceContainerCustody.release(after, closed);
+                events.add(new ProposedEvent(closed.scopeId(), closed));
+            }
+        } catch (IllegalArgumentException invalid) {
+            return new CommandPlan.Rejected(new CommandRejection(RejectionCode.REJECTED_BY_POLICY, invalid.getMessage()));
+        }
         events.addAll(ProductionProcess.resumeReleasedEffects(state, after, now));
         return new CommandPlan.Accepted(List.copyOf(events));
     }
@@ -210,6 +245,9 @@ public final class FrontierWorldPhysicalObservationProcess {
     static FrontierWorldState reduceFungibleBindingRelease(FrontierWorldState state, SubjectId subject, FungibleStackBindingsReleased released) {
         FungibleResourceLedger ledger = state.inventory().fungibleResources(); CustodyAccount account = ledger.accounts().get(released.accountId());
         if (account == null || !subject.equals(owner(state, account))) throw new IllegalArgumentException("fungible binding release has no owning subject");
+        if (account.custody() instanceof ResourceCustody.Actor) {
+            throw new IllegalArgumentException("actor-hand release requires its exact scene/work owner");
+        }
         return ProductionResourceCustody.release(state, released.accountId(), released.authorityEpoch());
     }
 

@@ -32,7 +32,7 @@ public final class FrontierV3ProductionTransformationGameTests {
         InventoryCustody.ContainerSlot slot = new InventoryCustody.ContainerSlot(container, 0);
         ExactItemStack input = new ExactItemStack(inputId, settlement, "minecraft:wheat", 64, slot);
         ExactItemStack output = new ExactItemStack(outputId, settlement, "minecraft:bread", 64, slot);
-        ProductionJob job = new ProductionJob(new SubjectId("job:production-game-test"), settlement, new SubjectId("structure:1-workshop"),
+        ProductionJob job = new ProductionJob(new SubjectId("job:production-game-test"), new SubjectId("task:production-game-test"), settlement, new SubjectId("structure:1-workshop"),
                 new SubjectId("resident:1-3"), inputId, outputId, "minecraft:bread", 64);
         ProductionTransformationStateSupport.Target target = new ProductionTransformationStateSupport.Target(job, input, output, slot,
                 new BlockPosition(chestPosition.getX(), chestPosition.getY(), chestPosition.getZ()));

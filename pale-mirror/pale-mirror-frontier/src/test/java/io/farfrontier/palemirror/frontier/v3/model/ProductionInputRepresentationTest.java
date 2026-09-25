@@ -33,7 +33,7 @@ class ProductionInputRepresentationTest {
     }
 
     private static void assertReceipt(ProductionInputHold hold, TerminalProductionReceipt.ResourceRepresentation expected) {
-        ProductionJob job = new ProductionJob(new SubjectId("job:test"), new SubjectId("settlement:test"),
+        ProductionJob job = new ProductionJob(new SubjectId("job:test"), new SubjectId("task:test"), new SubjectId("settlement:test"),
                 new SubjectId("facility:test"), new SubjectId("resident:test"), hold.itemId(), hold,
                 new SubjectId("output:test"), "minecraft:bread", 64);
         TerminalProductionReceipt receipt = TerminalProductionReceipt.of(job);

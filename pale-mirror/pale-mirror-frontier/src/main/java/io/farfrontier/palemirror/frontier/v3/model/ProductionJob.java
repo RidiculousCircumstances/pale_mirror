@@ -10,6 +10,7 @@ import java.util.Objects;
  */
 public record ProductionJob(
         SubjectId id,
+        SubjectId taskId,
         SubjectId settlementId,
         SubjectId facilityId,
         SubjectId workerId,
@@ -24,6 +25,7 @@ public record ProductionJob(
 ) {
     public ProductionJob {
         Objects.requireNonNull(id, "production job id");
+        Objects.requireNonNull(taskId, "production task id");
         Objects.requireNonNull(settlementId, "settlement id");
         Objects.requireNonNull(facilityId, "facility id");
         Objects.requireNonNull(workerId, "worker id");
@@ -31,11 +33,14 @@ public record ProductionJob(
         Objects.requireNonNull(inputHold, "production input hold");
         Objects.requireNonNull(outputItemId, "output item id");
         Objects.requireNonNull(workProgress, "production work progress"); workTraversal = Objects.requireNonNull(workTraversal, "production work traversal");
+        if (!taskId.value().startsWith("task:")) throw new IllegalArgumentException("production job needs its declared strategic task");
         if (!consumedItemId.equals(inputHold.itemId())) throw new IllegalArgumentException("production input hold must retain its exact item id");
         if (outputItemKind == null || !outputItemKind.matches("[a-z][a-z0-9_-]{0,31}:[a-z0-9][a-z0-9_./-]{0,127}")) {
             throw new IllegalArgumentException("production output kind must be namespace:path");
         }
         if (outputCount <= 0 || outputCount > 64) throw new IllegalArgumentException("production output count must be 1..64");
+        if ((inputHold instanceof ProductionInputHold.FungibleCold || inputHold instanceof ProductionInputHold.FungibleBound)
+                && outputCount != 64) throw new IllegalArgumentException("fungible bread job must match its 64-unit input allocation");
         if (!workTraversal.provenance().equals(facilityId) || workTraversal.edges().stream().anyMatch(edge -> edge.kind() != TraversalKind.PEDESTRIAN
                 || !edge.traversableBy(TraversalCapability.PEDESTRIAN)) || traversalCursor < 0
                 || traversalCursor >= workTraversal.linearCorridorSurfaces().size()) {
@@ -44,21 +49,29 @@ public record ProductionJob(
     }
 
     /** Compatibility fixture constructor: an existing inventory stack is a materialized hold. */
-    public ProductionJob(SubjectId id, SubjectId settlementId, SubjectId facilityId, SubjectId workerId, SubjectId consumedItemId,
+    public ProductionJob(SubjectId id, SubjectId taskId, SubjectId settlementId, SubjectId facilityId, SubjectId workerId, SubjectId consumedItemId,
                          SubjectId outputItemId, String outputItemKind, int outputCount) {
-        this(id, settlementId, facilityId, workerId, consumedItemId, new ProductionInputHold.Materialized(consumedItemId), outputItemId,
+        this(id, taskId, settlementId, facilityId, workerId, consumedItemId, new ProductionInputHold.Materialized(consumedItemId), outputItemId,
                 outputItemKind, outputCount, ProductionWorkProgress.notStarted(), fixtureTraversal(id, facilityId), 0);
     }
 
-    public ProductionJob(SubjectId id, SubjectId settlementId, SubjectId facilityId, SubjectId workerId, SubjectId consumedItemId,
+    public ProductionJob(SubjectId id, SubjectId taskId, SubjectId settlementId, SubjectId facilityId, SubjectId workerId, SubjectId consumedItemId,
                          ProductionInputHold inputHold, SubjectId outputItemId, String outputItemKind, int outputCount) {
-        this(id, settlementId, facilityId, workerId, consumedItemId, inputHold, outputItemId, outputItemKind, outputCount,
+        this(id, taskId, settlementId, facilityId, workerId, consumedItemId, inputHold, outputItemId, outputItemKind, outputCount,
                 ProductionWorkProgress.notStarted(), fixtureTraversal(id, facilityId), 0);
     }
 
     public ProductionJob withInputHold(ProductionInputHold next) {
-        return new ProductionJob(id, settlementId, facilityId, workerId, consumedItemId, next, outputItemId, outputItemKind, outputCount,
+        return new ProductionJob(id, taskId, settlementId, facilityId, workerId, consumedItemId, next, outputItemId, outputItemKind, outputCount,
                 workProgress, workTraversal, traversalCursor);
+    }
+    /** Exact resource subjects retained by this job, including every fungible input lot. */
+    public java.util.Map<SubjectId, Integer> inputQuantities() {
+        return switch (inputHold) {
+            case ProductionInputHold.FungibleCold cold -> cold.inputLots();
+            case ProductionInputHold.FungibleBound bound -> bound.inputLots();
+            default -> java.util.Map.of(consumedItemId, outputCount);
+        };
     }
     /** Resource representation cannot bypass labor or a live physical custodian. */
     public void requireColdCompletion(FrontierWorldState state) {
@@ -74,12 +87,12 @@ public record ProductionJob(
     }
 
     public ProductionJob withWorkProgress(ProductionWorkProgress next) {
-        return new ProductionJob(id, settlementId, facilityId, workerId, consumedItemId, inputHold, outputItemId, outputItemKind, outputCount,
+        return new ProductionJob(id, taskId, settlementId, facilityId, workerId, consumedItemId, inputHold, outputItemId, outputItemKind, outputCount,
                 next, workTraversal, traversalCursor);
     }
 
     public ProductionJob withWorkTraversal(TraversalTopology next, int nextCursor) {
-        return new ProductionJob(id, settlementId, facilityId, workerId, consumedItemId, inputHold, outputItemId, outputItemKind, outputCount,
+        return new ProductionJob(id, taskId, settlementId, facilityId, workerId, consumedItemId, inputHold, outputItemId, outputItemKind, outputCount,
                 workProgress, next, nextCursor);
     }
 
@@ -93,7 +106,7 @@ public record ProductionJob(
         if (traversalCursor != 0 || !workProgress.equals(ProductionWorkProgress.notStarted())) {
             throw new IllegalArgumentException("only an unstarted production worker may rebase its traversal at HOT hand-off");
         }
-        return new ProductionJob(id, settlementId, facilityId, workerId, consumedItemId, inputHold, outputItemId, outputItemKind, outputCount,
+        return new ProductionJob(id, taskId, settlementId, facilityId, workerId, consumedItemId, inputHold, outputItemId, outputItemKind, outputCount,
                 workProgress, Objects.requireNonNull(next, "rebased production-work traversal"), 0);
     }
 

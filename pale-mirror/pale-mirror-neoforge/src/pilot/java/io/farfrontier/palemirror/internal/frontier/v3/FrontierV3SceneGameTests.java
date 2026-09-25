@@ -57,6 +57,8 @@ import io.farfrontier.palemirror.frontier.v3.persistence.RecoveryImage;
 import io.farfrontier.palemirror.frontier.v3.persistence.SnapshotReceipt;
 import io.farfrontier.palemirror.frontier.v3.persistence.SnapshotRecord;
 import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.gametest.framework.GameTest;
@@ -381,6 +383,95 @@ public final class FrontierV3SceneGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "pm-frontier-v3-scene-first-admission", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    public static void firstResidentSceneConsumesOnlyItsIssuedPermission(GameTestHelper helper) {
+        verifyFirstSceneAdmission(helper, false);
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-first-admission", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    public static void firstBioformSceneConsumesOnlyItsIssuedPermission(GameTestHelper helper) {
+        verifyFirstSceneAdmission(helper, true);
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-first-admission", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    public static void recoveredResidentSceneResumesUnstartedAdmission(GameTestHelper helper) {
+        verifyFirstSceneAdmission(helper, false, true);
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-first-admission", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    public static void recoveredBioformSceneResumesUnstartedAdmission(GameTestHelper helper) {
+        verifyFirstSceneAdmission(helper, true, true);
+    }
+
+    private static void verifyFirstSceneAdmission(GameTestHelper helper, boolean bioform) {
+        verifyFirstSceneAdmission(helper, bioform, false);
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-first-admission", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void newBodiesHydrateHealthForBothKindsAndOwners(GameTestHelper helper) {
+        var condition = new io.farfrontier.palemirror.frontier.v3.model.ActorCondition(
+                ActorLifeStatus.ALIVE, new FixedScalar(7_250_000L));
+        for (var kind : FrontierV3ActorCarrierComposition.ActorKind.values()) {
+            for (var owner : FrontierV3ActorCarrierComposition.Owner.values()) {
+                var declaration = new FrontierV3ActorCarrierComposition.Declaration(
+                        new SubjectId(("actor:health-" + kind.name() + "-" + owner.name()).toLowerCase(java.util.Locale.ROOT)), kind, owner,
+                        java.util.UUID.randomUUID(), FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, 1L, 1L);
+                var producer = owner == FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE
+                        ? FrontierV3ActorCarrierComposition.InventoryEntry.SCENE_BODY
+                        : FrontierV3ActorCarrierComposition.InventoryEntry.AMBIENT_BODY;
+                var body = FrontierV3ActorCarrierFactory.create(producer, helper.getLevel(), declaration, condition);
+                helper.assertValueEqual(body.getHealth(), 7.25F, "new body must retain canonical injury");
+                var saved = new CompoundTag();
+                body.saveWithoutId(saved);
+                helper.assertValueEqual(saved.getFloat("Health"), 7.25F, "entity NBT must retain hydrated injury");
+                body.discard();
+            }
+        }
+        helper.succeed();
+    }
+
+    private static void verifyFirstSceneAdmission(GameTestHelper helper, boolean bioform, boolean recovered) {
+        var level = helper.getLevel(); var feet = helper.absolutePos(new BlockPos(0, 1, 0));
+        prepareFloor(level, feet);
+        var world = new WorldId((bioform ? "frontier:first-scene-bioform" : "frontier:first-scene-resident")
+                + (recovered ? "-recovered" : ""));
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(world, 91L));
+        var actor = new SubjectId(bioform ? "bioform:west-1" : "resident:1-1");
+        var member = new SceneMember(actor, SceneLease.deterministicEntityId(world, actor));
+        var lease = fixtureLease(new SceneLeaseId("lease:first-scene"), world,
+                new SubjectId("operation:first-scene"), new SubjectId("cargo:first-scene"),
+                new BlockPosition(feet.getX(), feet.getY(), feet.getZ()), SimInstant.ZERO, 1L,
+                recovered ? SceneLeaseStatus.UNKNOWN_AFTER_RESTART : SceneLeaseStatus.PREPARED, Optional.empty(), List.of(member));
+        var ledger = FrontierV3AmbientCarrierLedger.get(level, world);
+        helper.assertTrue(!FrontierV3SceneExecutor.canResumeUnstartedBodyAdmissions(level, state, lease),
+                "missing physical history cannot authorize restart creation");
+        helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodiesForFixture(level, state, lease),
+                FrontierV3SceneExecutor.BodyMaterialization.CONFLICT, "empty column without history is not creation permission");
+        FrontierV3ActorFirstAdmissionBootstrap.initialize(ledger, state,
+                new RecoveryImage(world, Optional.empty(), List.of()), () -> ledger.persist(level, world));
+        helper.assertValueEqual(FrontierV3SceneExecutor.canResumeUnstartedBodyAdmissions(level, state, lease), recovered,
+                "only an unknown scene with explicit unused permission can resume initial admission");
+        helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodiesForFixture(level, state, lease),
+                FrontierV3SceneExecutor.BodyMaterialization.COMPLETE, "issued first permit must admit the exact scene member");
+        helper.assertValueEqual(ledger.firstAdmission(actor).orElseThrow().phase(),
+                FrontierV3ActorFirstAdmission.Phase.PENDING, "insertion alone is not a saved-body acknowledgement");
+        helper.runAfterDelay(1L, () -> {
+            var body = level.getEntity(member.entityId());
+            helper.assertTrue(bioform ? body instanceof Zombie : body instanceof Villager, "canonical actor kind must be retained");
+            ((Mob) body).setHealth(9.0F);
+            helper.assertValueEqual(FrontierV3SceneExecutor.materializeBodiesForFixture(level, state, lease),
+                    FrontierV3SceneExecutor.BodyMaterialization.COMPLETE, "repeat must reuse the same scene body");
+            helper.assertTrue(level.getEntity(member.entityId()) == body, "repeat cannot replace the indexed body");
+            helper.assertValueEqual(((Mob) body).getHealth(), 9.0F, "existing body must not be rehydrated from stale canonical health");
+            body.discard();
+            helper.runAfterDelay(1L, () -> {
+                helper.assertTrue(!FrontierV3SceneExecutor.canResumeUnstartedBodyAdmissions(level, state, lease),
+                        "absence after an attempted insertion must never authorize another initial body");
+                helper.succeed();
+            });
+        });
+    }
+
     @GameTest(batch = "pm-frontier-v3-scene-bodies", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void preparedSceneUsesCanonicalBioformIdentityForZombieBodies(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
@@ -581,6 +672,8 @@ public final class FrontierV3SceneGameTests {
         helper.runAfterDelay(1L, () -> {
         helper.assertValueEqual(FrontierV3SceneLeaseRestartSafety.quarantineActiveLeases(runtime), 1,
                 "restart recovery must first retain the active scene as UNKNOWN");
+        helper.assertTrue(FrontierV3SceneExecutor.completeLoadedSceneSet(level, state(runtime), lease),
+                "no-demand recovery may recognize the same complete loaded body/cart set");
         helper.assertTrue(FrontierV3SceneExecutor.reclaimObservedBodies(level, runtime, state(runtime), lease),
                 "the loaded complete exact scene body set must be eligible for reclaim after demand admission");
         helper.assertValueEqual(state(runtime).sceneLeases().get(leaseId).status(), SceneLeaseStatus.HOT,
@@ -591,6 +684,8 @@ public final class FrontierV3SceneGameTests {
         helper.assertValueEqual(FrontierV3SceneLeaseRestartSafety.quarantineActiveLeases(runtime), 1,
                 "the reclaimed scene must return to UNKNOWN exactly once on a later restart");
         Entity missing = level.getEntity(lease.members().getLast().entityId()); helper.assertTrue(missing != null, "fixture must retain a body to remove"); missing.discard();
+        helper.assertFalse(FrontierV3SceneExecutor.completeLoadedSceneSet(level, state(runtime), lease),
+                "a partial loaded set cannot bypass whole-scene recovery");
         helper.assertTrue(!FrontierV3SceneExecutor.reclaimObservedBodies(level, runtime, state(runtime), lease),
                 "a partial observed body set must be ineligible for scene reclaim");
         helper.assertValueEqual(state(runtime).sceneLeases().get(leaseId).status(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART,

@@ -354,7 +354,8 @@ final class FrontierDevelopmentScenarios {
      * the normal next COLD action.  This is a test-clock admission detail, not a production
      * route rule.
      */
-    static RouteSceneReturnFixture routeSceneReturnFixture(WorldId worldId, long seed) {
+    static io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection>
+            routeCustodyConfiguration(WorldId worldId, long seed) {
         var configuration = FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(worldId, seed);
         // This fixture isolates route custody/recovery, not competition with population
         // growth. With real production labor, Northwatch's birth review can now consume
@@ -368,6 +369,11 @@ final class FrontierDevelopmentScenarios {
                 configuration.scheduledPlanner(), configuration.reducer(), configuration.stateCodec(), configuration.projectionMapper(),
                 configuration.limits(), schedulesWithoutBirth, configuration.transactionCommitter(), configuration.stateValidator(),
                 configuration.executionMetrics(), configuration.kernelQuarantineReporter());
+        return configuration;
+    }
+
+    static RouteSceneReturnFixture routeSceneReturnFixture(WorldId worldId, long seed) {
+        var configuration = routeCustodyConfiguration(worldId, seed);
         var engine = FrontierEngines.create(configuration);
         var codec = new FrontierWorldStateCodec(configuration.initialState().bootstrap());
         io.farfrontier.palemirror.frontier.v3.api.CheckpointImage checkpoint = null;
@@ -551,21 +557,28 @@ final class FrontierDevelopmentScenarios {
      * HOT movement; it cannot use the fixture to start travel or move a resident.
      */
     static OperationAssemblyFixture operationAssemblyFixture(WorldId worldId, long seed) {
-        var configuration = FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(worldId, seed);
-        var engine = FrontierEngines.create(configuration);
-        var codec = new FrontierWorldStateCodec(configuration.initialState().bootstrap());
+        var configuration = routeCustodyConfiguration(worldId, seed);
+        var engine = FrontierEngines.createCanonicalStateAccess(configuration);
         for (long tick = 1L; tick <= 12_000L; tick++) {
             engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
+            FrontierWorldState state = engine.canonicalState().state();
+            RouteOperation operation = initialNorthwatchAssembly(state).orElse(null);
+            if (operation == null) continue;
             var checkpoint = engine.checkpoint();
-            FrontierWorldState state = codec.decode(checkpoint.canonicalState());
-            RouteOperation operation = state.operations().get(new SubjectId("operation:supply-1-2"));
-            if (operation == null || operation.stage() != OperationStage.ASSEMBLING || operation.activeAssembly().isEmpty()) continue;
             var schedules = checkpoint.schedules().stream().filter(action -> !action.subject().equals(operation.id())
                     || !action.kind().equals("frontier.operation.assembly")).toList();
             if (schedules.size() == checkpoint.schedules().size()) throw new IllegalStateException("assembly fixture has no pending COLD assembly action");
             return new OperationAssemblyFixture(state, checkpoint.instant(), schedules, operation.id());
         }
         throw new IllegalStateException("development assembly fixture did not reach its exact cargo-loaded boundary by 12000 ticks");
+    }
+
+    static Optional<RouteOperation> initialNorthwatchAssembly(FrontierWorldState state) {
+        var candidates = state.operations().values().stream()
+                .filter(operation -> operation.settlementId().equals(new SubjectId("settlement:1")))
+                .filter(operation -> operation.stage() == OperationStage.ASSEMBLING && operation.activeAssembly().isPresent()).toList();
+        if (candidates.size() > 1) throw new IllegalStateException("assembly fixture contains competing Northwatch shipments");
+        return candidates.stream().findFirst();
     }
 
     /**
@@ -765,7 +778,7 @@ final class FrontierDevelopmentScenarios {
         ExactItemStack input = state.inventory().items().get(new SubjectId("item:bootstrap-1-wheat"));
         SubjectId jobId = new SubjectId("job:production-development-input-theft");
         SettlementStructure workshop = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.WORKSHOP).findFirst().orElseThrow();
-        ProductionJob job = new ProductionJob(jobId, settlementId, workshop.id(), worker, input.id(), new ProductionInputHold.Materialized(input.id()),
+        ProductionJob job = new ProductionJob(jobId, task.id(), settlementId, workshop.id(), worker, input.id(), new ProductionInputHold.Materialized(input.id()),
                 new SubjectId("item:development-production-input-theft-bread"), "minecraft:bread", input.count(), ProductionWorkProgress.notStarted(),
                 ProductionWorkTraversal.compile(state.bootstrap(), workshop, state.actorLocations().get(worker), jobId), 0);
         state = CompanyWorkPaymentProcess.reserve(state.withProductionJob(job), job);

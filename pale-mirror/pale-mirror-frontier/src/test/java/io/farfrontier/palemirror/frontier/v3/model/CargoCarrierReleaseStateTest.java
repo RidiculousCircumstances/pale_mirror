@@ -167,6 +167,19 @@ class CargoCarrierReleaseStateTest {
                 1L, Optional.of(candidate.engagementId()), candidate.actorIds());
         var hot = before.prepareSceneLease(lease).transitionSceneLease(lease.id(), SceneLeaseStatus.HOT);
         var carrier = CargoCarrierIdentity.id(lease);
+        var cargoAccount = hot.inventory().fungibleResources().accounts().values().stream()
+                .filter(account -> account.custody().equals(new ResourceCustody.Cargo(candidate.cargoId())))
+                .findFirst().orElseThrow();
+        var currentClaim = hot.inventory().fungibleResources().claims().get(cargoAccount.claimQuantities().keySet().iterator().next());
+        var wrongPurposeClaims = new java.util.HashMap<>(hot.inventory().fungibleResources().claims());
+        wrongPurposeClaims.put(currentClaim.id(), new ClaimAllocation(currentClaim.id(), currentClaim.claimantId(),
+                currentClaim.economicOwnerId(), currentClaim.itemKind(), currentClaim.quantity(), currentClaim.lotQuantities(),
+                ClaimPurpose.EXTERNAL_RESERVATION));
+        var currentResources = hot.inventory().fungibleResources();
+        FrontierWorldState wrongPurpose = hot.withInventory(hot.inventory().withFungibleResources(new FungibleResourceLedger(
+                currentResources.lots(), wrongPurposeClaims, currentResources.accounts(), currentResources.bindings())));
+        assertThrows(IllegalArgumentException.class, () -> wrongPurpose.releaseCargoCarrier(new CargoCarrierReleased(
+                lease.id(), candidate.cargoId(), carrier, Optional.empty())));
         var released = hot.releaseCargoCarrier(new CargoCarrierReleased(lease.id(), candidate.cargoId(), carrier, Optional.empty()));
         var codec = new FrontierWorldStateCodec();
         released = codec.decode(codec.encode(released));

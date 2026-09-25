@@ -400,7 +400,8 @@ class FrontierV3AmbientAdmissionPolicyTest {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(state, List.of(), store);
         try {
             FrontierV3AmbientCarrierRecognition.ManagedCarrier carrier = new FrontierV3AmbientCarrierRecognition.ManagedCarrier(
-                    FrontierV3AmbientActorExecutor.entityId(state, ambientResident), ambientResident.value(), false, false, "RESIDENT");
+                    FrontierV3AmbientActorExecutor.entityId(state, ambientResident), ambientResident.value(), false, false, "RESIDENT",
+                    "AMBIENT_LEASE", "LIVE_BODY", state.ambientLeases().get(ambientResident).revision(), 1L);
             assertJoinFirewall(runtime, carrier, FrontierV3ServerLifecycle.EntityJoinAdmission.NOT_MANAGED, true,
                     "an absent projection must fail closed through the same lifecycle/firewall composition");
             FrontierV3GrayboxExecutor.tick(new FullyLoadedPhysicalWorld(), runtime);
@@ -497,7 +498,8 @@ class FrontierV3AmbientAdmissionPolicyTest {
 
             FrontierV3GrayboxExecutor.resetProjectionWork(runtime);
             FrontierV3AmbientCarrierRecognition.ManagedCarrier carrier = new FrontierV3AmbientCarrierRecognition.ManagedCarrier(
-                    FrontierV3AmbientActorExecutor.entityId(nutrientReplacement, resident), resident.value(), false, false, "RESIDENT");
+                    FrontierV3AmbientActorExecutor.entityId(nutrientReplacement, resident), resident.value(), false, false, "RESIDENT",
+                    "AMBIENT_LEASE", "LIVE_BODY", nutrientReplacement.ambientLeases().get(resident).revision(), 1L);
             assertJoinFirewall(runtime, carrier, FrontierV3ServerLifecycle.EntityJoinAdmission.RETAINED, false,
                     "the installed nutrient replacement must retain the exact joining body through the ordinary runtime provider and firewall");
             FrontierV3GrayboxExecutor.admissionProvider(runtime, nutrientReplacement).orElseThrow()

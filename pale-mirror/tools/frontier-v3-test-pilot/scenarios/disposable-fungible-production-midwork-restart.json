@@ -1,0 +1,231 @@
+{
+  "schema": 1,
+  "id": "disposable_fungible_production_midwork_restart",
+  "isolation": {
+    "mode": "disposable_lite",
+    "seed": 41
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25575,
+    "profile": "fungible-production-work"
+  },
+  "pilot": {
+    "username": "PMTestPilot"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/clear PMTestPilot"
+    }
+  ],
+  "actions": [
+    {
+      "type": "inspect",
+      "view": "process",
+      "id": "job:production-1-1"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -388,
+        "y": 64,
+        "z": -326
+      },
+      "settleMs": 1000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "scene",
+      "id": "job:production-1-1",
+      "expect": {
+        "status": "ok",
+        "sceneKind": "PRODUCTION_WORK",
+        "leaseStatus": "HOT",
+        "primaryActor": "resident:1-15",
+        "productionStage": "PROCESSING"
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "scene",
+          "id": "job:production-1-1",
+          "field": "productionCurrent"
+        }
+      }
+    },
+    {
+      "type": "assert_visible_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": "INDUSTRIAL WORKER",
+      "maxDistance": 32,
+      "maxAngleDeg": 50,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "inspect",
+      "view": "scene",
+      "id": "job:production-1-1"
+    },
+    {
+      "type": "inspect",
+      "view": "process",
+      "id": "job:production-1-1"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "resource",
+      "id": "custody:container-1-depot",
+      "expect": {
+        "status": "ok",
+        "quantity": 64,
+        "lots": [
+          {
+            "id": "lot:production-1-1-bread",
+            "owner": "settlement:1",
+            "itemKind": "minecraft:bread",
+            "quantity": 64
+          }
+        ],
+        "claims": [],
+        "bindingCount": 1
+      },
+      "timeoutMs": 120000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "process",
+      "id": "job:production-1-1",
+      "expect": {
+        "status": "not_found"
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:1-depot",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE",
+        "replica": {
+          "state": "OBSERVED_CURRENT",
+          "conflict": ""
+        }
+      },
+      "timeoutMs": 30000
+    }
+  ],
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 6,
+    "resumeSetup": [
+      {
+        "type": "visit",
+        "dimension": "pale_mirror:frontier_graybox",
+        "position": {
+          "x": -388,
+          "y": 64,
+          "z": -326
+        },
+        "settleMs": 1000
+      }
+    ]
+  },
+  "assertions": [
+    {
+      "after": 1,
+      "view": "process",
+      "id": "job:production-1-1",
+      "expect": {
+        "status": "ok",
+        "identity": {
+          "worker": "resident:1-15"
+        },
+        "result": {
+          "workStage": "PROCESSING",
+          "inputHold": "FungibleCold",
+          "terminalEffectEligible": false
+        }
+      }
+    },
+    {
+      "after": 6,
+      "view": "scene",
+      "id": "job:production-1-1",
+      "expect": {
+        "status": "ok",
+        "sceneKind": "PRODUCTION_WORK",
+        "leaseStatus": "HOT",
+        "primaryActor": "resident:1-15",
+        "productionStage": "PROCESSING"
+      }
+    },
+    {
+      "after": 7,
+      "view": "process",
+      "id": "job:production-1-1",
+      "expect": {
+        "status": "ok",
+        "identity": {
+          "worker": "resident:1-15"
+        },
+        "result": {
+          "workStage": "PROCESSING",
+          "inputHold": "FungibleBound",
+          "terminalEffectEligible": false
+        }
+      }
+    },
+    {
+      "after": 8,
+      "view": "resource",
+      "id": "custody:container-1-depot",
+      "expect": {
+        "status": "ok",
+        "quantity": 64,
+        "lots": [
+          {
+            "id": "lot:production-1-1-bread",
+            "owner": "settlement:1",
+            "itemKind": "minecraft:bread",
+            "quantity": 64
+          }
+        ],
+        "claims": [],
+        "bindingCount": 1
+      }
+    },
+    {
+      "after": 9,
+      "view": "process",
+      "id": "job:production-1-1",
+      "expect": {
+        "status": "not_found"
+      }
+    },
+    {
+      "after": 10,
+      "view": "container",
+      "id": "container:1-depot",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE",
+        "replica": {
+          "state": "OBSERVED_CURRENT",
+          "conflict": ""
+        }
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 5,
+      "name": "fungible-worker-processing-before-restart"
+    }
+  ]
+}

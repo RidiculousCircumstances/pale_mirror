@@ -42,6 +42,51 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 class ProductionProcessTest {
     @Test
+    void productionJobRetainsItsExactTaskAcrossRecoveryAndRejectsRelinkingToAnotherEligibleTask() {
+        MaterializedProduction prepared = activeMaterializedProduction();
+        FrontierWorldState state = prepared.state();
+        ProductionJob job = prepared.job();
+        assertEquals(job.taskId(), new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state))
+                .productionJobs().get(job.id()).taskId());
+        assertTrue(FrontierDomainRelationships.view(state).edges().stream().anyMatch(edge ->
+                edge.kind() == FrontierDomainRelationships.Kind.JOB_TASK && edge.source().equals(
+                        new FrontierDomainRelationships.SubjectEndpoint(FrontierDomainRelationships.EntityKind.PRODUCTION_JOB, job.id()))
+                        && edge.target().equals(new FrontierDomainRelationships.SubjectEndpoint(FrontierDomainRelationships.EntityKind.TASK, job.taskId()))));
+
+        ProductionJob missing = new ProductionJob(job.id(), new SubjectId("task:production-missing"), job.settlementId(), job.facilityId(),
+                job.workerId(), job.consumedItemId(), job.inputHold(), job.outputItemId(), job.outputItemKind(), job.outputCount(),
+                job.workProgress(), job.workTraversal(), job.traversalCursor());
+        assertThrows(IllegalArgumentException.class, () -> state.withChanges(FrontierWorldStateUpdate.begin()
+                .productionJobs(Map.of(job.id(), missing))), "a plausible owner and kind cannot substitute for the missing exact task");
+
+        StrategicTask original = state.strategicPlans().tasks().get(job.taskId());
+        StrategicTask other = new StrategicTask(new SubjectId("task:production-other"), original.objectiveId(), original.ownerId(),
+                StrategicTaskKind.PRODUCE_BREAD, Optional.empty(), original.requirements(), List.of(), StrategicTaskStatus.ACTIVE);
+        FrontierWorldState twoTasks = state.withStrategicPlans(state.strategicPlans().addTask(other));
+        assertEquals(original, ProductionTransformationStateSupport.activeTask(twoTasks, job),
+                "physical completion must use the job's retained task even when another task has the same owner and kind");
+        ProductionJob relinked = new ProductionJob(job.id(), other.id(), job.settlementId(), job.facilityId(), job.workerId(),
+                job.consumedItemId(), job.inputHold(), job.outputItemId(), job.outputItemKind(), job.outputCount(),
+                job.workProgress(), job.workTraversal(), job.traversalCursor());
+        FrontierWorldState forged = twoTasks.withChanges(FrontierWorldStateUpdate.begin().productionJobs(Map.of(job.id(), relinked)));
+        assertThrows(IllegalArgumentException.class, () -> FrontierReferenceClosure.validate(forged, List.of()),
+                "an accepted order cannot silently follow a job relinked to another valid production task");
+    }
+
+    @Test
+    void productionBlockWalRetainsDeclaredTaskAndRejectsAnUnrelatedOneBeforeReasonChecking() {
+        ColdMarketJob prepared = coldMarketJob();
+        ProductionJob job = prepared.job();
+        ProductionBlocked declared = ProductionDiagnosticProducer.ROUTE_BLOCKED.create(job.settlementId(), job.facilityId(),
+                job.id(), job.taskId());
+        assertEquals(declared, FrontierWorldRuntimeDefinition.payloadCodecs().decode(declared.type(),
+                FrontierWorldRuntimeDefinition.payloadCodecs().encode(declared)));
+        ProductionBlocked forged = ProductionDiagnosticProducer.ROUTE_BLOCKED.create(job.settlementId(), job.facilityId(),
+                job.id(), new SubjectId("task:production-unrelated"));
+        assertThrows(IllegalStateException.class, () -> ProductionProcess.reduceBlocked(prepared.state(), job.settlementId(), forged));
+    }
+
+    @Test
     void forgedWalRoleSwapIsRejectedByTheStampedProductionOwnerBeforeReplay() {
         PreparedProduction prepared = activePhysicalProduction();
         PhysicalIntent forged = new PhysicalIntent(new PhysicalIntentId("intent:production-forged-wal-role-swap"),
@@ -341,6 +386,15 @@ class ProductionProcessTest {
         SceneLeaseTransition draining = assertInstanceOf(SceneLeaseTransition.class, planned.get(2).payload());
         assertEquals(leaseId, draining.leaseId());
         assertEquals(SceneLeaseStatus.DRAINING, draining.status());
+    }
+
+    @Test
+    void alreadyBlockedJobDoesNotReblockOnLaterFacilityLoss() {
+        MaterializedProduction prepared = activeMaterializedProduction();
+        FrontierWorldState blocked = prepared.state().withStrategicPlans(prepared.state().strategicPlans()
+                .transitionTask(prepared.job().taskId(), StrategicTaskStatus.BLOCKED));
+        assertTrue(ProductionProcess.planFacilityUnavailable(blocked, prepared.job().facilityId()).isEmpty(),
+                "a retained draining job must not create a second block just because its task is already blocked");
     }
 
     @Test
@@ -747,10 +801,11 @@ class ProductionProcessTest {
         SubjectId worker = initial.companies().companies().get(CompanyFoundationProcess.companyId(settlement)).founderId();
         FrontierWorldState state = productionTask(initial.withInventory(initial.inventory().withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED)
                 .withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE)), StrategicTaskStatus.ACTIVE);
-        ProductionJob job = new ProductionJob(new SubjectId("job:production-1-physical"), settlement, new SubjectId("structure:1-workshop"),
+        StrategicTask task = state.strategicPlans().tasks().values().iterator().next();
+        ProductionJob job = new ProductionJob(new SubjectId("job:production-1-physical"), task.id(), settlement, new SubjectId("structure:1-workshop"),
                 worker, new SubjectId("item:bootstrap-1-wheat"), new SubjectId("item:production-1-physical-bread"), "minecraft:bread", 64);
         state = CompanyWorkPaymentProcess.reserve(state.withProductionJob(job), job);
-        StrategicTask task = state.strategicPlans().tasks().values().iterator().next(); EmploymentContract contract = CompanyWorkPaymentProcess.contractFor(state, job).orElseThrow();
+        EmploymentContract contract = CompanyWorkPaymentProcess.contractFor(state, job).orElseThrow();
         FinancialReservation reservation = CompanyWorkPaymentProcess.reservation(job, contract);
         MarketDemand demand = new MarketDemand(new SubjectId("demand:production-1-physical"), settlement, task.id(), "minecraft:bread", 64,
                 FixedScalar.whole(2L), 0L, 1_000L, MarketDemandStatus.OPEN);
@@ -773,7 +828,7 @@ class ProductionProcessTest {
         ExactItemStack input = state.inventory().items().get(new SubjectId("item:bootstrap-1-wheat"));
         SubjectId company = CompanyFoundationProcess.companyId(settlement);
         SubjectId worker = state.companies().companies().get(company).founderId();
-        ProductionJob job = new ProductionJob(new SubjectId("job:production-1-cold-cancel"), settlement, new SubjectId("structure:1-workshop"), worker,
+        ProductionJob job = new ProductionJob(new SubjectId("job:production-1-cold-cancel"), task.id(), settlement, new SubjectId("structure:1-workshop"), worker,
                 input.id(), new ProductionInputHold.Cold(input), new SubjectId("item:production-1-cold-cancel-bread"), "minecraft:bread", input.count());
         state = CompanyWorkPaymentProcess.reserve(state.startProductionJob(job, input.id()), job);
         EmploymentContract contract = CompanyWorkPaymentProcess.contractFor(state, job).orElseThrow();
@@ -892,13 +947,23 @@ class ProductionProcessTest {
         FrontierWorldState current = state;
         for (int crop = 0; crop < ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS; crop++) {
             ResourceSiteHarvestJob job = (ResourceSiteHarvestJob) current.resourceSites().site(siteId).activeWork().orElseThrow();
-            while (job.hasNextTraversalStep()) {
-                current = ResourceSiteHarvestProcess.reduceColdTraversalAdvanced(current, siteId,
-                        new ResourceSiteHarvestColdTraversalAdvanced(jobId, job.workerId(), job.traversalCursor() + 1));
+            while (!ResourceSiteHarvestGoal.actorAtWorkCell(current, job)) {
+                ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(current, job);
+                BodyPosition next = ResourceSiteHarvestKnownNavigation.path(current, job)
+                        .get(1).standingBody();
+                ScheduledAction travel = ResourceSiteHarvestProcess.coldProgress(job, 22_301L);
+                current = ResourceSiteHarvestProcess.reduceColdGoalAdvanced(current, siteId,
+                        new ResourceSiteHarvestColdGoalAdvanced(job.id(), job.workerId(), goal.layoutRevision(),
+                                goal.nextWorkSlot(), goal.kind(), next, travel.id(), travel.dueAt().ticks()));
                 job = (ResourceSiteHarvestJob) current.resourceSites().site(siteId).activeWork().orElseThrow();
             }
             current = ResourceSiteHarvestProcess.reduceCropPrepared(current, siteId, new ResourceSiteHarvestCropPrepared(jobId, crop));
-            current = ResourceSiteHarvestProcess.reduceProgressed(current, siteId, new ResourceSiteHarvestProgressed(jobId, crop + 1));
+            ResourceFieldCycle field = current.resourceSites().cycle(siteId);
+            ResourceFieldLayout.CellId cellId = field.layout().cells().get(crop).id();
+            ScheduledAction action = ResourceSiteHarvestProcess.coldProgress(job, 22_301L);
+            current = ResourceSiteHarvestProcess.reduceProgressed(current, siteId,
+                    new ResourceSiteHarvestProgressed(siteId, field.epoch(), jobId, crop + 1, field.layout().revision(), cellId,
+                            field.expectedWorkOutcome(cellId), action.id(), action.dueAt().ticks()));
         }
         return current;
     }

@@ -10,6 +10,9 @@ import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
 import io.farfrontier.palemirror.frontier.v3.model.CustodyAccount;
+import io.farfrontier.palemirror.frontier.v3.model.ClaimAllocation;
+import io.farfrontier.palemirror.frontier.v3.model.ClaimPurpose;
+import io.farfrontier.palemirror.frontier.v3.model.FungibleClaimForfeitureStateSupport;
 import io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalObservation;
 import io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalHandoff;
 import io.farfrontier.palemirror.frontier.v3.model.FungibleResourceLedger;
@@ -56,6 +59,62 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FungiblePhysicalObservationProcessTest {
+    @Test
+    void oneObservedBreadStackRetiresMultipleRationClaimsThroughTheRegisteredHandoffOwner() {
+        WorldId world = new WorldId("frontier:multi-ration-physical-handoff");
+        FrontierWorldState state = FrontierWorldRuntimeDefinition.configuration(world, 91L).initialState();
+        SubjectId settlement = state.bootstrap().settlements().getFirst().id();
+        SubjectId account = new SubjectId("custody:container-1-depot"), bread = new SubjectId("lot:multi-ration-bread");
+        FungibleResourceLedger resources = state.inventory().fungibleResources().transformCold(account,
+                Map.of(new SubjectId("lot:bootstrap-1-wheat"), 64), Map.of(),
+                new ResourceLot(bread, settlement, "minecraft:bread", 64, "multi-ration", List.of()));
+        resources = resources.split(account, bread, resources.lots().get(bread).splitChild(new SubjectId("lot:bread-a"), 8), 8);
+        resources = resources.split(account, bread, resources.lots().get(bread).splitChild(new SubjectId("lot:bread-b"), 8), 8);
+        state = state.withInventory(state.inventory().withFungibleResources(resources));
+        var started = SettlementProvisionProcess.planReview(state, SettlementProvisionProcess.review(settlement, 1, 100L))
+                .stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                .filter(io.farfrontier.palemirror.frontier.v3.model.SettlementProvisionStarted.class::isInstance)
+                .map(io.farfrontier.palemirror.frontier.v3.model.SettlementProvisionStarted.class::cast).findFirst().orElseThrow();
+        state = SettlementProvisionProcess.reduceStarted(state, settlement, started);
+        resources = state.inventory().fungibleResources();
+        SubjectId depot = FrontierWorldState.depotId(settlement);
+        resources = resources.rebind(account, 7L, FungiblePhysicalObservation.bind(resources, account, 7L, List.of(
+                new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                        new InventoryCustody.ContainerSlot(depot, 0)), "minecraft:bread", 64))));
+        FrontierWorldState bound = state.withInventory(state.inventory().withFungibleResources(resources));
+        UUID player = UUID.fromString("00000000-0000-0000-0000-000000000189");
+        SubjectId playerAccount = new SubjectId("custody:multi-ration-player");
+        FungibleResourceHandoffObserved unstamped = FungiblePhysicalHandoff.departToNew(resources, account, 7L,
+                resources.bindings().values().iterator().next(), 0, playerAccount, new ResourceCustody.Player(player), 1L,
+                new PhysicalStackAddress.PlayerSlot(player, 0)).forfeitAffectedClaims(resources);
+        assertInstanceOf(CommandPlan.Rejected.class, FrontierWorldPhysicalObservationProcess.planFungibleHandoff(bound, unstamped));
+        FungibleResourceHandoffObserved observed = FungibleClaimForfeitureStateSupport.stampOwnerDiagnostic(bound, unstamped)
+                .withPlayerSaveFence(UUID.fromString("00000000-0000-0000-0000-000000000190"));
+        org.junit.jupiter.api.Assertions.assertTrue(observed.forfeitedClaimIds().size() >= 2);
+        assertEquals(observed, FrontierWorldRuntimeDefinition.payloadCodecs().decode(observed.type(),
+                FrontierWorldRuntimeDefinition.payloadCodecs().encode(observed)));
+        io.farfrontier.palemirror.frontier.v3.model.DiagnosticProducerContract.requireAdmitted(observed);
+        assertInstanceOf(CommandPlan.Accepted.class, FrontierWorldPhysicalObservationProcess.planFungibleHandoff(bound, observed));
+        FrontierWorldState after = FrontierWorldPhysicalObservationProcess.reduceFungibleHandoff(bound, settlement, observed);
+        assertEquals(io.farfrontier.palemirror.frontier.v3.model.SettlementProvisionStatus.CONFLICT,
+                after.humanPopulation().provision(settlement).status());
+        assertEquals(Map.of(), after.inventory().fungibleResources().claims());
+        assertEquals(64, after.inventory().fungibleResources().accounts().get(playerAccount).lotQuantities()
+                .values().stream().mapToInt(Integer::intValue).sum());
+        var base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
+        var configuration = new FrontierEngineConfiguration<>(world, bound, base.initialInstant(), base.commandPlanner(),
+                base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(), List.of(),
+                base.transactionCommitter(), base.stateValidator(), base.executionMetrics());
+        var engine = FrontierEngines.create(configuration);
+        assertInstanceOf(CommandResult.Accepted.class, engine.submit(command(engine, world, "multi-ration-theft", observed)));
+        FrontierWorldState committed = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec()
+                .decode(engine.checkpoint().canonicalState());
+        assertEquals(io.farfrontier.palemirror.frontier.v3.model.DiagnosticReason.SETTLEMENT_PROVISION_CONFLICT,
+                committed.diagnosticIncidents().why(new io.farfrontier.palemirror.frontier.v3.model.DiagnosticSubject(
+                        io.farfrontier.palemirror.frontier.v3.model.DiagnosticSubjectKind.SETTLEMENT_PROVISION, settlement))
+                        .orElseThrow().diagnostic().reason());
+    }
+
     @Test
     void registeredPhysicalObservationAcceptsVanillaSplitButRejectsStaleAndMixedEvidence() {
         WorldId world = new WorldId("frontier:fungible-physical-observation");
@@ -181,6 +240,16 @@ class FungiblePhysicalObservationProcessTest {
                 source, 32, new SubjectId("custody:player-claim-theft"), new ResourceCustody.Player(player), 1L,
                 new PhysicalStackAddress.PlayerSlot(player, 0)).forfeitMovedClaims()
                 .withPlayerSaveFence(UUID.fromString("00000000-0000-0000-0000-000000000778"));
+
+        var wrongClaims = new java.util.HashMap<>(active.inventory().fungibleResources().claims());
+        ClaimAllocation actual = wrongClaims.get(claimId);
+        wrongClaims.put(claimId, new ClaimAllocation(actual.id(), actual.claimantId(), actual.economicOwnerId(),
+                actual.itemKind(), actual.quantity(), actual.lotQuantities(), ClaimPurpose.SUPPLY_CONTRACT));
+        FungibleResourceLedger actualResources = active.inventory().fungibleResources();
+        FrontierWorldState misdeclared = active.withInventory(active.inventory().withFungibleResources(new FungibleResourceLedger(
+                actualResources.lots(), wrongClaims, actualResources.accounts(), actualResources.bindings())));
+        assertFalse(FungibleClaimForfeitureStateSupport.supports(misdeclared, theft),
+                "a claimant ID found in the hive registry cannot override its declared supply-contract owner kind");
 
         assertEquals(theft, FrontierWorldRuntimeDefinition.payloadCodecs().decode(theft.type(),
                 FrontierWorldRuntimeDefinition.payloadCodecs().encode(theft)));

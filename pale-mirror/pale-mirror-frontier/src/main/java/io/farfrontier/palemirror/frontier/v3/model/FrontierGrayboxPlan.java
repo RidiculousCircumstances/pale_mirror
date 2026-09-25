@@ -389,7 +389,7 @@ public final class FrontierGrayboxPlan {
     }
 
     /** Every exterior semantic access floor is part of the same exact structure exposure model. */
-    private static List<SurfaceAnchor> publicAccessSurfaces(SettlementStructure structure) {
+    static List<SurfaceAnchor> publicAccessSurfaces(SettlementStructure structure) {
         return switch (structure.kind()) {
             case HALL -> SettlementAccessPort.forHall(structure).ownedSurfaces();
             case DEPOT -> SettlementDepotServicePort.forDepot(structure).ownedAccessSurfaces();

@@ -46,7 +46,7 @@ public final class ResourceSiteProcess {
         if (lifecycle.phase() != ResourceSitePhase.UNPREPARED || lifecycle.activeWork().isPresent() || !action.id().equals(preparation(lifecycle.siteId(), action.dueAt().ticks()).id())) return List.of();
         String suffix = lifecycle.siteId().value().substring("site:".length()); ResourceSitePreparationJob job = new ResourceSitePreparationJob(
                 new SubjectId("job:site-prepare-" + suffix), lifecycle.siteId(), new PhysicalIntentId("intent:site-prepare-" + suffix));
-        ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).get(lifecycle.siteId()); BlockPosition origin = site.cropSlots().getFirst();
+        ResourceSite site = state.resourceSite(lifecycle.siteId()); BlockPosition origin = site.cropSlots().getFirst();
         ResourceSiteLifecycle prepared = lifecycle.preparing(job).prepared();
         return List.of(new ProposedEvent(lifecycle.siteId(), new ResourceSitePreparationStarted(job)), new ProposedEvent(lifecycle.siteId(), new ResourceSitePrepared(job)),
                 new ProposedEvent(lifecycle.siteId(), new ScheduleEffect.Created(nextGrowth(prepared, Math.addExact(action.dueAt().ticks(),
@@ -67,7 +67,9 @@ public final class ResourceSiteProcess {
         ResourceSitePreparationJob active = lifecycle.activeWork().filter(ResourceSitePreparationJob.class::isInstance).map(ResourceSitePreparationJob.class::cast)
                 .orElseThrow(() -> new IllegalArgumentException("resource-site preparation completion has no active work"));
         if (!active.equals(job)) throw new IllegalArgumentException("resource-site preparation completion does not match active work");
-        return state.withResourceSites(state.resourceSites().replace(lifecycle.prepared()));
+        ResourceFieldCycle seeded = ResourceFieldCycle.seeded(job.siteId(),
+                state.resourceSites().cycle(job.siteId()).layout(), 1L);
+        return state.withResourceSites(state.resourceSites().replace(lifecycle.prepared(), seeded));
     }
 
     public static FrontierWorldState reducePrepared(FrontierWorldState state, SubjectId subject, PhysicalIntent intent) {
@@ -109,16 +111,181 @@ public final class ResourceSiteProcess {
 
     public static FrontierWorldState reduceGrowth(FrontierWorldState state, SubjectId subject, ResourceSiteGrowthAdvanced advanced) {
         if (!subject.equals(advanced.siteId())) throw new IllegalArgumentException("resource-site growth has a foreign event owner");
+        if (state.resourceSites().hasPendingWorldChange(subject))
+            throw new IllegalArgumentException("resource-site growth overlaps an unresolved world field change");
         ResourceSiteLifecycle current = state.resourceSites().site(advanced.siteId());
         if (current.phase() != ResourceSitePhase.GROWING || current.growthEpoch() != advanced.growthEpoch() || current.growthStage() != advanced.growthStage()) {
             throw new IllegalArgumentException("resource-site growth event is stale or invalid");
         }
-        return state.withResourceSites(state.resourceSites().replace(current.advanceGrowth()));
+        ResourceFieldCycle cycle = state.resourceSites().cycle(current.siteId());
+        return state.withResourceSites(state.resourceSites().replace(current.advanceGrowth(), cycle.advanceGrowthStage()));
+    }
+
+    /** Persists one exact permission before Vanilla can remove the owned crop. */
+    public static FrontierWorldState reducePlayerBreakPrepared(FrontierWorldState state, SubjectId subject,
+                                                               ResourceFieldPlayerBreakPrepared prepared) {
+        if (!subject.equals(prepared.siteId()))
+            throw new IllegalArgumentException("prepared field break has a foreign event owner");
+        ResourceSiteLifecycle lifecycle = state.resourceSites().site(prepared.siteId());
+        if (lifecycle.phase() == ResourceSitePhase.UNPREPARED || lifecycle.phase() == ResourceSitePhase.CONFLICT
+                || lifecycle.phase() == ResourceSitePhase.DESTROYED)
+            throw new IllegalArgumentException("prepared field break has no active owned field");
+        ResourceFieldCycle cycle = state.resourceSites().cycle(prepared.siteId());
+        if (state.resourceSites().hasPendingWorldChange(prepared.siteId()))
+            throw new IllegalArgumentException("player break overlaps an unresolved world field change");
+        if (cycle.epoch() != prepared.epoch() || cycle.layout().revision() != prepared.layoutRevision())
+            throw new IllegalArgumentException("prepared field break has a stale epoch or layout revision");
+        ResourceSiteHarvestJob job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
+                .map(ResourceSiteHarvestJob.class::cast).orElse(null);
+        if (job != null && job.progress().hasPendingCrop()
+                && cycle.layout().cells().get(job.progress().pendingCropSlotIndex()).id().equals(prepared.cellId()))
+            throw new IllegalArgumentException("player break overlaps an unresolved farmer effect");
+        var pending = new ResourceFieldCycle.PendingPlayerBreak(prepared.playerId(), prepared.actionId(), prepared.before());
+        return state.withResourceSites(state.resourceSites().replace(lifecycle,
+                cycle.preparePlayerBreak(prepared.cellId(), pending)));
+    }
+
+    /** Retain the exact physical cause before COLD may advance this site's field epoch. */
+    public static FrontierWorldState reduceWorldChangeHeld(FrontierWorldState state, SubjectId subject,
+                                                            ResourceFieldWorldChangeHeld held) {
+        ResourceFieldCellObserved observation = held.observation();
+        if (!subject.equals(observation.siteId()))
+            throw new IllegalArgumentException("world field hold has a foreign event owner");
+        ResourceSiteLifecycle lifecycle = state.resourceSites().site(subject);
+        if (lifecycle.phase() == ResourceSitePhase.UNPREPARED || lifecycle.phase() == ResourceSitePhase.CONFLICT
+                || lifecycle.phase() == ResourceSitePhase.DESTROYED)
+            throw new IllegalArgumentException("world field hold has no active owned field");
+        ResourceFieldCycle cycle = state.resourceSites().cycle(subject);
+        if (cycle.epoch() != observation.epoch() || cycle.layout().revision() != observation.layoutRevision()
+                || !ResourceFieldPhysicalSurface.Condition.of(cycle.cell(observation.cellId())).equals(observation.before())
+                || cycle.pendingPlayerBreaks().containsKey(observation.cellId()))
+            throw new IllegalArgumentException("world field hold has a stale or competing canonical predecessor");
+        ResourceSiteHarvestJob job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
+                .map(ResourceSiteHarvestJob.class::cast).orElse(null);
+        if (job != null && job.progress().hasPendingCrop()
+                && cycle.layout().cells().get(job.progress().pendingCropSlotIndex()).id().equals(observation.cellId()))
+            throw new IllegalArgumentException("world field hold overlaps an unresolved farmer effect");
+        return state.withResourceSites(state.resourceSites().holdWorldChange(observation));
+    }
+
+    /** Release only the retained cause whose physical claim and block were just rechecked. */
+    public static FrontierWorldState reduceWorldChangeAcknowledged(FrontierWorldState state, SubjectId subject,
+                                                                    ResourceFieldWorldChangeAcknowledged acknowledged) {
+        ResourceFieldCellObserved observation = acknowledged.observation();
+        if (!subject.equals(observation.siteId())
+                || !observation.equals(state.resourceSites().pendingWorldChange(subject)))
+            throw new IllegalArgumentException("world field acknowledgement has no exact held owner");
+        ResourceFieldCycle cycle = state.resourceSites().cycle(subject);
+        if (cycle.epoch() != observation.epoch() || cycle.layout().revision() != observation.layoutRevision()
+                || !ResourceFieldPhysicalSurface.Condition.of(cycle.cell(observation.cellId()))
+                .equals(acknowledged.physical()))
+            throw new IllegalArgumentException("world field acknowledgement disagrees with canonical cell condition");
+        return state.withResourceSites(state.resourceSites().acknowledgeWorldChange(observation));
+    }
+
+    /** An exact physical predecessor fences this site before a foreign Vanilla write. */
+    public static FrontierWorldState reduceForeignChangeHeld(FrontierWorldState state, SubjectId subject,
+                                                              ResourceFieldForeignChangeHeld held) {
+        if (!subject.equals(held.siteId()))
+            throw new IllegalArgumentException("foreign field hold has a different event owner");
+        ResourceSiteLifecycle lifecycle = state.resourceSites().site(subject);
+        if (lifecycle.phase() == ResourceSitePhase.UNPREPARED || lifecycle.phase() == ResourceSitePhase.CONFLICT
+                || lifecycle.phase() == ResourceSitePhase.DESTROYED)
+            throw new IllegalArgumentException("foreign field hold has no active owned site");
+        ResourceFieldCycle cycle = state.resourceSites().cycle(subject);
+        if (cycle.epoch() != held.epoch() || cycle.layout().revision() != held.layoutRevision()
+                || !cycle.cell(held.cellId()).equals(held.before())
+                || cycle.pendingPlayerBreaks().containsKey(held.cellId()))
+            throw new IllegalArgumentException("foreign field hold has a stale or competing predecessor");
+        ResourceSiteHarvestJob job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
+                .map(ResourceSiteHarvestJob.class::cast).orElse(null);
+        if (job != null && job.progress().hasPendingCrop()
+                && cycle.layout().cells().get(job.progress().pendingCropSlotIndex()).id().equals(held.cellId()))
+            throw new IllegalArgumentException("foreign field hold overlaps an unresolved farmer effect");
+        return state.withResourceSites(state.resourceSites().holdForeignChange(held));
+    }
+
+    /** The physical reader, never a replacement prediction, selects the one local result. */
+    public static FrontierWorldState reduceForeignCellObserved(FrontierWorldState state, SubjectId subject,
+                                                                ResourceFieldForeignCellObserved observed) {
+        ResourceFieldForeignChangeHeld held = observed.hold();
+        if (!subject.equals(held.siteId()) || !held.equals(state.resourceSites().pendingForeignChange(subject)))
+            throw new IllegalArgumentException("foreign field observation lacks its exact retained cause");
+        ResourceSiteLifecycle lifecycle = state.resourceSites().site(subject);
+        ResourceFieldCycle cycle = state.resourceSites().cycle(subject);
+        if (cycle.epoch() != held.epoch() || cycle.layout().revision() != held.layoutRevision()
+                || !cycle.cell(held.cellId()).equals(held.before()))
+            throw new IllegalArgumentException("foreign field observation has a stale cell predecessor");
+        ResourceFieldCycle next = cycle.observedInterference(held.cellId(), observed.after());
+        return state.withResourceSites(state.resourceSites().replace(lifecycle, next));
+    }
+
+    public static FrontierWorldState reduceForeignChangeAcknowledged(FrontierWorldState state, SubjectId subject,
+                                                                      ResourceFieldForeignChangeAcknowledged acknowledged) {
+        ResourceFieldForeignChangeHeld held = acknowledged.hold();
+        if (!subject.equals(held.siteId()) || !held.equals(state.resourceSites().pendingForeignChange(subject)))
+            throw new IllegalArgumentException("foreign field acknowledgement lacks its exact retained cause");
+        ResourceFieldCycle cycle = state.resourceSites().cycle(subject);
+        if (cycle.epoch() != held.epoch() || cycle.layout().revision() != held.layoutRevision()
+                || !cycle.cell(held.cellId()).equals(acknowledged.physical()))
+            throw new IllegalArgumentException("foreign field acknowledgement disagrees with canonical cell");
+        return state.withResourceSites(state.resourceSites().acknowledgeForeignChange(held));
+    }
+
+    /** Reduces one adapter-declared postcondition without retiring an otherwise usable field. */
+    public static FrontierWorldState reduceCellObserved(FrontierWorldState state, SubjectId subject,
+                                                        ResourceFieldCellObserved observed) {
+        if (!subject.equals(observed.siteId()))
+            throw new IllegalArgumentException("field cell observation has a foreign event owner");
+        ResourceSiteLifecycle lifecycle = state.resourceSites().site(observed.siteId());
+        if (lifecycle.phase() == ResourceSitePhase.UNPREPARED || lifecycle.phase() == ResourceSitePhase.CONFLICT
+                || lifecycle.phase() == ResourceSitePhase.DESTROYED)
+            throw new IllegalArgumentException("field cell observation has no active owned field");
+        ResourceFieldCycle cycle = state.resourceSites().cycle(observed.siteId());
+        if (cycle.epoch() != observed.epoch() || cycle.layout().revision() != observed.layoutRevision())
+            throw new IllegalArgumentException("field cell observation has a stale epoch or layout revision");
+        ResourceFieldCycle.CellState prior = cycle.cell(observed.cellId());
+        if (!ResourceFieldPhysicalSurface.Condition.of(prior).equals(observed.before()))
+            throw new IllegalArgumentException("field cell observation has a stale canonical predecessor");
+        ResourceSiteHarvestJob job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
+                .map(ResourceSiteHarvestJob.class::cast).orElse(null);
+        if (job != null && job.progress().hasPendingCrop()
+                && cycle.layout().cells().get(job.progress().pendingCropSlotIndex()).id().equals(observed.cellId()))
+            throw new IllegalArgumentException("field cell observation overlaps an unresolved farmer effect");
+        ResourceFieldCycle ready = cycle;
+        ResourceFieldCellObserved heldWorld = state.resourceSites().pendingWorldChange(observed.siteId());
+        if (observed.source() == ResourceFieldCellObserved.Source.PLAYER) {
+            if (state.resourceSites().hasPendingWorldChange(observed.siteId()))
+                throw new IllegalArgumentException("player field action overlaps a held world change");
+            var pending = cycle.pendingPlayerBreaks().get(observed.cellId());
+            if (pending == null || !pending.actionId().equals(observed.causationId())
+                    || !pending.before().equals(observed.before()))
+                throw new IllegalArgumentException("player field observation lacks its exact durable break permission");
+            ready = cycle.closePlayerBreak(observed.cellId(), observed.causationId());
+        } else {
+            if (state.resourceSites().pendingForeignChange(observed.siteId()) != null
+                    || heldWorld == null || !heldWorld.causationId().equals(observed.causationId())
+                    || !heldWorld.siteId().equals(observed.siteId()) || heldWorld.epoch() != observed.epoch()
+                    || heldWorld.layoutRevision() != observed.layoutRevision()
+                    || !heldWorld.cellId().equals(observed.cellId()) || !heldWorld.before().equals(observed.before())
+                    || !heldWorld.equals(observed))
+                throw new IllegalArgumentException("world field observation lacks its exact canonical recovery hold");
+            if (cycle.pendingPlayerBreaks().containsKey(observed.cellId()))
+                throw new IllegalArgumentException("world field observation overlaps an unresolved player action");
+        }
+        ResourceFieldCycle next = switch (observed.change()) {
+            case CROP_REMOVED -> ready.cropRemoved(observed.cellId());
+            case SOIL_BECAME_DIRT -> ready.soilBecameDirt(observed.cellId());
+            case UNCHANGED -> ready;
+        };
+        if (!ResourceFieldPhysicalSurface.Condition.of(next.cell(observed.cellId())).equals(observed.after()))
+            throw new IllegalArgumentException("field cell observation disagrees with its canonical successor");
+        return state.withResourceSites(state.resourceSites().replace(lifecycle, next));
     }
 
     public static FrontierWorldState reduceConflict(FrontierWorldState state, SubjectId subject, ResourceSiteConflictObserved conflict) {
         if (!subject.equals(conflict.siteId())) throw new IllegalArgumentException("resource-site conflict has a foreign event owner");
-        ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).get(conflict.siteId());
+        ResourceSite site = state.resourceSite(conflict.siteId());
         boolean retainedTraversalSupport = lifecycleTraversalSupport(state, conflict);
         if (site == null || (!site.managedSlots().contains(conflict.position()) && !retainedTraversalSupport)) {
             throw new IllegalArgumentException("resource-site conflict must name one exact field cell");
@@ -153,9 +320,15 @@ public final class ResourceSiteProcess {
         Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases());
         leases.replaceAll((id, lease) -> {
             if (!FrontierSceneBehaviors.isResourceSiteHarvest(lease)
+                    || !FrontierSceneBehaviors.resourceSiteHarvest(lease).siteId().equals(job.siteId())
                     || !FrontierSceneBehaviors.resourceSiteHarvest(lease).jobId().equals(job.id())) return lease;
             return switch (lease.status()) {
-                case HOT, UNKNOWN_AFTER_RESTART -> lease.withStatus(SceneLeaseStatus.DRAINING);
+                // A generic DRAINING release cannot shed a worker whose physical hand still
+                // owns the harvested lot. Keep the conflict local with that exact body and
+                // stock until a typed transfer/recovery transition resolves the custody.
+                case HOT, UNKNOWN_AFTER_RESTART -> lease.withStatus(
+                        FrontierSceneLeaseStateSupport.hasBoundActorHand(state, lease)
+                                ? SceneLeaseStatus.CONFLICT : SceneLeaseStatus.DRAINING);
                 case PREPARED -> lease.withStatus(SceneLeaseStatus.CONFLICT);
                 default -> lease;
             };
@@ -174,9 +347,10 @@ public final class ResourceSiteProcess {
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(conflict.siteId());
         return lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
                 .map(ResourceSiteHarvestJob.class::cast)
-                .map(job -> job.traversal().linearCorridorSurfaces().stream()
-                        .anyMatch(surface -> surface.support().equals(conflict.position())))
-                .orElse(false);
+                .map(job -> {
+                    ActorLocation actor = state.actorLocations().get(job.workerId());
+                    return actor != null && actor.supportingSurface().support().equals(conflict.position());
+                }).orElse(false);
     }
 
     public static List<ProposedEvent> planConflict(FrontierWorldState state, ResourceSiteConflictObserved conflict) {

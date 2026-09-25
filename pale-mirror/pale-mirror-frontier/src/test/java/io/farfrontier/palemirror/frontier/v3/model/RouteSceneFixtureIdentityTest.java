@@ -10,6 +10,19 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class RouteSceneFixtureIdentityTest {
     @Test
+    void assemblyScenarioRetainsTheExactThreePersonShipmentBeforeAnyColdStep() {
+        var fixture = FrontierDevelopmentScenarios.operationAssemblyFixture(new WorldId("frontier:assembly-identity"), 41L);
+        var operation = fixture.state().operations().get(fixture.operationId());
+        assertEquals(new SubjectId("operation:supply-1-11"), operation.id());
+        assertEquals(java.util.List.of(new SubjectId("resident:1-30"), new SubjectId("resident:1-16"),
+                new SubjectId("resident:1-28")), operation.participantIds());
+        assertEquals(3, operation.activeAssembly().orElseThrow().members().size());
+        assertEquals(OperationStage.ASSEMBLING, operation.stage());
+        assertTrue(fixture.schedules().stream().noneMatch(action -> action.subject().equals(operation.id())
+                && action.kind().equals("frontier.operation.assembly")));
+    }
+
+    @Test
     void cargoTheftScenarioUsesTheActualFungibleShipment() {
         var state = FrontierV3FixtureCatalog.routeSceneReturnConfiguration(
                 new WorldId("frontier:route-cargo-identity"), 41L).initialState();

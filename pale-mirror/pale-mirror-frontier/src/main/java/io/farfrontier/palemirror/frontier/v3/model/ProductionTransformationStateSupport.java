@@ -150,10 +150,10 @@ public final class ProductionTransformationStateSupport {
     }
 
     private static StrategicTask taskFor(FrontierWorldState state, ProductionJob job, StrategicTaskStatus status) {
-        return state.strategicPlans().tasks().values().stream().filter(task -> task.ownerId().equals(job.settlementId())
-                && task.kind() == StrategicTaskKind.PRODUCE_BREAD && task.status() == status)
-                .reduce((left, right) -> { throw new IllegalArgumentException("production task binding is ambiguous"); })
-                .orElseThrow(() -> new IllegalArgumentException("production has no active strategic task"));
+        StrategicTask task = state.strategicPlans().tasks().get(job.taskId());
+        if (task == null || !task.ownerId().equals(job.settlementId()) || task.kind() != StrategicTaskKind.PRODUCE_BREAD
+                || task.status() != status) throw new IllegalArgumentException("production has no exact active strategic task");
+        return task;
     }
 
     public record Target(ProductionJob job, ExactItemStack input, ExactItemStack output, InventoryCustody.ContainerSlot slot, BlockPosition chestPosition) { }

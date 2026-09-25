@@ -3,6 +3,8 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -24,6 +26,54 @@ public final class FungibleResourceCustodySupport {
         Objects.requireNonNull(state, "resource state"); Objects.requireNonNull(containerId, "resource container");
         return state.inventory().fungibleResources().accounts().values().stream().filter(account -> account.custody() instanceof ResourceCustody.Container container
                 && container.containerId().equals(containerId)).findFirst();
+    }
+
+    /**
+     * Deterministic recipe candidate, not a reservation. The caller must commit a claim and
+     * retain this exact lot map before any physical write; account-level unclaimed stock alone
+     * cannot protect the chosen lot identities from a competing consumer.
+     */
+    public static Optional<LotSelection> selectAtContainer(FrontierWorldState state, SubjectId containerId,
+                                                           SubjectId economicOwnerId, String itemKind, int quantity) {
+        Objects.requireNonNull(state, "resource state"); Objects.requireNonNull(containerId, "resource container");
+        Objects.requireNonNull(economicOwnerId, "resource owner");
+        if (itemKind == null || itemKind.isBlank() || quantity < 1 || quantity > 64) {
+            throw new IllegalArgumentException("recipe lot selection is invalid");
+        }
+        var account = accountAtContainer(state, containerId).orElse(null);
+        if (account == null) return Optional.empty();
+        FungibleResourceLedger resources = state.inventory().fungibleResources();
+        if (resources.unclaimedQuantity(account.id(), economicOwnerId, itemKind) < quantity) return Optional.empty();
+        Map<SubjectId, Integer> pinned = new java.util.HashMap<>();
+        account.claimQuantities().keySet().forEach(claimId -> {
+            ClaimAllocation claim = resources.claims().get(claimId);
+            claim.lotQuantities().forEach((lotId, count) -> pinned.merge(lotId, count, Integer::sum));
+        });
+        Map<SubjectId, Integer> selected = new LinkedHashMap<>();
+        int remaining = quantity;
+        for (var entry : account.lotQuantities().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
+            ResourceLot lot = resources.lots().get(entry.getKey());
+            if (!lot.economicOwnerId().equals(economicOwnerId) || !lot.itemKind().equals(itemKind)) continue;
+            int take = Math.min(remaining, entry.getValue() - pinned.getOrDefault(lot.id(), 0));
+            if (take > 0) selected.put(lot.id(), take);
+            remaining -= take;
+            if (remaining == 0) break;
+        }
+        return remaining == 0 ? Optional.of(new LotSelection(account.id(), selected)) : Optional.empty();
+    }
+
+    public record LotSelection(SubjectId accountId, Map<SubjectId, Integer> lotQuantities) {
+        public LotSelection {
+            Objects.requireNonNull(accountId, "resource account");
+            lotQuantities = Map.copyOf(Objects.requireNonNull(lotQuantities, "selected resource lots"));
+            if (lotQuantities.isEmpty() || lotQuantities.size() > 64 || lotQuantities.values().stream().anyMatch(value -> value == null || value < 1 || value > 64)
+                    || lotQuantities.values().stream().mapToInt(Integer::intValue).sum() > 64) {
+                throw new IllegalArgumentException("recipe lot selection exceeds its bounded input");
+            }
+        }
+
+        public int quantity() { return lotQuantities.values().stream().mapToInt(Integer::intValue).sum(); }
+        public SubjectId firstLotId() { return lotQuantities.keySet().stream().min(Comparator.naturalOrder()).orElseThrow(); }
     }
 
     public record LotAtContainer(SubjectId accountId, ResourceLot lot, int quantity) {

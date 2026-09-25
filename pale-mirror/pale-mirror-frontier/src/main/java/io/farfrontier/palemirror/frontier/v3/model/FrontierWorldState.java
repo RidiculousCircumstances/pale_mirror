@@ -107,7 +107,9 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                                           Map<SubjectId, RouteMaintenance> routeMaintenances, RouteTopology routeTopology,
                                           StrategicPlanState strategicPlans, HumanPopulation humanPopulation,
                                           CompanyRegistry companies, ResourceSiteState resourceSites) {
-            resourceSites.validate(bootstrap); strategicPlans.validate(bootstrap, routeTopology, humanPopulation); strategicPlans.hiveOperationKnowledge().validate(bootstrap, hiveColony, actorLocations);
+            resourceSites.validate(bootstrap); validateHarvestOutputReservations(inventory, resourceSites);
+            validateHarvestResourceAccounts(inventory, resourceSites);
+            strategicPlans.validate(bootstrap, routeTopology, humanPopulation); strategicPlans.hiveOperationKnowledge().validate(bootstrap, hiveColony, actorLocations);
             strategicPlans.hiveSettlementKnowledge().validate(bootstrap, hiveColony, actorLocations);
             strategicPlans.hiveTerritoryKnowledge().validate(bootstrap, hiveColony, actorLocations, structureConditions);
         routeTopology.replacementSupplyRoutes().forEach((settlement, route) -> FrontierRouteNetwork.validateSupplyWaypoints(bootstrap, settlement, route));
@@ -117,9 +119,12 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         MedicalEvacuationStateSupport.validate(bootstrap, humanPopulation, actorLocations, structureConditions, inventory, physicalIntents); Objects.requireNonNull(hiveColony, "hive colony");
         hiveColony.validateAgainst(bootstrap); HiveNutrientTransferStateSupport.validate(bootstrap, inventory, hiveColony, strategicPlans);
         HiveMobilizationStateSupport.validateTaskCustody(bootstrap, hiveColony, strategicPlans);
+        for (HiveGrowthJob job : hiveColony.growthJobs().values()) {
+            requireJobTask(strategicPlans, job.taskId(), job.hiveId(), StrategicTaskKind.GROW_HIVE_ORGANISM, "hive growth");
+        }
         FrontierWorldStateSupport.validateEconomicClaims(bootstrap, inventory);
         Set<SubjectId> expectedActors = FrontierWorldStateSupport.bioformIds(bootstrap); expectedActors.addAll(hiveColony.spawnedBioforms().keySet()); expectedActors.addAll(humanPopulation.residentIds());
-        if (!expectedActors.equals(actorLocations.keySet())) throw new IllegalArgumentException("actor location index must own every and only canonical actor"); FrontierWorldStateSupport.validateActorItemCustody(expectedActors, inventory);
+        if (!expectedActors.equals(actorLocations.keySet())) throw new IllegalArgumentException("actor location index must own every and only canonical actor"); FrontierWorldStateSupport.validateActorItemCustody(bootstrap.worldId(), expectedActors, inventory, sceneLeases, ambientLeases);
         HiveLifecycleStateSupport.validateCocoonCustody(bootstrap, hiveColony, actorLocations, ambientLeases, physicalDeltas);
         Set<SubjectId> expectedSettlementPolicies = bootstrap.settlements().stream().map(Settlement::id).collect(java.util.stream.Collectors.toUnmodifiableSet());
         if (!humanPopulation.quarantines().keySet().equals(expectedSettlementPolicies)) throw new IllegalArgumentException("settlement quarantine index must own every and only canonical settlement");
@@ -229,6 +234,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         for (Map.Entry<SubjectId, ProductionJob> entry : productionJobs.entrySet()) {
             ProductionJob job = entry.getValue();
             if (!entry.getKey().equals(job.id())) throw new IllegalArgumentException("production job map key must match job identity");
+            requireJobTask(strategicPlans, job.taskId(), job.settlementId(), StrategicTaskKind.PRODUCE_BREAD, "production");
             Settlement settlement = FrontierWorldStateSupport.settlement(bootstrap, job.settlementId());
             SettlementStructure facility = FrontierWorldStateSupport.structure(settlement, job.facilityId());
             if (facility.kind() != StructureKind.WORKSHOP) throw new IllegalArgumentException("production job facility must be a workshop");
@@ -533,6 +539,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         return withChanges(FrontierWorldStateUpdate.begin().inventory(inventory.withEconomics(economics)).companies(companies.openEmployment(contract)));
     }
     public FrontierWorldState recordResidentMigration(ResidentMigrated migration) { return HumanPopulationStateSupport.recordMigration(this, migration); }
+    public ResourceSite resourceSite(SubjectId id) { return resourceSites.descriptor(bootstrap, id); }
+    public Map<SubjectId, ResourceSite> resourceSiteDescriptors() { return resourceSites.descriptors(bootstrap); }
     public FrontierWorldState startResidentBirth(ResidentBirthJob job) { return HumanPopulationStateSupport.startBirth(this, job); }
     public FrontierWorldState completeResidentBirth(ResidentBirthJob job) { return HumanPopulationStateSupport.completeBirth(this, job); }
     public FrontierWorldState cancelResidentBirth(SubjectId jobId) { return HumanPopulationStateSupport.cancelBirth(this, jobId); }
@@ -554,7 +562,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
     }
     ResourceSiteState resourceSitesForCondition(SubjectId facilityId, StructureCondition condition) {
         if (condition != StructureCondition.DESTROYED) return resourceSites;
-        return FrontierResourceSitePlan.compile(bootstrap).values().stream().filter(site -> site.facilityId().equals(facilityId)).findFirst()
+        return resourceSiteDescriptors().values().stream().filter(site -> site.facilityId().equals(facilityId)).findFirst()
                 .map(site -> resourceSites.replace(resourceSites.site(site.id()).destroyed())).orElse(resourceSites);
     }
     public FrontierWorldState recordStructureDamage(StructureDamaged damage) { return FrontierWorldPhysicalDeltaSupport.recordStructureDamage(this, damage); }
@@ -580,17 +588,67 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 .map(ProductionInputHold.Cold.class::cast).map(ProductionInputHold.Cold::item)
                 .anyMatch(item -> item.custody().equals(slot));
     }
+    /** An admitted harvest owns its declared output slot until terminal custody replaces the job. */
+    public boolean harvestOutputReserves(InventoryCustody.ContainerSlot slot) {
+        Objects.requireNonNull(slot, "container slot");
+        return resourceSites.sites().values().stream()
+                .map(ResourceSiteLifecycle::activeWork)
+                .flatMap(java.util.Optional::stream)
+                .filter(ResourceSiteHarvestJob.class::isInstance)
+                .map(ResourceSiteHarvestJob.class::cast)
+                .anyMatch(job -> job.outputSlot().equals(slot) || job.batchSuccessorSlot().filter(slot::equals).isPresent());
+    }
+    private static void validateHarvestOutputReservations(ExactInventory inventory, ResourceSiteState sites) {
+        java.util.Set<InventoryCustody.ContainerSlot> reserved = new java.util.HashSet<>();
+        for (ResourceSiteLifecycle lifecycle : sites.sites().values()) {
+            if (lifecycle.activeWork().orElse(null) instanceof ResourceSiteHarvestJob job) {
+                java.util.List<InventoryCustody.ContainerSlot> slots = job.batchSuccessorSlot().isPresent()
+                        ? java.util.List.of(job.outputSlot(), job.batchSuccessorSlot().orElseThrow())
+                        : java.util.List.of(job.outputSlot());
+                for (InventoryCustody.ContainerSlot slot : slots) {
+                    if (!reserved.add(slot) || !inventory.slotVacant(slot)
+                            || ReferenceContainerCustody.expectedFungibleSlot(inventory, slot.containerId(),
+                            slot.slot()).isPresent()) {
+                        throw new IllegalArgumentException("active harvest output slot lacks exclusive container capacity");
+                    }
+                }
+            }
+        }
+    }
+    private static void validateHarvestResourceAccounts(ExactInventory inventory, ResourceSiteState sites) {
+        java.util.Set<SubjectId> declared = new java.util.HashSet<>();
+        for (ResourceSiteLifecycle lifecycle : sites.sites().values()) {
+            if (!(lifecycle.activeWork().orElse(null) instanceof ResourceSiteHarvestJob job)) continue;
+            if (!declared.add(job.actorAccountId()))
+                throw new IllegalArgumentException("active harvest jobs share one declared actor resource account");
+            CustodyAccount account = inventory.fungibleResources().accounts().get(job.actorAccountId());
+            if (account != null && !account.custody().equals(new ResourceCustody.Actor(job.workerId())))
+                throw new IllegalArgumentException("active harvest actor account has foreign custody");
+            CustodyAccount depotAccount = inventory.fungibleResources().accounts().get(job.depotAccountId());
+            if (depotAccount != null && !depotAccount.custody().equals(new ResourceCustody.Container(job.outputSlot().containerId())))
+                throw new IllegalArgumentException("active harvest depot account has foreign custody");
+        }
+    }
     public boolean containerSlotAvailable(InventoryCustody.ContainerSlot slot) {
-        return inventory.itemAt(slot.containerId(), slot.slot()).isEmpty() && !productionHoldReserves(slot);
+        return inventory.slotVacant(slot) && ReferenceContainerCustody.expectedFungibleSlot(inventory,
+                slot.containerId(), slot.slot()).isEmpty()
+                && !productionHoldReserves(slot) && !harvestOutputReserves(slot);
     }
     public java.util.OptionalInt firstFreeContainerSlot(SubjectId containerId) {
-        ContainerRecord container = inventory.containers().get(Objects.requireNonNull(containerId, "container id"));
-        if (container == null) throw new IllegalArgumentException("unknown container: " + containerId.value());
-        for (int slot = 0; slot < container.slotCount(); slot++) {
+        for (int slot : inventory.availableSlots(containerId)) {
             if (containerSlotAvailable(new InventoryCustody.ContainerSlot(containerId, slot))) return java.util.OptionalInt.of(slot);
         }
         return java.util.OptionalInt.empty();
     }
+    private static void requireJobTask(StrategicPlanState plans, SubjectId taskId, SubjectId ownerId,
+                                       StrategicTaskKind kind, String jobKind) {
+        StrategicTask task = plans.tasks().get(taskId);
+        if (task == null || task.kind() != kind || !task.ownerId().equals(ownerId)
+                || task.status() != StrategicTaskStatus.ACTIVE && task.status() != StrategicTaskStatus.BLOCKED) {
+            throw new IllegalArgumentException(jobKind + " job must retain its exact active or blocked strategic task: " + taskId.value());
+        }
+    }
+
     public FrontierWorldState withProductionJob(ProductionJob job) {
         Objects.requireNonNull(job, "production job");
         if (!(job.inputHold() instanceof ProductionInputHold.Materialized)) {
@@ -647,7 +705,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         if (lot == null || !lot.economicOwnerId().equals(contract.settlementId()) || !lot.itemKind().equals(contract.itemKind())) {
             throw new IllegalArgumentException("fungible cargo lot does not match the contract");
         }
-        ClaimAllocation claim = new ClaimAllocation(supplyClaimId(contract), contract.id(), contract.settlementId(), contract.itemKind(), contract.itemCount());
+        ClaimAllocation claim = new ClaimAllocation(supplyClaimId(contract), contract.id(), contract.settlementId(), contract.itemKind(), contract.itemCount(),
+                Map.of(lotId, contract.itemCount()), ClaimPurpose.SUPPLY_CONTRACT);
         Map<SubjectId, SupplyContract> next = new LinkedHashMap<>(contracts); next.put(contractId, contract.withStatus(ContractStatus.LOADED));
         return next(actorLocations, structureConditions, infection,
                 inventory.reserveAndLoadFungibleCargo(cargo, sourceAccountId, lot, claim), productionJobs, next, operations,

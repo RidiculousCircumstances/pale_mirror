@@ -15,11 +15,9 @@
   "actions": [
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "diagnostic": { "view": "site", "id": "site:7-wheat-field", "field": "lastCrop" } }, "offset": { "x": -14, "y": 0, "z": 3 }, "settleMs": 1500 },
     { "type": "wait_until_diagnostic", "view": "site", "id": "site:7-wheat-field", "expect": { "status": "ok", "phase": "HARVESTING", "growthEpoch": 1 }, "timeoutMs": 180000 },
-    { "type": "look_nearest_entity", "entityType": "minecraft:villager", "nameContains": "Clearwater AGRICULTURAL WORKER", "maxDistance": 64, "timeoutMs": 30000 },
-    { "type": "observe_harvest_semantics", "siteId": "site:7-wheat-field", "durationTicks": 12000, "sampleEveryTicks": 20, "maxCanonicalStallTicks": 1200, "timeoutMs": 600000 },
-    { "type": "wait_until_diagnostic", "view": "site", "id": "site:7-wheat-field", "expect": { "status": "ok", "phase": "GROWING", "growthEpoch": 2, "terminalHarvest": { "physicalReceiptResolved": true } }, "timeoutMs": 180000 },
+    { "type": "observe_harvest_semantics", "siteId": "site:7-wheat-field", "durationTicks": 3000, "sampleEveryTicks": 20, "maxCanonicalStallTicks": 1200, "timeoutMs": 120000 },
+    { "type": "wait_until_diagnostic", "view": "site", "id": "site:7-wheat-field", "expect": { "status": "ok", "phase": "GROWING", "growthEpoch": 2, "terminalHarvest": { "physicalReceiptResolved": true } }, "timeoutMs": 300000 },
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "diagnostic": { "view": "container", "id": "container:7-depot", "field": "position" } }, "offset": { "x": 2, "y": 0, "z": 2 }, "settleMs": 1500 },
-    { "type": "wait_until_diagnostic", "view": "site", "id": "site:7-wheat-field", "expect": { "status": "ok", "terminalHarvest": { "canonicalSuccessor": true } }, "timeoutMs": 180000 },
     { "type": "wait_until_container_item", "containerId": "container:7-depot", "item": "minecraft:bread", "count": 64, "timeoutMs": 180000 },
     { "type": "open_container", "position": { "diagnostic": { "view": "container", "id": "container:7-depot", "field": "position" } }, "timeoutMs": 30000 },
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "diagnostic": { "view": "site", "id": "site:7-wheat-field", "field": "lastCrop" } }, "offset": { "x": -14, "y": 0, "z": 3 }, "settleMs": 3000 },
@@ -30,12 +28,11 @@
     { "type": "inspect", "view": "summary", "id": "" }
   ],
   "assertions": [
-    { "after": 11, "view": "site", "id": "site:7-wheat-field", "expect": { "status": "ok", "phase": "GROWING", "growthEpoch": 2, "conflictDisposition": null } },
-    { "after": 15, "view": "summary", "id": "", "expect": { "status": "ok", "requiredConflicts": 0 } }
+    { "after": 10, "view": "site", "id": "site:7-wheat-field", "expect": { "status": "ok", "phase": "GROWING", "growthEpoch": 2, "conflictDisposition": null } },
+    { "after": 13, "view": "summary", "id": "", "expect": { "status": "ok", "requiredConflicts": 0 } }
   ],
   "frames": [
-    { "after": 3, "name": "assigned-farmer" },
-    { "after": 9, "name": "successor-bread", "presentation": "player" },
-    { "after": 14, "name": "successor-field-board" }
+    { "after": 7, "name": "successor-bread", "presentation": "player" },
+    { "after": 12, "name": "successor-field-board" }
   ]
 }

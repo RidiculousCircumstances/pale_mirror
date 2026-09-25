@@ -42,6 +42,25 @@ public final class FrontierV3ObjectBoardGameTests {
     }
 
     @GameTest(batch = "pm-frontier-v3-object-boards", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void exactReturnedBoardClearsAbsenceConflictWithoutReplacingTheDisplay(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos position = interior(helper);
+        FrontierObjectBoard prior = board(position, "site:board-exact-return", FrontierObjectBoard.Tone.SETTLEMENT, "GROWING");
+        FrontierObjectBoard current = board(position, "site:board-exact-return", FrontierObjectBoard.Tone.WARNING, "FIELD CONFLICT");
+        FrontierV3ObjectBoardLedger ledger = FrontierV3ObjectBoardLedger.get(level);
+        helper.assertValueEqual(FrontierV3ObjectBoardExecutor.project(level, ledger, prior), FrontierV3ObjectBoardExecutor.ProjectionResult.APPLIED,
+                "fixture begins with one exact owned display");
+        Display.TextDisplay retained = display(level, position);
+        ledger.conflict(prior.ownerId().value());
+        FrontierV3ObjectBoardLedger recovered = FrontierV3ObjectBoardLedger.load(ledger.save(new CompoundTag(), level.registryAccess()), level.registryAccess());
+        helper.assertValueEqual(FrontierV3ObjectBoardExecutor.project(level, recovered, current), FrontierV3ObjectBoardExecutor.ProjectionResult.UPDATED,
+                "observing the exact retained board resolves stale absence and publishes current explanation");
+        helper.assertTrue(display(level, position) == retained, "the original entity is retained, never recreated");
+        helper.assertFalse(recovered.claim(prior.ownerId().value()).conflicted(), "exact physical return clears only this board's conflict");
+        helper.assertValueEqual(retained.getCustomName().getString(), current.text(), "conflicted field must not still advertise growth");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-object-boards", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void movedBoardBecomesConflictInsteadOfBeingSilentlyRestored(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); BlockPos position = interior(helper);
         FrontierObjectBoard board = board(position, "organ:board-ganglion", FrontierObjectBoard.Tone.HIVE, "HIVE\nGANGLION\nACTIVE");

@@ -24,7 +24,8 @@ public final class HiveGrowthStateSupport {
         if (!(job.inputHold() instanceof HiveGrowthInputHold.FungibleCold held)) {
             throw new IllegalArgumentException("fungible hive growth has no fungible biomass hold");
         }
-        ClaimAllocation claim = new ClaimAllocation(held.claimId(), job.id(), job.hiveId(), "minecraft:rotten_flesh", 64);
+        ClaimAllocation claim = new ClaimAllocation(held.claimId(), job.id(), job.hiveId(), "minecraft:rotten_flesh", 64,
+                java.util.Map.of(held.itemId(), 64), ClaimPurpose.HIVE_GROWTH);
         java.util.List<PhysicalStackBinding> bindings = state.inventory().fungibleResources().bindings().values().stream()
                 .filter(binding -> binding.accountId().equals(held.accountId())).toList();
         FungibleResourceLedger resources = bindings.isEmpty()

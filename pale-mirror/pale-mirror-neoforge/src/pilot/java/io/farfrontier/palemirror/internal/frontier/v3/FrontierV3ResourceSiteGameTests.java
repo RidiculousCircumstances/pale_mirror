@@ -267,7 +267,7 @@ public final class FrontierV3ResourceSiteGameTests {
         List<BlockPosition> crops = new ArrayList<>(64);
         for (int x = 0; x < 8; x++) for (int z = 0; z < 8; z++) crops.add(new BlockPosition(origin.getX() + x, origin.getY(), origin.getZ() + z));
         return new ResourceSite(new SubjectId(id), new SubjectId("settlement:1"), new SubjectId("structure:1-farm"),
-                ResourceSiteKind.WHEAT_FIELD, crops);
+                ResourceSiteKind.WHEAT_FIELD, io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSitePlan.initialGrayboxLayout(crops));
     }
     private static void prepareBaseline(ServerLevel level, ResourceSite site) {
         // fixtureOrigin keeps every managed slot inside this test's own full-air template.

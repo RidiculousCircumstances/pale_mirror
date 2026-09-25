@@ -51,7 +51,7 @@ class FrontierV3SceneTurnSchedulerTest {
                 new SettlementAssaultSceneCause(new SubjectId("assault:test"), new SubjectId("settlement:1")),
                 new EngineeringWorkSceneCause(new SubjectId("project:test"), 0),
                 new MedicalTreatmentSceneCause(new SubjectId("medical:test")),
-                new ResourceSiteHarvestSceneCause(new SubjectId("job:site-harvest-test")),
+                new ResourceSiteHarvestSceneCause(new SubjectId("site:harvest-test"), new SubjectId("job:site-harvest-test")),
                 new ProductionWorkSceneCause(new SubjectId("job:production-test")),
                 new SettlementServiceWorkSceneCause(new SubjectId("service:test")),
                 new RoutePatrolSceneCause(new SubjectId("task:test")));

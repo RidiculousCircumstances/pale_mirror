@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.Objects;
+import java.util.Map;
 
 /** One production input held through either legacy equipment custody or fungible lot custody. */
 public sealed interface ProductionInputHold permits ProductionInputHold.Cold, ProductionInputHold.Materialized,
@@ -38,20 +39,41 @@ public sealed interface ProductionInputHold permits ProductionInputHold.Cold, Pr
         public Materialized { Objects.requireNonNull(itemId, "materialized production input"); }
     }
 
-    /** A COLD job holds a stable allocation over one lot; its stock remains in the sole account. */
-    public record FungibleCold(SubjectId itemId, SubjectId accountId, SubjectId claimId) implements ProductionInputHold {
+    /** A COLD job retains its selected lot portions under one account and one claim. */
+    public record FungibleCold(SubjectId itemId, SubjectId accountId, SubjectId claimId,
+                               Map<SubjectId, Integer> inputLots) implements ProductionInputHold {
         public FungibleCold {
             Objects.requireNonNull(itemId, "fungible cold lot"); Objects.requireNonNull(accountId, "fungible cold account");
             Objects.requireNonNull(claimId, "fungible cold claim");
+            inputLots = checkedInputLots(itemId, inputLots);
+        }
+        public FungibleCold(SubjectId itemId, SubjectId accountId, SubjectId claimId) {
+            this(itemId, accountId, claimId, Map.of(itemId, 64));
         }
     }
 
-    /** A HOT job retains the same allocation under the account's current physical lease epoch. */
-    public record FungibleBound(SubjectId itemId, SubjectId accountId, SubjectId claimId, long authorityEpoch) implements ProductionInputHold {
+    /** A HOT job retains the same lot portions under the account's physical lease epoch. */
+    public record FungibleBound(SubjectId itemId, SubjectId accountId, SubjectId claimId, long authorityEpoch,
+                                Map<SubjectId, Integer> inputLots) implements ProductionInputHold {
         public FungibleBound {
             Objects.requireNonNull(itemId, "fungible bound lot"); Objects.requireNonNull(accountId, "fungible bound account");
             Objects.requireNonNull(claimId, "fungible bound claim");
             if (authorityEpoch < 1) throw new IllegalArgumentException("fungible production authority epoch must be positive");
+            inputLots = checkedInputLots(itemId, inputLots);
         }
+        public FungibleBound(SubjectId itemId, SubjectId accountId, SubjectId claimId, long authorityEpoch) {
+            this(itemId, accountId, claimId, authorityEpoch, Map.of(itemId, 64));
+        }
+    }
+
+    private static Map<SubjectId, Integer> checkedInputLots(SubjectId firstLotId, Map<SubjectId, Integer> portions) {
+        Map<SubjectId, Integer> lots = Map.copyOf(Objects.requireNonNull(portions, "production input lots"));
+        if (lots.isEmpty() || lots.size() > 64 || !lots.containsKey(firstLotId)
+                || lots.values().stream().anyMatch(value -> value < 1 || value > 64)
+                || lots.values().stream().mapToInt(Integer::intValue).sum() != 64
+                || !firstLotId.equals(lots.keySet().stream().min(SubjectId::compareTo).orElseThrow())) {
+            throw new IllegalArgumentException("production input must retain exactly 64 units and its stable first lot");
+        }
+        return lots;
     }
 }

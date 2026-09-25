@@ -1,0 +1,105 @@
+package io.farfrontier.palemirror.internal.frontier.v3;
+
+import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
+import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
+import io.farfrontier.palemirror.frontier.v3.model.SceneMemberPosition;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.DoubleTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.world.level.ChunkPos;
+import org.junit.jupiter.api.Test;
+
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+class FrontierV3SceneDeparturePersistenceTest {
+    private static final SubjectId ACTOR = new SubjectId("resident:save-proof");
+    private static final UUID ID = UUID.fromString("a520b5ba-7c35-36b7-845c-689ed5f4c697");
+    private static final SceneLeaseId LEASE = new SceneLeaseId("lease:save-proof");
+
+    private static FrontierV3SceneDeparture receipt(long health) {
+        var declaration = new FrontierV3ActorCarrierComposition.Declaration(ACTOR,
+                FrontierV3ActorCarrierComposition.ActorKind.RESIDENT,
+                FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, ID,
+                FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER, 7, 2);
+        return new FrontierV3SceneDeparture(new FrontierV3AmbientCarrierLedger.Carrier(declaration, 7, 3),
+                LEASE, 7, new SceneMemberPosition(ACTOR, new BodyPosition(12, 65, 10), FixedScalar.whole(health)),
+                FixedScalar.whole(20));
+    }
+
+    private static CompoundTag storedChunk(long health) {
+        var body = new CompoundTag(); body.putUUID("UUID", ID); body.putString("id", "minecraft:villager");
+        body.putFloat("Health", (float) health);
+        var position = new ListTag(); position.add(DoubleTag.valueOf(12.5D)); position.add(DoubleTag.valueOf(65.0D));
+        position.add(DoubleTag.valueOf(10.5D)); body.put("Pos", position);
+        var owner = new CompoundTag();
+        owner.putString(FrontierV3ActorCarrierComposition.ACTOR_KEY, ACTOR.value());
+        owner.putString(FrontierV3ActorCarrierComposition.KIND_KEY, "RESIDENT");
+        owner.putString(FrontierV3ActorCarrierComposition.OWNER_KEY, "SCENE_LEASE");
+        owner.putString(FrontierV3ActorCarrierComposition.REPRESENTATION_KEY, "LIVE_BODY");
+        owner.putLong(FrontierV3ActorCarrierComposition.REVISION_KEY, 7);
+        owner.putLong(FrontierV3ActorCarrierComposition.EPOCH_KEY, 2);
+        owner.putString(FrontierV3SceneExecutor.LEASE_KEY, LEASE.value());
+        owner.putLong(FrontierV3SceneExecutor.REVISION_KEY, 7);
+        body.put("NeoForgeData", owner);
+        var bodies = new ListTag(); bodies.add(body);
+        var chunk = new CompoundTag(); chunk.putIntArray("Position", new int[]{0, 0}); chunk.put("Entities", bodies);
+        return chunk;
+    }
+
+    @Test void unloadReceiptWaitsForExactWriteAndSuccessfulSync() {
+        var ledger = FrontierV3AmbientCarrierLedger.emptyForTest(); var receipt = receipt(9);
+        var batch = new FrontierV3SceneDeparturePersistence.Batch();
+        var written = new CompletableFuture<Void>();
+        batch.observe(new ChunkPos(0, 0), storedChunk(9), written);
+        assertTrue(ledger.recordDeparture(receipt));
+        var synchronizedStorage = new AtomicBoolean();
+        var ticket = batch.complete(true, () -> {
+            synchronizedStorage.set(true); return CompletableFuture.completedFuture(null);
+        }, ledger).orElseThrow();
+        assertEquals(java.util.List.of(receipt), ticket.departures());
+        assertFalse(ticket.saved().isDone(), "uncompleted entity write cannot certify departure");
+        assertFalse(ledger.savedDeparture(receipt));
+        written.complete(null);
+        ticket.saved().join();
+        assertTrue(synchronizedStorage.get(), "proof includes the storage synchronization");
+        assertFalse(ledger.savedDeparture(receipt), "sync alone is not a durable SavedData acknowledgement");
+        var published = new AtomicBoolean();
+        assertTrue(batch.acknowledge(ticket, ledger, receipt::equals, () -> published.set(true)));
+        assertTrue(published.get(), "the exact saved receipt must be published before release");
+        assertTrue(ledger.savedDeparture(receipt));
+        assertTrue(FrontierV3AmbientCarrierLedger.load(ledger.save(new CompoundTag(), null), null).savedDeparture(receipt));
+    }
+
+    @Test void changedHealthOrFailedWriteCannotBecomeSavedDeparture() {
+        var ledger = FrontierV3AmbientCarrierLedger.emptyForTest(); var receipt = receipt(9);
+        assertTrue(ledger.recordDeparture(receipt));
+        var wrong = new FrontierV3SceneDeparturePersistence.Batch();
+        wrong.observe(new ChunkPos(0, 0), storedChunk(8), CompletableFuture.completedFuture(null));
+        assertTrue(wrong.complete(true, () -> CompletableFuture.completedFuture(null), ledger)
+                .orElseThrow().departures().isEmpty());
+        var failed = new FrontierV3SceneDeparturePersistence.Batch();
+        failed.observe(new ChunkPos(0, 0), storedChunk(9), CompletableFuture.failedFuture(new java.io.IOException("region write failed")));
+        var ticket = failed.complete(true, () -> CompletableFuture.completedFuture(null), ledger).orElseThrow();
+        assertEquals(java.util.List.of(receipt), ticket.departures());
+        assertThrows(java.util.concurrent.CompletionException.class, () -> ticket.saved().join());
+        assertFalse(failed.acknowledge(ticket, ledger, value -> true, () -> fail("failed write must not publish")));
+        assertFalse(ledger.savedDeparture(receipt));
+    }
+
+    @Test void duplicateSavedUuidDoesNotSelectAReleaseProof() {
+        var ledger = FrontierV3AmbientCarrierLedger.emptyForTest(); var receipt = receipt(9);
+        assertTrue(ledger.recordDeparture(receipt));
+        var batch = new FrontierV3SceneDeparturePersistence.Batch();
+        batch.observe(new ChunkPos(0, 0), storedChunk(9), CompletableFuture.completedFuture(null));
+        var other = storedChunk(9); other.putIntArray("Position", new int[]{1, 0});
+        batch.observe(new ChunkPos(1, 0), other, CompletableFuture.completedFuture(null));
+        assertTrue(batch.complete(true, () -> CompletableFuture.completedFuture(null), ledger)
+                .orElseThrow().departures().isEmpty());
+    }
+}

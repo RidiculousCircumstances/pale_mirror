@@ -54,10 +54,18 @@ public final class FrontierResourceSitePlan {
             SettlementStructure farm = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.FARM).findFirst()
                     .orElseThrow(() -> new IllegalArgumentException("settlement lacks a farm: " + settlement.id().value()));
             String suffix = settlement.id().value().substring("settlement:".length()); SubjectId id = new SubjectId("site:" + suffix + "-wheat-field");
-            ResourceSite site = availableField(bootstrap.bounds(), id, settlement, farm, occupied);
+            ResourceFieldLayout authored = bootstrap.initialFieldLayouts().get(id);
+            ResourceSite site = authored == null ? availableField(bootstrap.bounds(), id, settlement, farm, occupied)
+                    : new ResourceSite(id, settlement.id(), farm.id(), ResourceSiteKind.WHEAT_FIELD, authored);
+            if (site.layout().cells().isEmpty() || site.managedSlots().stream().anyMatch(slot -> !bootstrap.bounds().contains(slot)
+                    || occupied.contains(slot)) || site.layout().cells().stream().anyMatch(cell ->
+                    !bootstrap.bounds().contains(cell.workstation().support())))
+                throw new IllegalArgumentException("resource site has an out-of-bounds or occupied initial layout: " + id.value());
             if (sites.put(id, site) != null) throw new IllegalArgumentException("duplicate resource site: " + id.value());
             occupied.addAll(site.managedSlots());
         }
+        if (!sites.keySet().containsAll(bootstrap.initialFieldLayouts().keySet()))
+            throw new IllegalArgumentException("initial field layout manifest names an unknown site");
         return Map.copyOf(sites);
     }
 
@@ -89,12 +97,33 @@ public final class FrontierResourceSitePlan {
     private static ResourceSite availableField(WorldBounds bounds, SubjectId id, Settlement settlement, SettlementStructure farm,
                                                Set<BlockPosition> occupied) {
         for (FacilityFacing side : candidateSides(farm.facing())) {
-            ResourceSite candidate = new ResourceSite(id, settlement.id(), farm.id(), ResourceSiteKind.WHEAT_FIELD, cropSlots(farm, side));
+            ResourceSite candidate = new ResourceSite(id, settlement.id(), farm.id(), ResourceSiteKind.WHEAT_FIELD, initialGrayboxLayout(cropSlots(farm, side)));
             if (candidate.managedSlots().stream().allMatch(bounds::contains) && candidate.managedSlots().stream().noneMatch(occupied::contains)) {
                 return candidate;
             }
         }
         throw new IllegalArgumentException("resource site has no clear bounded field side for " + farm.id().value());
+    }
+
+    /** Current bootstrap choice only; generic field geometry never assumes this rectangle. */
+    public static ResourceFieldLayout initialGrayboxLayout(List<BlockPosition> crops) {
+        if (crops.size() != FIELD_SIDE * FIELD_SIDE) throw new IllegalArgumentException("graybox bootstrap requires its 8x8 layout");
+        int minX = crops.stream().mapToInt(BlockPosition::x).min().orElseThrow();
+        int maxX = crops.stream().mapToInt(BlockPosition::x).max().orElseThrow();
+        int minZ = crops.stream().mapToInt(BlockPosition::z).min().orElseThrow();
+        int maxZ = crops.stream().mapToInt(BlockPosition::z).max().orElseThrow();
+        int soilY = crops.getFirst().y() - 1;
+        if (maxX - minX != FIELD_SIDE - 1 || maxZ - minZ != FIELD_SIDE - 1
+                || crops.stream().anyMatch(crop -> crop.y() != soilY + 1))
+            throw new IllegalArgumentException("graybox producer cannot supply irregular field irrigation");
+        var cells = new java.util.ArrayList<ResourceFieldLayout.Cell>(crops.size());
+        for (int index = 0; index < crops.size(); index++) {
+            var soil = new SurfaceAnchor(crops.get(index).offset(0, -1, 0));
+            cells.add(new ResourceFieldLayout.Cell(new ResourceFieldLayout.CellId(index + 1L), crops.get(index), soil, soil));
+        }
+        return new ResourceFieldLayout(1L, crops.size() + 1L, cells,
+                List.of(new BlockPosition(minX + 2, soilY, minZ - 1), new BlockPosition(maxX - 1, soilY, minZ - 1),
+                        new BlockPosition(minX + 2, soilY, maxZ + 1), new BlockPosition(maxX - 1, soilY, maxZ + 1)));
     }
 
     /**

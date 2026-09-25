@@ -65,7 +65,7 @@ final class FrontierV3ResourceSiteDeferredTerminalPrefix {
     static boolean ownsExactPrefix(ResourceSite site, ResourceSiteHarvestLineage lineage,
                                    FrontierV3ResourceSiteLedger.Claim claim, PhysicalIntent intent) {
         // Status alone is insufficient: a foreign RUNNING intent, look-alike site, or stale
-        // claim remains a local conflict. This owner alone may finish its terminal AIR suffix.
+        // claim remains a local conflict. This owner alone may finish its terminal replanted suffix.
         return lineage != null && intent != null && intent.id().equals(lineage.predecessorIntentId())
                 // The durable facility claim is intentionally stable across harvest jobs.
                 // It is the plan-derived site-projection identity, or (for the bounded

@@ -64,7 +64,11 @@ public final class PopulationBirthProcess {
     public static List<ProposedEvent> planCompletion(FrontierWorldState state, ScheduledAction action) {
         ResidentBirthJob job = state.humanPopulation().birthJobs().get(action.subject());
         if (job == null) throw new IllegalStateException("resident birth completion has no active permit: " + action.subject().value());
-        return List.of(new ProposedEvent(job.settlementId(), new ResidentBorn(job.resident(), job.position())));
+        if (!complete(job, job.resident().birthTick()).equals(action))
+            throw new IllegalArgumentException("resident birth completion lacks its exact retained schedule");
+        return List.of(new ProposedEvent(job.settlementId(), new ResidentBorn(job.id(), job.resident(), job.position(),
+                new io.farfrontier.palemirror.frontier.v3.api.ActorBirthIdentity(job.resident().id(),
+                        io.farfrontier.palemirror.frontier.v3.api.ActorBirthIdentity.Kind.RESIDENT))));
     }
 
     public static FrontierWorldState reduceStarted(FrontierWorldState state, SubjectId subject, ResidentBirthStarted started) {
@@ -83,9 +87,10 @@ public final class PopulationBirthProcess {
 
     public static FrontierWorldState reduceBorn(FrontierWorldState state, SubjectId subject, ResidentBorn birth) {
         if (!subject.equals(birth.resident().settlementId())) throw new IllegalArgumentException("resident birth lacks its settlement owner");
-        ResidentBirthJob job = state.humanPopulation().birthJobs().values().stream()
-                .filter(value -> value.resident().equals(birth.resident()) && value.position().equals(birth.position())).findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("resident birth has no active exact permit"));
+        ResidentBirthJob job = state.humanPopulation().birthJobs().get(birth.jobId());
+        if (job == null || !job.settlementId().equals(subject)
+                || !job.resident().equals(birth.resident()) || !job.position().equals(birth.position()))
+            throw new IllegalArgumentException("resident birth has no active exact job and output");
         return state.completeResidentBirth(job);
     }
 

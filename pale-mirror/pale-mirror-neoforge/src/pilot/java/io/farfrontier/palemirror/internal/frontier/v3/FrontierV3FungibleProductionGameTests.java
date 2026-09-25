@@ -134,7 +134,7 @@ public final class FrontierV3FungibleProductionGameTests {
         var worker = state.companies().companies().get(CompanyFoundationProcess.companyId(settlement)).founderId();
         SubjectId account = new SubjectId("custody:container-" + settlementIndex + "-depot"), claim = new SubjectId("claim:lot-effect-" + suffix);
         SubjectId input = new SubjectId("lot:bootstrap-" + settlementIndex + "-wheat");
-        var job = new ProductionJob(new SubjectId("job:lot-effect-" + suffix), settlement, new SubjectId("structure:" + settlementIndex + "-workshop"), worker,
+        var job = new ProductionJob(new SubjectId("job:lot-effect-" + suffix), task.id(), settlement, new SubjectId("structure:" + settlementIndex + "-workshop"), worker,
                 input, new ProductionInputHold.FungibleCold(input, account, claim),
                 new SubjectId("lot:effect-bread-" + suffix), "minecraft:bread", 64).withWorkProgress(ProductionWorkProgress.outputReady());
         state = CompanyWorkPaymentProcess.reserve(state.startFungibleProductionJob(job), job);

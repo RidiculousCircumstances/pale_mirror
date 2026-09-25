@@ -62,7 +62,7 @@ class HiveSettlementAssaultProcessTest {
                 .equals(new ResourceCustody.Container(FrontierWorldState.depotId(resident.settlementId())))).findFirst().orElseThrow();
         ResourceLot wheat = input.lotQuantities().keySet().stream().map(fixture.state().inventory().fungibleResources().lots()::get)
                 .filter(lot -> "minecraft:wheat".equals(lot.itemKind())).findFirst().orElseThrow();
-        ProductionJob job = new ProductionJob(new SubjectId("job:assault-occupied"), resident.settlementId(),
+        ProductionJob job = new ProductionJob(new SubjectId("job:assault-occupied"), fixture.task().id(), resident.settlementId(),
                 FrontierWorldStateSupport.settlement(fixture.state().bootstrap(), resident.settlementId()).structures().stream()
                         .filter(structure -> structure.kind() == StructureKind.WORKSHOP).findFirst().orElseThrow().id(), resident.id(),
                 wheat.id(), new ProductionInputHold.FungibleCold(wheat.id(), input.id(), new SubjectId("claim:assault-occupied")),

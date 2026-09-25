@@ -25,6 +25,11 @@ public final class BoundedPedestrianApproach {
         SurfaceAnchor at(int x, int z);
     }
 
+    /** An ordinary bounded-search miss, not malformed geometry or an invalid call. */
+    public static final class ApproachUnavailable extends IllegalArgumentException {
+        public ApproachUnavailable(String detail) { super(detail); }
+    }
+
     private BoundedPedestrianApproach() { }
 
     public static List<SurfaceAnchor> compile(FrontierBootstrap bootstrap, SurfaceAnchor start,
@@ -49,7 +54,7 @@ public final class BoundedPedestrianApproach {
         while (!queue.isEmpty()) {
             Candidate candidate = queue.remove(); SurfaceAnchor current = candidate.surface();
             if (candidate.distance() != distance.get(current)) continue;
-            if (++explored > MAX_EXPLORED_SURFACES) throw new IllegalArgumentException(owner + " approach exceeds bounded exploration");
+            if (++explored > MAX_EXPLORED_SURFACES) throw new ApproachUnavailable(owner + " approach exceeds bounded exploration");
             for (int[] delta : orderedNeighbours()) {
                 int x = current.x() + delta[0], z = current.z() + delta[1];
                 if (Math.abs(x - start.x()) > MAX_RADIUS || Math.abs(z - start.z()) > MAX_RADIUS) continue;
@@ -62,7 +67,7 @@ public final class BoundedPedestrianApproach {
                 queue.add(new Candidate(next, nextDistance));
             }
         }
-        throw new IllegalArgumentException(owner + " approach has no bounded immutable route from " + start.support() + " to " + target.support());
+        throw new ApproachUnavailable(owner + " approach has no bounded immutable route from " + start.support() + " to " + target.support());
     }
 
     private static boolean blocked(SurfaceAnchor surface, Set<BlockPosition> occupied) {

@@ -38,8 +38,10 @@ class FrontierV3PhysicalIntentSchedulingTest {
 
     @Test
     void postRestartExactEquipmentReturnRemainsActionableWhenItsLoadedPostconditionIsReady() {
-        PhysicalIntent recovered = intent("restart", PhysicalIntentKind.EQUIPMENT_RETURN)
-                .withStatus(PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, java.util.Optional.empty());
+        PhysicalIntent prepared = intent("restart", PhysicalIntentKind.EQUIPMENT_RETURN);
+        PhysicalIntent recovered = prepared
+                .withRecoveryUnknown(io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentRecoveryDiagnosticProducer.SETTLEMENT_ASSAULT
+                        .stamp(prepared));
 
         assertEquals(recovered, FrontierV3PhysicalIntentScheduling.firstActionable(List.of(recovered), candidate ->
                 FrontierV3PhysicalIntentScheduling.Readiness.RUNNABLE).orElseThrow(),

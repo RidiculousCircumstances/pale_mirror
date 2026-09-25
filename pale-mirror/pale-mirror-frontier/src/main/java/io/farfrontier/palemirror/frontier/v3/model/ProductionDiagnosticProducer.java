@@ -15,8 +15,8 @@ public enum ProductionDiagnosticProducer {
     private final ProductionBlockReason reason;
     ProductionDiagnosticProducer(ProductionBlockReason reason) { this.reason = reason; }
     public ProductionBlockReason reason() { return reason; }
-    public ProductionBlocked create(SubjectId settlementId, SubjectId facilityId, SubjectId workId) {
-        return new ProductionBlocked(settlementId, facilityId, workId, reason,
+    public ProductionBlocked create(SubjectId settlementId, SubjectId facilityId, SubjectId workId, SubjectId taskId) {
+        return new ProductionBlocked(settlementId, facilityId, workId, taskId, reason,
                 new DiagnosticTuple(DiagnosticReason.PRODUCTION_BLOCKED, DiagnosticCategory.WAIT_OR_BLOCKED,
                         new DiagnosticOwner(DiagnosticOwnerKind.PRODUCTION_JOB, workId),
                         new DiagnosticSubject(DiagnosticSubjectKind.PRODUCTION_INPUT, facilityId), DiagnosticDisposition.RETRY));

@@ -26,7 +26,7 @@ public final class FrontierDomainRelationships {
 
     public enum EntityKind {
         OBJECTIVE, TASK, MARKET_DEMAND, MARKET_QUOTE, MARKET_ORDER, FINANCIAL_RESERVATION,
-        PRODUCTION_JOB, RESOURCE_SITE, RESOURCE_HARVEST_JOB, RESIDENT, EXACT_ITEM, RESOURCE_LOT,
+        PRODUCTION_JOB, HIVE_GROWTH_JOB, RESOURCE_SITE, RESOURCE_HARVEST_JOB, RESIDENT, EXACT_ITEM, RESOURCE_LOT, RESOURCE_ACCOUNT,
         RESOURCE_CLAIM, PROVISION_CYCLE, PROVISION_ALLOCATION, SCENE_LEASE, AMBIENT_LEASE, CARRIER_EVIDENCE,
         SUPPLY_CONTRACT, ROUTE_OPERATION, CARGO, SERVICE_WORK, HIVE_MOBILIZATION, BIOFORM, STRUCTURE
     }
@@ -36,9 +36,11 @@ public final class FrontierDomainRelationships {
         OBJECTIVE_TASK("objective-task"), TASK_RESOURCE_SITE("task-resource-site"), TASK_PREDECESSOR("task-predecessor"),
         DEMAND_TASK("demand-task"), QUOTE_DEMAND("quote-demand"), ORDER_DEMAND("order-demand"),
         ORDER_QUOTE("order-quote"), ORDER_TASK("order-task"), ORDER_JOB("order-job"), ORDER_RESERVATION("order-reservation"),
-        JOB_WORKER("job-worker"), JOB_INPUT("job-input"), JOB_OUTPUT("job-output"), JOB_SCENE_LEASE("job-scene-lease"),
+        JOB_TASK("job-task"), JOB_WORKER("job-worker"), JOB_INPUT("job-input"), JOB_OUTPUT("job-output"), JOB_SCENE_LEASE("job-scene-lease"),
+        HIVE_GROWTH_TASK("hive-growth-task"),
         ACTOR_AMBIENT_LEASE("actor-ambient-lease"), HARVEST_SITE("harvest-site"), HARVEST_TASK("harvest-task"),
-        HARVEST_WORKER("harvest-worker"), HARVEST_OUTPUT("harvest-output"), HARVEST_PREDECESSOR("harvest-predecessor"),
+        HARVEST_WORKER("harvest-worker"), HARVEST_ACTOR_ACCOUNT("harvest-actor-account"),
+        HARVEST_DEPOT_ACCOUNT("harvest-depot-account"), HARVEST_OUTPUT("harvest-output"), HARVEST_PREDECESSOR("harvest-predecessor"),
         HARVEST_SUCCESSOR_TASK("harvest-successor-task"), HARVEST_SUCCESSOR_JOB("harvest-successor-job"),
         PROVISION_ALLOCATION("provision-allocation"), ALLOCATION_RESOURCE("allocation-resource"), ALLOCATION_RECIPIENT("allocation-recipient"),
         ACTOR_CARRIER_EVIDENCE("actor-carrier-evidence"),
@@ -78,18 +80,20 @@ public final class FrontierDomainRelationships {
     private static Set<Lifecycle> lifecycle(Kind kind) { return kind == Kind.ACTOR_AMBIENT_LEASE || kind == Kind.ACTOR_CARRIER_EVIDENCE ? EnumSet.of(Lifecycle.OBSERVED) : EnumSet.allOf(Lifecycle.class); }
     private static EntityKind source(Kind kind) { return switch (kind) {
         case OBJECTIVE_TASK -> EntityKind.OBJECTIVE; case TASK_RESOURCE_SITE, TASK_PREDECESSOR -> EntityKind.TASK; case DEMAND_TASK -> EntityKind.MARKET_DEMAND; case QUOTE_DEMAND -> EntityKind.MARKET_QUOTE;
-        case ORDER_DEMAND, ORDER_QUOTE, ORDER_TASK, ORDER_JOB, ORDER_RESERVATION -> EntityKind.MARKET_ORDER; case JOB_WORKER, JOB_INPUT, JOB_OUTPUT, JOB_SCENE_LEASE -> EntityKind.PRODUCTION_JOB;
+        case ORDER_DEMAND, ORDER_QUOTE, ORDER_TASK, ORDER_JOB, ORDER_RESERVATION -> EntityKind.MARKET_ORDER; case JOB_TASK, JOB_WORKER, JOB_INPUT, JOB_OUTPUT, JOB_SCENE_LEASE -> EntityKind.PRODUCTION_JOB;
+        case HIVE_GROWTH_TASK -> EntityKind.HIVE_GROWTH_JOB;
         case ACTOR_AMBIENT_LEASE, ACTOR_CARRIER_EVIDENCE -> EntityKind.RESIDENT; case HARVEST_SITE, HARVEST_PREDECESSOR -> EntityKind.RESOURCE_SITE;
-        case HARVEST_TASK, HARVEST_WORKER, HARVEST_OUTPUT, HARVEST_SUCCESSOR_TASK, HARVEST_SUCCESSOR_JOB -> EntityKind.RESOURCE_HARVEST_JOB;
+        case HARVEST_TASK, HARVEST_WORKER, HARVEST_ACTOR_ACCOUNT, HARVEST_DEPOT_ACCOUNT, HARVEST_OUTPUT, HARVEST_SUCCESSOR_TASK, HARVEST_SUCCESSOR_JOB -> EntityKind.RESOURCE_HARVEST_JOB;
         case PROVISION_ALLOCATION -> EntityKind.PROVISION_CYCLE; case ALLOCATION_RESOURCE, ALLOCATION_RECIPIENT -> EntityKind.PROVISION_ALLOCATION;
         case CONTRACT_ROUTE_OPERATION, CONTRACT_CARGO -> EntityKind.SUPPLY_CONTRACT; case ROUTE_CARRIER -> EntityKind.ROUTE_OPERATION;
         case SERVICE_TASK, SERVICE_WORKER, SERVICE_FACILITY, SERVICE_INPUT, SERVICE_SCENE_LEASE -> EntityKind.SERVICE_WORK;
         case HIVE_MOBILIZATION_TASK, HIVE_MOBILIZATION_MEMBER -> EntityKind.HIVE_MOBILIZATION; }; }
     private static EntityKind target(Kind kind) { return switch (kind) {
-        case OBJECTIVE_TASK, ORDER_TASK, DEMAND_TASK, HARVEST_TASK, HARVEST_SUCCESSOR_TASK, TASK_PREDECESSOR -> EntityKind.TASK;
+        case OBJECTIVE_TASK, ORDER_TASK, DEMAND_TASK, JOB_TASK, HIVE_GROWTH_TASK, HARVEST_TASK, HARVEST_SUCCESSOR_TASK, TASK_PREDECESSOR -> EntityKind.TASK;
         case TASK_RESOURCE_SITE -> EntityKind.RESOURCE_SITE; case QUOTE_DEMAND, ORDER_DEMAND -> EntityKind.MARKET_DEMAND;
         case ORDER_QUOTE -> EntityKind.MARKET_QUOTE; case ORDER_JOB -> EntityKind.PRODUCTION_JOB; case ORDER_RESERVATION -> EntityKind.FINANCIAL_RESERVATION;
         case JOB_WORKER, HARVEST_WORKER, ALLOCATION_RECIPIENT -> EntityKind.RESIDENT; case JOB_INPUT, JOB_OUTPUT, HARVEST_OUTPUT, ALLOCATION_RESOURCE -> EntityKind.EXACT_ITEM;
+        case HARVEST_ACTOR_ACCOUNT, HARVEST_DEPOT_ACCOUNT -> EntityKind.RESOURCE_ACCOUNT;
         case JOB_SCENE_LEASE -> EntityKind.SCENE_LEASE; case ACTOR_AMBIENT_LEASE -> EntityKind.AMBIENT_LEASE; case ACTOR_CARRIER_EVIDENCE -> EntityKind.CARRIER_EVIDENCE;
         case HARVEST_SITE, HARVEST_PREDECESSOR, HARVEST_SUCCESSOR_JOB -> EntityKind.RESOURCE_HARVEST_JOB; case PROVISION_ALLOCATION -> EntityKind.PROVISION_ALLOCATION;
         case CONTRACT_ROUTE_OPERATION -> EntityKind.ROUTE_OPERATION; case CONTRACT_CARGO -> EntityKind.CARGO; case ROUTE_CARRIER, SERVICE_WORKER -> EntityKind.RESIDENT;
@@ -99,10 +103,11 @@ public final class FrontierDomainRelationships {
         case OBJECTIVE_TASK -> EntityKind.OBJECTIVE; case TASK_RESOURCE_SITE, TASK_PREDECESSOR -> EntityKind.TASK;
         case DEMAND_TASK -> EntityKind.MARKET_DEMAND; case QUOTE_DEMAND -> EntityKind.MARKET_QUOTE;
         case ORDER_DEMAND, ORDER_QUOTE, ORDER_TASK, ORDER_JOB, ORDER_RESERVATION -> EntityKind.MARKET_ORDER;
-        case JOB_WORKER, JOB_INPUT, JOB_OUTPUT, JOB_SCENE_LEASE -> EntityKind.PRODUCTION_JOB;
+        case JOB_TASK, JOB_WORKER, JOB_INPUT, JOB_OUTPUT, JOB_SCENE_LEASE -> EntityKind.PRODUCTION_JOB;
+        case HIVE_GROWTH_TASK -> EntityKind.HIVE_GROWTH_JOB;
         case ACTOR_AMBIENT_LEASE, ACTOR_CARRIER_EVIDENCE -> EntityKind.RESIDENT;
         case HARVEST_SITE, HARVEST_PREDECESSOR, HARVEST_SUCCESSOR_TASK, HARVEST_SUCCESSOR_JOB -> EntityKind.RESOURCE_SITE;
-        case HARVEST_TASK, HARVEST_WORKER, HARVEST_OUTPUT -> EntityKind.RESOURCE_HARVEST_JOB;
+        case HARVEST_TASK, HARVEST_WORKER, HARVEST_ACTOR_ACCOUNT, HARVEST_DEPOT_ACCOUNT, HARVEST_OUTPUT -> EntityKind.RESOURCE_HARVEST_JOB;
         case PROVISION_ALLOCATION -> EntityKind.PROVISION_CYCLE; case ALLOCATION_RESOURCE, ALLOCATION_RECIPIENT -> EntityKind.PROVISION_ALLOCATION;
         case CONTRACT_ROUTE_OPERATION, CONTRACT_CARGO -> EntityKind.SUPPLY_CONTRACT; case ROUTE_CARRIER -> EntityKind.ROUTE_OPERATION;
         case SERVICE_TASK, SERVICE_WORKER, SERVICE_FACILITY, SERVICE_INPUT, SERVICE_SCENE_LEASE -> EntityKind.SERVICE_WORK;
@@ -121,6 +126,7 @@ public final class FrontierDomainRelationships {
     private static final List<Family> INVENTORY = List.of(
             new Family("strategic-objective-task", FamilyDisposition.RELATION_LAYER_CURRENT, "StrategicPlanState", "F0.6R3 vertical"),
             new Family("market-demand-order-production", FamilyDisposition.RELATION_LAYER_CURRENT, "MarketOrderBook/ProductionJob", "F0.6R3 vertical"),
+            new Family("hive-growth-task", FamilyDisposition.RELATION_LAYER_CURRENT, "HiveColony/HiveGrowthJob", "SA-09 explicit job-task retention"),
             new Family("resource-harvest-successor", FamilyDisposition.RELATION_LAYER_CURRENT, "ResourceSiteLifecycle", "F0.6R3 vertical"),
             new Family("provision-allocation-recipient", FamilyDisposition.RELATION_LAYER_CURRENT, "SettlementProvision", "F0.6R3 vertical"),
             new Family("actor-physical-carrier", FamilyDisposition.RELATION_LAYER_CURRENT, "canonical actor plus NeoForge evidence", "XACT-001 completes producer/adopter inventory"),
@@ -154,10 +160,12 @@ public final class FrontierDomainRelationships {
             surface(MarketDemand.class, "id", "buyerId", "reasonId"),
             surface(CompanyQuote.class, "id", "demandId", "sellerId"),
             surface(MarketWorkOrder.class, "id", "demandId", "quoteId", "sellerId", "taskId", "jobId", "reservationId"),
-            surface(ProductionJob.class, "id", "settlementId", "facilityId", "workerId", "consumedItemId", "outputItemId"),
+            surface(ProductionJob.class, "id", "taskId", "settlementId", "facilityId", "workerId", "consumedItemId", "outputItemId"),
+            surface(HiveGrowthJob.class, "id", "taskId", "hiveId", "nestId", "consumedItemId", "consumptionIntentId"),
             surface(ResourceSiteLifecycle.class, "siteId"),
-            surface(ResourceSiteHarvestJob.class, "id", "taskId", "siteId", "workerId", "outputItemId", "intentId"),
-            surface(ResourceSiteHarvestLineage.class, "predecessorJobId", "predecessorTaskId", "workerId", "outputItemId", "predecessorIntentId", "successorTaskId", "successorJobId"),
+            surface(ResourceSiteHarvestJob.class, "id", "taskId", "siteId", "workerId", "actorAccountId", "depotAccountId", "outputItemId", "intentId"),
+            surface(ResourceSiteHarvestLineage.class, "predecessorJobId", "predecessorTaskId", "workerId",
+                    "actorAccountId", "depotAccountId", "outputItemId", "predecessorIntentId", "successorTaskId", "successorJobId"),
             surface(SettlementProvision.class, "settlementId", "recipientIds", "activeIntentId"),
             surface(SettlementRationAllocation.class, "itemId", "recipientIds"),
             surface(SceneLease.class, "id", "worldId", "memberPositions", "ambientHandoffActorIds"),
@@ -363,6 +371,8 @@ public final class FrontierDomainRelationships {
             if (order.status() == MarketWorkOrderStatus.ACCEPTED && acceptedByJob.put(order.jobId(), order) != null) incident(incidents, Kind.ORDER_JOB, owner, IncidentReason.DUPLICATE_ENDPOINT, "one accepted order per job", order.jobId().value());
             ProductionJob job = state.productionJobs().get(order.jobId());
             if (job == null && order.status() == MarketWorkOrderStatus.ACCEPTED) incident(incidents, Kind.ORDER_JOB, owner, IncidentReason.MISSING_ENDPOINT, "active production job", order.jobId().value());
+            else if (job != null && order.status() == MarketWorkOrderStatus.ACCEPTED && !job.taskId().equals(order.taskId()))
+                incident(incidents, Kind.ORDER_TASK, owner, IncidentReason.STALE_RELATION, "same exact task as accepted production job", job.taskId().value());
             else edge(edges, Kind.ORDER_JOB, owner, owner, subject(EntityKind.PRODUCTION_JOB, order.jobId()), lifecycle, order.id().value());
             order.terminalReceipt().ifPresent(receipt -> {
                 Endpoint terminalJob = subject(EntityKind.PRODUCTION_JOB, receipt.jobId());
@@ -371,18 +381,33 @@ public final class FrontierDomainRelationships {
                         ? EntityKind.RESOURCE_LOT : EntityKind.EXACT_ITEM;
                 EntityKind outputKind = receipt.outputRepresentation() == TerminalProductionReceipt.ResourceRepresentation.RESOURCE_LOT
                         ? EntityKind.RESOURCE_LOT : EntityKind.EXACT_ITEM;
-                edge(edges, Kind.JOB_INPUT, terminalJob, terminalJob, subject(inputKind, receipt.inputId()), Lifecycle.TERMINAL_RETAINED,
-                        order.id().value());
+                receipt.inputLots().keySet().stream().sorted().forEach(inputId ->
+                        edge(edges, Kind.JOB_INPUT, terminalJob, terminalJob, subject(inputKind, inputId), Lifecycle.TERMINAL_RETAINED,
+                                order.id().value()));
                 edge(edges, Kind.JOB_OUTPUT, terminalJob, terminalJob, subject(outputKind, receipt.outputId()), Lifecycle.TERMINAL_RETAINED,
                         order.id().value());
             });
         }
         for (ProductionJob job : state.productionJobs().values()) {
             Endpoint owner = subject(EntityKind.PRODUCTION_JOB, job.id());
+            StrategicTask task = state.strategicPlans().tasks().get(job.taskId());
+            if (task == null) incident(incidents, Kind.JOB_TASK, owner, IncidentReason.MISSING_ENDPOINT, "active production task", job.taskId().value());
+            else if (task.kind() != StrategicTaskKind.PRODUCE_BREAD || !task.ownerId().equals(job.settlementId()))
+                incident(incidents, Kind.JOB_TASK, owner, IncidentReason.WRONG_TYPE, "production task owned by job settlement", job.taskId().value());
+            else edge(edges, Kind.JOB_TASK, owner, owner, subject(EntityKind.TASK, task.id()), Lifecycle.ACTIVE, job.id().value());
             if (state.humanPopulation().resident(job.workerId()) == null) incident(incidents, Kind.JOB_WORKER, owner, IncidentReason.MISSING_ENDPOINT, "canonical resident worker", job.workerId().value());
             else edge(edges, Kind.JOB_WORKER, owner, owner, subject(EntityKind.RESIDENT, job.workerId()), Lifecycle.ACTIVE, job.id().value());
-            edge(edges, Kind.JOB_INPUT, owner, owner, subject(job.inputHold().resourceEntityKind(), job.consumedItemId()), Lifecycle.ACTIVE, job.id().value());
+            job.inputQuantities().keySet().stream().sorted().forEach(inputId ->
+                    edge(edges, Kind.JOB_INPUT, owner, owner, subject(job.inputHold().resourceEntityKind(), inputId), Lifecycle.ACTIVE, job.id().value()));
             edge(edges, Kind.JOB_OUTPUT, owner, owner, subject(job.inputHold().resourceEntityKind(), job.outputItemId()), Lifecycle.ACTIVE, job.id().value());
+        }
+        for (HiveGrowthJob job : state.hiveColony().growthJobs().values()) {
+            Endpoint owner = subject(EntityKind.HIVE_GROWTH_JOB, job.id());
+            StrategicTask task = state.strategicPlans().tasks().get(job.taskId());
+            if (task == null) incident(incidents, Kind.HIVE_GROWTH_TASK, owner, IncidentReason.MISSING_ENDPOINT, "active hive growth task", job.taskId().value());
+            else if (task.kind() != StrategicTaskKind.GROW_HIVE_ORGANISM || !task.ownerId().equals(job.hiveId()))
+                incident(incidents, Kind.HIVE_GROWTH_TASK, owner, IncidentReason.WRONG_TYPE, "hive growth task owned by job hive", job.taskId().value());
+            else edge(edges, Kind.HIVE_GROWTH_TASK, owner, owner, subject(EntityKind.TASK, task.id()), Lifecycle.ACTIVE, job.id().value());
         }
     }
 
@@ -394,7 +419,10 @@ public final class FrontierDomainRelationships {
                 edge(edges, Kind.HARVEST_SITE, site, site, jobEndpoint, Lifecycle.ACTIVE, job.id().value());
                 edge(edges, Kind.HARVEST_TASK, jobEndpoint, jobEndpoint, subject(EntityKind.TASK, job.taskId()), Lifecycle.ACTIVE, job.id().value());
                 edge(edges, Kind.HARVEST_WORKER, jobEndpoint, jobEndpoint, subject(EntityKind.RESIDENT, job.workerId()), Lifecycle.ACTIVE, job.id().value());
-                edge(edges, Kind.HARVEST_OUTPUT, jobEndpoint, jobEndpoint, subject(EntityKind.EXACT_ITEM, job.outputItemId()), Lifecycle.ACTIVE, job.id().value());
+                edge(edges, Kind.HARVEST_ACTOR_ACCOUNT, jobEndpoint, jobEndpoint,
+                        subject(EntityKind.RESOURCE_ACCOUNT, job.actorAccountId()), Lifecycle.ACTIVE, job.id().value());
+                edge(edges, Kind.HARVEST_DEPOT_ACCOUNT, jobEndpoint, jobEndpoint,
+                        subject(EntityKind.RESOURCE_ACCOUNT, job.depotAccountId()), Lifecycle.ACTIVE, job.id().value());
             });
             lifecycle.harvestLineage().ifPresent(lineage -> {
                 Endpoint predecessor = subject(EntityKind.RESOURCE_HARVEST_JOB, lineage.predecessorJobId());

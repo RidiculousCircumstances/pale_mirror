@@ -23,13 +23,21 @@ final class FrontierV3SceneDepartureObserver {
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE) return false;
         var ambient = state.ambientLeases().get(binding.member().actorId());
         if (ambient != null && ambient.status() != AmbientLeaseStatus.CLOSED) return false;
+        BodyPosition observedBody;
+        if (FrontierSceneBehaviors.isResourceSiteHarvest(binding.lease())) {
+            var supported = FrontierV3SupportedBodyCapture.observeDeparting(level, body);
+            if (supported.isEmpty()) return false;
+            observedBody = supported.orElseThrow();
+        } else {
+            observedBody = new BodyPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ());
+        }
         long revision = Math.max(1L, binding.lease().revision());
         var inactive = new FrontierV3ActorCarrierComposition.Declaration(binding.live().actorId(), binding.live().kind(),
                 binding.live().owner(), binding.live().entityId(), FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER,
                 revision, binding.live().epoch());
         var receipt = new FrontierV3SceneDeparture(new FrontierV3AmbientCarrierLedger.Carrier(inactive, revision,
                 ambient == null ? 0L : ambient.revision()), binding.lease().id(), binding.lease().revision(),
-                new SceneMemberPosition(binding.member().actorId(), new BodyPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ()),
+                new SceneMemberPosition(binding.member().actorId(), observedBody,
                         new FixedScalar(Math.round((double) body.getHealth() * FixedScalar.SCALE))), actor.condition().health());
         return FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId()).recordDeparture(receipt);
     }
@@ -43,8 +51,16 @@ final class FrontierV3SceneDepartureObserver {
         var binding = binding(state, entity);
         if (binding != null && FrontierV3ActorCarrierComposition.owns(entity, binding.live())) {
             var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
+            BodyPosition observedBody;
+            if (FrontierSceneBehaviors.isResourceSiteHarvest(binding.lease())) {
+                var supported = FrontierV3SupportedBodyCapture.observe(level, body);
+                if (supported.isEmpty()) return;
+                observedBody = supported.orElseThrow();
+            } else {
+                observedBody = new BodyPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ());
+            }
             resumeReturned(state, binding.lease(), binding.member(), binding.live(),
-                    new SceneMemberPosition(binding.member().actorId(), new BodyPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ()),
+                    new SceneMemberPosition(binding.member().actorId(), observedBody,
                             new FixedScalar(Math.round((double) body.getHealth() * FixedScalar.SCALE))), ledger);
             // A different returned snapshot remains conflicting evidence. Never erase it
             // merely because a body with the same UUID became visible again.
@@ -55,7 +71,7 @@ final class FrontierV3SceneDepartureObserver {
     static boolean resumeReturned(FrontierWorldState state, SceneLease lease, SceneMember member,
                                    FrontierV3ActorCarrierComposition.Declaration live, SceneMemberPosition observed,
                                    FrontierV3AmbientCarrierLedger ledger) {
-        return validDeparture(state, lease, member, ledger)
+        return observedDeparture(state, lease, member, ledger)
                 .filter(receipt -> live.representation() == FrontierV3ActorCarrierComposition.Representation.LIVE_BODY
                         && live.owner() == receipt.carrier().identity().owner()
                         && live.kind() == receipt.carrier().identity().kind()
@@ -73,6 +89,12 @@ final class FrontierV3SceneDepartureObserver {
     }
 
     static java.util.Optional<FrontierV3SceneDeparture> validDeparture(FrontierWorldState state, SceneLease lease,
+                                                                      SceneMember member, FrontierV3AmbientCarrierLedger ledger) {
+        return observedDeparture(state, lease, member, ledger).filter(ledger::savedDeparture);
+    }
+
+    /** Unload observation is not yet a release witness until entity storage confirms it. */
+    static java.util.Optional<FrontierV3SceneDeparture> observedDeparture(FrontierWorldState state, SceneLease lease,
                                                                       SceneMember member, FrontierV3AmbientCarrierLedger ledger) {
         var actor = state.actorLocations().get(member.actorId());
         var ambient = state.ambientLeases().get(member.actorId());
@@ -93,6 +115,13 @@ final class FrontierV3SceneDepartureObserver {
                     declaration.kind(), declaration.owner(), declaration.entityId(), declaration.representation(),
                     declaration.authorityRevision(), declaration.epoch()));
         } catch (IllegalArgumentException foreignDeclaration) { return false; }
+    }
+
+    static boolean fenceDeparture(net.minecraft.server.level.ServerLevel level, FrontierWorldState state,
+                                  SceneLease lease, SceneMember member, FrontierV3AmbientCarrierLedger ledger) {
+        if (!fenceDeparture(state, lease, member, ledger)) return false;
+        ledger.persist(level, state.bootstrap().worldId());
+        return true;
     }
 
     static boolean fenceDeparture(FrontierWorldState state, SceneLease lease, SceneMember member,

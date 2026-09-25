@@ -168,9 +168,7 @@ class FrontierReadabilityPlanTest {
         SubjectId farmer = state.humanPopulation().residents().values().stream()
                 .filter(value -> value.settlementId().equals(settlement.id()) && value.profession() == ResidentProfession.AGRICULTURAL_WORKER)
                 .findFirst().orElseThrow().id();
-        ResourceSiteLifecycle ready = new ResourceSiteLifecycle(site.id(), ResourceSitePhase.READY, 2L,
-                ResourceSiteLifecycle.MATURE_STAGE, java.util.Optional.empty(), java.util.Optional.empty(), java.util.Optional.empty());
-        state = state.withResourceSites(state.resourceSites().replace(ready));
+        state = state.withResourceSites(matureReadyField(state, site));
         AmbientActorLease lease = AmbientActorProcess.nextLease(state, farmer, new SimInstant(22_000L));
         state = AmbientLeaseStateProcess.prepare(state, lease);
         state = AmbientLeaseStateProcess.transition(state, farmer, AmbientLeaseStatus.HOT);
@@ -203,8 +201,6 @@ class FrontierReadabilityPlanTest {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:board-starving-farmers"), 91L));
         Settlement settlement = state.bootstrap().settlements().getFirst();
         ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).get(new SubjectId("site:1-wheat-field"));
-        ResourceSiteLifecycle ready = new ResourceSiteLifecycle(site.id(), ResourceSitePhase.READY, 2L,
-                ResourceSiteLifecycle.MATURE_STAGE, java.util.Optional.empty(), java.util.Optional.empty(), java.util.Optional.empty());
         HumanPopulation population = state.humanPopulation();
         for (int cycle = 1; cycle <= ResidentNutrition.STARVING_AFTER_MISSED_CYCLES; cycle++) {
             for (ResidentProfile resident : population.residents().values()) {
@@ -213,7 +209,7 @@ class FrontierReadabilityPlanTest {
                 }
             }
         }
-        FrontierWorldState hungry = state.withResourceSites(state.resourceSites().replace(ready)).withHumanPopulation(population);
+        FrontierWorldState hungry = state.withResourceSites(matureReadyField(state, site)).withHumanPopulation(population);
 
         FrontierObjectBoard board = FrontierReadabilityPlan.compile(hungry).boards().get(site.id());
 
@@ -226,8 +222,6 @@ class FrontierReadabilityPlanTest {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:board-harvest-start-pending"), 91L));
         Settlement settlement = state.bootstrap().settlements().getFirst();
         ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).get(new SubjectId("site:1-wheat-field"));
-        ResourceSiteLifecycle ready = new ResourceSiteLifecycle(site.id(), ResourceSitePhase.READY, 2L,
-                ResourceSiteLifecycle.MATURE_STAGE, java.util.Optional.empty(), java.util.Optional.empty(), java.util.Optional.empty());
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:1-harvest"), settlement.id(),
                 StrategicObjectiveKind.SETTLEMENT_HARVEST_RESOURCE_SITE, java.util.Optional.empty(), java.util.Optional.of(site.id()),
                 1, StrategicObjectiveStatus.ACTIVE);
@@ -236,7 +230,7 @@ class FrontierReadabilityPlanTest {
                 java.util.List.of(StrategicTaskRequirement.ACTIVE_FARM, StrategicTaskRequirement.AVAILABLE_FARMER,
                         StrategicTaskRequirement.FREE_DEPOT_SLOT), java.util.List.of(),
                 StrategicTaskStatus.PENDING);
-        FrontierWorldState pending = state.withResourceSites(state.resourceSites().replace(ready))
+        FrontierWorldState pending = state.withResourceSites(matureReadyField(state, site))
                 .withStrategicPlans(state.strategicPlans().addObjective(objective).addTask(task));
 
         FrontierObjectBoard board = FrontierReadabilityPlan.compile(pending).boards().get(site.id());
@@ -292,5 +286,13 @@ class FrontierReadabilityPlanTest {
         FrontierObjectBoard board = FrontierReadabilityPlan.compile(damaged).boards().get(FrontierRouteNetwork.OWNER);
         assertEquals(FrontierObjectBoard.Tone.WARNING, board.tone());
         assertTrue(board.text().endsWith("ROUTE DAMAGE · PATROL NEEDED"));
+    }
+
+    private static ResourceSiteState matureReadyField(FrontierWorldState state, ResourceSite site) {
+        ResourceSiteLifecycle ready = new ResourceSiteLifecycle(site.id(), ResourceSitePhase.READY, 2L,
+                ResourceSiteLifecycle.MATURE_STAGE, java.util.Optional.empty(), java.util.Optional.empty(), java.util.Optional.empty());
+        ResourceFieldCycle cycle = ResourceFieldCycle.seeded(site.id(), site.layout(), ready.growthEpoch());
+        for (int stage = 0; stage < ResourceSiteLifecycle.MATURE_STAGE; stage++) cycle = cycle.advanceGrowthStage();
+        return state.resourceSites().replace(ready, cycle);
     }
 }

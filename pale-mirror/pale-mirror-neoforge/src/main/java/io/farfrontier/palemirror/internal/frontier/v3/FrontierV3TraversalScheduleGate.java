@@ -16,23 +16,23 @@ final class FrontierV3TraversalScheduleGate {
      * reschedule that continuation: semantic crop work remains due-gated below.  This keeps
      * the scheduler out of the body's movement clock without creating a second route or timer.
      */
-    static boolean traversalCheckpointBound(CheckpointImage checkpoint, SubjectId jobId) {
-        return binding(checkpoint, jobId).isPresent();
+    static boolean traversalCheckpointBound(CheckpointImage checkpoint, SubjectId siteId) {
+        return binding(checkpoint, siteId).isPresent();
     }
 
     /** A physically arrived exact next cell and its one engine binding are both necessary. */
-    static boolean shouldCommitObservedTraversal(CheckpointImage checkpoint, SubjectId jobId, boolean atExactNextCell) {
-        return atExactNextCell && traversalCheckpointBound(checkpoint, jobId);
+    static boolean shouldCommitObservedTraversal(CheckpointImage checkpoint, SubjectId siteId, boolean atExactNextCell) {
+        return atExactNextCell && traversalCheckpointBound(checkpoint, siteId);
     }
 
-    static Optional<ScheduledAction> binding(CheckpointImage checkpoint, SubjectId jobId) {
-        try { return Optional.of(FrontierV3ContinuationBinding.require(checkpoint, jobId,
+    static Optional<ScheduledAction> binding(CheckpointImage checkpoint, SubjectId siteId) {
+        try { return Optional.of(FrontierV3ContinuationBinding.require(checkpoint, siteId,
                 ResourceSiteHarvestProcess.COLD_PROGRESS_KIND)); }
         catch (IllegalArgumentException rejected) { return Optional.empty(); }
     }
 
     /** Irreversible crop mutation may consume the continuation only at its ordinary due turn. */
-    static Optional<ScheduledAction> dueBinding(CheckpointImage checkpoint, SubjectId jobId) {
-        return binding(checkpoint, jobId).filter(action -> checkpoint.instant().compareTo(action.dueAt()) >= 0);
+    static Optional<ScheduledAction> dueBinding(CheckpointImage checkpoint, SubjectId siteId) {
+        return binding(checkpoint, siteId).filter(action -> checkpoint.instant().compareTo(action.dueAt()) >= 0);
     }
 }

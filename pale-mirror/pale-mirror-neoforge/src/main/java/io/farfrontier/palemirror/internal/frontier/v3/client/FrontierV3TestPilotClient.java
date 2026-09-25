@@ -80,6 +80,7 @@ public final class FrontierV3TestPilotClient {
     private static boolean entityInteractionAttempted;
     private static int attackedEntityRuntimeId = -1;
     private static int entityAttackAttempts;
+    private static float attackedEntityInitialHealth = Float.NaN;
     private static long lastEntityAttackTick = Long.MIN_VALUE;
     private static Vec3 lastAttackedEntityPosition;
     private static CaptureBarrier captureBarrier;
@@ -145,7 +146,7 @@ public final class FrontierV3TestPilotClient {
             diagnosticWaitBaseline = null; diagnosticWaitRequestNanos = 0L; currentCausalMilestone = null;
             boardInteractionAttempted = false;
             entityInteractionAttempted = false;
-            attackedEntityRuntimeId = -1; entityAttackAttempts = 0; lastEntityAttackTick = Long.MIN_VALUE; lastAttackedEntityPosition = null;
+            attackedEntityRuntimeId = -1; entityAttackAttempts = 0; attackedEntityInitialHealth = Float.NaN; lastEntityAttackTick = Long.MIN_VALUE; lastAttackedEntityPosition = null;
             captureBarrier = null; captureFocus = null; diagnostics.clear(); FrontierV3PilotMotionObserver.reset(); FrontierV3PilotSettlementPopulationObserver.reset();
             harvestSemanticOracle = null;
             FrontierV3TestPilotPresentation.clear(Minecraft.getInstance());
@@ -679,6 +680,7 @@ public final class FrontierV3TestPilotClient {
         double maximum = action.has("maxDistance") ? action.get("maxDistance").getAsDouble() : 8.0D;
         int maximumAttempts = action.get("maxAttacks").getAsInt();
         boolean requireRemoval = action.has("requireRemoval") && action.get("requireRemoval").getAsBoolean();
+        boolean requireDamage = action.has("requireDamage") && action.get("requireDamage").getAsBoolean();
         Entity target;
         if (attackedEntityRuntimeId < 0) {
             target = minecraft.level.getEntitiesOfClass(Entity.class, minecraft.player.getBoundingBox().inflate(maximum), entity ->
@@ -687,7 +689,9 @@ public final class FrontierV3TestPilotClient {
                     .stream().sorted(java.util.Comparator.comparingDouble((Entity entity) -> entity.distanceToSqr(minecraft.player))
                             .thenComparing(Entity::getUUID)).findFirst().orElse(null);
             if (target == null) { timeout(minecraft, action, "no nearby ordinary entity of type " + expectedType); return; }
+            if (requireDamage && !(target instanceof LivingEntity)) throw new IllegalStateException("damage receipt requires a living entity");
             attackedEntityRuntimeId = target.getId();
+            if (requireDamage) attackedEntityInitialHealth = ((LivingEntity) target).getHealth();
         } else {
             target = minecraft.level.getEntity(attackedEntityRuntimeId);
             // A normal death packet reaches the client before Minecraft necessarily removes
@@ -728,7 +732,10 @@ public final class FrontierV3TestPilotClient {
             lastEntityAttackTick = tick;
         }
         if (!requireRemoval && entityAttackAttempts >= maximumAttempts) {
-            advance("attack_nearest_entity");
+            if (!requireDamage || target instanceof LivingEntity living && living.getHealth() < attackedEntityInitialHealth) {
+                advance("attack_nearest_entity"); return;
+            }
+            timeout(minecraft, action, "ordinary attack did not lower the selected entity's health");
             return;
         }
         timeout(minecraft, action, "timed out attacking ordinary entity " + expectedType);
@@ -1015,12 +1022,15 @@ public final class FrontierV3TestPilotClient {
         int completedAction = runningSetup ? 0 : index + 1;
         JsonObject reachedFrame = runningSetup ? null : frameAfter(completedAction);
         index++; actionStartedTick = -1L; actionStartedNanos = -1L; anchorResolutionStartedNanos = -1L; anchorResolutionLastRequestNanos = -1L;
+        // Each observation owns its exact job/worker and fresh progress window.
+        // A prior PASS must never satisfy another field or a later harvest epoch.
+        harvestSemanticOracle = null;
         currentCausalMilestone = null; breaking = false; placementAttempted = false;
         visitSent = false; visitChunkReadyTick = -1L; visitChunkReadyNanos = -1L; visitIngress = null; visitHandshakeArmed = false; visitHandshakeBaseline = null; containerOpenAttempted = false; quickMoveAttempted = false; inspectSent = false; inspectBaseline = null;
         fastForwardSent = false; fastForwardBaseline = null; releaseProjectionBaseline = null;
         diagnosticWaitBaseline = null; diagnosticWaitRequestNanos = 0L;
         boardInteractionAttempted = false; entityInteractionAttempted = false;
-        attackedEntityRuntimeId = -1; entityAttackAttempts = 0; lastEntityAttackTick = Long.MIN_VALUE; lastAttackedEntityPosition = null;
+        attackedEntityRuntimeId = -1; entityAttackAttempts = 0; attackedEntityInitialHealth = Float.NaN; lastEntityAttackTick = Long.MIN_VALUE; lastAttackedEntityPosition = null;
         if (runningSetup && index >= setup.size()) {
             runningSetup = false; index = 0;
             try {
@@ -1091,7 +1101,7 @@ public final class FrontierV3TestPilotClient {
         actions = null; setup = null; frames = null; captureBarrier = null; captureFocus = null; runningSetup = false; index = 0; actionStartedTick = -1L;
         anchorResolutionStartedNanos = -1L; anchorResolutionLastRequestNanos = -1L; breaking = false;
         visitSent = false; visitChunkReadyTick = -1L; visitChunkReadyNanos = -1L; visitIngress = null; visitHandshakeArmed = false; visitHandshakeBaseline = null; containerOpenAttempted = false; quickMoveAttempted = false; inspectSent = false; inspectBaseline = null;
-        boardInteractionAttempted = false; entityInteractionAttempted = false; attackedEntityRuntimeId = -1; entityAttackAttempts = 0; lastEntityAttackTick = Long.MIN_VALUE;
+        boardInteractionAttempted = false; entityInteractionAttempted = false; attackedEntityRuntimeId = -1; entityAttackAttempts = 0; attackedEntityInitialHealth = Float.NaN; lastEntityAttackTick = Long.MIN_VALUE;
         diagnostics.clear(); FrontierV3PilotMotionObserver.reset(); FrontierV3PilotSettlementPopulationObserver.reset(); FrontierV3PilotSessionControl.reset();
         fastForwardSent = false; fastForwardBaseline = null; releaseProjectionBaseline = null; currentCausalMilestone = null; diagnosticWaitBaseline = null; diagnosticWaitRequestNanos = 0L;
     }
@@ -1103,7 +1113,7 @@ public final class FrontierV3TestPilotClient {
         visitHandshakeArmed = false; visitHandshakeBaseline = null; containerOpenAttempted = false;
         quickMoveAttempted = false; inspectSent = false; inspectBaseline = null;
         fastForwardSent = false; fastForwardBaseline = null; releaseProjectionBaseline = null; boardInteractionAttempted = false; diagnosticWaitBaseline = null; diagnosticWaitRequestNanos = 0L;
-        entityInteractionAttempted = false; attackedEntityRuntimeId = -1; entityAttackAttempts = 0; lastEntityAttackTick = Long.MIN_VALUE; lastAttackedEntityPosition = null;
+        entityInteractionAttempted = false; attackedEntityRuntimeId = -1; entityAttackAttempts = 0; attackedEntityInitialHealth = Float.NaN; lastEntityAttackTick = Long.MIN_VALUE; lastAttackedEntityPosition = null;
         diagnostics.clear(); FrontierV3PilotMotionObserver.reset(); FrontierV3PilotSettlementPopulationObserver.reset(); inspectBaseline = null;
     }
     /** Client-only state; it has no authority to select a worker or mutate canonical work. */

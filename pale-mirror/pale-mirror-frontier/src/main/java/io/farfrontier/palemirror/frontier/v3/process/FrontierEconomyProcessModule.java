@@ -61,7 +61,8 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
                     }
                     ProductionJob job = before.productionJobs().get(intent.causeSubjectId());
                     if (!(binding.relations() instanceof PhysicalIntentRetirementAccount.Exact<java.util.List<FrontierDomainRelationships.Edge>> exact)
-                            || exact.value().size() != 3 || !(binding.leaseOrCarrier() instanceof PhysicalIntentRetirementAccount.Exact<SubjectId> carrier)
+                            || exact.value().size() != job.inputQuantities().size() + 2
+                            || !(binding.leaseOrCarrier() instanceof PhysicalIntentRetirementAccount.Exact<SubjectId> carrier)
                             || !carrier.value().equals(job.workerId()) || !(binding.commitment() instanceof PhysicalIntentRetirementAccount.Exact<SubjectId> commitment)
                             || !commitment.value().equals(job.consumedItemId())) {
                         throw new IllegalArgumentException("production retirement account does not retain its exact declared relations, worker and input commitment");
@@ -103,13 +104,14 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
         if (job == null) throw new IllegalArgumentException("production retirement account has no exact job");
         FrontierDomainRelationships.SubjectEndpoint owner = new FrontierDomainRelationships.SubjectEndpoint(FrontierDomainRelationships.EntityKind.PRODUCTION_JOB, job.id());
         FrontierDomainRelationships.EntityKind resourceKind = job.inputHold().resourceEntityKind();
-        java.util.List<FrontierDomainRelationships.Edge> relations = java.util.List.of(
-                FrontierDomainRelationships.declaredEdge(FrontierDomainRelationships.Kind.JOB_WORKER, owner, owner,
-                        new FrontierDomainRelationships.SubjectEndpoint(FrontierDomainRelationships.EntityKind.RESIDENT, job.workerId()), FrontierDomainRelationships.Lifecycle.ACTIVE, job.id().value()),
+        java.util.List<FrontierDomainRelationships.Edge> relations = new java.util.ArrayList<>();
+        relations.add(FrontierDomainRelationships.declaredEdge(FrontierDomainRelationships.Kind.JOB_WORKER, owner, owner,
+                new FrontierDomainRelationships.SubjectEndpoint(FrontierDomainRelationships.EntityKind.RESIDENT, job.workerId()), FrontierDomainRelationships.Lifecycle.ACTIVE, job.id().value()));
+        job.inputQuantities().keySet().stream().sorted().forEach(inputId -> relations.add(
                 FrontierDomainRelationships.declaredEdge(FrontierDomainRelationships.Kind.JOB_INPUT, owner, owner,
-                        new FrontierDomainRelationships.SubjectEndpoint(resourceKind, job.consumedItemId()), FrontierDomainRelationships.Lifecycle.ACTIVE, job.id().value()),
-                FrontierDomainRelationships.declaredEdge(FrontierDomainRelationships.Kind.JOB_OUTPUT, owner, owner,
-                        new FrontierDomainRelationships.SubjectEndpoint(resourceKind, job.outputItemId()), FrontierDomainRelationships.Lifecycle.ACTIVE, job.id().value()));
+                        new FrontierDomainRelationships.SubjectEndpoint(resourceKind, inputId), FrontierDomainRelationships.Lifecycle.ACTIVE, job.id().value())));
+        relations.add(FrontierDomainRelationships.declaredEdge(FrontierDomainRelationships.Kind.JOB_OUTPUT, owner, owner,
+                new FrontierDomainRelationships.SubjectEndpoint(resourceKind, job.outputItemId()), FrontierDomainRelationships.Lifecycle.ACTIVE, job.id().value()));
         return new PhysicalIntentRetirementAccount.Binding(intent.lifecycleOwner(), intent.id(), new PhysicalIntentRetirementAccount.Exact<>(relations), continuation,
                 new PhysicalIntentRetirementAccount.Exact<>(job.workerId()), new PhysicalIntentRetirementAccount.Exact<>(job.consumedItemId()),
                 transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART

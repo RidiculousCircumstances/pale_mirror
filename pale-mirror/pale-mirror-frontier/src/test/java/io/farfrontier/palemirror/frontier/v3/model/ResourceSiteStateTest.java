@@ -7,12 +7,35 @@ import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
+import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResourceSiteStateTest {
+    @Test
+    void currentDescriptorTakesIdentityFromBootstrapAndGeometryFromCanonicalCycle() {
+        FrontierWorldState baseline = initial();
+        SubjectId siteId = new SubjectId("site:1-wheat-field");
+        ResourceSite bootstrapSite = FrontierResourceSitePlan.compile(baseline.bootstrap()).get(siteId);
+        ResourceFieldCycle initial = baseline.resourceSites().cycle(siteId);
+        ResourceFieldLayout revised = initial.layout().revise(2, initial.layout().nextCellId(),
+                initial.layout().cells(), initial.layout().irrigationSlots());
+        ResourceFieldCycle current = initial.revised(revised, java.util.Set.of());
+        Map<SubjectId, ResourceFieldCycle> cycles = new java.util.LinkedHashMap<>(baseline.resourceSites().cycles());
+        cycles.put(siteId, current);
+        ResourceSiteState sites = new ResourceSiteState(baseline.resourceSites().sites(), cycles);
+        ResourceSite descriptor = sites.descriptor(baseline.bootstrap(), siteId);
+        assertEquals(bootstrapSite.settlementId(), descriptor.settlementId());
+        assertEquals(bootstrapSite.facilityId(), descriptor.facilityId());
+        assertEquals(revised, descriptor.layout());
+        assertEquals(revised, sites.descriptors(baseline.bootstrap()).get(siteId).layout());
+        assertEquals(1, bootstrapSite.layout().revision(), "bootstrap remains an immutable initial plan");
+        assertThrows(IllegalArgumentException.class, () -> sites.descriptor(baseline.bootstrap(), new SubjectId("site:missing")));
+    }
+
     @Test
     void fieldLifecycleKeepsOneExactWorkIdentityAndRecoversWithoutChangingIt() {
         FrontierWorldState baseline = initial();
@@ -29,15 +52,27 @@ class ResourceSiteStateTest {
         assertEquals(ResourceSitePhase.READY, growing.phase());
         SubjectId jobId = new SubjectId("job:site-harvest-1-wheat-field-1");
         ResourceSite site = FrontierResourceSitePlan.compile(baseline.bootstrap()).get(siteId);
-        ActorLocation worker = baseline.actorLocations().get(new SubjectId("resident:1-1"));
         ResourceSiteHarvestJob harvest = new ResourceSiteHarvestJob(new SubjectId("job:site-harvest-1-wheat-field-1"), new SubjectId("task:field-harvest-1"), siteId,
-                new SubjectId("resident:1-1"), new SubjectId("item:site-harvest-1-wheat-field-1"),
+                new SubjectId("resident:1-1"), new SubjectId("custody:field-actor-site-harvest-1-wheat-field-1"),
+                ReferenceContainerCustody.scopeId(FrontierWorldState.depotId(new SubjectId("settlement:1"))),
+                new SubjectId("item:site-harvest-1-wheat-field-1"),
                 new InventoryCustody.ContainerSlot(FrontierWorldState.depotId(new SubjectId("settlement:1")), 1),
-                new PhysicalIntentId("intent:site-harvest-1-wheat-field-1"), completeProgress(),
-                ResourceSiteHarvestTraversal.compile(baseline.bootstrap(), site, worker, jobId),
-                ResourceSiteHarvestTraversal.compile(baseline.bootstrap(), site, worker, jobId).linearCorridorSurfaces().size()
-                        - ResourceSiteHarvestTraversal.workReturnStationCount() - 1);
-        ResourceSiteLifecycle harvested = growing.harvesting(harvest).harvested();
+                new PhysicalIntentId("intent:site-harvest-1-wheat-field-1"), completeProgress());
+        ResourceFieldCycle unworked = ResourceFieldCycle.seeded(siteId, site.layout(), 1);
+        ResourceSiteLifecycle ready = growing;
+        assertThrows(IllegalArgumentException.class, () -> new ResourceSiteState(Map.of(siteId, ready),
+                Map.of(siteId, ResourceFieldCycle.seeded(new SubjectId("site:foreign"), site.layout(), 1))),
+                "the map key and matching geometry cannot adopt another site's cycle");
+        ResourceSiteLifecycle falselyComplete = growing.harvesting(harvest);
+        assertThrows(IllegalArgumentException.class,
+                () -> new ResourceSiteState(Map.of(siteId, falselyComplete), Map.of(siteId, unworked)),
+                "a complete farmer cursor cannot exist without its exact cell work outcomes");
+        SurfaceAnchor depotStation = SurfaceAnchor.at(1, 64, 1);
+        ResourceSiteHarvestGoal depotGoal = new ResourceSiteHarvestGoal(harvest.id(), siteId, harvest.workerId(),
+                site.layout().revision(), site.layout().cells().size(), ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE,
+                Optional.empty(), List.of(depotStation), TraversalCapability.PEDESTRIAN,
+                ResourceSiteHarvestGoal.ArrivalContract.ANY_DEPOT_SERVICE_STATION);
+        ResourceSiteLifecycle harvested = growing.harvesting(harvest).harvestedAt(depotGoal, depotStation.standingBody());
         assertEquals(ResourceSitePhase.GROWING, harvested.phase());
         assertEquals(2L, harvested.growthEpoch()); assertEquals(0, harvested.growthStage());
     }
@@ -51,21 +86,21 @@ class ResourceSiteStateTest {
         SurfaceAnchor terminal = ResourceSiteHarvestTraversal.workReturnSurface(baseline.bootstrap(), site);
         ActorLocation retained = new ActorLocation(terminal.standingBody(), baseline.actorLocations().get(workerId).condition());
 
-        TraversalTopology nextEpoch = ResourceSiteHarvestTraversal.compile(baseline.bootstrap(), site, retained,
+        ResourceSiteHarvestTraversal.Plan nextEpoch = ResourceSiteHarvestTraversal.compilePlan(baseline.bootstrap(), site, retained,
                 new SubjectId("job:site-harvest-1-wheat-field-2"));
 
-        assertEquals(terminal, nextEpoch.linearCorridorSurfaces().getFirst(), "the successor begins from the exact retained body support");
-        int firstCropCursor = nextEpoch.linearCorridorSurfaces().size() - site.cropSlots().size()
-                - ResourceSiteHarvestTraversal.workReturnStationCount();
+        assertEquals(terminal, nextEpoch.topology().linearCorridorSurfaces().getFirst(), "the successor begins from the exact retained body support");
+        int firstCropCursor = nextEpoch.firstCropCursor();
         assertEquals(site.cropSlots().stream().map(crop -> new SurfaceAnchor(crop.offset(0, -1, 0))).toList(),
-                nextEpoch.linearCorridorSurfaces().subList(firstCropCursor, firstCropCursor + site.cropSlots().size()),
+                nextEpoch.topology().linearCorridorSurfaces().subList(firstCropCursor, firstCropCursor + site.cropSlots().size()),
                 "the immutable per-slot plan remains complete, including its later terminal-slot visit");
-        assertEquals(terminal, nextEpoch.linearCorridorSurfaces().getLast(),
-                "the terminal field-edge station remains the collision-clear post-harvest receipt station");
+        assertEquals(terminal, nextEpoch.topology().linearCorridorSurfaces().get(
+                        firstCropCursor + site.cropSlots().size() - 1 + ResourceSiteHarvestTraversal.workReturnStationCount()),
+                "the local field-edge station remains a collision-clear post-harvest corridor point");
     }
 
     private static ResourceSiteHarvestProgress completeProgress() {
-        ResourceSiteHarvestProgress progress = ResourceSiteHarvestProgress.notStarted();
+        ResourceSiteHarvestProgress progress = ResourceSiteHarvestProgress.notStarted(ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS);
         for (int index = 0; index < ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS; index++) {
             progress = progress.prepareNextCrop().confirmPreparedCrop();
         }
@@ -75,7 +110,7 @@ class ResourceSiteStateTest {
     @Test
     void registerRejectsMissingSitesAndIllegalLifecycleTransitions() {
         FrontierWorldState baseline = initial(); SubjectId siteId = new SubjectId("site:1-wheat-field");
-        assertThrows(IllegalArgumentException.class, () -> baseline.withResourceSites(new ResourceSiteState(Map.of())));
+        assertThrows(IllegalArgumentException.class, () -> baseline.withResourceSites(new ResourceSiteState(Map.of(), Map.of())));
         assertThrows(IllegalArgumentException.class, () -> new ResourceSiteLifecycle(siteId, ResourceSitePhase.READY, 0L,
                 ResourceSiteLifecycle.MATURE_STAGE, java.util.Optional.empty()));
         assertThrows(IllegalStateException.class, () -> baseline.resourceSites().site(siteId).advanceGrowth());

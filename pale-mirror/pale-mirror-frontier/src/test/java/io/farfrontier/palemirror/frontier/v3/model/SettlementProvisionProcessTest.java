@@ -84,6 +84,99 @@ class SettlementProvisionProcessTest {
     }
 
     @Test
+    void conflictedProvisionReleasesEveryUnspentFungibleRationClaimWithoutSpendingBread() {
+        WorldId world = new WorldId("frontier:provision-multiple-claim-conflict");
+        FrontierWorldState initial = withFungibleBread(base(world).initialState());
+        SubjectId settlement = initial.bootstrap().settlements().getFirst().id();
+        SubjectId account = new SubjectId("custody:container-1-depot");
+        SubjectId source = new SubjectId("lot:provision-fungible-bread");
+        var resources = initial.inventory().fungibleResources();
+        resources = resources.split(account, source, resources.lots().get(source).splitChild(new SubjectId("lot:a-ration-bread"), 8), 8);
+        resources = resources.split(account, source, resources.lots().get(source).splitChild(new SubjectId("lot:b-ration-bread"), 8), 8);
+        initial = initial.withInventory(initial.inventory().withFungibleResources(resources));
+        var started = SettlementProvisionProcess.planReview(initial, SettlementProvisionProcess.review(settlement, 1, 100L)).stream()
+                .map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                .filter(SettlementProvisionStarted.class::isInstance).map(SettlementProvisionStarted.class::cast).findFirst().orElseThrow();
+        FrontierWorldState active = SettlementProvisionProcess.reduceStarted(initial, settlement, started);
+        assertTrue(active.humanPopulation().provision(settlement).allocations().size() >= 2);
+        assertTrue(active.inventory().fungibleResources().claims().size() >= 2);
+        SettlementProvision currentProvision = active.humanPopulation().provision(settlement);
+        SubjectId currentClaimId = currentProvision.currentAllocation().fungibleSource().orElseThrow().claimId();
+        var wrongPurposeClaims = new java.util.HashMap<>(active.inventory().fungibleResources().claims());
+        ClaimAllocation currentClaim = wrongPurposeClaims.get(currentClaimId);
+        wrongPurposeClaims.put(currentClaimId, new ClaimAllocation(currentClaim.id(), currentClaim.claimantId(),
+                currentClaim.economicOwnerId(), currentClaim.itemKind(), currentClaim.quantity(), currentClaim.lotQuantities(),
+                ClaimPurpose.SUPPLY_CONTRACT));
+        var currentResources = active.inventory().fungibleResources();
+        FrontierWorldState wrongPurpose = active.withInventory(active.inventory().withFungibleResources(new FungibleResourceLedger(
+                currentResources.lots(), wrongPurposeClaims, currentResources.accounts(), currentResources.bindings())));
+        var progress = new io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction(
+                new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:settlement-provision-progress-"
+                        + settlement.value().substring("settlement:".length()) + "-" + currentProvision.cycleOrdinal() + "-" + currentProvision.nextAllocation()),
+                new io.farfrontier.palemirror.frontier.v3.api.SimInstant(101L), 0, settlement,
+                "frontier.settlement.provision.progress", 1);
+        SettlementProvisionResolved purposeConflict = assertInstanceOf(SettlementProvisionResolved.class,
+                SettlementProvisionProcess.planProgress(wrongPurpose, progress).getFirst().payload(),
+                "a forged purpose must not schedule consumption that the reducer later rejects");
+        assertEquals(SettlementProvisionStatus.CONFLICT, purposeConflict.status());
+        assertThrows(IllegalArgumentException.class, () -> SettlementProvisionProcess.reduceConsumed(wrongPurpose, settlement,
+                new SettlementProvisionConsumed(settlement, currentProvision.currentAllocation().itemId(),
+                        currentProvision.currentAllocation().count(), true)));
+        SubjectId firstClaim = active.inventory().fungibleResources().claims().keySet().stream().sorted().findFirst().orElseThrow();
+        var foreignClaims = new java.util.HashMap<>(active.inventory().fungibleResources().claims());
+        ClaimAllocation prior = foreignClaims.get(firstClaim);
+        foreignClaims.put(firstClaim, new ClaimAllocation(firstClaim, new SubjectId("work:foreign-ration"), settlement,
+                prior.itemKind(), prior.quantity(), prior.lotQuantities(), ClaimPurpose.SETTLEMENT_RATION));
+        var originalResources = active.inventory().fungibleResources();
+        FrontierWorldState forged = active.withInventory(active.inventory().withFungibleResources(new FungibleResourceLedger(
+                originalResources.lots(), foreignClaims, originalResources.accounts(), originalResources.bindings())));
+        assertThrows(IllegalArgumentException.class, () -> SettlementProvisionProcess.reduceResolved(forged, settlement,
+                TerminalDiagnosticProducer.provisionConflict(settlement)));
+        FrontierWorldState conflicted = SettlementProvisionProcess.reduceResolved(active, settlement,
+                TerminalDiagnosticProducer.provisionConflict(settlement));
+        assertEquals(SettlementProvisionStatus.CONFLICT, conflicted.humanPopulation().provision(settlement).status());
+        assertTrue(conflicted.inventory().fungibleResources().claims().isEmpty());
+        assertEquals(active.inventory().fungibleResources().lots(), conflicted.inventory().fungibleResources().lots());
+        assertEquals(conflicted, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(conflicted)));
+
+        var observed = List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                new InventoryCustody.ContainerSlot(FrontierWorldState.depotId(settlement), 0)), SettlementProvisionProcess.BREAD, 64));
+        var boundResources = active.inventory().fungibleResources().rebind(account, 7L,
+                FungiblePhysicalObservation.bind(active.inventory().fungibleResources(), account, 7L, observed));
+        FrontierWorldState bound = active.withInventory(active.inventory().withFungibleResources(boundResources));
+        FrontierWorldState boundConflict = SettlementProvisionProcess.reduceResolved(bound, settlement,
+                TerminalDiagnosticProducer.provisionConflict(settlement));
+        assertTrue(boundConflict.inventory().fungibleResources().claims().isEmpty());
+        assertTrue(boundConflict.inventory().fungibleResources().bindings().values().stream()
+                .allMatch(binding -> binding.claimQuantities().isEmpty()));
+        assertEquals(bound.inventory().fungibleResources().lots(), boundConflict.inventory().fungibleResources().lots());
+
+        java.util.UUID player = java.util.UUID.fromString("00000000-0000-0000-0000-000000000188");
+        SubjectId playerAccount = new SubjectId("custody:player-ration-theft");
+        PhysicalStackBinding sourceBinding = boundResources.bindings().values().iterator().next();
+        FungibleResourceHandoffObserved unstamped = FungiblePhysicalHandoff.departToNew(boundResources, account, 7L,
+                sourceBinding, 0, playerAccount, new ResourceCustody.Player(player), 1L,
+                new PhysicalStackAddress.PlayerSlot(player, 0)).forfeitAffectedClaims(boundResources);
+        assertTrue(!FungibleClaimForfeitureStateSupport.supports(bound, unstamped),
+                "physical provision conflict must carry its owner's diagnostic");
+        FungibleResourceHandoffObserved stolen = FungibleClaimForfeitureStateSupport.stampOwnerDiagnostic(bound, unstamped);
+        assertTrue(stolen.forfeitedClaimIds().size() >= 2, "one physical stack touches multiple ration claims");
+        assertTrue(FungibleClaimForfeitureStateSupport.supports(bound, stolen));
+        assertEquals(TerminalDiagnosticProducer.provisionConflict(settlement).diagnostic(), stolen.retirementDiagnostic());
+        assertTrue(!FungibleClaimForfeitureStateSupport.supports(bound, stolen.withRetirementDiagnostic(
+                TerminalDiagnosticProducer.provisionConflict(new SubjectId("settlement:foreign")).diagnostic().orElseThrow())));
+        FrontierWorldState afterTheft = FungibleClaimForfeitureStateSupport.apply(bound, stolen);
+        assertEquals(SettlementProvisionStatus.CONFLICT, afterTheft.humanPopulation().provision(settlement).status());
+        assertTrue(afterTheft.inventory().fungibleResources().claims().isEmpty());
+        assertEquals(64, afterTheft.inventory().fungibleResources().accounts().get(playerAccount).lotQuantities()
+                .values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(bound.inventory().fungibleResources().lots(), afterTheft.inventory().fungibleResources().lots(),
+                "physical theft moves custody; it does not destroy or duplicate bread");
+        assertEquals(afterTheft, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(afterTheft)));
+        assertThrows(IllegalArgumentException.class, () -> FungibleClaimForfeitureStateSupport.apply(afterTheft, stolen));
+    }
+
+    @Test
     void missingFoodBecomesVisibleShortageWithoutCreatingAHiddenReserve() {
         WorldId world = new WorldId("frontier:provision-shortage"); var engine = FrontierEngines.create(configuration(world, base(world).initialState()));
         advance(engine, 101L);

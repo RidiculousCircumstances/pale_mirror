@@ -24,6 +24,11 @@ abstract class FrontierV3EntitySavePassMixin<T extends EntityAccess> {
     @Inject(method = "storeChunkSections", at = @At("RETURN"), require = 1)
     private void frontierV3$observeSkippedChunk(long chunk, Consumer<T> consumer, CallbackInfoReturnable<Boolean> callback) {
         if (!callback.getReturnValue()) frontierV3$completePass = false;
+        else if (permanentStorage instanceof FrontierV3EntitySaveBoundary boundary) {
+            // Vanilla has called storeEntities and then every final unload callback.
+            // Publish all raw observations once for this chunk, not per entity.
+            boundary.frontierV3$storedChunk();
+        }
     }
 
     @Inject(method = "autoSave", at = @At("RETURN"), require = 1)

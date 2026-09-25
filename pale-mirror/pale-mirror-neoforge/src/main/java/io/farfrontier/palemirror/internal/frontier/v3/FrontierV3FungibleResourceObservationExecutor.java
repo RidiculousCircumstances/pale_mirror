@@ -54,6 +54,7 @@ final class FrontierV3FungibleResourceObservationExecutor {
                 .filter(value -> value.custody() instanceof ResourceCustody.Container)
                 .sorted(Comparator.comparing(CustodyAccount::id)).toList()) {
             ResourceCustody.Container custody = (ResourceCustody.Container) account.custody();
+            if (FrontierV3ResourceSiteLedger.get(level).hasPendingFieldDelivery(custody.containerId())) continue;
             ContainerSurface surface = state.inventory().surfaces().get(custody.containerId());
             if (surface == null || surface.status() != ContainerSurfaceStatus.ACTIVE) continue;
             BlockPos position = new BlockPos(surface.position().x(), surface.position().y(), surface.position().z());
@@ -73,8 +74,17 @@ final class FrontierV3FungibleResourceObservationExecutor {
 
     static boolean observe(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
                            CustodyAccount account, ChestBlockEntity chest, long epoch) {
+        SubjectId containerId = ((ResourceCustody.Container) account.custody()).containerId();
+        if (FrontierV3ContainerSurfaceExecutor.hasForeignFungibleComponents(chest, state, containerId)) {
+            FrontierV3ContainerSurfaceExecutor.reportConflict(runtime, containerId);
+            return false;
+        }
         List<FungiblePhysicalObservation.Stack> stacks = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(chest, state,
-                ((ResourceCustody.Container) account.custody()).containerId());
+                containerId);
+        if (FrontierV3ContainerSurfaceExecutor.overlapsHarvestOutputReservation(state, stacks)) {
+            FrontierV3ContainerSurfaceExecutor.reportConflict(runtime, ((ResourceCustody.Container) account.custody()).containerId());
+            return false;
+        }
         List<PhysicalStackBinding> expected;
         try {
             expected = FungiblePhysicalObservation.bind(state.inventory().fungibleResources(), account.id(), epoch, stacks);
@@ -295,8 +305,10 @@ final class FrontierV3FungibleResourceObservationExecutor {
 
     /** A physical departure may take live input only through its owner's atomic forfeiture path. */
     private static FungibleResourceHandoffObserved committedDeparture(FrontierWorldState state, FungibleResourceHandoffObserved observed) {
-        FungibleResourceHandoffObserved committed = observed.forfeitMovedClaims();
-        return committed.forfeitedClaimIds().isEmpty() || FungibleClaimForfeitureStateSupport.supports(state, committed) ? committed : null;
+        FungibleResourceHandoffObserved committed = observed.forfeitAffectedClaims(state.inventory().fungibleResources());
+        if (committed.forfeitedClaimIds().isEmpty()) return committed;
+        committed = FungibleClaimForfeitureStateSupport.stampOwnerDiagnostic(state, committed);
+        return FungibleClaimForfeitureStateSupport.supports(state, committed) ? committed : null;
     }
 
     private static List<ExternalTarget> externalTargets(ServerLevel level, BlockPos source, SourceDeparture departure) {

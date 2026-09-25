@@ -77,6 +77,7 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
         for (PhysicalCustodyLease lease : state.replicaCustody().custodyByScope().values().stream()
                 .filter(lease -> lease.providerId().equals(ReferenceContainerCustody.PROVIDER_ID) && lease.live())
                 .sorted(Comparator.comparing(PhysicalCustodyLease::scopeId)).toList()) {
+            if (FrontierV3ResourceSiteLedger.get(level).hasPendingFieldDelivery(lease.objectId())) continue;
             ContainerSurface surface = state.inventory().surfaces().get(lease.objectId());
             if (surface == null || !naturallyTicking(level, position(surface))) {
                 // Pending or contradictory writes cannot be blindly released. They also
@@ -95,12 +96,14 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
             }
             rememberCurrentProcessObservation(level, lease);
         }
-        List<ContainerSurface> loaded = state.inventory().surfaces().values().stream().filter(surface -> naturallyTicking(level, position(surface))).toList();
+        List<ContainerSurface> loaded = state.inventory().surfaces().values().stream()
+                .filter(surface -> naturallyTicking(level, position(surface))
+                        && !FrontierV3ResourceSiteLedger.get(level).hasPendingFieldDelivery(surface.containerId())).toList();
         List<ContainerSurface> eligible = eligibleReferenceSurfaces(state, loaded);
         if (!eligible.isEmpty()) reconcile(level, runtime, state, selectRoundRobin(eligible, level.getGameTime()));
     }
 
-    private static void reconcile(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+    static void reconcile(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                   FrontierWorldState state, ContainerSurface surface) {
         SubjectId containerId = surface.containerId();
         PhysicalReplicaRecord replica = state.replicaCustody().replicas().get(containerId);
@@ -159,7 +162,11 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
             // whatever happens to be in the chest now.  The old retained comparison is made
             // before a new emission, so a changed/foreign/missing chest is a durable local
             // conflict rather than a new expected projection that would hide its cause.
-            Observed beforeCatchup = observed(state, containerId, chest);
+            // Compare the retained physical image in its own grammar. A COLD successor may
+            // already have consumed the old fungible slot, so classifying its still-saved
+            // plain stack from today's canonical layout would falsely turn it into foreign
+            // exact stock before the old replica fingerprint can be checked.
+            Observed beforeCatchup = observedRetained(state, containerId, chest);
             boolean retainedEvidenceMatches = beforeCatchup.fingerprint().equals(replica.fingerprint())
                     && beforeCatchup.provenance().equals(replica.provenance());
             if (!retainedEvidenceMatches) {
@@ -197,6 +204,11 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
                 return;
             }
             drain(runtime, lease, "renew");
+        } else if (lease.status() == PhysicalCustodyLeaseStatus.CHECKPOINTED) {
+            // A loaded, unchanged chest does not cancel an already recorded drain.
+            // Finish it even when an older transaction removed its resource bindings
+            // before this scope was released. No physical write or inferred repair.
+            release(runtime, lease);
         }
     }
 
@@ -241,6 +253,17 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
     private static void conflict(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalReplicaRecord replica, Observed observed) {
         submit(runtime, "conflict", replica.objectId(), replica.replicaRevision(), ReplicaCustodyDiagnosticProducer.conflict(replica.objectId(),
                 replica.emittedCanonicalRevision(), replica.replicaRevision(), observed.fingerprint(), observed.provenance()));
+    }
+
+    /** A witnessed non-replayable transfer keeps the depot exclusive; it may still report real foreign contents. */
+    static boolean reportForeignDuringFieldDelivery(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                                    FrontierWorldState state, PhysicalReplicaRecord replica,
+                                                    ChestBlockEntity chest) {
+        Observed actual = observed(state, replica.objectId(), chest);
+        if (actual.fingerprint().equals(replica.fingerprint()) && actual.provenance().equals(replica.provenance()))
+            return false;
+        conflict(runtime, replica, actual);
+        return true;
     }
 
     private static void acquire(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
@@ -403,6 +426,15 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
     }
 
     static Observed observed(FrontierWorldState state, SubjectId containerId, ChestBlockEntity chest) {
+        return observed(state, containerId, chest, false);
+    }
+
+    static Observed observedRetained(FrontierWorldState state, SubjectId containerId, ChestBlockEntity chest) {
+        return observed(state, containerId, chest, true);
+    }
+
+    private static Observed observed(FrontierWorldState state, SubjectId containerId, ChestBlockEntity chest,
+                                     boolean retainedImage) {
         if (chest == null) return new Observed("sha256:missing-" + containerId.value(), "missing:" + containerId.value());
         List<ReferenceContainerCustody.ObservedSlot> slots = new ArrayList<>(chest.getContainerSize());
         for (int slot = 0; slot < chest.getContainerSize(); slot++) {
@@ -412,7 +444,9 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
                 CustomData custom = stack.get(DataComponents.CUSTOM_DATA);
                 String kind = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
                 ReferenceContainerCustody.ProjectedFungibleSlot fungible = ReferenceContainerCustody.expectedFungibleSlot(state, containerId, slot).orElse(null);
-                if (custom == null && fungible != null && fungible.itemKind().equals(kind) && fungible.quantity() == stack.getCount()) {
+                if (custom == null && (retainedImage || fungible != null && fungible.itemKind().equals(kind)
+                        && fungible.quantity() == stack.getCount())
+                        && ItemStack.isSameItemSameComponents(stack, new ItemStack(stack.getItem(), stack.getCount()))) {
                     slots.add(ReferenceContainerCustody.ObservedSlot.fungible(slot, kind, stack.getCount()));
                     continue;
                 }

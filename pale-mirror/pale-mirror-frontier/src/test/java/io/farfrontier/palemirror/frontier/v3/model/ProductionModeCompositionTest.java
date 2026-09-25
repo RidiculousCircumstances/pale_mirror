@@ -15,6 +15,30 @@ class ProductionModeCompositionTest {
     @Test void resourceWorkRetainsLaborAcrossTwoHotVisits() { exercise(false); }
     @Test void exactItemWorkRetainsLaborAcrossTwoHotVisits() { exercise(true); }
 
+    @Test void exactAndFungibleInputsEarnTheSameLaborAndFinishAtTheSameInstant() {
+        var initial = BoundProductionAdmissionTest.coldFixture();
+        var resource = new Driver(initial);
+        var exact = new Driver(ProductionProcessTest.withLegacyExactWheat(initial));
+        resource.next(); exact.next();
+        var original = resource.job();
+        var exactOutput = exact.job().outputItemId();
+        for (int turn = 0; !resource.state().productionJobs().isEmpty(); turn++) {
+            assertTrue(turn < 300, "both representations must finish the ordinary route and labor");
+            assertFalse(exact.state().productionJobs().isEmpty(), "exact input must not skip remaining labor");
+            compare(resource, exact, original);
+            resource.next(); exact.next();
+        }
+        assertTrue(exact.state().productionJobs().isEmpty(), "fungible input must not finish ahead of exact input");
+        assertEquals(resource.engine.checkpoint().instant(), exact.engine.checkpoint().instant());
+        var lot = resource.state().inventory().fungibleResources().lots().get(original.outputItemId());
+        var stack = exact.state().inventory().items().get(exactOutput);
+        assertNotNull(lot); assertNotNull(stack);
+        assertEquals(lot.itemKind(), stack.itemKind());
+        assertEquals(lot.quantity(), stack.count());
+        assertEquals(FixedScalar.ONE, resource.state().inventory().economics().require(original.workerId()).balance());
+        assertEquals(FixedScalar.ONE, exact.state().inventory().economics().require(original.workerId()).balance());
+    }
+
     private static void exercise(boolean exact) {
         var initial = BoundProductionAdmissionTest.coldFixture();
         if (exact) initial = ProductionProcessTest.withLegacyExactWheat(initial);
@@ -127,8 +151,10 @@ class ProductionModeCompositionTest {
             var depot = FrontierWorldState.depotId(job.settlementId()); var scope = ReferenceContainerCustody.scopeId(depot);
             var custody = state().replicaCustody().custodyByScope().get(scope);
             if (!exact) submit(new FungibleStackBindingsReleased(new SubjectId("custody:container-1-depot"), custody.authorityEpoch()), false);
-            submit(new CustodyCheckpointed(scope, custody.authorityEpoch(), custody.expectedCanonicalRevision(), custody.expectedReplicaRevision()), false);
-            submit(new CustodyReleased(scope, custody.authorityEpoch(), custody.expectedCanonicalRevision(), custody.expectedReplicaRevision()), false);
+            else {
+                submit(new CustodyCheckpointed(scope, custody.authorityEpoch(), custody.expectedCanonicalRevision(), custody.expectedReplicaRevision()), false);
+                submit(new CustodyReleased(scope, custody.authorityEpoch(), custody.expectedCanonicalRevision(), custody.expectedReplicaRevision()), false);
+            }
         }
     }
 }

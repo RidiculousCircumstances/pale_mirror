@@ -299,6 +299,17 @@ test('declared two-boundary recovery keeps each ordinary COLD interval and actio
   assert.throws(() => validateScenario({ ...recoverable, restart: { ...recoverable.restart, mode: 'abrupt' } }), /restart needs/);
 });
 
+test('post-restart zero-player observation is finite and does not declare canonical fast-forward', () => {
+  const recoverable = { ...scenario, setup: [], actions: [{ type: 'wait', ms: 10 }, { type: 'wait', ms: 10 }],
+    assertions: [], frames: [], restart: { mode: 'graceful', afterAction: 1,
+      postRestartZeroPlayerSettleMs: 20_000 } };
+  assert.doesNotThrow(() => validateScenario(recoverable));
+  assert.throws(() => validateScenario({ ...recoverable, restart: { ...recoverable.restart,
+    postRestartZeroPlayerSettleMs: 120_001 } }), /restart needs/);
+  assert.throws(() => validateScenario({ ...recoverable, restart: { ...recoverable.restart,
+    postRestartZeroPlayerSettleMs: -1 } }), /restart needs/);
+});
+
 test('an armed crash names one exact durable boundary and cannot broaden an abrupt scenario', () => {
   const recoverable = { ...scenario, actions: [{ type: 'wait', ms: 10 }, { type: 'wait', ms: 10 }], assertions: [], frames: [],
     restart: { mode: 'abrupt', afterAction: 1 }, crash: { phase: 'before_restart', boundary: 'hot_checkpoint_durable_before_drain_release',

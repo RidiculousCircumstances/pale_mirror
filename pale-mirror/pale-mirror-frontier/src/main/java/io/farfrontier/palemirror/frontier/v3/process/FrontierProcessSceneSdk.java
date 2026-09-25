@@ -194,8 +194,10 @@ public final class FrontierProcessSceneSdk {
     }
 
     /**
-     * Family-neutral canonical facts compared by the generic matrix.  The descriptor's digest
-     * is computed from its real aggregate/reducer state; it is not a rendered trajectory.
+     * Family-neutral canonical facts compared by the generic matrix.  The legacy-named
+     * {@code cursor} is a monotonic semantic progress ordinal supplied by each family; it
+     * must not force a physical waypoint cursor into a goal-owned process. The descriptor's
+     * digest is computed from its real aggregate/reducer state, not a rendered trajectory.
      */
     public record SemanticCheckpoint(FamilyKey family, String ownerId, String actorId, int cursor,
                                      long authorityEpoch, boolean hotAuthority,

@@ -71,10 +71,13 @@ final class FungibleResourcePayloadCodecs {
             output.writeLong(observed.sourceEpoch()); output.writeLong(observed.destinationEpoch()); writeFungibleQuantities(output, observed.lotQuantities());
             writeFungibleQuantities(output, observed.claimQuantities()); writeFungibleBindings(output, observed.remainingSource()); writeFungibleBindings(output, observed.destinationBindings());
             writeSubjects(output, observed.forfeitedClaimIds()); writeString(output, observed.playerSaveFence());
+            output.writeBoolean(observed.retirementDiagnostic().isPresent());
+            if (observed.retirementDiagnostic().isPresent()) writeDiagnosticTuple(output, observed.retirementDiagnostic().orElseThrow());
         }); }
         @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new FungibleResourceHandoffObserved(readSubject(input).value(),
                 readFungibleAccount(input), input.readLong(), input.readLong(), readFungibleQuantities(input), readFungibleQuantities(input),
-                readFungibleBindings(input), readFungibleBindings(input), readSubjects(input), readString(input))); }
+                readFungibleBindings(input), readFungibleBindings(input), readSubjects(input), readString(input),
+                input.readBoolean() ? java.util.Optional.of(readDiagnosticTuple(input)) : java.util.Optional.empty())); }
     }
 
     private static final class FungibleStackBindingsReleasedCodec implements PayloadCodec {
@@ -92,6 +95,7 @@ final class FungibleResourcePayloadCodecs {
             case PhysicalStackAddress.PlayerSlot slot -> { output.writeByte(1); writeString(output, slot.playerId().toString()); output.writeByte(slot.slot()); }
             case PhysicalStackAddress.HopperSlot slot -> { output.writeByte(2); output.writeInt(slot.position().x()); output.writeInt(slot.position().y()); output.writeInt(slot.position().z()); output.writeByte(slot.slot()); }
             case PhysicalStackAddress.WorldEntity entity -> { output.writeByte(3); writeString(output, entity.entityId().toString()); }
+            case PhysicalStackAddress.ActorHand hand -> { output.writeByte(4); writeSubject(output, hand.actorId()); writeString(output, hand.entityId().toString()); }
         }
     }
 
@@ -101,6 +105,7 @@ final class FungibleResourcePayloadCodecs {
             case 1 -> new PhysicalStackAddress.PlayerSlot(java.util.UUID.fromString(readString(input)), input.readUnsignedByte());
             case 2 -> new PhysicalStackAddress.HopperSlot(new BlockPosition(input.readInt(), input.readInt(), input.readInt()), input.readUnsignedByte());
             case 3 -> new PhysicalStackAddress.WorldEntity(java.util.UUID.fromString(readString(input)));
+            case 4 -> new PhysicalStackAddress.ActorHand(readSubject(input).value(), java.util.UUID.fromString(readString(input)));
             default -> throw new IllegalArgumentException("unknown physical stack address");
         };
     }

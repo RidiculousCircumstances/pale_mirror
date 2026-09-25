@@ -25,6 +25,59 @@ final class FrontierResourceSiteHarvestFixture {
         return create(state);
     }
 
+    /** Test-only irregular genesis: one extra stable cell, no injected crop work or receipt. */
+    static Fixture createWithOneExtraCell(WorldId worldId, long seed) {
+        FrontierBootstrap baseline = FrontierBootstrapper.create(worldId, seed);
+        SubjectId siteId = new SubjectId("site:1-wheat-field");
+        ResourceFieldLayout original = FrontierResourceSitePlan.compile(baseline).get(siteId).layout();
+        BlockPosition last = original.cells().getLast().crop();
+        for (BlockPosition crop : List.of(last.offset(1, 0, 0), last.offset(-1, 0, 0),
+                last.offset(0, 0, 1), last.offset(0, 0, -1))) {
+            if (original.contains(crop) || original.contains(crop.offset(0, -1, 0))) continue;
+            var cells = new java.util.ArrayList<>(original.cells());
+            SurfaceAnchor soil = new SurfaceAnchor(crop.offset(0, -1, 0));
+            cells.add(new ResourceFieldLayout.Cell(new ResourceFieldLayout.CellId(original.nextCellId()), crop, soil, soil));
+            ResourceFieldLayout layout = new ResourceFieldLayout(1L, original.nextCellId() + 1L, cells,
+                    original.irrigationSlots());
+            FrontierBootstrap authored = new FrontierBootstrap(baseline.worldId(), baseline.seed(), baseline.bounds(),
+                    baseline.settlements(), baseline.hive(), baseline.ruleset(), baseline.terrain(),
+                    java.util.Map.of(siteId, layout));
+            try {
+                FrontierResourceSitePlan.compile(authored);
+            } catch (IllegalArgumentException occupiedOrOutside) {
+                // A candidate may overlap an immutable route, structure or other field.
+                continue;
+            }
+            return create(FrontierWorldState.initial(authored));
+        }
+        throw new IllegalStateException("65-cell test fixture has no free adjacent field cell");
+    }
+
+    /**
+     * A bounded post-first-part ingress.  All 64 predecessors are ordinary COLD cell/route
+     * reducers, not a fabricated cursor or a second farmer.  The native client must still
+     * materialize their current field/depot state and physically work the last cell.
+     */
+    static Fixture createWithOneExtraCellAfterColdPart(WorldId worldId, long seed) {
+        Fixture original = createWithOneExtraCell(worldId, seed);
+        FrontierWorldState state = original.state();
+        SubjectId siteId = original.siteId();
+        ScheduledAction continuation = original.schedules().getFirst();
+        for (int step = 0; step < 2_048; step++) {
+            ResourceSiteHarvestJob current = (ResourceSiteHarvestJob) state.resourceSites().site(siteId).activeWork().orElseThrow();
+            if (current.progress().completedCropSlots() == 64 && current.deliveredYieldQuantity() == 64
+                    && !current.returningForBatch()) break;
+            Step advanced = advanceCold(state, siteId, continuation);
+            state = advanced.state(); continuation = advanced.action();
+        }
+        ResourceSiteHarvestJob full = (ResourceSiteHarvestJob) state.resourceSites().site(siteId).activeWork().orElseThrow();
+        if (full.progress().completedCropSlots() != 64 || full.deliveredYieldQuantity() != 64
+                || full.returningForBatch())
+            throw new IllegalStateException("post-part fixture did not enter the exact final segment");
+        return new Fixture(state, new SimInstant(continuation.dueAt().ticks() - 1L),
+                List.of(continuation), siteId, full.id());
+    }
+
     /** Composes the same ordinary harvest ingress with an already-retained disjoint front. */
     static Fixture create(FrontierWorldState state) {
         SubjectId siteId = new SubjectId("site:1-wheat-field");
@@ -54,22 +107,52 @@ final class FrontierResourceSiteHarvestFixture {
         ScheduledAction continuation = started.stream().map(ProposedEvent::payload).filter(ScheduleEffect.Created.class::isInstance)
                 .map(ScheduleEffect.Created.class::cast).map(ScheduleEffect.Created::action).findFirst()
                 .orElseThrow(() -> new IllegalStateException("harvest fixture has no retained COLD continuation"));
-        ResourceSiteHarvestJob job = harvest.job();
         long instant = 22_100L;
-        while (job.hasNextTraversalStep()) {
-            List<ProposedEvent> step = ResourceSiteHarvestProcess.planColdProgress(state, continuation);
-            ResourceSiteHarvestColdTraversalAdvanced advanced = step.stream().map(ProposedEvent::payload)
-                    .filter(ResourceSiteHarvestColdTraversalAdvanced.class::isInstance).map(ResourceSiteHarvestColdTraversalAdvanced.class::cast)
-                    .findFirst().orElseThrow(() -> new IllegalStateException("harvest fixture COLD traversal stalled before first crop"));
-            state = ResourceSiteHarvestProcess.reduceColdTraversalAdvanced(state, siteId, advanced);
-            continuation = step.stream().map(ProposedEvent::payload).filter(ScheduleEffect.Rescheduled.class::isInstance)
-                    .map(ScheduleEffect.Rescheduled.class::cast).map(ScheduleEffect.Rescheduled::replacement).findFirst()
-                    .orElseThrow(() -> new IllegalStateException("harvest fixture COLD traversal lost its continuation"));
+        ResourceSiteHarvestJob job = harvest.job();
+        for (int step = 0; step < 256; step++) {
+            ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state, job);
+            if (ResourceSiteHarvestGoal.actorAtWorkCell(state, job)
+                    && goal.arrivedAt(state.actorLocations().get(job.workerId()).supportingSurface())) break;
+            Step advanced = advanceCold(state, siteId, continuation);
+            state = advanced.state(); continuation = advanced.action();
             instant = continuation.dueAt().ticks() - 1L;
             job = (ResourceSiteHarvestJob) state.resourceSites().site(siteId).activeWork().orElseThrow();
         }
+        if (!ResourceSiteHarvestGoal.actorAtWorkCell(state, job)
+                || !ResourceSiteHarvestGoal.current(state, job).arrivedAt(
+                        state.actorLocations().get(job.workerId()).supportingSurface()))
+            throw new IllegalStateException("harvest fixture failed to reach its first CellId work goal");
         return new Fixture(state, new SimInstant(instant), List.of(continuation), siteId, job.id());
     }
+
+    private static Step advanceCold(FrontierWorldState state, SubjectId siteId, ScheduledAction action) {
+        ScheduledAction next = null;
+        for (ProposedEvent proposed : ResourceSiteHarvestProcess.planColdProgress(state, action)) {
+            switch (proposed.payload()) {
+                case ResourceSiteHarvestColdGoalAdvanced advanced ->
+                        state = ResourceSiteHarvestProcess.reduceColdGoalAdvanced(state, siteId, advanced);
+                case ResourceSiteHarvestCropPrepared prepared ->
+                        state = ResourceSiteHarvestProcess.reduceCropPrepared(state, siteId, prepared);
+                case ResourceSiteHarvestProgressed progressed ->
+                        state = ResourceSiteHarvestProcess.reduceProgressed(state, siteId, progressed);
+                case ResourceSiteHarvestReturned returned ->
+                        state = ResourceSiteHarvestProcess.reduceReturned(state, siteId, returned);
+                case ResourceSiteHarvestSegmentRenewed renewed ->
+                        state = ResourceSiteHarvestProcess.reduceSegmentRenewed(state, siteId, renewed);
+                case ResourceSiteHarvestBlockedCellSkipped skipped ->
+                        state = ResourceSiteHarvestProcess.reduceBlockedCellSkipped(state, siteId, skipped);
+                case ResourceSiteHarvestColdGoalHeld held ->
+                        throw new IllegalStateException("harvest fixture cannot hide an unavailable COLD goal: " + held);
+                case ScheduleEffect.Rescheduled rescheduled -> next = rescheduled.replacement();
+                default -> throw new IllegalStateException("harvest fixture produced unexpected cold event: "
+                        + proposed.payload().type());
+            }
+        }
+        if (next == null) throw new IllegalStateException("harvest fixture lost its one COLD continuation");
+        return new Step(state, next);
+    }
+
+    private record Step(FrontierWorldState state, ScheduledAction action) { }
 
     record Fixture(FrontierWorldState state, SimInstant instant, List<ScheduledAction> schedules, SubjectId siteId, SubjectId jobId) {
         Fixture { schedules = List.copyOf(schedules); }

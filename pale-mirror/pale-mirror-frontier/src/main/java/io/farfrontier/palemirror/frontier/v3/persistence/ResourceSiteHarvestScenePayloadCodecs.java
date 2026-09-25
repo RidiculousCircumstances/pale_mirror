@@ -14,6 +14,11 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWireTags;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestSceneCause;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestSceneLeasePrepared;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestSceneLeaseHandoff;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestHandProjected;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestHandRelease;
+import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseReleased;
+import io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalObservation;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.SceneMember;
@@ -33,10 +38,70 @@ import java.util.UUID;
 
 /** Stable WAL boundary for the one-worker resource-site harvest scene. */
 final class ResourceSiteHarvestScenePayloadCodecs {
-    private static final int TYPED_BODY_LEASE_MARKER = 0xfffd;
+    private static final int TYPED_BODY_LEASE_MARKER = 0xfffc;
     private ResourceSiteHarvestScenePayloadCodecs() { }
 
-    static PayloadCodecs codecs() { return new PayloadCodecs(List.of(new PreparedCodec(), new HandoffCodec())); }
+    static PayloadCodecs codecs() { return new PayloadCodecs(List.of(new PreparedCodec(), new HandoffCodec(), new HandProjectedCodec(), new HandReleaseCodec())); }
+
+    private static final class HandReleaseCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.resource_site_harvest_hand_release"; }
+        @Override public byte[] encode(FrontierPayload payload) {
+            return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+                ResourceSiteHarvestHandRelease released = (ResourceSiteHarvestHandRelease) payload;
+                PhysicalStackAddress.ActorHand address = (PhysicalStackAddress.ActorHand) released.observedHand().address();
+                FrontierWorldPayloadCodecs.writeSubject(output, released.siteId());
+                FrontierWorldPayloadCodecs.writeSubject(output, released.jobId());
+                FrontierWorldPayloadCodecs.writeSubject(output, released.actorAccountId());
+                output.writeLong(released.actorEpoch());
+                FrontierWorldPayloadCodecs.writeSubject(output, address.actorId());
+                FrontierWorldPayloadCodecs.writeString(output, address.entityId().toString());
+                FrontierWorldPayloadCodecs.writeString(output, released.observedHand().itemKind());
+                output.writeInt(released.observedHand().quantity());
+                FrontierWorldPayloadCodecs.writeString(output, released.sceneRelease().leaseId().value());
+                writeMembers(output, released.sceneRelease().members());
+            });
+        }
+        @Override public FrontierPayload decode(byte[] bytes) {
+            return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new ResourceSiteHarvestHandRelease(
+                    FrontierWorldPayloadCodecs.readSubject(input).value(),
+                    FrontierWorldPayloadCodecs.readSubject(input).value(),
+                    FrontierWorldPayloadCodecs.readSubject(input).value(), input.readLong(),
+                    new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(
+                            FrontierWorldPayloadCodecs.readSubject(input).value(),
+                            UUID.fromString(FrontierWorldPayloadCodecs.readString(input))),
+                            FrontierWorldPayloadCodecs.readString(input), input.readInt()),
+                    new SceneLeaseReleased(new SceneLeaseId(FrontierWorldPayloadCodecs.readString(input)), readMembers(input))));
+        }
+    }
+
+    private static final class HandProjectedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.resource_site_harvest_hand_projected"; }
+        @Override public byte[] encode(FrontierPayload payload) {
+            return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+                ResourceSiteHarvestHandProjected projected = (ResourceSiteHarvestHandProjected) payload;
+                PhysicalStackAddress.ActorHand address = (PhysicalStackAddress.ActorHand) projected.hand().address();
+                FrontierWorldPayloadCodecs.writeSubject(output, projected.siteId());
+                FrontierWorldPayloadCodecs.writeSubject(output, projected.jobId());
+                FrontierWorldPayloadCodecs.writeSubject(output, projected.actorAccountId());
+                FrontierWorldPayloadCodecs.writeString(output, projected.leaseId().value());
+                output.writeLong(projected.actorEpoch());
+                FrontierWorldPayloadCodecs.writeSubject(output, address.actorId());
+                FrontierWorldPayloadCodecs.writeString(output, address.entityId().toString());
+                FrontierWorldPayloadCodecs.writeString(output, projected.hand().itemKind());
+                output.writeInt(projected.hand().quantity());
+            });
+        }
+        @Override public FrontierPayload decode(byte[] bytes) {
+            return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new ResourceSiteHarvestHandProjected(
+                    FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldPayloadCodecs.readSubject(input).value(),
+                    FrontierWorldPayloadCodecs.readSubject(input).value(),
+                    new SceneLeaseId(FrontierWorldPayloadCodecs.readString(input)), input.readLong(),
+                    new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(
+                            FrontierWorldPayloadCodecs.readSubject(input).value(),
+                            UUID.fromString(FrontierWorldPayloadCodecs.readString(input))),
+                            FrontierWorldPayloadCodecs.readString(input), input.readInt())));
+        }
+    }
 
     private static final class PreparedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.resource_site_harvest_scene_lease_prepared"; }
@@ -68,6 +133,7 @@ final class ResourceSiteHarvestScenePayloadCodecs {
         }
         output.writeShort(TYPED_BODY_LEASE_MARKER);
         FrontierWorldPayloadCodecs.writeString(output, lease.id().value()); FrontierWorldPayloadCodecs.writeString(output, lease.worldId().value());
+        FrontierWorldPayloadCodecs.writeSubject(output, cause.siteId());
         FrontierWorldPayloadCodecs.writeSubject(output, cause.jobId()); writePosition(output, lease.handoffPosition());
         output.writeLong(lease.handoffInstant().ticks()); output.writeLong(lease.revision()); output.writeByte(lease.status().wireTag());
         output.writeByte(lease.members().size());
@@ -84,7 +150,8 @@ final class ResourceSiteHarvestScenePayloadCodecs {
             throw new IllegalArgumentException("resource-site harvest scene payload requires the current typed-body envelope");
         }
         SceneLeaseId id = new SceneLeaseId(FrontierWorldPayloadCodecs.readString(input)); WorldId world = new WorldId(FrontierWorldPayloadCodecs.readString(input));
-        ResourceSiteHarvestSceneCause cause = new ResourceSiteHarvestSceneCause(FrontierWorldPayloadCodecs.readSubject(input).value());
+        ResourceSiteHarvestSceneCause cause = new ResourceSiteHarvestSceneCause(
+                FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldPayloadCodecs.readSubject(input).value());
         BlockPosition handoff = readPosition(input); long instant = input.readLong(); long revision = input.readLong(); int status = input.readUnsignedByte();
         if (status >= SceneLeaseStatus.values().length) throw new IllegalArgumentException("unknown scene lease status");
         List<SceneMember> members = new ArrayList<>(); Map<SubjectId, BodyPosition> positions = new LinkedHashMap<>();

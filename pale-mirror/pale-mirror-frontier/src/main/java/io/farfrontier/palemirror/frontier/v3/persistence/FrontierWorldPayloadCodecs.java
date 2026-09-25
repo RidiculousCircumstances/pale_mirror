@@ -2,7 +2,7 @@ package io.farfrontier.palemirror.frontier.v3.persistence;
 import io.farfrontier.palemirror.frontier.v3.model.*; import io.farfrontier.palemirror.frontier.v3.api.FixedRatio; import io.farfrontier.palemirror.frontier.v3.api.FixedScalar; import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.kernel.PayloadCodec; import io.farfrontier.palemirror.frontier.v3.kernel.PayloadCodecs;
-import java.nio.ByteBuffer; import java.io.ByteArrayInputStream; import java.io.ByteArrayOutputStream; import java.io.DataInputStream; import java.io.DataOutputStream; import java.io.IOException; import java.util.List;
+import java.nio.ByteBuffer; import java.io.ByteArrayInputStream; import java.io.ByteArrayOutputStream; import java.io.DataInputStream; import java.io.DataOutputStream; import java.io.IOException; import java.util.List; import java.util.Map;
 /** Complete payload registry for the currently installed v3 world processes. */
 public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCodecs() { }
     public static PayloadCodecs create() { return FrontierWorldProcessCodecs.create(); }
@@ -39,8 +39,19 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     static PayloadCodecs resourceSiteCodecs() { return PayloadCodecs.merge(new PayloadCodecs(List.of(ResourceSitePayloadCodecs.growthAdvanced(),
             ResourceSitePayloadCodecs.preparationStarted(), ResourceSitePayloadCodecs.prepared(), ResourceSitePayloadCodecs.harvestStarted(),
             ResourceSitePayloadCodecs.harvestCropPrepared(), ResourceSitePayloadCodecs.harvestProgressed(),
-            ResourceSitePayloadCodecs.harvestColdTraversalAdvanced(), ResourceSitePayloadCodecs.harvestHotTraversalAdvanced(),
-            ResourceSitePayloadCodecs.conflictObserved())), ResourceSiteHarvestScenePayloadCodecs.codecs()); }
+            ResourceSitePayloadCodecs.harvestColdTraversalAdvanced(), ResourceSitePayloadCodecs.harvestColdGoalAdvanced(),
+            ResourceSitePayloadCodecs.harvestColdGoalHeld(), ResourceSitePayloadCodecs.harvestReturned(),
+            ResourceSitePayloadCodecs.harvestSegmentRenewed(), ResourceSitePayloadCodecs.harvestBlockedCellSkipped(),
+            ResourceSitePayloadCodecs.harvestRouteBlocked(), ResourceSitePayloadCodecs.harvestRouteCleared(), ResourceSitePayloadCodecs.harvestBatchPrepared(),
+            ResourceSitePayloadCodecs.harvestBatchDelivered(),
+            ResourceSitePayloadCodecs.harvestHotTraversalAdvanced(),
+            ResourceSitePayloadCodecs.harvestHotGoalArrived(),
+            ResourceSitePayloadCodecs.harvestHotTransitObserved(),
+            ResourceSitePayloadCodecs.conflictObserved(), ResourceSitePayloadCodecs.cellObserved(),
+            ResourceSitePayloadCodecs.worldChangeHeld(), ResourceSitePayloadCodecs.worldChangeAcknowledged(),
+            ResourceSitePayloadCodecs.foreignChangeHeld(), ResourceSitePayloadCodecs.foreignCellObserved(),
+            ResourceSitePayloadCodecs.foreignChangeAcknowledged(),
+            ResourceSitePayloadCodecs.playerBreakPrepared())), ResourceSiteHarvestScenePayloadCodecs.codecs()); }
     static PayloadCodecs hiveCodecs() { return PayloadCodecs.merge(RouteEngagementPayloadCodecs.codecs(), SettlementAssaultPayloadCodecs.codecs(),
             HiveMobilizationPayloadCodecs.codecs(), DeferredAftermathPayloadCodecs.codecs(), new PayloadCodecs(List.of(new InfectionCodec(),
             new HiveGrowthStartedCodec(), new HiveGrowthBiomassConsumedCodec(), new HiveGrowthCompletedCodec(), new HiveGrowthBlockedCodec(),
@@ -144,7 +155,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         @Override public FrontierPayload decode(byte[] bytes) {
             return decodeProduction(bytes, input -> {
                 ProductionJob job = readJob(input); SubjectIdHolder item = readSubject(input);
-                if (input.available() != 0) job = job.withInputHold(readProductionInputHold(input, job.consumedItemId()));
+                job = job.withInputHold(readProductionInputHold(input, job.consumedItemId()));
                 return new ProductionStarted(job, item.value());
             });
         }
@@ -168,14 +179,14 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     } private static final class ProductionBlockedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.production_blocked"; } @Override public byte[] encode(FrontierPayload payload) {
             ProductionBlocked blocked = (ProductionBlocked) payload;
-            return encodeProduction(output -> { writeSubject(output, blocked.settlementId()); writeSubject(output, blocked.facilityId()); writeSubject(output, blocked.workId()); output.writeByte(blocked.reason().wireTag()); writeDiagnosticTuple(output, blocked.diagnostic()); });
+            return encodeProduction(output -> { writeSubject(output, blocked.settlementId()); writeSubject(output, blocked.facilityId()); writeSubject(output, blocked.workId()); writeSubject(output, blocked.taskId()); output.writeByte(blocked.reason().wireTag()); writeDiagnosticTuple(output, blocked.diagnostic()); });
         }
         @Override public FrontierPayload decode(byte[] bytes) {
             return decodeProduction(bytes, input -> {
-                SubjectIdHolder settlement = readSubject(input); SubjectIdHolder facility = readSubject(input); SubjectIdHolder work = readSubject(input);
+                SubjectIdHolder settlement = readSubject(input); SubjectIdHolder facility = readSubject(input); SubjectIdHolder work = readSubject(input); SubjectIdHolder task = readSubject(input);
                 int ordinal = input.readUnsignedByte();
                 if (ordinal >= ProductionBlockReason.values().length) throw new IllegalArgumentException("unknown production block reason");
-                return new ProductionBlocked(settlement.value(), facility.value(), work.value(), FrontierWireTags.require(ProductionBlockReason.class, ordinal), readDiagnosticTuple(input));
+                return new ProductionBlocked(settlement.value(), facility.value(), work.value(), task.value(), FrontierWireTags.require(ProductionBlockReason.class, ordinal), readDiagnosticTuple(input));
             });
         }
     }
@@ -494,8 +505,14 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     }
     private static final class HiveGrowthCompletedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.hive_growth_completed"; }
-        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> writeSubject(output, ((HiveGrowthCompleted) payload).jobId())); }
-        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> new HiveGrowthCompleted(readSubject(input).value())); }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
+            var completed = (HiveGrowthCompleted) payload;
+            ActorBirthIdentityCodec.write(output, completed.birth()); writeSubject(output, completed.jobId());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
+            var birth = ActorBirthIdentityCodec.read(input);
+            return new HiveGrowthCompleted(readSubject(input).value(), birth);
+        }); }
     } private static final class HiveGrowthBlockedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.hive_growth_blocked"; }
         @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> { HiveGrowthBlocked blocked = (HiveGrowthBlocked) payload;
@@ -545,16 +562,16 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         } catch (IOException error) { throw new IllegalArgumentException("truncated production payload", error); }
     }
     private static void writeJob(DataOutputStream output, ProductionJob job) throws IOException {
-        writeSubject(output, job.id()); writeSubject(output, job.settlementId()); writeSubject(output, job.facilityId()); writeSubject(output, job.workerId());
+        writeSubject(output, job.id()); writeSubject(output, job.taskId()); writeSubject(output, job.settlementId()); writeSubject(output, job.facilityId()); writeSubject(output, job.workerId());
         writeSubject(output, job.consumedItemId()); writeSubject(output, job.outputItemId()); writeString(output, job.outputItemKind()); output.writeByte(job.outputCount());
         ProductionWorkProgressStateCodec.write(output, job.workProgress()); TraversalTopologyStateCodec.write(output, job.workTraversal()); output.writeShort(job.traversalCursor());
     }
     private static ProductionJob readJob(DataInputStream input) throws IOException {
-        SubjectId id = readSubject(input).value(); SubjectId settlement = readSubject(input).value(); SubjectId facility = readSubject(input).value();
+        SubjectId id = readSubject(input).value(); SubjectId task = readSubject(input).value(); SubjectId settlement = readSubject(input).value(); SubjectId facility = readSubject(input).value();
         SubjectId worker = readSubject(input).value(); SubjectId consumed = readSubject(input).value(); SubjectId output = readSubject(input).value();
         String outputKind = readString(input); int outputCount = input.readUnsignedByte();
         ProductionWorkProgress progress = ProductionWorkProgressStateCodec.read(input); TraversalTopology traversal = TraversalTopologyStateCodec.read(input);
-        return new ProductionJob(id, settlement, facility, worker, consumed, new ProductionInputHold.Materialized(consumed), output, outputKind, outputCount,
+        return new ProductionJob(id, task, settlement, facility, worker, consumed, new ProductionInputHold.Materialized(consumed), output, outputKind, outputCount,
                 progress, traversal, input.readUnsignedShort());
     }
     private static void writeProductionInputHold(DataOutputStream output, ProductionInputHold hold) throws IOException {
@@ -565,9 +582,11 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             if (!(item.custody() instanceof InventoryCustody.ContainerSlot slot)) throw new IllegalArgumentException("cold production input must retain its depot slot");
             writeSubject(output, slot.containerId()); output.writeByte(slot.slot());
         } else if (hold instanceof ProductionInputHold.FungibleCold cold) {
-            output.writeByte(2); writeSubject(output, cold.accountId()); writeSubject(output, cold.claimId());
+            output.writeByte(cold.inputLots().size() == 1 ? 2 : 4); writeSubject(output, cold.accountId()); writeSubject(output, cold.claimId());
+            if (cold.inputLots().size() != 1) writeProductionInputLots(output, cold.inputLots());
         } else if (hold instanceof ProductionInputHold.FungibleBound bound) {
-            output.writeByte(3); writeSubject(output, bound.accountId()); writeSubject(output, bound.claimId()); output.writeLong(bound.authorityEpoch());
+            output.writeByte(bound.inputLots().size() == 1 ? 3 : 5); writeSubject(output, bound.accountId()); writeSubject(output, bound.claimId()); output.writeLong(bound.authorityEpoch());
+            if (bound.inputLots().size() != 1) writeProductionInputLots(output, bound.inputLots());
         } else throw new IllegalArgumentException("unknown production input hold");
     }
     private static ProductionInputHold readProductionInputHold(DataInputStream input, SubjectId itemId) throws IOException {
@@ -577,25 +596,44 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
                     new InventoryCustody.ContainerSlot(readSubject(input).value(), input.readUnsignedByte())));
             case 2 -> new ProductionInputHold.FungibleCold(itemId, readSubject(input).value(), readSubject(input).value());
             case 3 -> new ProductionInputHold.FungibleBound(itemId, readSubject(input).value(), readSubject(input).value(), input.readLong());
+            case 4 -> new ProductionInputHold.FungibleCold(itemId, readSubject(input).value(), readSubject(input).value(), readProductionInputLots(input));
+            case 5 -> new ProductionInputHold.FungibleBound(itemId, readSubject(input).value(), readSubject(input).value(), input.readLong(), readProductionInputLots(input));
             default -> throw new IllegalArgumentException("unknown production input hold");
         };
     }
+    private static void writeProductionInputLots(DataOutputStream output, Map<SubjectId, Integer> lots) throws IOException {
+        output.writeByte(lots.size());
+        for (var entry : lots.entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
+            writeSubject(output, entry.getKey()); output.writeByte(entry.getValue());
+        }
+    }
+    private static Map<SubjectId, Integer> readProductionInputLots(DataInputStream input) throws IOException {
+        int count = input.readUnsignedByte();
+        if (count < 2 || count > 64) throw new IllegalArgumentException("invalid multi-lot production input count");
+        Map<SubjectId, Integer> lots = new java.util.LinkedHashMap<>();
+        for (int index = 0; index < count; index++) {
+            if (lots.put(readSubject(input).value(), input.readUnsignedByte()) != null) {
+                throw new IllegalArgumentException("duplicate production input lot");
+            }
+        }
+        return lots;
+    }
     private static void writeHiveGrowthJob(DataOutputStream output, HiveGrowthJob job) throws IOException {
-        writeSubject(output, job.id()); writeSubject(output, job.hiveId()); writeSubject(output, job.nestId());
+        writeSubject(output, job.id()); writeSubject(output, job.taskId()); writeSubject(output, job.hiveId()); writeSubject(output, job.nestId());
         writeSubject(output, job.consumedItemId()); writeHiveGrowthInputHold(output, job.inputHold());
         writeString(output, job.consumptionIntentId().value());
         writeSubject(output, job.organ().id()); output.writeByte(job.organ().kind().wireTag()); writePosition(output, job.organ().anchor());
         writeSubject(output, job.bioform().id()); BioformProfileStateCodec.write(output, job.bioform());
     }
     private static HiveGrowthJob readHiveGrowthJob(DataInputStream input) throws IOException {
-        SubjectIdHolder id = readSubject(input); SubjectIdHolder hive = readSubject(input); SubjectIdHolder nest = readSubject(input);
+        SubjectIdHolder id = readSubject(input); SubjectIdHolder task = readSubject(input); SubjectIdHolder hive = readSubject(input); SubjectIdHolder nest = readSubject(input);
         SubjectIdHolder item = readSubject(input); HiveGrowthInputHold hold = readHiveGrowthInputHold(input, item.value());
         io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId consumption = new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(readString(input));
         SubjectIdHolder organId = readSubject(input); int kind = input.readUnsignedByte(); BlockPosition anchor = readPosition(input);
         SubjectIdHolder bioformId = readSubject(input); Bioform bioform = BioformProfileStateCodec.read(input, bioformId.value(), hive.value(), nest.value());
         HiveOrgan organ = new HiveOrgan(organId.value(), hive.value(), nest.value(), FrontierWireTags.require(HiveOrganKind.class, kind), anchor,
                 java.util.Optional.empty());
-        return new HiveGrowthJob(id.value(), hive.value(), nest.value(), item.value(), hold, consumption, organ, bioform);
+        return new HiveGrowthJob(id.value(), task.value(), hive.value(), nest.value(), item.value(), hold, consumption, organ, bioform);
     }
     private static void writeHiveGrowthInputHold(DataOutputStream output, HiveGrowthInputHold hold) throws IOException {
         if (hold instanceof HiveGrowthInputHold.Exact) output.writeByte(0);
@@ -625,7 +663,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
         SubjectId cargo = readSubject(input).value(), item = readSubject(input).value(); boolean fungible = input.readBoolean(); java.util.ArrayList<BlockPosition> corridor = new java.util.ArrayList<>();
         for (int index = 0, count = input.readUnsignedShort(); index < count; index++) corridor.add(readPosition(input));
         int cursor = input.readUnsignedShort(), phase = input.readUnsignedByte(); boolean blocked = input.readBoolean(); int reason = blocked ? input.readUnsignedByte() : -1;
-        var endpoint = input.available() == 0 || !input.readBoolean() ? java.util.Optional.<PhysicalIntentId>empty() : java.util.Optional.of(new PhysicalIntentId(readString(input)));
+        var endpoint = !input.readBoolean() ? java.util.Optional.<PhysicalIntentId>empty() : java.util.Optional.of(new PhysicalIntentId(readString(input)));
         if (phase >= HiveNutrientTransferPhase.values().length || blocked != (phase == HiveNutrientTransferPhase.BLOCKED.wireTag())
                 || blocked && reason >= HiveNutrientTransferBlockReason.values().length) throw new IllegalArgumentException("invalid hive nutrient transfer payload");
         return new HiveNutrientTransfer(id, hive, task, source, new InventoryCustody.ContainerSlot(source, sourceSlot), target, new InventoryCustody.ContainerSlot(target, targetSlot), cargo, item, fungible, corridor, cursor,

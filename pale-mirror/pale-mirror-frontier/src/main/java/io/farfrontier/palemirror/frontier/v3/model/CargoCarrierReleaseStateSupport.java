@@ -33,6 +33,24 @@ final class CargoCarrierReleaseStateSupport {
         java.util.Set<SubjectId> releasedClaims = inventory.fungibleResources().accounts().values().stream()
                 .filter(account -> account.custody().equals(new ResourceCustody.WorldCarrier(released.carrierId())))
                 .flatMap(account -> account.claimQuantities().keySet().stream()).collect(java.util.stream.Collectors.toSet());
+        CargoBatch batch = state.inventory().cargo().get(released.cargoId());
+        if (batch == null) throw new IllegalArgumentException("cargo carrier release has no current cargo batch");
+        if (batch.fungibleContents()) {
+            CustodyAccount carrierAccount = inventory.fungibleResources().accounts().values().stream()
+                    .filter(account -> account.custody().equals(new ResourceCustody.WorldCarrier(released.carrierId())))
+                    .reduce((left, right) -> { throw new IllegalArgumentException("cargo carrier has ambiguous fungible accounts"); })
+                    .orElseThrow(() -> new IllegalArgumentException("fungible cargo carrier has no current account"));
+            if (releasedClaims.size() != 1) throw new IllegalArgumentException("fungible cargo carrier has no sole supply claim");
+            ClaimAllocation claim = inventory.fungibleResources().claims().get(releasedClaims.iterator().next());
+            if (claim == null || claim.purpose() != ClaimPurpose.SUPPLY_CONTRACT || !claim.claimantId().equals(contract.id())
+                    || !claim.economicOwnerId().equals(contract.settlementId()) || !claim.itemKind().equals(contract.itemKind())
+                    || claim.quantity() != contract.itemCount() || !claim.lotQuantities().equals(carrierAccount.lotQuantities())
+                    || !carrierAccount.claimQuantities().equals(Map.of(claim.id(), claim.quantity()))) {
+                throw new IllegalArgumentException("cargo carrier release cannot retire a foreign supply claim");
+            }
+        } else if (!releasedClaims.isEmpty()) {
+            throw new IllegalArgumentException("exact cargo carrier has foreign fungible claims");
+        }
         if (!releasedClaims.isEmpty()) inventory = inventory.withFungibleResources(inventory.fungibleResources().releaseClaims(releasedClaims));
         Map<SubjectId, SupplyContract> contracts = new LinkedHashMap<>(state.contracts()); contracts.put(contract.id(), contract.withStatus(ContractStatus.INTERRUPTED));
         Map<SubjectId, RouteOperation> operations = new LinkedHashMap<>(state.operations());

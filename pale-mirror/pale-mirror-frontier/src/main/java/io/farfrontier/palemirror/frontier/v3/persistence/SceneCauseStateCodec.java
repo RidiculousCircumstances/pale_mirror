@@ -37,7 +37,9 @@ final class SceneCauseStateCodec {
             output.writeByte(2); FrontierWorldStateCodec.writeString(output, engineering.projectId().value()); output.writeInt(engineering.workCellIndex()); return;
         }
         if (cause instanceof MedicalTreatmentSceneCause medical) { output.writeByte(3); FrontierWorldStateCodec.writeString(output, medical.operationId().value()); return; }
-        if (cause instanceof ResourceSiteHarvestSceneCause harvest) { output.writeByte(4); FrontierWorldStateCodec.writeString(output, harvest.jobId().value()); return; }
+        if (cause instanceof ResourceSiteHarvestSceneCause harvest) { output.writeByte(4);
+            FrontierWorldStateCodec.writeString(output, harvest.siteId().value());
+            FrontierWorldStateCodec.writeString(output, harvest.jobId().value()); return; }
         if (cause instanceof ProductionWorkSceneCause production) { output.writeByte(5); FrontierWorldStateCodec.writeString(output, production.jobId().value()); return; }
         if (cause instanceof SettlementServiceWorkSceneCause service) { output.writeByte(6); FrontierWorldStateCodec.writeString(output, service.workId().value()); return; }
         if (cause instanceof RoutePatrolSceneCause patrol) { output.writeByte(7); FrontierWorldStateCodec.writeString(output, patrol.taskId().value()); return; }
@@ -52,7 +54,8 @@ final class SceneCauseStateCodec {
             case 1 -> new SettlementAssaultSceneCause(new SubjectId(FrontierWorldStateCodec.readString(input)), new SubjectId(FrontierWorldStateCodec.readString(input)));
             case 2 -> new EngineeringWorkSceneCause(new SubjectId(FrontierWorldStateCodec.readString(input)), input.readInt());
             case 3 -> new MedicalTreatmentSceneCause(new SubjectId(FrontierWorldStateCodec.readString(input)));
-            case 4 -> new ResourceSiteHarvestSceneCause(new SubjectId(FrontierWorldStateCodec.readString(input)));
+            case 4 -> new ResourceSiteHarvestSceneCause(new SubjectId(FrontierWorldStateCodec.readString(input)),
+                    new SubjectId(FrontierWorldStateCodec.readString(input)));
             case 5 -> new ProductionWorkSceneCause(new SubjectId(FrontierWorldStateCodec.readString(input)));
             case 6 -> new SettlementServiceWorkSceneCause(new SubjectId(FrontierWorldStateCodec.readString(input)));
             case 7 -> new RoutePatrolSceneCause(new SubjectId(FrontierWorldStateCodec.readString(input)));

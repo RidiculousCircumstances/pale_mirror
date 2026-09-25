@@ -13,7 +13,7 @@ final class FrontierV3OperationFixture {
     static RouteOperation routeSceneReturnOperation() {
         FrontierWorldState state = FrontierV3FixtureCatalog
                 .routeSceneReturnConfiguration(new WorldId("frontier:operation-fixture"), 91L).initialState();
-        return state.operations().get(new SubjectId("operation:supply-1-2"));
+        return FrontierDevelopmentScenarios.initialNorthwatchShipment(state).orElseThrow();
     }
 
     static OperationTravel advanceCold(OperationTravel prior) {

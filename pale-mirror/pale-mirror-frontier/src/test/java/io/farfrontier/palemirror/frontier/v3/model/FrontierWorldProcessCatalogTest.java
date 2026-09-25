@@ -125,6 +125,7 @@ class FrontierWorldProcessCatalogTest {
         for (String type : List.of(
                 "frontier.resource_site_harvest_crop_prepared",
                 "frontier.resource_site_harvest_progressed",
+                "frontier.resource_site_harvest_blocked_cell_skipped",
                 "frontier.resource_site_harvest_hot_traversal_advanced",
                 "frontier.resource_site_harvest_scene_lease_prepared",
                 "frontier.resource_site_harvest_scene_lease_handoff")) {

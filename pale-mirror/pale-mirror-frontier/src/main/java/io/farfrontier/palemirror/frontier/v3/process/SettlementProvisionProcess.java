@@ -227,14 +227,7 @@ public final class SettlementProvisionProcess {
     }
 
     public static FrontierWorldState reduceResolved(FrontierWorldState state, SubjectId subject, SettlementProvisionResolved resolved) {
-        SettlementProvision provision = state.humanPopulation().provision(resolved.settlementId());
-        if (!subject.equals(resolved.settlementId()) || provision.status() != SettlementProvisionStatus.IN_PROGRESS) {
-            throw new IllegalArgumentException("settlement provision resolution lacks an active owner");
-        }
-        SettlementProvision next = resolved.status() == SettlementProvisionStatus.CONFLICT ? provision.conflict() : provision.shortage();
-        HumanPopulation population = state.humanPopulation().withProvision(next);
-        return state.withHumanPopulation(resolved.status() == SettlementProvisionStatus.CONFLICT ? population
-                : resolveUnserved(population, provision, provision.nextAllocation()));
+        return SettlementProvisionStateSupport.reduceResolved(state, subject, resolved);
     }
 
     private static FrontierWorldState consume(FrontierWorldState state, SettlementProvision provision, SubjectId itemId, int count, boolean physical) {
@@ -336,13 +329,10 @@ public final class SettlementProvisionProcess {
 
     private static List<ProposedEvent> planFungibleProgress(FrontierWorldState state, ScheduledAction action, SettlementProvision provision,
                                                              SettlementRationAllocation allocation, SubjectId depot) {
-        SettlementRationAllocation.FungibleSource source = allocation.fungibleSource().orElseThrow();
-        CustodyAccount account = state.inventory().fungibleResources().accounts().get(source.accountId());
-        ClaimAllocation claim = state.inventory().fungibleResources().claims().get(source.claimId());
-        if (account == null || claim == null || !account.lotQuantities().containsKey(allocation.itemId()) || claim.quantity() != allocation.count()
-                || account.claimQuantities().getOrDefault(claim.id(), 0) != allocation.count()) {
+        if (!currentFungibleRation(state, provision, allocation, depot)) {
             return List.of(new ProposedEvent(provision.settlementId(), TerminalDiagnosticProducer.provisionConflict(provision.settlementId())));
         }
+        CustodyAccount account = state.inventory().fungibleResources().accounts().get(allocation.fungibleSource().orElseThrow().accountId());
         if (state.inventory().fungibleResources().bindings().values().stream().anyMatch(binding -> binding.accountId().equals(account.id()))) {
             return List.of(schedule(progressAfter(provision, Math.addExact(action.dueAt().ticks(), 100L))));
         }
@@ -365,7 +355,8 @@ public final class SettlementProvisionProcess {
                     || account.lotQuantities().getOrDefault(lot.id(), 0) < allocation.count()) {
                 throw new IllegalArgumentException("fungible ration allocation lacks current owned food custody");
             }
-            resources = resources.reserve(new ClaimAllocation(source.claimId(), provision.settlementId(), provision.settlementId(), BREAD, allocation.count()), account.id());
+            resources = resources.reserve(new ClaimAllocation(source.claimId(), provision.settlementId(), provision.settlementId(), BREAD,
+                    allocation.count(), java.util.Map.of(allocation.itemId(), allocation.count()), ClaimPurpose.SETTLEMENT_RATION), account.id());
         }
         return state.inventory().withFungibleResources(resources);
     }
@@ -376,9 +367,8 @@ public final class SettlementProvisionProcess {
             throw new IllegalArgumentException("settlement provision consumption does not match its fungible food allocation");
         }
         SettlementRationAllocation.FungibleSource source = allocation.fungibleSource().orElseThrow();
-        CustodyAccount account = state.inventory().fungibleResources().accounts().get(source.accountId()); ResourceLot lot = state.inventory().fungibleResources().lots().get(lotId);
-        if (ReferenceContainerCustody.blocksCanonicalUse(state, depot) || account == null || lot == null || !BREAD.equals(lot.itemKind())
-                || !(account.custody() instanceof ResourceCustody.Container container) || !container.containerId().equals(depot)
+        CustodyAccount account = state.inventory().fungibleResources().accounts().get(source.accountId());
+        if (ReferenceContainerCustody.blocksCanonicalUse(state, depot) || !currentFungibleRation(state, provision, allocation, depot)
                 || state.inventory().fungibleResources().bindings().values().stream().anyMatch(binding -> binding.accountId().equals(account.id()))) {
             throw new IllegalArgumentException("fungible provision crossed the wrong physical custody boundary");
         }
@@ -386,6 +376,24 @@ public final class SettlementProvisionProcess {
         HumanPopulation population = feedCurrentAllocation(state.humanPopulation(), provision);
         if (provision.nextAllocation() + 1 == provision.allocations().size()) population = resolveUnserved(population, provision, provision.nextAllocation() + 1);
         return state.withInventory(state.inventory().withFungibleResources(resources)).withHumanPopulation(population.withProvision(provision.consumeCurrent(lotId, count)));
+    }
+
+    private static boolean currentFungibleRation(FrontierWorldState state, SettlementProvision provision,
+                                                  SettlementRationAllocation allocation, SubjectId depot) {
+        var source = allocation.fungibleSource().orElseThrow();
+        var resources = state.inventory().fungibleResources();
+        CustodyAccount account = resources.accounts().get(source.accountId());
+        ResourceLot lot = resources.lots().get(allocation.itemId());
+        ClaimAllocation claim = resources.claims().get(source.claimId());
+        return account != null && lot != null && claim != null
+                && account.custody() instanceof ResourceCustody.Container container && container.containerId().equals(depot)
+                && BREAD.equals(lot.itemKind()) && lot.economicOwnerId().equals(provision.settlementId())
+                && account.lotQuantities().getOrDefault(lot.id(), 0) >= allocation.count()
+                && account.claimQuantities().getOrDefault(claim.id(), 0) == allocation.count()
+                && claim.purpose() == ClaimPurpose.SETTLEMENT_RATION
+                && claim.claimantId().equals(provision.settlementId()) && claim.economicOwnerId().equals(provision.settlementId())
+                && BREAD.equals(claim.itemKind()) && claim.quantity() == allocation.count()
+                && claim.lotQuantities().equals(java.util.Map.of(lot.id(), allocation.count()));
     }
 
     private static SubjectId rationClaimId(SubjectId settlementId, int cycle, int ordinal) {

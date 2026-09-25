@@ -16,6 +16,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceTransition;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
 import io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalObservation;
 import io.farfrontier.palemirror.frontier.v3.model.FungibleResourceLedger;
+import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceCustody;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierContainerSocketPlan;
@@ -36,9 +37,11 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 
 import java.util.Comparator;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Materializes one exact inventory surface at a time in naturally loaded chunks.
@@ -166,12 +169,10 @@ final class FrontierV3ContainerSurfaceExecutor {
     }
 
     static boolean writeCanonicalSlots(ChestBlockEntity chest, FrontierWorldState state, SubjectId containerId) {
-        if (state.inventory().containers().get(containerId) == null || !chest.isEmpty()) return false;
-        for (int slot = 0; slot < chest.getContainerSize(); slot++) {
-            ExactItemStack item = state.inventory().itemAt(containerId, slot).orElse(null);
-            if (item != null) chest.setItem(slot, FrontierV3CargoHandoffExecutor.materializedStack(item));
-        }
-        if (!writeFungibleSlots(chest, state, containerId)) return false;
+        if (!chest.isEmpty()) return false;
+        Optional<List<ItemStack>> planned = plannedCanonicalSlots(state, containerId, chest.getContainerSize());
+        if (planned.isEmpty()) return false;
+        for (int slot = 0; slot < chest.getContainerSize(); slot++) chest.setItem(slot, planned.orElseThrow().get(slot));
         chest.setChanged();
         return matchesCanonicalSlots(chest, state, containerId);
     }
@@ -187,13 +188,9 @@ final class FrontierV3ContainerSurfaceExecutor {
      * It is deliberately package-private so no generic surface lifecycle can use it.
      */
     static boolean replaceCanonicalSlots(ChestBlockEntity chest, FrontierWorldState state, SubjectId containerId) {
-        if (state.inventory().containers().get(containerId) == null || chest.getContainerSize() != state.inventory().containers().get(containerId).slotCount()) return false;
-        for (int slot = 0; slot < chest.getContainerSize(); slot++) chest.setItem(slot, ItemStack.EMPTY);
-        for (int slot = 0; slot < chest.getContainerSize(); slot++) {
-            ExactItemStack item = state.inventory().itemAt(containerId, slot).orElse(null);
-            if (item != null) chest.setItem(slot, FrontierV3CargoHandoffExecutor.materializedStack(item));
-        }
-        if (!writeFungibleSlots(chest, state, containerId)) return false;
+        Optional<List<ItemStack>> planned = plannedCanonicalSlots(state, containerId, chest.getContainerSize());
+        if (planned.isEmpty()) return false;
+        for (int slot = 0; slot < chest.getContainerSize(); slot++) chest.setItem(slot, planned.orElseThrow().get(slot));
         chest.setChanged();
         return matchesCanonicalSlots(chest, state, containerId);
     }
@@ -237,12 +234,25 @@ final class FrontierV3ContainerSurfaceExecutor {
         return List.copyOf(observed);
     }
 
+    /** Fungible layout bytes carry kind/count only; modified item components cannot be erased into that evidence. */
+    static boolean hasForeignFungibleComponents(ChestBlockEntity chest, FrontierWorldState state, SubjectId containerId) {
+        for (int slot = 0; slot < chest.getContainerSize(); slot++) {
+            if (state.inventory().itemAt(containerId, slot).isPresent()) continue;
+            ItemStack actual = chest.getItem(slot);
+            if (!actual.isEmpty() && !ItemStack.isSameItemSameComponents(actual,
+                    new ItemStack(actual.getItem(), actual.getCount()))) return true;
+        }
+        return false;
+    }
+
     private static boolean matchesFungibleSlots(ChestBlockEntity chest, FrontierWorldState state, SubjectId containerId) {
+        if (hasForeignFungibleComponents(chest, state, containerId)) return false;
         FungibleResourceLedger resources = state.inventory().fungibleResources();
         List<io.farfrontier.palemirror.frontier.v3.model.CustodyAccount> accounts = resources.accounts().values().stream()
                 .filter(account -> account.custody() instanceof ResourceCustody.Container value && value.containerId().equals(containerId)).toList();
         if (accounts.size() > 1) return false;
         List<FungiblePhysicalObservation.Stack> observed = observedFungibleSlots(chest, state, containerId);
+        if (overlapsHarvestOutputReservation(state, observed)) return false;
         if (accounts.isEmpty()) return observed.isEmpty();
         long epoch = resources.bindings().values().stream().filter(binding -> binding.accountId().equals(accounts.getFirst().id()))
                 .mapToLong(io.farfrontier.palemirror.frontier.v3.model.PhysicalStackBinding::authorityEpoch).findFirst().orElse(1L);
@@ -254,31 +264,68 @@ final class FrontierV3ContainerSurfaceExecutor {
         }
     }
 
-    private static boolean writeFungibleSlots(ChestBlockEntity chest, FrontierWorldState state, SubjectId containerId) {
+    /** Build the complete owned image before touching even one physical slot. */
+    static Optional<List<ItemStack>> plannedCanonicalSlots(FrontierWorldState state, SubjectId containerId, int capacity) {
+        if (state.inventory().containers().get(containerId) == null
+                || capacity != state.inventory().containers().get(containerId).slotCount()) return Optional.empty();
+        List<ItemStack> planned = new ArrayList<>(java.util.Collections.nCopies(capacity, ItemStack.EMPTY));
+        for (int slot = 0; slot < capacity; slot++) {
+            ExactItemStack item = state.inventory().itemAt(containerId, slot).orElse(null);
+            if (item != null) {
+                ResourceLocation id = ResourceLocation.tryParse(item.itemKind());
+                if (id == null || !BuiltInRegistries.ITEM.containsKey(id)
+                        || BuiltInRegistries.ITEM.get(id) == net.minecraft.world.item.Items.AIR
+                        || item.count() > BuiltInRegistries.ITEM.get(id).getDefaultMaxStackSize()) return Optional.empty();
+                planned.set(slot, FrontierV3CargoHandoffExecutor.materializedStack(item));
+            }
+        }
         FungibleResourceLedger resources = state.inventory().fungibleResources();
         List<io.farfrontier.palemirror.frontier.v3.model.CustodyAccount> accounts = resources.accounts().values().stream()
                 .filter(account -> account.custody() instanceof ResourceCustody.Container value && value.containerId().equals(containerId)).toList();
-        if (accounts.size() > 1) return false;
-        if (accounts.isEmpty()) return true;
-        Map<String, Integer> quantities = new LinkedHashMap<>();
+        if (accounts.size() > 1) return Optional.empty();
+        if (accounts.isEmpty()) return Optional.of(List.copyOf(planned));
+        Map<String, Long> quantities = new LinkedHashMap<>();
         accounts.getFirst().lotQuantities().entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
             String kind = resources.lots().get(entry.getKey()).itemKind();
-            quantities.merge(kind, entry.getValue(), Integer::sum);
+            quantities.merge(kind, entry.getValue().longValue(), Math::addExact);
         });
         int slot = 0;
-        for (Map.Entry<String, Integer> entry : quantities.entrySet()) {
+        for (Map.Entry<String, Long> entry : quantities.entrySet()) {
             ResourceLocation id = ResourceLocation.tryParse(entry.getKey());
-            if (id == null || !BuiltInRegistries.ITEM.containsKey(id)) return false;
-            int remaining = entry.getValue();
+            if (id == null || !BuiltInRegistries.ITEM.containsKey(id)
+                    || BuiltInRegistries.ITEM.get(id) == net.minecraft.world.item.Items.AIR) return Optional.empty();
+            long remaining = entry.getValue();
             while (remaining > 0) {
-                while (slot < chest.getContainerSize() && !chest.getItem(slot).isEmpty()) slot++;
-                if (slot == chest.getContainerSize()) return false;
-                int count = Math.min(64, remaining);
-                chest.setItem(slot++, new ItemStack(BuiltInRegistries.ITEM.get(id), count));
+                // A retained field job owns its future exact output slot even while its
+                // wheat is still carried by the farmer. The fungible cold-stock image must
+                // leave that slot vacant, or first visibility creates a physical collision
+                // which only surfaces at the much later terminal harvest receipt.
+                slot = nextProjectionSlot(state, containerId, capacity, slot, index -> !planned.get(index).isEmpty());
+                if (slot == capacity) return Optional.empty();
+                var item = BuiltInRegistries.ITEM.get(id);
+                int count = (int) Math.min(item.getDefaultMaxStackSize(), remaining);
+                if (count < 1) return Optional.empty();
+                planned.set(slot++, new ItemStack(item, count));
                 remaining -= count;
             }
         }
-        return true;
+        return Optional.of(List.copyOf(planned));
+    }
+
+    /** Shared by the complete-image writer and its pure slot-selection regression. */
+    static int nextProjectionSlot(FrontierWorldState state, SubjectId containerId, int capacity, int from,
+                                  java.util.function.IntPredicate occupied) {
+        for (int candidate = from; candidate < capacity; candidate++) {
+            if (!occupied.test(candidate)
+                    && !state.harvestOutputReserves(new InventoryCustody.ContainerSlot(containerId, candidate))) return candidate;
+        }
+        return capacity;
+    }
+
+    /** A physically occupied promised output slot is drift, never available fungible custody. */
+    static boolean overlapsHarvestOutputReservation(FrontierWorldState state, List<FungiblePhysicalObservation.Stack> stacks) {
+        return stacks.stream().anyMatch(stack -> stack.address() instanceof PhysicalStackAddress.ContainerSlot address
+                && state.harvestOutputReserves(address.slot()));
     }
 
     private static boolean pendingProductionOutputAt(FrontierWorldState state, SubjectId containerId, int slot, net.minecraft.world.item.ItemStack physical) {

@@ -24,6 +24,8 @@ public enum FrontierV3DiagnosticView {
     /** Bounded read-only inventory of every current settlement harvest process. */
     PROCESS_INVENTORY("process_inventory", true),
     SITE("site", true),
+    /** Read-only physical field-claim phase and retained observation fence for one site. */
+    FIELD_PHYSICAL("field_physical", true),
     SETTLEMENT("settlement", true),
     /** One bounded settlement resident set for a first-visibility audit; read-only and permission-gated. */
     SETTLEMENT_POPULATION("settlement_population", true),

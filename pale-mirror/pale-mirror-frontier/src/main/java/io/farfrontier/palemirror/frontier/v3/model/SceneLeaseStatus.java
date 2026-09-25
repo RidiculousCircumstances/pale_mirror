@@ -10,7 +10,9 @@ public enum SceneLeaseStatus {
             case HOT -> next == DRAINING || next == UNKNOWN_AFTER_RESTART || next == CONFLICT;
             case DRAINING -> next == UNKNOWN_AFTER_RESTART || next == CONFLICT;
             case CLOSED -> false;
-            // Reclaim is observation-only: the adapter must find every already-owned body.
+            // Reclaim requires every exact owned body. An adapter may first complete
+            // explicitly permitted, never-started initial admission; unknown absence
+            // alone cannot authorize creation or replay an attempted admission.
             // PREPARED is recovery of an already materialized pre-effect assembly: the same
             // bodies were observed again, but no treatment effect had become eligible yet.
             case UNKNOWN_AFTER_RESTART -> next == PREPARED || next == HOT || next == DRAINING;

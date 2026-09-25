@@ -16,6 +16,45 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.util.EnumSet;
 
 class DiagnosticIncidentIndexTest {
+    @Test void distinctProductionJobsAtOneFacilityRetainIndependentIncidentsAcrossSnapshot() {
+        var settlement = new io.farfrontier.palemirror.frontier.v3.api.SubjectId("settlement:7");
+        var facility = new io.farfrontier.palemirror.frontier.v3.api.SubjectId("structure:7-workshop");
+        var first = ProductionDiagnosticProducer.ROUTE_BLOCKED.create(settlement, facility,
+                new io.farfrontier.palemirror.frontier.v3.api.SubjectId("job:production-7-1"), new io.farfrontier.palemirror.frontier.v3.api.SubjectId("task:production-7-1")).diagnostic();
+        var second = ProductionDiagnosticProducer.ROUTE_BLOCKED.create(settlement, facility,
+                new io.farfrontier.palemirror.frontier.v3.api.SubjectId("job:production-7-2"), new io.farfrontier.palemirror.frontier.v3.api.SubjectId("task:production-7-2")).diagnostic();
+        assertNotEquals(DiagnosticIncident.idFor(first), DiagnosticIncident.idFor(second));
+        var index = DiagnosticIncidentIndex.empty().retain(first, "event:1", "cause:1", 1, 10)
+                .retain(second, "event:2", "cause:2", 2, 20);
+        assertEquals(2, index.incidents().size());
+        assertEquals(second, index.why(first.subject()).orElseThrow().diagnostic());
+        var initial = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:multi-incident"), 93L).initialState();
+        var codec = new FrontierWorldStateCodec();
+        var recovered = codec.decode(codec.encode(initial.withDiagnosticIncidents(index))).diagnosticIncidents();
+        assertEquals(index, recovered);
+        var repeated = recovered.retain(first, "event:3", "cause:3", 3, 30);
+        assertEquals(first, repeated.why(first.subject()).orElseThrow().diagnostic());
+        assertEquals(2, repeated.incident(DiagnosticIncident.idFor(first)).orElseThrow().occurrences());
+        assertEquals("event:1", repeated.incident(DiagnosticIncident.idFor(first)).orElseThrow().firstEventId());
+        assertEquals(1, repeated.incident(DiagnosticIncident.idFor(second)).orElseThrow().occurrences());
+        assertThrows(IllegalArgumentException.class, () -> recovered.retain(DiagnosticIncident.idFor(first),
+                second, "event:forged", "cause:forged", 3, 30));
+    }
+
+    @Test void multipleTerminalOwnersAtOneSubjectRemainIndividuallyAddressable() {
+        var first = tuple(7);
+        var second = new DiagnosticTuple(first.reason(), first.category(),
+                new DiagnosticOwner(DiagnosticOwnerKind.RESOURCE_SITE,
+                        new io.farfrontier.palemirror.frontier.v3.api.SubjectId("site:diagnostic-other")),
+                first.subject(), first.disposition());
+        var index = DiagnosticIncidentIndex.empty().retain(first, "event:1", "cause:1", 1, 1)
+                .retain(second, "event:2", "cause:2", 2, 2);
+        assertEquals(2, index.incidents().size());
+        assertTrue(index.incidents().values().stream().allMatch(DiagnosticIncident::awaitingReview));
+        assertEquals(second, index.why(first.subject()).orElseThrow().diagnostic());
+        assertTrue(index.bundle(DiagnosticIncident.idFor(first)).isPresent());
+    }
+
     @Test void currentProducerInventoryHasNoUnretainedReason() {
         EnumSet<DiagnosticReason> expected = EnumSet.allOf(DiagnosticReason.class);
         assertEquals(expected, DiagnosticIncidentExtractor.retainedReasons());

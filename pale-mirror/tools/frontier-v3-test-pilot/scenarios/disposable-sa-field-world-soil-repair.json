@@ -1,0 +1,67 @@
+{
+  "schema": 1,
+  "id": "disposable_sa_field_world_soil_repair",
+  "isolation": { "mode": "disposable_lite", "seed": 125 },
+  "server": { "host": "127.0.0.1", "port": 25586, "profile": "resource-site-harvest-65-after-cold-part", "viewDistance": 6 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
+      "position": { "diagnostic": { "view": "site", "id": "site:1-wheat-field", "field": "firstCrop" } },
+      "offset": { "x": 4, "y": 0, "z": -6 }, "settleMs": 1000 },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "field_physical", "id": "site:1-wheat-field", "expect": {
+        "status": "ACTIVE", "claimKind": "OWNERSHIP", "layoutCurrent": true,
+        "epoch": 2, "firstCellCurrent": true
+      } }
+    ] },
+    { "type": "command", "command": "/execute in pale_mirror:frontier_graybox run setblock -343 63 -346 minecraft:dirt" }
+  ],
+  "actions": [
+    { "type": "wait_until_diagnostic", "view": "trace", "id": "field-world-prewrite:site:1-wheat-field",
+      "expect": { "status": "ok", "eventKind": "resource_field_world_change_held:prewrite", "subject": "site:1-wheat-field" },
+      "timeoutMs": 15000, "causalMilestone": "soil_loss_held_before_world_write" },
+    { "type": "wait_until_diagnostic", "view": "field_physical", "id": "site:1-wheat-field",
+      "expect": { "status": "ACTIVE", "claimKind": "OWNERSHIP", "firstCellCommitted": {
+        "soil": "DIRT", "crop": "ABSENT", "stage": 0 }, "worldChangePending": false }, "timeoutMs": 30000,
+      "causalMilestone": "soil_loss_canonical_and_physical" },
+    { "type": "look", "at": { "diagnostic": { "view": "site", "id": "site:1-wheat-field", "field": "firstCrop" } } },
+    { "type": "visit", "dimension": "minecraft:overworld", "position": { "x": 0, "y": 66, "z": 0 }, "settleMs": 3000 },
+    { "type": "fast_forward_to_instant", "targetInstant": 55800, "timeoutMs": 180000 },
+    { "type": "release_fast_forward_hold" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
+      "position": { "diagnostic": { "view": "site", "id": "site:1-wheat-field", "field": "firstCrop" } },
+      "offset": { "x": 4, "y": 0, "z": -6 }, "settleMs": 1000 },
+    { "type": "look", "at": { "diagnostic": { "view": "site", "id": "site:1-wheat-field", "field": "firstCrop" } } },
+    { "type": "wait_until_diagnostic", "view": "field_physical", "id": "site:1-wheat-field",
+      "expect": { "status": "ACTIVE", "claimKind": "OWNERSHIP", "firstCellCurrent": true,
+        "firstCellCommitted": { "soil": "FARMLAND", "crop": "GROWING", "stage": 0 },
+        "worldChangePending": false }, "timeoutMs": 180000,
+      "causalMilestone": "farmer_repaired_and_planted_exact_damaged_cell" },
+    { "type": "wait_until_block", "position": { "x": -343, "y": 63, "z": -346 },
+      "block": "minecraft:farmland", "timeoutMs": 15000 },
+    { "type": "wait_until_block", "position": { "x": -343, "y": 64, "z": -346 },
+      "block": "minecraft:wheat", "timeoutMs": 15000 },
+    { "type": "visit", "dimension": "minecraft:overworld", "position": { "x": 0, "y": 66, "z": 0 }, "settleMs": 5000 },
+    { "type": "fast_forward", "ticks": 16000, "timeoutMs": 180000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
+      "position": { "diagnostic": { "view": "site", "id": "site:1-wheat-field", "field": "firstCrop" } },
+      "offset": { "x": 4, "y": 0, "z": -6 }, "settleMs": 1000 },
+    { "type": "wait_until_diagnostic", "view": "site", "id": "site:1-wheat-field",
+      "expect": { "status": "ok", "phase": "GROWING", "growthEpoch": 3 }, "timeoutMs": 180000,
+      "causalMilestone": "damaged_cell_cold_cycle_completed" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
+      "position": { "x": -343, "y": 65, "z": -326 }, "settleMs": 1500 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:1-depot",
+      "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT" },
+        "custody": { "status": "ACQUIRED" } }, "timeoutMs": 90000,
+      "causalMilestone": "cold_depot_image_current_under_player_visit" },
+    { "type": "wait_until_diagnostic", "view": "site", "id": "site:1-wheat-field",
+      "expect": { "status": "ok", "terminalHarvest": { "physicalReceiptResolved": true,
+        "physicalReceiptConfirmed": true, "intentStatus": "CONFIRMED" } }, "timeoutMs": 90000,
+      "causalMilestone": "mixed_hot_cold_depot_physically_confirmed" }
+  ],
+  "frames": [
+    { "after": 3, "name": "soil-loss-before-repair", "presentation": "player" },
+    { "after": 11, "name": "same-cell-repaired-and-planted", "presentation": "player" }
+  ]
+}

@@ -22,11 +22,15 @@ final class FrontierV3CargoDepartureObserver {
                 : FrontierV3CargoCarrierExecutor.captureLoadedRelease(state, entity, lease);
         if (ledger.conflicted(FrontierV3CargoCarrierExecutor.id(lease)) || receipt.isEmpty()
                 || !FrontierV3CargoCarrierExecutor.currentDeparture(state, lease, receipt.orElseThrow(), level.registryAccess())) return false;
+        if (entity == null && !ledger.savedObservation(receipt.orElseThrow())) return false;
         try {
+            // A previous publication failure must never leave an in-memory marker
+            // that can close the canonical lease without its durable journal.
+            if (entity == null) ledger.persist(level, state.bootstrap().worldId());
             FrontierV3CargoCleanupArchive.at(level, state.bootstrap().worldId()).prepareRelease(state, lease, receipt.orElseThrow());
             FrontierV3CargoCleanupPersistence.witnessPublished(level);
             return true;
-        } catch (java.io.IOException failure) {
+        } catch (java.io.IOException | java.io.UncheckedIOException failure) {
             PaleMirrorMod.LOGGER.error("Cargo release witness not durable entity={}; closure deferred", receipt.orElseThrow().entityId(), failure);
             return false;
         }

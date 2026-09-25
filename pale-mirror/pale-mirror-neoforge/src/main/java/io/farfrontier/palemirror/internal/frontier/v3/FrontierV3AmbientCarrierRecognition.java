@@ -17,7 +17,48 @@ final class FrontierV3AmbientCarrierRecognition {
     private FrontierV3AmbientCarrierRecognition() { }
 
     static boolean recognizes(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity) {
-        return recognizes(runtime, ManagedCarrier.from(entity));
+        var state = runtime.decodedState().orElse(null);
+        if (state == null || !(entity.level() instanceof net.minecraft.server.level.ServerLevel level)) return false;
+        var carrier = ManagedCarrier.from(entity);
+        return recoverableOwnership(state, carrier, FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId()))
+                && recognizes(runtime, carrier);
+    }
+
+    static boolean recoverableOwnership(FrontierWorldState state, ManagedCarrier carrier,
+                                         FrontierV3AmbientCarrierLedger ledger) {
+        if (!recognizesOwnership(state, carrier)) return false;
+        var actor = actorId(carrier);
+        if (ledger.hasCarrier(actor) || ledger.hasDepartureConflict(actor)
+                || ledger.departure(actor).isPresent() || ledger.ambientDeparture(actor).isPresent()) return false;
+        var handoff = ledger.pendingHandoff(actor);
+        if (handoff.isPresent()) return carrier.matches(handoff.orElseThrow().current());
+        var first = ledger.firstAdmission(actor).orElse(null);
+        if (first != null && (first.phase() == FrontierV3ActorFirstAdmission.Phase.NEVER_CREATED
+                || first.phase() == FrontierV3ActorFirstAdmission.Phase.PROVEN_ABSENT
+                || first.phase() == FrontierV3ActorFirstAdmission.Phase.PENDING
+                    && !carrier.matches(first.attempt().orElseThrow().declaration()))) return false;
+        return ledger.pendingAdoption(actor).map(value -> carrier.matches(value.admitted())).orElse(true);
+    }
+
+    /** Retiring a stale saved body requires its completed canonical owner AND exact retained fence. */
+    static boolean retainedClosedRelease(FrontierWorldState state, ManagedCarrier carrier,
+                                         FrontierV3AmbientCarrierLedger ledger) {
+        var actor = actorId(carrier);
+        if (actor == null || carrier.epoch() < 1L) return false;
+        var lease = state.ambientLeases().get(actor);
+        var location = state.actorLocations().get(actor);
+        if (lease == null || lease.status() != AmbientLeaseStatus.CLOSED || location == null
+                || location.condition().status() != ActorLifeStatus.ALIVE
+                || ledger.hasDepartureConflict(actor) || ledger.pendingAdoption(actor).isPresent()
+                || state.sceneLeases().values().stream().anyMatch(scene -> scene.status()
+                    != io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.CLOSED
+                    && scene.members().stream().anyMatch(member -> member.actorId().equals(actor)))) return false;
+        var expected = FrontierV3AmbientActorExecutor.carrierDeclaration(state, actor,
+                FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,
+                FrontierV3AmbientActorExecutor.entityId(state, actor),
+                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, lease.revision(), carrier.epoch());
+        return carrier.ownedBy(actor, FrontierV3AmbientActorExecutor.bioform(state, actor)) && carrier.matches(expected)
+                && ledger.matchesCarrier(expected.inactiveCarrier(), lease.revision(), lease.revision());
     }
 
     static boolean recognizes(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, ManagedCarrier carrier) {
@@ -56,6 +97,9 @@ final class FrontierV3AmbientCarrierRecognition {
         return location != null && location.condition().status() == ActorLifeStatus.ALIVE
                 && lease != null && lease.status() != AmbientLeaseStatus.CLOSED
                 && FrontierV3AmbientActorExecutor.entityId(state, actorId).equals(carrier.entityId())
+                && FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE.name().equals(carrier.owner())
+                && FrontierV3ActorCarrierComposition.Representation.LIVE_BODY.name().equals(carrier.representation())
+                && carrier.authorityRevision() == lease.revision() && carrier.epoch() >= 1L
                 && carrier.ownedBy(actorId, FrontierV3AmbientActorExecutor.bioform(state, actorId));
     }
 
@@ -64,14 +108,30 @@ final class FrontierV3AmbientCarrierRecognition {
     }
 
     /** Exact read-only facts adapted from a joining Minecraft entity. */
-    record ManagedCarrier(UUID entityId, String actorId, boolean removed, boolean bioform, String kind) {
+    record ManagedCarrier(UUID entityId, String actorId, boolean removed, boolean bioform, String kind,
+                          String owner, String representation, long authorityRevision, long epoch) {
         ManagedCarrier {
             Objects.requireNonNull(entityId, "entity id"); Objects.requireNonNull(actorId, "actor id"); Objects.requireNonNull(kind, "kind");
+            Objects.requireNonNull(owner, "owner tag"); Objects.requireNonNull(representation, "representation tag");
         }
         static ManagedCarrier from(Entity entity) {
             Objects.requireNonNull(entity, "entity");
             return new ManagedCarrier(entity.getUUID(), entity.getPersistentData().getString(FrontierV3AmbientActorExecutor.ACTOR_KEY), entity.isRemoved(),
-                    entity instanceof Zombie, entity.getPersistentData().getString(FrontierV3AmbientActorExecutor.KIND_KEY));
+                    entity instanceof Zombie, entity.getPersistentData().getString(FrontierV3AmbientActorExecutor.KIND_KEY),
+                    entity.getPersistentData().getString(FrontierV3ActorCarrierComposition.OWNER_KEY),
+                    entity.getPersistentData().getString(FrontierV3ActorCarrierComposition.REPRESENTATION_KEY),
+                    exactLong(entity.getPersistentData(), FrontierV3ActorCarrierComposition.REVISION_KEY),
+                    exactLong(entity.getPersistentData(), FrontierV3ActorCarrierComposition.EPOCH_KEY));
+        }
+        private static long exactLong(net.minecraft.nbt.CompoundTag tag, String key) {
+            // Zero is an invalid raw observation, never a synthesized authority.
+            return tag.contains(key, net.minecraft.nbt.Tag.TAG_LONG) ? tag.getLong(key) : 0L;
+        }
+        boolean matches(FrontierV3ActorCarrierComposition.Declaration declaration) {
+            return !removed && entityId.equals(declaration.entityId()) && actorId.equals(declaration.actorId().value())
+                    && kind.equals(declaration.kind().name()) && owner.equals(declaration.owner().name())
+                    && representation.equals(declaration.representation().name())
+                    && authorityRevision == declaration.authorityRevision() && epoch == declaration.epoch();
         }
         boolean ownedBy(SubjectId expectedActor, boolean expectedBioform) {
             return !removed && expectedActor.value().equals(actorId) && bioform == expectedBioform

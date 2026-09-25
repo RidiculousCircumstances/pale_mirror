@@ -12,7 +12,9 @@ public record ResourceSitePreparationObservation(PhysicalObservationId id, Physi
     public ResourceSitePreparationObservation {
         Objects.requireNonNull(id, "resource-site preparation observation id"); Objects.requireNonNull(intentId, "resource-site preparation intent id");
         Objects.requireNonNull(siteId, "resource-site preparation observation site id");
-        if (!siteId.value().startsWith("site:") || preparedSoilSlots != ResourceSiteKind.WHEAT_FIELD.cropSlotCount()
-                || preparedCropSlots != ResourceSiteKind.WHEAT_FIELD.cropSlotCount()) throw new IllegalArgumentException("resource-site preparation receipt is incomplete");
+        if (!siteId.value().startsWith("site:") || preparedSoilSlots < 1
+                || preparedSoilSlots > ResourceFieldLayout.MAX_CELLS
+                || preparedCropSlots != preparedSoilSlots)
+            throw new IllegalArgumentException("resource-site preparation receipt is incomplete");
     }
 }

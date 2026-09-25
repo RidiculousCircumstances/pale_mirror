@@ -33,7 +33,7 @@ final class FrontierV3ResourceSiteExplosionExecutor {
     private static boolean capture(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, List<BlockPos> affected,
                                    Optional<PhysicalIntentId> managedIntent) {
         FrontierWorldState state = runtime.decodedState().orElse(null); if (state == null) return false;
-        Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, ResourceSite> sites = FrontierResourceSitePlan.compile(state.bootstrap());
+        Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, ResourceSite> sites = state.resourceSiteDescriptors();
         FrontierV3ResourceSiteExplosionLedger ledger = FrontierV3ResourceSiteExplosionLedger.get(level);
         return managedIntent.map(intent -> ledger.captureManaged(level, level.getGameTime(), intent, affected, List.copyOf(sites.values()),
                         FrontierV3ResourceSiteLedger.get(level)))
@@ -47,7 +47,7 @@ final class FrontierV3ResourceSiteExplosionExecutor {
             if (ready.isEmpty()) return;
             FrontierV3ResourceSiteExplosionLedger.Ready value = ready.orElseThrow(); FrontierWorldState state = runtime.decodedState().orElse(null);
             if (state == null) return;
-            ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).get(value.candidate().siteId());
+            ResourceSite site = state.resourceSiteDescriptors().get(value.candidate().siteId());
             if (site == null) throw new IllegalStateException("resource-site explosion references an unknown canonical site");
             BlockPos witness = new BlockPos(value.candidate().witness().x(), value.candidate().witness().y(), value.candidate().witness().z());
             if (!FrontierV3ResourceSiteExecutor.contains(site, witness)) throw new IllegalStateException("resource-site explosion witness is outside its canonical field");
@@ -69,10 +69,14 @@ final class FrontierV3ResourceSiteExplosionExecutor {
     /** Resource-site effects have their own site-level reconciliation and must not also become generic scars. */
     static Set<Long> activeOwnedCells(ServerLevel level, FrontierWorldState state) {
         FrontierV3ResourceSiteLedger claims = FrontierV3ResourceSiteLedger.get(level);
-        return FrontierResourceSitePlan.compile(state.bootstrap()).values().stream().filter(site -> {
-            FrontierV3ResourceSiteLedger.Claim claim = claims.claim(site.id());
-            return claim != null && claim.status() == FrontierV3ResourceSiteLedger.Status.ACTIVE
-                    && FrontierV3ResourceSiteExecutor.loaded(level, site) && FrontierV3ResourceSiteExecutor.matches(level, site, claim.stage());
+        return state.resourceSiteDescriptors().values().stream().filter(site -> {
+            FrontierV3ResourceSiteLedger.SiteClaim claim = claims.siteClaim(site.id());
+            if (claim instanceof FrontierV3ResourceSiteLedger.CellSiteClaim cells)
+                return cells.claim().status() == FrontierV3ResourceSiteLedger.Status.ACTIVE;
+            if (!(claim instanceof FrontierV3ResourceSiteLedger.LegacySiteClaim legacy)) return false;
+            return legacy.claim().status() == FrontierV3ResourceSiteLedger.Status.ACTIVE
+                    && FrontierV3ResourceSiteExecutor.loaded(level, site)
+                    && FrontierV3ResourceSiteExecutor.matches(level, site, legacy.claim().stage());
         }).flatMap(site -> java.util.stream.Stream.concat(site.soilSlots().stream(), site.cropSlots().stream()))
                 .map(position -> new BlockPos(position.x(), position.y(), position.z()).asLong()).collect(java.util.stream.Collectors.toUnmodifiableSet());
     }

@@ -36,8 +36,10 @@ public enum PhysicalIntentRoleSchema {
             PhysicalIntentSubjectRole.SETTLEMENT_PROVISION, PhysicalIntentSubjectRole.ITEM),
     RESOURCE_SITE_PREPARATION(13, PhysicalIntentLifecycleOwner.RESOURCE_SITE_PREPARATION, PhysicalIntentKind.RESOURCE_SITE_PREPARATION,
             PhysicalIntentSubjectRole.SITE, PhysicalIntentSubjectRole.RESOURCE_SITE_JOB),
-    RESOURCE_SITE_HARVEST(14, PhysicalIntentLifecycleOwner.RESOURCE_SITE_HARVEST, PhysicalIntentKind.RESOURCE_SITE_HARVEST,
-            PhysicalIntentSubjectRole.SITE, PhysicalIntentSubjectRole.RESOURCE_SITE_JOB, PhysicalIntentSubjectRole.WORKER, PhysicalIntentSubjectRole.OUTPUT_ITEM),
+    // Tag 14 is retired: one exact output item cannot represent zero/partial field yield.
+    RESOURCE_SITE_HARVEST(30, PhysicalIntentLifecycleOwner.RESOURCE_SITE_HARVEST, PhysicalIntentKind.RESOURCE_SITE_HARVEST,
+            PhysicalIntentSubjectRole.SITE, PhysicalIntentSubjectRole.RESOURCE_SITE_JOB, PhysicalIntentSubjectRole.WORKER,
+            PhysicalIntentSubjectRole.CUSTODY_ACCOUNT, PhysicalIntentSubjectRole.RESOURCE_DESTINATION_ACCOUNT),
     PRODUCTION(15, PhysicalIntentLifecycleOwner.PRODUCTION_WORK, PhysicalIntentKind.PRODUCTION_TRANSFORMATION,
             PhysicalIntentSubjectRole.PRODUCTION_JOB, PhysicalIntentSubjectRole.INPUT_ITEM, PhysicalIntentSubjectRole.OUTPUT_ITEM),
     CARGO_LOADING(16, PhysicalIntentLifecycleOwner.ROUTE_OPERATION, PhysicalIntentKind.CARGO_LOADING,

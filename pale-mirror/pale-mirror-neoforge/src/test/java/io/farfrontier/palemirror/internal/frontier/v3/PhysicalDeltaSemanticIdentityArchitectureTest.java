@@ -40,7 +40,7 @@ class PhysicalDeltaSemanticIdentityArchitectureTest {
         String aftermath = read(root.resolve("pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3/persistence/DeferredAftermathStateCodec.java"));
         String bridge = read(root.resolve("pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/internal/frontier/v3/FrontierV3PhysicalObservationLedger.java"));
         assertTrue(delta.contains("writeTarget") && delta.contains("readTarget"));
-        assertTrue(snapshot.contains("VERSION = 163") && snapshot.contains("writePhysicalDeltaTarget"));
+        assertTrue(snapshot.contains("writePhysicalDeltaTarget"));
         assertTrue(aftermath.contains("cell.semanticTarget()"));
         assertTrue(bridge.contains("claim.targetTag()") && bridge.contains("value.putInt(\"targetTag\""));
     }

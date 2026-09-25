@@ -23,6 +23,7 @@ public final class DiagnosticIncidentExtractor {
             case ResidentMigrationBlocked value -> Optional.of(value.diagnostic());
             case OperationFailed value -> Optional.of(value.diagnostic());
             case SettlementProvisionResolved value -> value.diagnostic();
+            case FungibleResourceHandoffObserved value -> value.retirementDiagnostic();
             case SettlementAssaultTransition value -> value.diagnostic();
             case InventoryConflictObserved value -> Optional.of(value.conflict().diagnostic());
             case PhysicalReplicaCustodyPayloads.ReplicaConflictObserved value -> Optional.of(value.diagnostic());

@@ -76,29 +76,39 @@ public final class FrontierV3FieldTurnGameTests {
                 int stage = variant == 0 ? 2 : 7;
                 var lineage = new ResourceSiteHarvestLineage(new SubjectId("job:site-harvest-1-wheat-field-2"),
                         new SubjectId("task:settlement-1-harvest"), new SubjectId("resident:1-31"),
+                        new SubjectId("custody:field-actor-site-harvest-1-wheat-field-2"), new SubjectId("custody:container-1"),
                         new SubjectId("item:site-harvest-1-wheat-field-2-wheat"), 2L, new BodyPosition(0, 64, 0),
                         new PhysicalIntentId("intent:site-harvest-1-wheat-field-2"),
                         new InventoryCustody.ContainerSlot(new SubjectId("container:1"), 1), true, Optional.empty(), Optional.empty());
                 var lifecycle = new ResourceSiteLifecycle(site.id(), stage == 7 ? ResourceSitePhase.READY : ResourceSitePhase.GROWING,
                         3L, stage, Optional.empty(), Optional.empty(), Optional.of(lineage));
-                var state = baseline.withResourceSites(baseline.resourceSites().replace(lifecycle));
+                // This adapter fixture relocates only the physical site into GameTest's
+                // reserved structure. Canonical state must retain its bootstrap layout.
+                var cycle = ResourceFieldCycle.seeded(site.id(), baseline.resourceSites().cycle(site.id()).layout(), 3L);
+                for (int growth = 0; growth < stage; growth++) cycle = cycle.advanceGrowthStage();
+                var state = baseline.withResourceSites(baseline.resourceSites().replace(lifecycle, cycle));
                 site.soilSlots().forEach(p -> level.setBlock(pos(p), Blocks.FARMLAND.defaultBlockState(), 2));
                 site.irrigationSlots().forEach(p -> level.setBlock(pos(p), Blocks.WATER.defaultBlockState(), 2));
-                site.cropSlots().forEach(p -> level.setBlock(pos(p), Blocks.AIR.defaultBlockState(), 2));
+                site.cropSlots().forEach(p -> level.setBlock(pos(p), Blocks.WHEAT.defaultBlockState(), 2));
                 ledger.reserveComposedTerminalSuccessor(site.id(), lineage.predecessorIntentId());
                 ledger.activate(site.id());
+                var predecessorOutput = new io.farfrontier.palemirror.frontier.v3.model.ExactItemStack(
+                        lineage.outputItemId(), new SubjectId("settlement:1"), "minecraft:wheat", 64, lineage.outputSlot());
+                ledger.recordHarvestReceipt(site.id(), predecessorOutput);
                 if (variant < 2) {
                     var pending = new ResourceSiteHarvestLineage(lineage.predecessorJobId(), lineage.predecessorTaskId(),
-                            lineage.workerId(), lineage.outputItemId(), lineage.completedGrowthEpoch(), lineage.terminalBody(),
+                            lineage.workerId(), lineage.actorAccountId(), lineage.depotAccountId(),
+                            lineage.outputItemId(), lineage.completedGrowthEpoch(), lineage.terminalBody(),
                             lineage.predecessorIntentId(), lineage.outputSlot(), false, Optional.empty(), Optional.empty());
                     var pendingLifecycle = new ResourceSiteLifecycle(site.id(), lifecycle.phase(), 3L, stage,
                             Optional.empty(), Optional.empty(), Optional.of(pending));
-                    var pendingState = baseline.withResourceSites(baseline.resourceSites().replace(pendingLifecycle));
+                    var pendingState = baseline.withResourceSites(baseline.resourceSites().replace(pendingLifecycle, cycle));
                     for (int attempt = 0; attempt < 2; attempt++) {
                         var held = FrontierV3ResourceSiteExecutor.projectLifecycleBounded(level, runtime, pendingState, site, stage, 0);
                         helper.assertTrue(held == FrontierV3ResourceSiteExecutor.StageProjectionResult.DEFERRED, "unresolved receipt retains the terminal field, including READY");
                         helper.assertTrue(FrontierV3ResourceSiteExecutor.matchesHarvestProgress(level, site, 64), "pending receipt field is untouched");
                         helper.assertTrue(ledger.claim(site.id()).projection() == null, "pending receipt grants no regrowth writer");
+                        helper.assertTrue(ledger.hasHarvestReceipt(site.id(), predecessorOutput), "pending output retains its anti-duplication fence");
                         FrontierV3ResourceSiteExecutor.forget(runtime);
                     }
                     // Changing this explicit adapter precondition is not an economic receipt/command test.
@@ -110,6 +120,7 @@ public final class FrontierV3FieldTurnGameTests {
                     helper.assertTrue(level.getBlockState(pos(site.cropSlots().getLast())).is(Blocks.DIAMOND_BLOCK), "foreign block is preserved");
                     helper.assertValueEqual(ledger.claim(site.id()).harvestedCropSlots(), 64, "rejection retains terminal receipt cursor");
                     helper.assertTrue(ledger.claim(site.id()).projection() == null, "rejection does not start a projection");
+                    helper.assertTrue(ledger.hasHarvestReceipt(site.id(), predecessorOutput), "foreign cells cannot retire output evidence");
                     continue;
                 }
                 helper.assertTrue(result == FrontierV3ResourceSiteExecutor.StageProjectionResult.DEFERRED, "successor uses bounded writes");
@@ -122,6 +133,10 @@ public final class FrontierV3FieldTurnGameTests {
                 helper.assertTrue(result == FrontierV3ResourceSiteExecutor.StageProjectionResult.UPDATED, "successor terminates");
                 helper.assertTrue(FrontierV3ResourceSiteExecutor.matches(level, site, stage), "all successor crops match canonical stage");
                 helper.assertValueEqual(ledger.claim(site.id()).harvestedCropSlots(), 0, "successor begins with no harvested slots");
+                helper.assertFalse(ledger.hasHarvestReceipt(site.id(), predecessorOutput),
+                        "both nonmature ADVANCE and mature reverse restore retire the predecessor receipt");
+                var restored = FrontierV3ResourceSiteLedger.load(ledger.save(new net.minecraft.nbt.CompoundTag(), level.registryAccess()), level.registryAccess());
+                helper.assertFalse(restored.hasHarvestReceipt(site.id(), predecessorOutput), "receipt retirement survives SavedData reload");
             }
             helper.succeed();
         } finally { FrontierV3ResourceSiteExecutor.forget(runtime); }
@@ -139,24 +154,33 @@ public final class FrontierV3FieldTurnGameTests {
                 var surfaces = new ArrayList<>(site.cropSlots().stream().map(p -> new SurfaceAnchor(p.offset(0, -1, 0))).toList());
                 var last = surfaces.getLast();
                 for (int tail = 1; tail <= 4; tail++) surfaces.add(new SurfaceAnchor(last.support().offset(tail, 0, 0)));
-                var topology = TraversalTopology.corridor(new TraversalTopologyId("topology:active-field-" + variant), 1L,
-                        site.id(), TraversalKind.PEDESTRIAN, Set.of(TraversalCapability.PEDESTRIAN), surfaces);
                 var job = new ResourceSiteHarvestJob(new SubjectId("job:site-harvest-active-" + variant),
                         new SubjectId("task:active-field-" + variant), site.id(), new SubjectId("resident:1-31"),
-                        new SubjectId("item:site-harvest-active-" + variant), new InventoryCustody.ContainerSlot(new SubjectId("container:1"), 1),
-                        new PhysicalIntentId("intent:site-harvest-active-" + variant), new ResourceSiteHarvestProgress(3, -1), topology, 3);
+                        new SubjectId("custody:field-actor-site-harvest-active-" + variant),
+                        ReferenceContainerCustody.scopeId(FrontierWorldState.depotId(site.settlementId())),
+                        new SubjectId("item:site-harvest-active-" + variant),
+                        new InventoryCustody.ContainerSlot(FrontierWorldState.depotId(site.settlementId()), 1),
+                        new PhysicalIntentId("intent:site-harvest-active-" + variant),
+                        new ResourceSiteHarvestProgress(site.layout().cells().size(), 3, -1));
                 var predecessor = new PhysicalIntentId("intent:site-harvest-predecessor-" + variant);
                 Optional<ResourceSiteHarvestLineage> pending = variant == 2 ? Optional.of(new ResourceSiteHarvestLineage(
                         new SubjectId("job:site-harvest-predecessor-" + variant), new SubjectId("task:predecessor-" + variant),
-                        job.workerId(), new SubjectId("item:site-harvest-predecessor-" + variant), 2L,
+                        job.workerId(), new SubjectId("custody:field-actor-site-harvest-predecessor-" + variant),
+                        job.depotAccountId(), new SubjectId("item:site-harvest-predecessor-" + variant), 2L,
                         surfaces.getLast().standingBody(), predecessor, new InventoryCustody.ContainerSlot(job.outputSlot().containerId(), 0),
                         false, Optional.empty(), Optional.empty()).bindSuccessor(job)) : Optional.empty();
                 var lifecycle = new ResourceSiteLifecycle(site.id(), ResourceSitePhase.HARVESTING, 3L, 7,
                         Optional.of(job), Optional.empty(), pending);
-                var state = baseline.withResourceSites(baseline.resourceSites().replace(lifecycle));
+                // Physical coordinates are fixture-local; canonical cell identity and
+                // geometry still come from the bootstrap owner for this site ID.
+                var cycle = ResourceFieldCycle.seeded(site.id(), baseline.resourceSites().cycle(site.id()).layout(), 3L);
+                for (int growth = 0; growth < 7; growth++) cycle = cycle.advanceGrowthStage();
+                for (int worked = 0; worked < job.progress().completedCropSlots(); worked++)
+                    cycle = cycle.worked(cycle.layout().cells().get(worked).id());
+                var state = baseline.withResourceSites(baseline.resourceSites().replace(lifecycle, cycle));
                 site.soilSlots().forEach(p -> level.setBlock(pos(p), Blocks.FARMLAND.defaultBlockState(), 2));
                 site.irrigationSlots().forEach(p -> level.setBlock(pos(p), Blocks.WATER.defaultBlockState(), 2));
-                site.cropSlots().forEach(p -> level.setBlock(pos(p), Blocks.AIR.defaultBlockState(), 2));
+                site.cropSlots().forEach(p -> level.setBlock(pos(p), Blocks.WHEAT.defaultBlockState(), 2));
                 ledger.reserveComposedTerminalSuccessor(site.id(), predecessor);
                 ledger.activate(site.id());
                 if (variant == 1) level.setBlock(pos(site.cropSlots().getLast()), Blocks.DIAMOND_BLOCK.defaultBlockState(), 2);
@@ -168,7 +192,7 @@ public final class FrontierV3FieldTurnGameTests {
                     var lineage = pending.orElseThrow();
                     var running = new PhysicalIntent(predecessor, PhysicalIntentKind.RESOURCE_SITE_HARVEST,
                             PhysicalIntentStatus.RUNNING, site.id(), PhysicalIntentRoleBinding.siteHarvest(site.id(),
-                            lineage.predecessorJobId(), lineage.workerId(), lineage.outputItemId()),
+                            lineage.predecessorJobId(), lineage.workerId(), lineage.actorAccountId(), lineage.depotAccountId()),
                             new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0,
                             PhysicalPostcondition.RESOURCE_SITE_HARVESTED_OBSERVED, PhysicalIntentLifecycleOwner.RESOURCE_SITE_HARVEST);
                     state = state.withChanges(FrontierWorldStateUpdate.begin().physicalIntents(Map.of(predecessor, running)));
@@ -228,7 +252,7 @@ public final class FrontierV3FieldTurnGameTests {
             int z = x % 2 == 0 ? index : 7 - index;
             crops.add(new BlockPosition(origin.getX()+x, origin.getY(), origin.getZ()+z));
         }
-        return new ResourceSite(new SubjectId(id), new SubjectId("settlement:1"), new SubjectId("structure:1-farm"), ResourceSiteKind.WHEAT_FIELD, crops);
+        return new ResourceSite(new SubjectId(id), new SubjectId("settlement:1"), new SubjectId("structure:1-farm"), ResourceSiteKind.WHEAT_FIELD, io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSitePlan.initialGrayboxLayout(crops));
     }
     private static BlockPos pos(BlockPosition p) { return new BlockPos(p.x(), p.y(), p.z()); }
     private static final class EphemeralStore implements FrontierStore {

@@ -18,10 +18,10 @@ import java.util.Optional;
 final class FrontierV3ResourceSiteHarvestReleaseBinding {
     private FrontierV3ResourceSiteHarvestReleaseBinding() { }
 
-    static Optional<ScheduledAction> forPhase(CheckpointImage checkpoint, SubjectId jobId,
+    static Optional<ScheduledAction> forPhase(CheckpointImage checkpoint, SubjectId siteId,
                                               ResourceSitePhase phase) {
         return phase == ResourceSitePhase.HARVESTING
-                ? Optional.of(FrontierV3ContinuationBinding.require(checkpoint, jobId,
+                ? Optional.of(FrontierV3ContinuationBinding.require(checkpoint, siteId,
                 ResourceSiteHarvestProcess.COLD_PROGRESS_KIND))
                 : Optional.empty();
     }

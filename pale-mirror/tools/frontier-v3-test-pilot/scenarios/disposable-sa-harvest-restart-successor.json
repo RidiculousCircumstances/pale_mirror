@@ -1,0 +1,331 @@
+{
+  "schema": 1,
+  "id": "disposable_sa_harvest_restart_successor",
+  "isolation": {
+    "mode": "disposable_lite",
+    "seed": 47
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25585,
+    "profile": "world",
+    "viewDistance": 6
+  },
+  "zeroPlayerPrelude": {
+    "kind": "cold_duty_cycle",
+    "advanceTicks": 20500,
+    "timeoutMs": 240000,
+    "expectTerminalStatus": "COMPLETED"
+  },
+  "pilot": {
+    "username": "PMTestPilot"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/time set day"
+    },
+    {
+      "type": "command",
+      "command": "/gamerule doDaylightCycle false"
+    },
+    {
+      "type": "command",
+      "command": "/tick rate 50"
+    },
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 30000,
+      "checks": [
+        {
+          "view": "summary",
+          "id": "",
+          "expect": {
+            "status": "ok",
+            "settlements": 12,
+            "sites": 12
+          }
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "site",
+          "id": "site:7-wheat-field",
+          "field": "lastCrop"
+        }
+      },
+      "offset": {
+        "x": -14,
+        "y": 0,
+        "z": 3
+      },
+      "settleMs": 1500
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "site",
+      "id": "site:7-wheat-field",
+      "expect": {
+        "status": "ok",
+        "phase": "HARVESTING",
+        "growthEpoch": 1
+      },
+      "timeoutMs": 180000
+    },
+    {
+      "type": "look",
+      "position": {
+        "diagnostic": {
+          "view": "site",
+          "id": "site:7-wheat-field",
+          "field": "firstCrop"
+        }
+      }
+    },
+    {
+      "type": "observe_harvest_semantics",
+      "siteId": "site:7-wheat-field",
+      "durationTicks": 12000,
+      "sampleEveryTicks": 20,
+      "maxCanonicalStallTicks": 1200,
+      "timeoutMs": 600000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "site",
+      "id": "site:7-wheat-field",
+      "expect": {
+        "status": "ok",
+        "phase": "GROWING",
+        "growthEpoch": 2,
+        "terminalHarvest": {
+          "physicalReceiptResolved": true
+        }
+      },
+      "timeoutMs": 180000
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:7-depot",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": 2,
+        "y": 0,
+        "z": 2
+      },
+      "settleMs": 1500
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "site",
+      "id": "site:7-wheat-field",
+      "expect": {
+        "status": "ok",
+        "terminalHarvest": {
+          "canonicalSuccessor": true
+        }
+      },
+      "timeoutMs": 180000
+    },
+    {
+      "type": "wait_until_container_item",
+      "containerId": "container:7-depot",
+      "item": "minecraft:bread",
+      "count": 64,
+      "timeoutMs": 180000
+    },
+    {
+      "type": "open_container",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:7-depot",
+          "field": "position"
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "site",
+          "id": "site:7-wheat-field",
+          "field": "lastCrop"
+        }
+      },
+      "offset": {
+        "x": -14,
+        "y": 0,
+        "z": 3
+      },
+      "settleMs": 3000
+    },
+    {
+      "type": "inspect",
+      "view": "site",
+      "id": "site:7-wheat-field"
+    },
+    {
+      "type": "assert_complete_resource_site",
+      "siteId": "site:7-wheat-field",
+      "completedCropSlots": 0,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "look",
+      "position": {
+        "diagnostic": {
+          "view": "site",
+          "id": "site:7-wheat-field",
+          "field": "boardPosition"
+        }
+      }
+    },
+    {
+      "type": "assert_visible_board",
+      "text": "WHEAT FIELD",
+      "position": {
+        "diagnostic": {
+          "view": "site",
+          "id": "site:7-wheat-field",
+          "field": "boardPosition"
+        }
+      },
+      "radius": 3,
+      "maxDistance": 64,
+      "maxAngleDeg": 50,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "site",
+      "id": "site:7-wheat-field",
+      "expect": {
+        "status": "ok",
+        "phase": "HARVESTING",
+        "growthEpoch": 2
+      },
+      "requireIncreaseAt": "growthStage",
+      "timeoutMs": 600000
+    },
+    {
+      "type": "observe_harvest_semantics",
+      "siteId": "site:7-wheat-field",
+      "durationTicks": 12000,
+      "sampleEveryTicks": 20,
+      "maxCanonicalStallTicks": 1200,
+      "timeoutMs": 600000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "site",
+      "id": "site:7-wheat-field",
+      "expect": {
+        "status": "ok",
+        "phase": "GROWING",
+        "growthEpoch": 3,
+        "terminalHarvest": {
+          "physicalReceiptResolved": true
+        }
+      },
+      "timeoutMs": 180000
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    }
+  ],
+  "assertions": [
+    {
+      "after": 11,
+      "view": "site",
+      "id": "site:7-wheat-field",
+      "expect": {
+        "status": "ok",
+        "phase": "GROWING",
+        "growthEpoch": 2,
+        "conflictDisposition": null
+      }
+    },
+    {
+      "after": 15,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "requiredConflicts": 0
+      }
+    },
+    {
+      "after": 19,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "requiredConflicts": 0
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 3,
+      "name": "harvest-start-field"
+    },
+    {
+      "after": 9,
+      "name": "successor-bread",
+      "presentation": "player"
+    },
+    {
+      "after": 14,
+      "name": "successor-field-board"
+    }
+  ],
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 3,
+    "resumeSetup": [
+      {
+        "type": "command",
+        "command": "/tick rate 50"
+      },
+      {
+        "type": "visit",
+        "dimension": "pale_mirror:frontier_graybox",
+        "position": {
+          "diagnostic": {
+            "view": "site",
+            "id": "site:7-wheat-field",
+            "field": "lastCrop"
+          }
+        },
+        "offset": {
+          "x": -14,
+          "y": 0,
+          "z": 3
+        },
+        "settleMs": 1500
+      }
+    ]
+  }
+}

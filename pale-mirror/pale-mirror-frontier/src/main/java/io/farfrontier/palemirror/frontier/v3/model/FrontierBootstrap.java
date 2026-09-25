@@ -8,17 +8,22 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
 /** Immutable, fresh-world-only v3 bootstrap manifest. */
 public record FrontierBootstrap(WorldId worldId, long seed, WorldBounds bounds, List<Settlement> settlements, Hive hive, FrontierRuleset ruleset,
-                                TerrainSurfacePlan terrain) {
+                                TerrainSurfacePlan terrain, Map<SubjectId, ResourceFieldLayout> initialFieldLayouts) {
     public FrontierBootstrap(WorldId worldId, long seed, WorldBounds bounds, List<Settlement> settlements, Hive hive) {
         this(worldId, seed, bounds, settlements, hive, FrontierRulesets.production(), TerrainSurfacePlan.uniform(63));
     }
     public FrontierBootstrap(WorldId worldId, long seed, WorldBounds bounds, List<Settlement> settlements, Hive hive, FrontierRuleset ruleset) {
         this(worldId, seed, bounds, settlements, hive, ruleset, TerrainSurfacePlan.uniform(63));
+    }
+    public FrontierBootstrap(WorldId worldId, long seed, WorldBounds bounds, List<Settlement> settlements, Hive hive,
+                             FrontierRuleset ruleset, TerrainSurfacePlan terrain) {
+        this(worldId, seed, bounds, settlements, hive, ruleset, terrain, Map.of());
     }
     public FrontierBootstrap {
         Objects.requireNonNull(worldId, "world id");
@@ -27,6 +32,13 @@ public record FrontierBootstrap(WorldId worldId, long seed, WorldBounds bounds, 
         Objects.requireNonNull(hive, "hive");
         ruleset = Objects.requireNonNull(ruleset, "ruleset");
         terrain = Objects.requireNonNull(terrain, "terrain surface plan");
+        initialFieldLayouts = Map.copyOf(Objects.requireNonNull(initialFieldLayouts, "initial field layouts"));
+        if (initialFieldLayouts.size() > settlements.size())
+            throw new IllegalArgumentException("initial field layout manifest exceeds settlement count");
+        for (var entry : initialFieldLayouts.entrySet()) {
+            if (!entry.getKey().value().startsWith("site:") || entry.getValue().revision() != 1)
+                throw new IllegalArgumentException("initial field layout requires an exact site and first revision");
+        }
         if (bounds.width() != 1024 || bounds.depth() != 1024) throw new IllegalArgumentException("Frontier v3 bootstrap is exactly 1024 by 1024 blocks");
         if (settlements.size() != 12) throw new IllegalArgumentException("Frontier v3 bootstrap requires exactly 12 settlements");
         Set<SubjectId> ids = new HashSet<>();
@@ -78,6 +90,8 @@ public record FrontierBootstrap(WorldId worldId, long seed, WorldBounds bounds, 
         });
         hive.bioforms().forEach(bioform -> { append(text, bioform.id(), bioform.position()); text.append(':').append(bioform.nestId().value())
                 .append(':').append(bioform.chassis()).append(':').append(bioform.mutations()).append(':').append(bioform.assignment()); });
+        initialFieldLayouts.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry ->
+                text.append("|field:").append(entry.getKey().value()).append(':').append(entry.getValue().fingerprint()));
         return text.toString();
     }
 

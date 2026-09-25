@@ -15,21 +15,16 @@
 
 ## Pale Mirror work
 
-- Pale Mirror is the primary development project in this workspace. At the
-  start of every assistant turn concerning this workspace, before acting or
-  selecting tools, read `pale-mirror/AGENTS.md` and
-  `pale-mirror/CONTINUITY.md`. This bootstrap is mandatory even when the task
-  begins in the root repository or appears to concern only packaging/runtime.
-- Rules and mandatory skills declared by `pale-mirror/AGENTS.md` remain binding.
-  Resolve its relative paths from `pale-mirror/`.
-- `pale-mirror/CONTINUITY.md` is the single continuity ledger for Pale Mirror
-  source, packaging and disposable test-server work. Do not create a competing
-  workspace-level copy.
-- The monorepo has been adopted for continued Pale Mirror development.
-  `pale-mirror/CONTINUITY.md` is the sole active ledger. The original ledger at
-  `/home/rd/proj/minecraft/pale-mirror/CONTINUITY.md` is a preserved read-only
-  handoff record and must not be maintained as a competing source of current
-  authority.
+- Canonical instructions and the sole active continuity ledger are at
+  /home/rd/proj/pm-governance/pale-mirror/AGENTS.md and
+  /home/rd/proj/pm-governance/pale-mirror/CONTINUITY.md.
+- Read them on session entry or context loss; use retained unchanged context
+  during automatic continuations. Refresh changed instructions/state when needed,
+  not all historical files on every turn.
+- Resolve project skills and normative references from that governance directory.
+  The current ledger names the implementation checkout and execution assignment.
+- Local Pale Mirror entry files outside governance are redirects, not alternative
+  authority. Preserve all histories/WIP; this is not a repository migration.
 
 ## Ownership boundaries
 

@@ -21,7 +21,7 @@ final class FrontierV3ResourceSitePreparationSelection {
      * chunk state; selection itself cannot request a chunk load.
      */
     static Optional<PhysicalIntent> nextLoaded(FrontierWorldState state, Predicate<ResourceSite> isLoaded) {
-        var sites = FrontierResourceSitePlan.compile(state.bootstrap());
+        var sites = state.resourceSiteDescriptors();
         return state.physicalIntents().values().stream().sorted(Comparator.comparing(PhysicalIntent::id))
                 .filter(intent -> intent.kind() == PhysicalIntentKind.RESOURCE_SITE_PREPARATION)
                 .filter(intent -> intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING)

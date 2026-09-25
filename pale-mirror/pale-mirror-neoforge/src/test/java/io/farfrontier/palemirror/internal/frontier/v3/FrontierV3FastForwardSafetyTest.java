@@ -49,7 +49,8 @@ class FrontierV3FastForwardSafetyTest {
     void preparedHarvestReservationDoesNotMasqueradeAsAnExecutableColdBoundary() {
         PhysicalIntent preparedHarvest = new PhysicalIntent(new PhysicalIntentId("intent:prepared-harvest"), PhysicalIntentKind.RESOURCE_SITE_HARVEST,
                 PhysicalIntentStatus.PREPARED, new SubjectId("site:1-wheat-field"), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.siteHarvest(new SubjectId("site:1-wheat-field"),
-                new SubjectId("job:site-harvest-1-wheat-field-1"), new SubjectId("resident:1-1"), new SubjectId("item:site-harvest-1-wheat-field-1-wheat")),
+                new SubjectId("job:site-harvest-1-wheat-field-1"), new SubjectId("resident:1-1"),
+                new SubjectId("custody:field-actor-site-harvest-1-wheat-field-1"), new SubjectId("custody:container-1-depot")),
                 new FixedPosition(FixedScalar.whole(48), FixedScalar.whole(64), FixedScalar.whole(-32)), 0,
                 PhysicalPostcondition.RESOURCE_SITE_HARVESTED_OBSERVED,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.RESOURCE_SITE_HARVEST);
@@ -63,7 +64,8 @@ class FrontierV3FastForwardSafetyTest {
     void preparedHarvestReservationRemainsColdInTheGenericSafetyPredicate() {
         PhysicalIntent preparedHarvest = new PhysicalIntent(new PhysicalIntentId("intent:prepared-harvest-present"), PhysicalIntentKind.RESOURCE_SITE_HARVEST,
                 PhysicalIntentStatus.PREPARED, new SubjectId("site:1-wheat-field"), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.siteHarvest(new SubjectId("site:1-wheat-field"),
-                new SubjectId("job:site-harvest-1-wheat-field-1"), new SubjectId("resident:1-1"), new SubjectId("item:site-harvest-1-wheat-field-1-wheat")),
+                new SubjectId("job:site-harvest-1-wheat-field-1"), new SubjectId("resident:1-1"),
+                new SubjectId("custody:field-actor-site-harvest-1-wheat-field-1"), new SubjectId("custody:container-1-depot")),
                 new FixedPosition(FixedScalar.whole(48), FixedScalar.whole(64), FixedScalar.whole(-32)), 0,
                 PhysicalPostcondition.RESOURCE_SITE_HARVESTED_OBSERVED,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.RESOURCE_SITE_HARVEST);
@@ -85,13 +87,14 @@ class FrontierV3FastForwardSafetyTest {
         SubjectId worker = new SubjectId("resident:1-1");
         PhysicalIntent running = new PhysicalIntent(new PhysicalIntentId("intent:running-harvest"), PhysicalIntentKind.RESOURCE_SITE_HARVEST,
                 PhysicalIntentStatus.RUNNING, new SubjectId("site:1-wheat-field"), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.siteHarvest(new SubjectId("site:1-wheat-field"), job, worker,
-                new SubjectId("item:site-harvest-1-wheat-field-1-wheat")),
+                new SubjectId("custody:field-actor-site-harvest-1-wheat-field-1"), new SubjectId("custody:container-1-depot")),
                 new FixedPosition(FixedScalar.whole(48), FixedScalar.whole(64), FixedScalar.whole(-32)), 0,
                 PhysicalPostcondition.RESOURCE_SITE_HARVESTED_OBSERVED,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.RESOURCE_SITE_HARVEST);
         WorldId world = new WorldId("frontier:test");
         SceneMember member = new SceneMember(worker, SceneLease.deterministicEntityId(world, worker));
-        SceneLease active = SceneLease.forCause(new SceneLeaseId("lease:running-harvest"), world, new ResourceSiteHarvestSceneCause(job),
+        SceneLease active = SceneLease.forCause(new SceneLeaseId("lease:running-harvest"), world,
+                new ResourceSiteHarvestSceneCause(new SubjectId("site:1-wheat-field"), job),
                 new BlockPosition(48, 64, -32), new SimInstant(7), 9L, SceneLeaseStatus.HOT, List.of(member),
                 Map.of(worker, new BodyPosition(48, 65, -32)), java.util.Set.of(), Optional.empty());
 

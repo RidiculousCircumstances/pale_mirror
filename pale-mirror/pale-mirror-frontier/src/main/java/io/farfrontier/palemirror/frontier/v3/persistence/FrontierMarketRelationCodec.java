@@ -7,8 +7,10 @@ import io.farfrontier.palemirror.frontier.v3.model.TerminalProductionReceipt;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
-/** Schema-159 relation facts retained by the market-order owner. */
+/** Versioned relation facts retained by the market-order owner. */
 final class FrontierMarketRelationCodec {
     private FrontierMarketRelationCodec() {}
 
@@ -16,6 +18,10 @@ final class FrontierMarketRelationCodec {
         FrontierWorldStateCodec.writeString(output, receipt.jobId().value());
         FrontierWorldStateCodec.writeString(output, receipt.workerId().value());
         FrontierWorldStateCodec.writeString(output, receipt.inputId().value());
+        FrontierWorldStateCodec.writeCount(output, receipt.inputLots().size());
+        for (var entry : receipt.inputLots().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
+            FrontierWorldStateCodec.writeString(output, entry.getKey().value()); output.writeByte(entry.getValue());
+        }
         FrontierWorldStateCodec.writeString(output, receipt.outputId().value());
         FrontierWorldStateCodec.writeString(output, receipt.inputRepresentation().name());
         FrontierWorldStateCodec.writeString(output, receipt.outputRepresentation().name());
@@ -28,13 +34,21 @@ final class FrontierMarketRelationCodec {
         SubjectId job = new SubjectId(FrontierWorldStateCodec.readString(input));
         SubjectId worker = new SubjectId(FrontierWorldStateCodec.readString(input));
         SubjectId source = new SubjectId(FrontierWorldStateCodec.readString(input));
+        int inputCount = FrontierWorldStateCodec.readCount(input);
+        if (inputCount < 1 || inputCount > 64) throw new IllegalArgumentException("terminal production input lot count is invalid");
+        Map<SubjectId, Integer> inputLots = new LinkedHashMap<>();
+        for (int index = 0; index < inputCount; index++) {
+            if (inputLots.put(new SubjectId(FrontierWorldStateCodec.readString(input)), input.readUnsignedByte()) != null) {
+                throw new IllegalArgumentException("duplicate terminal production input lot");
+            }
+        }
         SubjectId output = new SubjectId(FrontierWorldStateCodec.readString(input));
         var inputKind = TerminalProductionReceipt.ResourceRepresentation.valueOf(FrontierWorldStateCodec.readString(input));
         var outputKind = TerminalProductionReceipt.ResourceRepresentation.valueOf(FrontierWorldStateCodec.readString(input));
         String kind = FrontierWorldStateCodec.readString(input); int count = input.readInt();
         var topology = new io.farfrontier.palemirror.frontier.v3.model.TraversalTopologyId(FrontierWorldStateCodec.readString(input)); long revision = input.readLong(); int cursor = input.readInt();
         var body = new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(input.readInt(), input.readInt(), input.readInt());
-        return new TerminalProductionReceipt(job, worker, source, output, inputKind, outputKind, kind, count, topology, revision, cursor, body);
+        return new TerminalProductionReceipt(job, worker, source, inputLots, output, inputKind, outputKind, kind, count, topology, revision, cursor, body);
     }
     static void writeRelationshipIncident(DataOutputStream output, RelationshipIncident incident) throws IOException {
         FrontierWorldStateCodec.writeString(output, incident.kind().tag());

@@ -266,6 +266,9 @@ final class FrontierV3ControlledMobMotion {
 
     private static void submit(ServerLevel level, Mob actor, Vec3 target, boolean continuous, LocalNavigationEnvelope envelope,
                                WorldBounds bounds, double maximumStep, boolean exactEndpoint) {
+        // A crop-local pose or legacy checkpoint directive supersedes the HOT-only
+        // Minecraft path. Never let two physical actuators drive the same owned body.
+        FrontierV3GoalNavigation.stop(actor);
         actor.setNoAi(true);
         // NoAI suppresses Minecraft's goal selector, not physical gravity.  Reassert the latter
         // because a retained entity can carry an old mod/AI no-gravity flag across a HOT handoff.
@@ -278,7 +281,7 @@ final class FrontierV3ControlledMobMotion {
         // A HOT adapter may only follow the next retained pedestrian edge.  Existing callers
         // that still use same-level local goals remain unaffected; a larger vertical gap is not
         // a licence to fly or to infer a route and is therefore left for the canonical planner.
-        if (Math.abs(delta.y) > (exactEndpoint ? MAX_WALK_GRADE : MAX_WALK_GRADE + ARRIVAL_DISTANCE)) { stop(actor); return; }
+        if (!walkGradeAllowed(actor.position(), target, exactEndpoint, envelope)) { stop(actor); return; }
         if (!Double.isFinite(maximumStep) || maximumStep <= 0.0D) throw new IllegalArgumentException("motion maximum step");
         MotionIntent pending = PENDING.get(actor);
         if (continuous && !CONTINUOUS.containsKey(actor) && CONTINUOUS.size() >= MAX_PENDING_INTENTS) return;
@@ -391,6 +394,7 @@ final class FrontierV3ControlledMobMotion {
     }
 
     static void stop(Mob actor) {
+        FrontierV3GoalNavigation.stop(actor);
         PENDING.remove(actor);
         CONTINUOUS.remove(actor);
         TENDING.remove(actor);
@@ -479,7 +483,7 @@ final class FrontierV3ControlledMobMotion {
                 : horizontalDistance <= ARRIVAL_DISTANCE && Math.abs(delta.y) <= ARRIVAL_DISTANCE)) {
             actor.stopInPlace(); observeMotion(actor, "ARRIVED", target); return;
         }
-        if (Math.abs(delta.y) > (exactEndpoint ? MAX_WALK_GRADE : MAX_WALK_GRADE + ARRIVAL_DISTANCE)) {
+        if (!walkGradeAllowed(actor.position(), target, exactEndpoint, envelope)) {
             observeMotion(actor, "REJECTED_GRADE", target); return;
         }
         // A one-block retained ascent is an ordinary collision move, but it cannot share the
@@ -604,6 +608,19 @@ final class FrontierV3ControlledMobMotion {
     private static boolean livingBodyOccupies(ServerLevel level, Mob actor, AABB candidate) {
         return !level.getEntities(actor, candidate.inflate(0.001D), entity -> entity instanceof LivingEntity living
                 && living.isAlive() && !living.isSpectator()).isEmpty();
+    }
+
+    /**
+     * The retained route bounds named support grades, while a collision-safe local step may
+     * leave the real feet one thin-surface increment above that support.  The next grade-one
+     * descent must not be rejected as a grade greater than one before its vertical half runs.
+     * Only an exact edge with its already-declared envelope receives that increment; ordinary
+     * goals and unbounded physical gaps keep their previous limits.
+     */
+    static boolean walkGradeAllowed(Vec3 feet, Vec3 target, boolean exactEndpoint,
+                                    LocalNavigationEnvelope envelope) {
+        double allowance = exactEndpoint ? (envelope == null ? 0.0D : THIN_SURFACE_STEP) : ARRIVAL_DISTANCE;
+        return Math.abs(target.y - feet.y) <= MAX_WALK_GRADE + allowance + 1.0E-8D;
     }
 
     /**

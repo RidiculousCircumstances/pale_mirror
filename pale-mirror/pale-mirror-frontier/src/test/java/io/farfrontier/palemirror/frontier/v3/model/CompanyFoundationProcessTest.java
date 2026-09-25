@@ -73,7 +73,7 @@ class CompanyFoundationProcessTest {
         FrontierWorldState state = foundedState(); Settlement settlement = state.bootstrap().settlements().getFirst();
         Company company = state.companies().companies().get(CompanyFoundationProcess.companyId(settlement.id()));
         EmploymentContract contract = state.companies().employmentContracts().get(CompanyFoundationProcess.employmentId(settlement.id()));
-        ProductionJob job = new ProductionJob(new SubjectId("job:production-company-payment"), settlement.id(),
+        ProductionJob job = new ProductionJob(new SubjectId("job:production-company-payment"), new SubjectId("task:production-company-payment"), settlement.id(),
                 settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.WORKSHOP).findFirst().orElseThrow().id(),
                 company.founderId(), new SubjectId("item:company-payment-wheat"), new SubjectId("item:company-payment-bread"), "minecraft:bread", 64);
 

@@ -35,12 +35,28 @@ final class ResourceSiteStateCodec {
             }
             output.writeBoolean(lifecycle.harvestLineage().isPresent());
             if (lifecycle.harvestLineage().isPresent()) writeHarvestLineage(output, lifecycle.harvestLineage().orElseThrow());
+            ResourceFieldCycleStateCodec.write(output, state.cycle(lifecycle.siteId()));
+            ResourceFieldCellObserved held = state.pendingWorldChange(lifecycle.siteId());
+            output.writeBoolean(held != null);
+            if (held != null) {
+                byte[] encoded = ResourceSitePayloadCodecs.cellObserved().encode(held);
+                output.writeInt(encoded.length); output.write(encoded);
+            }
+            ResourceFieldForeignChangeHeld foreign = state.pendingForeignChange(lifecycle.siteId());
+            output.writeBoolean(foreign != null);
+            if (foreign != null) {
+                byte[] encoded = ResourceSitePayloadCodecs.foreignChangeHeld().encode(foreign);
+                output.writeInt(encoded.length); output.write(encoded);
+            }
         }
     }
 
     static ResourceSiteState read(DataInputStream input) throws IOException {
         int count = input.readUnsignedByte(); if (count > MAX_SITES) throw new IllegalArgumentException("resource-site retention limit exceeded");
         Map<SubjectId, ResourceSiteLifecycle> sites = new LinkedHashMap<>();
+        Map<SubjectId, ResourceFieldCycle> cycles = new LinkedHashMap<>();
+        Map<SubjectId, ResourceFieldCellObserved> heldWorldChanges = new LinkedHashMap<>();
+        Map<SubjectId, ResourceFieldForeignChangeHeld> heldForeignChanges = new LinkedHashMap<>();
         for (int index = 0; index < count; index++) {
             SubjectId siteId = new SubjectId(FrontierWorldStateCodec.readString(input)); int phase = input.readUnsignedByte();
             long epoch = input.readLong(); int stage = input.readUnsignedByte(); boolean hasWork = input.readBoolean();
@@ -56,14 +72,35 @@ final class ResourceSiteStateCodec {
             Optional<ResourceSiteHarvestLineage> lineage = input.readBoolean() ? Optional.of(readHarvestLineage(input)) : Optional.empty();
             ResourceSiteLifecycle lifecycle = new ResourceSiteLifecycle(siteId, FrontierWireTags.require(ResourceSitePhase.class, phase), epoch, stage, work, disposition, lineage);
             if (sites.put(siteId, lifecycle) != null) throw new IllegalArgumentException("duplicate resource-site lifecycle");
+            cycles.put(siteId, ResourceFieldCycleStateCodec.read(input));
+            if (input.readBoolean()) {
+                int length = input.readInt();
+                if (length < 1 || length > 600) throw new IllegalArgumentException("invalid held world field change length");
+                ResourceFieldCellObserved held = (ResourceFieldCellObserved) ResourceSitePayloadCodecs.cellObserved()
+                        .decode(input.readNBytes(length));
+                if (held.source() != ResourceFieldCellObserved.Source.WORLD || !siteId.equals(held.siteId()))
+                    throw new IllegalArgumentException("held world field change has a foreign owner or source");
+                heldWorldChanges.put(siteId, held);
+            }
+            if (input.readBoolean()) {
+                int length = input.readInt();
+                if (length < 1 || length > 600) throw new IllegalArgumentException("invalid held foreign field change length");
+                var held = (ResourceFieldForeignChangeHeld) ResourceSitePayloadCodecs.foreignChangeHeld()
+                        .decode(input.readNBytes(length));
+                if (!siteId.equals(held.siteId()))
+                    throw new IllegalArgumentException("held foreign field change has a different site owner");
+                heldForeignChanges.put(siteId, held);
+            }
         }
-        return new ResourceSiteState(sites);
+        return new ResourceSiteState(sites, cycles, heldWorldChanges, heldForeignChanges);
     }
 
     private static void writeHarvestLineage(DataOutputStream output, ResourceSiteHarvestLineage lineage) throws IOException {
         FrontierWorldStateCodec.writeString(output, lineage.predecessorJobId().value());
         FrontierWorldStateCodec.writeString(output, lineage.predecessorTaskId().value());
         FrontierWorldStateCodec.writeString(output, lineage.workerId().value());
+        FrontierWorldStateCodec.writeString(output, lineage.actorAccountId().value());
+        FrontierWorldStateCodec.writeString(output, lineage.depotAccountId().value());
         FrontierWorldStateCodec.writeString(output, lineage.outputItemId().value());
         output.writeLong(lineage.completedGrowthEpoch());
         output.writeInt(lineage.terminalBody().x()); output.writeInt(lineage.terminalBody().y()); output.writeInt(lineage.terminalBody().z());
@@ -94,6 +131,8 @@ final class ResourceSiteStateCodec {
         SubjectId predecessorJob = new SubjectId(FrontierWorldStateCodec.readString(input));
         SubjectId predecessorTask = new SubjectId(FrontierWorldStateCodec.readString(input));
         SubjectId worker = new SubjectId(FrontierWorldStateCodec.readString(input));
+        SubjectId actorAccount = new SubjectId(FrontierWorldStateCodec.readString(input));
+        SubjectId depotAccount = new SubjectId(FrontierWorldStateCodec.readString(input));
         SubjectId output = new SubjectId(FrontierWorldStateCodec.readString(input));
         long epoch = input.readLong();
         BodyPosition terminal = new BodyPosition(input.readInt(), input.readInt(), input.readInt());
@@ -113,7 +152,8 @@ final class ResourceSiteStateCodec {
                 FrontierWorldStateCodec.readString(input), FrontierWorldStateCodec.readString(input), input.readLong(), input.readLong(),
                 FrontierWorldStateCodec.readString(input), FrontierWorldStateCodec.readString(input), FrontierWorldStateCodec.readString(input), input.readLong(), input.readLong());
         ResourceSiteHarvestCausality causality = new ResourceSiteHarvestCausality(schedule, due, leases, intent, expected, observed, reconciliation, trace);
-        return new ResourceSiteHarvestLineage(predecessorJob, predecessorTask, worker, output, epoch, terminal, intent, slot, confirmed,
+        return new ResourceSiteHarvestLineage(predecessorJob, predecessorTask, worker, actorAccount, depotAccount,
+                output, epoch, terminal, intent, slot, confirmed,
                 successorTask, successorJob, causality);
     }
 
@@ -147,9 +187,30 @@ final class ResourceSiteStateCodec {
         if (work instanceof ResourceSiteHarvestJob harvest) {
             output.writeByte(1); writeIdentity(output, harvest); FrontierWorldStateCodec.writeString(output, harvest.taskId().value());
             FrontierWorldStateCodec.writeString(output, harvest.workerId().value());
+            FrontierWorldStateCodec.writeString(output, harvest.actorAccountId().value());
+            FrontierWorldStateCodec.writeString(output, harvest.depotAccountId().value());
             FrontierWorldStateCodec.writeString(output, harvest.outputItemId().value()); FrontierWorldStateCodec.writeCustody(output, harvest.outputSlot());
-            output.writeByte(harvest.progress().completedCropSlots()); output.writeByte(harvest.progress().pendingCropSlotIndex());
-            TraversalTopologyStateCodec.write(output, harvest.traversal()); output.writeShort(harvest.traversalCursor()); return;
+            output.writeInt(harvest.progress().totalCropSlots()); output.writeInt(harvest.progress().completedCropSlots());
+            output.writeInt(harvest.progress().pendingCropSlotIndex());
+            output.writeInt(harvest.deliveredYieldQuantity());
+            output.writeBoolean(harvest.returningForBatch());
+            output.writeBoolean(harvest.batchSuccessorSlot().isPresent());
+            if (harvest.batchSuccessorSlot().isPresent())
+                FrontierWorldStateCodec.writeCustody(output, harvest.batchSuccessorSlot().orElseThrow());
+            output.writeBoolean(harvest.lastConfirmedBatch().isPresent());
+            if (harvest.lastConfirmedBatch().isPresent()) {
+                ResourceSiteHarvestBatchDelivered batch = harvest.lastConfirmedBatch().orElseThrow();
+                output.writeInt(batch.deliveredYieldBefore());
+                PhysicalEffectObservationPayloadCodec.write(output, batch.receipt());
+            }
+            output.writeBoolean(harvest.navigationBlock().isPresent());
+            if (harvest.navigationBlock().isPresent()) {
+                var blocked = harvest.navigationBlock().orElseThrow();
+                output.writeInt(blocked.target().x()); output.writeInt(blocked.target().y()); output.writeInt(blocked.target().z());
+                output.writeLong(blocked.layoutRevision());
+                output.writeByte(blocked.reason().wireTag());
+            }
+            return;
         }
         throw new IllegalArgumentException("unknown resource-site work type");
     }
@@ -159,11 +220,38 @@ final class ResourceSiteStateCodec {
         SubjectId site = new SubjectId(FrontierWorldStateCodec.readString(input)); PhysicalIntentId intent = new PhysicalIntentId(FrontierWorldStateCodec.readString(input));
         return switch (kind) {
             case 0 -> new ResourceSitePreparationJob(id, site, intent);
-            case 1 -> new ResourceSiteHarvestJob(id, new SubjectId(FrontierWorldStateCodec.readString(input)), site, new SubjectId(FrontierWorldStateCodec.readString(input)),
-                    new SubjectId(FrontierWorldStateCodec.readString(input)), readOutputSlot(input), intent,
-                    new ResourceSiteHarvestProgress(input.readUnsignedByte(), input.readByte()), TraversalTopologyStateCodec.read(input), input.readUnsignedShort());
+            case 1 -> readHarvestWork(input, id, site, intent);
             default -> throw new IllegalArgumentException("unknown resource-site work type");
         };
+    }
+
+    private static ResourceSiteHarvestJob readHarvestWork(DataInputStream input, SubjectId id, SubjectId site,
+                                                          PhysicalIntentId intent) throws IOException {
+        SubjectId task = new SubjectId(FrontierWorldStateCodec.readString(input));
+        SubjectId worker = new SubjectId(FrontierWorldStateCodec.readString(input));
+        SubjectId actor = new SubjectId(FrontierWorldStateCodec.readString(input));
+        SubjectId depot = new SubjectId(FrontierWorldStateCodec.readString(input));
+        SubjectId output = new SubjectId(FrontierWorldStateCodec.readString(input));
+        InventoryCustody.ContainerSlot slot = readOutputSlot(input);
+        ResourceSiteHarvestProgress progress = new ResourceSiteHarvestProgress(input.readInt(), input.readInt(), input.readInt());
+        int delivered = input.readInt(); boolean returning = input.readBoolean();
+        java.util.Optional<InventoryCustody.ContainerSlot> successorSlot = input.readBoolean()
+                ? java.util.Optional.of(readOutputSlot(input)) : java.util.Optional.empty();
+        java.util.Optional<ResourceSiteHarvestBatchDelivered> lastBatch = java.util.Optional.empty();
+        if (input.readBoolean()) {
+            int before = input.readInt();
+            PhysicalEffectObservation observation = PhysicalEffectObservationPayloadCodec.read(input);
+            if (!(observation instanceof ResourceSiteHarvestDeliveryObservation receipt))
+                throw new IllegalArgumentException("field snapshot has a foreign batch receipt");
+            lastBatch = java.util.Optional.of(new ResourceSiteHarvestBatchDelivered(receipt, before));
+        }
+        java.util.Optional<ResourceSiteHarvestNavigationBlock> navigationBlock = java.util.Optional.empty();
+        if (input.readBoolean()) navigationBlock = java.util.Optional.of(new ResourceSiteHarvestNavigationBlock(
+                SurfaceAnchor.at(input.readInt(), input.readInt(), input.readInt()),
+                input.readLong(), ResourceSiteHarvestNavigationBlock.Reason.requireWireTag(input.readUnsignedByte())));
+        return new ResourceSiteHarvestJob(id, task, site, worker, actor, depot, output, slot, intent,
+                progress, delivered, returning,
+                successorSlot, lastBatch, navigationBlock);
     }
 
     private static InventoryCustody.ContainerSlot readOutputSlot(DataInputStream input) throws IOException {

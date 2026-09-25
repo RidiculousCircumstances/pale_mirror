@@ -12,7 +12,8 @@ import java.util.Objects;
 public record ResourceLot(SubjectId id, SubjectId economicOwnerId, String itemKind, int quantity,
                           String provenance, List<SubjectId> lineage) {
     public static final int MAX_QUANTITY = 4_096;
-    public static final int MAX_LINEAGE = 8;
+    /** A 64-unit recipe may draw one unit from each of 64 distinct parent lots. */
+    public static final int MAX_LINEAGE = 64;
 
     public ResourceLot {
         Objects.requireNonNull(id, "resource lot id"); Objects.requireNonNull(economicOwnerId, "resource lot owner");

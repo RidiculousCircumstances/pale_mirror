@@ -81,7 +81,7 @@ class RoutePatrolProcessTest {
         WorldId world = new WorldId("frontier:route-loss-deferred-objective");
         var engine = FrontierEngines.create(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(world, 41L));
         FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        SubjectId settlement = state.operations().get(new SubjectId("operation:supply-1-2")).settlementId();
+        SubjectId settlement = FrontierDevelopmentScenarios.initialNorthwatchShipment(state).orElseThrow().settlementId();
         BlockPosition obstruction = new BlockPosition(-380, 64, -304);
         state = state.recordPhysicalDelta(new PhysicalDelta(obstruction, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
                 Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER)), Optional.of(GrayboxSemanticPart.ROUTE_SURFACE), "player:test"));

@@ -17,7 +17,8 @@ import java.util.Collection;
  * different farmer merely because several are currently eligible.</p>
  */
 public record ResourceSiteHarvestLineage(SubjectId predecessorJobId, SubjectId predecessorTaskId,
-                                         SubjectId workerId, SubjectId outputItemId, long completedGrowthEpoch,
+                                         SubjectId workerId, SubjectId actorAccountId, SubjectId depotAccountId,
+                                         SubjectId outputItemId, long completedGrowthEpoch,
                                          BodyPosition terminalBody, PhysicalIntentId predecessorIntentId, InventoryCustody.ContainerSlot outputSlot,
                                          boolean outputReceiptResolved, Optional<SubjectId> successorTaskId, Optional<SubjectId> successorJobId,
                                          ResourceSiteHarvestCausality causality) {
@@ -25,6 +26,8 @@ public record ResourceSiteHarvestLineage(SubjectId predecessorJobId, SubjectId p
         Objects.requireNonNull(predecessorJobId, "harvest lineage predecessor job");
         Objects.requireNonNull(predecessorTaskId, "harvest lineage predecessor task");
         Objects.requireNonNull(workerId, "harvest lineage worker");
+        Objects.requireNonNull(actorAccountId, "harvest lineage actor account");
+        Objects.requireNonNull(depotAccountId, "harvest lineage depot account");
         Objects.requireNonNull(outputItemId, "harvest lineage output");
         Objects.requireNonNull(terminalBody, "harvest lineage terminal body");
         Objects.requireNonNull(predecessorIntentId, "harvest lineage intent"); Objects.requireNonNull(outputSlot, "harvest lineage output slot");
@@ -34,6 +37,10 @@ public record ResourceSiteHarvestLineage(SubjectId predecessorJobId, SubjectId p
         successorJobId = Optional.ofNullable(successorJobId).orElse(Optional.empty());
         if (completedGrowthEpoch < 1L || !predecessorJobId.value().startsWith("job:site-harvest-")
                 || !predecessorTaskId.value().startsWith("task:") || !workerId.value().startsWith("resident:")
+                || !actorAccountId.value().startsWith("custody:field-actor-")
+                || !depotAccountId.value().startsWith("custody:")
+                || actorAccountId.equals(depotAccountId)
+                || !depotAccountId.equals(ReferenceContainerCustody.scopeId(outputSlot.containerId()))
                 || !outputItemId.value().startsWith("item:site-harvest-")) {
             throw new IllegalArgumentException("resource-site harvest lineage has invalid canonical identities");
         }
@@ -42,28 +49,23 @@ public record ResourceSiteHarvestLineage(SubjectId predecessorJobId, SubjectId p
         }
     }
 
-    /** Compatibility constructor for older in-memory fixtures; persisted current-schema records always carry causality. */
-    public ResourceSiteHarvestLineage(SubjectId predecessorJobId, SubjectId predecessorTaskId, SubjectId workerId, SubjectId outputItemId,
+    public ResourceSiteHarvestLineage(SubjectId predecessorJobId, SubjectId predecessorTaskId, SubjectId workerId,
+                                      SubjectId actorAccountId, SubjectId depotAccountId, SubjectId outputItemId,
                                       long completedGrowthEpoch, BodyPosition terminalBody, PhysicalIntentId predecessorIntentId,
                                       InventoryCustody.ContainerSlot outputSlot, boolean outputReceiptResolved,
                                       Optional<SubjectId> successorTaskId, Optional<SubjectId> successorJobId) {
-        this(predecessorJobId, predecessorTaskId, workerId, outputItemId, completedGrowthEpoch, terminalBody, predecessorIntentId,
+        this(predecessorJobId, predecessorTaskId, workerId, actorAccountId, depotAccountId, outputItemId,
+                completedGrowthEpoch, terminalBody, predecessorIntentId,
                 outputSlot, outputReceiptResolved, successorTaskId, successorJobId,
                 ResourceSiteHarvestCausality.notCaptured(predecessorIntentId, outputItemId, outputSlot));
     }
 
-    public static ResourceSiteHarvestLineage completed(ResourceSiteHarvestJob job, long growthEpoch) {
-        return completed(job, growthEpoch, true);
-    }
-
-    public static ResourceSiteHarvestLineage completed(ResourceSiteHarvestJob job, long growthEpoch, boolean outputReceiptResolved) {
-        return completed(job, growthEpoch, outputReceiptResolved, ResourceSiteHarvestCausality.notCaptured(job));
-    }
-
+    /** An observed HOT depot service station may differ from the obsolete route-cache endpoint. */
     public static ResourceSiteHarvestLineage completed(ResourceSiteHarvestJob job, long growthEpoch, boolean outputReceiptResolved,
-                                                        ResourceSiteHarvestCausality causality) {
-        return new ResourceSiteHarvestLineage(job.id(), job.taskId(), job.workerId(), job.outputItemId(), growthEpoch,
-                job.traversal().linearCorridorSurfaces().getLast().standingBody(), job.intentId(), job.outputSlot(), outputReceiptResolved,
+                                                        ResourceSiteHarvestCausality causality, BodyPosition terminalBody) {
+        return new ResourceSiteHarvestLineage(job.id(), job.taskId(), job.workerId(), job.actorAccountId(), job.depotAccountId(),
+                job.outputItemId(), growthEpoch,
+                terminalBody, job.intentId(), job.outputSlot(), outputReceiptResolved,
                 Optional.empty(), Optional.empty(), causality);
     }
 
@@ -72,7 +74,8 @@ public record ResourceSiteHarvestLineage(SubjectId predecessorJobId, SubjectId p
         if (successorTaskId.isPresent() || !workerId.equals(job.workerId())) {
             throw new IllegalArgumentException("resource-site successor must retain its one completed farmer");
         }
-        return new ResourceSiteHarvestLineage(predecessorJobId, predecessorTaskId, workerId, outputItemId, completedGrowthEpoch,
+        return new ResourceSiteHarvestLineage(predecessorJobId, predecessorTaskId, workerId, actorAccountId, depotAccountId,
+                outputItemId, completedGrowthEpoch,
                 terminalBody, predecessorIntentId, outputSlot, outputReceiptResolved, Optional.of(job.taskId()), Optional.of(job.id()), causality);
     }
 
@@ -116,12 +119,14 @@ public record ResourceSiteHarvestLineage(SubjectId predecessorJobId, SubjectId p
     public ResourceSiteHarvestLineage resolveReceipt(PhysicalObservationId observationId) {
         if (outputReceiptResolved) throw new IllegalStateException("resource-site harvest receipt is already resolved");
         String observation = observationId == null ? "confirmed:" + predecessorIntentId.value() : "confirmed:" + observationId.value();
-        return new ResourceSiteHarvestLineage(predecessorJobId, predecessorTaskId, workerId, outputItemId, completedGrowthEpoch,
+        return new ResourceSiteHarvestLineage(predecessorJobId, predecessorTaskId, workerId, actorAccountId, depotAccountId,
+                outputItemId, completedGrowthEpoch,
                 terminalBody, predecessorIntentId, outputSlot, true, successorTaskId, successorJobId,
                 causality.confirmed(observation));
     }
     public ResourceSiteHarvestLineage withTrace(RetainedDiagnosticTrace trace) {
-        return new ResourceSiteHarvestLineage(predecessorJobId, predecessorTaskId, workerId, outputItemId, completedGrowthEpoch,
+        return new ResourceSiteHarvestLineage(predecessorJobId, predecessorTaskId, workerId, actorAccountId, depotAccountId,
+                outputItemId, completedGrowthEpoch,
                 terminalBody, predecessorIntentId, outputSlot, outputReceiptResolved, successorTaskId, successorJobId, causality.withTrace(trace));
     }
 }

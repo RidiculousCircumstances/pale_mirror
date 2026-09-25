@@ -55,7 +55,7 @@ final class FrontierV3FungibleProductionEffect {
                 }
                 var held = (ProductionInputHold.FungibleBound) job.inputHold();
                 var receipt = new FungibleProductionObservation(new PhysicalObservationId("observation:" + intent.id().value().replace(':', '-')),
-                        intent.id(), held.accountId(), layout.containerId(), held.itemId(), held.claimId(), job.outputItemId(), job.outputCount(),
+                        intent.id(), held.accountId(), layout.containerId(), held.itemId(), held.inputLots(), held.claimId(), job.outputItemId(), job.outputCount(),
                         held.authorityEpoch(), observed);
                 if (!transition(PhysicalIntentStatus.CONFIRMED, Optional.of(receipt), "confirmed")
                         || !FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedMutation(runtime, layout.containerId(), chest)) {

@@ -14,7 +14,20 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     // Version 180 requires cargo storage footprints from physical birth. Version 179
     // worlds may already contain carts with unknown historical storage columns;
     // accepting their state cannot manufacture that missing provider evidence.
-    static final int VERSION = 180; private static final int MAX_ENTRIES = 65_535;
+    // Version 184 retains every input lot in a completed production order's terminal relation.
+    // The inline market-order receipt grammar changed; schema-183 snapshots cannot be read as 184.
+    // Version 187 adds a nominal actor-hand physical stack address. Old readers
+    // cannot safely reinterpret a carried resource as another custody surface.
+    // Version 189 retains each field cycle's nominal site owner independently of its map key.
+    // Schema 187 job-only causes cannot be completed by scanning a recovered world.
+    // Version 190 retains the producer-declared strategic task in production and hive growth jobs.
+    // Version 192 retains the harvest producer's actor-resource account instead of deriving it during replay.
+    // Version 193 retains its exact depot-resource account for terminal handoff.
+    // Version 197 retains the current bounded field segment and the before-effect
+    // reservation for its next physical depot slot.
+    // Version 199 persists the immutable initial-field layout manifest; recovery may no
+    // longer regenerate non-default geometry from only world/seed/ruleset/terrain.
+    static final int VERSION = 203; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -32,6 +45,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 writeString(output, FrontierWorldProcessCatalog.physicalLifecycleFingerprint());
                 writeString(output, state.bootstrap().worldId().value()); output.writeLong(state.bootstrap().seed()); writeRuleset(output, state.bootstrap().ruleset());
                 TerrainSurfacePlanCodec.write(output, state.bootstrap().terrain());
+                InitialFieldLayoutManifestCodec.write(output, state.bootstrap().initialFieldLayouts());
                 writeActors(output, state.actorLocations());
                 writeStructures(output, state.structureConditions());
                 writeStructureDamage(output, state.structureDamage());
@@ -77,7 +91,8 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             }
             WorldId worldId = new WorldId(readString(input)); long seed = input.readLong();
             FrontierRuleset ruleset = readRuleset(input); TerrainSurfacePlan terrain = TerrainSurfacePlanCodec.read(input);
-            FrontierBootstrap bootstrap = bootstrapFor(worldId, seed, ruleset, terrain);
+            Map<SubjectId, ResourceFieldLayout> initialFieldLayouts = InitialFieldLayoutManifestCodec.read(input);
+            FrontierBootstrap bootstrap = bootstrapFor(worldId, seed, ruleset, terrain, initialFieldLayouts);
             Map<SubjectId, ActorLocation> actors = readActors(input); Map<SubjectId, StructureCondition> structures = readStructures(input);
             Map<SubjectId, StructureDamage> structureDamage = readStructureDamage(input);
             Map<BlockPosition, PhysicalDelta> physicalDeltas = readPhysicalDeltas(input);
@@ -88,7 +103,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             DeferredAftermathState deferredAftermath = DeferredAftermathStateCodec.read(input);
             FencedRecoveryState fencedRecovery = FencedRecoveryStateCodec.read(input);
             DiagnosticIncidentIndex diagnosticIncidents = DiagnosticIncidentIndexCodec.read(input);
-            Map<SubjectId, ProductionJob> jobs = ProductionJobStateCodec.read(input, true);
+            Map<SubjectId, ProductionJob> jobs = ProductionJobStateCodec.read(input);
             Map<SubjectId, SettlementServiceWork> serviceWorks = SettlementServiceWorkStateCodec.read(input);
             Map<SubjectId, SupplyContract> contracts = readContracts(input); Map<SubjectId, RouteOperation> operations = readOperations(input, true, true, true, true, true, true, true);
             LogisticsHistory history = readLogisticsHistory(input);
@@ -111,19 +126,21 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             return state;
         } catch (IOException error) { throw new IllegalArgumentException("truncated Frontier v3 state", error); }
     }
-    private FrontierBootstrap bootstrapFor(WorldId worldId, long seed, FrontierRuleset ruleset, TerrainSurfacePlan terrain) {
+    private FrontierBootstrap bootstrapFor(WorldId worldId, long seed, FrontierRuleset ruleset, TerrainSurfacePlan terrain,
+                                            Map<SubjectId, ResourceFieldLayout> initialFieldLayouts) {
         if (pinnedBootstrap == null) {
-            return FrontierBootstrapCache.resolve(worldId, seed, ruleset, terrain);
+            return FrontierBootstrapCache.resolve(worldId, seed, ruleset, terrain, initialFieldLayouts);
         }
         if (!pinnedBootstrap.worldId().equals(worldId) || pinnedBootstrap.seed() != seed || !pinnedBootstrap.ruleset().equals(ruleset)
-                || !pinnedBootstrap.terrain().equals(terrain)) {
+                || !pinnedBootstrap.terrain().equals(terrain) || !pinnedBootstrap.initialFieldLayouts().equals(initialFieldLayouts)) {
             throw new IllegalArgumentException("Frontier v3 state belongs to a different pinned bootstrap");
         }
         return pinnedBootstrap;
     }
     private void verifyPinnedBootstrap(FrontierBootstrap bootstrap) {
         if (pinnedBootstrap != null && (!pinnedBootstrap.worldId().equals(bootstrap.worldId()) || pinnedBootstrap.seed() != bootstrap.seed()
-                || !pinnedBootstrap.ruleset().equals(bootstrap.ruleset()) || !pinnedBootstrap.terrain().equals(bootstrap.terrain()))) {
+                || !pinnedBootstrap.ruleset().equals(bootstrap.ruleset()) || !pinnedBootstrap.terrain().equals(bootstrap.terrain())
+                || !pinnedBootstrap.initialFieldLayouts().equals(bootstrap.initialFieldLayouts()))) {
             throw new IllegalArgumentException("cannot encode Frontier v3 state for a different pinned bootstrap");
         }
     }
@@ -319,7 +336,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         }
         writeCount(output, colony.growthJobs().size());
         for (HiveGrowthJob job : colony.growthJobs().values().stream().sorted(Comparator.comparing(HiveGrowthJob::id)).toList()) {
-            writeString(output, job.id().value()); writeString(output, job.hiveId().value()); writeString(output, job.nestId().value());
+            writeString(output, job.id().value()); writeString(output, job.taskId().value()); writeString(output, job.hiveId().value()); writeString(output, job.nestId().value());
             writeString(output, job.consumedItemId().value()); writeHiveGrowthInputHold(output, job.inputHold());
             writeString(output, job.consumptionIntentId().value());
             HiveOrgan organ = job.organ(); writeString(output, organ.id().value()); output.writeByte(organ.kind().wireTag()); writePosition(output, organ.anchor());
@@ -363,13 +380,13 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         }
         Map<SubjectId, HiveGrowthJob> jobs = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
-            SubjectId id = new SubjectId(readString(input)); SubjectId hive = new SubjectId(readString(input));
+            SubjectId id = new SubjectId(readString(input)); SubjectId task = new SubjectId(readString(input)); SubjectId hive = new SubjectId(readString(input));
             SubjectId nest = new SubjectId(readString(input)); SubjectId item = new SubjectId(readString(input));
             HiveGrowthInputHold hold = readHiveGrowthInputHold(input, item);
             io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId consumption = new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(readString(input));
             SubjectId organId = new SubjectId(readString(input)); int kind = input.readUnsignedByte(); BlockPosition anchor = readPosition(input);
             SubjectId bioformId = new SubjectId(readString(input)); Bioform bioform = BioformProfileStateCodec.read(input, bioformId, hive, nest);
-            if (jobs.put(id, new HiveGrowthJob(id, hive, nest, item, hold, consumption,
+            if (jobs.put(id, new HiveGrowthJob(id, task, hive, nest, item, hold, consumption,
                     new HiveOrgan(organId, hive, nest, FrontierWireTags.require(HiveOrganKind.class, kind), anchor, java.util.Optional.empty()),
                     bioform)) != null) throw new IllegalArgumentException("invalid or duplicate hive growth job");
         }

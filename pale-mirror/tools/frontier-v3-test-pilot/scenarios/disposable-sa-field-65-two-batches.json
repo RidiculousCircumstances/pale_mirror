@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "id": "disposable_sa_field_65_two_batches",
+  "isolation": { "mode": "disposable_lite", "seed": 125 },
+  "server": { "host": "127.0.0.1", "port": 25586, "profile": "resource-site-harvest-65", "viewDistance": 6 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/time set day" },
+    { "type": "command", "command": "/gamerule doDaylightCycle false" },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "summary", "id": "", "expect": { "status": "ok", "settlements": 12, "sites": 12 } },
+      { "view": "process", "id": "job:site-harvest-1-wheat-field-1", "expect": {
+        "status": "ok", "conservation": { "completedCropSlots": 0, "totalCropSlots": 65,
+          "deliveredYield": 0 }
+      } }
+    ] }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
+      "position": { "diagnostic": { "view": "site", "id": "site:1-wheat-field", "field": "firstCrop" } },
+      "offset": { "x": -8, "y": 0, "z": -8 }, "settleMs": 1000,
+      "causalMilestone": "authored_field_visible" },
+    { "type": "look", "at": { "diagnostic": { "view": "site", "id": "site:1-wheat-field", "field": "firstCrop" } } },
+    { "type": "assert_visible_block", "position": { "diagnostic": { "view": "site", "id": "site:1-wheat-field", "field": "firstCrop" } },
+      "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-1-wheat-field-1",
+      "expect": { "status": "ok", "conservation": { "completedCropSlots": 0, "totalCropSlots": 65 },
+        "claims": { "lease": { "status": "HOT", "members": 1 } } },
+      "timeoutMs": 120000, "causalMilestone": "authored_field_hot_admission_before_clock_release" },
+    { "type": "release_fast_forward_hold" },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-1-wheat-field-1",
+      "expect": { "status": "ok", "conservation": { "totalCropSlots": 65,
+        "completedCropSlots": 20, "deliveredYield": 0 } },
+      "timeoutMs": 300000, "causalMilestone": "physical_work_first_20_cells" },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-1-wheat-field-1",
+      "expect": { "status": "ok", "conservation": { "totalCropSlots": 65,
+        "completedCropSlots": 40, "deliveredYield": 0 } },
+      "timeoutMs": 300000, "causalMilestone": "physical_work_first_40_cells" },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-1-wheat-field-1",
+      "expect": { "status": "ok", "conservation": { "totalCropSlots": 65,
+        "completedCropSlots": 60, "deliveredYield": 0 } },
+      "timeoutMs": 300000, "causalMilestone": "physical_work_first_60_cells" },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-1-wheat-field-1",
+      "expect": { "status": "ok", "conservation": { "totalCropSlots": 65,
+        "completedCropSlots": 64, "deliveredYield": 64 } },
+      "timeoutMs": 300000, "causalMilestone": "first_physical_part_delivered" },
+    { "type": "inspect", "view": "container", "id": "container:1-depot" },
+    { "type": "wait_until_diagnostic", "view": "site", "id": "site:1-wheat-field",
+      "expect": { "status": "ok", "phase": "GROWING", "growthEpoch": 2,
+        "terminalHarvest": { "physicalReceiptResolved": true } },
+      "timeoutMs": 240000, "causalMilestone": "second_physical_part_terminal" },
+    { "type": "inspect", "view": "site", "id": "site:1-wheat-field" },
+    { "type": "inspect", "view": "container", "id": "container:1-depot" }
+  ],
+  "assertions": [
+    { "after": 9, "view": "process", "id": "job:site-harvest-1-wheat-field-1", "expect": {
+      "status": "ok", "conservation": { "completedCropSlots": 64, "deliveredYield": 64 } } },
+    { "after": 11, "view": "site", "id": "site:1-wheat-field", "expect": {
+      "status": "ok", "phase": "GROWING", "growthEpoch": 2 } }
+  ],
+  "frames": [
+    { "after": 3, "name": "authored-field-before-work" },
+    { "after": 9, "name": "first-part-delivered" },
+    { "after": 11, "name": "two-part-terminal" }
+  ]
+}

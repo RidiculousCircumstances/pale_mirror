@@ -9,7 +9,9 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ExactInventoryTest {
     @Test
@@ -116,6 +118,125 @@ class ExactInventoryTest {
                 Map.of(container, new ContainerRecord(container, owner, 2)), Map.of(item, tool), Map.of(), Map.of(),
                 Map.of(), Map.of(), surfaceFor(container), EconomicLedger.fromClaimHolders(
                         List.of(new ContainerRecord(container, owner, 2)), List.of(tool), List.of()), resources));
+    }
+
+    @Test
+    void freeSlotSelectionSkipsAnExistingFungiblePhysicalStack() {
+        SubjectId container = new SubjectId("container:bound-wheat");
+        SubjectId owner = new SubjectId("settlement:one");
+        SubjectId lot = new SubjectId("lot:bound-wheat");
+        SubjectId account = new SubjectId("custody:bound-wheat");
+        InventoryCustody.ContainerSlot bound = new InventoryCustody.ContainerSlot(container, 0);
+        FungibleResourceLedger resources = FungibleResourceLedger.empty().issue(
+                new ResourceLot(lot, owner, "minecraft:wheat", 64, "bootstrap", List.of()),
+                new CustodyAccount(account, new ResourceCustody.Container(container), Map.of(lot, 64), Map.of()))
+                .rebind(account, 1L, List.of(new PhysicalStackBinding(new SubjectId("binding:bound-wheat"), account,
+                        new PhysicalStackAddress.ContainerSlot(bound), 1L, "minecraft:wheat", Map.of(lot, 64), Map.of())));
+        ExactInventory inventory = new ExactInventory(Map.of(container, new ContainerRecord(container, owner, 2)),
+                Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), surfaceFor(container),
+                EconomicLedger.fromClaimHolders(List.of(new ContainerRecord(container, owner, 2)), List.of(), List.of()), resources);
+
+        assertFalse(inventory.slotVacant(bound));
+        assertTrue(inventory.slotVacant(new InventoryCustody.ContainerSlot(container, 1)));
+        assertEquals(1, inventory.firstFreeSlot(container).orElseThrow());
+        assertThrows(IllegalArgumentException.class, () -> inventory.store(new ExactItemStack(
+                new SubjectId("item:wrong-overlap"), owner, "minecraft:wheat", 1, bound)));
+    }
+
+    @Test
+    void unboundColdStockReservesPhysicalCapacityBeforeExactStore() {
+        SubjectId container = new SubjectId("container:cold-wheat");
+        SubjectId owner = new SubjectId("settlement:one");
+        SubjectId lot = new SubjectId("lot:cold-wheat");
+        SubjectId account = new SubjectId("custody:cold-wheat");
+        FungibleResourceLedger resources = FungibleResourceLedger.empty().issue(
+                new ResourceLot(lot, owner, "minecraft:wheat", 64, "bootstrap", List.of()),
+                new CustodyAccount(account, new ResourceCustody.Container(container), Map.of(lot, 64), Map.of()));
+        ContainerRecord record = new ContainerRecord(container, owner, 2);
+        ExactInventory initial = new ExactInventory(Map.of(container, record), Map.of(), Map.of(), Map.of(),
+                Map.of(), Map.of(), surfaceFor(container),
+                EconomicLedger.fromClaimHolders(List.of(record), List.of(), List.of()), resources);
+        assertEquals(List.of(0, 1), initial.availableSlots(container));
+        ExactInventory withHistoricalConflict = initial.recordConflict(
+                InventoryDiagnosticProducer.PLAYER_EXPECTED_SLOT_MISSING.create(
+                        new SubjectId("conflict:retired-slot"), new SubjectId("item:retired"), container, 1));
+        assertEquals(List.of(0, 1), withHistoricalConflict.availableSlots(container),
+                "retained conflict evidence is not current physical slot occupancy");
+
+        ExactInventory oneExact = initial.store(new ExactItemStack(new SubjectId("item:tool"), owner,
+                "minecraft:iron_pickaxe", 1, new InventoryCustody.ContainerSlot(container, 0)));
+        assertTrue(oneExact.firstFreeSlot(container).isEmpty());
+        assertFalse(oneExact.slotVacant(new InventoryCustody.ContainerSlot(container, 1)));
+        assertThrows(IllegalArgumentException.class, () -> oneExact.store(new ExactItemStack(
+                new SubjectId("item:overfill"), owner, "minecraft:cobblestone", 1,
+                new InventoryCustody.ContainerSlot(container, 1))));
+        assertEquals(List.of(0, 1), oneExact.withoutItem(new SubjectId("item:tool")).availableSlots(container));
+        assertEquals(1, initial.store(new ExactItemStack(new SubjectId("item:other-slot"), owner,
+                "minecraft:iron_pickaxe", 1, new InventoryCustody.ContainerSlot(container, 1)))
+                .itemAt(container, 1).orElseThrow().count());
+    }
+
+    @Test
+    void allContainerIngressRejectsNewOvercommitButOldEvidenceRemainsRecoverable() {
+        SubjectId container = new SubjectId("container:capacity-ingress");
+        SubjectId owner = new SubjectId("settlement:one");
+        ContainerRecord record = new ContainerRecord(container, owner, 2);
+        SubjectId toolId = new SubjectId("item:capacity-tool");
+        ExactItemStack tool = new ExactItemStack(toolId, owner, "minecraft:iron_pickaxe", 1,
+                new InventoryCustody.ContainerSlot(container, 0));
+        SubjectId lot = new SubjectId("lot:capacity-wheat");
+        SubjectId account = new SubjectId("custody:capacity-wheat");
+        FungibleResourceLedger wheat = FungibleResourceLedger.empty().issue(
+                new ResourceLot(lot, owner, "minecraft:wheat", 64, "bootstrap", List.of()),
+                new CustodyAccount(account, new ResourceCustody.Container(container), Map.of(lot, 64), Map.of()));
+        EconomicLedger economics = EconomicLedger.fromClaimHolders(List.of(record), List.of(tool), List.of());
+        ExactInventory oneExact = new ExactInventory(Map.of(container, record), Map.of(toolId, tool), Map.of(),
+                Map.of(), Map.of(), Map.of(), surfaceFor(container), economics, wheat);
+
+        SubjectId incomingId = new SubjectId("item:incoming-actor");
+        InventoryCustody.Actor actor = new InventoryCustody.Actor(new SubjectId("resident:capacity-worker"));
+        Map<SubjectId, ExactItemStack> withActor = new java.util.HashMap<>(oneExact.items());
+        withActor.put(incomingId, new ExactItemStack(incomingId, owner, "minecraft:cobblestone", 1, actor));
+        ExactInventory actorHeld = new ExactInventory(oneExact.containers(), withActor, Map.of(), Map.of(),
+                Map.of(), Map.of(), oneExact.surfaces(), economics, wheat);
+        assertThrows(IllegalArgumentException.class, () -> actorHeld.moveObservedItem(incomingId, actor,
+                new InventoryCustody.ContainerSlot(container, 1)));
+
+        SubjectId cargoId = new SubjectId("cargo:capacity-exact");
+        SubjectId cargoItemId = new SubjectId("item:capacity-cargo");
+        Map<SubjectId, ExactItemStack> withCargo = new java.util.HashMap<>(oneExact.items());
+        withCargo.put(cargoItemId, new ExactItemStack(cargoItemId, owner, "minecraft:cobblestone", 1,
+                new InventoryCustody.Cargo(cargoId)));
+        ExactInventory exactCargo = new ExactInventory(oneExact.containers(), withCargo,
+                Map.of(cargoId, new CargoBatch(cargoId, owner, List.of(cargoItemId))), Map.of(), Map.of(), Map.of(),
+                oneExact.surfaces(), economics, wheat);
+        assertThrows(IllegalArgumentException.class, () -> exactCargo.completeCargoHandoff(cargoId,
+                List.of(new CargoHandoffPlacement(cargoItemId, new InventoryCustody.ContainerSlot(container, 1)))));
+
+        SubjectId secondId = new SubjectId("item:capacity-second");
+        ExactInventory fullExact = new ExactInventory(Map.of(container, record), Map.of(toolId, tool,
+                secondId, new ExactItemStack(secondId, owner, "minecraft:cobblestone", 1,
+                        new InventoryCustody.ContainerSlot(container, 1))), Map.of(), Map.of(), Map.of(), Map.of(),
+                surfaceFor(container), economics);
+        assertThrows(IllegalArgumentException.class, () -> fullExact.withFungibleResources(wheat));
+
+        SubjectId fungibleCargoId = new SubjectId("cargo:capacity-wheat");
+        FungibleResourceLedger carried = FungibleResourceLedger.empty().issue(
+                new ResourceLot(lot, owner, "minecraft:wheat", 64, "bootstrap", List.of()),
+                new CustodyAccount(account, new ResourceCustody.Cargo(fungibleCargoId), Map.of(lot, 64), Map.of()));
+        ExactInventory fungibleCargo = new ExactInventory(fullExact.containers(), fullExact.items(),
+                Map.of(fungibleCargoId, CargoBatch.fungible(fungibleCargoId, owner)), Map.of(), Map.of(), Map.of(),
+                fullExact.surfaces(), economics, carried);
+        assertThrows(IllegalArgumentException.class, () -> fungibleCargo.completeFungibleCargoHandoff(fungibleCargoId, container));
+
+        // A format-compatible old image may be decoded and reduced; an unrelated
+        // no-op must not make historical overcommit an unrecoverable world.
+        ExactInventory legacyOvercommit = new ExactInventory(fullExact.containers(), fullExact.items(), Map.of(),
+                Map.of(), Map.of(), Map.of(), fullExact.surfaces(), economics, wheat);
+        assertEquals(legacyOvercommit, legacyOvercommit.withFungibleResources(wheat));
+        assertTrue(legacyOvercommit.withoutItem(secondId).itemAt(container, 1).isEmpty());
+        assertTrue(legacyOvercommit.withoutItem(secondId).availableSlots(container).isEmpty(),
+                "removing the overcommit restores a full but valid two-slot image");
     }
 
     @Test

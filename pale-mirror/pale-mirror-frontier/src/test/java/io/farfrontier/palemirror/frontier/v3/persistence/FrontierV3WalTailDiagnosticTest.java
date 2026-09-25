@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FrontierV3WalTailDiagnosticTest {
     @Test
@@ -33,8 +34,12 @@ class FrontierV3WalTailDiagnosticTest {
                 new FrontierEvent(FrontierEvent.SCHEMA_VERSION, new EventId("event:wal-forensics"), transactionId, world,
                         new Revision(1L), new SimInstant(1L), new SubjectId("owner:wal-forensics"), CauseChain.root(commandId),
                         new ScheduleEffect.Cancelled(new ScheduleId("schedule:wal-forensics")))), Optional.empty());
-        Files.write(directory.resolve("wal-00000000000000000001.bin"),
-                FrontierPersistenceCodec.encodeWal(transaction, FrontierWorldRuntimeDefinition.payloadCodecs()));
+        byte[] wal = FrontierPersistenceCodec.encodeWal(transaction, FrontierWorldRuntimeDefinition.payloadCodecs());
+        assertEquals(75, Byte.toUnsignedInt(wal[4]));
+        byte[] priorEnvelope = wal.clone(); priorEnvelope[4] = 74;
+        assertThrows(IllegalArgumentException.class, () -> FrontierPersistenceCodec.decodeWal(priorEnvelope,
+                FrontierWorldRuntimeDefinition.payloadCodecs()));
+        Files.write(directory.resolve("wal-00000000000000000001.bin"), wal);
 
         List<FrontierV3WalTailDiagnostic.Entry> tail = FrontierV3WalTailDiagnostic.decode(directory);
 

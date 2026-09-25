@@ -361,6 +361,9 @@ final class FrontierV3TestPilotScenario {
         return validEntityInteraction(action) && wholeWithin(action, "maxAttacks", 1, 40)
                 && (!action.has("requireRemoval") || action.get("requireRemoval").isJsonPrimitive()
                     && action.get("requireRemoval").getAsJsonPrimitive().isBoolean())
+                && (!action.has("requireDamage") || action.get("requireDamage").isJsonPrimitive()
+                    && action.get("requireDamage").getAsJsonPrimitive().isBoolean()
+                    && (!action.get("requireDamage").getAsBoolean() || !action.has("requireRemoval") || !action.get("requireRemoval").getAsBoolean()))
                 && (!action.has("nameContains") || action.get("nameContains").isJsonPrimitive()
                 && !action.get("nameContains").getAsString().isBlank() && action.get("nameContains").getAsString().length() <= 72);
     }

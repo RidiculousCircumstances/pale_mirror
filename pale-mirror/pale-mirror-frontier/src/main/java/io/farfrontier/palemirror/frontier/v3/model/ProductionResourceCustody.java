@@ -12,40 +12,57 @@ public final class ProductionResourceCustody {
 
     /** Admission only: select the explicit input representation from its current custody authority. */
     public static boolean canStart(FrontierWorldState state, FungibleResourceCustodySupport.LotAtContainer input, int quantity) {
-        var account = state.inventory().fungibleResources().accounts().get(input.accountId());
+        if (quantity < 1 || input.quantity() < quantity) return false;
+        return canStart(state, new FungibleResourceCustodySupport.LotSelection(input.accountId(), Map.of(input.lot().id(), quantity)), quantity);
+    }
+
+    public static boolean canStart(FrontierWorldState state, FungibleResourceCustodySupport.LotSelection input, int quantity) {
+        var resources = state.inventory().fungibleResources();
+        var account = resources.accounts().get(input.accountId());
         if (quantity < 1 || account == null || !(account.custody() instanceof ResourceCustody.Container container)
-                || account.lotQuantities().getOrDefault(input.lot().id(), 0) < quantity
-                || !input.lot().equals(state.inventory().fungibleResources().lots().get(input.lot().id()))
+                || input.quantity() != quantity
                 || ReferenceContainerCustody.blocksCanonicalUse(state, container.containerId())) return false;
-        var bindings = state.inventory().fungibleResources().bindings().values().stream()
+        ResourceLot first = resources.lots().get(input.firstLotId());
+        if (first == null || resources.unclaimedQuantity(input.accountId(), first.economicOwnerId(), first.itemKind()) < quantity) return false;
+        for (var entry : input.lotQuantities().entrySet()) {
+            ResourceLot lot = resources.lots().get(entry.getKey());
+            if (lot == null || !lot.economicOwnerId().equals(first.economicOwnerId()) || !lot.itemKind().equals(first.itemKind())) return false;
+            int pinned = account.claimQuantities().keySet().stream().map(resources.claims()::get)
+                    .mapToInt(claim -> claim.lotQuantities().getOrDefault(entry.getKey(), 0)).sum();
+            if (entry.getValue() > account.lotQuantities().getOrDefault(entry.getKey(), 0) - pinned) return false;
+        }
+        var bindings = resources.bindings().values().stream()
                 .filter(binding -> binding.accountId().equals(input.accountId())).toList();
         if (!ReferenceContainerCustody.hasLiveCustody(state, container.containerId())) return bindings.isEmpty();
         if (!ReferenceContainerCustody.hasOperationalCustody(state, container.containerId())) return false;
         long epoch = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(container.containerId())).authorityEpoch();
         return !bindings.isEmpty() && bindings.stream().allMatch(binding -> binding.authorityEpoch() == epoch)
-                && bindings.stream().mapToInt(binding -> binding.lotQuantities().getOrDefault(input.lot().id(), 0)).sum() >= quantity;
+                && input.lotQuantities().entrySet().stream().allMatch(entry -> bindings.stream()
+                .mapToInt(binding -> binding.lotQuantities().getOrDefault(entry.getKey(), 0)).sum() >= entry.getValue());
     }
 
     public static ProductionInputHold holdForStart(FrontierWorldState state, FungibleResourceCustodySupport.LotAtContainer input,
+                                                    SubjectId claimId, int quantity) {
+        return holdForStart(state, new FungibleResourceCustodySupport.LotSelection(input.accountId(), Map.of(input.lot().id(), quantity)), claimId, quantity);
+    }
+
+    public static ProductionInputHold holdForStart(FrontierWorldState state, FungibleResourceCustodySupport.LotSelection input,
                                                     SubjectId claimId, int quantity) {
         if (!canStart(state, input, quantity)) throw new IllegalArgumentException("production input has no admissible custody representation");
         var account = state.inventory().fungibleResources().accounts().get(input.accountId());
         var container = (ResourceCustody.Container) account.custody();
         if (!ReferenceContainerCustody.hasLiveCustody(state, container.containerId())) {
-            return new ProductionInputHold.FungibleCold(input.lot().id(), input.accountId(), claimId);
+            return new ProductionInputHold.FungibleCold(input.firstLotId(), input.accountId(), claimId, input.lotQuantities());
         }
         long epoch = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(container.containerId())).authorityEpoch();
-        return new ProductionInputHold.FungibleBound(input.lot().id(), input.accountId(), claimId, epoch);
+        return new ProductionInputHold.FungibleBound(input.firstLotId(), input.accountId(), claimId, epoch, input.lotQuantities());
     }
 
     static void requireNewHold(FrontierWorldState state, ProductionJob job, SubjectId accountId, SubjectId claimId) {
         var resources = state.inventory().fungibleResources();
         var account = resources.accounts().get(accountId);
-        var lot = resources.lots().get(job.consumedItemId());
-        if (account == null || lot == null || account.lotQuantities().getOrDefault(lot.id(), 0) < job.outputCount()) {
-            throw new IllegalArgumentException("new production hold has no retained input lot");
-        }
-        var input = new FungibleResourceCustodySupport.LotAtContainer(accountId, lot, account.lotQuantities().get(lot.id()));
+        if (account == null) throw new IllegalArgumentException("new production hold has no retained input account");
+        var input = new FungibleResourceCustodySupport.LotSelection(accountId, job.inputQuantities());
         if (!job.inputHold().equals(holdForStart(state, input, claimId, job.outputCount()))) {
             throw new IllegalArgumentException("new production hold does not match current physical custody");
         }
@@ -58,7 +75,7 @@ public final class ProductionResourceCustody {
         for (ProductionJob job : state.productionJobs().values()) {
             if (job.inputHold() instanceof ProductionInputHold.FungibleCold cold && cold.accountId().equals(accountId)) {
                 requireClaim(state, resources, job, accountId, cold.claimId());
-                jobs.put(job.id(), job.withInputHold(new ProductionInputHold.FungibleBound(cold.itemId(), accountId, cold.claimId(), epoch)));
+                jobs.put(job.id(), job.withInputHold(new ProductionInputHold.FungibleBound(cold.itemId(), accountId, cold.claimId(), epoch, cold.inputLots())));
             } else if (job.inputHold() instanceof ProductionInputHold.FungibleBound bound && bound.accountId().equals(accountId)) {
                 if (bound.authorityEpoch() != epoch) throw new IllegalArgumentException("production input binding has a foreign epoch");
                 requireClaim(state, resources, job, accountId, bound.claimId());
@@ -88,7 +105,7 @@ public final class ProductionResourceCustody {
                 intents.remove(intent.id());
             }
             requireClaim(state, resources, job, accountId, bound.claimId());
-            jobs.put(job.id(), job.withInputHold(new ProductionInputHold.FungibleCold(bound.itemId(), accountId, bound.claimId())));
+            jobs.put(job.id(), job.withInputHold(new ProductionInputHold.FungibleCold(bound.itemId(), accountId, bound.claimId(), bound.inputLots())));
         }
         return state.withChanges(FrontierWorldStateUpdate.begin()
                 .inventory(state.inventory().withFungibleResources(resources)).productionJobs(jobs)

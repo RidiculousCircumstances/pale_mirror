@@ -236,7 +236,7 @@ final class FrontierV3GrayboxExecutor {
         retainSiblingHiveVisibility(runtime, chunk, true);
     }
     private static void retainResourceSiteVisibility(FrontierV3ServerRuntime<?, ?> runtime, FrontierWorldState state, ChunkPos ingress) {
-        FrontierResourceSitePlan.compile(state.bootstrap()).values().stream()
+        state.resourceSiteDescriptors().values().stream()
                 .filter(site -> resourceSiteIngressMatches(ingress, site))
                 .flatMap(site -> site.managedSlots().stream())
                 .map(position -> new ChunkPos(position.x() >> 4, position.z() >> 4))

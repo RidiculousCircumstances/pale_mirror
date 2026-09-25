@@ -194,7 +194,11 @@ final class PhysicalIntentLifecycleCapabilities {
                 if (state.fencedRecovery().current().containsKey(
                         io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryPhysicalIntentSupport.bindingId(intent))) recovery++;
             }
-            PhysicalIntentLifecycleCompositionDiagnostic.Pressure pressure = unresolved >= declaration.maxUnresolved()
+            // An explicitly non-physical owner has no intent queue to saturate.
+            // Its zero quota forbids admission; it does not indicate retained pressure.
+            PhysicalIntentLifecycleCompositionDiagnostic.Pressure pressure = declaration.kinds().isEmpty()
+                    ? PhysicalIntentLifecycleCompositionDiagnostic.Pressure.OPEN
+                    : unresolved >= declaration.maxUnresolved()
                     ? PhysicalIntentLifecycleCompositionDiagnostic.Pressure.UNRESOLVED_SATURATED
                     : resolved >= declaration.maxResolvedRetention() || unresolved + resolved >= declaration.maxUnresolved()
                     ? PhysicalIntentLifecycleCompositionDiagnostic.Pressure.COMPACTION_REQUIRED

@@ -592,7 +592,8 @@ public final class FrontierSceneBehaviors {
             return FrontierResourceSiteHarvestSceneSupport.isTerminalReceiptRelease(state, cause(lease))
                     ? SceneLeaseStatus.DRAINING : SceneLeaseStatus.HOT;
         }
-        @Override public ResourceSiteHarvestSceneCause sampleCause() { return new ResourceSiteHarvestSceneCause(new SubjectId("job:site-harvest-registry")); }
+        @Override public ResourceSiteHarvestSceneCause sampleCause() { return new ResourceSiteHarvestSceneCause(
+                new SubjectId("site:harvest-registry"), new SubjectId("job:site-harvest-registry")); }
         @Override public ResourceSiteHarvestSceneCause resourceSiteHarvest(SceneLease lease) { return cause(lease); }
         @Override public boolean owns(SceneLease lease, SubjectId subjectId) { return cause(lease).jobId().equals(subjectId); }
         @Override public SubjectId owner(FrontierWorldState state, SceneLease lease) {
@@ -646,11 +647,14 @@ public final class FrontierSceneBehaviors {
                 return observed;
             }
             if (!job.workerId().equals(actorId)) throw new IllegalArgumentException("resource-site scene release has a foreign worker");
-            // Minecraft may unload while the Villager is between two retained surfaces.  The
-            // field-job cursor, not that transient sub-cell body, is the sole COLD/HOT hand-off
-            // authority; otherwise the next naturally loaded admission rejects its own worker
-            // as off-corridor and the visible harvest can never resume.
-            return job.traversal().linearCorridorSurfaces().get(job.traversalCursor()).standingBody();
+            if (ResourceSiteHarvestGoal.actorAtDepot(state, job)) {
+                if (!ResourceSiteHarvestGoal.current(state, job).arrivedAt(observed.supportingSurface()))
+                    throw new IllegalArgumentException("resource-site depot release has no observed service station");
+                return observed;
+            }
+            // The observed supported body is the COLD/HOT hand-off authority.  A route
+            // checkpoint is historical work context, not permission to move the farmer.
+            return observed;
         }
         @Override public SceneReleasePlan releasePlan(FrontierWorldState state, SceneLease lease, long submittedAt, SceneLeaseReleased released) {
             ResourceSiteHarvestJob job = null;
@@ -663,7 +667,7 @@ public final class FrontierSceneBehaviors {
                 return new SceneReleasePlan(owner(state, lease), released, new SceneContinuation.None());
             }
             return new SceneReleasePlan(owner(state, lease), released,
-                    new SceneContinuation.ResumeResourceSiteHarvest(job.id()));
+                    new SceneContinuation.ResumeResourceSiteHarvest(job.siteId(), job.id()));
         }
         @Override public SceneRecoveryPlan recoveryUnresolvedPlan(FrontierWorldState state, SceneLease lease, SceneLeaseRecoveryUnresolved unresolved) {
             return new SceneRecoveryPlan(owner(state, lease), unresolved, new SceneContinuation.None());
@@ -681,7 +685,7 @@ public final class FrontierSceneBehaviors {
             ResourceSiteHarvestJob job = FrontierResourceSiteHarvestSceneSupport.require(state, cause(lease));
             if (!job.workerId().equals(actorId)) return SceneDeathOutcome.unchanged(state);
             ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId());
-            ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).get(job.siteId());
+            ResourceSite site = state.resourceSite(job.siteId());
             ResourceSiteConflictObserved conflict = new ResourceSiteConflictObserved(job.siteId(), site.cropSlots().getFirst(),
                     ResourceSiteDiagnosticProducer.WORKER_DIED);
             ResourceSiteState sites = state.resourceSites().replace(lifecycle.conflicted(

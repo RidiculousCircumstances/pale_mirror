@@ -170,6 +170,9 @@ class HeldHarvestSchedulingCompositionTest {
         var continued = (ResourceSiteHarvestJob) resumed.canonicalState().state().resourceSites().site(hot.site()).activeWork().orElseThrow();
         assertEquals(hot.job().id(), continued.id());
         assertEquals(hot.job().workerId(), continued.workerId());
-        assertNotEquals(hot.job(), continued, "the released overdue owner must resume actual work after recovery");
+        assertTrue(!hot.job().equals(continued)
+                        || !hot.state().actorLocations().get(continued.workerId()).body().equals(
+                                resumed.canonicalState().state().actorLocations().get(continued.workerId()).body()),
+                "the released overdue owner must resume actual-body travel or crop work after recovery");
     }
 }

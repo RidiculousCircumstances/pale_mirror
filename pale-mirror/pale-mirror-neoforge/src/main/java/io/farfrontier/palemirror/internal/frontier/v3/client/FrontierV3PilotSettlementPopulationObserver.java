@@ -52,7 +52,9 @@ final class FrontierV3PilotSettlementPopulationObserver {
             }
         }
         if (observations.size() != expected.size()) return timeout(minecraft, action,
-                "ordinary first ingress did not render every exact settlement resident; expected=" + expected.size() + " observed=" + observations.size());
+                "ordinary first ingress did not render every exact settlement resident; expected=" + expected.size() + " observed=" + observations.size()
+                        + " missing=" + expected.values().stream().filter(value -> !observations.containsKey(value.uuid()))
+                        .sorted(Comparator.comparing(Expected::actorId)).map(value -> value.actorId() + "@" + value.uuid()).toList());
         if (completeSince == Long.MIN_VALUE) completeSince = elapsedClientTicks;
         if (elapsedClientTicks - completeSince < action.get("durationTicks").getAsLong()) return false;
         emit(action, actionStep, milestone); return true;

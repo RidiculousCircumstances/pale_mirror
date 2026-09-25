@@ -19,6 +19,7 @@ import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.LinkedHashSet;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -28,6 +29,301 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @PrefixGameTestTemplate(false)
 public final class FrontierV3LocalNavigationGameTests {
     private FrontierV3LocalNavigationGameTests() { }
+
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void farmerReleaseCapturesRealCollisionSupportButNotAnAirborneBody(GameTestHelper helper) {
+        BlockPos support = helper.absolutePos(new BlockPos(2, 0, 2));
+        helper.getLevel().setBlock(support, Blocks.FARMLAND.defaultBlockState(), 3);
+        helper.getLevel().setBlock(support.above(), Blocks.AIR.defaultBlockState(), 3);
+        helper.getLevel().setBlock(support.above(2), Blocks.AIR.defaultBlockState(), 3);
+        Villager worker = helper.spawnWithNoFreeWill(EntityType.VILLAGER,
+                new Vec3(2.5D, 0.9375D, 2.5D));
+        helper.runAtTickTime(2, () -> {
+            helper.assertValueEqual(FrontierV3SupportedBodyCapture.observe(helper.getLevel(), worker),
+                    java.util.Optional.of(new BodyPosition(support.getX(), support.getY() + 1, support.getZ())),
+                    "the release body follows the real farmland collision top, not the transient onGround flag");
+            worker.setPos(worker.getX(), worker.getY() + 1.0D, worker.getZ());
+            helper.assertTrue(FrontierV3SupportedBodyCapture.observe(helper.getLevel(), worker).isEmpty(),
+                    "an airborne body must not be labelled as supported by stale getOnPos data");
+            worker.discard(); helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 65)
+    public static void minecraftGoalNavigatorReportsAnUnreachableGoalWithinFinitePhysicalTurns(GameTestHelper helper) {
+        var level = helper.getLevel();
+        BlockPos start = helper.absolutePos(new BlockPos(3, 0, 3));
+        BlockPos destination = start.east(2);
+        for (int x = 1; x <= 6; x++) for (int z = 1; z <= 6; z++) {
+            BlockPos support = helper.absolutePos(new BlockPos(x, 0, z));
+            level.setBlock(support, Blocks.STONE.defaultBlockState(), 3);
+            level.setBlock(support.above(), Blocks.AIR.defaultBlockState(), 3);
+            level.setBlock(support.above(2), Blocks.AIR.defaultBlockState(), 3);
+        }
+        for (int x = -1; x <= 1; x++) for (int z = -1; z <= 1; z++) {
+            if (x == 0 && z == 0) continue;
+            BlockPos wall = start.offset(x, 1, z);
+            level.setBlock(wall, Blocks.STONE.defaultBlockState(), 3);
+            level.setBlock(wall.above(), Blocks.STONE.defaultBlockState(), 3);
+        }
+        Villager worker = helper.spawnWithNoFreeWill(EntityType.VILLAGER, new Vec3(3.5D, 1.0D, 3.5D));
+        SurfaceAnchor from = SurfaceAnchor.at(start.getX(), start.getY(), start.getZ());
+        SurfaceAnchor to = SurfaceAnchor.at(destination.getX(), destination.getY(), destination.getZ());
+        var goal = new FrontierV3GoalNavigation.Goal(to,
+                io.farfrontier.palemirror.frontier.v3.model.TraversalCapability.PEDESTRIAN,
+                LocalNavigationEnvelope.around(from.standingBody(), to.standingBody()));
+        var status = new java.util.concurrent.atomic.AtomicReference<>(FrontierV3GoalNavigation.Status.IN_PROGRESS);
+        for (int turn = 1; turn <= 26; turn++) helper.runAtTickTime(turn, () -> {
+            status.set(FrontierV3GoalNavigation.pursue(level, worker, goal).status());
+            helper.assertTrue(worker.isNoAi(), "the blocked path cannot enlist vanilla goal or Brain AI");
+        });
+        helper.runAtTickTime(27, () -> {
+            helper.assertValueEqual(status.get(), FrontierV3GoalNavigation.Status.BLOCKED,
+                    "an unreachable physical goal must have a finite, explicit local disposition");
+            helper.assertTrue(worker.getOnPos().equals(start), "failure may not move the worker through the obstruction");
+            FrontierV3GoalNavigation.stop(worker); worker.discard(); helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 110)
+    public static void minecraftGoalNavigatorDetoursWithoutVanillaTaskAi(GameTestHelper helper) {
+        var level = helper.getLevel();
+        BlockPos start = helper.absolutePos(new BlockPos(2, 0, 2));
+        BlockPos destination = start.east(3);
+        for (int x = 1; x <= 6; x++) for (int z = 1; z <= 3; z++) {
+            BlockPos support = helper.absolutePos(new BlockPos(x, 0, z));
+            level.setBlock(support, Blocks.STONE.defaultBlockState(), 3);
+            level.setBlock(support.above(), Blocks.AIR.defaultBlockState(), 3);
+            level.setBlock(support.above(2), Blocks.AIR.defaultBlockState(), 3);
+        }
+        level.setBlock(start.east(2).above(), Blocks.STONE.defaultBlockState(), 3);
+        level.setBlock(start.east(2).above(2), Blocks.STONE.defaultBlockState(), 3);
+        Villager worker = helper.spawnWithNoFreeWill(EntityType.VILLAGER, new Vec3(2.5D, 1.0D, 2.5D));
+        SurfaceAnchor from = SurfaceAnchor.at(start.getX(), start.getY(), start.getZ());
+        SurfaceAnchor to = SurfaceAnchor.at(destination.getX(), destination.getY(), destination.getZ());
+        LocalNavigationEnvelope envelope = LocalNavigationEnvelope.around(from.standingBody(), to.standingBody());
+        var goal = new FrontierV3GoalNavigation.Goal(to, io.farfrontier.palemirror.frontier.v3.model.TraversalCapability.PEDESTRIAN, envelope);
+        AtomicBoolean detoured = new AtomicBoolean();
+        helper.runAfterDelay(1, () -> {
+            List<String> samples = new ArrayList<>();
+            // GameTest catch-up collapses many runAtTickTime callbacks into a single
+            // physical entity turn. Drive the same NoAI navigation/control/travel
+            // methods as separate bounded physical turns, as the local-motion proof
+            // below does, without supplying any synthetic position or path result.
+            for (int tick = 1; tick <= 75 && !FrontierV3SemanticMovement.arrived(level, worker, to); tick++) {
+                var result = FrontierV3GoalNavigation.pursue(level, worker, goal);
+                helper.assertTrue(result.status() == FrontierV3GoalNavigation.Status.IN_PROGRESS,
+                        "Minecraft path must remain available within the retained goal: " + result
+                                + " position=" + worker.position() + " onGround=" + worker.onGround()
+                                + " support=" + worker.getOnPos() + " target=" + destination
+                                + " path=" + worker.getNavigation().getPath());
+                helper.assertTrue(worker.isNoAi(), "the farmer must not activate vanilla task/Brain AI");
+                var observed = worker.getOnPos();
+                helper.assertTrue(envelope.contains(new BlockPosition(observed.getX(), observed.getY(), observed.getZ())),
+                        "the physical body must remain inside the retained navigation envelope");
+                if (Math.abs(worker.getZ() - (start.getZ() + .5D)) > .35D) detoured.set(true);
+                FrontierV3GoalNavigation.advanceAtEntityBoundary(worker);
+                worker.aiStep();
+                if (tick % 5 == 0) samples.add(tick + ":" + worker.position() + "/" + worker.getOnPos()
+                        + "/" + worker.getNavigation().getPath());
+            }
+            helper.assertTrue(FrontierV3SemanticMovement.arrived(level, worker, to),
+                    "the exact retained goal must be physically reached: " + worker.position()
+                            + " ground=" + worker.onGround() + " path=" + worker.getNavigation().getPath()
+                            + " speed=" + worker.getSpeed() + " zza=" + worker.zza
+                            + " velocity=" + worker.getDeltaMovement() + " samples=" + samples);
+            helper.assertTrue(detoured.get(), "the Minecraft path must avoid the real blocked column");
+            FrontierV3ControlledMobMotion.stop(worker); worker.discard(); helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 110)
+    public static void observedGoalCanDetourBeyondTheOldKnownPathStripe(GameTestHelper helper) {
+        var level = helper.getLevel();
+        BlockPos start = helper.absolutePos(new BlockPos(2, 0, 2));
+        BlockPos destination = start.east(4);
+        for (int x = 1; x <= 7; x++) for (int z = 0; z <= 5; z++) {
+            BlockPos support = helper.absolutePos(new BlockPos(x, 0, z));
+            level.setBlock(support, Blocks.STONE.defaultBlockState(), 3);
+            level.setBlock(support.above(), Blocks.AIR.defaultBlockState(), 3);
+            level.setBlock(support.above(2), Blocks.AIR.defaultBlockState(), 3);
+        }
+        for (int z = 0; z <= 3; z++) {
+            BlockPos wall = helper.absolutePos(new BlockPos(4, 1, z));
+            level.setBlock(wall, Blocks.STONE.defaultBlockState(), 3);
+            level.setBlock(wall.above(), Blocks.STONE.defaultBlockState(), 3);
+        }
+        Villager worker = helper.spawnWithNoFreeWill(EntityType.VILLAGER, new Vec3(2.5D, 1.0D, 2.5D));
+        SurfaceAnchor from = SurfaceAnchor.at(start.getX(), start.getY(), start.getZ());
+        SurfaceAnchor to = SurfaceAnchor.at(destination.getX(), destination.getY(), destination.getZ());
+        List<SurfaceAnchor> oldKnownPath = java.util.stream.IntStream.rangeClosed(0, 4)
+                .mapToObj(index -> SurfaceAnchor.at(start.getX() + index, start.getY(), start.getZ()))
+                .toList();
+        LocalNavigationEnvelope oldStripe = LocalNavigationEnvelope.along(oldKnownPath, List.of(to));
+        LocalNavigationEnvelope latitude = LocalNavigationEnvelope.between(from.standingBody(), List.of(to));
+        helper.assertTrue(!oldStripe.contains(new BlockPosition(start.getX() + 2, start.getY(), start.getZ() + 2)),
+                "the old stripe must exclude the only legal two-cell detour");
+        helper.assertTrue(latitude.contains(new BlockPosition(start.getX() + 2, start.getY(), start.getZ() + 2)),
+                "bounded HOT latitude must admit the physical detour without choosing another task");
+        var goal = new FrontierV3GoalNavigation.Goal(to,
+                io.farfrontier.palemirror.frontier.v3.model.TraversalCapability.PEDESTRIAN, latitude);
+        AtomicBoolean detoured = new AtomicBoolean();
+        helper.runAfterDelay(1, () -> {
+            for (int tick = 1; tick <= 90 && !FrontierV3SemanticMovement.arrived(level, worker, to); tick++) {
+                var result = FrontierV3GoalNavigation.pursue(level, worker, goal);
+                helper.assertTrue(result.status() == FrontierV3GoalNavigation.Status.IN_PROGRESS,
+                        "real Minecraft path must remain within the bounded replan latitude: " + result);
+                if (worker.getZ() >= start.getZ() + 1.9D) detoured.set(true);
+                FrontierV3GoalNavigation.advanceAtEntityBoundary(worker);
+                worker.aiStep();
+            }
+            helper.assertTrue(detoured.get(), "the worker must physically leave the obsolete one-cell stripe");
+            helper.assertTrue(FrontierV3SemanticMovement.arrived(level, worker, to),
+                    "the same semantic goal must be reached without a synthetic body move: " + worker.position());
+            FrontierV3GoalNavigation.stop(worker); worker.discard(); helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 90)
+    public static void minecraftGoalNavigatorUsesReachableStationInDeclaredServiceRegion(GameTestHelper helper) {
+        var level = helper.getLevel();
+        BlockPos start = helper.absolutePos(new BlockPos(2, 0, 2));
+        BlockPos obstructed = helper.absolutePos(new BlockPos(4, 0, 2));
+        BlockPos service = helper.absolutePos(new BlockPos(4, 0, 3));
+        Set<BlockPosition> supports = new LinkedHashSet<>();
+        for (int x = 1; x <= 6; x++) for (int z = 1; z <= 5; z++) {
+            BlockPos support = helper.absolutePos(new BlockPos(x, 0, z));
+            supports.add(new BlockPosition(support.getX(), support.getY(), support.getZ()));
+            level.setBlock(support, Blocks.STONE.defaultBlockState(), 3);
+            level.setBlock(support.above(), Blocks.AIR.defaultBlockState(), 3);
+            level.setBlock(support.above(2), Blocks.AIR.defaultBlockState(), 3);
+        }
+        level.setBlock(obstructed.above(), Blocks.STONE.defaultBlockState(), 3);
+        level.setBlock(obstructed.above(2), Blocks.STONE.defaultBlockState(), 3);
+        Villager worker = helper.spawnWithNoFreeWill(EntityType.VILLAGER, new Vec3(2.5D, 1.0D, 2.5D));
+        SurfaceAnchor blockedStation = SurfaceAnchor.at(obstructed.getX(), obstructed.getY(), obstructed.getZ());
+        SurfaceAnchor serviceStation = SurfaceAnchor.at(service.getX(), service.getY(), service.getZ());
+        var goal = new FrontierV3GoalNavigation.Goal(List.of(blockedStation, serviceStation),
+                io.farfrontier.palemirror.frontier.v3.model.TraversalCapability.PEDESTRIAN,
+                new LocalNavigationEnvelope(supports));
+        helper.runAfterDelay(1, () -> {
+            for (int turn = 0; turn < 70 && !FrontierV3SemanticMovement.arrived(level, worker, serviceStation); turn++) {
+                var result = FrontierV3GoalNavigation.pursue(level, worker, goal);
+                helper.assertTrue(result.status() == FrontierV3GoalNavigation.Status.IN_PROGRESS,
+                        "declared service region should use its reachable station: " + result);
+                FrontierV3GoalNavigation.advanceAtEntityBoundary(worker);
+                worker.aiStep();
+            }
+            helper.assertTrue(FrontierV3SemanticMovement.arrived(level, worker, serviceStation),
+                    "physical actor must reach the legal, unobstructed service support");
+            var arrived = FrontierV3GoalNavigation.pursue(level, worker, goal);
+            helper.assertValueEqual(arrived.status(), FrontierV3GoalNavigation.Status.ARRIVED,
+                    "only an observed legal station closes the goal");
+            helper.assertValueEqual(arrived.arrivedStation().orElseThrow(), serviceStation,
+                    "arrival must carry the exact service station rather than an arbitrary representative");
+            helper.assertTrue(worker.isNoAi(), "service navigation may not activate vanilla task AI");
+            FrontierV3GoalNavigation.stop(worker); worker.discard(); helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 80)
+    public static void minecraftGoalNavigatorReachesHydratedCropSupportWithoutTrampling(GameTestHelper helper) {
+        var level = helper.getLevel();
+        BlockPos start = helper.absolutePos(new BlockPos(2, 0, 2));
+        BlockPos middle = start.east();
+        BlockPos soil = middle.east();
+        for (BlockPos support : List.of(start, middle, soil)) {
+            level.setBlock(support, Blocks.STONE.defaultBlockState(), 3);
+            level.setBlock(support.above(), Blocks.AIR.defaultBlockState(), 3);
+            level.setBlock(support.above(2), Blocks.AIR.defaultBlockState(), 3);
+        }
+        level.setBlock(soil, Blocks.FARMLAND.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.FarmBlock.MOISTURE, 7), 3);
+        level.setBlock(soil.above(), Blocks.WHEAT.defaultBlockState(), 3);
+        level.setBlock(soil.south(), Blocks.WATER.defaultBlockState(), 3);
+        Villager worker = helper.spawnWithNoFreeWill(EntityType.VILLAGER, new Vec3(2.5D, 1.0D, 2.5D));
+        SurfaceAnchor from = SurfaceAnchor.at(start.getX(), start.getY(), start.getZ());
+        SurfaceAnchor target = SurfaceAnchor.at(soil.getX(), soil.getY(), soil.getZ());
+        var goal = new FrontierV3GoalNavigation.Goal(target,
+                io.farfrontier.palemirror.frontier.v3.model.TraversalCapability.PEDESTRIAN,
+                LocalNavigationEnvelope.around(from.standingBody(), target.standingBody()));
+        helper.runAfterDelay(1, () -> {
+            String lastReason = "not-started";
+            for (int turn = 0; turn < 65 && !FrontierV3SemanticMovement.arrived(level, worker, target); turn++) {
+                var result = FrontierV3GoalNavigation.pursue(level, worker, goal);
+                lastReason = result.reason();
+                helper.assertTrue(result.status() == FrontierV3GoalNavigation.Status.IN_PROGRESS,
+                        "hydrated farmland remains a reachable physical support: " + result);
+                FrontierV3GoalNavigation.advanceAtEntityBoundary(worker);
+                worker.aiStep();
+                helper.assertTrue(level.getBlockState(soil).is(Blocks.FARMLAND),
+                        "ordinary Minecraft travel may not trample this hydrated field");
+            }
+            var diagnosticPath = worker.getNavigation().createPath(soil.above(), 0);
+            var pathNodes = diagnosticPath == null ? List.of() : java.util.stream.IntStream.range(0, diagnosticPath.getNodeCount())
+                    .mapToObj(index -> diagnosticPath.getNode(index).asBlockPos().toString()).toList();
+            helper.assertTrue(FrontierV3SemanticMovement.arrived(level, worker, target),
+                    "exact farmland support must be observed after vanilla travel: " + worker.position()
+                            + " reason=" + lastReason + " ground=" + worker.onGround()
+                            + " observed=" + worker.getOnPos() + " path=" + worker.getNavigation().getPath()
+                            + " soil=" + level.getBlockState(soil) + " crop=" + level.getBlockState(soil.above())
+                            + " diagnosticPath=" + diagnosticPath + " nodes=" + pathNodes);
+            helper.assertTrue(FrontierV3GoalNavigation.pursue(level, worker, goal).status()
+                            == FrontierV3GoalNavigation.Status.ARRIVED,
+                    "the shared boundary reports only physically observed arrival");
+            helper.assertTrue(worker.isNoAi(), "the navigation bridge must retain the persisted NoAI flag");
+            FrontierV3GoalNavigation.stop(worker); worker.discard(); helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-harvest-support", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 140)
+    public static void tendingThenLeavingHydratedFarmlandDoesNotInventTrampling(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var soil = helper.absolutePos(new BlockPos(4, 0, 4));
+        var road = soil.east();
+        level.setBlock(soil, Blocks.FARMLAND.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.FarmBlock.MOISTURE, 7), 3);
+        level.setBlock(soil.west(), Blocks.WATER.defaultBlockState(), 3);
+        level.setBlock(soil.above(), Blocks.WHEAT.defaultBlockState(), 3);
+        level.setBlock(soil.above(2), Blocks.AIR.defaultBlockState(), 3);
+        level.setBlock(road, Blocks.STONE.defaultBlockState(), 3);
+        level.setBlock(road.above(), Blocks.AIR.defaultBlockState(), 3);
+        level.setBlock(road.above(2), Blocks.AIR.defaultBlockState(), 3);
+        Villager worker = helper.spawnWithNoFreeWill(EntityType.VILLAGER, new Vec3(4.5D, .9375D, 4.5D));
+        FrontierV3ControlledMobMotion.restoreOrdinaryPhysics(worker);
+        var from = SurfaceAnchor.at(soil.getX(), soil.getY(), soil.getZ());
+        var to = SurfaceAnchor.at(road.getX(), road.getY(), road.getZ());
+        for (int tick = 1; tick <= 100; tick++) {
+            final int turn = tick;
+            helper.runAtTickTime(tick, () -> {
+                helper.assertTrue(level.getBlockState(soil).is(Blocks.FARMLAND),
+                        "ordinary tending/exit must retain hydrated soil; turn=" + turn
+                                + " pos=" + worker.position() + " fall=" + worker.fallDistance
+                                + " motion=" + FrontierV3ControlledMobMotion.motionObservation(worker));
+                if (turn < 50) {
+                    FrontierV3ControlledMobMotion.tendCurrentCrop(level, worker,
+                            new BlockPosition(soil.getX(), soil.getY() + 1, soil.getZ()));
+                } else {
+                    if (turn == 50) level.setBlock(soil.above(), Blocks.AIR.defaultBlockState(), 3);
+                    FrontierV3ControlledMobMotion.pursueRetainedSemanticCheckpoint(level, worker,
+                            FrontierV3SemanticMovement.point(level, to),
+                            LocalNavigationEnvelope.around(from.standingBody(), to.standingBody()));
+                }
+            });
+        }
+        helper.runAtTickTime(110, () -> {
+            helper.assertTrue(FrontierV3SemanticMovement.arrived(level, worker, to),
+                    "worker must actually leave the fractional support for its retained road checkpoint");
+            helper.assertTrue(level.getBlockState(soil).is(Blocks.FARMLAND), "soil remains after exit");
+            FrontierV3ControlledMobMotion.stop(worker); worker.discard(); helper.succeed();
+        });
+    }
 
     @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft", template = "bastion/mobs/empty")
     public static void hotEnvelopeUsesOpenDoorStairAndHarmlessDetourWithoutChangingCheckpoint(GameTestHelper helper) {

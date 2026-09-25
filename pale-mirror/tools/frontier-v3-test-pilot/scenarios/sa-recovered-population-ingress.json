@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "id": "sa_recovered_population_ingress",
+  "server": { "host": "127.0.0.1", "port": 25585 },
+  "pilot": { "username": "FrontierPilot" },
+  "setup": [
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "site", "id": "site:7-wheat-field", "expect": { "status": "ok" } },
+      { "view": "actor", "id": "resident:7-13", "expect": { "status": "ok", "life": "ALIVE" } },
+      { "view": "settlement_population", "id": "settlement:7", "expect": { "status": "ok" } }
+    ] }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 154, "y": 66, "z": -10 }, "settleMs": 0, "causalMilestone": "ordinary_visit_after_offline_population_recovery" },
+    { "type": "look", "position": { "diagnostic": { "view": "site", "id": "site:7-wheat-field", "field": "firstCrop" } } },
+    { "type": "observe_settlement_population", "settlementId": "settlement:7", "durationTicks": 60, "maxDistance": 96, "timeoutMs": 60000, "causalMilestone": "recovered_population_physically_present" },
+    { "type": "inspect", "view": "actor", "id": "resident:7-13", "causalMilestone": "original_farmer_retained" },
+    { "type": "inspect", "view": "settlement_population", "id": "settlement:7", "causalMilestone": "terminal_population_census" },
+    { "type": "inspect", "view": "site", "id": "site:7-wheat-field", "causalMilestone": "field_state_after_ingress" }
+  ],
+  "assertions": [
+    { "after": 4, "view": "actor", "id": "resident:7-13", "expect": { "status": "ok", "life": "ALIVE" } }
+  ],
+  "frames": [
+    { "after": 3, "name": "recovered-population", "presentation": "player" }
+  ]
+}

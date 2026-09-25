@@ -21,6 +21,93 @@ class FungibleResourceLedgerTest {
     private static final SubjectId DEPOT_ACCOUNT = new SubjectId("custody:depot");
 
     @Test
+    void coldActorHarvestAccruesOneObservedUnitIntoOneRetainedPart() {
+        SubjectId farmer = new SubjectId("resident:field-worker");
+        SubjectId account = new SubjectId("custody:field-worker-harvest");
+        ResourceLot first = new ResourceLot(new SubjectId("lot:field-part"), OWNER,
+                "minecraft:wheat", 1, "field:one:epoch-1:part-0", List.of());
+        FungibleResourceLedger one = FungibleResourceLedger.empty()
+                .accrueColdActorHarvestPart(first, account, farmer);
+        ResourceLot second = first.withQuantity(2);
+        FungibleResourceLedger two = one.accrueColdActorHarvestPart(second, account, farmer);
+        assertEquals(2, two.totalQuantity(OWNER, "minecraft:wheat"));
+        assertEquals(Map.of(first.id(), 2), two.accounts().get(account).lotQuantities());
+        assertThrows(IllegalArgumentException.class, () -> one.accrueColdActorHarvestPart(first, account, farmer),
+                "replaying one cell cannot credit the same unit again");
+        assertThrows(IllegalArgumentException.class, () -> one.accrueColdActorHarvestPart(first.withQuantity(3), account, farmer),
+                "a missing cell receipt cannot jump the held amount");
+        assertThrows(IllegalArgumentException.class, () -> one.accrueColdActorHarvestPart(
+                new ResourceLot(first.id(), OWNER, first.itemKind(), 2, "field:forged-source", List.of()), account, farmer));
+        assertThrows(IllegalArgumentException.class, () -> one.accrueColdActorHarvestPart(second, account,
+                new SubjectId("resident:other-farmer")));
+        assertThrows(IllegalArgumentException.class, () -> one.accrueColdActorHarvestPart(
+                new ResourceLot(new SubjectId("lot:another-field-part"), OWNER, "minecraft:wheat", 1,
+                        "field:one:epoch-1:part-1", List.of()), new SubjectId("custody:second-harvest"), farmer),
+                "one farmer cannot open a second live cargo part before the first is handed off");
+    }
+
+    @Test
+    void hotActorHarvestRequiresTheSameObservedHandAndAuthorityEpochForEveryUnit() {
+        SubjectId farmer = new SubjectId("resident:hot-field-worker");
+        SubjectId account = new SubjectId("custody:hot-field-worker-harvest");
+        ResourceLot first = new ResourceLot(new SubjectId("lot:hot-field-part"), OWNER,
+                "minecraft:wheat", 1, "field:hot:epoch-1:part-0", List.of());
+        PhysicalStackAddress.ActorHand hand = new PhysicalStackAddress.ActorHand(farmer, uuid(7));
+        FungiblePhysicalObservation.Stack observedOne = new FungiblePhysicalObservation.Stack(hand, "minecraft:wheat", 1);
+        FungibleResourceLedger one = FungibleResourceLedger.empty().accrueObservedActorHarvestPart(
+                first, account, farmer, 4L, observedOne);
+        ResourceLot second = first.withQuantity(2);
+        FungiblePhysicalObservation.Stack observedTwo = new FungiblePhysicalObservation.Stack(hand, "minecraft:wheat", 2);
+        FungibleResourceLedger two = one.accrueObservedActorHarvestPart(second, account, farmer, 4L, observedTwo);
+        assertEquals(2, two.totalQuantity(OWNER, "minecraft:wheat"));
+        assertEquals(hand, two.bindings().values().iterator().next().address());
+        assertThrows(IllegalArgumentException.class, () -> one.accrueObservedActorHarvestPart(
+                first, account, farmer, 4L, observedOne), "one observed cell must not be credited twice");
+        assertThrows(IllegalArgumentException.class, () -> one.accrueObservedActorHarvestPart(
+                second, account, farmer, 5L, observedTwo), "a stale or invented authority epoch cannot add wheat");
+        assertThrows(IllegalArgumentException.class, () -> one.accrueObservedActorHarvestPart(
+                second, account, farmer, 4L, new FungiblePhysicalObservation.Stack(
+                        new PhysicalStackAddress.ActorHand(farmer, uuid(8)), "minecraft:wheat", 2)),
+                "a different body requires an explicit handoff, not a crop receipt");
+        assertThrows(IllegalArgumentException.class, () -> one.accrueObservedActorHarvestPart(
+                second, account, farmer, 4L, new FungiblePhysicalObservation.Stack(
+                        new PhysicalStackAddress.PlayerSlot(uuid(7), 0), "minecraft:wheat", 2)));
+    }
+
+    @Test
+    void physicalAddressMustBelongToTheExactCustodyOwner() {
+        FungibleResourceLedger depot = issue(10);
+        assertThrows(IllegalArgumentException.class, () -> depot.rebind(DEPOT_ACCOUNT, 1L, List.of(
+                binding("binding:foreign-depot", 1L, 10,
+                        new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(
+                                new SubjectId("container:other-depot"), 0))))));
+        assertThrows(IllegalArgumentException.class, () -> depot.rebind(DEPOT_ACCOUNT, 1L, List.of(
+                binding("binding:depot-as-player", 1L, 10, new PhysicalStackAddress.PlayerSlot(uuid(9), 0)))));
+
+        SubjectId playerId = new SubjectId("custody:player-owner");
+        CustodyAccount player = new CustodyAccount(playerId, new ResourceCustody.Player(uuid(4)),
+                Map.of(LOT, 10), Map.of());
+        FungibleResourceLedger held = depot.transferToNewAccount(DEPOT_ACCOUNT, player);
+        assertThrows(IllegalArgumentException.class, () -> held.rebind(playerId, 1L, List.of(
+                new PhysicalStackBinding(new SubjectId("binding:wrong-player"), playerId,
+                        new PhysicalStackAddress.PlayerSlot(uuid(5), 0), 1L, "minecraft:bread",
+                        Map.of(LOT, 10), Map.of()))));
+
+        SubjectId carrierAccountId = new SubjectId("custody:world-owner");
+        CustodyAccount carrier = new CustodyAccount(carrierAccountId, new ResourceCustody.WorldCarrier(uuid(7)),
+                Map.of(LOT, 10), Map.of());
+        FungibleResourceLedger worldHeld = depot.transferToNewAccount(DEPOT_ACCOUNT, carrier);
+        assertEquals(1, worldHeld.rebind(carrierAccountId, 1L, List.of(new PhysicalStackBinding(
+                new SubjectId("binding:world-owner"), carrierAccountId,
+                new PhysicalStackAddress.WorldEntity(uuid(7)), 1L, "minecraft:bread",
+                Map.of(LOT, 10), Map.of()))).bindings().size());
+        assertThrows(IllegalArgumentException.class, () -> worldHeld.rebind(carrierAccountId, 1L, List.of(
+                new PhysicalStackBinding(new SubjectId("binding:wrong-world-owner"), carrierAccountId,
+                        new PhysicalStackAddress.WorldEntity(uuid(8)), 1L, "minecraft:bread",
+                        Map.of(LOT, 10), Map.of()))));
+    }
+
+    @Test
     void splitPartialMoveAndMergePreserveOneExactFungibleTotalWithoutStackIdentity() {
         FungibleResourceLedger issued = issue(10);
         ResourceLot child = new ResourceLot(new SubjectId("lot:bread-child"), OWNER, "minecraft:bread", 4, "bootstrap", List.of(LOT));
@@ -42,7 +129,7 @@ class FungibleResourceLedgerTest {
     @Test
     void reservedPortionMovesExactlyAndCannotBeDoubleAllocatedOrOverConsumed() {
         FungibleResourceLedger reserved = issue(10).reserve(new ClaimAllocation(new SubjectId("claim:provision"), new SubjectId("process:provision"), OWNER,
-                "minecraft:bread", 4), DEPOT_ACCOUNT);
+                "minecraft:bread", 4, Map.of(), ClaimPurpose.EXTERNAL_RESERVATION), DEPOT_ACCOUNT);
         CustodyAccount player = new CustodyAccount(new SubjectId("custody:player"), new ResourceCustody.Player(uuid(3)), Map.of(LOT, 4),
                 Map.of(new SubjectId("claim:provision"), 4));
         FungibleResourceLedger stolen = reserved.transferToNewAccount(DEPOT_ACCOUNT, player);
@@ -50,7 +137,7 @@ class FungibleResourceLedgerTest {
         assertEquals(10, stolen.totalQuantity(OWNER, "minecraft:bread"));
         assertEquals(4, stolen.accounts().get(player.id()).claimQuantities().get(new SubjectId("claim:provision")));
         assertThrows(IllegalArgumentException.class, () -> reserved.reserve(new ClaimAllocation(new SubjectId("claim:duplicate"), new SubjectId("process:other"), OWNER,
-                "minecraft:bread", 8), DEPOT_ACCOUNT));
+                "minecraft:bread", 8, Map.of(), ClaimPurpose.EXTERNAL_RESERVATION), DEPOT_ACCOUNT));
         assertThrows(IllegalArgumentException.class, () -> stolen.destroy(player.id(), Map.of(LOT, 5), Map.of(new SubjectId("claim:provision"), 4)));
     }
 
@@ -58,7 +145,7 @@ class FungibleResourceLedgerTest {
     void partialColdRecipeConsumesOnlyItsReservedInputPortionBeforeItCreatesOutput() {
         SubjectId claimId = new SubjectId("claim:bakery");
         FungibleResourceLedger reserved = issue(10).reserve(new ClaimAllocation(claimId, new SubjectId("process:bakery"), OWNER,
-                "minecraft:bread", 4), DEPOT_ACCOUNT);
+                "minecraft:bread", 4, Map.of(), ClaimPurpose.EXTERNAL_RESERVATION), DEPOT_ACCOUNT);
         ResourceLot output = new ResourceLot(new SubjectId("lot:toast"), OWNER, "minecraft:toast", 4, "recipe:toast", List.of(LOT));
 
         FungibleResourceLedger transformed = reserved.transformCold(DEPOT_ACCOUNT, Map.of(LOT, 4), Map.of(claimId, 4), output);
@@ -70,6 +157,128 @@ class FungibleResourceLedgerTest {
         assertThrows(IllegalStateException.class, () -> issue(10).rebind(DEPOT_ACCOUNT, 3L, List.of(binding("binding:recipe", 3L, 10,
                 new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(DEPOT, 0))))).transformCold(DEPOT_ACCOUNT,
                 Map.of(LOT, 4), Map.of(), output));
+    }
+
+    @Test
+    void coldRecipeCanConsumeTwoDistinctProvenanceLotsUnderOneClaim() {
+        SubjectId first = new SubjectId("lot:wheat-field-one");
+        SubjectId second = new SubjectId("lot:wheat-field-two");
+        SubjectId claimId = new SubjectId("claim:bread-from-two-fields");
+        ResourceLot firstLot = new ResourceLot(first, OWNER, "minecraft:wheat", 32, "harvest:field-one", List.of());
+        ResourceLot secondLot = new ResourceLot(second, OWNER, "minecraft:wheat", 32, "harvest:field-two", List.of());
+        FungibleResourceLedger source = new FungibleResourceLedger(Map.of(first, firstLot, second, secondLot), Map.of(),
+                Map.of(DEPOT_ACCOUNT, new CustodyAccount(DEPOT_ACCOUNT, new ResourceCustody.Container(DEPOT),
+                        Map.of(first, 32, second, 32), Map.of())), Map.of());
+        ClaimAllocation claim = new ClaimAllocation(claimId, new SubjectId("job:two-field-bread"), OWNER, "minecraft:wheat", 64,
+                Map.of(), ClaimPurpose.EXTERNAL_RESERVATION);
+        FungibleResourceLedger reserved = source.reserve(claim, DEPOT_ACCOUNT);
+        ResourceLot output = new ResourceLot(new SubjectId("lot:two-field-bread"), OWNER, "minecraft:bread", 64,
+                "recipe:bread", List.of(first, second));
+
+        FungibleResourceLedger transformed = reserved.transformCold(DEPOT_ACCOUNT,
+                Map.of(first, 32, second, 32), Map.of(claimId, 64), output);
+
+        assertEquals(Map.of(output.id(), output), transformed.lots());
+        assertEquals(Map.of(output.id(), 64), transformed.accounts().get(DEPOT_ACCOUNT).lotQuantities());
+        assertEquals(Map.of(), transformed.claims());
+        assertEquals(List.of(first, second), transformed.lots().get(output.id()).lineage());
+        assertThrows(IllegalArgumentException.class, () -> reserved.transformCold(DEPOT_ACCOUNT,
+                Map.of(first, 32), Map.of(claimId, 64), output));
+    }
+
+    @Test
+    void pinnedRecipeClaimProtectsBothLotsFromAnotherConsumerAndBindsBothPhysicalStacks() {
+        SubjectId first = new SubjectId("lot:two-source-first");
+        SubjectId second = new SubjectId("lot:two-source-second");
+        SubjectId pinId = new SubjectId("claim:two-source-recipe");
+        Map<SubjectId, Integer> portions = Map.of(first, 32, second, 32);
+        FungibleResourceLedger source = new FungibleResourceLedger(Map.of(
+                first, new ResourceLot(first, OWNER, "minecraft:wheat", 32, "harvest:first", List.of()),
+                second, new ResourceLot(second, OWNER, "minecraft:wheat", 32, "harvest:second", List.of())), Map.of(),
+                Map.of(DEPOT_ACCOUNT, new CustodyAccount(DEPOT_ACCOUNT, new ResourceCustody.Container(DEPOT), portions, Map.of())), Map.of());
+        ClaimAllocation pin = new ClaimAllocation(pinId, new SubjectId("job:two-source-recipe"), OWNER, "minecraft:wheat", 64,
+                portions, ClaimPurpose.EXTERNAL_RESERVATION);
+        FungibleResourceLedger cold = source.reserve(pin, DEPOT_ACCOUNT);
+        assertEquals(portions, cold.claims().get(pinId).lotQuantities());
+        assertThrows(IllegalArgumentException.class, () -> cold.destroy(DEPOT_ACCOUNT, Map.of(first, 1), Map.of()));
+        assertThrows(IllegalArgumentException.class, () -> cold.destroy(DEPOT_ACCOUNT, Map.of(first, 1), Map.of(pinId, 1)));
+        assertThrows(IllegalArgumentException.class, () -> cold.reserve(new ClaimAllocation(new SubjectId("claim:other"),
+                new SubjectId("work:other"), OWNER, "minecraft:wheat", 1, Map.of(), ClaimPurpose.EXTERNAL_RESERVATION), DEPOT_ACCOUNT));
+
+        var stacks = List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                        new InventoryCustody.ContainerSlot(DEPOT, 0)), "minecraft:wheat", 32),
+                new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                        new InventoryCustody.ContainerSlot(DEPOT, 1)), "minecraft:wheat", 32));
+        FungibleResourceLedger bound = source.rebind(DEPOT_ACCOUNT, 7L, FungiblePhysicalObservation.bind(source, DEPOT_ACCOUNT, 7L, stacks))
+                .reserveBound(pin, DEPOT_ACCOUNT, 7L);
+        assertEquals(2, bound.bindings().values().stream().filter(binding -> binding.claimQuantities().containsKey(pinId)).count());
+        assertEquals(64, bound.bindings().values().stream().mapToInt(binding -> binding.claimQuantities().getOrDefault(pinId, 0)).sum());
+        assertEquals(cold, bound.releaseBindings(DEPOT_ACCOUNT, 7L));
+    }
+
+    @Test
+    void movingPinnedLotForfeitsItsClaimEvenWhenIndependentStackClaimColumnStayedBehind() {
+        SubjectId unclaimed = new SubjectId("lot:a-unclaimed-wheat");
+        SubjectId pinned = new SubjectId("lot:z-pinned-wheat");
+        SubjectId claimId = new SubjectId("claim:pinned-work");
+        var source = new FungibleResourceLedger(Map.of(
+                unclaimed, new ResourceLot(unclaimed, OWNER, "minecraft:wheat", 32, "harvest:unclaimed", List.of()),
+                pinned, new ResourceLot(pinned, OWNER, "minecraft:wheat", 32, "harvest:pinned", List.of())), Map.of(),
+                Map.of(DEPOT_ACCOUNT, new CustodyAccount(DEPOT_ACCOUNT, new ResourceCustody.Container(DEPOT),
+                        Map.of(unclaimed, 32, pinned, 32), Map.of())), Map.of());
+        var claim = new ClaimAllocation(claimId, new SubjectId("job:pinned-work"), OWNER, "minecraft:wheat", 32,
+                Map.of(pinned, 32), ClaimPurpose.EXTERNAL_RESERVATION);
+        var reserved = source.reserve(claim, DEPOT_ACCOUNT);
+        var binding = new PhysicalStackBinding(new SubjectId("binding:mixed-wheat"), DEPOT_ACCOUNT,
+                new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(DEPOT, 0)), 7L,
+                "minecraft:wheat", Map.of(unclaimed, 32, pinned, 32), Map.of(claimId, 32));
+        var hot = reserved.rebind(DEPOT_ACCOUNT, 7L, List.of(binding));
+        UUID player = UUID.fromString("00000000-0000-0000-0000-000000000081");
+        var observed = FungiblePhysicalHandoff.departToNew(hot, DEPOT_ACCOUNT, 7L, binding, 32,
+                new SubjectId("custody:player-pinned-wheat"), new ResourceCustody.Player(player), 1L,
+                new PhysicalStackAddress.PlayerSlot(player, 0));
+        assertEquals(Map.of(pinned, 32), observed.lotQuantities());
+        assertEquals(Map.of(), observed.claimQuantities(), "old independent claim split retained the column on the source stack");
+        var forfeited = observed.forfeitAffectedClaims(hot);
+        assertEquals(java.util.Set.of(claimId), forfeited.forfeitedClaimIds());
+        var effective = forfeited.withoutForfeitedClaims();
+        var released = hot.releaseClaims(forfeited.forfeitedClaimIds());
+        var transferred = released.transferObservedToNewAccount(effective.sourceAccountId(), effective.destinationAccount(),
+                effective.sourceEpoch(), effective.destinationEpoch(), effective.lotQuantities(), effective.claimQuantities(),
+                effective.remainingSource(), effective.destinationBindings());
+        assertEquals(32, transferred.accounts().get(effective.destinationAccount().id()).lotQuantities().get(pinned));
+        assertEquals(Map.of(), transferred.claims());
+    }
+
+    @Test
+    void observedLayoutAlignsPinnedClaimWithItsLotAndRepositionsOlderGenericClaim() {
+        SubjectId first = new SubjectId("lot:a-field-wheat");
+        SubjectId second = new SubjectId("lot:z-field-wheat");
+        SubjectId genericId = new SubjectId("claim:a-generic-work");
+        SubjectId pinnedId = new SubjectId("claim:z-pinned-work");
+        var source = new FungibleResourceLedger(Map.of(
+                first, new ResourceLot(first, OWNER, "minecraft:wheat", 32, "harvest:first", List.of()),
+                second, new ResourceLot(second, OWNER, "minecraft:wheat", 32, "harvest:second", List.of())), Map.of(),
+                Map.of(DEPOT_ACCOUNT, new CustodyAccount(DEPOT_ACCOUNT, new ResourceCustody.Container(DEPOT),
+                        Map.of(first, 32, second, 32), Map.of())), Map.of());
+        var stacks = List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                        new InventoryCustody.ContainerSlot(DEPOT, 0)), "minecraft:wheat", 32),
+                new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                        new InventoryCustody.ContainerSlot(DEPOT, 1)), "minecraft:wheat", 32));
+        var generic = new ClaimAllocation(genericId, new SubjectId("work:generic"), OWNER, "minecraft:wheat", 32,
+                Map.of(), ClaimPurpose.EXTERNAL_RESERVATION);
+        var pinned = new ClaimAllocation(pinnedId, new SubjectId("work:pinned"), OWNER, "minecraft:wheat", 32,
+                Map.of(first, 32), ClaimPurpose.EXTERNAL_RESERVATION);
+        var hot = source.rebind(DEPOT_ACCOUNT, 7L, FungiblePhysicalObservation.bind(source, DEPOT_ACCOUNT, 7L, stacks))
+                .reserveBound(generic, DEPOT_ACCOUNT, 7L).reserveBound(pinned, DEPOT_ACCOUNT, 7L);
+        var firstStack = hot.bindings().values().stream().filter(binding -> binding.lotQuantities().containsKey(first)).findFirst().orElseThrow();
+        var secondStack = hot.bindings().values().stream().filter(binding -> binding.lotQuantities().containsKey(second)).findFirst().orElseThrow();
+        assertEquals(Map.of(pinnedId, 32), firstStack.claimQuantities());
+        assertEquals(Map.of(genericId, 32), secondStack.claimQuantities());
+        var rebound = hot.releaseBindings(DEPOT_ACCOUNT, 7L);
+        var restored = rebound.rebind(DEPOT_ACCOUNT, 8L, FungiblePhysicalObservation.bind(rebound, DEPOT_ACCOUNT, 8L, stacks));
+        assertEquals(Map.of(pinnedId, 32), restored.bindings().values().stream()
+                .filter(binding -> binding.lotQuantities().containsKey(first)).findFirst().orElseThrow().claimQuantities());
     }
 
     @Test
@@ -98,7 +307,7 @@ class FungibleResourceLedgerTest {
                 binding("binding:one", 7L, 6, new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(DEPOT, 0))),
                 binding("binding:two", 7L, 4, new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(DEPOT, 1)))));
         ClaimAllocation claim = new ClaimAllocation(new SubjectId("claim:hot-production"), new SubjectId("job:production-hot"), OWNER,
-                "minecraft:bread", 7);
+                "minecraft:bread", 7, Map.of(), ClaimPurpose.EXTERNAL_RESERVATION);
 
         FungibleResourceLedger reserved = hot.reserveBound(claim, DEPOT_ACCOUNT, 7L);
 
@@ -109,7 +318,7 @@ class FungibleResourceLedgerTest {
         assertThrows(IllegalStateException.class, () -> reserved.destroy(DEPOT_ACCOUNT, Map.of(LOT, 1), Map.of()));
         assertThrows(IllegalArgumentException.class, () -> hot.reserveBound(claim, DEPOT_ACCOUNT, 6L));
         assertThrows(IllegalArgumentException.class, () -> hot.reserveBound(new ClaimAllocation(new SubjectId("claim:over-hot"),
-                new SubjectId("job:over-hot"), OWNER, "minecraft:bread", 11), DEPOT_ACCOUNT, 7L));
+                new SubjectId("job:over-hot"), OWNER, "minecraft:bread", 11, Map.of(), ClaimPurpose.EXTERNAL_RESERVATION), DEPOT_ACCOUNT, 7L));
     }
 
     @Test
@@ -129,7 +338,8 @@ class FungibleResourceLedgerTest {
                 new PhysicalStackBinding(new SubjectId("binding:c-own"), account.id(), new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(DEPOT, 2)),
                         7L, bread.itemKind(), Map.of(bread.id(), 10), Map.of(), ""));
         var hot = cold.rebind(account.id(), 7L, bindings);
-        var claim = new ClaimAllocation(new SubjectId("claim:own-bread"), new SubjectId("job:own-bread"), OWNER, bread.itemKind(), 7);
+        var claim = new ClaimAllocation(new SubjectId("claim:own-bread"), new SubjectId("job:own-bread"), OWNER, bread.itemKind(), 7,
+                Map.of(), ClaimPurpose.EXTERNAL_RESERVATION);
         var reserved = hot.reserveBound(claim, account.id(), 7L);
         assertEquals(Map.of(), reserved.bindings().get(bindings.get(0).id()).claimQuantities());
         assertEquals(Map.of(), reserved.bindings().get(bindings.get(1).id()).claimQuantities());
@@ -231,7 +441,7 @@ class FungibleResourceLedgerTest {
         SubjectId claimId = new SubjectId("claim:bread-shipment");
         ResourceLot child = new ResourceLot(new SubjectId("lot:bread-shipment"), OWNER, "minecraft:bread", 4, "bootstrap", List.of(LOT));
         FungibleResourceLedger loaded = issue(10).split(DEPOT_ACCOUNT, LOT, child, 4).reserve(new ClaimAllocation(claimId,
-                new SubjectId("contract:bread-shipment"), OWNER, "minecraft:bread", 4), DEPOT_ACCOUNT)
+                new SubjectId("contract:bread-shipment"), OWNER, "minecraft:bread", 4, Map.of(), ClaimPurpose.EXTERNAL_RESERVATION), DEPOT_ACCOUNT)
                 .transferToNewAccount(DEPOT_ACCOUNT, new CustodyAccount(cargoAccountId, new ResourceCustody.Cargo(cargoId), Map.of(child.id(), 4), Map.of(claimId, 4)));
         CustodyAccount destination = new CustodyAccount(new SubjectId("custody:hive-store"), new ResourceCustody.Container(receiver), Map.of(child.id(), 4), Map.of());
 
@@ -276,7 +486,8 @@ class FungibleResourceLedgerTest {
                 new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(containerId, 1)), 3L, "minecraft:bread",
                 Map.of(lotId, 10), Map.of(new SubjectId("claim:snapshot"), 4));
         FungibleResourceLedger resources = FungibleResourceLedger.empty().issue(lot, account)
-                .reserve(new ClaimAllocation(new SubjectId("claim:snapshot"), new SubjectId("process:snapshot"), owner, "minecraft:bread", 4), accountId)
+                .reserve(new ClaimAllocation(new SubjectId("claim:snapshot"), new SubjectId("process:snapshot"), owner, "minecraft:bread", 4,
+                        Map.of(), ClaimPurpose.EXTERNAL_RESERVATION), accountId)
                 .rebind(accountId, 3L, List.of(binding));
         FrontierWorldState retained = baseline.withInventory(baseline.inventory().withFungibleResources(resources));
 

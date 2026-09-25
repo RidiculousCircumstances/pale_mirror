@@ -34,7 +34,7 @@ public final class ResourceSitePhysicalIntentStateSupport {
         if (intent.kind() != PhysicalIntentKind.RESOURCE_SITE_PREPARATION) return;
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(intent.causeSubjectId());
         ResourceSitePreparationJob job = preparation(lifecycle, intent.id());
-        ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).get(lifecycle.siteId());
+        ResourceSite site = state.resourceSite(lifecycle.siteId());
         FixedPosition expectedOrigin = new FixedPosition(FixedScalar.whole(site.cropSlots().getFirst().x()), FixedScalar.whole(site.cropSlots().getFirst().y()), FixedScalar.whole(site.cropSlots().getFirst().z()));
         if (intent.status() != PhysicalIntentStatus.PREPARED || !intent.roles().equals(PhysicalIntentRoleBinding.sitePreparation(job.siteId(), job.id()))
                 || !intent.origin().equals(expectedOrigin) || intent.radiusBlocks() != 0 || intent.postcondition() != PhysicalPostcondition.RESOURCE_SITE_PREPARED_OBSERVED) {
@@ -49,9 +49,11 @@ public final class ResourceSitePhysicalIntentStateSupport {
                 || lifecycle.phase() == ResourceSitePhase.HARVESTING && (lifecycle.siteId().equals(subject)
                 || jobId(lifecycle.siteId()).equals(subject) || lifecycle.activeWork().map(ResourceSiteWork::id).filter(subject::equals).isPresent()
                 || lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
-                .map(ResourceSiteHarvestJob::outputItemId).filter(subject::equals).isPresent())
+                .map(job -> job.actorAccountId().equals(subject) || job.depotAccountId().equals(subject)
+                        || job.outputItemId().equals(subject)).orElse(false))
                 || lifecycle.harvestLineage().filter(ResourceSiteHarvestLineage::receiptPending).map(lineage ->
                 lifecycle.siteId().equals(subject) || lineage.predecessorJobId().equals(subject) || lineage.workerId().equals(subject)
+                        || lineage.actorAccountId().equals(subject) || lineage.depotAccountId().equals(subject)
                         || lineage.outputItemId().equals(subject)).orElse(false));
     }
 
@@ -78,50 +80,177 @@ public final class ResourceSitePhysicalIntentStateSupport {
         ResourceSitePreparationJob job = preparation(lifecycle, intent.id());
         validateReceipt(intent, receipt);
         if (!receipt.siteId().equals(job.siteId())) throw new IllegalArgumentException("resource-site preparation receipt has a foreign site");
+        ResourceSite site = state.resourceSite(job.siteId());
+        if (receipt.preparedSoilSlots() != site.soilSlots().size()
+                || receipt.preparedCropSlots() != site.cropSlots().size())
+            throw new IllegalArgumentException("resource-site preparation receipt has a partial or foreign field layout");
         nextIntents.put(intent.id(), intent.withStatus(PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(receipt.id())));
         Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(state.physicalObservations()); observations.put(receipt.id(), receipt);
-        return replace(state, state.resourceSites().replace(lifecycle.prepared()), nextIntents, observations);
+        return replace(state, state.resourceSites().replace(lifecycle.prepared(),
+                ResourceFieldCycle.seeded(job.siteId(), state.resourceSites().cycle(job.siteId()).layout(), 1L)), nextIntents, observations);
     }
 
     public static FrontierWorldState completeHarvest(FrontierWorldState state, PhysicalIntent intent, ResourceSiteHarvestObservation receipt,
                                               Map<PhysicalIntentId, PhysicalIntent> nextIntents) {
-        ResourceSiteLifecycle lifecycle = state.resourceSites().site(intent.causeSubjectId());
-        ResourceSiteHarvestLineage deferred = lifecycle.harvestLineage().filter(ResourceSiteHarvestLineage::receiptPending)
-                .filter(lineage -> lineage.predecessorIntentId().equals(intent.id())).orElse(null);
-        if (deferred != null) return completeDeferredHarvest(state, intent, receipt, nextIntents, lifecycle, deferred);
-        ResourceSiteHarvestJob job = harvest(lifecycle, intent.id());
-        if (!job.progress().complete()) throw new IllegalArgumentException("resource-site harvest receipt cannot precede every observed crop");
-        validateHarvestReceipt(state.bootstrap(), intent, receipt); if (!receipt.siteId().equals(job.siteId()) || !receipt.workerId().equals(job.workerId())) {
-            throw new IllegalArgumentException("resource-site harvest receipt has a foreign site or worker");
-        }
-        if (!receipt.output().id().equals(job.outputItemId()) || !receipt.output().custody().equals(job.outputSlot())) {
-            throw new IllegalArgumentException("resource-site harvest receipt has a foreign output slot");
-        }
-        nextIntents.put(intent.id(), intent.withStatus(PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(receipt.id())));
-        Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(state.physicalObservations()); observations.put(receipt.id(), receipt);
-        return replace(state, state.resourceSites().replace(lifecycle.harvested()), state.inventory().store(receipt.output()), nextIntents, observations);
+        // The current field reducer already credits each positive cell to its one fungible
+        // actor part. This old receipt would mint a second exact 64-stack (including after a
+        // zero/partial cycle), so it is no longer an admissible transition in fresh schema.
+        // A typed per-part hand/depot receipt must replace it before HOT completion is live.
+        throw new IllegalArgumentException("legacy exact-stack field harvest receipt is retired");
     }
 
-    private static FrontierWorldState completeDeferredHarvest(FrontierWorldState state, PhysicalIntent intent, ResourceSiteHarvestObservation receipt,
-                                                              Map<PhysicalIntentId, PhysicalIntent> nextIntents, ResourceSiteLifecycle lifecycle,
-                                                              ResourceSiteHarvestLineage lineage) {
-        if (!receipt.siteId().equals(lifecycle.siteId()) || !receipt.workerId().equals(lineage.workerId())
-                || !receipt.output().id().equals(lineage.outputItemId()) || !receipt.output().custody().equals(lineage.outputSlot())
-                || receipt.output().count() != 64 || !receipt.output().itemKind().equals("minecraft:wheat")) {
-            throw new IllegalArgumentException("deferred resource-site harvest receipt has a foreign exact binding");
+    /**
+     * One canonical publication of the observed handoff, job retirement, next field epoch and
+     * HOT scene drain. The active job's reserved chest slot is released only in this successor.
+     */
+    public static FrontierWorldState completeHarvest(FrontierWorldState state, PhysicalIntent intent,
+                                                     ResourceSiteHarvestDeliveryObservation receipt,
+                                                     Map<PhysicalIntentId, PhysicalIntent> nextIntents) {
+        ResourceSiteLifecycle lifecycle = state.resourceSites().site(intent.causeSubjectId());
+        ResourceSiteHarvestJob job = harvest(lifecycle, intent.id());
+        ResourceSite site = state.resourceSite(job.siteId());
+        ResourceFieldCycle cycle = state.resourceSites().cycle(job.siteId());
+        if (intent.status() != PhysicalIntentStatus.RUNNING
+                || !cycle.cycleAccounted() || !cycle.pendingPlayerBreaks().isEmpty()
+                || !receipt.intentId().equals(intent.id()) || !receipt.siteId().equals(job.siteId())
+                || !receipt.jobId().equals(job.id()) || !receipt.workerId().equals(job.workerId())
+                || !receipt.actorAccountId().equals(job.actorAccountId())
+                || !receipt.depotAccountId().equals(job.depotAccountId())) {
+            throw new IllegalArgumentException("field delivery does not close its exact accounted job and intent");
         }
-        ExactItemStack owned = state.inventory().items().get(lineage.outputItemId());
-        // A true late observation of the historical wheat effect is still evidence, but once
-        // an exact COLD successor owns that wheat it must not require resurrecting the consumed
-        // stack.  The reference-container owner reconciles the actual chest to that current
-        // successor result after this receipt.
-        if (!receipt.output().equals(owned) && !lineage.composedIntoCanonicalSuccessor(state)) {
-            throw new IllegalArgumentException("deferred resource-site harvest receipt does not match its already-owned exact output");
+        SceneLease lease = FrontierResourceSiteHarvestSceneSupport.requireHotLease(state, job, receipt.leaseId());
+        if (!lease.members().getFirst().entityId().equals(receipt.entityId())
+                || lease.revision() != receipt.actorEpoch()) {
+            throw new IllegalArgumentException("field delivery lacks its exact HOT farmer body and epoch");
         }
-        nextIntents.put(intent.id(), intent.withStatus(PhysicalIntentStatus.CONFIRMED, java.util.Optional.of(receipt.id())));
-        Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(state.physicalObservations()); observations.put(receipt.id(), receipt);
+        ActorLocation actor = state.actorLocations().get(job.workerId());
+        if (actor == null || !ResourceSiteHarvestGoal.actorAtDepot(state, job))
+            throw new IllegalArgumentException("field delivery lacks an observed legal depot service station");
+        ResourceFieldYield yield = ResourceFieldYield.fromCompletedCycle(job.siteId(), site.settlementId(), cycle);
+        int carried = job.carriedYieldQuantity(yield.quantity());
+        if (carried != receipt.harvestedQuantity()) {
+            throw new IllegalArgumentException("field delivery cannot skip a completed bounded yield part");
+        }
+        FungibleResourceLedger resources = state.inventory().fungibleResources();
+        if (carried == 0) {
+            if (resources.accounts().containsKey(job.actorAccountId()))
+                throw new IllegalArgumentException("zero-yield field delivery retains actor-held wheat");
+        } else {
+            resources = resources.deliverObservedActorHarvestStacks(cycle, site.settlementId(), job.deliveredYieldQuantity(),
+                    job.actorAccountId(), job.workerId(), receipt.entityId(), job.depotAccountId(),
+                    receipt.actorEpoch(), receipt.depotEpoch(), receipt.depotStacks());
+        }
+        Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(state.physicalObservations());
+        observations.put(receipt.id(), receipt);
+        Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> scenes = new LinkedHashMap<>(state.sceneLeases());
+        scenes.put(lease.id(), lease.withStatus(SceneLeaseStatus.DRAINING));
+        FrontierWorldState published = state.withChanges(FrontierWorldStateUpdate.begin()
+                .resourceSites(state.resourceSites().replace(lifecycle.harvestedAt(ResourceSiteHarvestGoal.current(state, job), actor.body()), cycle.nextEpoch()))
+                .inventory(state.inventory().withFungibleResources(resources))
+                .physicalIntents(nextIntents).physicalObservations(observations).sceneLeases(scenes));
+        if (carried == 0) return published;
+        SubjectId containerId = job.outputSlot().containerId();
+        if (!ReferenceContainerCustody.canonicalFingerprint(published, containerId).equals(receipt.depotFingerprint())) {
+            throw new IllegalArgumentException("field delivery observed a different complete depot postcondition");
+        }
+        return ReferenceContainerCustody.closeConfirmedMutation(published,
+                ReferenceContainerCustody.confirmedMutationTransition(published, containerId,
+                        receipt.emittedCanonicalRevision()));
+    }
+
+    /** Confirms the already-owned COLD depot image; it neither transfers nor issues wheat. */
+    public static FrontierWorldState completeDeferredHarvest(FrontierWorldState state, PhysicalIntent intent,
+                                                              ResourceSiteHarvestDeferredObservation receipt,
+                                                              Map<PhysicalIntentId, PhysicalIntent> nextIntents) {
+        ResourceSiteLifecycle lifecycle = state.resourceSites().site(receipt.siteId());
+        ResourceSiteHarvestLineage lineage = lifecycle.harvestLineage()
+                .filter(ResourceSiteHarvestLineage::receiptPending)
+                .filter(value -> value.predecessorIntentId().equals(intent.id()))
+                .orElseThrow(() -> new IllegalArgumentException("deferred harvest has no exact pending lineage"));
+        ResourceSite site = state.resourceSite(receipt.siteId());
+        if (intent.status() != PhysicalIntentStatus.RUNNING || site == null
+                || !intent.causeSubjectId().equals(receipt.siteId())
+                || intent.kind() != PhysicalIntentKind.RESOURCE_SITE_HARVEST
+                || intent.postcondition() != PhysicalPostcondition.RESOURCE_SITE_HARVESTED_OBSERVED
+                || !intent.id().equals(receipt.intentId())
+                || !intent.roles().equals(PhysicalIntentRoleBinding.siteHarvest(receipt.siteId(), receipt.jobId(),
+                        lineage.workerId(), lineage.actorAccountId(), lineage.depotAccountId()))
+                || !lineage.predecessorJobId().equals(receipt.jobId())
+                || lineage.completedGrowthEpoch() != receipt.completedGrowthEpoch()
+                || !lineage.outputSlot().containerId().equals(receipt.containerId())
+                || !receipt.containerId().equals(FrontierWorldState.depotId(site.settlementId()))
+                || lineage.causality().hotLeaseIds().isEmpty()
+                || state.sceneLeases().values().stream().anyMatch(lease -> lease.cause() instanceof ResourceSiteHarvestSceneCause cause
+                        && cause.siteId().equals(receipt.siteId()) && cause.jobId().equals(receipt.jobId())
+                        && lease.status() != SceneLeaseStatus.CLOSED)) {
+            throw new IllegalArgumentException("deferred harvest receipt lacks its completed HOT/COLD owner");
+        }
+        SubjectId depot = receipt.containerId();
+        PhysicalReplicaRecord replica = state.replicaCustody().replicas().get(depot);
+        PhysicalCustodyLease custody = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(depot));
+        if (replica == null || replica.state() != PhysicalReplicaState.OBSERVED_CURRENT
+                || !replica.semanticKind().equals(ReferenceContainerCustody.semanticKind(state, depot))
+                || replica.emittedCanonicalRevision() != receipt.emittedCanonicalRevision()
+                || replica.replicaRevision() != receipt.replicaRevision()
+                || !replica.fingerprint().equals(receipt.depotFingerprint())
+                || !replica.provenance().equals(receipt.depotProvenance())
+                || !receipt.depotFingerprint().equals(ReferenceContainerCustody.canonicalFingerprint(state, depot))
+                || !receipt.depotProvenance().equals(ReferenceContainerCustody.provenance(depot))
+                || custody == null || custody.status() != PhysicalCustodyLeaseStatus.ACQUIRED
+                || !custody.objectId().equals(depot) || !custody.providerId().equals(ReferenceContainerCustody.PROVIDER_ID)
+                || custody.authorityEpoch() != receipt.custodyEpoch()
+                || custody.expectedCanonicalRevision() != replica.emittedCanonicalRevision()
+                || custody.expectedReplicaRevision() != replica.replicaRevision()) {
+            throw new IllegalArgumentException("deferred harvest receipt lacks its current owned physical depot");
+        }
+        Map<PhysicalObservationId, PhysicalEffectObservation> observations = new LinkedHashMap<>(state.physicalObservations());
+        observations.put(receipt.id(), receipt);
         return replace(state, state.resourceSites().replace(lifecycle.confirmDeferredHarvestReceipt(intent.id(), receipt.id())),
-                state.inventory(), nextIntents, observations);
+                nextIntents, observations);
+    }
+
+    /** Confirms one full physical handoff while retaining the same farmer, job and RUNNING intent. */
+    public static FrontierWorldState deliverHarvestBatch(FrontierWorldState state,
+                                                        ResourceSiteHarvestBatchDelivered delivered) {
+        ResourceSiteHarvestDeliveryObservation receipt = delivered.receipt();
+        ResourceSiteLifecycle lifecycle = state.resourceSites().site(receipt.siteId());
+        ResourceSiteHarvestJob job = harvest(lifecycle, receipt.intentId());
+        ResourceSite site = state.resourceSite(job.siteId());
+        ResourceFieldCycle cycle = state.resourceSites().cycle(job.siteId());
+        PhysicalIntent intent = state.physicalIntents().get(job.intentId());
+        if (intent == null || intent.status() != PhysicalIntentStatus.RUNNING
+                || !job.returningForBatch() || job.progress().complete()
+                || job.deliveredYieldQuantity() != delivered.deliveredYieldBefore()
+                || cycle.accountedPrefixCount() != job.progress().completedCropSlots()
+                || !cycle.pendingPlayerBreaks().isEmpty() || job.carriedYieldQuantity(cycle.harvestedCount()) != 64
+                || !receipt.jobId().equals(job.id()) || !receipt.workerId().equals(job.workerId())
+                || !receipt.actorAccountId().equals(job.actorAccountId())
+                || !receipt.depotAccountId().equals(job.depotAccountId())
+                || receipt.harvestedQuantity() != 64 || job.batchSuccessorSlot().isEmpty()
+                || state.physicalObservations().containsKey(receipt.id()))
+            throw new IllegalArgumentException("field batch delivery lacks its exact pending full hand and intent");
+        validateHarvestDeliveryReceipt(state.bootstrap(), intent, receipt);
+        SceneLease lease = FrontierResourceSiteHarvestSceneSupport.requireHotLease(state, job, receipt.leaseId());
+        if (!lease.members().getFirst().entityId().equals(receipt.entityId())
+                || lease.revision() != receipt.actorEpoch())
+            throw new IllegalArgumentException("field batch delivery lacks its exact HOT farmer body and epoch");
+        ActorLocation actor = state.actorLocations().get(job.workerId());
+        if (actor == null || !ResourceSiteHarvestGoal.actorAtDepot(state, job))
+            throw new IllegalArgumentException("field batch delivery lacks its retained depot station");
+        InventoryCustody.ContainerSlot nextSlot = job.batchSuccessorSlot().orElseThrow();
+        FungibleResourceLedger resources = state.inventory().fungibleResources().deliverObservedActorHarvestStacks(
+                cycle, site.settlementId(), job.deliveredYieldQuantity(), job.actorAccountId(), job.workerId(),
+                receipt.entityId(), job.depotAccountId(), receipt.actorEpoch(), receipt.depotEpoch(), receipt.depotStacks());
+        FrontierWorldState published = state.withChanges(FrontierWorldStateUpdate.begin()
+                .resourceSites(state.resourceSites().replace(lifecycle.deliverFullHarvestBatch(job, nextSlot,
+                        cycle.harvestedCount(), java.util.Optional.of(delivered))))
+                .inventory(state.inventory().withFungibleResources(resources)));
+        if (!ReferenceContainerCustody.canonicalFingerprint(published, job.outputSlot().containerId())
+                .equals(receipt.depotFingerprint()))
+            throw new IllegalArgumentException("field batch delivery observed a different complete depot postcondition");
+        return ReferenceContainerCustody.closeConfirmedMutation(published,
+                ReferenceContainerCustody.confirmedMutationTransition(published, job.outputSlot().containerId(),
+                        receipt.emittedCanonicalRevision()));
     }
 
     public static FrontierWorldState conflict(FrontierWorldState state, PhysicalIntent intent, Map<PhysicalIntentId, PhysicalIntent> nextIntents) {
@@ -142,7 +271,7 @@ public final class ResourceSitePhysicalIntentStateSupport {
             }
             harvest(lifecycle, intent.id());
         } else throw new IllegalArgumentException("resource-site conflict has a foreign physical intent");
-        ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).get(lifecycle.siteId());
+        ResourceSite site = state.resourceSite(lifecycle.siteId());
         ResourceSiteConflictObserved conflict = new ResourceSiteConflictObserved(lifecycle.siteId(), site.cropSlots().getFirst(),
                 ResourceSiteDiagnosticProducer.PHYSICAL_INTENT_RECOVERY);
         return replace(state, state.resourceSites().replace(lifecycle.conflicted(ResourceSiteConflictDisposition.recovery(site.cropSlots().getFirst(),
@@ -201,12 +330,56 @@ public final class ResourceSitePhysicalIntentStateSupport {
         }
     }
 
+    static void validateHarvestDeliveryReceipt(FrontierBootstrap bootstrap, PhysicalIntent intent,
+                                               ResourceSiteHarvestDeliveryObservation receipt) {
+        ResourceSite site = FrontierResourceSitePlan.compile(bootstrap).get(receipt.siteId());
+        if (site == null || intent.kind() != PhysicalIntentKind.RESOURCE_SITE_HARVEST
+                || intent.postcondition() != PhysicalPostcondition.RESOURCE_SITE_HARVESTED_OBSERVED
+                || !intent.id().equals(receipt.intentId()) || !intent.causeSubjectId().equals(receipt.siteId())
+                || !intent.roles().equals(PhysicalIntentRoleBinding.siteHarvest(receipt.siteId(), receipt.jobId(),
+                        receipt.workerId(), receipt.actorAccountId(), receipt.depotAccountId()))
+                || !receipt.depotAccountId().equals(ReferenceContainerCustody.scopeId(
+                        FrontierWorldState.depotId(site.settlementId())))
+                || receipt.depotStacks().stream().anyMatch(stack -> !(stack.address()
+                        instanceof PhysicalStackAddress.ContainerSlot slot)
+                        || !slot.slot().containerId().equals(FrontierWorldState.depotId(site.settlementId())))) {
+            throw new IllegalArgumentException("field delivery receipt has a foreign intent, account or depot surface");
+        }
+    }
+
+    static void validateDeferredHarvestReceipt(FrontierBootstrap bootstrap, PhysicalIntent intent,
+                                               ResourceSiteHarvestDeferredObservation receipt) {
+        ResourceSite site = FrontierResourceSitePlan.compile(bootstrap).get(receipt.siteId());
+        if (site == null || intent.kind() != PhysicalIntentKind.RESOURCE_SITE_HARVEST
+                || intent.postcondition() != PhysicalPostcondition.RESOURCE_SITE_HARVESTED_OBSERVED
+                || !intent.id().equals(receipt.intentId()) || !intent.causeSubjectId().equals(receipt.siteId())
+                || !intent.roles().require(PhysicalIntentSubjectRole.RESOURCE_SITE_JOB).equals(receipt.jobId())
+                || !receipt.containerId().equals(FrontierWorldState.depotId(site.settlementId()))
+                || !intent.roles().require(PhysicalIntentSubjectRole.RESOURCE_DESTINATION_ACCOUNT)
+                .equals(ReferenceContainerCustody.scopeId(receipt.containerId()))
+                || !receipt.depotProvenance().equals(ReferenceContainerCustody.provenance(receipt.containerId()))) {
+            throw new IllegalArgumentException("retained deferred harvest receipt has a foreign intent or depot");
+        }
+    }
+
     private static void validateHarvestState(ResourceSiteState sites, Map<PhysicalIntentId, PhysicalIntent> intents,
                                              Map<PhysicalObservationId, PhysicalEffectObservation> observations, ResourceSiteLifecycle lifecycle) {
         ResourceSiteHarvestJob job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
                 .orElseThrow(() -> new IllegalArgumentException("harvesting resource site has no harvest job"));
-        PhysicalIntent intent = intents.get(job.intentId()); if (intent == null) return;
+        PhysicalIntent intent = intents.get(job.intentId());
+        if (intent == null) {
+            if (job.lastConfirmedBatch().isPresent())
+                throw new IllegalArgumentException("confirmed intermediate field batch lost its owning intent");
+            return;
+        }
         validateHarvestBinding(lifecycle, intent);
+        if (job.lastConfirmedBatch().isPresent()) {
+            ResourceSiteHarvestDeliveryObservation batch = job.lastConfirmedBatch().orElseThrow().receipt();
+            if (intent.status() != PhysicalIntentStatus.RUNNING
+                    && intent.status() != PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
+                    || observations.containsKey(batch.id()))
+                throw new IllegalArgumentException("intermediate field receipt must remain under its running job, not a terminal observation");
+        }
         if (intent.status() == PhysicalIntentStatus.CONFIRMED) {
             PhysicalEffectObservation observation = observations.get(intent.postconditionObservationId().orElseThrow());
             if (!(observation instanceof ResourceSiteHarvestObservation)) throw new IllegalArgumentException("harvest intent has a foreign receipt");
@@ -227,14 +400,16 @@ public final class ResourceSitePhysicalIntentStateSupport {
 
     private static boolean matchesDeferredHarvestBinding(ResourceSiteLifecycle lifecycle, PhysicalIntent intent, ResourceSiteHarvestLineage lineage) {
         return intent.kind() == PhysicalIntentKind.RESOURCE_SITE_HARVEST && intent.causeSubjectId().equals(lifecycle.siteId())
-                && intent.roles().equals(PhysicalIntentRoleBinding.siteHarvest(lifecycle.siteId(), lineage.predecessorJobId(), lineage.workerId(), lineage.outputItemId()))
+                && intent.roles().equals(PhysicalIntentRoleBinding.siteHarvest(lifecycle.siteId(), lineage.predecessorJobId(), lineage.workerId(),
+                lineage.actorAccountId(), lineage.depotAccountId()))
                 && intent.postcondition() == PhysicalPostcondition.RESOURCE_SITE_HARVESTED_OBSERVED;
     }
 
     private static void validateHarvestBinding(ResourceSiteLifecycle lifecycle, PhysicalIntent intent) {
         ResourceSiteHarvestJob job = harvest(lifecycle, intent.id());
         if (intent.kind() != PhysicalIntentKind.RESOURCE_SITE_HARVEST || !intent.causeSubjectId().equals(lifecycle.siteId())
-                || !intent.roles().equals(PhysicalIntentRoleBinding.siteHarvest(job.siteId(), job.id(), job.workerId(), job.outputItemId()))
+                || !intent.roles().equals(PhysicalIntentRoleBinding.siteHarvest(job.siteId(), job.id(), job.workerId(),
+                job.actorAccountId(), job.depotAccountId()))
                 || intent.postcondition() != PhysicalPostcondition.RESOURCE_SITE_HARVESTED_OBSERVED) {
             throw new IllegalArgumentException("resource-site harvest intent does not bind its active job");
         }

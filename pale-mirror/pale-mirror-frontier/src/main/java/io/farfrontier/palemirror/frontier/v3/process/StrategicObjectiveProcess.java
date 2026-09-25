@@ -135,7 +135,7 @@ public final class StrategicObjectiveProcess {
 
     /** A ready exact field asks its settlement planner for work without bypassing durable task ownership. */
     public static ScheduledAction resourceHarvestOpportunity(FrontierWorldState state, ResourceSiteLifecycle lifecycle, long dueAt) {
-        ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).get(lifecycle.siteId());
+        ResourceSite site = state.resourceSite(lifecycle.siteId());
         if (site == null || lifecycle.phase() != ResourceSitePhase.READY) throw new IllegalArgumentException("resource harvest opportunity requires a ready known field");
         String suffix = lifecycle.siteId().value().substring("site:".length());
         return new ScheduledAction(new ScheduleId("schedule:objective-resource-harvest-" + suffix + "-" + lifecycle.growthEpoch() + "-" + dueAt),
@@ -145,7 +145,7 @@ public final class StrategicObjectiveProcess {
     public static List<ProposedEvent> planResourceHarvestOpportunity(FrontierWorldState state, ScheduledAction action) {
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(action.subject());
         if (lifecycle.phase() != ResourceSitePhase.READY || !action.id().equals(resourceHarvestOpportunity(state, lifecycle, action.dueAt().ticks()).id())) return List.of();
-        ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).get(lifecycle.siteId());
+        ResourceSite site = state.resourceSite(lifecycle.siteId());
         SubjectId owner = site.settlementId();
         if (state.strategicPlans().hasActiveObjective(owner, StrategicObjectiveLane.FACILITY)) {
             return List.of(new ProposedEvent(lifecycle.siteId(), new ScheduleEffect.Created(resourceHarvestOpportunity(state, lifecycle,
@@ -327,7 +327,7 @@ public final class StrategicObjectiveProcess {
         boolean wheat = state.inventory().items().values().stream().anyMatch(item -> item.itemKind().equals("minecraft:wheat")
                 && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot)
                 && !ResourceSiteHarvestLineage.hasPendingOutputReceipt(state.resourceSites().sites().values(), item.id()))
-                || FungibleResourceCustodySupport.firstAtContainer(state, depot, "minecraft:wheat", 64).isPresent();
+                || FungibleResourceCustodySupport.selectAtContainer(state, depot, settlement.id(), "minecraft:wheat", 64).isPresent();
         boolean constructionActive = state.routeConstructions().values().stream().anyMatch(project -> project.settlementId().equals(settlement.id()));
         boolean alreadyConfirmed = state.strategicPlans().routePatrols().values().stream().anyMatch(patrol -> patrol.settlementId().equals(settlement.id())
                 && patrol.status() == RoutePatrolStatus.OBSTRUCTION_CONFIRMED && patrol.obstruction().stream().anyMatch(state.physicalDeltas()::containsKey));

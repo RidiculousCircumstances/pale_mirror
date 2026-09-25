@@ -105,6 +105,15 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
                 Objects.requireNonNull(recovered, "recovered image"), null, identity);
     }
 
+    /** Host composition supplies its physical-admission write-ahead participant explicitly. */
+    static <S, P extends FrontierProjection> FrontierV3ServerRuntime<S, P> startRecovered(
+            FrontierEngineConfiguration<S, P> configuration, FrontierStore store, RecoveryImage recovered,
+            int checkpointIntervalTicks, DiagnosticRuntimeIdentity identity, TransactionCommitter committer
+    ) {
+        return new FrontierV3ServerRuntime<>(configuration, store, committer, checkpointIntervalTicks,
+                Objects.requireNonNull(recovered, "recovered image"), null, identity);
+    }
+
     /** Preserves visible fail-closed lifecycle state when recovery selection itself is invalid. */
     static <S, P extends FrontierProjection> FrontierV3ServerRuntime<S, P> failedStart(
             FrontierEngineConfiguration<S, P> configuration, FrontierStore store, int checkpointIntervalTicks, RuntimeException failure
@@ -149,6 +158,17 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
      */
     Optional<S> decodedState() {
         return canonicalState().map(FrontierCanonicalState::state);
+    }
+
+    /**
+     * Read-only retained ownership for the native crop-growth veto/post-veto, including quarantine.
+     * Quarantine suspends execution; it does not surrender already-owned physical cells
+     * to a second simulation. The paired post-veto may undo a forced native growth event;
+     * never use this view to resume commands or advance canonical projection writes.
+     * Failed startup without a recovered engine supplies no invented ownership.
+     */
+    Optional<S> stateForNativeGrowthFence() {
+        return engine == null ? Optional.empty() : Optional.of(engine.canonicalState().state());
     }
 
     Optional<CommandResult> submit(FrontierCommand command) {

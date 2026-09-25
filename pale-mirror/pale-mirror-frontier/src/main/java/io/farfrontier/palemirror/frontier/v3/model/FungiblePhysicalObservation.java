@@ -39,31 +39,80 @@ public final class FungiblePhysicalObservation {
         Map<String, List<LotPart>> lotsByKind = parts(ledger, account.lotQuantities()).stream()
                 .collect(java.util.stream.Collectors.groupingBy(LotPart::itemKind));
         if (!observedByKind.keySet().equals(lotsByKind.keySet())) throw new IllegalArgumentException("physical observation has an unknown or missing resource kind");
-        Map<String, List<ClaimPart>> claimsByKind = claimParts(ledger, account.claimQuantities()).stream()
-                .collect(java.util.stream.Collectors.groupingBy(ClaimPart::itemKind));
         List<PhysicalStackBinding> bindings = new ArrayList<>(); int ordinal = 0;
         for (String kind : observedByKind.keySet().stream().sorted().toList()) {
-            List<Stack> stacks = observedByKind.get(kind); List<LotPart> lots = lotsByKind.get(kind); List<ClaimPart> claims = claimsByKind.getOrDefault(kind, List.of());
+            List<Stack> stacks = observedByKind.get(kind); List<LotPart> lots = lotsByKind.get(kind);
             int expected = lots.stream().mapToInt(LotPart::quantity).sum();
             if (stacks.stream().mapToInt(Stack::quantity).sum() != expected) throw new IllegalArgumentException("physical observation does not retain exact account quantity");
-            int lotCursor = 0, claimCursor = 0, remainingLot = lots.getFirst().quantity(), remainingClaim = claims.isEmpty() ? 0 : claims.getFirst().quantity();
+            int lotCursor = 0, remainingLot = lots.getFirst().quantity();
             for (Stack stack : stacks) {
-                Map<SubjectId, Integer> lotQuantities = new HashMap<>(); Map<SubjectId, Integer> claimQuantities = new HashMap<>(); int remaining = stack.quantity();
+                Map<SubjectId, Integer> lotQuantities = new HashMap<>(); int remaining = stack.quantity();
                 while (remaining > 0) {
                     LotPart part = lots.get(lotCursor); int used = Math.min(remaining, remainingLot); lotQuantities.merge(part.id(), used, Integer::sum);
                     remaining -= used; remainingLot -= used; if (remainingLot == 0 && ++lotCursor < lots.size()) remainingLot = lots.get(lotCursor).quantity();
                 }
-                int claimRemaining = stack.quantity();
-                while (claimRemaining > 0 && claimCursor < claims.size()) {
-                    ClaimPart part = claims.get(claimCursor); int used = Math.min(claimRemaining, remainingClaim); claimQuantities.merge(part.id(), used, Integer::sum);
-                    claimRemaining -= used; remainingClaim -= used; if (remainingClaim == 0 && ++claimCursor < claims.size()) remainingClaim = claims.get(claimCursor).quantity();
-                }
                 SubjectId bindingId = new SubjectId("binding:" + accountId.value().replace(':', '-') + "-e" + authorityEpoch + "-s" + ordinal++);
-                bindings.add(new PhysicalStackBinding(bindingId, accountId, stack.address(), authorityEpoch, kind, lotQuantities, claimQuantities));
+                bindings.add(new PhysicalStackBinding(bindingId, accountId, stack.address(), authorityEpoch, kind, lotQuantities, Map.of()));
             }
-            if (lotCursor != lots.size() || claimCursor != claims.size()) throw new IllegalArgumentException("physical observation omitted exact resource evidence");
+            if (lotCursor != lots.size()) throw new IllegalArgumentException("physical observation omitted exact resource evidence");
         }
-        return List.copyOf(bindings);
+        return allocateClaims(ledger, accountId, bindings);
+    }
+
+    /** Rebuilds intangible claim columns against the exact retained lot layout, preserving stack IDs and addresses. */
+    static List<PhysicalStackBinding> allocateClaims(FungibleResourceLedger ledger, SubjectId accountId,
+                                                     List<PhysicalStackBinding> layout) {
+        CustodyAccount account = ledger.accounts().get(accountId);
+        if (account == null || layout.isEmpty()) throw new IllegalArgumentException("claim layout has no current account or stacks");
+        List<PhysicalStackBinding> ordered = layout.stream().sorted(Comparator.comparing(PhysicalStackBinding::id)).toList();
+        List<Map<SubjectId, Integer>> allocated = new ArrayList<>();
+        List<Map<SubjectId, Integer>> occupiedLots = new ArrayList<>();
+        for (var ignored : ordered) { allocated.add(new HashMap<>()); occupiedLots.add(new HashMap<>()); }
+        for (var claimId : account.claimQuantities().keySet().stream().sorted().toList()) {
+            ClaimAllocation claim = ledger.claims().get(claimId);
+            if (claim == null || claim.lotQuantities().isEmpty()) continue;
+            for (var portion : claim.lotQuantities().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
+                int remaining = portion.getValue();
+                for (int i = 0; i < ordered.size() && remaining > 0; i++) {
+                    PhysicalStackBinding binding = ordered.get(i);
+                    int available = binding.lotQuantities().getOrDefault(portion.getKey(), 0)
+                            - occupiedLots.get(i).getOrDefault(portion.getKey(), 0);
+                    int take = Math.min(remaining, available);
+                    if (take > 0) {
+                        occupiedLots.get(i).merge(portion.getKey(), take, Integer::sum);
+                        allocated.get(i).merge(claimId, take, Integer::sum);
+                        remaining -= take;
+                    }
+                }
+                if (remaining != 0) throw new IllegalArgumentException("pinned claim has no matching physical lot portion");
+            }
+        }
+        for (var claimId : account.claimQuantities().keySet().stream().sorted().toList()) {
+            ClaimAllocation claim = ledger.claims().get(claimId);
+            if (!claim.lotQuantities().isEmpty()) continue;
+            int remaining = account.claimQuantities().get(claimId);
+            for (int i = 0; i < ordered.size() && remaining > 0; i++) {
+                PhysicalStackBinding binding = ordered.get(i);
+                int stock = binding.lotQuantities().entrySet().stream().filter(entry -> {
+                    ResourceLot lot = ledger.lots().get(entry.getKey());
+                    return lot.economicOwnerId().equals(claim.economicOwnerId()) && lot.itemKind().equals(claim.itemKind());
+                }).mapToInt(Map.Entry::getValue).sum();
+                int occupied = allocated.get(i).entrySet().stream().filter(entry -> {
+                    ClaimAllocation other = ledger.claims().get(entry.getKey());
+                    return other.economicOwnerId().equals(claim.economicOwnerId()) && other.itemKind().equals(claim.itemKind());
+                }).mapToInt(Map.Entry::getValue).sum();
+                int take = Math.min(remaining, stock - occupied);
+                if (take > 0) { allocated.get(i).merge(claimId, take, Integer::sum); remaining -= take; }
+            }
+            if (remaining != 0) throw new IllegalArgumentException("generic claim has no compatible physical stock");
+        }
+        List<PhysicalStackBinding> result = new ArrayList<>();
+        for (int i = 0; i < ordered.size(); i++) {
+            PhysicalStackBinding binding = ordered.get(i);
+            result.add(new PhysicalStackBinding(binding.id(), binding.accountId(), binding.address(), binding.authorityEpoch(),
+                    binding.itemKind(), binding.lotQuantities(), allocated.get(i), binding.playerSaveFence()));
+        }
+        return List.copyOf(result);
     }
 
     private static List<LotPart> parts(FungibleResourceLedger ledger, Map<SubjectId, Integer> quantities) {
@@ -73,13 +122,5 @@ public final class FungiblePhysicalObservation {
             return new LotPart(lot.id(), lot.itemKind(), entry.getValue());
         }).toList();
     }
-    private static List<ClaimPart> claimParts(FungibleResourceLedger ledger, Map<SubjectId, Integer> quantities) {
-        return quantities.entrySet().stream().sorted(Map.Entry.comparingByKey()).map(entry -> {
-            ClaimAllocation claim = ledger.claims().get(entry.getKey());
-            if (claim == null) throw new IllegalArgumentException("resource account has an unknown claim");
-            return new ClaimPart(claim.id(), claim.itemKind(), entry.getValue());
-        }).toList();
-    }
     private record LotPart(SubjectId id, String itemKind, int quantity) { }
-    private record ClaimPart(SubjectId id, String itemKind, int quantity) { }
 }

@@ -1,0 +1,118 @@
+package io.farfrontier.palemirror.internal.frontier.v3;
+
+import io.farfrontier.palemirror.PaleMirrorMod;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.ChunkPos;
+
+import java.util.Optional;
+import java.util.WeakHashMap;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+
+/** A saved departure cannot be reused after vanilla begins reloading its body. */
+final class FrontierV3DepartureReturnReadFence {
+    /** Pending vanilla entity reads, including the interval before their durable return fence. */
+    private static final ReadReservations<ServerLevel> PENDING_READS = new ReadReservations<>();
+    private FrontierV3DepartureReturnReadFence() { }
+
+    static CompletableFuture<Optional<CompoundTag>> observeRead(ServerLevel level, ChunkPos chunk,
+                                                                 CompletableFuture<Optional<CompoundTag>> source) {
+        if (!FrontierV3PhysicalWorld.isPhysical(level)) return source;
+        PENDING_READS.reserve(level, chunk);
+        var result = new CompletableFuture<Optional<CompoundTag>>();
+        source.whenComplete((raw, failure) -> level.getServer().execute(() -> {
+            // EntityStorage deserializes only after this dependent future completes.
+            try {
+                if (failure != null) {
+                    result.completeExceptionally(failure);
+                    return;
+                }
+                try {
+                    fenceBeforeVanillaLoad(level, chunk, raw.orElse(null));
+                    result.complete(raw);
+                } catch (RuntimeException publicationFailure) {
+                    PaleMirrorMod.LOGGER.error("Entity return-read fence could not be published chunk={}; vanilla load held", chunk, publicationFailure);
+                    result.completeExceptionally(publicationFailure);
+                }
+            } finally {
+                PENDING_READS.release(level, chunk);
+            }
+        }));
+        return result;
+    }
+
+    static boolean readPending(ServerLevel level, ChunkPos chunk) {
+        return PENDING_READS.pending(level, chunk);
+    }
+
+    static boolean anyReadPending(ServerLevel level) {
+        return PENDING_READS.anyPending(level);
+    }
+
+    static final class ReadReservations<K> {
+        private final Map<K, Map<Long, Integer>> counts = new WeakHashMap<>();
+
+        synchronized boolean pending(K owner, ChunkPos chunk) {
+            return counts.getOrDefault(owner, Map.of()).getOrDefault(chunk.toLong(), 0) > 0;
+        }
+
+        synchronized boolean anyPending(K owner) {
+            return !counts.getOrDefault(owner, Map.of()).isEmpty();
+        }
+
+        synchronized void reserve(K owner, ChunkPos chunk) {
+            counts.computeIfAbsent(owner, ignored -> new HashMap<>()).merge(chunk.toLong(), 1, Integer::sum);
+        }
+
+        synchronized void release(K owner, ChunkPos chunk) {
+            var chunks = counts.get(owner);
+            if (chunks == null) throw new IllegalStateException("entity read reservation is missing");
+            chunks.compute(chunk.toLong(), (ignored, count) -> {
+                if (count == null || count < 1) throw new IllegalStateException("entity read count is invalid");
+                return count == 1 ? null : count - 1;
+            });
+            if (chunks.isEmpty()) counts.remove(owner);
+        }
+    }
+
+    static void fenceBeforeVanillaLoad(ServerLevel level, ChunkPos chunk, CompoundTag raw) {
+        var world = FrontierV3PhysicalWorld.WORLD_ID;
+        var actors = FrontierV3AmbientCarrierLedger.get(level, world);
+        var cargo = FrontierV3CargoDepartureLedger.get(level, world);
+        boolean[] changed = fenceStoredInventory(chunk, raw, actors, cargo);
+        // A failed publication fails the dependent vanilla read: otherwise an
+        // unjournaled returned body could move while an old saved departure
+        // still looks eligible to a later no-load recovery after a crash.
+        if (changed[0]) actors.persist(level, world);
+        if (changed[1]) cargo.persist(level, world);
+    }
+
+    static boolean[] fenceStoredInventory(ChunkPos chunk, CompoundTag raw,
+                                          FrontierV3AmbientCarrierLedger actors,
+                                          FrontierV3CargoDepartureLedger cargo) {
+        var actorReceipts = actors.departures().stream().filter(receipt ->
+                inChunk(receipt.observed().body().x(), receipt.observed().body().z(), chunk)).toList();
+        var cargoReceipts = cargo.observations().stream().filter(receipt ->
+                inChunk(receipt.body().x(), receipt.body().z(), chunk)).toList();
+        if (actorReceipts.isEmpty() && cargoReceipts.isEmpty()) return new boolean[] {false, false};
+        if (!FrontierV3CargoCleanupPersistence.matchesStoredChunk(raw, chunk))
+            throw new IllegalStateException("misplaced stored entity chunk during return fencing");
+        var entities = FrontierV3CargoCleanupPersistence.serializedEntities(raw)
+                .orElseThrow(() -> new IllegalStateException("invalid stored entity inventory during return fencing"));
+        boolean actorReturn = false, cargoReturn = false;
+        for (var receipt : actorReceipts) {
+            if (entities.containsKey(receipt.carrier().identity().entityId()))
+                actorReturn |= actors.markReturnRead(receipt);
+        }
+        for (var receipt : cargoReceipts) {
+            if (entities.containsKey(receipt.entityId())) cargoReturn |= cargo.markReturnRead(receipt.entityId());
+        }
+        return new boolean[] {actorReturn, cargoReturn};
+    }
+
+    private static boolean inChunk(int x, int z, ChunkPos chunk) {
+        return Math.floorDiv(x, 16) == chunk.x && Math.floorDiv(z, 16) == chunk.z;
+    }
+}

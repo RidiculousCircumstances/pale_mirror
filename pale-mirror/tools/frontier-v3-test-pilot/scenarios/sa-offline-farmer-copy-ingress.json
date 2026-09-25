@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "id": "sa_offline_farmer_copy_ingress",
+  "server": { "host": "127.0.0.1", "port": 25585 },
+  "pilot": { "username": "FrontierPilot" },
+  "setup": [
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "site", "id": "site:7-wheat-field", "expect": { "status": "ok" } },
+      { "view": "actor", "id": "resident:7-13", "expect": { "status": "ok", "life": "ALIVE" } },
+      { "view": "settlement_population", "id": "settlement:7", "expect": { "status": "ok" } }
+    ] }
+  ],
+  "actions": [
+    { "type": "wait_until_diagnostic", "view": "site", "id": "site:7-wheat-field", "expect": { "growthEpoch": 4, "phase": "GROWING" }, "timeoutMs": 180000, "causalMilestone": "next_cold_harvest_completed_before_visit" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 150, "y": 66, "z": -10 }, "settleMs": 0, "causalMilestone": "ordinary_visit_to_recovered_field" },
+    { "type": "look", "position": { "diagnostic": { "view": "site", "id": "site:7-wheat-field", "field": "firstCrop" } } },
+    { "type": "observe_settlement_population", "settlementId": "settlement:7", "durationTicks": 60, "maxDistance": 96, "timeoutMs": 60000, "causalMilestone": "actual_population_after_cold_recovery" },
+    { "type": "inspect", "view": "actor", "id": "resident:7-13", "causalMilestone": "same_farmer_physical_admission" },
+    { "type": "look", "position": { "diagnostic": { "view": "site", "id": "site:7-wheat-field", "field": "boardPosition" } } },
+    { "type": "inspect", "view": "site", "id": "site:7-wheat-field", "causalMilestone": "current_field_after_ordinary_ingress" }
+  ],
+  "assertions": [
+    { "after": 5, "view": "actor", "id": "resident:7-13", "expect": { "status": "ok", "life": "ALIVE" } },
+    { "after": 7, "view": "site", "id": "site:7-wheat-field", "expect": { "status": "ok", "growthEpoch": 4, "phase": "GROWING" } }
+  ],
+  "frames": [
+    { "after": 4, "name": "recovered-field-population", "presentation": "player" },
+    { "after": 7, "name": "recovered-field-board", "presentation": "player" }
+  ]
+}

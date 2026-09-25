@@ -485,10 +485,11 @@ class InMemoryFrontierEngineTest {
         assertEquals(engine.projection(ProjectionQuery.summary()).value(), replay.state().value());
         assertEquals(new Revision(2L), replay.revision());
         assertTrue(replay.schedules().isEmpty());
-        TransactionRecord corrupt = new TransactionRecord(engine.transactions().getFirst().id(), WORLD,
-                new Revision(2L), SimInstant.ZERO, engine.transactions().getFirst().events());
+        assertThrows(IllegalArgumentException.class, () -> new TransactionRecord(engine.transactions().getFirst().id(), WORLD,
+                new Revision(2L), SimInstant.ZERO, engine.transactions().getFirst().events()));
+        TransactionRecord skippedRevision = engine.transactions().get(1);
         assertThrows(IllegalArgumentException.class, () -> TransactionReplayer.replay(
-                WORLD, new Counter(0), SimInstant.ZERO, List.of(), List.of(corrupt),
+                WORLD, new Counter(0), SimInstant.ZERO, List.of(), List.of(skippedRevision),
                 (state, event) -> reduce(state, event, false), state -> new byte[] {0}));
     }
 

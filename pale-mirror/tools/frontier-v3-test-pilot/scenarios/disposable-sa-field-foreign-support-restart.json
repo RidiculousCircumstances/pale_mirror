@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "id": "disposable_sa_field_foreign_support_restart",
+  "isolation": { "mode": "disposable_lite", "seed": 125 },
+  "server": { "host": "127.0.0.1", "port": 25586, "profile": "resource-site-harvest-65-after-cold-part", "viewDistance": 6 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
+      "position": { "diagnostic": { "view": "site", "id": "site:1-wheat-field", "field": "firstCrop" } },
+      "offset": { "x": 4, "y": 0, "z": -6 }, "settleMs": 1000 },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "field_physical", "id": "site:1-wheat-field", "expect": {
+        "status": "ACTIVE", "claimKind": "OWNERSHIP", "layoutCurrent": true,
+        "firstCellCurrent": true
+      } }
+    ] },
+    { "type": "command", "command": "/execute in pale_mirror:frontier_graybox run setblock -343 63 -346 minecraft:stone" }
+  ],
+  "actions": [
+    { "type": "wait_until_diagnostic", "view": "trace", "id": "field-foreign-prewrite:site:1-wheat-field",
+      "expect": { "status": "ok", "eventKind": "resource_field_foreign_change_held:prewrite",
+        "subject": "site:1-wheat-field" }, "timeoutMs": 15000 },
+    { "type": "wait_until_diagnostic", "view": "trace", "id": "field-foreign-observed:site:1-wheat-field",
+      "expect": { "status": "ok", "eventKind": "resource_field_foreign_cell_observed",
+        "subject": "site:1-wheat-field" }, "timeoutMs": 60000 },
+    { "type": "wait_until_diagnostic", "view": "field_physical", "id": "site:1-wheat-field",
+      "expect": { "status": "ACTIVE", "claimKind": "OWNERSHIP", "layoutCurrent": true,
+        "firstCellCanonical": { "soil": "OBSTRUCTED", "crop": "OBSTRUCTED" },
+        "firstCellForeign": true, "foreignSoilName": "minecraft:stone",
+        "foreignChangePending": false }, "timeoutMs": 20000 },
+    { "type": "wait_until_block", "position": { "x": -343, "y": 63, "z": -346 },
+      "block": "minecraft:stone", "timeoutMs": 10000 },
+    { "type": "wait_until_diagnostic", "view": "field_physical", "id": "site:1-wheat-field",
+      "expect": { "status": "ACTIVE", "firstCellCanonical": { "soil": "OBSTRUCTED", "crop": "OBSTRUCTED" },
+        "firstCellForeign": true, "foreignSoilName": "minecraft:stone",
+        "foreignChangePending": false }, "timeoutMs": 30000 }
+  ],
+  "restart": { "mode": "graceful", "afterAction": 3, "resumeSetup": [] },
+  "assertions": [
+    { "after": 5, "view": "field_physical", "id": "site:1-wheat-field", "expect": {
+      "status": "ACTIVE", "claimKind": "OWNERSHIP", "layoutCurrent": true,
+      "firstCellCanonical": { "soil": "OBSTRUCTED", "crop": "OBSTRUCTED" },
+      "firstCellForeign": true, "foreignSoilName": "minecraft:stone",
+      "foreignChangePending": false
+    } }
+  ]
+}

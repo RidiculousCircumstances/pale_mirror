@@ -73,9 +73,12 @@ final class FrontierV3ObjectBoardExecutor {
 
     static ProjectionResult project(ServerLevel level, FrontierV3ObjectBoardLedger ledger, FrontierObjectBoard board) {
         BlockPos position = position(board);
-        if (!level.hasChunkAt(position)) return ProjectionResult.DEFERRED;
+        // A loaded block column is not evidence that its saved display entities
+        // have arrived. Neither declare disappearance nor create a duplicate
+        // before the shared entity-storage boundary is ready.
+        if (!FrontierV3SceneExecutor.entityStorageReady(level, position)) return ProjectionResult.DEFERRED;
         String owner = board.ownerId().value(); UUID uuid = uuid(owner); FrontierV3ObjectBoardLedger.Claim claim = ledger.claim(owner);
-        if (claim != null && (claim.conflicted() || claim.position() != position.asLong() || !claim.uuid().equals(uuid.toString()))) return ProjectionResult.CONFLICT;
+        if (claim != null && (claim.position() != position.asLong() || !claim.uuid().equals(uuid.toString()))) return ProjectionResult.CONFLICT;
         Display.TextDisplay display = level.getEntity(uuid) instanceof Display.TextDisplay known ? known : null;
         if (claim != null && display == null) { ledger.conflict(owner); return ProjectionResult.CONFLICT; }
         if (display != null && (!owner.equals(display.getPersistentData().getString(OWNER_KEY)) || !display.blockPosition().equals(position))) {
@@ -90,6 +93,7 @@ final class FrontierV3ObjectBoardExecutor {
             ledger.applied(owner, position.asLong(), uuid.toString());
             return level.addFreshEntity(display) ? ProjectionResult.APPLIED : ProjectionResult.DEFERRED;
         }
+        if (claim != null) ledger.observeExactReturn(owner, position.asLong(), uuid.toString());
         String expected = board.text();
         if (expected.equals(display.getCustomName() == null ? null : display.getCustomName().getString())) return ProjectionResult.CURRENT;
         configure(display, board); return ProjectionResult.UPDATED;

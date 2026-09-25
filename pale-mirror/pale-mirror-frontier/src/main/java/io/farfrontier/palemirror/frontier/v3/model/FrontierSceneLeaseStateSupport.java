@@ -120,10 +120,8 @@ public final class FrontierSceneLeaseStateSupport {
     }
 
     /**
-     * Releases a restart-unknown patrol without waiting for a player to load its old chunk.
-     * Patrol has no cargo, container, player custody, or physical effect to infer: its retained
-     * formation is an explicitly reversible COLD checkpoint. Other scene families must declare
-     * their own recovery contract instead of borrowing this pose-only path.
+     * Legacy WAL reducer only. No new command may invoke this pose-only retirement: a saved
+     * patrol body may carry nonfatal injury not yet published to canonical actor health.
      */
     public static FrontierWorldState revokeUnknownPatrolToCold(FrontierWorldState state, SceneLeaseRecoveryRevoked revoked) {
         SceneLease current = state.sceneLeases().get(revoked.leaseId());
@@ -140,6 +138,7 @@ public final class FrontierSceneLeaseStateSupport {
     static FrontierWorldState release(FrontierWorldState state, SceneLeaseId leaseId, List<SceneMemberPosition> positions) {
         SceneLease current = state.sceneLeases().get(leaseId);
         if (current == null || current.status() != SceneLeaseStatus.DRAINING) throw new IllegalArgumentException("only a draining scene lease can be released");
+        requireNoBoundActorHand(state, current);
         FrontierWorldState releaseReady = SceneStrikeStateSupport.prepareRelease(state, current);
         Set<SubjectId> expected = current.members().stream().map(SceneMember::actorId).filter(actor -> state.actorLocations().get(actor).condition().status() == ActorLifeStatus.ALIVE)
                 .collect(java.util.stream.Collectors.toSet());
@@ -158,6 +157,23 @@ public final class FrontierSceneLeaseStateSupport {
         StrategicPlanState plans = FrontierSceneBehaviors.releasePlans(state, current);
         Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases()); leases.put(leaseId, current.withStatus(SceneLeaseStatus.CLOSED));
         return copy(releaseReady, actors, leases, state.ambientLeases(), plans, confirmRecovery(releaseReady, releaseReady.fencedRecovery(), current));
+    }
+
+    /** Ordinary scene release cannot discard a body while its physical offhand still owns stock. */
+    public static void requireNoBoundActorHand(FrontierWorldState state, SceneLease lease) {
+        if (hasBoundActorHand(state, lease)) {
+            throw new IllegalArgumentException("scene release requires typed actor-hand custody transfer");
+        }
+    }
+
+    /** A scene with physically bound stock must retain local custody through any conflict. */
+    public static boolean hasBoundActorHand(FrontierWorldState state, SceneLease lease) {
+        Set<SubjectId> members = lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet());
+        return state.inventory().fungibleResources().bindings().values().stream()
+                .map(PhysicalStackBinding::address)
+                .filter(PhysicalStackAddress.ActorHand.class::isInstance)
+                .map(PhysicalStackAddress.ActorHand.class::cast)
+                .anyMatch(hand -> members.contains(hand.actorId()));
     }
 
     /** A PREPARED lease has not transferred authority to its provisional Minecraft bodies. */

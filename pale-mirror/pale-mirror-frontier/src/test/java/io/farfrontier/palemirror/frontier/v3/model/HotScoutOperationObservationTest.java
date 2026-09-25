@@ -31,7 +31,7 @@ class HotScoutOperationObservationTest {
         WorldId world = new WorldId("frontier:hot-scout-observation");
         FrontierEngine<FrontierWorldProjection> engine = FrontierEngines.create(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(world, 41L));
         SubjectId scout = new SubjectId("bioform:west-1");
-        RouteOperation operation = state(engine).operations().get(new SubjectId("operation:supply-1-2"));
+        RouteOperation operation = FrontierDevelopmentScenarios.initialNorthwatchShipment(state(engine)).orElseThrow();
         SceneLease lease = FrontierTestSceneLeases.exact(state(engine), new SceneLeaseId("lease:hot-scout-observation"), operation.id(), operation.cargoId(),
                 operation.currentPosition(), engine.checkpoint().instant(), engine.checkpoint().revision().value(), Optional.empty(), operation.participantIds());
 
@@ -101,7 +101,7 @@ class HotScoutOperationObservationTest {
         FrontierEngine<FrontierWorldProjection> engine = FrontierEngines.create(
                 FrontierV3FixtureCatalog.hotScoutInterceptConfiguration(new WorldId("frontier:hot-scout-intercept-fixture"), 41L));
         FrontierWorldState state = state(engine);
-        RouteOperation operation = state.operations().get(new SubjectId("operation:supply-1-2"));
+        RouteOperation operation = FrontierDevelopmentScenarios.initialNorthwatchShipment(state).orElseThrow();
         var selected = java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
                 .filter(value -> value.isExplosiveAssaulter() || value.isDefender())
                 .sorted(java.util.Comparator.comparingLong((Bioform value) -> distance(FrontierTestPositions.supportOf(state.actorLocations().get(value.id())), operation.currentPosition()))
@@ -122,7 +122,7 @@ class HotScoutOperationObservationTest {
         WorldId world = new WorldId("frontier:hot-scout-observation-negative");
         FrontierEngine<FrontierWorldProjection> engine = FrontierEngines.create(FrontierV3FixtureCatalog.routeSceneReturnConfiguration(world, 41L));
         SubjectId scout = new SubjectId("bioform:west-1");
-        RouteOperation operation = state(engine).operations().get(new SubjectId("operation:supply-1-2"));
+        RouteOperation operation = FrontierDevelopmentScenarios.initialNorthwatchShipment(state(engine)).orElseThrow();
         SceneLease lease = FrontierTestSceneLeases.exact(state(engine), new SceneLeaseId("lease:hot-scout-observation-negative"), operation.id(), operation.cargoId(),
                 operation.currentPosition(), engine.checkpoint().instant(), engine.checkpoint().revision().value(), Optional.empty(), operation.participantIds());
         submit(engine, world, new AmbientActorObserved(scout, FrontierTestPositions.bodyAboveSupport(FrontierSceneBehaviors.logistics(lease).cargoPosition()), state(engine).actorLocations().get(scout).condition().health()));

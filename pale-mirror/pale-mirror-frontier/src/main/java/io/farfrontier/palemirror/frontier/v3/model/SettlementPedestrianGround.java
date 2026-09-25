@@ -26,6 +26,11 @@ public final class SettlementPedestrianGround {
                 .orElseThrow(() -> new IllegalArgumentException("settlement pedestrian ground has no settlement: " + settlementId.value()));
         LinkedHashMap<TerrainColumn, SurfaceAnchor> surfaces = new LinkedHashMap<>();
         SettlementLocalCirculation.surfaceCells(settlement).forEach(position -> add(surfaces, new SurfaceAnchor(position)));
+        // Service stations are materialized support floors, not the natural terrain beneath
+        // them. A route through the lower terrain datum would put the worker's feet inside
+        // the depot/workshop sill even though its endpoint is the correct elevated station.
+        settlement.structures().forEach(structure ->
+                FrontierGrayboxPlan.publicAccessSurfaces(structure).forEach(surface -> add(surfaces, surface)));
         SettlementResidentIngressPlan.compile(bootstrap.bounds(), bootstrap.terrain(), settlement,
                 bootstrap.ruleset().facilityCapacity().intactHousingBeds()).ownedSurfaces().forEach(surface -> add(surfaces, surface));
         return Collections.unmodifiableMap(new LinkedHashMap<>(surfaces));

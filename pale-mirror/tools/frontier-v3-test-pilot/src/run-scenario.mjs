@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { matches } from './diagnostic-matcher.mjs';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { execFile } from 'node:child_process';
@@ -484,8 +485,4 @@ function waitForPilot(child, predicate, startedAt, startupTimeoutMs, scenarioTim
       }
     }
   })();
-}
-function matches(actual, expected) {
-  return Object.entries(expected).every(([key, value]) => value && typeof value === 'object' && !Array.isArray(value)
-    ? actual[key] && matches(actual[key], value) : actual[key] === value);
 }

@@ -318,7 +318,8 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
         }
         if (command.payload() instanceof SceneLeaseReleased released) return planSceneReleased(state, command, released);
         if (command.payload() instanceof SceneLeaseRecoveryUnresolved unresolved) return planRecoveryUnresolved(state, command, unresolved);
-        if (command.payload() instanceof SceneLeaseRecoveryRevoked revoked) return planRecoveryRevoked(state, command, revoked);
+        if (command.payload() instanceof SceneLeaseRecoveryRevoked)
+            return FrontierWorldCommandPlanner.rejected("scene recovery revoke has no saved body/health proof");
         if (command.payload() instanceof ActorDied death) return planActorDied(state, death);
         return FrontierWorldCommandPlanner.rejected("logistics process does not admit command: " + command.payload().type());
     }
@@ -368,15 +369,6 @@ final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule
             return FrontierWorldCommandPlanner.rejected("scene recovery evidence does not bind one unresolved restart lease");
         }
         try { return new CommandPlan.Accepted(FrontierSceneContinuationPlanner.recoveryUnresolvedEvents(state, lease, command.submittedAt().ticks(), unresolved)); }
-        catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
-    }
-
-    private static CommandPlan planRecoveryRevoked(FrontierWorldState state, FrontierCommand command, SceneLeaseRecoveryRevoked revoked) {
-        SceneLease lease = state.sceneLeases().get(revoked.leaseId());
-        if (lease == null || lease.status() != SceneLeaseStatus.UNKNOWN_AFTER_RESTART || !FrontierSceneBehaviors.isRoutePatrol(lease)) {
-            return FrontierWorldCommandPlanner.rejected("scene recovery revoke does not bind one unknown patrol lease");
-        }
-        try { return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierSceneOwnerSupport.owner(state, lease), revoked))); }
         catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
     }
 

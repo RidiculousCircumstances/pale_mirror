@@ -42,6 +42,43 @@ import java.util.Optional;
 public final class FrontierV3ResourceSiteHarvestGameTests {
     private FrontierV3ResourceSiteHarvestGameTests() { }
 
+    @GameTest(batch = "pm-frontier-v3-resource-harvest", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 40)
+    public static void secondHarvestAfterRegrowthWritesItsOwnOutputWithoutReplacingTheFirst(GameTestHelper helper) {
+        var level = helper.getLevel(); var site = field(fixtureOrigin(helper), "site:two-harvest-receipts");
+        prepare(level, site);
+        runWhenLit(helper, level, site, () -> {
+            var ledger = FrontierV3ResourceSiteLedger.fixture();
+            ledger.reserve(site.id(), new PhysicalIntentId("intent:two-harvest-field"));
+            helper.assertTrue(FrontierV3ResourceSiteExecutor.placeWholeField(level, site), "initial field is physically owned");
+            ledger.activate(site.id());
+            var last = site.cropSlots().getLast();
+            var chestPos = new BlockPos(last.x() + 3, last.y(), last.z());
+            level.setBlock(chestPos, Blocks.AIR.defaultBlockState(), 3);
+            level.setBlock(chestPos.below(), Blocks.STONE.defaultBlockState(), 3);
+            var depot = new SubjectId("container:two-harvest-receipts");
+            var chest = FrontierV3ContainerSurfaceExecutor.claimFreshChest(level, chestPos, depot);
+            helper.assertTrue(chest != null, "exact depot must be claimed");
+            var first = new ExactItemStack(new SubjectId("item:first-harvest-wheat"), new SubjectId("settlement:1"),
+                    "minecraft:wheat", 64, new InventoryCustody.ContainerSlot(depot, 4));
+            var second = new ExactItemStack(new SubjectId("item:second-harvest-wheat"), new SubjectId("settlement:1"),
+                    "minecraft:wheat", 64, new InventoryCustody.ContainerSlot(depot, 5));
+            FrontierV3ResourceSiteExecutor.projectStage(level, ledger, site, 7);
+            helper.assertTrue(FrontierV3ResourceSiteHarvestExecutor.apply(level, ledger, site, chest, first), "first physical receipt succeeds");
+            ledger = FrontierV3ResourceSiteLedger.load(ledger.save(new CompoundTag(), level.registryAccess()), level.registryAccess());
+            helper.assertTrue(ledger.hasHarvestReceipt(site.id(), first), "first fence survives recovery");
+            helper.assertValueEqual(FrontierV3ResourceSiteExecutor.projectStage(level, ledger, site, 0),
+                    FrontierV3ResourceSiteExecutor.StageProjectionResult.UPDATED, "regrowth retires terminal AIR cursor");
+            ledger = FrontierV3ResourceSiteLedger.load(ledger.save(new CompoundTag(), level.registryAccess()), level.registryAccess());
+            FrontierV3ResourceSiteExecutor.projectStage(level, ledger, site, 7);
+            helper.assertTrue(FrontierV3ResourceSiteHarvestExecutor.apply(level, ledger, site, chest, second), "second output has its own receipt");
+            helper.assertTrue(FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(4), first), "first physical output is not replaced");
+            helper.assertTrue(FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(5), second), "second physical output is exact");
+            helper.assertTrue(FrontierV3ResourceSiteHarvestExecutor.completePostcondition(level, site, ledger, chest, second), "second terminal receipt is reconcilable");
+            helper.assertFalse(FrontierV3ResourceSiteHarvestExecutor.apply(level, ledger, site, chest, second), "retry must not mint output again");
+            helper.succeed();
+        });
+    }
+
     // The fixture writes an 8x8 field plus an adjacent chest.  Use the 38x48x38
     // vanilla air template, not the 1x1 `mobs/empty` template, so GameTest's
     // layout allocator reserves the complete physical footprint.
@@ -120,6 +157,14 @@ public final class FrontierV3ResourceSiteHarvestGameTests {
                     "the post-fence must retain the exact stage-zero crop instead of adopting native progress");
             helper.assertValueEqual(ledger.nativeGrowthFence(site.id()), new FrontierV3ResourceSiteLedger.NativeGrowthFence(
                     "crop-grow-post", crop, 1, 0), "the restored native event retains one exact diagnostic witness");
+            level.setBlock(position, Blocks.AIR.defaultBlockState(), 2);
+            helper.assertFalse(FrontierV3ResourceSiteExecutor.restoreNativeGrowthPostcondition(level, ledger, site, position),
+                    "the native-growth veto must not recreate a removed crop");
+            helper.assertTrue(level.getBlockState(position).isAir(), "missing crop remains physical evidence");
+            level.setBlock(position, Blocks.STONE.defaultBlockState(), 2);
+            helper.assertFalse(FrontierV3ResourceSiteExecutor.restoreNativeGrowthPostcondition(level, ledger, site, position),
+                    "the native-growth veto must not overwrite foreign player/world blocks");
+            helper.assertTrue(level.getBlockState(position).is(Blocks.STONE), "foreign physical state remains untouched");
             helper.succeed();
         });
     }
@@ -145,7 +190,10 @@ public final class FrontierV3ResourceSiteHarvestGameTests {
                     "the COLD terminal receipt retains its exact irrigated/farmland predecessor surface, not a neutral baseline");
             ResourceSiteHarvestLineage lineage = new ResourceSiteHarvestLineage(
                     new SubjectId("job:site-harvest-resource-harvest-composed-terminal"), new SubjectId("task:settlement-1-harvest"),
-                    new SubjectId("resident:1-13"), new SubjectId("item:site-harvest-resource-harvest-composed-terminal-wheat"), 1L,
+                    new SubjectId("resident:1-13"),
+                    new SubjectId("custody:field-actor-site-harvest-resource-harvest-composed-terminal"),
+                    new SubjectId("custody:container-1-depot"),
+                    new SubjectId("item:site-harvest-resource-harvest-composed-terminal-wheat"), 1L,
                     new BodyPosition(site.cropSlots().getLast().x(), site.cropSlots().getLast().y(), site.cropSlots().getLast().z()), intent,
                     new InventoryCustody.ContainerSlot(new SubjectId("container:1-depot"), 0), true, Optional.empty(), Optional.empty());
             ResourceSiteLifecycle successor = new ResourceSiteLifecycle(site.id(), ResourceSitePhase.GROWING, 2L, 3,
@@ -460,7 +508,7 @@ public final class FrontierV3ResourceSiteHarvestGameTests {
     private static ResourceSite field(BlockPos origin, String id) {
         List<BlockPosition> crops = new ArrayList<>(64);
         for (int x = 0; x < 8; x++) for (int z = 0; z < 8; z++) crops.add(new BlockPosition(origin.getX() + x, origin.getY(), origin.getZ() + z));
-        return new ResourceSite(new SubjectId(id), new SubjectId("settlement:1"), new SubjectId("structure:1-farm"), ResourceSiteKind.WHEAT_FIELD, crops);
+        return new ResourceSite(new SubjectId(id), new SubjectId("settlement:1"), new SubjectId("structure:1-farm"), ResourceSiteKind.WHEAT_FIELD, io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSitePlan.initialGrayboxLayout(crops));
     }
     private static void prepare(ServerLevel level, ResourceSite site) {
         // Fixture state must not receive an unrelated random grass tick while

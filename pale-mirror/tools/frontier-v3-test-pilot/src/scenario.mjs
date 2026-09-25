@@ -138,7 +138,13 @@ export function validateScenario(scenario) {
   if (scenario.restart !== undefined && (!scenario.restart || !Number.isInteger(scenario.restart.afterAction)
       || scenario.restart.afterAction < 1 || scenario.restart.afterAction >= (scenario.actions ?? []).length
       || !['graceful', 'abrupt'].includes(scenario.restart.mode)
+      || (scenario.restart.preStopSaveAllFlush !== undefined
+          && (scenario.restart.mode !== 'abrupt' || scenario.restart.preStopSaveAllFlush !== true))
       || (scenario.restart.resumeSetup !== undefined && !Array.isArray(scenario.restart.resumeSetup))
+      || (scenario.restart.postRestartZeroPlayerSettleMs !== undefined
+          && (!Number.isInteger(scenario.restart.postRestartZeroPlayerSettleMs)
+              || scenario.restart.postRestartZeroPlayerSettleMs < 0
+              || scenario.restart.postRestartZeroPlayerSettleMs > 120_000))
       // A declared COLD interlude is an ordinary no-player interval between the client
       // disconnect and the durable restart.  It is deliberately opt-in: recovery carriers
       // which certify an immediate save retain their original boundary.
@@ -296,6 +302,7 @@ export function validateScenario(scenario) {
           || action.timeoutMs < 0 || action.timeoutMs > 120_000 || !Number.isInteger(action.maxAttacks)
           || action.maxAttacks < 1 || action.maxAttacks > 40
           || (action.requireRemoval !== undefined && typeof action.requireRemoval !== 'boolean')
+          || (action.requireDamage !== undefined && (typeof action.requireDamage !== 'boolean' || action.requireDamage && action.requireRemoval === true))
           || (action.nameContains !== undefined && (typeof action.nameContains !== 'string' || !action.nameContains || action.nameContains.length > 72))
           || (action.maxDistance !== undefined && (!Number.isFinite(action.maxDistance) || action.maxDistance < 1 || action.maxDistance > 64)))) {
         throw new Error('attack_nearest_entity needs a namespaced entity type, bounded local range and 1..40 attacks');
@@ -353,9 +360,7 @@ export function validateScenario(scenario) {
   if (!Array.isArray(assertions)) throw new Error('scenario assertions must be an array');
   for (const assertion of assertions) {
     if (!assertion || !Number.isInteger(assertion.after) || assertion.after < 0 || assertion.after > (scenario.actions ?? []).length
-        || !['summary', 'performance', 'projection_work', 'aftermath', 'process', 'process_inventory', 'site', 'settlement', 'hive', 'hive_transfer', 'hive_mobilization', 'actor', 'item', 'resource', 'player_resource', 'container', 'reference_container', 'market_order', 'operation', 'route_construction', 'route_maintenance', 'route_topology', 'physical_delta', 'medical', 'scene', 'intent', 'trace', 'transit', 'traversal_foundry', 'hive_foundry', 'recovery', 'first_visibility'].includes(assertion.view)
-        || typeof assertion.id !== 'string' || (!['summary', 'performance', 'projection_work', 'aftermath'].includes(assertion.view) && !assertion.id)
-        || !assertion.expect || typeof assertion.expect !== 'object') {
+        || !validDiagnosticIdentity(assertion) || !assertion.expect || typeof assertion.expect !== 'object') {
       throw new Error('invalid diagnostic assertion');
     }
   }
@@ -467,7 +472,7 @@ function segment(scenario, first, end, setup, includeFirstBoundary) {
 }
 
 function validDiagnosticIdentity(value) {
-  return ['summary', 'performance', 'projection_work', 'aftermath', 'process', 'process_inventory', 'site', 'settlement', 'settlement_population', 'hive', 'hive_transfer', 'hive_mobilization', 'actor', 'item', 'resource', 'player_resource', 'container', 'reference_container', 'market_order', 'operation', 'route_construction', 'route_maintenance', 'route_topology', 'physical_delta', 'medical', 'scene', 'intent', 'trace', 'transit', 'traversal_foundry', 'hive_foundry', 'recovery', 'first_visibility'].includes(value.view)
+  return ['summary', 'performance', 'projection_work', 'aftermath', 'process', 'process_inventory', 'site', 'field_physical', 'settlement', 'settlement_population', 'hive', 'hive_transfer', 'hive_mobilization', 'actor', 'item', 'resource', 'player_resource', 'container', 'reference_container', 'market_order', 'operation', 'route_construction', 'route_maintenance', 'route_topology', 'physical_delta', 'medical', 'scene', 'intent', 'trace', 'transit', 'traversal_foundry', 'hive_foundry', 'recovery', 'first_visibility'].includes(value.view)
     && typeof value.id === 'string' && (['summary', 'performance', 'projection_work', 'aftermath'].includes(value.view) || Boolean(value.id));
 }
 

@@ -88,8 +88,11 @@ public sealed interface SceneContinuation permits SceneContinuation.None, SceneC
     }
 
     /** A released field worker retains its engine-owned COLD continuation unchanged. */
-    record ResumeResourceSiteHarvest(SubjectId jobId) implements SceneContinuation {
-        public ResumeResourceSiteHarvest { Objects.requireNonNull(jobId, "resource-site harvest job"); }
+    record ResumeResourceSiteHarvest(SubjectId siteId, SubjectId jobId) implements SceneContinuation {
+        public ResumeResourceSiteHarvest {
+            Objects.requireNonNull(siteId, "resource-site harvest continuation site");
+            Objects.requireNonNull(jobId, "resource-site harvest continuation job");
+        }
         @Override public Kind kind() { return Kind.RESUME_RESOURCE_SITE_HARVEST; }
     }
 }

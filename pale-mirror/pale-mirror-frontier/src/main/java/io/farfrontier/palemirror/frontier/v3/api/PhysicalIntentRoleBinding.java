@@ -52,7 +52,13 @@ public final class PhysicalIntentRoleBinding {
     public static PhysicalIntentRoleBinding medicalTreatmentConsumption(SubjectId operation, SubjectId item) { return bind(PhysicalIntentRoleSchema.MEDICAL_TREATMENT_CONSUMPTION, map(PhysicalIntentSubjectRole.MEDICAL_TREATMENT_OPERATION, operation, PhysicalIntentSubjectRole.ITEM, item)); }
     public static PhysicalIntentRoleBinding settlementProvisionConsumption(SubjectId provision, SubjectId item) { return bind(PhysicalIntentRoleSchema.SETTLEMENT_PROVISION_CONSUMPTION, map(PhysicalIntentSubjectRole.SETTLEMENT_PROVISION, provision, PhysicalIntentSubjectRole.ITEM, item)); }
     public static PhysicalIntentRoleBinding sitePreparation(SubjectId site, SubjectId job) { return bind(PhysicalIntentRoleSchema.RESOURCE_SITE_PREPARATION, map(PhysicalIntentSubjectRole.SITE, site, PhysicalIntentSubjectRole.RESOURCE_SITE_JOB, job)); }
-    public static PhysicalIntentRoleBinding siteHarvest(SubjectId site, SubjectId job, SubjectId worker, SubjectId output) { return bind(PhysicalIntentRoleSchema.RESOURCE_SITE_HARVEST, map(PhysicalIntentSubjectRole.SITE, site, PhysicalIntentSubjectRole.RESOURCE_SITE_JOB, job, PhysicalIntentSubjectRole.WORKER, worker, PhysicalIntentSubjectRole.OUTPUT_ITEM, output)); }
+    public static PhysicalIntentRoleBinding siteHarvest(SubjectId site, SubjectId job, SubjectId worker,
+                                                        SubjectId actorAccount, SubjectId depotAccount) {
+        return bind(PhysicalIntentRoleSchema.RESOURCE_SITE_HARVEST, map(PhysicalIntentSubjectRole.SITE, site,
+                PhysicalIntentSubjectRole.RESOURCE_SITE_JOB, job, PhysicalIntentSubjectRole.WORKER, worker,
+                PhysicalIntentSubjectRole.CUSTODY_ACCOUNT, actorAccount,
+                PhysicalIntentSubjectRole.RESOURCE_DESTINATION_ACCOUNT, depotAccount));
+    }
     public static PhysicalIntentRoleBinding production(SubjectId job, SubjectId input, SubjectId output) { return bind(PhysicalIntentRoleSchema.PRODUCTION, map(PhysicalIntentSubjectRole.PRODUCTION_JOB, job, PhysicalIntentSubjectRole.INPUT_ITEM, input, PhysicalIntentSubjectRole.OUTPUT_ITEM, output)); }
     public static PhysicalIntentRoleBinding cargoLoading(SubjectId contract, SubjectId cargo, SubjectId sourceItem) { return bind(PhysicalIntentRoleSchema.CARGO_LOADING, map(PhysicalIntentSubjectRole.CONTRACT, contract, PhysicalIntentSubjectRole.CARGO, cargo, PhysicalIntentSubjectRole.SOURCE_ITEM, sourceItem)); }
     public static PhysicalIntentRoleBinding routeConstructionLoading(SubjectId route, SubjectId project, SubjectId cargo, SubjectId cargoItem, SubjectId sourceItem) { return bind(PhysicalIntentRoleSchema.ROUTE_CONSTRUCTION_LOADING, map(PhysicalIntentSubjectRole.ROUTE, route, PhysicalIntentSubjectRole.ROUTE_CONSTRUCTION_PROJECT, project, PhysicalIntentSubjectRole.CARGO, cargo, PhysicalIntentSubjectRole.CARGO_ITEM, cargoItem, PhysicalIntentSubjectRole.SOURCE_ITEM, sourceItem)); }

@@ -37,6 +37,12 @@ class StrategicScheduleRetirementTest {
         assertArrayEquals(engine.checkpoint().canonicalState(), recovered.checkpoint().canonicalState());
         assertEquals(engine.checkpoint().schedules(), recovered.checkpoint().schedules());
 
+        var selected = wal.getFirst().events().stream()
+                .filter(event -> event.payload() instanceof StrategicObjectiveSelected).findFirst().orElseThrow();
+        var fixturePlanner = FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(base.worldId(), 41L).scheduledPlanner();
+        assertEquals(List.of(pulse), fixturePlanner.retiredBy(initial, engine.canonicalState().state(), selected,
+                () -> List.of(pulse, otherPulse)), "native fixture wrappers must preserve the production retirement policy");
+
         var failedWrite = FrontierEngines.createCanonicalStateAccess(configuration.withTransactionCommitter((transaction, durability) -> {
             throw new IllegalStateException("injected WAL failure");
         }));

@@ -51,8 +51,16 @@ public final class FrontierWorldRuntimeDefinition {
     }
     private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(WorldId worldId, long seed,
                                                                                                            FrontierRuleset ruleset, boolean autonomousInterception) {
-        FrontierBootstrap bootstrap = FrontierBootstrapper.create(worldId, seed, ruleset); FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
-        return new FrontierEngineConfiguration<>(worldId, initial, SimInstant.ZERO, FrontierWorldRuntimeDefinition::planCommand,
+        return configuration(FrontierBootstrapper.create(worldId, seed, ruleset), autonomousInterception);
+    }
+    /** Explicit fresh-world manifest; its field geometry is persisted and pinned at recovery. */
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(FrontierBootstrap bootstrap) {
+        return configuration(bootstrap, true);
+    }
+    private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(FrontierBootstrap bootstrap,
+                                                                                                           boolean autonomousInterception) {
+        FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
+        return new FrontierEngineConfiguration<>(bootstrap.worldId(), initial, SimInstant.ZERO, FrontierWorldRuntimeDefinition::planCommand,
                 new io.farfrontier.palemirror.frontier.v3.kernel.ScheduledActionPlanner<FrontierWorldState>() {
                     @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
                         return planScheduled(state, action, autonomousInterception);
@@ -63,7 +71,7 @@ public final class FrontierWorldRuntimeDefinition {
                     @Override public List<ScheduledAction> retiredBy(FrontierWorldState previous, FrontierWorldState next,
                                                                     io.farfrontier.palemirror.frontier.v3.api.FrontierEvent event,
                                                                     java.util.function.Supplier<List<ScheduledAction>> pending) {
-                        return FrontierWorldProcessCatalog.retiredSchedules(PROCESS_REGISTRY, previous, next, event, pending);
+                        return retiredSchedules(previous, next, event, pending);
                     }
                 }, FrontierWorldRuntimeDefinition::reduce, new FrontierWorldStateCodec(bootstrap), FrontierWorldProjectionCompiler::compile,
                 new EngineLimits(4_096, 1_200L, 4_096, 4_096), FrontierWorldProcessCatalog.initialSchedule(bootstrap), TransactionCommitter.noOp(), FrontierWorldStateTransitionValidator.INSTANCE)
@@ -76,6 +84,12 @@ public final class FrontierWorldRuntimeDefinition {
     public static PayloadCodecs payloadCodecs() { return PAYLOAD_CODECS; }
     public static boolean scheduledHeld(FrontierWorldState state, ScheduledAction action) {
         return FrontierWorldProcessCatalog.scheduledHeld(PROCESS_REGISTRY, state, action);
+    }
+
+    public static List<ScheduledAction> retiredSchedules(FrontierWorldState previous, FrontierWorldState next,
+            io.farfrontier.palemirror.frontier.v3.api.FrontierEvent event,
+            java.util.function.Supplier<List<ScheduledAction>> pending) {
+        return FrontierWorldProcessCatalog.retiredSchedules(PROCESS_REGISTRY, previous, next, event, pending);
     }
 
     public static DeterministicProcessRegistry processRegistry() {

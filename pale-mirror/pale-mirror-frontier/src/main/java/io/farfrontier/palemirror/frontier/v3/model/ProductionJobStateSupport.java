@@ -78,7 +78,7 @@ final class ProductionJobStateSupport {
         }
         job.requireColdCompletion(state);
         FungibleResourceLedger resources = state.inventory().fungibleResources().transformCold(cold.accountId(),
-                Map.of(cold.itemId(), job.outputCount()), Map.of(cold.claimId(), job.outputCount()), output);
+                cold.inputLots(), Map.of(cold.claimId(), job.outputCount()), output);
         Map<SubjectId, ProductionJob> next = new LinkedHashMap<>(state.productionJobs()); next.remove(jobId);
         return state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory().withFungibleResources(resources), next,
                 state.contracts(), state.operations(), state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony(),
@@ -93,11 +93,11 @@ final class ProductionJobStateSupport {
         FungibleResourceLedger reserved;
         if (hold instanceof ProductionInputHold.FungibleCold cold) {
             ProductionResourceCustody.requireNewHold(state, job, cold.accountId(), cold.claimId());
-            claim = new ClaimAllocation(cold.claimId(), job.id(), job.settlementId(), "minecraft:wheat", job.outputCount());
+            claim = new ClaimAllocation(cold.claimId(), job.id(), job.settlementId(), "minecraft:wheat", job.outputCount(), cold.inputLots(), ClaimPurpose.PRODUCTION_WORK);
             reserved = resources.reserve(claim, cold.accountId());
         } else if (hold instanceof ProductionInputHold.FungibleBound bound) {
             ProductionResourceCustody.requireNewHold(state, job, bound.accountId(), bound.claimId());
-            claim = new ClaimAllocation(bound.claimId(), job.id(), job.settlementId(), "minecraft:wheat", job.outputCount());
+            claim = new ClaimAllocation(bound.claimId(), job.id(), job.settlementId(), "minecraft:wheat", job.outputCount(), bound.inputLots(), ClaimPurpose.PRODUCTION_WORK);
             reserved = resources.reserveBound(claim, bound.accountId(), bound.authorityEpoch());
         } else {
             throw new IllegalArgumentException("fungible production job has no fungible input hold");

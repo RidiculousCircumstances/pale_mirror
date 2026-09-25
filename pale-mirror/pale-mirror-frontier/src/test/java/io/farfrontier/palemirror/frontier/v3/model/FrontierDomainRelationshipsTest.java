@@ -46,17 +46,18 @@ class FrontierDomainRelationshipsTest {
     @Test
     void successorLineageRejectsAReplacementFarmer() {
         ResourceSiteHarvestLineage lineage = new ResourceSiteHarvestLineage(new SubjectId("job:site-harvest-1-wheat-field-1"),
-                new SubjectId("task:site-harvest-1"), new SubjectId("resident:1-1"), new SubjectId("item:site-harvest-1-wheat-field-1"),
+                new SubjectId("task:site-harvest-1"), new SubjectId("resident:1-1"),
+                new SubjectId("custody:field-actor-site-harvest-1-wheat-field-1"), new SubjectId("custody:container-settlement-1-depot"),
+                new SubjectId("item:site-harvest-1-wheat-field-1"),
                 1L, new BodyPosition(1, 65, 1), new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:site-harvest-1-wheat-field-1"),
                 new InventoryCustody.ContainerSlot(new SubjectId("container:settlement-1-depot"), 0), true, Optional.empty(), Optional.empty());
         ResourceSiteHarvestJob replacement = new ResourceSiteHarvestJob(new SubjectId("job:site-harvest-1-wheat-field-2"),
                 new SubjectId("task:site-harvest-2"), new SubjectId("site:1-wheat-field"), new SubjectId("resident:1-2"),
+                new SubjectId("custody:field-actor-site-harvest-1-wheat-field-2"),
+                new SubjectId("custody:container-settlement-1-depot"),
                 new SubjectId("item:site-harvest-1-wheat-field-2"), new InventoryCustody.ContainerSlot(new SubjectId("container:settlement-1-depot"), 0),
                 new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:site-harvest-1-wheat-field-2"),
-                ResourceSiteHarvestProgress.notStarted(), TraversalTopology.corridor(new TraversalTopologyId("topology:relationship-test"), 0L,
-                        new SubjectId("site:1-wheat-field"), TraversalKind.PEDESTRIAN, java.util.Set.of(TraversalCapability.PEDESTRIAN),
-                        java.util.stream.IntStream.range(0, ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS)
-                                .mapToObj(index -> SurfaceAnchor.at(index, 0, 0)).toList()), 0);
+                ResourceSiteHarvestProgress.notStarted(ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS));
 
         assertThrows(IllegalArgumentException.class, () -> lineage.bindSuccessor(replacement),
                 "another eligible farmer may not replace the exact retained successor");

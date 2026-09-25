@@ -203,10 +203,11 @@ class FrontierWorldStateTest {
                 new ExactItemStack(item, new SubjectId("settlement:1"), "minecraft:iron_ingot", 64, new InventoryCustody.ContainerSlot(container, 0)),
                 wheat, heldWheat), Map.of(), Map.of(), Map.of(), Map.of(), baseline.inventory().surfaces());
         inventory = inventory.recordConflict(InventoryDiagnosticProducer.PLAYER_EXPECTED_SLOT_MISSING.create(new SubjectId("conflict:codec-item"), item, container, 0));
-        ProductionJob activeJob = new ProductionJob(new SubjectId("job:production-1-1"), new SubjectId("settlement:1"),
+        FrontierWorldState taskBaseline = withActiveJobTask(baseline, new SubjectId("task:production-1-1"), StrategicTaskKind.PRODUCE_BREAD);
+        ProductionJob activeJob = new ProductionJob(new SubjectId("job:production-1-1"), new SubjectId("task:production-1-1"), new SubjectId("settlement:1"),
                 new SubjectId("structure:1-workshop"), new SubjectId("resident:1-3"), wheat, new ProductionInputHold.Cold(heldWheat),
                 new SubjectId("item:production-1-1-bread"), "minecraft:bread", 64);
-        FrontierWorldState source = baseline.withInventory(inventory).withActorBody(new SubjectId("bioform:west-1"), FrontierTestPositions.bodyAboveSupport(new BlockPosition(-400, 64, 400)))
+        FrontierWorldState source = taskBaseline.withInventory(inventory).withActorBody(new SubjectId("bioform:west-1"), FrontierTestPositions.bodyAboveSupport(new BlockPosition(-400, 64, 400)))
                 .withStructureCondition(new SubjectId("structure:2-depot"), StructureCondition.DESTROYED)
                 .withInfection(new InfectionCell(-100, 100), HALF).startProductionJob(activeJob, wheat);
         FrontierWorldStateCodec codec = new FrontierWorldStateCodec();
@@ -229,10 +230,9 @@ class FrontierWorldStateTest {
 
     @Test
     void durableAssemblyPreservesExactPeopleWithoutCreationTeleportAndSurvivesSnapshotRecovery() {
-        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(new WorldId("frontier:operation-travel"), 91L));
-        for (long tick = 100L; tick <= 2_550L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
+        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.operationAssemblyConfiguration(new WorldId("frontier:operation-travel"), 91L));
         FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        RouteOperation operation = before.operations().get(new SubjectId("operation:supply-1-2"));
+        RouteOperation operation = FrontierDevelopmentScenarios.initialNorthwatchAssembly(before).orElseThrow();
         OperationAssembly assembly = operation.activeAssembly().orElseThrow();
 
         assertEquals(OperationStage.ASSEMBLING, operation.stage());
@@ -248,12 +248,11 @@ class FrontierWorldStateTest {
 
     @Test
     void hotAssemblyMovesOnlyTheObservedMemberAndRetargetsItsSameLease() {
-        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.uncontestedSupplyConfiguration(new WorldId("frontier:operation-assembly-hot"), 91L));
-        for (long tick = 100L; tick <= 2_550L; tick += 50L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
+        var engine = FrontierEngines.create(FrontierV3FixtureCatalog.operationAssemblyConfiguration(new WorldId("frontier:operation-assembly-hot"), 91L));
         FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        RouteOperation operation = state.operations().get(new SubjectId("operation:supply-1-2"));
+        RouteOperation operation = FrontierDevelopmentScenarios.initialNorthwatchAssembly(state).orElseThrow();
         SubjectId hauler = operation.participantIds().getFirst(); OperationAssembly initial = operation.activeAssembly().orElseThrow();
-        AmbientActorLease prepared = AmbientActorProcess.nextLease(state, hauler, new SimInstant(2_550L));
+        AmbientActorLease prepared = AmbientActorProcess.nextLease(state, hauler, engine.checkpoint().instant());
         assertEquals(AmbientGoalKind.OPERATION_ASSEMBLY, prepared.goal());
         state = AmbientLeaseStateProcess.prepare(state, prepared);
         state = AmbientLeaseStateProcess.transition(state, hauler, AmbientLeaseStatus.HOT);
@@ -263,7 +262,10 @@ class FrontierWorldStateTest {
         FrontierWorldState advanced = state.advanceOperationAssembly(operation.id(), new OperationAssembly(members, initial.cargoCarrierId()));
 
         assertEquals(current.nextSurface().support(), FrontierTestPositions.supportOf(advanced.actorLocations().get(hauler)));
-        assertEquals(initial.members().get(operation.participantIds().get(1)).currentSurface().support(), FrontierTestPositions.supportOf(advanced.actorLocations().get(operation.participantIds().get(1))));
+        for (SubjectId member : operation.participantIds()) {
+            if (!member.equals(hauler)) assertEquals(state.actorLocations().get(member), advanced.actorLocations().get(member),
+                    "only the physically observed member may move");
+        }
         assertEquals(AmbientGoalKind.OPERATION_ASSEMBLY, advanced.ambientLeases().get(hauler).goal());
         assertEquals(advanced, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(advanced)));
     }
@@ -420,17 +422,27 @@ class FrontierWorldStateTest {
 
     @Test
     void hiveGrowthConsumesOneExactStoreItemBeforeItPublishesItsNewIdentities() {
-        FrontierWorldState baseline = withLegacyExactBiomass(initial()); SubjectId hive = baseline.bootstrap().hive().id(); SubjectId east = new SubjectId("nest:seed-east");
-        HiveGrowthJob job = new HiveGrowthJob(new SubjectId("job:hive-growth-1"), hive, east, new SubjectId("item:bootstrap-hive-biomass"),
+        FrontierWorldState baseline = withActiveJobTask(withLegacyExactBiomass(initial()), new SubjectId("task:hive-growth-1"), StrategicTaskKind.GROW_HIVE_ORGANISM);
+        SubjectId hive = baseline.bootstrap().hive().id(); SubjectId east = new SubjectId("nest:seed-east");
+        HiveGrowthJob job = new HiveGrowthJob(new SubjectId("job:hive-growth-1"), new SubjectId("task:hive-growth-1"), hive, east, new SubjectId("item:bootstrap-hive-biomass"),
                 new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:hive-growth-biomass-1"),
                 new HiveOrgan(new SubjectId("organ:east-grown-relay-1"), hive, east, HiveOrganKind.RELAY, new BlockPosition(432, 64, 432), java.util.Optional.empty()),
                 new Bioform(new SubjectId("bioform:east-grown-1"), hive, east, BioformChassis.RUNT,
                         java.util.Set.of(BioformMutation.ARMORED), BioformAssignment.DEFEND, new BlockPosition(436, 64, 432)));
+        HiveGrowthJob missingTask = new HiveGrowthJob(job.id(), new SubjectId("task:hive-growth-missing"), job.hiveId(), job.nestId(),
+                job.consumedItemId(), job.inputHold(), job.consumptionIntentId(), job.organ(), job.bioform());
+        assertThrows(IllegalArgumentException.class, () -> baseline.startHiveGrowth(missingTask));
         SubjectId store = ((InventoryCustody.ContainerSlot) baseline.inventory().items().get(job.consumedItemId()).custody()).containerId();
         FrontierWorldState active = ReferenceContainerCustodyFixtures.observedAndHeld(baseline.withInventory(baseline.inventory().withSurfaceStatus(store, ContainerSurfaceStatus.PREPARED)
                 .withSurfaceStatus(store, ContainerSurfaceStatus.ACTIVE)), store).startHiveGrowth(job);
         assertTrue(active.inventory().items().containsKey(job.consumedItemId()));
         assertEquals(job, active.hiveColony().growthJobs().get(job.id()));
+        assertTrue(FrontierDomainRelationships.view(active).edges().stream().anyMatch(edge ->
+                edge.kind() == FrontierDomainRelationships.Kind.HIVE_GROWTH_TASK
+                        && edge.target().equals(new FrontierDomainRelationships.SubjectEndpoint(
+                                FrontierDomainRelationships.EntityKind.TASK, job.taskId()))));
+        assertEquals(job.taskId(), new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(active))
+                .hiveColony().growthJobs().get(job.id()).taskId());
         PhysicalIntent intent = new PhysicalIntent(job.consumptionIntentId(), PhysicalIntentKind.EXACT_ITEM_CONSUMPTION, PhysicalIntentStatus.PREPARED,
                 job.id(), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.hiveGrowthConsumption(job.id(), job.consumedItemId()), new FixedPosition(FixedScalar.whole(420), FixedScalar.whole(64), FixedScalar.whole(420)), 0,
                 PhysicalPostcondition.EXACT_ITEM_CONSUMED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.HIVE_GROWTH);
@@ -441,9 +453,9 @@ class FrontierWorldStateTest {
         assertTrue(consumed.inventory().items().containsKey(job.consumedItemId()),
                 "a direct storage transition cannot compose an owner-specific consumption receipt");
         assertEquals(consumed, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(consumed)));
-        assertThrows(IllegalArgumentException.class, () -> baseline.startHiveGrowth(new HiveGrowthJob(new SubjectId("job:hive-growth-bad"), hive, east,
+        assertThrows(IllegalArgumentException.class, () -> baseline.startHiveGrowth(new HiveGrowthJob(new SubjectId("job:hive-growth-bad"), job.taskId(), hive, east,
                 new SubjectId("item:bootstrap-1-wheat"), new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:hive-growth-biomass-bad"), job.organ(), job.bioform())));
-        assertThrows(IllegalArgumentException.class, () -> baseline.startHiveGrowth(new HiveGrowthJob(new SubjectId("job:hive-growth-remote"), hive,
+        assertThrows(IllegalArgumentException.class, () -> baseline.startHiveGrowth(new HiveGrowthJob(new SubjectId("job:hive-growth-remote"), job.taskId(), hive,
                 new SubjectId("nest:seed-west"), job.consumedItemId(), new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:hive-growth-biomass-remote"),
                 new HiveOrgan(new SubjectId("organ:west-grown-relay-remote"), hive, new SubjectId("nest:seed-west"), HiveOrganKind.RELAY,
                         new BlockPosition(-408, 64, 432), java.util.Optional.empty()),
@@ -460,8 +472,9 @@ class FrontierWorldStateTest {
 
     @Test
     void unknownHiveBiomassEffectReleasesTheActiveGrowthSlotWithoutAssumingConsumption() {
-        FrontierWorldState baseline = withLegacyExactBiomass(initial()); SubjectId hive = baseline.bootstrap().hive().id(); SubjectId east = new SubjectId("nest:seed-east");
-        HiveGrowthJob job = new HiveGrowthJob(new SubjectId("job:hive-growth-unknown"), hive, east, new SubjectId("item:bootstrap-hive-biomass"),
+        FrontierWorldState baseline = withActiveJobTask(withLegacyExactBiomass(initial()), new SubjectId("task:hive-growth-unknown"), StrategicTaskKind.GROW_HIVE_ORGANISM);
+        SubjectId hive = baseline.bootstrap().hive().id(); SubjectId east = new SubjectId("nest:seed-east");
+        HiveGrowthJob job = new HiveGrowthJob(new SubjectId("job:hive-growth-unknown"), new SubjectId("task:hive-growth-unknown"), hive, east, new SubjectId("item:bootstrap-hive-biomass"),
                 new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:hive-growth-biomass-unknown"),
                 new HiveOrgan(new SubjectId("organ:east-grown-relay-unknown"), hive, east, HiveOrganKind.RELAY, new BlockPosition(440, 64, 432), java.util.Optional.empty()),
                 new Bioform(new SubjectId("bioform:east-grown-unknown"), hive, east, BioformChassis.RUNT,
@@ -484,6 +497,20 @@ class FrontierWorldStateTest {
 
     private static FrontierWorldState initial() {
         return FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:state"), 1234L));
+    }
+
+    private static FrontierWorldState withActiveJobTask(FrontierWorldState state, SubjectId taskId, StrategicTaskKind kind) {
+        boolean hiveGrowth = kind == StrategicTaskKind.GROW_HIVE_ORGANISM;
+        SubjectId owner = hiveGrowth ? state.bootstrap().hive().id() : new SubjectId("settlement:1");
+        SubjectId objectiveId = new SubjectId("objective:" + taskId.value().substring("task:".length()));
+        StrategicObjective objective = new StrategicObjective(objectiveId, owner,
+                hiveGrowth ? StrategicObjectiveKind.HIVE_GROW_ORGANISM : StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD,
+                Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
+        StrategicTask task = new StrategicTask(taskId, objectiveId, owner, kind, Optional.empty(),
+                hiveGrowth ? List.of(StrategicTaskRequirement.EXACT_HIVE_BIOMASS)
+                        : List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT),
+                List.of(), StrategicTaskStatus.ACTIVE);
+        return state.withStrategicPlans(state.strategicPlans().addObjective(objective).addTask(task));
     }
 
     /** Retained exact-consumption recovery coverage uses a local synthetic stack, never bootstrap biomass. */

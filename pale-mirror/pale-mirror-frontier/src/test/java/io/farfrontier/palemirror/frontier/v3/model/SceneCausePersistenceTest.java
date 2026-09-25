@@ -20,6 +20,25 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class SceneCausePersistenceTest {
+    @Test void harvestSceneWalRetainsDeclaredSiteAndRejectsItsOldJobOnlyMarker() {
+        WorldId world = new WorldId("frontier:harvest-scene-owner-wire");
+        SubjectId actor = new SubjectId("resident:harvest-scene-owner-wire");
+        ResourceSiteHarvestSceneCause cause = new ResourceSiteHarvestSceneCause(
+                new SubjectId("site:harvest-scene-owner-wire"),
+                new SubjectId("job:site-harvest-owner-wire"));
+        BlockPosition support = new BlockPosition(8, 64, 8);
+        SceneLease lease = SceneLease.forCause(new SceneLeaseId("lease:harvest-scene-owner-wire"), world,
+                cause, support, new SimInstant(10L), 1L, SceneLeaseStatus.PREPARED,
+                List.of(new SceneMember(actor, SceneLease.deterministicEntityId(world, actor))),
+                Map.of(actor, BodyPosition.aboveSupportCell(support)), Set.of(), Optional.empty());
+        ResourceSiteHarvestSceneLeasePrepared payload = new ResourceSiteHarvestSceneLeasePrepared(lease);
+        byte[] encoded = FrontierWorldRuntimeDefinition.payloadCodecs().encode(payload);
+        assertEquals(payload, FrontierWorldRuntimeDefinition.payloadCodecs().decode(payload.type(), encoded));
+        byte[] oldMarker = encoded.clone(); oldMarker[1] = (byte) 0xfd;
+        assertThrows(IllegalArgumentException.class, () -> FrontierWorldRuntimeDefinition.payloadCodecs()
+                .decode(payload.type(), oldMarker), "the old job-only WAL body cannot be reinterpreted as a site declaration");
+    }
+
     @Test void preTypedLogisticsLeaseWalIsRejectedForFreshWorlds() {
         WorldId world = new WorldId("frontier:legacy-scene-wal");
         SubjectId operation = new SubjectId("operation:legacy-scene-wal");

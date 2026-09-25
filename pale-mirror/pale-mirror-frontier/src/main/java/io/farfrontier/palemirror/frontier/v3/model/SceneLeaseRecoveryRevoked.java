@@ -6,11 +6,10 @@ import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import java.util.Objects;
 
 /**
- * No-visit recovery decision for a lease whose only unfinished projections are reversible.
+ * Legacy no-visit recovery event retained solely for replaying existing WAL.
  *
- * <p>This is not a synthetic loaded-world observation: it retires the old projection fence
- * and leaves the retained canonical COLD checkpoint in place. A future natural entity load can
- * therefore only be rejected as stale.</p>
+ * <p>New commands are rejected: a scene body can retain uncheckpointed injury, so absence
+ * of demand is not proof that closing its projection preserves physical consequences.</p>
  */
 public record SceneLeaseRecoveryRevoked(SceneLeaseId leaseId) implements FrontierPayload {
     public SceneLeaseRecoveryRevoked { Objects.requireNonNull(leaseId, "scene recovery revoke lease"); }

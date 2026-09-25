@@ -109,6 +109,23 @@ final class FrontierV3ActorCarrierComposition {
         entity.getPersistentData().putLong(EPOCH_KEY, declaration.epoch());
     }
 
+    /** Decode only the entity's own complete declaration; class/ID never supplies a missing tag. */
+    static java.util.Optional<Declaration> declaredBy(Entity entity) {
+        var tag = entity.getPersistentData();
+        if (!tag.contains(ACTOR_KEY, net.minecraft.nbt.Tag.TAG_STRING)
+                || !tag.contains(KIND_KEY, net.minecraft.nbt.Tag.TAG_STRING)
+                || !tag.contains(OWNER_KEY, net.minecraft.nbt.Tag.TAG_STRING)
+                || !tag.contains(REPRESENTATION_KEY, net.minecraft.nbt.Tag.TAG_STRING)
+                || !tag.contains(REVISION_KEY, net.minecraft.nbt.Tag.TAG_LONG)
+                || !tag.contains(EPOCH_KEY, net.minecraft.nbt.Tag.TAG_LONG)) return java.util.Optional.empty();
+        try {
+            var declaration = new Declaration(new SubjectId(tag.getString(ACTOR_KEY)), ActorKind.valueOf(tag.getString(KIND_KEY)),
+                    Owner.valueOf(tag.getString(OWNER_KEY)), entity.getUUID(), Representation.valueOf(tag.getString(REPRESENTATION_KEY)),
+                    tag.getLong(REVISION_KEY), tag.getLong(EPOCH_KEY));
+            return owns(entity, declaration) ? java.util.Optional.of(declaration) : java.util.Optional.empty();
+        } catch (IllegalArgumentException invalid) { return java.util.Optional.empty(); }
+    }
+
     /**
      * The canonical producer supplies the actor kind as one of its two closed rosters.  A missing
      * or duplicate roster declaration is not repaired by an ID convention and is rejected here.
