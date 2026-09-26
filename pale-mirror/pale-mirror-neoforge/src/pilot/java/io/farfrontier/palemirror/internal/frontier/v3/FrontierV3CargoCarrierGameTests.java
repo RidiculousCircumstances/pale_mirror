@@ -253,7 +253,7 @@ public final class FrontierV3CargoCarrierGameTests {
         });
     }
 
-    @GameTest(batch = "pm-frontier-v3-scene-cargo-interaction", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    @GameTest(batch = "pm-frontier-v3-scene-cargo-interaction", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 20)
     public static void playerOpeningCargoReleasesItsRouteThenObservesPartialFungibleWithdrawal(GameTestHelper helper) {
         // This test proves player custody/release, while preparedSceneMaterializes... proves
         // cargo creation. Keep the observed cart in this template instead of force-loading the

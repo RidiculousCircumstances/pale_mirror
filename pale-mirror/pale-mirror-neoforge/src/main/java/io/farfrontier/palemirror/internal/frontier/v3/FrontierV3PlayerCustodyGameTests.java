@@ -18,6 +18,12 @@ import io.farfrontier.palemirror.frontier.v3.model.CustodyAccount;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackBinding;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceLot;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateUpdate;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalCustodyLease;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalCustodyLeaseStatus;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyState;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaRecord;
+import io.farfrontier.palemirror.frontier.v3.model.ReferenceContainerCustody;
 import io.farfrontier.palemirror.frontier.v3.persistence.AppendReceipt;
 import io.farfrontier.palemirror.frontier.v3.persistence.CompactionReceipt;
 import io.farfrontier.palemirror.frontier.v3.persistence.Durability;
@@ -115,13 +121,11 @@ public final class FrontierV3PlayerCustodyGameTests {
     public static void activeChestTransfersOneFungiblePortionToItsRealPlayer(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); WorldId world = new WorldId("frontier:fungible-player-withdrawal-game-test");
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
-                FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.configuration(world, 91L), new EphemeralStore(), 10_000);
+                acquiredFungibleChestRuntime(world);
         SubjectId container = new SubjectId("container:1-depot"); BlockPos chestPosition = interior(helper);
         level.setBlock(chestPosition.below(), Blocks.STONE.defaultBlockState(), 3);
         ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.claimFreshChest(level, chestPosition, container);
         helper.assertTrue(chest != null, "the fungible fixture needs an owned chest");
-        FrontierV3CommandSubmission.submit(runtime, "fungible-player-withdrawal-prepare", container.value(), new ContainerSurfaceTransition(container, ContainerSurfaceStatus.PREPARED));
-        FrontierV3CommandSubmission.submit(runtime, "fungible-player-withdrawal-active", container.value(), new ContainerSurfaceTransition(container, ContainerSurfaceStatus.ACTIVE));
         chest.setItem(0, new ItemStack(Items.WHEAT, 64)); chest.setChanged();
         observeFungibleChest(level, runtime, chest, container);
         FrontierWorldState bound = state(runtime);
@@ -160,13 +164,11 @@ public final class FrontierV3PlayerCustodyGameTests {
     public static void activeChestHandsOneFungibleStackToItsObservedHopper(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); WorldId world = new WorldId("frontier:fungible-hopper-game-test");
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
-                FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.configuration(world, 91L), new EphemeralStore(), 10_000);
+                acquiredFungibleChestRuntime(world);
         SubjectId container = new SubjectId("container:1-depot"); BlockPos chestPosition = interior(helper);
         level.setBlock(chestPosition.below(), Blocks.STONE.defaultBlockState(), 3);
         ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.claimFreshChest(level, chestPosition, container);
         helper.assertTrue(chest != null, "the hopper fixture needs an owned chest");
-        FrontierV3CommandSubmission.submit(runtime, "fungible-hopper-prepare", container.value(), new ContainerSurfaceTransition(container, ContainerSurfaceStatus.PREPARED));
-        FrontierV3CommandSubmission.submit(runtime, "fungible-hopper-active", container.value(), new ContainerSurfaceTransition(container, ContainerSurfaceStatus.ACTIVE));
         chest.setItem(0, new ItemStack(Items.WHEAT, 64)); chest.setChanged();
         observeFungibleChest(level, runtime, chest, container);
         BlockPos hopperPosition = chestPosition.east(); level.setBlock(hopperPosition.below(), Blocks.STONE.defaultBlockState(), 3);
@@ -187,13 +189,11 @@ public final class FrontierV3PlayerCustodyGameTests {
     public static void activeChestDropThenRealPlayerPickupKeepsOneFungibleHotLineage(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); WorldId world = new WorldId("frontier:fungible-drop-pickup-game-test");
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
-                FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.configuration(world, 91L), new EphemeralStore(), 10_000);
+                acquiredFungibleChestRuntime(world);
         SubjectId container = new SubjectId("container:1-depot"); BlockPos chestPosition = interior(helper);
         level.setBlock(chestPosition.below(), Blocks.STONE.defaultBlockState(), 3);
         ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.claimFreshChest(level, chestPosition, container);
         helper.assertTrue(chest != null, "the drop fixture needs an owned chest");
-        FrontierV3CommandSubmission.submit(runtime, "fungible-drop-prepare", container.value(), new ContainerSurfaceTransition(container, ContainerSurfaceStatus.PREPARED));
-        FrontierV3CommandSubmission.submit(runtime, "fungible-drop-active", container.value(), new ContainerSurfaceTransition(container, ContainerSurfaceStatus.ACTIVE));
         chest.setItem(0, new ItemStack(Items.WHEAT, 64)); chest.setChanged();
         observeFungibleChest(level, runtime, chest, container);
         ItemEntity drop = new ItemEntity(level, chestPosition.getX() + 0.5D, chestPosition.getY() + 0.5D, chestPosition.getZ() + 0.5D,
@@ -293,6 +293,30 @@ public final class FrontierV3PlayerCustodyGameTests {
 
     private static FrontierWorldState state(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         return new FrontierWorldStateCodec().decode(runtime.checkpointImage().orElseThrow().canonicalState());
+    }
+
+    /** Withdrawal fixtures start after the reference chest's exact observation/acquisition boundary. */
+    private static FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection>
+    acquiredFungibleChestRuntime(WorldId world) {
+        var base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
+        SubjectId depot = new SubjectId("container:1-depot");
+        FrontierWorldState state = base.initialState().withInventory(base.initialState().inventory()
+                .withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED)
+                .withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE));
+        PhysicalReplicaRecord expected = PhysicalReplicaRecord.expected(depot,
+                ReferenceContainerCustody.semanticKind(state, depot), 0L,
+                ReferenceContainerCustody.canonicalFingerprint(state, depot), ReferenceContainerCustody.provenance(depot));
+        PhysicalReplicaCustodyState custody = PhysicalReplicaCustodyState.empty().declare(expected)
+                .observe(depot, 0L, 1L, expected.fingerprint(), expected.provenance(), 0L)
+                .acquire(new PhysicalCustodyLease(ReferenceContainerCustody.scopeId(depot), depot,
+                        ReferenceContainerCustody.PROVIDER_ID, 1L, 0L, 2L,
+                        PhysicalCustodyLeaseStatus.ACQUIRED, null));
+        state = state.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(custody));
+        var config = new FrontierEngineConfiguration<>(base.worldId(), state, base.initialInstant(),
+                base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(),
+                base.projectionMapper(), base.limits(), base.initialSchedules(), base.transactionCommitter(),
+                base.stateValidator(), base.executionMetrics());
+        return FrontierV3ServerRuntime.start(config, new EphemeralStore(), 10_000);
     }
 
     private static void observeFungibleChest(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,

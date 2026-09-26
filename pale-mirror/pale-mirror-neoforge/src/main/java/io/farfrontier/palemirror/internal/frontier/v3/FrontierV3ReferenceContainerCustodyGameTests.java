@@ -385,11 +385,17 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
         state = HiveNutrientTransferProcess.reduceStarted(state, hive, transfer);
         var departure = HiveNutrientTransferStateSupport.departureIntent(state, transfer);
         state = state.preparePhysicalIntent(departure);
+        state = state.withChanges(FrontierWorldStateUpdate.begin().fencedRecovery(
+                FencedRecoveryPhysicalIntentSupport.prepared(state.fencedRecovery(), departure, FencedRecoveryAsset.CARGO)));
 
         ChestBlockEntity chest = chest(helper, position, east);
         FrontierV3ContainerSurfaceExecutor.replaceCanonicalSlots(chest, state, east);
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(world, state);
+        helper.assertTrue(runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE,
+                "nutrient endpoint fixture startup: " + runtime.status());
         FrontierV3HiveNutrientEndpointExecutor.tick(helper.getLevel(), runtime);
+        helper.assertTrue(runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE,
+                "nutrient endpoint transition: " + runtime.status());
         FrontierWorldState confirmed = runtime.decodedState().orElseThrow();
         helper.assertTrue(confirmed.physicalIntents().get(departure.id()).status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED
                         && confirmed.inventory().items().get(biomass.id()).custody().equals(new InventoryCustody.Cargo(transfer.cargoId()))
@@ -427,11 +433,17 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
         state = HiveNutrientTransferProcess.reduceStarted(state, hive, transfer);
         var departure = HiveNutrientTransferStateSupport.departureIntent(state, transfer);
         state = state.preparePhysicalIntent(departure);
+        state = state.withChanges(FrontierWorldStateUpdate.begin().fencedRecovery(
+                FencedRecoveryPhysicalIntentSupport.prepared(state.fencedRecovery(), departure, FencedRecoveryAsset.CARGO)));
 
         ChestBlockEntity chest = chest(helper, position(state, east), east);
         chest.setItem(0, new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.ROTTEN_FLESH, 64)); chest.setChanged();
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(world, state);
+        helper.assertTrue(runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE,
+                "fungible nutrient endpoint fixture startup: " + runtime.status());
         FrontierV3HiveNutrientEndpointExecutor.tick(helper.getLevel(), runtime);
+        helper.assertTrue(runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE,
+                "fungible nutrient endpoint transition: " + runtime.status());
         FrontierWorldState confirmed = runtime.decodedState().orElseThrow();
         helper.assertTrue(chest.getItem(0).isEmpty() && confirmed.physicalIntents().get(departure.id()).status()
                         == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED,

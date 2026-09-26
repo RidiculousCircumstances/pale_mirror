@@ -45,7 +45,9 @@ public final class FrontierV3ResourceSiteObservationGameTests {
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime = preparedRuntime();
         FrontierWorldState before = runtime.decodedState().orElseThrow();
         ResourceSite site = FrontierResourceSitePlan.compile(before.bootstrap()).get(siteId);
-        FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
+        // This isolated canonical-conflict fixture must not leave a claim for the
+        // same site ID in the shared GameTest SavedData used by later field tests.
+        FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.fixture();
         ledger.reserve(siteId, new PhysicalIntentId("intent:site-prepare-1-wheat-field"));
         ledger.activate(siteId);
 

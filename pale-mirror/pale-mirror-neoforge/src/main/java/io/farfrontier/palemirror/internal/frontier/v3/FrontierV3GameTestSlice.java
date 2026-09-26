@@ -41,7 +41,15 @@ public final class FrontierV3GameTestSlice {
             case "scene-restart-reclaim" -> batchName.equals("pm-frontier-v3-scene-restart-reclaim");
             case "first-admission" -> batchName.equals("pm-frontier-v3-scene-first-admission");
             case "harvest-support" -> batchName.equals("pm-frontier-v3-scene-harvest-support");
+            case "ambient-restart-absence" -> batchName.equals("pm-frontier-v3-ambient-restart-absence");
+            case "ambient-prepared-recovery" -> batchName.equals("pm-frontier-v3-ambient-prepared-recovery");
+            case "village-observer" -> batchName.equals("pm-village-observer");
+            case "graybox-projection" -> batchName.equals("pm-frontier-v3-graybox-projection");
             case "scene-strikes" -> batchName.equals("pm-frontier-v3-scene-strikes");
+            case "scene-handoff" -> batchName.equals("pm-frontier-v3-scene-handoff");
+            case "scene-bodies" -> batchName.equals("pm-frontier-v3-scene-bodies");
+            case "route-patrol" -> batchName.equals("pm-frontier-v3-scene-route-patrol")
+                    || batchName.startsWith("pm-frontier-v3-scene-z-route-patrol-");
             case "production-work" -> batchName.equals("pm-frontier-v3-scene-production-work");
             case "local-navigation" -> batchName.equals("pm-frontier-v3-scene-local-navigation");
             case "route-construction" -> batchName.equals("pm-frontier-v3-scene-route-construction");

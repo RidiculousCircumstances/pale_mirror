@@ -492,6 +492,18 @@ final class FrontierV3AmbientActorExecutor {
         Entity existing = level.getEntity(expectedId);
         AmbientActorLease lease = state.ambientLeases().get(actorId);
         var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
+        Entity pending = FrontierV3AmbientPendingAdmissions.get(runtime, expectedId);
+        // A durable PENDING creation plus its exact still-live pre-index body is
+        // more specific than the unresolved-disk history alone. This is read-only
+        // diagnostic precedence, never permission to admit another body.
+        if (existing == null && pending != null && retainsPendingJoin(runtime, pending)
+                && ledger.firstAdmission(actorId).filter(first -> first.phase() == FrontierV3ActorFirstAdmission.Phase.PENDING
+                    && FrontierV3AmbientCarrierRecognition.ManagedCarrier.from(pending)
+                            .matches(first.attempt().orElseThrow().declaration())).isPresent()) {
+            return FrontierV3AmbientAdmissionDiagnostic.pendingUnindexed(expectedId,
+                    new BlockPosition(pending.getBlockX(), pending.getBlockY(), pending.getBlockZ()),
+                    new ObservedPosition(pending.getX(), pending.getY(), pending.getZ()));
+        }
         var unresolved = FrontierV3AmbientAdmissionDiagnostic.unresolvedCreationReason(ledger, actorId);
         if (existing == null && unresolved.isPresent()) {
             return FrontierV3AmbientAdmissionDiagnostic.carrierAmbiguity(expectedId, unresolved.orElseThrow());
@@ -529,7 +541,6 @@ final class FrontierV3AmbientActorExecutor {
             }
             return FrontierV3AmbientAdmissionDiagnostic.conflict(expectedId);
         }
-        Entity pending = FrontierV3AmbientPendingAdmissions.get(runtime, expectedId);
         if (pending != null) return FrontierV3AmbientAdmissionDiagnostic.pendingUnindexed(expectedId,
                 new BlockPosition(pending.getBlockX(), pending.getBlockY(), pending.getBlockZ()),
                 new ObservedPosition(pending.getX(), pending.getY(), pending.getZ()));

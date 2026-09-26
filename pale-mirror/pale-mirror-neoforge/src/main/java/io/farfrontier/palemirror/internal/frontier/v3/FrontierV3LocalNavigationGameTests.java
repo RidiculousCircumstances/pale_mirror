@@ -282,10 +282,10 @@ public final class FrontierV3LocalNavigationGameTests {
         });
     }
 
-    @GameTest(batch = "pm-frontier-v3-scene-harvest-support", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 140)
+    @GameTest(batch = "pm-frontier-v3-scene-harvest-support", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 140)
     public static void tendingThenLeavingHydratedFarmlandDoesNotInventTrampling(GameTestHelper helper) {
         var level = helper.getLevel();
-        var soil = helper.absolutePos(new BlockPos(4, 0, 4));
+        var soil = helper.absolutePos(new BlockPos(4, 30, 4));
         var road = soil.east();
         level.setBlock(soil, Blocks.FARMLAND.defaultBlockState()
                 .setValue(net.minecraft.world.level.block.FarmBlock.MOISTURE, 7), 3);
@@ -295,7 +295,7 @@ public final class FrontierV3LocalNavigationGameTests {
         level.setBlock(road, Blocks.STONE.defaultBlockState(), 3);
         level.setBlock(road.above(), Blocks.AIR.defaultBlockState(), 3);
         level.setBlock(road.above(2), Blocks.AIR.defaultBlockState(), 3);
-        Villager worker = helper.spawnWithNoFreeWill(EntityType.VILLAGER, new Vec3(4.5D, .9375D, 4.5D));
+        Villager worker = helper.spawnWithNoFreeWill(EntityType.VILLAGER, new Vec3(4.5D, 30.9375D, 4.5D));
         FrontierV3ControlledMobMotion.restoreOrdinaryPhysics(worker);
         var from = SurfaceAnchor.at(soil.getX(), soil.getY(), soil.getZ());
         var to = SurfaceAnchor.at(road.getX(), road.getY(), road.getZ());
@@ -315,11 +315,17 @@ public final class FrontierV3LocalNavigationGameTests {
                             FrontierV3SemanticMovement.point(level, to),
                             LocalNavigationEnvelope.around(from.standingBody(), to.standingBody()));
                 }
+                // GameTest callbacks can run after EntityTick.Pre; drive that same
+                // idempotent boundary explicitly so a missed tick is not an arrival proof.
+                FrontierV3ControlledMobMotion.advanceAtEntityBoundary(worker);
             });
         }
         helper.runAtTickTime(110, () -> {
             helper.assertTrue(FrontierV3SemanticMovement.arrived(level, worker, to),
-                    "worker must actually leave the fractional support for its retained road checkpoint");
+                    "worker must actually leave the fractional support for its retained road checkpoint: pos="
+                            + worker.position() + " support=" + worker.getOnPos() + " target=" + road
+                            + " arrival=" + FrontierV3SemanticMovement.at(level, worker, to)
+                            + " motion=" + FrontierV3ControlledMobMotion.motionObservation(worker));
             helper.assertTrue(level.getBlockState(soil).is(Blocks.FARMLAND), "soil remains after exit");
             FrontierV3ControlledMobMotion.stop(worker); worker.discard(); helper.succeed();
         });

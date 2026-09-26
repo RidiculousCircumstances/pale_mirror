@@ -661,9 +661,10 @@ final class FrontierV3ControlledMobMotion {
 
     /** Moves only upward through the current exact clear body column before one retained step. */
     private static void settleExactAscent(ServerLevel level, Mob actor, Vec3 target, double verticalDelta) {
-        Vec3 before = actor.position();
         RetainedAscent prior = ASCENTS.get(actor);
-        BlockPos sourceSupport = prior == null ? belowFeet(before) : prior.sourceSupport();
+        // Integer feet rounding points one block *below* a fractional support
+        // such as farmland. Use Minecraft's observed collision support instead.
+        BlockPos sourceSupport = prior == null ? actor.getOnPos() : prior.sourceSupport();
         // A controlled lift is a grade move from one real physical support, never a flight
         // response to an absent or player-destroyed floor.  This keeps a retained climb live
         // across ordinary gravity while immediately returning the body to vanilla falling when
@@ -674,10 +675,12 @@ final class FrontierV3ControlledMobMotion {
         // apparent ascent at a same-level field edge.  Use the same physical support notion:
         // this still rejects air, pass-through decoration and a removed floor, without adding
         // a coordinate exception or alternate path.
-        if (level.getBlockState(sourceSupport).getCollisionShape(level, sourceSupport).isEmpty()) {
+        if (prior == null && !standingOnPhysicalSupport(level, actor)
+                || level.getBlockState(sourceSupport).getCollisionShape(level, sourceSupport).isEmpty()) {
             ASCENTS.remove(actor);
             return;
         }
+        Vec3 before = actor.position();
         actor.move(MoverType.SELF, new Vec3(0.0D, Math.min(verticalDelta, VERTICAL_SPEED), 0.0D));
         if (actor.position().y > before.y + 1.0E-8D) {
             // The ordinary gravity half has already run at this entity boundary.  Retaining
@@ -689,10 +692,6 @@ final class FrontierV3ControlledMobMotion {
             ASCENTS.put(actor, new RetainedAscent(target, sourceSupport));
             publishAcceptedMove(actor);
         }
-    }
-
-    private static BlockPos belowFeet(Vec3 feet) {
-        return new BlockPos((int) Math.floor(feet.x), (int) Math.floor(feet.y) - 1, (int) Math.floor(feet.z));
     }
 
     /** Requests vanilla's normal position-delta publication after an accepted move. */

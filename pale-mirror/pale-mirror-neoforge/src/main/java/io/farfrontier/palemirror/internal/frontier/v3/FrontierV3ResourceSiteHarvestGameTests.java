@@ -182,7 +182,8 @@ public final class FrontierV3ResourceSiteHarvestGameTests {
             helper.assertValueEqual(FrontierV3ResourceSiteExecutor.projectStage(level, ledger, site, ResourceSiteLifecycle.MATURE_STAGE),
                     FrontierV3ResourceSiteExecutor.StageProjectionResult.UPDATED, "the predecessor receipt begins mature");
             for (int cursor = 0; cursor < site.cropSlots().size(); cursor++) {
-                level.setBlock(new BlockPos(site.cropSlots().get(cursor).x(), site.cropSlots().get(cursor).y(), site.cropSlots().get(cursor).z()), Blocks.AIR.defaultBlockState(), 3);
+                level.setBlock(new BlockPos(site.cropSlots().get(cursor).x(), site.cropSlots().get(cursor).y(), site.cropSlots().get(cursor).z()),
+                        FrontierV3ResourceSiteExecutor.crop(0), 3);
                 ledger.harvestOne(site.id(), cursor + 1);
             }
             helper.assertTrue(FrontierV3ResourceSiteExecutor.matchesHarvestProgress(level, site, 64)
@@ -300,7 +301,7 @@ public final class FrontierV3ResourceSiteHarvestGameTests {
                     FrontierV3ResourceSiteExecutor.StageProjectionResult.UPDATED, "the prefix fixture begins mature");
             for (int index = 0; index < 21; index++) {
                 BlockPosition crop = site.cropSlots().get(index);
-                level.setBlock(new BlockPos(crop.x(), crop.y(), crop.z()), Blocks.AIR.defaultBlockState(), 3);
+                level.setBlock(new BlockPos(crop.x(), crop.y(), crop.z()), FrontierV3ResourceSiteExecutor.crop(0), 3);
                 ledger.harvestOne(site.id(), index + 1);
             }
             CompoundTag saved = ledger.save(new CompoundTag(), level.registryAccess()); ledger = FrontierV3ResourceSiteLedger.load(saved, level.registryAccess());
@@ -366,11 +367,12 @@ public final class FrontierV3ResourceSiteHarvestGameTests {
             helper.assertValueEqual(FrontierV3ResourceSiteExecutor.projectStage(level, ledger, site, 7),
                     FrontierV3ResourceSiteExecutor.StageProjectionResult.UPDATED, "successor fixture must begin mature");
             for (int index = 0; index < site.cropSlots().size(); index++) {
-                BlockPosition crop = site.cropSlots().get(index); level.setBlock(new BlockPos(crop.x(), crop.y(), crop.z()), Blocks.AIR.defaultBlockState(), 3);
+                BlockPosition crop = site.cropSlots().get(index);
+                level.setBlock(new BlockPos(crop.x(), crop.y(), crop.z()), FrontierV3ResourceSiteExecutor.crop(0), 3);
                 ledger.harvestOne(site.id(), index + 1);
             }
             // Restore the suffix in the only order represented by the claim: after restoring
-            // N-1, exactly [0,N) remains AIR.  A persisted middle cursor is therefore an
+            // N-1, exactly [0,N) remains replanted. A persisted middle cursor is therefore an
             // exact restart witness, not an incomplete/foreign successor field.
             for (int index = site.cropSlots().size() - 1; index >= site.cropSlots().size() - 8; index--) {
                 BlockPosition crop = site.cropSlots().get(index);
@@ -471,7 +473,7 @@ public final class FrontierV3ResourceSiteHarvestGameTests {
                     FrontierV3ResourceSiteExecutor.StageProjectionResult.UPDATED, "the owned-prefix fixture must start from the mature current field");
             for (int index = 0; index < 12; index++) {
                 BlockPosition crop = site.cropSlots().get(index);
-                level.setBlock(new BlockPos(crop.x(), crop.y(), crop.z()), Blocks.AIR.defaultBlockState(), 3);
+                level.setBlock(new BlockPos(crop.x(), crop.y(), crop.z()), FrontierV3ResourceSiteExecutor.crop(0), 3);
                 ledger.harvestOne(site.id(), index + 1);
             }
             helper.assertTrue(FrontierV3ResourceSiteExecutor.matchesHarvestProgress(level, site, 12),

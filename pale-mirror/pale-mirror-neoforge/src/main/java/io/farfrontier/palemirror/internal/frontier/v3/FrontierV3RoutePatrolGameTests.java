@@ -150,6 +150,10 @@ public final class FrontierV3RoutePatrolGameTests {
     }
 
     private static void prepareRouteFloor(ServerLevel level, Fixture fixture) {
+        WorldId world = fixture.state().bootstrap().worldId();
+        FrontierV3AmbientCarrierLedger ledger = FrontierV3AmbientCarrierLedger.get(level, world);
+        FrontierV3ActorFirstAdmissionBootstrap.initialize(ledger, fixture.state(),
+                new RecoveryImage(world, Optional.empty(), List.of()), () -> ledger.persist(level, world));
         fixture.surfaces().forEach(surface -> {
             BlockPos support = new BlockPos(surface.x(), surface.y(), surface.z());
             level.setBlock(support, Blocks.STONE.defaultBlockState(), 3);

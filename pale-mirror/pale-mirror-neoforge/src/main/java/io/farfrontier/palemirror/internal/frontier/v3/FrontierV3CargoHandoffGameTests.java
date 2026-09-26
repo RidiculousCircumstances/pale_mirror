@@ -354,7 +354,7 @@ public final class FrontierV3CargoHandoffGameTests {
 
     @GameTest(batch = "pm-frontier-v3-graybox-projection", templateNamespace = "minecraft",
             template = "bastion/mobs/empty", timeoutTicks = 20)
-    public static void grayboxDriftBecomesTerminalConflictInsteadOfTemplateRepair(GameTestHelper helper) {
+    public static void grayboxDriftDefersToCanonicalDispositionInsteadOfTemplateRepair(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos position = interior(helper);
         GrayboxCell cell = grayboxCell(position, 1, "structure:graybox-drift", GrayboxMaterial.HOUSING, GrayboxSemanticPart.WALL);
@@ -363,10 +363,10 @@ public final class FrontierV3CargoHandoffGameTests {
                 "the test begins from an owned cell");
         level.setBlock(position, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
 
-        helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, cell), FrontierV3GrayboxExecutor.ProjectionResult.CONFLICT,
-                "changed ownership never grants repair authority");
+        helper.assertValueEqual(FrontierV3GrayboxExecutor.project(level, ledger, cell), FrontierV3GrayboxExecutor.ProjectionResult.DEFERRED,
+                "changed ownership defers to its causal observer and never grants repair authority");
         helper.assertTrue(level.getBlockState(position).is(Blocks.DIAMOND_BLOCK), "the materializer does not restore its template over the changed block");
-        helper.assertTrue(ledger.claim(position).conflicted(), "drift remains terminal provenance for later domain reconciliation");
+        helper.assertTrue(ledger.claim(position).deferred(), "drift retains provenance for later canonical disposition");
         helper.succeed();
     }
 

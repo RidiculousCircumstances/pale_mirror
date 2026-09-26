@@ -163,11 +163,17 @@ public final class FrontierV3AmbientMotionGameTests {
         body.discard(); FrontierV3AmbientActorExecutor.forget(runtime); runtime.shutdown(); helper.succeed();
     }
 
-    @GameTest(batch = "pm-frontier-v3-ambient-prepared-recovery", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    @GameTest(batch = "pm-frontier-v3-ambient-prepared-recovery", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 20)
     public static void unindexedManagedJoinDefersAdmissionUntilItsExactUuidIsPublished(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
+        WorldId world = new WorldId("frontier:ambient-unindexed-join-game-test");
+        var config = FrontierWorldRuntimeDefinition.configuration(world, 91L);
+        var store = new EphemeralStore();
+        var ledger = FrontierV3AmbientCarrierLedger.get(level, world);
+        FrontierV3ActorFirstAdmissionBootstrap.initialize(ledger, config.initialState(), store.recover(world),
+                () -> ledger.persist(level, world));
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
-                FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:ambient-unindexed-join-game-test"), 91L), new EphemeralStore(), 10_000);
+                FrontierV3ServerRuntime.start(config, store, 10_000);
         SubjectId resident = new SubjectId("resident:1-1");
         FrontierWorldState before = state(runtime);
         FrontierV3CommandSubmission.submit(runtime, "ambient-unindexed-prepare", resident.value(),
@@ -176,13 +182,20 @@ public final class FrontierV3AmbientMotionGameTests {
         Villager joining = net.minecraft.world.entity.EntityType.VILLAGER.create(level);
         if (joining == null) throw new IllegalStateException("game test could not create resident body");
         joining.setUUID(FrontierV3AmbientActorExecutor.entityId(prepared, resident));
-        BlockPos observed = helper.absolutePos(new BlockPos(2, 8, 0)); joining.setPos(observed.getX() + 0.5D, observed.getY(), observed.getZ() + 0.5D);
+        BlockPos observed = helper.absolutePos(new BlockPos(4, 8, 4)); joining.setPos(observed.getX() + 0.5D, observed.getY(), observed.getZ() + 0.5D);
         joining.setNoAi(true); joining.getPersistentData().putString(FrontierV3AmbientActorExecutor.ACTOR_KEY, resident.value());
         joining.getPersistentData().putString(FrontierV3AmbientActorExecutor.KIND_KEY, "RESIDENT");
         joining.getPersistentData().putLong(FrontierV3AmbientActorExecutor.CUSTODY_EPOCH_KEY, 1L);
         FrontierV3ActorCarrierComposition.stamp(joining, FrontierV3AmbientActorExecutor.carrierDeclaration(prepared, resident,
                 FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, joining.getUUID(),
                 FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, prepared.ambientLeases().get(resident).revision(), 1L));
+        helper.assertTrue(ledger.beginFirstAdmission(FrontierV3ActorOwnerBinding.ambient(
+                        FrontierV3AmbientActorExecutor.carrierDeclaration(prepared, resident,
+                                FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, joining.getUUID(),
+                                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY,
+                                prepared.ambientLeases().get(resident).revision(), 1L))),
+                "the unindexed body requires its retained before-effect first-admission attempt");
+        ledger.persist(level, world);
         FrontierV3ServerLifecycle.JoinFirewallProof joiningProof = FrontierV3ServerLifecycle.observeSourceJoin(runtime, joining);
         helper.assertValueEqual(joiningProof.lifecycleAdmission(), FrontierV3ServerLifecycle.EntityJoinAdmission.RETAINED,
                 "an exact PREPARED managed body must be retained while its UUID is not yet indexed");
@@ -223,7 +236,7 @@ public final class FrontierV3AmbientMotionGameTests {
         joining.discard(); helper.succeed();
     }
 
-    @GameTest(batch = "pm-frontier-v3-ambient-restart-absence", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    @GameTest(batch = "pm-frontier-v3-ambient-restart-absence", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 20)
     public static void retainedCarrierPermitsFreshAdmissionButLoadedAbsenceAloneDoesNot(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
@@ -232,6 +245,10 @@ public final class FrontierV3AmbientMotionGameTests {
         FrontierWorldState initial = state(runtime);
         BodyPosition anchor = initial.actorLocations().get(resident).body();
         prepareFloor(level, new BlockPos(anchor.x(), anchor.y(), anchor.z()));
+        // Keep the body under this GameTest's entity-ticking structure ticket;
+        // the canonical anchor remains the independently tested restart witness.
+        BodyPosition localBody = bodyAt(helper.absolutePos(new BlockPos(4, 8, 4)));
+        prepareFloor(level, new BlockPos(localBody.x(), localBody.y(), localBody.z()));
         AmbientActorLease lease = new AmbientActorLease(resident, anchor, runtime.checkpointImage().orElseThrow().instant(), 1L,
                 AmbientLeaseStatus.PREPARED, AmbientGoalKind.WORK, anchor);
         FrontierV3CommandSubmission.submit(runtime, "ambient-restart-absence-prepare", resident.value(), new AmbientLeasePrepared(lease));
@@ -259,7 +276,7 @@ public final class FrontierV3AmbientMotionGameTests {
         publishProjectionBeforeManagedJoin(helper, level, runtime);
         helper.assertFalse(FrontierV3AmbientActorExecutor.mayCreateFreshBody(true, false, true),
                 "production admission must defer while Minecraft has loaded blocks but is still restoring entity storage");
-        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state(runtime), resident, anchor), FrontierV3AmbientActorExecutor.Result.APPLIED,
+        helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, runtime, state(runtime), resident, localBody), FrontierV3AmbientActorExecutor.Result.APPLIED,
                 "the isolated fixture may admit its known-empty test chunk exactly once");
         helper.runAfterDelay(1L, () -> {
             try {

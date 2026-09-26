@@ -232,15 +232,15 @@ public final class FrontierV3AmbientPhysicsGameTests {
      * the ambient executor owns PREPARED -> HOT admission, the retained UUID bodies, and every
      * subsequent ordinary-physics turn.
      */
-    @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 300)
+    @GameTest(batch = "pm-frontier-v3-ambient-physics", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 300)
     public static void demandedManagedResidentAndBioformFallThroughExecutorCadence(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        // Keep the complete local fall surface inside this tiny template cell.  The admitted
+        // Keep the complete local fall surface inside this test's structure. The admitted
         // scout may pursue its retained local target before the player removes a support, so a
         // single launch column would test the template floor rather than the actor's actual
         // physical collision path.
-        BlockPos residentSupport = helper.absolutePos(new BlockPos(2, 4, 2));
-        BlockPos bioformSupport = helper.absolutePos(new BlockPos(5, 4, 2));
+        BlockPos residentSupport = helper.absolutePos(new BlockPos(12, 8, 12));
+        BlockPos bioformSupport = helper.absolutePos(new BlockPos(22, 8, 12));
         Fixture fixture = fixture(residentSupport, bioformSupport);
         // The exact agricultural resident begins at its final field station and follows the
         // plan-owned return surface.  Give that declared, four-cell local departure its real
@@ -248,7 +248,7 @@ public final class FrontierV3AmbientPhysicsGameTests {
         // physical test of the corrected post-harvest body.
         prepareFallCorridor(level, residentSupport, fixture.residentWorkTarget());
         prepareFallArena(level, bioformSupport);
-        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(fixture.state());
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(level, fixture.state());
         ServerPlayer observer = helper.makeMockServerPlayerInLevel();
         observer.setPos(residentSupport.getX() + 6.5D, residentSupport.getY() + 1.0D, residentSupport.getZ() + 6.5D);
         double[] initialY = { Double.NaN, Double.NaN };
@@ -426,13 +426,17 @@ public final class FrontierV3AmbientPhysicsGameTests {
 
     private static BlockPosition block(BlockPos position) { return new BlockPosition(position.getX(), position.getY(), position.getZ()); }
 
-    private static FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime(FrontierWorldState state) {
+    private static FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime(ServerLevel level, FrontierWorldState state) {
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base =
                 FrontierWorldRuntimeDefinition.configuration(state.bootstrap().worldId(), state.bootstrap().seed());
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration = new FrontierEngineConfiguration<>(base.worldId(), state,
                 base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(state.bootstrap()),
                 base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter(), base.stateValidator(), base.executionMetrics());
-        return FrontierV3ServerRuntime.start(configuration, new EphemeralStore(), 10_000);
+        var store = new EphemeralStore();
+        var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
+        FrontierV3ActorFirstAdmissionBootstrap.initialize(ledger, state, store.recover(state.bootstrap().worldId()),
+                () -> ledger.persist(level, state.bootstrap().worldId()));
+        return FrontierV3ServerRuntime.start(configuration, store, 10_000);
     }
 
     /** GameTest coordinates are far from origin; translate the complete authored topology, not just its bounds. */

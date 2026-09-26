@@ -276,9 +276,10 @@ public final class LivingRegionGameTests {
         helper.assertTrue(data.testMines().containsKey(bindings.primaryMineId())
                         && data.testMines().containsKey(bindings.alternateMineId()),
                 "autonomous commissioning must persist both physical MineSite identities");
+        reset(data);
         helper.succeed();
     }
-    @GameTest(batch = "pm-autonomous-region", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 400)
+    @GameTest(batch = "pm-autonomous-region-preflight", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 400)
     public static void autonomousMineSitePreflightPreservesProtectedBlocksBeforeWrites(GameTestHelper helper) {
         if (GameTestProfiles.createAdapterOnly()) { helper.succeed(); return; }
         ServerLevel level = helper.getLevel();
@@ -303,15 +304,20 @@ public final class LivingRegionGameTests {
                 "failed autonomous preflight must preserve an unbreakable block");
         helper.assertTrue(data.testMines().isEmpty(),
                 "failed preflight must not register a partially materialized MineSite");
+        reset(data);
         helper.succeed();
     }
-    @GameTest(batch = "pm-village-observer", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    @GameTest(batch = "pm-village-observer", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 40)
     public static void vanillaVillageObserverRequiresStableSignalsAndOnlyRecordsFacts(GameTestHelper helper) {
         if (GameTestProfiles.createAdapterOnly()) { helper.succeed(); return; }
         ServerLevel level = helper.getLevel();
         PaleMirrorSavedData data = PaleMirrorSavedData.get(level.getServer().overworld());
         reset(data);
-        BlockPos focus = helper.absolutePos(new net.minecraft.core.BlockPos(0, 2, 0));
+        // GameTest batches share a level and may leave nearby villagers. Keep
+        // this test's X/Z inside its own structure footprint, but put its village
+        // above their vertical search window so the negative one-villager check
+        // does not accidentally observe a different earlier village.
+        BlockPos focus = helper.absolutePos(new net.minecraft.core.BlockPos(4, 82, 4));
         BlockPos anchor = focus.offset(0, 24, 0); level.getChunkAt(anchor);
         level.setBlock(anchor, Blocks.BELL.defaultBlockState(), 3);
         level.setBlock(anchor.east(), Blocks.RED_BED.defaultBlockState(), 3);

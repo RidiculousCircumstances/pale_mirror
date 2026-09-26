@@ -159,7 +159,7 @@ final class FrontierV3SceneReleaseExecutor {
                     releasePolicy.conflict(level, runtime, state, lease, "release-ambient-authority-open"); return;
                 }
                 releaseCarriers.add(new FrontierV3AmbientCarrierLedger.Carrier(live.inactiveCarrier(),
-                        lease.revision(), ambient == null ? 0L : ambient.revision()));
+                        Math.max(1L, lease.revision()), ambient == null ? 0L : ambient.revision()));
                 retireLoadedBodies.add(body);
             }
         }
