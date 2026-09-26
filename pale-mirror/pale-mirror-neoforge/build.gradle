@@ -124,9 +124,6 @@ if (!frontierV3GrayboxDisabledModsCatalog.isFile()) {
 }
 def frontierV3GrayboxDisabledMods = frontierV3GrayboxDisabledModsCatalog.readLines()
         .collect { it.trim() }.findAll { !it.isEmpty() && !it.startsWith('#') }
-if (frontierV3GrayboxDisabledMods.isEmpty()) {
-    throw new GradleException("Frontier v3 pack-pilot graybox mod catalog is empty: ${frontierV3GrayboxDisabledModsCatalog}")
-}
 def ftbGameTestWorldDirectory = new File(ftbGameTestDirectory, 'world')
 def ftbGameTestConfigDirectory = layout.buildDirectory.dir('runs/ftb-game-test/config').get().asFile
 
