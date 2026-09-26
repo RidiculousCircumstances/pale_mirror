@@ -17,8 +17,7 @@ public final class ContainerSurfaceProcess {
             return new CommandPlan.Rejected(new io.farfrontier.palemirror.frontier.v3.api.CommandRejection(
                     io.farfrontier.palemirror.frontier.v3.api.RejectionCode.REJECTED_BY_POLICY, "container surface is unknown"));
         }
-        if (transition.status() == ContainerSurfaceStatus.ACTIVE
-                && ContainerSurfaceActivationStateSupport.blockedByColdProduction(state, transition.containerId())) {
+        if (activationBlocked(state, transition)) {
             return new CommandPlan.Rejected(new io.farfrontier.palemirror.frontier.v3.api.CommandRejection(
                     io.farfrontier.palemirror.frontier.v3.api.RejectionCode.REJECTED_BY_POLICY,
                     "container activation waits for its exact cold production input"));
@@ -30,12 +29,16 @@ public final class ContainerSurfaceProcess {
                                      ContainerSurfaceTransition transition) {
         ContainerRecord container = state.inventory().containers().get(transition.containerId());
         if (container == null || !subject.equals(container.ownerId())) throw new IllegalArgumentException("container surface lacks its canonical owner");
-        if (transition.status() == ContainerSurfaceStatus.ACTIVE
-                && ContainerSurfaceActivationStateSupport.blockedByColdProduction(state, transition.containerId())) {
+        if (activationBlocked(state, transition)) {
             throw new IllegalArgumentException("container activation waits for its exact cold production input");
         }
         FrontierWorldState reduced = state.withInventory(state.inventory().withSurfaceStatus(transition.containerId(), transition.status()));
         return reduced.withChanges(FrontierWorldStateUpdate.begin().fencedRecovery(
                 FencedRecoveryContainerSupport.transition(state.fencedRecovery(), container, transition.status())));
+    }
+
+    private static boolean activationBlocked(FrontierWorldState state, ContainerSurfaceTransition transition) {
+        return transition.status() == ContainerSurfaceStatus.ACTIVE
+                && ContainerSurfaceActivationStateSupport.blockedByColdProduction(state, transition.containerId());
     }
 }

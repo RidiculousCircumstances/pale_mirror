@@ -437,7 +437,10 @@ public final class FrontierReadabilityPlan {
             case IN_PROGRESS -> "FOOD SERVING · " + provision.fulfilledRations() + " / " + provision.requiredRations();
             case SECURE -> "FOOD SECURE · " + available + " / " + reserve;
             case RATIONED -> "FOOD RATIONED · " + provision.fulfilledRations() + " / " + provision.requiredRations();
-            case SHORTAGE -> "FOOD SHORTAGE · BREAD NEEDED";
+            // SHORTAGE is the outcome of the last ration cycle, not a live stock
+            // measurement. Bread may arrive before the next scheduled review.
+            case SHORTAGE -> available == 0 ? "FOOD SHORTAGE · BREAD NEEDED"
+                    : "LAST MEAL MISSED · BREAD " + available + " / " + reserve;
             case CONFLICT -> "FOOD CONFLICT · INSPECT DEPOT";
         };
     }

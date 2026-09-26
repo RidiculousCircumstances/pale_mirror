@@ -39,7 +39,8 @@ final class FrontierV3RoutePatrolSceneExecutor {
 
     private static boolean admit(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state) {
         Optional<FrontierRoutePatrolSceneSupport.Candidate> candidate = FrontierV3SceneDemand.nextDemandedCandidate(
-                level, runtime, io.farfrontier.palemirror.frontier.v3.model.SceneCauseKind.ROUTE_PATROL, FrontierRoutePatrolSceneSupport.candidates(state), FrontierRoutePatrolSceneSupport.Candidate::handoffPosition, FrontierRoutePatrolSceneSupport.Candidate::taskId);
+                level, runtime, io.farfrontier.palemirror.frontier.v3.model.SceneCauseKind.ROUTE_PATROL, FrontierRoutePatrolSceneSupport.candidates(state), FrontierRoutePatrolSceneSupport.Candidate::handoffPosition,
+                        FrontierRoutePatrolSceneSupport.Candidate::taskId);
         if (candidate.isEmpty()) return false;
         FrontierRoutePatrolSceneSupport.Candidate patrol = candidate.orElseThrow();
         SceneLease lease = lease(runtime, patrol);

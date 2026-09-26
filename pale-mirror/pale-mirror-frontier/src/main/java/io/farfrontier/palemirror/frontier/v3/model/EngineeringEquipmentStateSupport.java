@@ -15,7 +15,8 @@ public final class EngineeringEquipmentStateSupport {
     }
 
     public static void validateIssue(FrontierWorldState state, PhysicalIntent intent) {
-        SubjectId projectId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ENGINEERING_WORK_ORDER), residentId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ENGINEERING_WORKER), itemId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.EQUIPMENT);
+        SubjectId projectId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ENGINEERING_WORK_ORDER), residentId =
+                intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ENGINEERING_WORKER), itemId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.EQUIPMENT);
         EngineeringWorkOrder project = project(state, projectId);
         EngineeringRecoveryTeam team = project.engineeringTeam().orElseThrow();
         ExactItemStack item = state.inventory().items().get(itemId);
@@ -40,7 +41,8 @@ public final class EngineeringEquipmentStateSupport {
     }
 
     public static void validateReturn(FrontierWorldState state, PhysicalIntent intent) {
-        SubjectId projectId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ENGINEERING_WORK_ORDER), residentId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ENGINEERING_WORKER), itemId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.EQUIPMENT);
+        SubjectId projectId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ENGINEERING_WORK_ORDER), residentId =
+                intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ENGINEERING_WORKER), itemId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.EQUIPMENT);
         EngineeringWorkOrder project = project(state, projectId);
         EngineeringRecoveryTeam team = project.engineeringTeam().orElseThrow();
         ExactItemStack item = state.inventory().items().get(itemId);

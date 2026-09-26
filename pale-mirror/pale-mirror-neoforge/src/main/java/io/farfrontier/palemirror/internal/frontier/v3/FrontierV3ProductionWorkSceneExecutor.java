@@ -161,7 +161,8 @@ final class FrontierV3ProductionWorkSceneExecutor {
         }
         if (job.traversalCursor() < route.size() - 1) {
             SurfaceAnchor next = route.get(job.traversalCursor() + 1);
-            if (FrontierV3SemanticMovement.arrived(level, worker, next)) submit(runtime, "production-work-traversal", lease.id().value(), new ProductionWorkTraversalAdvanced(job.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, next), job.traversalCursor() + 1));
+            if (FrontierV3SemanticMovement.arrived(level, worker, next)) submit(runtime, "production-work-traversal", lease.id().value(), new ProductionWorkTraversalAdvanced(job.id(), lease.id(),
+                    FrontierV3SurfaceObservation.observedAt(worker, next), job.traversalCursor() + 1));
             else if (!FrontierV3SemanticMovement.targetIsNavigable(level, worker, next)) blocked(level, runtime, lease, job, worker, current, next);
             else pursueRetainedTraversalEdge(level, worker, current, next);
             return;

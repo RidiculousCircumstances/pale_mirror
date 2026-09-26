@@ -219,9 +219,11 @@ final class FrontierV3ManagedExplosionLedger extends SavedData {
         }
         static BlockCandidate load(CompoundTag value) {
             if (!value.contains("pos", Tag.TAG_LONG) || !value.contains("baseline", Tag.TAG_COMPOUND)) throw new IllegalStateException("incomplete managed explosion block");
-            boolean owner = value.contains("owner", Tag.TAG_STRING), target = value.contains("targetTag", Tag.TAG_INT), part = value.contains("part", Tag.TAG_STRING), x = value.contains("infectionX", Tag.TAG_INT), z = value.contains("infectionZ", Tag.TAG_INT);
+            boolean owner = value.contains("owner", Tag.TAG_STRING), target = value.contains("targetTag", Tag.TAG_INT), part = value.contains("part", Tag.TAG_STRING), x = value.contains("infectionX", Tag.TAG_INT), z =
+                    value.contains("infectionZ", Tag.TAG_INT);
             if (owner != part || owner != target || x != z) throw new IllegalStateException("partial managed explosion block evidence");
-            return new BlockCandidate(value.getLong("pos"), value.getCompound("baseline"), owner ? Optional.of(new FrontierV3PhysicalObservationLedger.Semantic(value.getString("owner"), value.getInt("targetTag"), value.getString("part"))) : Optional.empty(),
+            return new BlockCandidate(value.getLong("pos"), value.getCompound("baseline"), owner ? Optional.of(new FrontierV3PhysicalObservationLedger.Semantic(value.getString("owner"), value.getInt("targetTag"),
+                    value.getString("part"))) : Optional.empty(),
                     x ? Optional.of(new InfectionCell(value.getInt("infectionX"), value.getInt("infectionZ"))) : Optional.empty());
         }
     }

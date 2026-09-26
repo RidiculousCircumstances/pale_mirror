@@ -55,8 +55,9 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
                     && intent.status() != PhysicalIntentStatus.RUNNING) continue;
             SceneLease scene = state.sceneLeases().values().stream()
                     .filter(lease -> lease.status() == SceneLeaseStatus.HOT
-                            && lease.cause() instanceof ResourceSiteHarvestSceneCause cause
-                            && cause.siteId().equals(job.siteId()) && cause.jobId().equals(job.id()))
+                            && FrontierSceneBehaviors.isResourceSiteHarvest(lease)
+                            && FrontierSceneBehaviors.resourceSiteHarvest(lease).siteId().equals(job.siteId())
+                            && FrontierSceneBehaviors.resourceSiteHarvest(lease).jobId().equals(job.id()))
                     .findFirst().orElse(null);
             if (scene == null || scene.members().size() != 1) continue;
             if (!workerAtDepot(level, state, job, scene)) continue;

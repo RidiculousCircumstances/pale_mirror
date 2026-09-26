@@ -252,7 +252,8 @@ public final class HiveNutrientTransferStateSupport {
 
     private static PhysicalIntent endpointIntent(HiveNutrientTransfer transfer, SubjectId endpoint, PhysicalIntentId intentId,
                                                   PhysicalIntentKind kind, PhysicalPostcondition postcondition, BlockPosition position) {
-        return new PhysicalIntent(intentId, kind, PhysicalIntentStatus.PREPARED, transfer.hiveId(), kind == PhysicalIntentKind.HIVE_NUTRIENT_DEPARTURE ? PhysicalIntentRoleBinding.nutrientDeparture(transfer.id(), transfer.cargoId(), transfer.itemId()) : PhysicalIntentRoleBinding.nutrientArrival(transfer.id(), transfer.cargoId(), transfer.itemId()),
+        return new PhysicalIntent(intentId, kind, PhysicalIntentStatus.PREPARED, transfer.hiveId(), kind == PhysicalIntentKind.HIVE_NUTRIENT_DEPARTURE ? PhysicalIntentRoleBinding.nutrientDeparture(transfer.id(),
+                transfer.cargoId(), transfer.itemId()) : PhysicalIntentRoleBinding.nutrientArrival(transfer.id(), transfer.cargoId(), transfer.itemId()),
                 new FixedPosition(FixedScalar.whole(position.x()), FixedScalar.whole(position.y()), FixedScalar.whole(position.z())), 0, postcondition,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.HIVE_NUTRIENT_TRANSFER);
     }

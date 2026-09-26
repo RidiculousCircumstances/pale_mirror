@@ -31,7 +31,8 @@ final class FrontierV3SettlementServiceWorkSceneExecutor {
 
     private static boolean admit(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state) {
         Optional<FrontierSettlementServiceWorkSceneSupport.Candidate> candidate = FrontierV3SceneDemand.nextDemandedCandidate(
-                level, runtime, io.farfrontier.palemirror.frontier.v3.model.SceneCauseKind.SERVICE_WORK, FrontierSettlementServiceWorkSceneSupport.candidates(state), FrontierSettlementServiceWorkSceneSupport.Candidate::handoffPosition, FrontierSettlementServiceWorkSceneSupport.Candidate::workId);
+                level, runtime, io.farfrontier.palemirror.frontier.v3.model.SceneCauseKind.SERVICE_WORK, FrontierSettlementServiceWorkSceneSupport.candidates(state),
+                        FrontierSettlementServiceWorkSceneSupport.Candidate::handoffPosition, FrontierSettlementServiceWorkSceneSupport.Candidate::workId);
         if (candidate.isEmpty()) return false;
         FrontierSettlementServiceWorkSceneSupport.Candidate work = candidate.orElseThrow(); SceneLease lease = lease(runtime, work);
         if (FrontierSceneAdmission.available(state, Set.of(work.workerId()))) prepare(level, runtime, lease); else handoff(level, runtime, state, lease);

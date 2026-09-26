@@ -582,173 +582,11 @@ final class FrontierV3SceneExecutor {
         submit(runtime, "explosion-prepare", key, new PhysicalIntentPrepared(intent));
         return true;
     }
-    static void executeStrike(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease,
-                              PhysicalIntentLifecycleOwner lifecycleOwner) {
-        boolean settlementAssault = FrontierSceneBehaviors.isSettlementAssault(lease);
-        List<Body> bodies = lease.members().stream().map(member -> body(level, state, lease, member)).flatMap(Optional::stream).toList();
-        SettlementAssault assault = settlementAssault ? state.strategicPlans().settlementAssaults().get(FrontierSceneBehaviors.settlementAssault(lease).assaultId()) : null;
-        long strikeEpoch = assault == null ? 0L : SettlementAssaultCauseIdentity.hotEpoch(assault, state.physicalIntents().values());
-        FrontierV3SettlementAssaultSceneExecutor.StrikePair pair = settlementAssault && assault != null
-                ? FrontierV3SettlementAssaultSceneExecutor.currentStrikePair(assault, strikeEpoch).orElse(null) : null;
-        SubjectId sceneCause = FrontierV3SceneBehaviorRegistry.strikeCause(state, lease,
-                pair == null ? null : pair.attackerId(), strikeEpoch);
-        Optional<PhysicalIntent> pending = state.physicalIntents().values().stream().filter(intent -> intent.kind() == PhysicalIntentKind.SCENE_STRIKE
-                && intent.lifecycleOwner() == lifecycleOwner && intent.status() != PhysicalIntentStatus.CONFIRMED)
-                .filter(intent -> io.farfrontier.palemirror.frontier.v3.model.SceneStrikeStateSupport.boundTo(lease, intent))
-                .filter(intent -> !settlementAssault || FrontierV3SettlementAssaultReceiptBinding.belongsToLease(state, lease, intent))
-                .min(Comparator.comparing(PhysicalIntent::id));
-        if (pending.filter(intent -> intent.status() == PhysicalIntentStatus.CONFLICTED).isPresent()) {
-            if (lease.status() == SceneLeaseStatus.HOT) submit(runtime, "scene-strike-drain", lease.id().value(),
-                    new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
-            return;
-        }
-        if (pending.filter(intent -> intent.status() != PhysicalIntentStatus.PREPARED
-                && intent.status() != PhysicalIntentStatus.RUNNING
-                && intent.status() != PhysicalIntentStatus.UNKNOWN_AFTER_RESTART).isPresent()) return;
-        if (pending.isEmpty()) {
-            if (sceneCause == null || lease.status() == SceneLeaseStatus.DRAINING) return;
-            List<Body> attackers;
-            List<Body> targets;
-            if (!settlementAssault) {
-                boolean hiveTurn = confirmedStrikeCount(state, sceneCause) % 2L == 0L;
-                final boolean genericHiveTurn = hiveTurn;
-                attackers = bodies.stream().filter(body -> genericHiveTurn ? body.bioform() : !body.bioform() && residentGuard(state, body.member().actorId())).toList();
-                targets = bodies.stream().filter(body -> genericHiveTurn ? !body.bioform() : body.bioform()).toList();
-            } else {
-                attackers = bodies.stream().filter(body -> body.member().actorId().equals(pair.attackerId())).toList();
-                targets = bodies.stream().filter(body -> body.member().actorId().equals(pair.targetId())).toList();
-            }
-            if (attackers.isEmpty() || targets.isEmpty()) return;
-            Body attacker = settlementAssault ? attackers.getFirst() : attackers.stream().min(Comparator.comparing(body -> body.member().actorId())).orElseThrow();
-            Body target = settlementAssault ? targets.getFirst() : targets.stream().min(Comparator.comparingDouble((Body body) -> attacker.entity().distanceToSqr(body.entity()))
-                    .thenComparing(body -> body.member().actorId())).orElseThrow();
-            if (attacker.entity().distanceToSqr(target.entity()) > 3.61D) return;
-
-            PhysicalIntentId intentId = settlementAssault
-                    ? FrontierV3SettlementAssaultReceiptBinding.intentId(state, lease, sceneCause)
-                    : new PhysicalIntentId("intent:scene-strike-" + state.bootstrap().worldId().value().replace(':', '-') + "-"
-                    + sceneCause.value().replace(':', '-') + "-r" + lease.revision() + "-s" + confirmedStrikeCount(state, sceneCause));
-            String key = intentId.value().substring("intent:scene-strike-".length());
-            PhysicalIntent intent = new PhysicalIntent(intentId, PhysicalIntentKind.SCENE_STRIKE, PhysicalIntentStatus.PREPARED,
-                    sceneCause, settlementAssault
-                            ? PhysicalIntentRoleBinding.assaultSceneStrike(attacker.member().actorId(), target.member().actorId(), lease.id(), lease.revision())
-                            : PhysicalIntentRoleBinding.routeSceneStrike(attacker.member().actorId(), target.member().actorId(), lease.id(), lease.revision()), position(attacker.entity()), 0,
-                    PhysicalPostcondition.SCENE_STRIKE_OBSERVED, lifecycleOwner);
-            submit(runtime, "scene-strike-prepare", key, new PhysicalIntentPrepared(intent)); return;
-        }
-        PhysicalIntent intent = pending.orElseThrow();
-        Body attacker = bodies.stream().filter(body -> body.member().actorId().equals(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ATTACKER))).findFirst().orElse(null);
-        Body target = bodies.stream().filter(body -> body.member().actorId().equals(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.TARGET))).findFirst().orElse(null);
-        if (target == null) {
-            // A dead but still loaded exact body can supply evidence, never new work.
-            var member = lease.members().stream().filter(value -> value.actorId().equals(intent.roles().require(
-                    io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.TARGET))).findFirst().orElse(null);
-            Entity entity = member == null ? null : level.getEntity(member.entityId());
-            if (member != null && entity instanceof Mob mob && ownsDeclaration(entity, state, lease, member)) {
-                target = new Body(member, mob, bioform(state, member.actorId()));
-            }
-        }
-        if (target != null && target.entity().getPersistentData().contains(FrontierV3SceneStrikeReceipt.KEY)) {
-            try {
-                var saved = FrontierV3SceneStrikeReceipt.load(target.entity().getPersistentData().getCompound(FrontierV3SceneStrikeReceipt.KEY));
-                var previous = state.physicalIntents().get(saved.observation().intentId());
-                if (saved.world().equals(state.bootstrap().worldId()) && saved.targetEntity().equals(target.entity().getUUID())
-                        && previous != null && previous.status() == PhysicalIntentStatus.CONFIRMED
-                        && saved.observation().equals(state.physicalObservations().get(saved.observation().id()))) {
-                    // WAL confirmation survived but marker removal did not. Clear only the
-                    // already-acknowledged exact evidence; never restore its old health.
-                    target.entity().getPersistentData().remove(FrontierV3SceneStrikeReceipt.KEY);
-                    return;
-                }
-                if (saved.world().equals(state.bootstrap().worldId()) && saved.targetEntity().equals(target.entity().getUUID())
-                        && saved.terminallyAbandoned(state)) {
-                    target.entity().getPersistentData().remove(FrontierV3SceneStrikeReceipt.KEY);
-                    return;
-                }
-                if (!saved.matches(state, lease, intent, target.entity().getUUID(), fixed(target.entity().getHealth()))) {
-                    inspectUnresolvedStrike(level, runtime, state, intent, target.entity());
-                    return;
-                }
-                io.farfrontier.palemirror.frontier.v3.model.SceneStrikeStateSupport.validateObservation(state, intent, saved.observation());
-                submit(runtime, "scene-strike-confirm", intent.id().value(), new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(saved.observation())));
-                target.entity().getPersistentData().remove(FrontierV3SceneStrikeReceipt.KEY);
-            } catch (IllegalArgumentException invalid) {
-                PaleMirrorMod.LOGGER.debug("Unresolved exact strike witness intent={}: {}", intent.id(), invalid.getMessage());
-                inspectUnresolvedStrike(level, runtime, state, intent, target.entity());
-            }
-            return;
-        }
-        // No witness is not proof that damage did not happen. Never replay an unknown hit.
-        if (intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) {
-            if (target != null) inspectUnresolvedStrike(level, runtime, state, intent, target.entity());
-            else {
-                var recorded = state.actorLocations().get(intent.roles().require(
-                        io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.TARGET));
-                // Exact committed death is evidence independent of entity loading. It is
-                // not evidence that this particular hit killed it; abandon, never confirm.
-                if (recorded != null && recorded.condition().status() == io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.DEAD) {
-                    advanceUnresolvedStrike(runtime, state, intent);
-                } else if (recorded != null && (lease.status() == SceneLeaseStatus.HOT || lease.status() == SceneLeaseStatus.DRAINING)) {
-                    // Absence does not settle either the actor or the effect. Delegate to
-                    // ordinary scene recovery, whose loaded-entity readiness gates inspection.
-                    submit(runtime, "scene-strike-target-unobserved", lease.id().value(),
-                            new SceneLeaseTransition(lease.id(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART));
-                }
-            }
-            return;
-        }
-        if (lease.status() == SceneLeaseStatus.DRAINING && intent.status() == PhysicalIntentStatus.RUNNING) {
-            submit(runtime, "scene-strike-drain-inspect", intent.id().value(),
-                    new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty()));
-            return;
-        }
-        if (target != null && !target.entity().isAlive()) return;
-        if (attacker == null || target == null || attacker.entity().distanceToSqr(target.entity()) > 3.61D) return;
-        if (intent.status() == PhysicalIntentStatus.PREPARED) { submit(runtime, "scene-strike-running", intent.id().value(), new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty())); return; }
-
-        var effect = state.fencedRecovery().current().get(
-                io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryPhysicalIntentSupport.bindingId(intent));
-        if (effect == null || effect.asset() != io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryAsset.EFFECT
-                || effect.phase() != io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryPhase.RUNNING
-                || !effect.ownerId().equals(intent.causeSubjectId())) return;
-        float before = target.entity().getHealth(); attacker.entity().swing(net.minecraft.world.InteractionHand.MAIN_HAND);
-        target.entity().hurt(level.damageSources().mobAttack(attacker.entity()), attacker.bioform() ? 2.0F : 1.5F);
-        SceneStrikeObservation receipt = new SceneStrikeObservation(new PhysicalObservationId("observation:" + intent.id().value().replace(':', '-')), intent.id(),
-                attacker.member().actorId(), target.member().actorId(), fixed(before), fixed(target.entity().getHealth()));
-        var saved = new FrontierV3SceneStrikeReceipt(state.bootstrap().worldId(),
-                new io.farfrontier.palemirror.frontier.v3.api.PhysicalSceneBinding(lease.id(), lease.revision()),
-                intent.lifecycleOwner(), effect.authorityEpoch(), target.entity().getUUID(), receipt);
-        target.entity().getPersistentData().put(FrontierV3SceneStrikeReceipt.KEY, saved.save());
-        submit(runtime, "scene-strike-confirm", intent.id().value(), new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt)));
-        target.entity().getPersistentData().remove(FrontierV3SceneStrikeReceipt.KEY);
+    static void executeStrike(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                              FrontierWorldState state, SceneLease lease, PhysicalIntentLifecycleOwner lifecycleOwner) {
+        FrontierV3SceneStrikeExecutor.executeStrike(level, runtime, state, lease, lifecycleOwner);
     }
-
-    /** Inspect only an actual owned loaded target; lack of chunk/entity readiness is not a failed inspection. */
-    private static void inspectUnresolvedStrike(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-            FrontierWorldState state, PhysicalIntent intent, net.minecraft.world.entity.LivingEntity target) {
-        if (!level.areEntitiesLoaded(ChunkPos.asLong(target.blockPosition()))) return;
-        advanceUnresolvedStrike(runtime, state, intent);
-    }
-
-    /** Caller supplies actual loaded inspection or exact committed target death, never inferred absence. */
-    private static void advanceUnresolvedStrike(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                                FrontierWorldState state, PhysicalIntent intent) {
-        if (intent.status() == PhysicalIntentStatus.RUNNING) {
-            submit(runtime, "scene-strike-witness-unresolved", intent.id().value(),
-                    new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, Optional.empty()));
-            return;
-        }
-        if (intent.status() != PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) return;
-        var fence = state.fencedRecovery().current().get(
-                io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryPhysicalIntentSupport.bindingId(intent));
-        if (fence == null || fence.phase() != io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryPhase.AMBIGUOUS
-                || fence.asset() != io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryAsset.EFFECT
-                || !fence.ownerId().equals(intent.causeSubjectId())) return;
-        var next = fence.recoveryAttempts() < io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryBinding.MAX_RECOVERY_ATTEMPTS
-                ? PhysicalIntentStatus.UNKNOWN_AFTER_RESTART : PhysicalIntentStatus.CONFLICTED;
-        submit(runtime, "scene-strike-inspect", intent.id().value(), new PhysicalIntentTransition(intent.id(), next, Optional.empty()));
-    }
-    private static FixedPosition position(Entity entity) {
+    static FixedPosition position(Entity entity) {
         return new FixedPosition(new FixedScalar(Math.round(entity.getX() * FixedScalar.SCALE)),
                 new FixedScalar(Math.round(entity.getY() * FixedScalar.SCALE)), new FixedScalar(Math.round(entity.getZ() * FixedScalar.SCALE)));
     }
@@ -756,8 +594,8 @@ final class FrontierV3SceneExecutor {
     private static FixedPosition position(BlockPos position) {
         return new FixedPosition(FixedScalar.whole(position.getX()), FixedScalar.whole(position.getY()), FixedScalar.whole(position.getZ()));
     }
-    private static FixedScalar fixed(float health) { return new FixedScalar(Math.max(0L, Math.round(health * FixedScalar.SCALE))); }
-    private static Optional<Body> body(ServerLevel level, FrontierWorldState state, SceneLease lease, SceneMember member) {
+    static FixedScalar fixed(float health) { return new FixedScalar(Math.max(0L, Math.round(health * FixedScalar.SCALE))); }
+    static Optional<Body> body(ServerLevel level, FrontierWorldState state, SceneLease lease, SceneMember member) {
         Entity entity = level.getEntity(member.entityId());
         return owned(entity, state, lease, member) && entity instanceof Mob mob && mob.isAlive() ? Optional.of(new Body(member, mob, bioform(state, member.actorId()))) : Optional.empty();
     }
@@ -789,7 +627,7 @@ final class FrontierV3SceneExecutor {
         if (operation == null || operation.activeTravel().isEmpty() || operation.activeTravel().orElseThrow().arrived()) return Optional.empty();
         return Optional.of(OperationFront.logistics(operation).directive(operation, lease.id(), actorId));
     }
-    private static long confirmedStrikeCount(FrontierWorldState state, SubjectId sceneCause) {
+    static long confirmedStrikeCount(FrontierWorldState state, SubjectId sceneCause) {
         return state.physicalIntents().values().stream().filter(intent -> intent.kind() == PhysicalIntentKind.SCENE_STRIKE
                 && intent.causeSubjectId().equals(sceneCause) && intent.status() == PhysicalIntentStatus.CONFIRMED).count();
     }
@@ -816,7 +654,7 @@ final class FrontierV3SceneExecutor {
         // motion provider may traverse only the next surveyed topology edge, including grade.
         return target;
     }
-    private static boolean residentGuard(FrontierWorldState state, SubjectId actorId) {
+    static boolean residentGuard(FrontierWorldState state, SubjectId actorId) {
         return state.bootstrap().settlements().stream().flatMap(settlement -> settlement.residents().stream())
                 .anyMatch(resident -> resident.id().equals(actorId) && resident.role() == ResidentRole.GUARD);
     }
@@ -853,166 +691,16 @@ final class FrontierV3SceneExecutor {
      * selection and this release pass; those dead bodies are no longer release candidates.
      */
     static void release(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease selectedLease) {
-        release(level, runtime, selectedLease, java.util.Optional.empty());
+        FrontierV3SceneReleaseExecutor.release(level, runtime, selectedLease);
     }
-    /** Generic lifecycle release; an enforced descriptor may supply one exact engine action binding. */
-    static void release(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease selectedLease,
+    static void release(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                        SceneLease selectedLease,
                         java.util.Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction> binding) {
-        FrontierWorldState state = state(runtime);
-        if (state == null) return;
-        SceneLease lease = state.sceneLeases().get(selectedLease.id());
-        if (lease == null || lease.status() != SceneLeaseStatus.DRAINING) return;
-        var unfinishedStrike = state.physicalIntents().values().stream()
-                .filter(intent -> intent.kind() == PhysicalIntentKind.SCENE_STRIKE
-                        && (intent.status() == PhysicalIntentStatus.RUNNING || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART))
-                .filter(intent -> io.farfrontier.palemirror.frontier.v3.model.SceneStrikeStateSupport.boundTo(lease, intent))
-                .min(Comparator.comparing(PhysicalIntent::id));
-        if (unfinishedStrike.isPresent()) {
-            executeStrike(level, runtime, state, lease, unfinishedStrike.orElseThrow().lifecycleOwner());
-            return; // Re-read the resulting authority next turn before releasing any body.
-        }
-        if (FrontierV3SceneReleaseReadiness.awaitingEntityStorage(level, state, lease)) return;
-        boolean hasCargoCarrier = FrontierV3SceneBehaviorRegistry.hasCargoCarrier(lease);
-        RouteOperation operation = hasCargoCarrier ? state.operations().get(FrontierSceneBehaviors.logistics(lease).operationId()) : null;
-        boolean interrupted = hasCargoCarrier && operation != null && operation.stage() == io.farfrontier.palemirror.frontier.v3.model.OperationStage.INTERRUPTED;
-        // Release requires current physical evidence, never a historical HOT sample.
-        if (hasCargoCarrier && !interrupted && !FrontierV3CargoCarrierExecutor.intact(level, state, lease)) {
-            var ledger = FrontierV3CargoDepartureLedger.get(level, state.bootstrap().worldId());
-            var id = FrontierV3CargoCarrierExecutor.id(lease);
-            var receipt = ledger.observation(id);
-            if (level.getEntity(id) != null || ledger.conflicted(id) || receipt.isEmpty()
-                    || !FrontierV3CargoCarrierExecutor.currentDeparture(state, lease, receipt.orElseThrow(), level.registryAccess())) {
-                conflict(level, runtime, state, lease, "release-carrier-unavailable"); return;
-            }
-            // The unload callback alone is not proof that vanilla saved the cart. Wait
-            // for the exact entity-region write and synchronization before cold custody.
-            if (!ledger.savedObservation(receipt.orElseThrow())) return;
-        }
-        List<SceneMemberPosition> positions = new ArrayList<>();
-        List<SceneMember> departedMembers = new ArrayList<>();
-        List<Mob> retireLoadedBodies = new ArrayList<>();
-        List<FrontierV3AmbientCarrierLedger.Carrier> releaseCarriers = new ArrayList<>();
-        var actorLedger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
-        var releasePolicy = FrontierV3SceneBehaviorRegistry.bodyReleasePolicy(lease.cause().kind());
-        boolean retainVisible = releasePolicy
-                .retainsLiveBody(demandExists(level, lease.handoffPosition()) || playerWithinSafeRadius(level, lease));
-        for (SceneMember member : lease.members()) {
-            if (state.actorLocations().get(member.actorId()).condition().status() == io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.DEAD) continue;
-            Entity entity = level.getEntity(member.entityId());
-            if (entity == null) {
-                var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
-                if (ledger.departure(member.actorId()).isPresent()
-                        && !ledger.savedDeparture(ledger.departure(member.actorId()).orElseThrow())
-                        && !ledger.hasDepartureConflict(member.actorId())
-                        && FrontierV3SceneDepartureObserver.observedDeparture(state, lease, member, ledger).isPresent()) return;
-                var receipt = FrontierV3SceneDepartureObserver.validDeparture(state, lease, member, ledger);
-                if (receipt.isEmpty()) { conflict(level, runtime, state, lease, "release-departure-unproven"); return; }
-                positions.add(receipt.orElseThrow().observed());
-                departedMembers.add(member);
-                releaseCarriers.add(receipt.orElseThrow().carrier());
-                continue;
-            }
-            if (FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId()).departure(member.actorId()).isPresent()) {
-                conflict(level, runtime, state, lease, "release-concurrent-departure-evidence"); return;
-            }
-            if (!owned(entity, state, lease, member)) {
-                conflict(level, runtime, state, lease, "release-body-unavailable"); return;
-            }
-            if (!(entity instanceof Mob body) || body.getHealth() <= 0.0F) {
-                conflict(level, runtime, state, lease, "release-body-dead"); return;
-            }
-            long health = Math.round((double) body.getHealth() * FixedScalar.SCALE);
-            BodyPosition observedBody;
-            if (FrontierSceneBehaviors.isResourceSiteHarvest(lease)) {
-                var supported = FrontierV3SupportedBodyCapture.observe(level, body);
-                if (supported.isEmpty()) return; // keep DRAINING until a real supported body can be captured
-                observedBody = supported.orElseThrow();
-            } else {
-                observedBody = new BodyPosition(entity.getBlockX(), entity.getBlockY(), entity.getBlockZ());
-            }
-            positions.add(new SceneMemberPosition(member.actorId(), observedBody, new FixedScalar(health)));
-            if (!retainVisible) {
-                var live = FrontierV3ActorCarrierComposition.declaredBy(body).orElseThrow();
-                var ambient = state.ambientLeases().get(member.actorId());
-                if (ambient != null && ambient.status() != AmbientLeaseStatus.CLOSED) {
-                    releasePolicy.conflict(level, runtime, state, lease, "release-ambient-authority-open"); return;
-                }
-                releaseCarriers.add(new FrontierV3AmbientCarrierLedger.Carrier(live.inactiveCarrier(),
-                        lease.revision(), ambient == null ? 0L : ambient.revision()));
-                retireLoadedBodies.add(body);
-            }
-        }
-        if (!actorLedger.canFenceAll(releaseCarriers)) {
-            releasePolicy.conflict(level, runtime, state, lease, "release-survivor-fence-conflict"); return;
-        }
-        // A field worker may still carry an already-accounted HOT wheat part. Its physical
-        // offhand, fungible binding and scene exit must close in the same WAL transition;
-        // the generic release deliberately rejects a bound hand.
-        io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestHandRelease harvestHandRelease = null;
-        if (io.farfrontier.palemirror.frontier.v3.model.FrontierSceneLeaseStateSupport.hasBoundActorHand(state, lease)) {
-            if (!FrontierSceneBehaviors.isResourceSiteHarvest(lease) || lease.members().size() != 1) {
-                releasePolicy.conflict(level, runtime, state, lease, "release-bound-hand-without-typed-owner"); return;
-            }
-            var cause = FrontierSceneBehaviors.resourceSiteHarvest(lease);
-            var job = io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSiteHarvestSceneSupport.require(state, cause);
-            Entity carrier = level.getEntity(lease.members().getFirst().entityId());
-            if (!(carrier instanceof Mob worker) || !owned(carrier, state, lease, lease.members().getFirst())) {
-                FrontierV3ResourceSiteHarvestSceneExecutor.releaseCustodyConflict(level, runtime, state, lease,
-                        "bound-hand-release-body-unavailable"); return;
-            }
-            var held = worker.getOffhandItem();
-            if (held.isEmpty() || !net.minecraft.world.item.ItemStack.isSameItemSameComponents(held,
-                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.WHEAT, held.getCount()))) {
-                FrontierV3ResourceSiteHarvestSceneExecutor.releaseCustodyConflict(level, runtime, state, lease,
-                        "bound-hand-release-physical-foreign"); return;
-            }
-            harvestHandRelease = new io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestHandRelease(
-                    job.siteId(), job.id(), job.actorAccountId(), lease.revision(),
-                    new io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalObservation.Stack(
-                            new io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress.ActorHand(
-                                    job.workerId(), lease.members().getFirst().entityId()), "minecraft:wheat", held.getCount()),
-                    new SceneLeaseReleased(lease.id(), positions));
-            try {
-                io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess.reduceHandRelease(
-                        state, state.resourceSite(job.siteId()).settlementId(), harvestHandRelease);
-            } catch (IllegalArgumentException invalid) {
-                FrontierV3ResourceSiteHarvestSceneExecutor.releaseCustodyConflict(level, runtime, state, lease,
-                        "bound-hand-release-preflight:" + invalid.getMessage()); return;
-            }
-        }
-        if (!FrontierV3CargoDepartureObserver.prepareRelease(level, state, lease)) return;
-        if (!actorLedger.fenceAll(releaseCarriers)) {
-            releasePolicy.conflict(level, runtime, state, lease, "release-survivor-fence-conflict"); return;
-        }
-        if (!releaseCarriers.isEmpty()) actorLedger.persist(level, state.bootstrap().worldId());
-        CommandResult result = releaseLoaded(runtime, lease, positions, binding, harvestHandRelease);
-        FrontierV3DiagnosticTrace.recordScene(level.getServer(), "scene_released", lease, result);
-        if (result instanceof CommandResult.Accepted) {
-            for (Mob body : retireLoadedBodies) {
-                FrontierV3ControlledMobMotion.stop(body);
-                body.discard();
-            }
-            for (SceneMember member : departedMembers) {
-                FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId()).forgetDeparture(member.actorId());
-            }
-        }
+        FrontierV3SceneReleaseExecutor.release(level, runtime, selectedLease, binding);
     }
     static void releaseCustodyConflict(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                        FrontierWorldState state, SceneLease lease, String reason) {
-        conflict(level, runtime, state, lease, reason);
-    }
-    /** A rejected release retains its same observation for diagnosis; it is never rewritten or guessed. */
-    private static CommandResult releaseLoaded(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease,
-                                               List<SceneMemberPosition> positions,
-                                               java.util.Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction> binding,
-                                               io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestHandRelease harvestHandRelease) {
-        io.farfrontier.palemirror.frontier.v3.api.FrontierPayload payload = harvestHandRelease == null
-                ? new SceneLeaseReleased(lease.id(), positions) : harvestHandRelease;
-        CommandResult result = binding.map(action -> FrontierV3CommandSubmission.submitBound(runtime, "scene-release", lease.id().value(),
-                        payload, action))
-                .orElseGet(() -> submit(runtime, "scene-release", lease.id().value(), payload));
-        if (result instanceof CommandResult.Accepted) forgetLeaseTransient(runtime, lease.id());
-        return result;
+        FrontierV3SceneReleaseExecutor.releaseCustodyConflict(level, runtime, state, lease, reason);
     }
     /**
      * Removes only stale closed-scene projections before any behavior receives its turn.
@@ -1022,134 +710,20 @@ final class FrontierV3SceneExecutor {
      * former medical/engineering/assault body permanently tagged by its old lease.</p>
      */
     static void cleanClosedBodies(ServerLevel level, FrontierWorldState state) {
-        state.sceneLeases().values().stream().filter(lease -> lease.status() == SceneLeaseStatus.CLOSED).forEach(lease -> lease.members().forEach(member -> {
-            Entity entity = level.getEntity(member.entityId());
-            // Historical cleanup still requires this exact lease, revision, UUID,
-            // actor and body kind; a newer same-actor scene is not its projection.
-            if (!ownedByClosedLease(entity, state, lease, member)) return;
-            var actor = state.actorLocations().get(member.actorId());
-            var live = FrontierV3ActorCarrierComposition.declaredBy(entity).orElseThrow();
-            var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
-            // Covers a crash after canonical close but before physical discard.
-            // A completed inactive disposition wins over presentation retention,
-            // including harvest; it may never leave both representations current.
-            if (actor.condition().status() == io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.DEAD
-                    || ledger.fencesBody(live)) {
-                if (entity instanceof Mob body) FrontierV3ControlledMobMotion.stop(body);
-                entity.discard();
-                return;
-            }
-            if (FrontierV3ResourceSiteHarvestSceneExecutor.retainsClosedBody(entity, state, lease, member)) {
-                // A player-visible terminal/successor hand-off retains its body while demand
-                // remains.  Once no natural interaction eligibility exists, fence exactly one
-                // same-ID/same-UUID inactive carrier and remove this live physical custodian so
-                // COLD can lawfully advance.  A failed fence is deliberately left visible and
-                // blocks re-admission as local ambiguity.
-                if (!demandExists(level, lease.handoffPosition()) && !playerWithinSafeRadius(level, lease)) {
-                    FrontierV3AmbientActorExecutor.fenceClosedSceneBody(level, state, lease, member, entity);
-                }
-                return;
-            }
-            // A canonical stale-body tombstone alone is not reconstruction evidence.
-            // Preserve an unfenced historical survivor instead of erasing it.
-        }));
-        // Exact cargo obligations survive historical scene compaction. Assault/body
-        // history is neither an admission source nor a prerequisite for this cleanup.
-        state.fencedRecovery().cargoRetirements().pending().values()
-                .forEach(retirement -> FrontierV3CargoCarrierExecutor.cleanRetired(level, state, retirement));
+        FrontierV3ClosedSceneBodyRecovery.cleanClosedBodies(level, state);
     }
-
-    /**
-     * Transfers the one retained closed resource body into a newly PREPARED ambient lease.
-     * This is a live-body hand-off, not carrier reconstruction: the exact UUID remains loaded
-     * and there is no inactive carrier.  Any other closed projection stays historical/stale and
-     * is deliberately not eligible for this conversion.
-     */
     static boolean adoptRetainedClosedBodyForAmbient(Entity entity, FrontierWorldState state, SubjectId actorId) {
-        if (!(entity instanceof Mob body) || entity.isRemoved()
-                || !FrontierV3AmbientActorExecutor.entityId(state, actorId).equals(entity.getUUID())) return false;
-        List<SceneLease> matches = state.sceneLeases().values().stream().filter(lease -> lease.status() == SceneLeaseStatus.CLOSED)
-                .filter(FrontierSceneBehaviors::isResourceSiteHarvest)
-                .filter(lease -> lease.members().stream().anyMatch(member -> member.actorId().equals(actorId)
-                        && FrontierV3ResourceSiteHarvestSceneExecutor.retainsClosedBody(entity, state, lease, member)))
-                .toList();
-        if (matches.size() != 1) return false;
-        var ambient = state.ambientLeases().get(actorId);
-        var from = FrontierV3ActorCarrierComposition.declaredBy(entity).orElse(null);
-        if (ambient == null || ambient.status() != AmbientLeaseStatus.PREPARED || from == null
-                || !(entity.level() instanceof ServerLevel level)) return false;
-        var target = FrontierV3AmbientActorExecutor.carrierDeclaration(state, actorId,
-                FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, entity.getUUID(),
-                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, ambient.revision(), from.epoch());
-        FrontierV3ControlledMobMotion.stop(body);
-        return FrontierV3ActorHandoffAdmission.transfer(level, state.bootstrap().worldId(), entity, FrontierV3ActorOwnerBinding.ambient(target));
+        return FrontierV3ClosedSceneBodyRecovery.adoptRetainedClosedBodyForAmbient(entity, state, actorId);
     }
-
-    /**
-     * Exact closed bodies waiting for their next shared ambient custody epoch.  This is a
-     * registry query, rather than a resource-site scheduler: the typed behavior supplies the
-     * retention predicate while the common ambient owner decides the return.  It is bounded by
-     * the live closed-lease inventory and considers only naturally demanded hand-off anchors.
-     */
     static List<SubjectId> retainedClosedActorsDemandedBy(ServerLevel level, FrontierWorldState state) {
-        return state.sceneLeases().values().stream().filter(lease -> lease.status() == SceneLeaseStatus.CLOSED)
-                // The exact loaded closed body retains its shared ambient return attempt;
-                // this registry neither loads a chunk nor creates a replacement body.
-                .flatMap(lease -> lease.members().stream().filter(member -> {
-                    Entity entity = level.getEntity(member.entityId());
-                    return FrontierV3ResourceSiteHarvestSceneExecutor.retainsClosedBody(entity, state, lease, member);
-                }).map(SceneMember::actorId)).distinct().sorted().toList();
+        return FrontierV3ClosedSceneBodyRecovery.retainedClosedActorsDemandedBy(level, state);
     }
-
-    /**
-     * Read-only return gate. Empty local storage is not a physical generation or
-     * historical release receipt. Only an already retained exact carrier permits
-     * reconstruction; missing legacy history requires explicit recovery.
-     */
     static ClosedSceneReturnRecovery inspectClosedHarvestReturn(ServerLevel level, FrontierWorldState state, SubjectId actorId) {
-        List<SceneLease> matches = state.sceneLeases().values().stream().filter(lease -> lease.status() == SceneLeaseStatus.CLOSED)
-                .filter(FrontierSceneBehaviors::isResourceSiteHarvest)
-                .filter(lease -> lease.members().stream().anyMatch(member -> member.actorId().equals(actorId)
-                        && member.entityId().equals(FrontierV3AmbientActorExecutor.entityId(state, actorId))))
-                .sorted(Comparator.comparingLong(SceneLease::revision).reversed()).toList();
-        if (matches.isEmpty()) return ClosedSceneReturnRecovery.NOT_RETAINED;
-        if (matches.size() > 1 && matches.get(0).revision() == matches.get(1).revision()) return ClosedSceneReturnRecovery.CONFLICT;
-        SceneLease lease = matches.getFirst();
-        SceneMember member = lease.members().stream().filter(value -> value.actorId().equals(actorId)).findFirst().orElseThrow();
-        FrontierV3AmbientCarrierLedger ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
-        Entity existing = level.getEntity(member.entityId());
-        if (existing != null) {
-            // Closed history is not current custody. After the actual handoff the
-            // ordinary ambient loop must execute this same body, not skip it forever.
-            if (FrontierV3AmbientCarrierRecognition.recoverableOwnership(state,
-                    FrontierV3AmbientCarrierRecognition.ManagedCarrier.from(existing), ledger)) {
-                return ClosedSceneReturnRecovery.NOT_RETAINED;
-            }
-            return FrontierV3ResourceSiteHarvestSceneExecutor.retainsClosedBody(existing, state, lease, member)
-                    ? ClosedSceneReturnRecovery.LIVE_BODY : ClosedSceneReturnRecovery.CONFLICT;
-        }
-        var actor = state.actorLocations().get(actorId);
-        if (actor == null || actor.condition().status() != io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.ALIVE) return ClosedSceneReturnRecovery.CONFLICT;
-        BlockPos current = new BlockPos(actor.body().x(), actor.body().y(), actor.body().z());
-        if (!level.hasChunkAt(current) || !level.areEntitiesLoaded(ChunkPos.asLong(current))) return ClosedSceneReturnRecovery.PENDING;
-        if (!ledger.hasCarrier(actorId) || ledger.pendingAdoption(actorId).isPresent()) return ClosedSceneReturnRecovery.CONFLICT;
-        var ambient = state.ambientLeases().get(actorId);
-        if (ambient != null && ambient.status() != AmbientLeaseStatus.CLOSED
-                && ambient.status() != AmbientLeaseStatus.PREPARED) return ClosedSceneReturnRecovery.CONFLICT;
-        long nextRevision = ambient == null ? 1L : ambient.status() == AmbientLeaseStatus.PREPARED
-                ? ambient.revision() : Math.addExact(ambient.revision(), 1L);
-        var next = FrontierV3AmbientActorExecutor.carrierDeclaration(state, actorId,
-                FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, member.entityId(),
-                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, nextRevision, ledger.reconstructionEpoch(actorId));
-        return retainedClosedReturnAdmission(ledger, next);
+        return FrontierV3ClosedSceneBodyRecovery.inspectClosedHarvestReturn(level, state, actorId);
     }
     static ClosedSceneReturnRecovery retainedClosedReturnAdmission(FrontierV3AmbientCarrierLedger ledger,
                                                                    FrontierV3ActorCarrierComposition.Declaration next) {
-        return next.owner() == FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE
-                && ledger.hasCarrier(next.actorId()) && ledger.pendingAdoption(next.actorId()).isEmpty()
-                && next.epoch() == ledger.reconstructionEpoch(next.actorId())
-                && ledger.reconciliation(next) == FrontierV3AmbientCarrierLedger.Reconciliation.READY
-                ? ClosedSceneReturnRecovery.FENCED : ClosedSceneReturnRecovery.CONFLICT;
+        return FrontierV3ClosedSceneBodyRecovery.retainedClosedReturnAdmission(ledger, next);
     }
     enum ClosedSceneReturnRecovery { NOT_RETAINED, LIVE_BODY, PENDING, FENCED, CONFLICT }
     static FrontierV3SceneDemand.Snapshot demandSnapshot(ServerLevel level, BlockPosition anchor) {
@@ -1205,7 +779,7 @@ final class FrontierV3SceneExecutor {
         absentSince.remove(leaseId);
         if (absentSince.isEmpty()) COLD_DEMAND_SINCE.remove(runtime);
     }
-    private static void forgetLeaseTransient(FrontierV3ServerRuntime<?, ?> runtime, SceneLeaseId leaseId) {
+    static void forgetLeaseTransient(FrontierV3ServerRuntime<?, ?> runtime, SceneLeaseId leaseId) {
         forgetColdDemand(runtime, leaseId);
 
         forgetRestartRecoveryObservation(runtime, leaseId);
@@ -1272,7 +846,7 @@ final class FrontierV3SceneExecutor {
     }
 
     /** Recognition retains a conflicting managed body; it is not permission to execute work. */
-    private static boolean ownsDeclaration(Entity entity, FrontierWorldState state, SceneLease lease, SceneMember member) {
+    static boolean ownsDeclaration(Entity entity, FrontierWorldState state, SceneLease lease, SceneMember member) {
         // An observed entity is untrusted until it presents every physical authority field.
         // In particular, NBT's absent-long default must be a boolean rejection, never an
         // exception while inspecting a foreign body that happens to have this scene UUID.
@@ -1293,7 +867,7 @@ final class FrontierV3SceneExecutor {
     static boolean ownedByClosedLease(Entity entity, FrontierWorldState state, SceneLease lease, SceneMember member) {
         return lease.status() == SceneLeaseStatus.CLOSED && ownsDeclaration(entity, state, lease, member);
     }
-    private static boolean bioform(FrontierWorldState state, SubjectId actorId) {
+    static boolean bioform(FrontierWorldState state, SubjectId actorId) {
         return java.util.stream.Stream.concat(state.bootstrap().hive().bioforms().stream(), state.hiveColony().spawnedBioforms().values().stream())
                 .anyMatch(bioform -> bioform.id().equals(actorId));
     }
@@ -1313,7 +887,7 @@ final class FrontierV3SceneExecutor {
         return FrontierV3ActorHandoffAdmission.transfer(level, state.bootstrap().worldId(), entity, FrontierV3ActorOwnerBinding.scene(target, lease.id()));
     }
     /** A loaded-world obstruction or altered owned body is a physical conflict, not restart evidence. */
-    private static void conflict(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
+    static void conflict(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
                                  SceneLease lease, String cause) {
         // Cargo is not a generic scene property.  Engineering, medical and assault scenes are
         // deliberately cargo-free, so conflict reporting must consult the typed registry before
@@ -1328,7 +902,7 @@ final class FrontierV3SceneExecutor {
                                            boolean missingCarrier) {
         submit(runtime, "scene-recovery-unresolved", lease.id().value(), new SceneLeaseRecoveryUnresolved(lease.id(), missingActors, missingCarrier));
     }
-    private static CommandResult submit(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, String phase, String id, FrontierPayload payload) {
+    static CommandResult submit(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, String phase, String id, FrontierPayload payload) {
         io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = checkpoint(runtime);
         // A scene can perform a sequence of distinct durable transitions while retaining the
         // same lease identity.  Bind the command identity to the expected canonical revision,
@@ -1344,9 +918,9 @@ final class FrontierV3SceneExecutor {
     private static io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         return runtime.canonicalState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
     }
-    private static FrontierWorldState state(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
+    static FrontierWorldState state(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         return runtime.decodedState().orElse(null);
     }
-    private record Body(SceneMember member, Mob entity, boolean bioform) { }
+    record Body(SceneMember member, Mob entity, boolean bioform) { }
     private record LeaseMember(SceneLease lease, SceneMember member) { }
 }

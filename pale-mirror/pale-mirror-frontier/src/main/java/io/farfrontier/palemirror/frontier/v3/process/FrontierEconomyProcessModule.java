@@ -86,7 +86,8 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
     private static PhysicalIntentRetirementAccount.Binding bindRetirement(FrontierWorldState before, FrontierCommand command,
                                                                             io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
                                                                             PhysicalIntentTransition transition) {
-        var continuation = (command == null ? java.util.Optional.<io.farfrontier.palemirror.frontier.v3.api.EngineScheduleBinding>empty() : command.scheduleBinding()).<PhysicalIntentRetirementAccount.Obligation<io.farfrontier.palemirror.frontier.v3.api.ScheduleId>>map(value -> new PhysicalIntentRetirementAccount.Exact<>(value.action().id()))
+        var continuation = (command == null ? java.util.Optional.<io.farfrontier.palemirror.frontier.v3.api.EngineScheduleBinding>empty() :
+                command.scheduleBinding()).<PhysicalIntentRetirementAccount.Obligation<io.farfrontier.palemirror.frontier.v3.api.ScheduleId>>map(value -> new PhysicalIntentRetirementAccount.Exact<>(value.action().id()))
                 .orElseGet(() -> new PhysicalIntentRetirementAccount.CheckedNone<>(PhysicalIntentRetirementProof.Absence.NO_ENGINE_CONTINUATION));
         return retirementFacts(before, intent, transition, continuation);
     }

@@ -38,7 +38,8 @@ final class FrontierV3MedicalTreatmentSceneExecutor {
 
     private static boolean admit(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state) {
         Optional<FrontierMedicalTreatmentSceneSupport.Candidate> candidate = FrontierV3SceneDemand.nextDemandedCandidate(
-                level, runtime, io.farfrontier.palemirror.frontier.v3.model.SceneCauseKind.MEDICAL_TREATMENT, FrontierMedicalTreatmentSceneSupport.candidates(state), FrontierMedicalTreatmentSceneSupport.Candidate::infirmaryAnchor, FrontierMedicalTreatmentSceneSupport.Candidate::operationId);
+                level, runtime, io.farfrontier.palemirror.frontier.v3.model.SceneCauseKind.MEDICAL_TREATMENT, FrontierMedicalTreatmentSceneSupport.candidates(state),
+                        FrontierMedicalTreatmentSceneSupport.Candidate::infirmaryAnchor, FrontierMedicalTreatmentSceneSupport.Candidate::operationId);
         if (candidate.isEmpty()) return false;
         FrontierMedicalTreatmentSceneSupport.Candidate treatment = candidate.orElseThrow();
         SceneLease lease = lease(runtime, treatment);

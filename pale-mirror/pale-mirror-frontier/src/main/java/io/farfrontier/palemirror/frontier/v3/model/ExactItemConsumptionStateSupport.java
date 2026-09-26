@@ -40,7 +40,8 @@ public final class ExactItemConsumptionStateSupport {
     private static Claim settlementProvisionClaim(FrontierWorldState state, PhysicalIntent intent) {
         SubjectId settlementId = intent.roles().require(PhysicalIntentSubjectRole.SETTLEMENT_PROVISION);
         SettlementProvision provision = state.humanPopulation().provisions().get(settlementId);
-        if (provision == null || !intent.causeSubjectId().equals(settlementId) || provision.activeIntentId().filter(intent.id()::equals).isEmpty()) throw new IllegalArgumentException("exact consumption does not bind its settlement provision allocation");
+        if (provision == null || !intent.causeSubjectId().equals(settlementId) || provision.activeIntentId().filter(intent.id()::equals).isEmpty()) throw new
+                IllegalArgumentException("exact consumption does not bind its settlement provision allocation");
         SettlementRationAllocation allocation = provision.currentOrActiveAllocation();
         Claim claim = ownedActiveClaim(state, allocation.itemId(), FrontierWorldState.depotId(settlementId)::equals, "settlement depot", allocation.count());
         if (!claim.ownerId().equals(settlementId) || !claim.item().itemKind().equals("minecraft:bread")) throw new IllegalArgumentException("settlement provision has no exact owned food stack");

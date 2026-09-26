@@ -36,7 +36,9 @@ class FrontierV3ArchitectureDebtTest(unittest.TestCase):
             "pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror/"
             "internal/frontier/v3/FrontierV3SceneExecutor.java"
         )
-        broken["forbidden_scene_cause_predicates"][generic] += 1
+        broken["forbidden_scene_cause_predicates"][generic] = (
+            self.policy["forbidden_scene_cause_predicates"]["allowed_files"][generic] + 1
+        )
         with self.assertRaisesRegex(DebtError, "per-file ceiling exceeded"):
             validate(ROOT, self.policy, broken)
 

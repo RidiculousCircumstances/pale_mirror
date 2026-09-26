@@ -212,10 +212,10 @@ public final class FrontierDomainRelationships {
         public SubjectEndpoint { Objects.requireNonNull(kind, "relationship endpoint kind"); Objects.requireNonNull(id, "relationship endpoint id"); }
         @Override public String stableKey() { return kind + ":" + id.value(); }
     }
-    public record ProvisionAllocationEndpoint(SubjectId settlementId, int cycle, int ordinal) implements Endpoint {
+    public record ProvisionAllocationEndpoint(SubjectId settlementId, int cycle, int allocationIndex) implements Endpoint {
         @Override public EntityKind kind() { return EntityKind.PROVISION_ALLOCATION; }
-        public ProvisionAllocationEndpoint { Objects.requireNonNull(settlementId, "provision allocation settlement"); if (cycle < 0 || ordinal < 0) throw new IllegalArgumentException("invalid provision allocation identity"); }
-        @Override public String stableKey() { return kind() + ":" + settlementId.value() + ":" + cycle + ":" + ordinal; }
+        public ProvisionAllocationEndpoint { Objects.requireNonNull(settlementId, "provision allocation settlement"); if (cycle < 0 || allocationIndex < 0) throw new IllegalArgumentException("invalid provision allocation identity"); }
+        @Override public String stableKey() { return kind() + ":" + settlementId.value() + ":" + cycle + ":" + allocationIndex; }
     }
     public record SceneLeaseEndpoint(SceneLeaseId id) implements Endpoint {
         @Override public EntityKind kind() { return EntityKind.SCENE_LEASE; }

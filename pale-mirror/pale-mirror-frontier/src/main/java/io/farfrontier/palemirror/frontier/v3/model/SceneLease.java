@@ -27,11 +27,7 @@ public record SceneLease(SceneLeaseId id, WorldId worldId, SceneCause cause, Blo
         if (revision < 0) throw new IllegalArgumentException("scene lease revision must be non-negative");
         Objects.requireNonNull(status, "scene lease status");
         cause = Objects.requireNonNull(cause, "scene cause");
-        if (cause instanceof LogisticsSceneCause logistics
-                && logistics.carrierDisposition() == CargoProjectionRetirement.Disposition.RETAIN_WORLD_CUSTODY
-                && (status == SceneLeaseStatus.PREPARED || status == SceneLeaseStatus.HOT)) {
-            throw new IllegalArgumentException("released world carrier cannot regain prepared or HOT scene custody");
-        }
+        cause.validateLeaseStatus(status);
         members = List.copyOf(members);
         Map<SubjectId, BodyPosition> positions = new LinkedHashMap<>();
         memberPositions.forEach((actor, position) -> positions.put(Objects.requireNonNull(actor, "scene member position actor"),

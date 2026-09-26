@@ -9,4 +9,5 @@ package io.farfrontier.palemirror.frontier.v3.model;
 public sealed interface SceneCause permits LogisticsSceneCause, SettlementAssaultSceneCause, EngineeringWorkSceneCause, MedicalTreatmentSceneCause,
         ResourceSiteHarvestSceneCause, ProductionWorkSceneCause, SettlementServiceWorkSceneCause, RoutePatrolSceneCause {
     SceneCauseKind kind();
+    default void validateLeaseStatus(SceneLeaseStatus status) { }
 }

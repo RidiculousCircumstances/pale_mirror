@@ -222,7 +222,8 @@ public final class RouteMaintenanceStateSupport {
                 || !intent.roles().require(PhysicalIntentSubjectRole.ROUTE).equals(FrontierRouteNetwork.OWNER)) {
             throw new IllegalArgumentException("route maintenance work intent has invalid route ownership");
         }
-        return java.util.Optional.ofNullable(state.routeMaintenances().get(intent.roles().require(PhysicalIntentSubjectRole.ROUTE_MAINTENANCE))).filter(java.util.Objects::nonNull).orElseThrow(() -> new IllegalArgumentException("route maintenance work intent lacks an active operation"));
+        return java.util.Optional.ofNullable(state.routeMaintenances().get(intent.roles().require(PhysicalIntentSubjectRole.ROUTE_MAINTENANCE))).filter(java.util.Objects::nonNull).orElseThrow(() -> new
+                IllegalArgumentException("route maintenance work intent lacks an active operation"));
     }
 
     public static void validateMaterialLoadingIntent(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent) {
@@ -335,7 +336,8 @@ public final class RouteMaintenanceStateSupport {
 
     public static FrontierWorldState conflict(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
                                        Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent> intents) {
-        RouteMaintenance maintenance = java.util.Optional.ofNullable(state.routeMaintenances().get(intent.roles().require(PhysicalIntentSubjectRole.ROUTE_MAINTENANCE))).filter(java.util.Objects::nonNull).orElseThrow(() -> new IllegalArgumentException("route maintenance conflict has no active operation"));
+        RouteMaintenance maintenance = java.util.Optional.ofNullable(state.routeMaintenances().get(intent.roles().require(PhysicalIntentSubjectRole.ROUTE_MAINTENANCE))).filter(java.util.Objects::nonNull).orElseThrow(()
+                -> new IllegalArgumentException("route maintenance conflict has no active operation"));
         Map<SubjectId, RouteMaintenance> maintenances = new LinkedHashMap<>(state.routeMaintenances()); maintenances.put(maintenance.id(), maintenance.conflict());
         intents.put(intent.id(), intent.withRecoveryUnknown(PhysicalIntentRecoveryDiagnosticProducer.ENGINEERING_WORKSITE.stamp(intent)));
         return state.withChanges(FrontierWorldStateUpdate.begin().physicalIntents(intents).routeMaintenances(maintenances)

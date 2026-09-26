@@ -13,7 +13,8 @@ import java.util.List;
 /** Stable WAL payload codecs for the pure replica/custody transition vocabulary. */
 final class PhysicalReplicaCustodyPayloadCodecs {
     private PhysicalReplicaCustodyPayloadCodecs() { }
-    static List<PayloadCodec> codecs() { return List.of(new Declared(), new Emitted(), new Observed(), new ConflictObserved(), new Acquired(), new Checkpointed(), new Unresolved(), new Released(), new ReferenceMutation(), new ProjectionPrepared(), new ProjectionConfirmed(), new ReferencePrepared(), new ProjectionConflict()); }
+    static List<PayloadCodec> codecs() { return List.of(new Declared(), new Emitted(), new Observed(), new ConflictObserved(), new Acquired(), new Checkpointed(), new Unresolved(), new Released(), new
+            ReferenceMutation(), new ProjectionPrepared(), new ProjectionConfirmed(), new ReferencePrepared(), new ProjectionConflict()); }
     private abstract static class Base implements PayloadCodec {
         final byte[] encodeBytes(Writer writer) { return FrontierWorldPayloadCodecs.encodeProduction(writer::write); }
         final FrontierPayload decodeBytes(byte[] bytes, Reader reader) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, reader::read); }

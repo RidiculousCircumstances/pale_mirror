@@ -180,8 +180,9 @@ public final class ResourceSitePhysicalIntentStateSupport {
                 || !lineage.outputSlot().containerId().equals(receipt.containerId())
                 || !receipt.containerId().equals(FrontierWorldState.depotId(site.settlementId()))
                 || lineage.causality().hotLeaseIds().isEmpty()
-                || state.sceneLeases().values().stream().anyMatch(lease -> lease.cause() instanceof ResourceSiteHarvestSceneCause cause
-                        && cause.siteId().equals(receipt.siteId()) && cause.jobId().equals(receipt.jobId())
+                || state.sceneLeases().values().stream().anyMatch(lease -> FrontierSceneBehaviors.isResourceSiteHarvest(lease)
+                        && FrontierSceneBehaviors.resourceSiteHarvest(lease).siteId().equals(receipt.siteId())
+                        && FrontierSceneBehaviors.resourceSiteHarvest(lease).jobId().equals(receipt.jobId())
                         && lease.status() != SceneLeaseStatus.CLOSED)) {
             throw new IllegalArgumentException("deferred harvest receipt lacks its completed HOT/COLD owner");
         }

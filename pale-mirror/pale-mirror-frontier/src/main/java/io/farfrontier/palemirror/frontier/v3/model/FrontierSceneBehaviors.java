@@ -98,6 +98,10 @@ public final class FrontierSceneBehaviors {
     public static boolean isServiceWork(SceneLease lease) { return behavior(lease).kind() == SceneCauseKind.SERVICE_WORK; }
     public static boolean isRoutePatrol(SceneLease lease) { return behavior(lease).kind() == SceneCauseKind.ROUTE_PATROL; }
     public static boolean owns(SceneLease lease, SubjectId subjectId) { return behavior(lease).owns(lease, subjectId); }
+    /** Only an assault scene can exempt its own combatants from another-owner admission. */
+    public static boolean ownedBySettlementAssault(SceneLease lease, SubjectId assaultId) {
+        return behavior(lease).ownedBySettlementAssault(lease, assaultId);
+    }
     public static SubjectId owner(FrontierWorldState state, SceneLease lease) { return behavior(lease).owner(state, lease); }
     public static void validatePrepared(FrontierWorldState state, SceneLease lease) {
         behavior(lease).validatePrepared(state, lease);
@@ -196,6 +200,7 @@ public final class FrontierSceneBehaviors {
             throw new IllegalStateException("scene behavior has no route-patrol binding: " + kind());
         }
         boolean owns(SceneLease lease, SubjectId subjectId);
+        default boolean ownedBySettlementAssault(SceneLease lease, SubjectId assaultId) { return false; }
         SubjectId owner(FrontierWorldState state, SceneLease lease);
         void validatePrepared(FrontierWorldState state, SceneLease lease);
         Set<SubjectId> expectedMembers(FrontierBootstrap bootstrap, HumanPopulation population, Map<SubjectId, ActorLocation> actors,
@@ -231,7 +236,8 @@ public final class FrontierSceneBehaviors {
             throw new IllegalArgumentException("scene recovery cannot resume a terminal operation");
         }
         @Override public Class<LogisticsSceneCause> causeType() { return LogisticsSceneCause.class; }
-        @Override public LogisticsSceneCause sampleCause() { return new LogisticsSceneCause(new SubjectId("operation:registry"), new SubjectId("cargo:registry"), java.util.Optional.empty(), new BlockPosition(0, 0, 0), CargoProjectionRetirement.Disposition.REMOVE_PROJECTION); }
+        @Override public LogisticsSceneCause sampleCause() { return new LogisticsSceneCause(new SubjectId("operation:registry"), new SubjectId("cargo:registry"), java.util.Optional.empty(), new BlockPosition(0, 0, 0),
+                CargoProjectionRetirement.Disposition.REMOVE_PROJECTION); }
         @Override public LogisticsSceneCause logistics(SceneLease lease) { return cause(lease); }
         @Override public boolean owns(SceneLease lease, SubjectId subjectId) {
             LogisticsSceneCause cause = cause(lease);
@@ -385,6 +391,9 @@ public final class FrontierSceneBehaviors {
         @Override public SettlementAssaultSceneCause sampleCause() { return new SettlementAssaultSceneCause(new SubjectId("assault:registry"), new SubjectId("settlement:registry")); }
         @Override public SettlementAssaultSceneCause settlementAssault(SceneLease lease) { return cause(lease); }
         @Override public boolean owns(SceneLease lease, SubjectId subjectId) { return cause(lease).assaultId().equals(subjectId); }
+        @Override public boolean ownedBySettlementAssault(SceneLease lease, SubjectId assaultId) {
+            return cause(lease).assaultId().equals(assaultId);
+        }
         @Override public SubjectId owner(FrontierWorldState state, SceneLease lease) { return FrontierSettlementAssaultSceneSupport.require(state, cause(lease)).hiveId(); }
         @Override public void validatePrepared(FrontierWorldState state, SceneLease lease) { FrontierSettlementAssaultSceneSupport.validatePrepared(state, lease); }
         @Override public Set<SubjectId> expectedMembers(FrontierBootstrap bootstrap, HumanPopulation population, Map<SubjectId, ActorLocation> actors,

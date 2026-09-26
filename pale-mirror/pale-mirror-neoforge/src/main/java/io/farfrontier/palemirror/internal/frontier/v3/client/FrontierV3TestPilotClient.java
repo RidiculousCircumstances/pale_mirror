@@ -48,12 +48,11 @@ public final class FrontierV3TestPilotClient {
     private static final String SCENARIO_PROPERTY = "pale_mirror.frontier_v3.test_pilot.scenario";
     private static final String CAPTURE_CONTROL_PROPERTY = "pale_mirror.frontier_v3.test_pilot.capture_control_directory";
     private static final String SERVER_PROPERTY = "pale_mirror.frontier_v3.test_pilot.server";
-    private static final String REQUIRED_MODS_PROPERTY = "pale_mirror.frontier_v3.test_pilot.required_mods";
     private static final long CAPTURE_SETTLE_TICKS = 10L;
     private static JsonArray actions, setup, frames;
     private static boolean runningSetup;
     private static int index;
-    private static long actionStartedTick = -1L;
+    static long actionStartedTick = -1L;
     private static long actionStartedNanos = -1L;
     private static long anchorResolutionStartedNanos = -1L;
     private static long anchorResolutionLastRequestNanos = -1L;
@@ -65,10 +64,13 @@ public final class FrontierV3TestPilotClient {
     private static boolean visitHandshakeArmed; private static ObservedDiagnostic visitHandshakeBaseline;
     private static boolean containerOpenAttempted;
     private static boolean quickMoveAttempted;
-    private static boolean inspectSent, fastForwardSent;
-    private static ObservedDiagnostic inspectBaseline, fastForwardBaseline;
-    private static ObservedDiagnostic releaseProjectionBaseline;
-    private static ObservedDiagnostic diagnosticWaitBaseline; private static long diagnosticWaitRequestNanos;
+    private static boolean inspectSent;
+    static boolean fastForwardSent;
+    private static ObservedDiagnostic inspectBaseline;
+    static ObservedDiagnostic fastForwardBaseline;
+    static ObservedDiagnostic releaseProjectionBaseline;
+    private static ObservedDiagnostic diagnosticWaitBaseline;
+    static long diagnosticWaitRequestNanos;
     /**
      * A reconnect may deliver a current server receipt before its local world time catches up
      * to the previous segment. Receipt order, not cross-connection game time, fences a fresh
@@ -84,50 +86,11 @@ public final class FrontierV3TestPilotClient {
     private static long lastEntityAttackTick = Long.MIN_VALUE;
     private static Vec3 lastAttackedEntityPosition;
     private static CaptureBarrier captureBarrier;
-    private static HarvestSemanticOracle harvestSemanticOracle;
+    private static FrontierV3HarvestSemanticOracle harvestSemanticOracle;
     /** Local-only focus retained while the asynchronous X11 frame handshake is in flight. */
     private static Vec3 captureFocus;
     static final Map<DiagnosticIdentity, ObservedDiagnostic> diagnostics = new HashMap<>();
     private FrontierV3TestPilotClient() { }
-    /**
-     * Full-pack acceptance is allowed to connect only after the loader has published the
-     * actual active IDs.  This is intentionally opt-in: production and ordinary source pilots
-     * never set REQUIRED_MODS_PROPERTY.
-     */
-    @EventBusSubscriber(modid = PaleMirrorMod.MOD_ID, value = Dist.CLIENT, bus = EventBusSubscriber.Bus.MOD)
-    public static final class FullPackPreflight {
-        private FullPackPreflight() { }
-        @SubscribeEvent
-        public static void verifyRequiredModsBeforeQuickPlay(FMLClientSetupEvent event) {
-            String configured = System.getProperty(REQUIRED_MODS_PROPERTY, "");
-            if (configured.isBlank()) return;
-            Set<String> required = new TreeSet<>();
-            for (String id : configured.split(",")) {
-                String trimmed = id.trim();
-                if (trimmed.isEmpty() || !trimmed.matches("[a-z][a-z0-9_-]*")) {
-                    throw new IllegalStateException("Malformed full-pack required mod ID " + id);
-                }
-                required.add(trimmed);
-            }
-            if (required.isEmpty()) throw new IllegalStateException("Full-pack required mod inventory is empty");
-            Set<String> loaded = new TreeSet<>();
-            ModList.get().getMods().forEach(info -> loaded.add(info.getModId()));
-            Set<String> missing = new TreeSet<>(required);
-            missing.removeAll(loaded);
-            JsonObject inventory = new JsonObject();
-            inventory.addProperty("status", missing.isEmpty() ? "PASS" : "REJECTED");
-            inventory.add("required", stringArray(required));
-            inventory.add("loaded", stringArray(loaded));
-            inventory.add("missing", stringArray(missing));
-            PaleMirrorMod.LOGGER.info("PMV3_PILOT_LOADED_MODS {}", inventory);
-            if (!missing.isEmpty()) throw new IllegalStateException("Full-pack client is missing required mods " + missing);
-        }
-    }
-    private static JsonArray stringArray(Iterable<String> values) {
-        JsonArray result = new JsonArray();
-        values.forEach(result::add);
-        return result;
-    }
     @SubscribeEvent
     public static void login(ClientPlayerNetworkEvent.LoggingIn event) {
         String configured = System.getProperty(SCENARIO_PROPERTY, "");
@@ -767,107 +730,14 @@ public final class FrontierV3TestPilotClient {
     }
     /** Waits for the server-owned terminal receipt before allowing a following visible action. */
     private static void waitForFastForward(Minecraft minecraft, JsonObject action) {
-        if (!fastForwardSent) {
-            fastForwardBaseline = diagnostics.get(new DiagnosticIdentity("performance", "")); minecraft.player.connection.sendCommand("pale_mirror v3 advance " + action.get("ticks").getAsInt()); fastForwardSent = true;
-        }
-        ObservedDiagnostic observed = diagnostics.get(new DiagnosticIdentity("performance", ""));
-        if (fresh(observed)) {
-            JsonObject receipt = FrontierV3FastForwardReceipt.terminalRelative(observed.value(), fastForwardBaseline == null ? null : fastForwardBaseline.value(), action.get("ticks").getAsInt());
-            if (receipt != null) {
-                String expected = action.has("expectTerminalStatus") ? action.get("expectTerminalStatus").getAsString() : "COMPLETED"; String actual = receipt.get("status").getAsString();
-                if (!expected.equals(actual)) {
-                    throw new IllegalStateException("relative canonical advance terminal status=" + actual + " receipt=" + receipt);
-                }
-                if (action.has("expectReasonContains") && (!receipt.has("reason") || receipt.get("reason").isJsonNull()
-                        || !receipt.get("reason").getAsString().contains(action.get("expectReasonContains").getAsString()))) {
-                    throw new IllegalStateException("relative canonical advance terminal receipt omitted required owner reason: " + receipt);
-                }
-                advance("fast_forward"); return;
-            }
-        }
-        if (System.nanoTime() - diagnosticWaitRequestNanos >= 1_000_000_000L) {
-            minecraft.player.connection.sendCommand("pale_mirror v3 inspect performance");
-            diagnosticWaitRequestNanos = System.nanoTime();
-        }
-        // Canonical acceleration deliberately changes the client-visible game-tick rate.  This
-        // deadline protects the carrier process, so it must remain wall-clock based rather than
-        // silently shrink whenever the scenario raises /tick rate.
-        if (elapsedWallMillis() >= action.get("timeoutMs").getAsLong()) throw new IllegalStateException("timed out waiting for bounded canonical fast-forward completion");
+        FrontierV3PilotFastForwardActions.waitForFastForward(minecraft, action);
     }
-
-    /** Waits for one server-held absolute checkpoint; client packet latency cannot add canonical time. */
     private static void waitForAbsoluteFastForward(Minecraft minecraft, JsonObject action) {
-        long target = action.get("targetInstant").getAsLong();
-        if (!fastForwardSent) {
-            fastForwardBaseline = diagnostics.get(new DiagnosticIdentity("performance", ""));
-            minecraft.player.connection.sendCommand("pale_mirror v3 advance_to " + target);
-            fastForwardSent = true;
-        }
-        ObservedDiagnostic observed = diagnostics.get(new DiagnosticIdentity("performance", ""));
-        if (fresh(observed) && observed.value().has("fastForwardTargetOutcome")
-                && !observed.value().get("fastForwardTargetOutcome").isJsonNull()) {
-            JsonObject outcome = observed.value().getAsJsonObject("fastForwardTargetOutcome");
-            long requestId = outcome.get("requestId").getAsLong();
-            long baselineRequestId = fastForwardBaseline == null || !fastForwardBaseline.value().has("fastForwardTargetOutcome")
-                    || fastForwardBaseline.value().get("fastForwardTargetOutcome").isJsonNull() ? 0L
-                    : fastForwardBaseline.value().getAsJsonObject("fastForwardTargetOutcome").get("requestId").getAsLong();
-            if (requestId > baselineRequestId && outcome.get("targetInstant").getAsLong() == target) {
-                String status = outcome.get("status").getAsString();
-                if ("REJECTED".equals(status)) {
-                    throw new IllegalStateException("server rejected absolute canonical target: " + outcome.get("failure"));
-                }
-                if ("HELD".equals(status) && outcome.has("reachedCheckpointInstant") && !outcome.get("reachedCheckpointInstant").isJsonNull()
-                        && outcome.get("reachedCheckpointInstant").getAsLong() == target
-                        && observed.value().has("instant") && observed.value().get("instant").getAsLong() == target) {
-                    advance("fast_forward_to_instant"); return;
-                }
-            }
-        }
-        if (System.nanoTime() - diagnosticWaitRequestNanos >= 1_000_000_000L) {
-            minecraft.player.connection.sendCommand("pale_mirror v3 inspect performance");
-            diagnosticWaitRequestNanos = System.nanoTime();
-        }
-        // See the relative path above: this is an operator wall-clock guard, not canonical time.
-        if (elapsedWallMillis() >= action.get("timeoutMs").getAsLong()) {
-            throw new IllegalStateException("timed out waiting for server-held absolute canonical target " + target);
-        }
+        FrontierV3PilotFastForwardActions.waitForAbsoluteFastForward(minecraft, action);
     }
-    /** Releases the read-only absolute checkpoint without advancing canonical time. */
     private static void releaseAbsoluteFastForwardHold(Minecraft minecraft) {
-        if (!fastForwardSent) {
-            fastForwardBaseline = diagnostics.get(new DiagnosticIdentity("performance", ""));
-            releaseProjectionBaseline = diagnostics.get(new DiagnosticIdentity("projection_work", ""));
-            minecraft.player.connection.sendCommand("pale_mirror v3 release_advance_hold");
-            // The held-COLD release is the precise physical turn whose cost must be accounted
-            // for.  Pair its normal acknowledgement with the read-only projection snapshot so
-            // a later INPUT_REFRESH cannot erase the compile trigger that caused the turn.
-            minecraft.player.connection.sendCommand("pale_mirror v3 inspect projection_work");
-            fastForwardSent = true;
-        }
-        ObservedDiagnostic observed = diagnostics.get(new DiagnosticIdentity("performance", ""));
-        ObservedDiagnostic projection = diagnostics.get(new DiagnosticIdentity("projection_work", ""));
-        if (fresh(observed) && observed.value().has("fastForwardTargetOutcome")
-                && !observed.value().get("fastForwardTargetOutcome").isJsonNull()) {
-            JsonObject outcome = observed.value().getAsJsonObject("fastForwardTargetOutcome");
-            long baselineRequestId = fastForwardBaseline == null || !fastForwardBaseline.value().has("fastForwardTargetOutcome")
-                    || fastForwardBaseline.value().get("fastForwardTargetOutcome").isJsonNull() ? 0L
-                    : fastForwardBaseline.value().getAsJsonObject("fastForwardTargetOutcome").get("requestId").getAsLong();
-            if (outcome.get("requestId").getAsLong() > baselineRequestId && "RELEASED".equals(outcome.get("status").getAsString())
-                    && projection != null && projection != releaseProjectionBaseline) {
-                advance("release_fast_forward_hold"); return;
-            }
-        }
-        long tick = minecraft.level.getGameTime();
-        if ((tick - actionStartedTick) % 20L == 0L) {
-            minecraft.player.connection.sendCommand("pale_mirror v3 inspect performance");
-            minecraft.player.connection.sendCommand("pale_mirror v3 inspect projection_work");
-        }
-        if ((tick - actionStartedTick) * 50L >= 30_000L) throw new IllegalStateException("timed out releasing absolute canonical checkpoint");
+        FrontierV3PilotFastForwardActions.releaseAbsoluteFastForwardHold(minecraft);
     }
-    /**
-     * An inspect completes only after its ordinary read-only command returned. Advancing on
-     * packet submission would make that delayed reply look like evidence for the next action.
-     */
     private static void inspect(Minecraft minecraft, JsonObject action) {
         String view = action.get("view").getAsString(); String id = action.get("id").getAsString();
         ObservedDiagnostic observed = diagnostics.get(new DiagnosticIdentity(view, id));
@@ -921,9 +791,9 @@ public final class FrontierV3TestPilotClient {
      * falsely-labelled field can be accepted as a player story.
      */
     private static void observeHarvestSemantics(Minecraft minecraft, JsonObject action) {
-        if (harvestSemanticOracle == null) harvestSemanticOracle = new HarvestSemanticOracle(action);
-        HarvestSemanticOracle.Result result = harvestSemanticOracle.sample(minecraft, diagnostics);
-        if (result == HarvestSemanticOracle.Result.PASS) {
+        if (harvestSemanticOracle == null) harvestSemanticOracle = new FrontierV3HarvestSemanticOracle(action);
+        FrontierV3HarvestSemanticOracle.Result result = harvestSemanticOracle.sample(minecraft, diagnostics);
+        if (result == FrontierV3HarvestSemanticOracle.Result.PASS) {
             harvestSemanticOracle.publish("PASS");
             advance("observe_harvest_semantics");
         }
@@ -936,7 +806,7 @@ public final class FrontierV3TestPilotClient {
         if ((tick - actionStartedTick) % 20L == 0L) minecraft.player.connection.sendCommand("pale_mirror v3 inspect container " + containerId);
         timeout(minecraft, action, "timed out waiting for exact container ingress " + containerId);
     }
-    private static boolean fresh(ObservedDiagnostic observed) { return observed != null && observed.tick() >= actionStartedTick; }
+    static boolean fresh(ObservedDiagnostic observed) { return observed != null && observed.tick() >= actionStartedTick; }
     /** A fixture is only a bounded read-only precondition; it cannot arrange or mutate the world. */
     private static void assertFixture(Minecraft minecraft, JsonObject action) {
         long tick = minecraft.level.getGameTime(); JsonArray checks = action.getAsJsonArray("checks"); boolean allMatch = true;
@@ -957,7 +827,7 @@ public final class FrontierV3TestPilotClient {
     private static void timeout(Minecraft minecraft, JsonObject action, String detail) {
         if (elapsedWallMillis() >= action.get("timeoutMs").getAsLong()) throw new IllegalStateException(detail);
     }
-    private static long elapsedWallMillis() { return actionStartedNanos < 0L ? 0L : (System.nanoTime() - actionStartedNanos) / 1_000_000L; }
+    static long elapsedWallMillis() { return actionStartedNanos < 0L ? 0L : (System.nanoTime() - actionStartedNanos) / 1_000_000L; }
     private static void look(Minecraft minecraft, BlockPos target) {
         look(minecraft, Vec3.atCenterOf(target));
     }
@@ -1016,7 +886,7 @@ public final class FrontierV3TestPilotClient {
         return new BlockPos(value.get("x").getAsInt(), value.get("y").getAsInt(), value.get("z").getAsInt());
     }
     private static String withoutSlash(String value) { return value.startsWith("/") ? value.substring(1) : value; }
-    private static void advance(String type) {
+    static void advance(String type) {
         String phase = runningSetup ? "setup" : "action";
         PaleMirrorMod.LOGGER.info("PMV3_PILOT complete {} step={} type={}", phase, index + 1, type);
         int completedAction = runningSetup ? 0 : index + 1;
@@ -1026,7 +896,8 @@ public final class FrontierV3TestPilotClient {
         // A prior PASS must never satisfy another field or a later harvest epoch.
         harvestSemanticOracle = null;
         currentCausalMilestone = null; breaking = false; placementAttempted = false;
-        visitSent = false; visitChunkReadyTick = -1L; visitChunkReadyNanos = -1L; visitIngress = null; visitHandshakeArmed = false; visitHandshakeBaseline = null; containerOpenAttempted = false; quickMoveAttempted = false; inspectSent = false; inspectBaseline = null;
+        visitSent = false; visitChunkReadyTick = -1L; visitChunkReadyNanos = -1L; visitIngress = null; visitHandshakeArmed = false; visitHandshakeBaseline = null; containerOpenAttempted = false; quickMoveAttempted =
+                false; inspectSent = false; inspectBaseline = null;
         fastForwardSent = false; fastForwardBaseline = null; releaseProjectionBaseline = null;
         diagnosticWaitBaseline = null; diagnosticWaitRequestNanos = 0L;
         boardInteractionAttempted = false; entityInteractionAttempted = false;
@@ -1100,7 +971,8 @@ public final class FrontierV3TestPilotClient {
         Minecraft minecraft = Minecraft.getInstance(); minecraft.options.keyUp.setDown(false); FrontierV3TestPilotPresentation.reset(minecraft);
         actions = null; setup = null; frames = null; captureBarrier = null; captureFocus = null; runningSetup = false; index = 0; actionStartedTick = -1L;
         anchorResolutionStartedNanos = -1L; anchorResolutionLastRequestNanos = -1L; breaking = false;
-        visitSent = false; visitChunkReadyTick = -1L; visitChunkReadyNanos = -1L; visitIngress = null; visitHandshakeArmed = false; visitHandshakeBaseline = null; containerOpenAttempted = false; quickMoveAttempted = false; inspectSent = false; inspectBaseline = null;
+        visitSent = false; visitChunkReadyTick = -1L; visitChunkReadyNanos = -1L; visitIngress = null; visitHandshakeArmed = false; visitHandshakeBaseline = null; containerOpenAttempted = false; quickMoveAttempted =
+                false; inspectSent = false; inspectBaseline = null;
         boardInteractionAttempted = false; entityInteractionAttempted = false; attackedEntityRuntimeId = -1; entityAttackAttempts = 0; attackedEntityInitialHealth = Float.NaN; lastEntityAttackTick = Long.MIN_VALUE;
         diagnostics.clear(); FrontierV3PilotMotionObserver.reset(); FrontierV3PilotSettlementPopulationObserver.reset(); FrontierV3PilotSessionControl.reset();
         fastForwardSent = false; fastForwardBaseline = null; releaseProjectionBaseline = null; currentCausalMilestone = null; diagnosticWaitBaseline = null; diagnosticWaitRequestNanos = 0L;
@@ -1117,138 +989,5 @@ public final class FrontierV3TestPilotClient {
         diagnostics.clear(); FrontierV3PilotMotionObserver.reset(); FrontierV3PilotSettlementPopulationObserver.reset(); inspectBaseline = null;
     }
     /** Client-only state; it has no authority to select a worker or mutate canonical work. */
-    private static final class HarvestSemanticOracle {
-        private final String siteId;
-        private final long durationTicks;
-        private final long sampleEveryTicks;
-        private final long maxCanonicalStallTicks;
-        private final ArrayDeque<JsonObject> tail = new ArrayDeque<>();
-        private long lastRequestTick = Long.MIN_VALUE;
-        private long lastSiteReceipt = -1L;
-        private long lastCanonicalInstant = -1L;
-        private long firstCanonicalInstant = -1L;
-        private long lastSemanticProgressInstant = -1L;
-        private long lastPhysicalProgressInstant = -1L;
-        private String jobId = "", workerId = "", intentId = "";
-        private String semanticSignature = "", physicalSignature = "";
-        private boolean bound, sawCanonicalProgress, sawPhysicalProgress, sawActive, passed;
-
-        HarvestSemanticOracle(JsonObject action) {
-            this.siteId = action.get("siteId").getAsString();
-            this.durationTicks = action.get("durationTicks").getAsLong(); this.sampleEveryTicks = action.get("sampleEveryTicks").getAsLong();
-            this.maxCanonicalStallTicks = action.get("maxCanonicalStallTicks").getAsLong();
-        }
-
-        Result sample(Minecraft minecraft, Map<DiagnosticIdentity, ObservedDiagnostic> diagnostics) {
-            long tick = minecraft.level.getGameTime();
-            if (lastRequestTick == Long.MIN_VALUE || tick - lastRequestTick >= sampleEveryTicks) request(minecraft, diagnostics);
-            ObservedDiagnostic site = diagnostics.get(new DiagnosticIdentity("site", siteId));
-            if (site != null && site.receiptSequence() > lastSiteReceipt) {
-                lastSiteReceipt = site.receiptSequence(); inspect(site.value(), diagnostics);
-            }
-            return passed ? Result.PASS : Result.WAIT;
-        }
-
-        private void request(Minecraft minecraft, Map<DiagnosticIdentity, ObservedDiagnostic> diagnostics) {
-            lastRequestTick = minecraft.level.getGameTime();
-            minecraft.player.connection.sendCommand("pale_mirror v3 inspect site " + siteId);
-            if (!jobId.isBlank()) minecraft.player.connection.sendCommand("pale_mirror v3 inspect process " + jobId);
-            if (!workerId.isBlank()) minecraft.player.connection.sendCommand("pale_mirror v3 inspect actor " + workerId);
-            if (!intentId.isBlank()) minecraft.player.connection.sendCommand("pale_mirror v3 inspect intent " + intentId);
-        }
-
-        private void inspect(JsonObject site, Map<DiagnosticIdentity, ObservedDiagnostic> diagnostics) {
-            if (!"ok".equals(string(site, "status"))) fail("site_diagnostic_unavailable");
-            long instant = number(site, "instant");
-            if (instant <= lastCanonicalInstant) return;
-            lastCanonicalInstant = instant;
-            String phase = string(site, "phase"); String active = string(site, "activeWork");
-            if (!site.get("conflictDisposition").isJsonNull()) fail("truthful_local_blocker=" + site.get("conflictDisposition"));
-            if ("HARVESTING".equals(phase) && active.isBlank()) fail("false_active_without_current_work");
-            if (sawActive && active.isBlank() && "GROWING".equals(phase)) {
-                if (!sawCanonicalProgress || !sawPhysicalProgress || site.get("terminalHarvest").isJsonNull()) fail("terminal_without_observed_progress");
-                publish("PASS:TERMINAL");
-                semanticSignature = "TERMINAL";
-                passed = true;
-                return;
-            }
-            if (!active.isBlank()) {
-                if (bound && !jobId.equals(active)) fail("current_work_changed=" + active);
-                jobId = active; bound = true; sawActive = true;
-            }
-            ObservedDiagnostic process = jobId.isBlank() ? null : diagnostics.get(new DiagnosticIdentity("process", jobId));
-            if (process == null) return;
-            if (!"ok".equals(string(process.value(), "status"))) fail("process_diagnostic_unavailable");
-            if (number(process.value(), "instant") < instant) return;
-            JsonObject value = process.value();
-            String processSite = path(value, "claims", "site"); String worker = path(value, "identity", "worker"); String intent = path(value, "claims", "intent");
-            if (!siteId.equals(processSite) || !jobId.equals(path(value, "identity", "job")) || worker.isBlank() || intent.isBlank()) fail("incoherent_site_process_claim");
-            workerId = worker; intentId = intent;
-            ObservedDiagnostic actor = diagnostics.get(new DiagnosticIdentity("actor", workerId));
-            ObservedDiagnostic intentDiagnostic = diagnostics.get(new DiagnosticIdentity("intent", intentId));
-            if (actor == null || intentDiagnostic == null) return;
-            JsonObject actorValue = actor.value(); JsonObject intentValue = intentDiagnostic.value();
-            if (!"ok".equals(string(actorValue, "status"))) fail("actor_diagnostic_unavailable");
-            if (!"ok".equals(string(intentValue, "status"))) fail("intent_diagnostic_unavailable");
-            if (!jobId.equals(string(actorValue, "assignmentOwner")) || !"FIELD_HARVEST".equals(string(actorValue, "assignment"))) fail("worker_assignment_diverges");
-            if (!intentId.equals(string(intentValue, "id")) || !"RESOURCE_SITE_HARVEST".equals(string(intentValue, "intentKind"))) fail("intent_diverges");
-            JsonObject admission = object(actorValue, "physicalAdmission");
-            if (admission == null || "UUID_CONFLICT".equals(string(admission, "status")) || "CARRIER".equals(string(admission, "status"))) fail("worker_physical_admission_invalid");
-            String lease = path(value, "claims", "lease", "status");
-            String completed = path(value, "conservation", "completedCropSlots"); String cursor = path(value, "cursor", "index");
-            String physical = path(admission, "observedExact", "x") + "," + path(admission, "observedExact", "y") + "," + path(admission, "observedExact", "z");
-            String nextSemanticSignature = completed + "/" + cursor + "/" + lease + "/" + string(intentValue, "intentStatus");
-            JsonObject snapshot = new JsonObject(); snapshot.addProperty("instant", instant); snapshot.addProperty("phase", phase); snapshot.addProperty("job", jobId);
-            snapshot.addProperty("worker", workerId); snapshot.addProperty("intent", intentId); snapshot.addProperty("lease", lease);
-            snapshot.addProperty("completedCropSlots", completed); snapshot.addProperty("cursor", cursor); snapshot.addProperty("physical", physical);
-            // The carrier's causal tail must distinguish an admitted retained edge that the
-            // actuator cannot physically accept from one that was never submitted.  These
-            // are read-only body facts published by the server diagnostic; they cannot choose
-            // a route, relax an arrival condition, or turn a failed motion into progress.
-            snapshot.addProperty("motionStatus", string(admission, "motionStatus"));
-            snapshot.addProperty("motionTarget", path(admission, "motionTarget", "x") + ","
-                    + path(admission, "motionTarget", "y") + "," + path(admission, "motionTarget", "z"));
-            snapshot.addProperty("motionAcceptedMoves", string(admission, "motionAcceptedMoves"));
-            tail.addLast(snapshot); while (tail.size() > 12) tail.removeFirst();
-            // A dynamic oracle cannot start its canonical observation window until the site
-            // has yielded its exact job/worker/intent relation and the matching diagnostics
-            // arrived.  At accelerated tick rates that first diagnostic round-trip can span
-            // the whole window; charging that transport/bootstrap interval would turn a
-            // healthy, already-progressing HOT scene into a false rejection.
-            if (firstCanonicalInstant < 0L) firstCanonicalInstant = instant;
-            if (semanticSignature.isBlank()) {
-                lastSemanticProgressInstant = instant;
-            } else if (!nextSemanticSignature.equals(semanticSignature)) {
-                sawCanonicalProgress |= !completed.equals(pathTail("completedCropSlots")) || !cursor.equals(pathTail("cursor"));
-                lastSemanticProgressInstant = instant;
-            }
-            if (physicalSignature.isBlank() || !physical.equals(physicalSignature)) {
-                sawPhysicalProgress |= !physicalSignature.isBlank();
-                lastPhysicalProgressInstant = instant;
-            }
-            if (lastSemanticProgressInstant >= 0L && instant - lastSemanticProgressInstant > maxCanonicalStallTicks) {
-                String kind = lastPhysicalProgressInstant >= 0L && instant - lastPhysicalProgressInstant <= maxCanonicalStallTicks
-                        ? "canonical_physical_divergence=" : "unexplained_canonical_stall=";
-                fail(kind + (instant - lastSemanticProgressInstant));
-            }
-            semanticSignature = nextSemanticSignature;
-            physicalSignature = physical;
-            if (instant - firstCanonicalInstant >= durationTicks) {
-                if (!bound || !sawActive || !sawCanonicalProgress || !sawPhysicalProgress) fail("incomplete_online_observation");
-                publish("PASS:IN_FLIGHT");
-                passed = true;
-            }
-        }
-
-        private String pathTail(String field) { JsonObject prior = tail.size() < 2 ? null : tail.stream().skip(tail.size() - 2L).findFirst().orElse(null); return prior == null ? "" : string(prior, field); }
-        private void fail(String reason) { publish("REJECTED:" + reason); throw new IllegalStateException("harvest semantic oracle site=" + siteId + " job=" + jobId + " worker=" + workerId + " intent=" + intentId + " " + reason); }
-        void publish(String outcome) { JsonObject value = new JsonObject(); value.addProperty("schema", 1); value.addProperty("kind", "harvest_oracle"); value.addProperty("id", siteId); value.addProperty("status", outcome); value.addProperty("job", jobId); value.addProperty("worker", workerId); value.addProperty("intent", intentId); value.addProperty("lastCanonicalInstant", lastCanonicalInstant); value.add("causalTail", tailJson()); PaleMirrorMod.LOGGER.info("PMV3_PILOT_DIAGNOSTIC {}", value); }
-        private JsonArray tailJson() { JsonArray result = new JsonArray(); tail.forEach(result::add); return result; }
-        private static String string(JsonObject value, String name) { JsonElement element = value.get(name); return element != null && element.isJsonPrimitive() ? element.getAsString() : ""; }
-        private static long number(JsonObject value, String name) { JsonElement element = value.get(name); return element != null && element.isJsonPrimitive() && element.getAsJsonPrimitive().isNumber() ? element.getAsLong() : -1L; }
-        private static JsonObject object(JsonObject value, String name) { JsonElement element = value.get(name); return element != null && element.isJsonObject() ? element.getAsJsonObject() : null; }
-        private static String path(JsonObject value, String... parts) { JsonObject current = value; for (int index = 0; index < parts.length - 1; index++) { current = object(current, parts[index]); if (current == null) return ""; } return string(current, parts[parts.length - 1]); }
-        enum Result { WAIT, PASS }
-    }
     record DiagnosticIdentity(String view, String id) { } record ObservedDiagnostic(long tick, long receiptSequence, JsonObject value) { }
     private record CaptureBarrier(int after, String name, String presentation, long readyAtTick, boolean announced) { } }

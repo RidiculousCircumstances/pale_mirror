@@ -41,13 +41,13 @@ class FrontierV3ResourceSiteExecutorTest {
         var b = new SubjectId("site:2-wheat-field");
         var pending = new java.util.HashSet<>(java.util.Set.of(a, b));
         var turns = new FrontierV3FairTurn<SubjectId>();
-        assertEquals(a, FrontierV3ResourceSiteExecutor.nextRecoverySite(pending, turns, id -> true).orElseThrow());
+        assertEquals(a, FrontierV3ResourceSiteRestartDispatcher.nextRecoverySite(pending, turns, id -> true).orElseThrow());
         // A returned DEFERRED: its durable projection and pending membership remain.
-        assertEquals(b, FrontierV3ResourceSiteExecutor.nextRecoverySite(pending, turns, id -> true).orElseThrow());
+        assertEquals(b, FrontierV3ResourceSiteRestartDispatcher.nextRecoverySite(pending, turns, id -> true).orElseThrow());
         assertEquals(java.util.Set.of(a, b), pending);
         pending.remove(b); // B finished normally, A subsequently loses observer demand.
-        assertTrue(FrontierV3ResourceSiteExecutor.nextRecoverySite(pending, turns, id -> false).isEmpty());
-        assertEquals(a, FrontierV3ResourceSiteExecutor.nextRecoverySite(pending, turns, id -> true).orElseThrow());
+        assertTrue(FrontierV3ResourceSiteRestartDispatcher.nextRecoverySite(pending, turns, id -> false).isEmpty());
+        assertEquals(a, FrontierV3ResourceSiteRestartDispatcher.nextRecoverySite(pending, turns, id -> true).orElseThrow());
         assertEquals(java.util.Set.of(a), pending);
     }
 
@@ -72,12 +72,12 @@ class FrontierV3ResourceSiteExecutorTest {
         var ledger = FrontierV3ResourceSiteLedger.fixture();
         ledger.reserveComposedTerminalSuccessor(site, new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:site-projection-1-wheat-field"));
         ledger.activate(site);
-        assertTrue(FrontierV3ResourceSiteExecutor.restoresMaturePredecessor(ledger.claim(site), 7, 0, true));
-        assertFalse(FrontierV3ResourceSiteExecutor.restoresMaturePredecessor(ledger.claim(site), 7, 0, false),
+        assertTrue(FrontierV3ResourceSiteProjectionAdmission.restoresMaturePredecessor(ledger.claim(site), 7, 0, true));
+        assertFalse(FrontierV3ResourceSiteProjectionAdmission.restoresMaturePredecessor(ledger.claim(site), 7, 0, false),
                 "a lower cursor alone grants no regrowth authority");
-        assertFalse(FrontierV3ResourceSiteExecutor.restoresMaturePredecessor(ledger.claim(site), 2, 0, true),
+        assertFalse(FrontierV3ResourceSiteProjectionAdmission.restoresMaturePredecessor(ledger.claim(site), 2, 0, true),
                 "nonmature regrowth uses the existing whole-stage transition");
-        int writes = FrontierV3ResourceSiteExecutor.successorRegrowthRestoreSlots(64, 0);
+        int writes = FrontierV3ResourceSiteProjectionAdmission.successorRegrowthRestoreSlots(64, 0);
         ledger.beginProjection(site, new FrontierV3ResourceSiteLedger.ProjectionTransition("growth:site:1-wheat-field:e2",
                 7, 64, 7, 0, 0, writes, FrontierV3ResourceSiteLedger.ProjectionMode.SUCCESSOR_RESTORE));
         for (int index = 1; index <= 8; index++) { ledger.restoreOne(site, 64 - index); ledger.advanceProjection(site, index); }
@@ -163,10 +163,10 @@ class FrontierV3ResourceSiteExecutorTest {
 
     @Test
     void successorRegrowthRestoresOnlyThePredecessorSuffixBeyondColdProgress() {
-        assertEquals(1, FrontierV3ResourceSiteExecutor.successorRegrowthRestoreSlots(64, 63),
+        assertEquals(1, FrontierV3ResourceSiteProjectionAdmission.successorRegrowthRestoreSlots(64, 63),
                 "a successor already advanced through 63 slots must retain that owned AIR prefix");
-        assertEquals(64, FrontierV3ResourceSiteExecutor.successorRegrowthRestoreSlots(64, 0));
-        assertThrows(IllegalArgumentException.class, () -> FrontierV3ResourceSiteExecutor.successorRegrowthRestoreSlots(63, 64));
+        assertEquals(64, FrontierV3ResourceSiteProjectionAdmission.successorRegrowthRestoreSlots(64, 0));
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3ResourceSiteProjectionAdmission.successorRegrowthRestoreSlots(63, 64));
     }
 
     @Test
@@ -178,31 +178,31 @@ class FrontierV3ResourceSiteExecutorTest {
         ResourceSiteLifecycle nextEpoch = new ResourceSiteLifecycle(site, ResourceSitePhase.GROWING, 2L, 0, Optional.empty());
 
         assertEquals(FrontierV3ResourceSiteExecutor.ConfirmedHarvestRegrowthAdmission.ADMITTED,
-                FrontierV3ResourceSiteExecutor.classifyConfirmedHarvestRegrowth(terminal, nextEpoch, 0, 0, true, true),
+                FrontierV3ResourceSiteProjectionAdmission.classifyConfirmedHarvestRegrowth(terminal, nextEpoch, 0, 0, true, true),
                 "the scene's exact final receipt is the one owned input to bounded stage-zero regrowth");
         assertEquals(FrontierV3ResourceSiteExecutor.ConfirmedHarvestRegrowthAdmission.MISSING_CONFIRMED_RECEIPT,
-                FrontierV3ResourceSiteExecutor.classifyConfirmedHarvestRegrowth(terminal, nextEpoch, 0, 0, true, false),
+                FrontierV3ResourceSiteProjectionAdmission.classifyConfirmedHarvestRegrowth(terminal, nextEpoch, 0, 0, true, false),
                 "a look-alike all-AIR field without canonical receipt provenance remains fail-closed");
         assertEquals(FrontierV3ResourceSiteExecutor.ConfirmedHarvestRegrowthAdmission.PHYSICAL_RECEIPT_MISMATCH,
-                FrontierV3ResourceSiteExecutor.classifyConfirmedHarvestRegrowth(terminal, nextEpoch, 0, 0, false, true),
+                FrontierV3ResourceSiteProjectionAdmission.classifyConfirmedHarvestRegrowth(terminal, nextEpoch, 0, 0, false, true),
                 "confirmed history cannot overwrite a damaged terminal field");
-        assertTrue(FrontierV3ResourceSiteExecutor.resetsTerminalHarvestClaim(terminal, 0, false, true),
+        assertTrue(FrontierV3ResourceSiteProjectionAdmission.resetsTerminalHarvestClaim(terminal, 0, false, true),
                 "the admitted terminal receipt may advance the mature/64 ownership witness to stage-zero regrowth");
-        assertFalse(FrontierV3ResourceSiteExecutor.resetsTerminalHarvestClaim(terminal, 0, false, false),
+        assertFalse(FrontierV3ResourceSiteProjectionAdmission.resetsTerminalHarvestClaim(terminal, 0, false, false),
                 "a terminal-looking claim without either classified lifecycle route remains fail-closed");
         FrontierV3ResourceSiteLedger.Claim initialGrowth = new FrontierV3ResourceSiteLedger.Claim(
                 new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:site-projection-1-wheat-field"),
                 FrontierV3ResourceSiteLedger.Status.ACTIVE, 0, 0);
-        assertTrue(FrontierV3ResourceSiteExecutor.allowsOwnedStageCatchUp(initialGrowth, ResourceSiteLifecycle.MATURE_STAGE, 0),
+        assertTrue(FrontierV3ResourceSiteProjectionAdmission.allowsOwnedStageCatchUp(initialGrowth, ResourceSiteLifecycle.MATURE_STAGE, 0),
                 "a restart may route an exact active stage-zero successor through its bounded canonical catch-up");
-        assertFalse(FrontierV3ResourceSiteExecutor.allowsOwnedStageCatchUp(terminal, ResourceSiteLifecycle.MATURE_STAGE, 0),
+        assertFalse(FrontierV3ResourceSiteProjectionAdmission.allowsOwnedStageCatchUp(terminal, ResourceSiteLifecycle.MATURE_STAGE, 0),
                 "a completed predecessor cannot be relabelled as an ordinary stage catch-up");
         ResourceSiteLifecycle ready = new ResourceSiteLifecycle(site, ResourceSitePhase.GROWING, 2L, 6, Optional.empty()).advanceGrowth();
         assertEquals(FrontierV3ResourceSiteExecutor.ConfirmedHarvestRegrowthAdmission.ADMITTED,
-                FrontierV3ResourceSiteExecutor.classifyConfirmedHarvestRegrowth(terminal, ready, 7, 0, true, true),
+                FrontierV3ResourceSiteProjectionAdmission.classifyConfirmedHarvestRegrowth(terminal, ready, 7, 0, true, true),
                 "COLD reaching READY before player return does not invalidate the exact terminal predecessor");
         assertEquals(FrontierV3ResourceSiteExecutor.ConfirmedHarvestRegrowthAdmission.PHYSICAL_RECEIPT_MISMATCH,
-                FrontierV3ResourceSiteExecutor.classifyConfirmedHarvestRegrowth(terminal, ready, 7, 0, false, true),
+                FrontierV3ResourceSiteProjectionAdmission.classifyConfirmedHarvestRegrowth(terminal, ready, 7, 0, false, true),
                 "maturity never grants authority to overwrite a damaged predecessor");
     }
 
@@ -222,50 +222,50 @@ class FrontierV3ResourceSiteExecutorTest {
         ResourceSiteLifecycle regrowth = new ResourceSiteLifecycle(siteId, ResourceSitePhase.GROWING, 3L, 2,
                 Optional.empty(), Optional.empty(), Optional.of(composed));
 
-        assertTrue(FrontierV3ResourceSiteExecutor.isExactComposedTerminalRegrowth(
+        assertTrue(FrontierV3ResourceSiteProjectionAdmission.isExactComposedTerminalRegrowth(
                 regrowth, 2, 0, hotPrefix, true),
                 "a COLD-composed terminal may advance only its exact retained HOT prefix into the current growth epoch");
         ResourceSiteLifecycle ready = new ResourceSiteLifecycle(siteId, ResourceSitePhase.GROWING, 3L, 6,
                 Optional.empty(), Optional.empty(), Optional.of(composed)).advanceGrowth();
-        assertTrue(FrontierV3ResourceSiteExecutor.isExactComposedTerminalRegrowth(ready, 7, 0, hotPrefix, true),
+        assertTrue(FrontierV3ResourceSiteProjectionAdmission.isExactComposedTerminalRegrowth(ready, 7, 0, hotPrefix, true),
                 "a composed predecessor also admits its already-mature successor before a new job exists");
-        assertFalse(FrontierV3ResourceSiteExecutor.isExactComposedTerminalRegrowth(ready, 7, 0, hotPrefix, false),
+        assertFalse(FrontierV3ResourceSiteProjectionAdmission.isExactComposedTerminalRegrowth(ready, 7, 0, hotPrefix, false),
                 "canonical lineage never grants permission to overwrite a damaged physical predecessor");
-        assertFalse(FrontierV3ResourceSiteExecutor.isExactComposedTerminalRegrowth(
+        assertFalse(FrontierV3ResourceSiteProjectionAdmission.isExactComposedTerminalRegrowth(
                 regrowth, 2, 1, hotPrefix, true),
                 "a live harvest cursor is never relabelled as terminal regrowth");
 
-        assertTrue(FrontierV3ResourceSiteExecutor.allowsComposedTerminalLedgerRehydration(
+        assertTrue(FrontierV3ResourceSiteProjectionAdmission.allowsComposedTerminalLedgerRehydration(
                 regrowth, 2, 0, true, true),
                 "an exact current successor may restore only its missing physical ownership witness after restart");
-        assertTrue(FrontierV3ResourceSiteExecutor.admitsMissingComposedTerminalRehydration(
+        assertTrue(FrontierV3ResourceSiteProjectionAdmission.admitsMissingComposedTerminalRehydration(
                 null, regrowth, 2, 0, true, true),
                 "restart must route the exact composed terminal predecessor through its bounded rehydration writer");
-        assertFalse(FrontierV3ResourceSiteExecutor.admitsMissingComposedTerminalRehydration(
+        assertFalse(FrontierV3ResourceSiteProjectionAdmission.admitsMissingComposedTerminalRehydration(
                 hotPrefix, regrowth, 2, 0, true, true),
                 "an extant owner stays on its ordinary recovery path instead of borrowing missing-claim authority");
-        assertFalse(FrontierV3ResourceSiteExecutor.allowsComposedTerminalLedgerRehydration(
+        assertFalse(FrontierV3ResourceSiteProjectionAdmission.allowsComposedTerminalLedgerRehydration(
                 regrowth, 2, 0, false, true),
                 "a missing ledger never adopts a changed or foreign field surface");
-        assertFalse(FrontierV3ResourceSiteExecutor.admitsMissingComposedTerminalRehydration(
+        assertFalse(FrontierV3ResourceSiteProjectionAdmission.admitsMissingComposedTerminalRehydration(
                 null, regrowth, 2, 0, false, true),
                 "a missing ledger with a changed field stays a truthful local conflict");
-        assertTrue(FrontierV3ResourceSiteExecutor.admitsMissingComposedGrowthPredecessor(
+        assertTrue(FrontierV3ResourceSiteProjectionAdmission.admitsMissingComposedGrowthPredecessor(
                 null, regrowth, 2, 0, 1, true, true),
                 "an exact whole stage-one surface may advance through a composed epoch-two successor");
-        assertFalse(FrontierV3ResourceSiteExecutor.admitsMissingComposedGrowthPredecessor(
+        assertFalse(FrontierV3ResourceSiteProjectionAdmission.admitsMissingComposedGrowthPredecessor(
                 null, regrowth, 2, 0, 0, false, true),
                 "a mixed or changed predecessor surface stays a truthful local conflict");
-        assertFalse(FrontierV3ResourceSiteExecutor.admitsMissingComposedGrowthPredecessor(
+        assertFalse(FrontierV3ResourceSiteProjectionAdmission.admitsMissingComposedGrowthPredecessor(
                 null, regrowth, 2, 0, 2, true, true),
                 "the current surface takes the direct rehydration path rather than a predecessor transition");
-        assertFalse(FrontierV3ResourceSiteExecutor.admitsMissingComposedGrowthPredecessor(
+        assertFalse(FrontierV3ResourceSiteProjectionAdmission.admitsMissingComposedGrowthPredecessor(
                 hotPrefix, regrowth, 2, 0, 1, true, true),
                 "an extant owner cannot borrow missing-ledger predecessor authority");
-        assertFalse(FrontierV3ResourceSiteExecutor.allowsComposedTerminalLedgerRehydration(
+        assertFalse(FrontierV3ResourceSiteProjectionAdmission.allowsComposedTerminalLedgerRehydration(
                 regrowth, 2, 1, true, true),
                 "a live harvest cursor is not terminal successor recovery");
-        assertFalse(FrontierV3ResourceSiteExecutor.allowsComposedTerminalLedgerRehydration(
+        assertFalse(FrontierV3ResourceSiteProjectionAdmission.allowsComposedTerminalLedgerRehydration(
                 regrowth, 2, 0, true, false),
                 "terminal history without its exact composed consumer remains fail-closed");
     }

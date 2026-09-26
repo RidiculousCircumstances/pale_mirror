@@ -72,7 +72,8 @@ class HiveMobilizationProcessTest {
         SubjectId defender = assault.defenderIds().stream().sorted().findFirst().orElseThrow();
         SubjectId cause = SettlementAssaultCauseIdentity.strike(assault.id(), attacker, assault.nextStrikeEpoch());
         PhysicalIntent intent = new PhysicalIntent(SettlementAssaultStrikeReceiptBinding.intentId(state, lease, cause), PhysicalIntentKind.SCENE_STRIKE,
-                PhysicalIntentStatus.PREPARED, cause, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.assaultSceneStrike(attacker, defender, lease.id(), lease.revision()), new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO),
+                PhysicalIntentStatus.PREPARED, cause, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.assaultSceneStrike(attacker, defender, lease.id(), lease.revision()), new
+                        FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO),
                 0, io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition.SCENE_STRIKE_OBSERVED,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
         state = io.farfrontier.palemirror.frontier.v3.process.PhysicalIntentLifecycleFixture.prepare(state, hive, intent);

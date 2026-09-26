@@ -60,7 +60,8 @@ final class PhysicalIntentStateCodec {
         Map<PhysicalIntentId, PhysicalIntent> intents = new LinkedHashMap<>();
         for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) {
             PhysicalIntentId id = new PhysicalIntentId(FrontierWorldStateCodec.readString(input)); int kind = input.readUnsignedByte(); int status = input.readUnsignedByte();
-            SubjectId cause = new SubjectId(FrontierWorldStateCodec.readString(input)); PhysicalIntentRoleSchema schema = PhysicalIntentRoleSchema.fromWire(input.readUnsignedByte()); Map<PhysicalIntentSubjectRole, SubjectId> roles = new java.util.EnumMap<>(PhysicalIntentSubjectRole.class);
+            SubjectId cause = new SubjectId(FrontierWorldStateCodec.readString(input)); PhysicalIntentRoleSchema schema = PhysicalIntentRoleSchema.fromWire(input.readUnsignedByte()); Map<PhysicalIntentSubjectRole,
+                    SubjectId> roles = new java.util.EnumMap<>(PhysicalIntentSubjectRole.class);
             for (int subject = 0, subjectCount = FrontierWorldStateCodec.readCount(input); subject < subjectCount; subject++) {
                 PhysicalIntentSubjectRole role = PhysicalIntentSubjectRole.fromWire(input.readUnsignedByte());
                 if (roles.put(role, new SubjectId(FrontierWorldStateCodec.readString(input))) != null) throw new IllegalArgumentException("duplicate physical intent role tag");

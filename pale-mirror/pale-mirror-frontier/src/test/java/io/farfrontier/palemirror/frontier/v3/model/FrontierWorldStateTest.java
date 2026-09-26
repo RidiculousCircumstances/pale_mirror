@@ -95,7 +95,8 @@ class FrontierWorldStateTest {
                 new FixedPosition(FixedScalar.whole(plan.inputStation().x()), FixedScalar.whole(plan.inputStation().y()), FixedScalar.whole(plan.inputStation().z())),
                 0, PhysicalPostcondition.SETTLEMENT_SERVICE_INPUT_ISSUED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_SERVICE_WORK);
         PhysicalIntent endpoint = new PhysicalIntent(work.endpointIntentId(), PhysicalIntentKind.DECONTAMINATION, PhysicalIntentStatus.PREPARED, work.id(),
-                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.serviceDecontamination(work.id(), medic.id(), work.inputItemId()), new FixedPosition(FixedScalar.whole(selectedCell.originAtY(0).x()), FixedScalar.whole(0), FixedScalar.whole(selectedCell.originAtY(0).z())),
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.serviceDecontamination(work.id(), medic.id(), work.inputItemId()), new FixedPosition(FixedScalar.whole(selectedCell.originAtY(0).x()),
+                        FixedScalar.whole(0), FixedScalar.whole(selectedCell.originAtY(0).z())),
                 0, PhysicalPostcondition.DECONTAMINATION_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_SERVICE_DECONTAMINATION);
         ExactInventory inventory = baseline.inventory().store(new ExactItemStack(work.inputItemId(), work.settlementId(), "minecraft:glowstone_dust", 1,
                         new InventoryCustody.ContainerSlot(new SubjectId("container:1-depot"), 1)))

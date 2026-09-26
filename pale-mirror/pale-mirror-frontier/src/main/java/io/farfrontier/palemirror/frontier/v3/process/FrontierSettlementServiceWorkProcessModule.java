@@ -38,7 +38,8 @@ final class FrontierSettlementServiceWorkProcessModule implements FrontierWorldP
                         PhysicalIntentLifecycleRetirementPolicy.of(
                                 FrontierSettlementServiceWorkProcessModule::planServiceDecontaminationTransition,
                                 FrontierSettlementServiceWorkProcessModule::reduceServiceDecontaminationTransition), intent -> FencedRecoveryAsset.EFFECT,
-                        retirementAccount(PhysicalIntentLifecycleOwner.SETTLEMENT_SERVICE_DECONTAMINATION), PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery(), PhysicalIntentRecoveryDiagnosticProducer.SETTLEMENT_SERVICE_DECONTAMINATION));
+                        retirementAccount(PhysicalIntentLifecycleOwner.SETTLEMENT_SERVICE_DECONTAMINATION), PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery(),
+                                PhysicalIntentRecoveryDiagnosticProducer.SETTLEMENT_SERVICE_DECONTAMINATION));
     }
 
     private static PhysicalIntentRetirementAccount retirementAccount(PhysicalIntentLifecycleOwner owner) {
@@ -75,7 +76,9 @@ final class FrontierSettlementServiceWorkProcessModule implements FrontierWorldP
         SettlementServiceWork work = before == null ? null : before.serviceWorks().get(intent.causeSubjectId());
         if (work == null) throw new IllegalArgumentException("service retirement account has no exact work");
         List<FrontierDomainRelationships.Edge> relations = retirementRelations(work);
-        var continuation = command == null ? new PhysicalIntentRetirementAccount.CheckedNone<io.farfrontier.palemirror.frontier.v3.api.ScheduleId>(io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentRetirementProof.Absence.NO_ENGINE_CONTINUATION)
+        var continuation = command == null
+                ? new PhysicalIntentRetirementAccount.CheckedNone<io.farfrontier.palemirror.frontier.v3.api.ScheduleId>(
+                        io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentRetirementProof.Absence.NO_ENGINE_CONTINUATION)
                 : command.scheduleBinding().<PhysicalIntentRetirementAccount.Obligation<io.farfrontier.palemirror.frontier.v3.api.ScheduleId>>map(binding -> new PhysicalIntentRetirementAccount.Exact<>(binding.action().id()))
                 .orElseGet(() -> new PhysicalIntentRetirementAccount.CheckedNone<>(io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentRetirementProof.Absence.NO_ENGINE_CONTINUATION));
         return new PhysicalIntentRetirementAccount.Binding(intent.lifecycleOwner(), intent.id(), new PhysicalIntentRetirementAccount.Exact<>(relations), continuation,

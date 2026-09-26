@@ -105,112 +105,15 @@ public final class FrontierV3ServerLifecycle {
                 .orElse("Frontier v3 is ACTIVE, but its immutable status projection is unavailable.");
     }
     public static String diagnostic(MinecraftServer server, String view, String id) {
-        Objects.requireNonNull(server, "server"); Objects.requireNonNull(view, "view"); Objects.requireNonNull(id, "id");
-        if (!"execution".equals(view) && !FrontierV3DiagnosticView.accepts(view, id)) {
-            return FrontierV3DiagnosticJson.unavailableRuntime(view, id);
-        }
-        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(server);
-        if (!ownsPhysicalWorld(server) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) {
-            return FrontierV3DiagnosticJson.unavailableRuntime(view, id);
-        }
-        CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
-        if ("execution".equals(view)) return FrontierV3PhysicalExecutionDiagnostic.render(checkpoint);
-        if ("first_visibility".equals(view)) return FrontierV3DiagnosticJson.firstVisibility(id, checkpoint,
-                FrontierV3GrayboxExecutor.firstVisibility(runtime, id));
-        if ("status".equals(view)) return FrontierV3DiagnosticJson.operatorStatus(checkpoint, runtime.decodedState().orElseThrow(),
-                fastForwardRequests(server), id);
-        FrontierWorldState state = runtime.decodedState().orElseThrow();
-        if ("field_physical".equals(view)) return FrontierV3DiagnosticJson.bounded(view, id, checkpoint,
-                FrontierV3ResourceFieldPhysicalDiagnostic.render(checkpoint, state,
-                        FrontierV3ResourceSiteLedger.get(FrontierV3PhysicalWorld.require(server)), id));
-        if ("settlement_population".equals(view)) {
-            try {
-                io.farfrontier.palemirror.frontier.v3.api.SubjectId settlementId = new io.farfrontier.palemirror.frontier.v3.api.SubjectId(id);
-                java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, FrontierV3AmbientAdmissionDiagnostic> admissions =
-                        new java.util.LinkedHashMap<>();
-                net.minecraft.server.level.ServerLevel level = FrontierV3PhysicalWorld.require(server);
-                state.humanPopulation().residents().values().stream()
-                        .filter(resident -> resident.settlementId().equals(settlementId))
-                        .sorted(java.util.Comparator.comparing(resident -> resident.id().value()))
-                        .forEach(resident -> admissions.put(resident.id(), FrontierV3AmbientActorExecutor.admissionDiagnostic(
-                                level, runtime, state, resident.id())));
-                return FrontierV3DiagnosticJson.settlementPopulation(checkpoint, state, id, admissions);
-            } catch (IllegalArgumentException ignored) {
-                return FrontierV3DiagnosticJson.settlementPopulation(checkpoint, state, id, java.util.Map.of());
-            }
-        }
-        if ("performance".equals(view)) return FrontierV3PerformanceDiagnostic.render(checkpoint, runtime.executionMetrics().snapshot(), state,
+        return FrontierV3ServerDiagnostic.render(server, RUNTIMES.get(server), view, id);
+    }
+
+    static String performanceDiagnostic(MinecraftServer server,
+                                        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime,
+                                        CheckpointImage checkpoint, FrontierWorldState state) {
+        return FrontierV3PerformanceDiagnostic.render(checkpoint, runtime.executionMetrics().snapshot(), state,
                 FAST_FORWARD_REMAINING.getOrDefault(server, 0), FAST_FORWARD_TARGETS.get(server), FAST_FORWARD_FAILURES.get(server),
                 FAST_FORWARD_OUTCOMES.get(server), FAST_FORWARD_SLICE_TELEMETRY.get(server), fastForwardRequests(server));
-        if ("projection_work".equals(view)) return FrontierV3ProjectionWorkDiagnostic.render(checkpoint, runtime);
-        if ("player_resource".equals(view)) return FrontierV3PlayerResourceDiagnostic.render(checkpoint, state, server, id);
-        if ("traversal_foundry".equals(view)) return FrontierV3TraversalFoundryDiagnostic.render(checkpoint, state,
-                FrontierV3PhysicalWorld.require(server), id);
-        if ("hive_foundry".equals(view)) return FrontierV3HiveFoundryDiagnostic.render(checkpoint, state,
-                FrontierV3PhysicalWorld.require(server), id);
-        if ("hive_mobilization".equals(view)) return FrontierV3HiveMobilizationDiagnostic.render(checkpoint, state,
-                FrontierV3PhysicalWorld.require(server), id);
-        java.util.Optional<FrontierV3AmbientAdmissionDiagnostic> admission = java.util.Optional.empty();
-        if ("actor".equals(view)) {
-            try {
-                admission = java.util.Optional.of(FrontierV3AmbientActorExecutor.admissionDiagnostic(
-                        FrontierV3PhysicalWorld.require(server), runtime, state,
-                        new io.farfrontier.palemirror.frontier.v3.api.SubjectId(id)));
-            } catch (IllegalArgumentException ignored) {
-            }
-        }
-        java.util.Optional<FrontierV3ResourceSiteHarvestExecutor.Readiness> harvestReadiness = java.util.Optional.empty();
-        if ("intent".equals(view)) {
-            try {
-                harvestReadiness = FrontierV3ResourceSiteHarvestExecutor.readiness(
-                        FrontierV3PhysicalWorld.require(server), state,
-                        new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(id));
-            } catch (IllegalArgumentException ignored) {
-            }
-        }
-        java.util.Optional<FrontierV3SceneReadiness.Value> sceneReadiness = java.util.Optional.empty();
-        if ("scene".equals(view)) {
-            try {
-                sceneReadiness = FrontierV3SceneReadiness.forSubject(FrontierV3PhysicalWorld.require(server), state,
-                        new io.farfrontier.palemirror.frontier.v3.api.SubjectId(id));
-            } catch (IllegalArgumentException ignored) {
-            }
-        }
-        java.util.Optional<FrontierV3OperationAssemblyDiagnostic.Readiness> assemblyReadiness = java.util.Optional.empty();
-        if ("operation".equals(view)) {
-            try {
-                assemblyReadiness = FrontierV3OperationAssemblyDiagnostic.readiness(FrontierV3PhysicalWorld.require(server), state,
-                        new io.farfrontier.palemirror.frontier.v3.api.SubjectId(id));
-            } catch (IllegalArgumentException ignored) {
-            }
-        }
-        java.util.Optional<FrontierV3ContainerSurfaceExecutor.Readiness> containerReadiness = java.util.Optional.empty();
-        if ("container".equals(view)) {
-            try {
-                containerReadiness = java.util.Optional.of(FrontierV3ContainerSurfaceExecutor.readiness(
-                        FrontierV3PhysicalWorld.require(server), state, new io.farfrontier.palemirror.frontier.v3.api.SubjectId(id)));
-            } catch (IllegalArgumentException ignored) {
-            }
-        }
-        java.util.Optional<FrontierV3EquipmentIssueExecutor.Readiness> equipmentIssueReadiness = java.util.Optional.empty();
-        java.util.Optional<FrontierV3EquipmentReturnExecutor.Readiness> equipmentReturnReadiness = java.util.Optional.empty();
-        if ("intent".equals(view)) {
-            try {
-                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent = state.physicalIntents().get(
-                        new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(id));
-                if (intent != null && intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_ISSUE) {
-                    equipmentIssueReadiness = java.util.Optional.of(FrontierV3EquipmentIssueExecutor.readinessDetail(
-                            FrontierV3PhysicalWorld.require(server), state, intent));
-                } else if (intent != null && intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_RETURN) {
-                    equipmentReturnReadiness = java.util.Optional.of(FrontierV3EquipmentReturnExecutor.readinessDetail(
-                            FrontierV3PhysicalWorld.require(server), state, intent));
-                }
-            } catch (IllegalArgumentException ignored) {
-            }
-        }
-        return FrontierV3DiagnosticJson.render(view, id, checkpoint, state,
-                "trace".equals(view) ? FrontierV3DiagnosticTrace.latest(server, id) : java.util.Optional.empty(), admission, harvestReadiness, sceneReadiness, assemblyReadiness,
-                containerReadiness, equipmentIssueReadiness, equipmentReturnReadiness);
     }
     static FrontierV3PilotSceneDemandSnapshot pilotSceneDemandSnapshot(ServerLevel level, SubjectId assaultId) {
         Objects.requireNonNull(level, "pilot demand level");
@@ -986,233 +889,64 @@ public final class FrontierV3ServerLifecycle {
                         || lease.status() == io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.HOT
                         || lease.status() == io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.DRAINING);
     }
+    static FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtimeFor(MinecraftServer server) {
+        return RUNTIMES.get(server);
+    }
     public static CargoCarrierInteraction releaseCargoCarrier(ServerLevel level, ServerPlayer player, Entity entity) {
-        Objects.requireNonNull(level, "level"); Objects.requireNonNull(player, "player"); Objects.requireNonNull(entity, "entity");
-        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
-        if (!FrontierV3PhysicalWorld.isPhysical(level)) return CargoCarrierInteraction.NOT_MANAGED;
-        if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) {
-            return FrontierV3CargoCarrierExecutor.hasDeclaration(entity) ? CargoCarrierInteraction.REJECTED : CargoCarrierInteraction.NOT_MANAGED;
-        }
-        return releaseCargoCarrier(level, runtime, entity, java.util.Optional.of(player.getUUID()));
+        return FrontierV3ServerPhysicalInteractions.releaseCargoCarrier(level, player, entity);
     }
     public static boolean presentObjectBoard(ServerLevel level, ServerPlayer player, Entity entity) {
-        Objects.requireNonNull(level, "level"); Objects.requireNonNull(player, "player"); Objects.requireNonNull(entity, "entity");
-        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
-        if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return false;
-        FrontierWorldState state = runtime.decodedState().orElse(null);
-        if (state == null) return false;
-        String owner = entity.getPersistentData().getString("pale_mirror.frontier_v3.board_owner");
-        if (owner.isBlank()) return false;
-        var board = FrontierReadabilityPlan.compile(state).boards().get(new io.farfrontier.palemirror.frontier.v3.api.SubjectId(owner));
-        if (board == null || !FrontierV3ObjectBoardExecutor.isCurrentOwnedBoard(level, entity, board)) return false;
-        PaleMirrorPlayerPresentation.inspect(player, "frontier-v3:board:" + owner, FrontierV3ObjectBoardCard.fromBoard(board));
-        return true;
+        return FrontierV3ServerPhysicalInteractions.presentObjectBoard(level, player, entity);
     }
     static CargoCarrierInteraction releaseCargoCarrier(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                                                Entity entity, java.util.Optional<java.util.UUID> observerPlayerId) {
-        Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity"); Objects.requireNonNull(observerPlayerId, "observer player id");
-        Objects.requireNonNull(runtime, "runtime");
-        if (runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) {
-            return FrontierV3CargoCarrierExecutor.hasDeclaration(entity) ? CargoCarrierInteraction.REJECTED : CargoCarrierInteraction.NOT_MANAGED;
-        }
-        FrontierWorldState state = runtime.decodedState().orElse(null);
-        if (state == null) return CargoCarrierInteraction.REJECTED;
-        var lease = FrontierV3CargoCarrierExecutor.activeLease(state, entity);
-        if (lease.isEmpty()) {
-            // An accepted handoff can survive a torn save of the old cart declaration.
-            // Canonical world custody allows ordinary interaction, not a second release.
-            if (entity instanceof MinecartChest && FrontierV3CargoCarrierExecutor.hasWorldCustody(state, entity.getUUID())) {
-                if (FrontierV3CargoCarrierExecutor.hasDeclaration(entity)) {
-                    if (!FrontierV3CargoCarrierExecutor.hasCurrentDeclaration(state, entity)) return CargoCarrierInteraction.REJECTED;
-                    if (!FrontierV3CargoCarrierProvenance.restore(state.inventory().items(), entity.getUUID(), (MinecartChest) entity)) {
-                        return CargoCarrierInteraction.REJECTED;
-                    }
-                    FrontierV3CargoCarrierExecutor.relinquishDeclaration(entity);
-                }
-                return CargoCarrierInteraction.NOT_MANAGED;
-            }
-            return FrontierV3CargoCarrierExecutor.hasDeclaration(entity)
-                    ? CargoCarrierInteraction.REJECTED : CargoCarrierInteraction.NOT_MANAGED;
-        }
-        io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = runtime.canonicalState().orElse(null);
-        if (checkpoint == null) return CargoCarrierInteraction.REJECTED;
-        CommandId commandId = FrontierV3CommandIds.physical("cargo-carrier-release", checkpoint.revision().value());
-        CommandResult result = runtime.submit(new FrontierCommand(1, commandId, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
-                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId),
-                new CargoCarrierReleased(lease.orElseThrow().id(), io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.logistics(lease.orElseThrow()).cargoId(), entity.getUUID(), observerPlayerId)))
-                .orElse(null);
-        if (result instanceof CommandResult.Accepted) {
-            // activeLease validated this exact physical carrier without mutation. The
-            // server-thread handoff must commit before captions or item provenance change.
-            // Keep the pre-command state solely to validate the already admitted contents.
-            if (!FrontierV3CargoCarrierExecutor.markReleasedCarrier(state, lease.orElseThrow(), entity)) {
-                throw new IllegalStateException("accepted cargo handoff lost its validated physical carrier");
-            }
-            FrontierV3CargoCarrierExecutor.relinquishDeclaration(entity);
-            return CargoCarrierInteraction.RELEASED;
-        }
-        return CargoCarrierInteraction.REJECTED;
+                                                        Entity entity, java.util.Optional<java.util.UUID> observerPlayerId) {
+        return FrontierV3ServerPhysicalInteractions.releaseCargoCarrier(level, runtime, entity, observerPlayerId);
     }
     public enum CargoCarrierInteraction { NOT_MANAGED, RELEASED, REJECTED }
     public static void observeTerminalVehicleDamage(ServerLevel level, Entity entity, DamageSource source) {
-        Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity"); Objects.requireNonNull(source, "damage source");
-        if (source.is(DamageTypeTags.IS_EXPLOSION)) return;
-        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
-        if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return;
-        observeTerminalVehicleDamage(level, runtime, entity, source);
+        FrontierV3ServerPhysicalInteractions.observeTerminalVehicleDamage(level, entity, source);
     }
     public static boolean isLeasedRoadCargoCarrier(Entity entity) {
-        return entity instanceof MinecartChest
-                && entity.getPersistentData().contains(FrontierV3CargoCarrierExecutor.LEASE_KEY)
-                && entity.getPersistentData().contains(FrontierV3CargoCarrierExecutor.CARGO_KEY);
+        return FrontierV3ServerPhysicalInteractions.isLeasedRoadCargoCarrier(entity);
     }
     static void observeTerminalVehicleDamage(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                              Entity entity, DamageSource source) {
-        Objects.requireNonNull(level, "level"); Objects.requireNonNull(runtime, "runtime"); Objects.requireNonNull(entity, "entity"); Objects.requireNonNull(source, "damage source");
-        if (source.is(DamageTypeTags.IS_EXPLOSION)) return;
-        CargoCarrierInteraction released = releaseCargoCarrier(level, runtime, entity, java.util.Optional.empty());
-        if (released == CargoCarrierInteraction.REJECTED) {
-            runtime.quarantine(new IllegalStateException("terminal vehicle damage cannot durably release one HOT cargo carrier"));
-            return;
-        }
-        captureCargoCarrierImpact(level, runtime, entity, "terminal vehicle damage");
+        FrontierV3ServerPhysicalInteractions.observeTerminalVehicleDamage(level, runtime, entity, source);
     }
     public static ExactCustodyObservation observeExactItemPickup(ServerLevel level, ServerPlayer player, ItemEntity itemEntity) {
-        Objects.requireNonNull(level, "level"); Objects.requireNonNull(player, "player"); Objects.requireNonNull(itemEntity, "item entity");
-        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
-        if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return ExactCustodyObservation.NOT_MANAGED;
-        FrontierWorldState state = runtime.decodedState().orElse(null);
-        if (state == null) return ExactCustodyObservation.REJECTED;
-        var carrierId = FrontierV3CargoHandoffExecutor.worldCarrierId(itemEntity.getItem());
-        if (carrierId.isEmpty()) return ExactCustodyObservation.NOT_MANAGED;
-        var source = new io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.WorldCarrier(carrierId.orElseThrow());
-        var item = state.inventory().items().values().stream().filter(value -> value.custody().equals(source))
-                .filter(value -> FrontierV3CargoHandoffExecutor.exactMatch(itemEntity.getItem(), value)).findFirst();
-        if (item.isEmpty()) return ExactCustodyObservation.NOT_MANAGED;
-        return submitExactCustody(runtime, "world-pickup", item.orElseThrow().id().value(),
-                new io.farfrontier.palemirror.frontier.v3.model.ExactItemCustodyChanged(item.orElseThrow().id(), source,
-                        new io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.Player(player.getUUID())));
+        return FrontierV3ServerPhysicalInteractions.observeExactItemPickup(level, player, itemEntity);
     }
     public static ExactCustodyObservation observeExactItemToss(ServerLevel level, ServerPlayer player, ItemEntity itemEntity) {
-        Objects.requireNonNull(level, "level"); Objects.requireNonNull(player, "player"); Objects.requireNonNull(itemEntity, "item entity");
-        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
-        if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return ExactCustodyObservation.NOT_MANAGED;
-        FrontierWorldState state = runtime.decodedState().orElse(null);
-        if (state == null) return ExactCustodyObservation.REJECTED;
-        var item = state.inventory().items().values().stream().filter(value -> value.custody() instanceof io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.Player owner
-                        && owner.playerId().equals(player.getUUID()))
-                .filter(value -> FrontierV3CargoHandoffExecutor.exactMatch(itemEntity.getItem(), value)).findFirst();
-        if (item.isEmpty()) {
-            var carrierId = FrontierV3CargoHandoffExecutor.worldCarrierId(itemEntity.getItem());
-            if (carrierId.isEmpty()) return ExactCustodyObservation.NOT_MANAGED;
-            var source = new io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.WorldCarrier(carrierId.orElseThrow());
-            item = state.inventory().items().values().stream().filter(value -> value.custody().equals(source))
-                    .filter(value -> FrontierV3CargoHandoffExecutor.exactMatch(itemEntity.getItem(), value)).findFirst();
-            if (item.isEmpty()) return ExactCustodyObservation.NOT_MANAGED;
-            FrontierV3CargoHandoffExecutor.bindWorldCarrier(itemEntity.getItem(), itemEntity.getUUID()); itemEntity.setItem(itemEntity.getItem());
-            return submitExactCustody(runtime, "world-retoss", item.orElseThrow().id().value(),
-                    new io.farfrontier.palemirror.frontier.v3.model.ExactItemCustodyChanged(item.orElseThrow().id(), source,
-                            new io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.WorldCarrier(itemEntity.getUUID())));
-        }
-        FrontierV3CargoHandoffExecutor.bindWorldCarrier(itemEntity.getItem(), itemEntity.getUUID()); itemEntity.setItem(itemEntity.getItem());
-        return submitExactCustody(runtime, "player-toss", item.orElseThrow().id().value(),
-                new io.farfrontier.palemirror.frontier.v3.model.ExactItemCustodyChanged(item.orElseThrow().id(), item.orElseThrow().custody(),
-                        new io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.WorldCarrier(itemEntity.getUUID())));
-    }
-    private static ExactCustodyObservation submitExactCustody(FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime,
-                                                               String phase, String id, io.farfrontier.palemirror.frontier.v3.api.FrontierPayload payload) {
-        io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = runtime.canonicalState().orElse(null);
-        if (checkpoint == null) return ExactCustodyObservation.REJECTED;
-        CommandId commandId = FrontierV3CommandIds.physical(phase, checkpoint.revision().value());
-        CommandResult result = runtime.submit(new FrontierCommand(1, commandId, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
-                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), payload)).orElse(null);
-        return result instanceof CommandResult.Accepted ? ExactCustodyObservation.ACCEPTED : ExactCustodyObservation.REJECTED;
+        return FrontierV3ServerPhysicalInteractions.observeExactItemToss(level, player, itemEntity);
     }
     public enum ExactCustodyObservation { NOT_MANAGED, ACCEPTED, REJECTED }
     public enum PlayerBreakDisposition { UNMANAGED, ACCEPTED, REJECTED }
     public static PlayerBreakDisposition observePlayerBreakPacket(ServerLevel level, BlockPos position, ServerPlayer player) {
-        Objects.requireNonNull(level, "level"); Objects.requireNonNull(position, "position"); Objects.requireNonNull(player, "player");
-        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
-        if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return PlayerBreakDisposition.UNMANAGED;
-        String cause = "player:" + player.getUUID();
-        FrontierV3InfectionOverlayExecutor.BlockBreakObservation infection = FrontierV3InfectionOverlayExecutor.observeBlockBreak(runtime, level, position, cause);
-        if (infection == FrontierV3InfectionOverlayExecutor.BlockBreakObservation.REJECTED) return PlayerBreakDisposition.REJECTED;
-        if (infection == FrontierV3InfectionOverlayExecutor.BlockBreakObservation.ACCEPTED) {
-            FrontierV3PlayerBreakDisposition.accept(level.getServer(), player.getUUID(), position); return PlayerBreakDisposition.ACCEPTED;
-        }
-        FrontierV3ResourceSiteExecutor.BlockBreakObservation resource = FrontierV3ResourceSiteExecutor.observePlayerBlockBreak(runtime, level, position, player);
-        if (resource == FrontierV3ResourceSiteExecutor.BlockBreakObservation.REJECTED) return PlayerBreakDisposition.REJECTED;
-        if (resource == FrontierV3ResourceSiteExecutor.BlockBreakObservation.ACCEPTED) {
-            FrontierV3PlayerBreakDisposition.accept(level.getServer(), player.getUUID(), position); return PlayerBreakDisposition.ACCEPTED;
-        }
-        FrontierV3GrayboxExecutor.BlockBreakObservation graybox = FrontierV3GrayboxExecutor.observeBlockBreak(runtime, level, position, cause);
-        if (graybox == FrontierV3GrayboxExecutor.BlockBreakObservation.REJECTED) return PlayerBreakDisposition.REJECTED;
-        if (graybox == FrontierV3GrayboxExecutor.BlockBreakObservation.ACCEPTED) {
-            FrontierV3PlayerBreakDisposition.accept(level.getServer(), player.getUUID(), position); return PlayerBreakDisposition.ACCEPTED;
-        }
-        return PlayerBreakDisposition.UNMANAGED;
+        return FrontierV3ServerPhysicalInteractions.observePlayerBreakPacket(level, position, player);
     }
     public static boolean rejectBlockBreak(ServerLevel level, BlockPos position, ServerPlayer player) {
-        return observePlayerBreakPacket(level, position, player) == PlayerBreakDisposition.REJECTED;
+        return FrontierV3ServerPhysicalInteractions.rejectBlockBreak(level, position, player);
     }
     public static boolean acceptedPlayerBreak(ServerLevel level, BlockPos position, ServerPlayer player) {
-        return FrontierV3PlayerBreakDisposition.accepted(level.getServer(), player.getUUID(), position);
+        return FrontierV3ServerPhysicalInteractions.acceptedPlayerBreak(level, position, player);
     }
     public static boolean consumeAcceptedPlayerBreak(ServerLevel level, BlockPos position, ServerPlayer player) {
-        return FrontierV3PlayerBreakDisposition.consume(level.getServer(), player.getUUID(), position);
+        return FrontierV3ServerPhysicalInteractions.consumeAcceptedPlayerBreak(level, position, player);
     }
-    /** Post-Vanilla crop result, including a cancelled/no-op removal. */
     public static void observePlayerBreakResult(ServerLevel level, BlockPos position, ServerPlayer player) {
-        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
-        if (runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
-                && FrontierV3PhysicalWorld.isPhysical(level))
-            FrontierV3ResourceFieldPlayerBreakExecutor.observePlayerAction(level, runtime, position, player);
+        FrontierV3ServerPhysicalInteractions.observePlayerBreakResult(level, position, player);
     }
-    public static void clearPlayerBreakDispositions(net.minecraft.server.MinecraftServer server) {
-        FrontierV3PlayerBreakDisposition.clear(server);
+    public static void clearPlayerBreakDispositions(MinecraftServer server) {
+        FrontierV3ServerPhysicalInteractions.clearPlayerBreakDispositions(server);
     }
     public static boolean observeExplosion(ServerLevel level, net.minecraft.world.level.Explosion explosion,
                                            java.util.List<BlockPos> affected, java.util.List<Entity> entities) {
-        Objects.requireNonNull(level, "level"); Objects.requireNonNull(affected, "affected blocks");
-        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
-        if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return false;
-        return observeExplosion(level, runtime, explosion, affected, entities);
+        return FrontierV3ServerPhysicalInteractions.observeExplosion(level, explosion, affected, entities);
     }
     static boolean observeExplosion(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                    net.minecraft.world.level.Explosion explosion, java.util.List<BlockPos> affected, java.util.List<Entity> entities) {
-        Objects.requireNonNull(level, "level"); Objects.requireNonNull(runtime, "runtime"); Objects.requireNonNull(affected, "affected blocks");
-        Entity directSource = explosion == null ? null : explosion.getDirectSourceEntity();
-        java.util.Optional<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId> managed = FrontierV3ExplosionExecutionScope.currentIntent()
-                .or(() -> FrontierV3BomberBomb.intentFor(explosion));
-        for (Entity entity : entities) {
-            CargoCarrierInteraction released = releaseCargoCarrier(level, runtime, entity, java.util.Optional.empty());
-            if (released == CargoCarrierInteraction.REJECTED) {
-                runtime.quarantine(new IllegalStateException("explosion cannot durably release one HOT cargo carrier"));
-                return false;
-            }
-            if (managed.isEmpty()) captureCargoCarrierImpact(level, runtime, entity, "external explosion");
-            if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.QUARANTINED) return false;
-        }
-        boolean resourceSite = managed.map(intent -> FrontierV3ResourceSiteExplosionExecutor.captureManaged(level, runtime, intent, affected))
-                .orElseGet(() -> FrontierV3ResourceSiteExplosionExecutor.captureExternal(level, runtime, affected));
-        boolean ordinary = managed.map(intent -> FrontierV3ExplosionExecutor.observeDetonation(level, runtime, intent, directSource, affected, entities))
-                .orElseGet(() -> FrontierV3PhysicalObservationExecutor.captureExternalExplosion(level, runtime, affected));
-        return resourceSite || ordinary;
-    }
-    private static void captureCargoCarrierImpact(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                                  Entity entity, String cause) {
-        if (!(entity instanceof MinecartChest)) return;
-        FrontierWorldState state = runtime.decodedState().orElse(null);
-        if (state == null) {
-            runtime.quarantine(new IllegalStateException(cause + " has no canonical state"));
-            return;
-        }
-        if (!FrontierV3CargoCarrierExecutor.hasWorldCustody(state, entity.getUUID())) return;
-        try {
-            FrontierV3CargoCarrierImpactLedger.get(level).capture(level.getGameTime(), entity, state);
-        } catch (RuntimeException error) {
-            runtime.quarantine(error);
-        }
+                                    net.minecraft.world.level.Explosion explosion, java.util.List<BlockPos> affected,
+                                    java.util.List<Entity> entities) {
+        return FrontierV3ServerPhysicalInteractions.observeExplosion(level, runtime, explosion, affected, entities);
     }
     public enum EntityJoinAdmission { NOT_MANAGED, RETAINED, DUPLICATE_UNINDEXED }
     public record JoinFirewallProof(EntityJoinAdmission lifecycleAdmission, boolean verifiedV3Carrier) {

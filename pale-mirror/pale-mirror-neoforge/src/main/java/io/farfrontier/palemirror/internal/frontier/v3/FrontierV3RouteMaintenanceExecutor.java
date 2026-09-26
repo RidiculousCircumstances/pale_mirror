@@ -211,9 +211,11 @@ final class FrontierV3RouteMaintenanceExecutor {
         BlockPosition origin = wholeBlock(intent); if (origin == null) return null;
         RouteMaintenance maintenance = state.routeMaintenances().get(intent.causeSubjectId());
         if (maintenance == null || !maintenance.building() || maintenance.cargoId().isPresent()) return null;
-        SubjectId cargoId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.CARGO), cargoMaterialId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.CARGO_ITEM), sourceId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.SOURCE_ITEM);
+        SubjectId cargoId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.CARGO), cargoMaterialId =
+                intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.CARGO_ITEM), sourceId = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.SOURCE_ITEM);
         ExactItemStack material = state.inventory().items().get(sourceId);
-        if (material == null || !intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ROUTE).equals(FrontierRouteNetwork.OWNER) || !intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ROUTE_MAINTENANCE).equals(maintenance.id())
+        if (material == null || !intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ROUTE).equals(FrontierRouteNetwork.OWNER) ||
+                !intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ROUTE_MAINTENANCE).equals(maintenance.id())
                 || !(material.custody() instanceof InventoryCustody.ContainerSlot slot) || !slot.containerId().equals(FrontierRouteNetwork.MAINTENANCE_CONTAINER)) return null;
         ContainerSurface surface = state.inventory().surfaces().get(slot.containerId());
         if (surface == null || surface.status() != ContainerSurfaceStatus.ACTIVE || !surface.position().equals(origin)) return null;

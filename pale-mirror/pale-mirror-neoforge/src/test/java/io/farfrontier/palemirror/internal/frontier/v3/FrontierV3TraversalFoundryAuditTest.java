@@ -48,7 +48,8 @@ class FrontierV3TraversalFoundryAuditTest {
     }
 
     @Test void runtimeSupportPendingIsOnlyFreshAirWithoutAnyOwnershipClaim() {
-        GrayboxCell route = new GrayboxCell(new BlockPosition(8, 64, 8), new io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTarget(io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, new SubjectId("route:test")),
+        GrayboxCell route = new GrayboxCell(new BlockPosition(8, 64, 8), new
+                io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTarget(io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, new SubjectId("route:test")),
                 GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE);
         FrontierV3GrayboxLedger.Claim claimed = new FrontierV3GrayboxLedger.Claim("route:test", 4, "ROUTE", "ROUTE_SURFACE", false);
         FrontierV3GrayboxLedger.Claim conflicted = new FrontierV3GrayboxLedger.Claim("route:test", 4, "ROUTE", "ROUTE_SURFACE", true);

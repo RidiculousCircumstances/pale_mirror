@@ -27,7 +27,7 @@ public final class ReferenceProjectionStateSupport {
                     || surface.status() != ContainerSurfaceStatus.UNMATERIALIZED) {
                 throw new IllegalArgumentException("initial projection requires a fresh unmaterialized surface");
             }
-        } else if (prior.state() != PhysicalReplicaState.OBSERVED_CURRENT || surface.status() != ContainerSurfaceStatus.ACTIVE
+        } else if (prior.state() != PhysicalReplicaState.OBSERVED_CURRENT
                 || prior.replicaRevision() != request.expectedReplicaRevision()
                 || !prior.fingerprint().equals(request.priorFingerprint()) || !prior.provenance().equals(request.priorProvenance())
                 || revision <= prior.emittedCanonicalRevision()) {

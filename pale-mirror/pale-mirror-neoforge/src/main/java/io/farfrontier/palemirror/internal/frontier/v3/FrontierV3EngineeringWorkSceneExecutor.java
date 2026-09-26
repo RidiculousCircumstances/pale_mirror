@@ -35,7 +35,8 @@ final class FrontierV3EngineeringWorkSceneExecutor {
 
     private static boolean admit(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state) {
         Optional<EngineeringWorkSceneCandidate> candidate = FrontierV3SceneDemand.nextDemandedCandidate(
-                level, runtime, io.farfrontier.palemirror.frontier.v3.model.SceneCauseKind.ENGINEERING_WORKSITE, FrontierEngineeringWorkSceneSupport.candidates(state), EngineeringWorkSceneCandidate::workCell, EngineeringWorkSceneCandidate::projectId);
+                level, runtime, io.farfrontier.palemirror.frontier.v3.model.SceneCauseKind.ENGINEERING_WORKSITE, FrontierEngineeringWorkSceneSupport.candidates(state), EngineeringWorkSceneCandidate::workCell,
+                        EngineeringWorkSceneCandidate::projectId);
         if (candidate.isEmpty()) return false;
         EngineeringWorkSceneCandidate work = candidate.orElseThrow();
         SceneLease lease = lease(runtime, work);

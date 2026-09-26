@@ -262,7 +262,9 @@ class HiveRouteEngagementProcessTest {
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ROUTE_ENGAGEMENT);
         assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleFixture.prepare(hot, operation.settlementId(), foreignTarget));
         PhysicalIntent unknownTarget = new PhysicalIntent(new PhysicalIntentId("intent:scene-strike-unknown"), PhysicalIntentKind.SCENE_STRIKE, PhysicalIntentStatus.PREPARED,
-                operation.id(), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.routeSceneStrike(attacker, new SubjectId("actor:unknown"), lease.id(), lease.revision()), strikeOrigin, 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED,
+                operation.id(), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.routeSceneStrike(
+                        attacker, new SubjectId("actor:unknown"), lease.id(), lease.revision()),
+                strikeOrigin, 0, PhysicalPostcondition.SCENE_STRIKE_OBSERVED,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ROUTE_ENGAGEMENT);
         assertThrows(IllegalArgumentException.class, () -> PhysicalIntentLifecycleFixture.prepare(hot, operation.settlementId(), unknownTarget));
         SceneStrikeObservation strikeReceipt = new SceneStrikeObservation(new PhysicalObservationId("observation:scene-strike-test"), strikeIntent.id(), attacker, target,

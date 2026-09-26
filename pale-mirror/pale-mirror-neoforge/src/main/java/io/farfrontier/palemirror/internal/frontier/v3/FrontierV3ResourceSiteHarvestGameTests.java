@@ -232,7 +232,7 @@ public final class FrontierV3ResourceSiteHarvestGameTests {
 
     @GameTest(batch = "pm-frontier-v3-resource-harvest", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full",
             timeoutTicks = 40)
-    public static void oneObservedCropPersistsAsPartialFieldWithoutCreatingTheDepotOutput(GameTestHelper helper) {
+    public static void oneObservedCropPersistsAsReplantedPartialFieldWithoutCreatingTheDepotOutput(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); ResourceSite site = field(fixtureOrigin(helper), "site:resource-harvest-partial-progress"); prepare(level, site);
         runWhenLit(helper, level, site, () -> {
             FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.fixture();
@@ -242,9 +242,10 @@ public final class FrontierV3ResourceSiteHarvestGameTests {
                     "partial fixture must materialize its exact owned field: " + fieldIssue(level, site)); ledger.activate(site.id());
             helper.assertValueEqual(FrontierV3ResourceSiteExecutor.projectStage(level, ledger, site, 7),
                     FrontierV3ResourceSiteExecutor.StageProjectionResult.UPDATED, "partial fixture must begin with mature crops");
-            BlockPosition first = site.cropSlots().getFirst(); level.setBlock(new BlockPos(first.x(), first.y(), first.z()), Blocks.AIR.defaultBlockState(), 3);
+            BlockPosition first = site.cropSlots().getFirst();
+            level.setBlock(new BlockPos(first.x(), first.y(), first.z()), FrontierV3ResourceSiteExecutor.crop(0), 3);
             helper.assertTrue(FrontierV3ResourceSiteExecutor.matchesHarvestProgress(level, site, 1),
-                    "one AIR cell followed by 63 mature cells is the sole first-crop postcondition");
+                    "one replanted cell followed by 63 mature cells is the sole first-crop postcondition");
             ledger.harvestOne(site.id(), 1);
             BlockPosition lastCrop = site.cropSlots().getLast(); BlockPos chestPosition = new BlockPos(lastCrop.x(), lastCrop.y(), lastCrop.z()).offset(3, 0, 0);
             level.setBlock(chestPosition, Blocks.AIR.defaultBlockState(), 3); level.setBlock(chestPosition.below(), Blocks.STONE.defaultBlockState(), 3);
@@ -329,7 +330,8 @@ public final class FrontierV3ResourceSiteHarvestGameTests {
             helper.assertValueEqual(FrontierV3ResourceSiteExecutor.projectStage(level, ledger, site, 7),
                     FrontierV3ResourceSiteExecutor.StageProjectionResult.UPDATED, "completion fixture must begin mature");
             for (int index = 0; index < site.cropSlots().size(); index++) {
-                BlockPosition crop = site.cropSlots().get(index); level.setBlock(new BlockPos(crop.x(), crop.y(), crop.z()), Blocks.AIR.defaultBlockState(), 3);
+                BlockPosition crop = site.cropSlots().get(index);
+                level.setBlock(new BlockPos(crop.x(), crop.y(), crop.z()), FrontierV3ResourceSiteExecutor.crop(0), 3);
                 ledger.harvestOne(site.id(), index + 1);
             }
             BlockPosition lastCrop = site.cropSlots().getLast(); BlockPos chestPosition = new BlockPos(lastCrop.x(), lastCrop.y(), lastCrop.z()).offset(3, 0, 0);

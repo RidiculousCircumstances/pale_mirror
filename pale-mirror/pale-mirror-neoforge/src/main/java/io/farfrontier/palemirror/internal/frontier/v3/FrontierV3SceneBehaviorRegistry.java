@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
+import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
 import io.farfrontier.palemirror.frontier.v3.model.SceneCauseKind;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssault;
@@ -155,6 +156,11 @@ final class FrontierV3SceneBehaviorRegistry {
         private final ReleaseFailure failure;
         BodyReleasePolicy(ReleaseFailure failure) { this.failure = failure; }
         boolean retainsLiveBody(boolean observed) { return this == RETAIN_WHILE_OBSERVED && observed; }
+        Optional<BodyPosition> captureReleasedBody(ServerLevel level, net.minecraft.world.entity.Mob body) {
+            return this == RETAIN_WHILE_OBSERVED ? FrontierV3SupportedBodyCapture.observe(level, body)
+                    : Optional.of(new BodyPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ()));
+        }
+        boolean permitsBoundActorHand() { return this == RETAIN_WHILE_OBSERVED; }
         void conflict(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                       FrontierWorldState state, SceneLease lease, String reason) {
             failure.report(level, runtime, state, lease, reason);

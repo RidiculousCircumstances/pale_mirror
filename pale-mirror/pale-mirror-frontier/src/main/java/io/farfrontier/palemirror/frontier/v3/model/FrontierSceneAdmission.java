@@ -321,7 +321,7 @@ public final class FrontierSceneAdmission {
     public static boolean reservedByOtherThanSettlementAssault(FrontierWorldState state, SubjectId actorId, SubjectId assaultId) {
         Objects.requireNonNull(assaultId, "assault id");
         return state.sceneLeases().values().stream().anyMatch(lease -> lease.status() != SceneLeaseStatus.CLOSED
-                && (!FrontierSceneBehaviors.isSettlementAssault(lease) || !FrontierSceneBehaviors.settlementAssault(lease).assaultId().equals(assaultId))
+                && !FrontierSceneBehaviors.ownedBySettlementAssault(lease, assaultId)
                 && lease.members().stream().anyMatch(member -> member.actorId().equals(actorId)))
                 || state.operations().values().stream().anyMatch(operation -> operation.stage() == OperationStage.EN_ROUTE
                 && operation.participantIds().contains(actorId))

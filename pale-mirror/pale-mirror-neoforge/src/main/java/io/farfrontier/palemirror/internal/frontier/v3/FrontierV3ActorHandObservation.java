@@ -4,7 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalObservation;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob;
-import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestSceneCause;
+import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteLifecycle;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSitePhase;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
@@ -118,9 +118,9 @@ final class FrontierV3ActorHandObservation {
         return lease.status() == SceneLeaseStatus.HOT
                 && lease.worldId().equals(state.bootstrap().worldId())
                 && lease.equals(state.sceneLeases().get(lease.id()))
-                && lease.cause() instanceof ResourceSiteHarvestSceneCause cause
-                && cause.siteId().equals(job.siteId())
-                && cause.jobId().equals(job.id())
+                && FrontierSceneBehaviors.isResourceSiteHarvest(lease)
+                && FrontierSceneBehaviors.resourceSiteHarvest(lease).siteId().equals(job.siteId())
+                && FrontierSceneBehaviors.resourceSiteHarvest(lease).jobId().equals(job.id())
                 && site != null && site.phase() == ResourceSitePhase.HARVESTING
                 && site.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
                         .map(ResourceSiteHarvestJob.class::cast).filter(job::equals).isPresent()

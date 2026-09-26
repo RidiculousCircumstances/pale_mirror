@@ -82,7 +82,10 @@ public final class RouteConstructionStateSupport {
 
     public static void validateIntent(FrontierWorldState state, PhysicalIntent intent) {
         if (intent.kind() != PhysicalIntentKind.ROUTE_CONSTRUCTION) throw new IllegalArgumentException("route construction intent kind is invalid");
-        RouteConstruction project = java.util.Optional.ofNullable(state.routeConstructions().get(intent.roles().require(PhysicalIntentSubjectRole.ROUTE_CONSTRUCTION_PROJECT))).filter(java.util.Objects::nonNull).orElseThrow(() -> new IllegalArgumentException("route construction intent lacks an active project"));
+        RouteConstruction project = java.util.Optional.ofNullable(state.routeConstructions()
+                .get(intent.roles().require(PhysicalIntentSubjectRole.ROUTE_CONSTRUCTION_PROJECT)))
+                .filter(java.util.Objects::nonNull)
+                .orElseThrow(() -> new IllegalArgumentException("route construction intent lacks an active project"));
         SubjectId cargoId = project.cargoId().orElseThrow(() -> new IllegalArgumentException("route construction intent has no loaded material cargo"));
         if (!intent.roles().require(PhysicalIntentSubjectRole.CARGO).equals(cargoId)) throw new IllegalArgumentException("route construction intent lacks its material cargo");
         SubjectId materialId = intent.roles().require(PhysicalIntentSubjectRole.MATERIAL);
@@ -204,7 +207,10 @@ public final class RouteConstructionStateSupport {
 
     public static FrontierWorldState conflict(FrontierWorldState state, PhysicalIntent intent,
                                        Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, PhysicalIntent> intents) {
-        RouteConstruction project = java.util.Optional.ofNullable(state.routeConstructions().get(intent.roles().require(PhysicalIntentSubjectRole.ROUTE_CONSTRUCTION_PROJECT))).filter(java.util.Objects::nonNull).orElseThrow(() -> new IllegalArgumentException("route construction conflict lacks its project"));
+        RouteConstruction project = java.util.Optional.ofNullable(state.routeConstructions()
+                .get(intent.roles().require(PhysicalIntentSubjectRole.ROUTE_CONSTRUCTION_PROJECT)))
+                .filter(java.util.Objects::nonNull)
+                .orElseThrow(() -> new IllegalArgumentException("route construction conflict lacks its project"));
         Map<SubjectId, RouteConstruction> projects = new LinkedHashMap<>(state.routeConstructions());
         projects.put(project.id(), project.withConfirmedCells(project.confirmedCells(), RouteConstructionStatus.CONFLICT));
         intents.put(intent.id(), intent.withRecoveryUnknown(PhysicalIntentRecoveryDiagnosticProducer.ENGINEERING_WORKSITE.stamp(intent)));

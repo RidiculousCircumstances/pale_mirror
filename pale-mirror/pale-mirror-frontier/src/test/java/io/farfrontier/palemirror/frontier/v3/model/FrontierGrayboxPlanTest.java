@@ -191,7 +191,8 @@ class FrontierGrayboxPlanTest {
         state.bootstrap().settlements().forEach(settlement -> {
             SettlementStructure infirmary = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.INFIRMARY).findFirst().orElseThrow();
             SettlementInfirmaryTreatmentPort port = SettlementInfirmaryTreatmentPort.forInfirmary(infirmary);
-            port.ownedAccessSurfaces().forEach(surface -> assertEquals(new GrayboxCell(surface.support(), new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, infirmary.id()), GrayboxMaterial.INFIRMARY, GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE),
+            port.ownedAccessSurfaces().forEach(surface -> assertEquals(new GrayboxCell(surface.support(), new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, infirmary.id()),
+                    GrayboxMaterial.INFIRMARY, GrayboxSemanticPart.PUBLIC_ACCESS_SURFACE),
                     plan.cells().get(surface.support()), "treatment access walk must retain exact infirmary provenance"));
             port.throatAirCells().forEach(position -> assertEquals(null, plan.cells().get(position),
                     "infirmary throat must retain two body-clear cells: " + infirmary.id()));
@@ -205,7 +206,8 @@ class FrontierGrayboxPlanTest {
             }
             for (int ordinal = 0; ordinal < 3; ordinal++) {
                 SurfaceAnchor floor = port.treatmentSurface(ordinal);
-                assertEquals(new GrayboxCell(floor.support(), new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, infirmary.id()), GrayboxMaterial.INFIRMARY, GrayboxSemanticPart.FOUNDATION), plan.cells().get(floor.support()),
+                assertEquals(new GrayboxCell(floor.support(), new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, infirmary.id()), GrayboxMaterial.INFIRMARY,
+                        GrayboxSemanticPart.FOUNDATION), plan.cells().get(floor.support()),
                         "treatment position must be a retained infirmary floor: " + infirmary.id());
                 assertEquals(null, plan.cells().get(floor.support().offset(0, 1, 0)), "treatment body clearance must stay open: " + infirmary.id());
                 assertEquals(null, plan.cells().get(floor.support().offset(0, 2, 0)), "treatment head clearance must stay open: " + infirmary.id());

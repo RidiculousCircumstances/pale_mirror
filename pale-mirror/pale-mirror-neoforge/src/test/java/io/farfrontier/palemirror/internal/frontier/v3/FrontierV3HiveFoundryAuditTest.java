@@ -53,7 +53,8 @@ class FrontierV3HiveFoundryAuditTest {
 
     @Test
     void runtimeClassificationRejectsMatchingLookingUnclaimedOrConflictedHiveroot() {
-        GrayboxCell root = new GrayboxCell(new BlockPosition(8, 65, 8), new io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTarget(io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.HIVE_ORGAN, new SubjectId("organ:test-ganglion")),
+        GrayboxCell root = new GrayboxCell(new BlockPosition(8, 65, 8), new
+                io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTarget(io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.HIVE_ORGAN, new SubjectId("organ:test-ganglion")),
                 GrayboxMaterial.HIVE_GANGLION, GrayboxSemanticPart.FOUNDATION);
         FrontierV3GrayboxLedger.Claim claim = new FrontierV3GrayboxLedger.Claim("organ:test-ganglion", 2, "HIVE_GANGLION", "FOUNDATION", false);
         FrontierV3GrayboxLedger.Claim conflicted = new FrontierV3GrayboxLedger.Claim("organ:test-ganglion", 2, "HIVE_GANGLION", "FOUNDATION", true);
@@ -172,7 +173,8 @@ class FrontierV3HiveFoundryAuditTest {
     void idleProjectionNeverScansEveryDeclaredChunkToFindOneNaturalChunk() {
         var cells = new ArrayList<GrayboxCell>();
         for (int chunk = 0; chunk < 2_160; chunk++) {
-            cells.add(new GrayboxCell(new BlockPosition(chunk << 4, 64, 0), new io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTarget(io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, new SubjectId("structure:probe-" + chunk)),
+            cells.add(new GrayboxCell(new BlockPosition(chunk << 4, 64, 0), new
+                    io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTarget(io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, new SubjectId("structure:probe-" + chunk)),
                     GrayboxMaterial.WORKSITE, GrayboxSemanticPart.WORKSITE_STAGING));
         }
         var cursor = FrontierV3GrayboxExecutor.Cursor.fromCells(cells, null);

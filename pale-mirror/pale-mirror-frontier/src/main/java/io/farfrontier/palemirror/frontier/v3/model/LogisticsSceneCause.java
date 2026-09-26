@@ -17,4 +17,10 @@ public record LogisticsSceneCause(SubjectId operationId, SubjectId cargoId, Opti
     }
 
     @Override public SceneCauseKind kind() { return SceneCauseKind.LOGISTICS; }
+    @Override public void validateLeaseStatus(SceneLeaseStatus status) {
+        if (carrierDisposition == CargoProjectionRetirement.Disposition.RETAIN_WORLD_CUSTODY
+                && (status == SceneLeaseStatus.PREPARED || status == SceneLeaseStatus.HOT)) {
+            throw new IllegalArgumentException("released world carrier cannot regain prepared or HOT scene custody");
+        }
+    }
 }

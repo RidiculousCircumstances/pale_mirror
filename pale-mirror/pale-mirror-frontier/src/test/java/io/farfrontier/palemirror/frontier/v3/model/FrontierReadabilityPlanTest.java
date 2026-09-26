@@ -257,6 +257,30 @@ class FrontierReadabilityPlanTest {
     }
 
     @Test
+    void showsRestockedBreadWithoutRewritingTheMissedRationOutcome() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:board-restocked-food"), 91L));
+        Settlement settlement = state.bootstrap().settlements().getFirst();
+        java.util.List<SubjectId> recipients = state.humanPopulation().residents().values().stream()
+                .filter(resident -> resident.settlementId().equals(settlement.id())).map(ResidentProfile::id).sorted().toList();
+        SettlementProvision shortage = SettlementProvision.started(settlement.id(), 1, 100L, recipients.size(), recipients, java.util.List.of());
+        FrontierWorldState hungry = state.withHumanPopulation(state.humanPopulation().withProvision(shortage));
+        SubjectId depotId = FrontierWorldState.depotId(settlement.id());
+        int slot = hungry.inventory().availableSlots(depotId).getFirst();
+        FrontierWorldState restocked = hungry.withInventory(hungry.inventory().store(new ExactItemStack(
+                new SubjectId("item:board-restocked-bread"), settlement.id(), "minecraft:bread", 64,
+                new InventoryCustody.ContainerSlot(depotId, slot))));
+        SettlementStructure depot = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
+        FrontierObjectBoard board = FrontierReadabilityPlan.compile(restocked).boards().get(depot.id());
+
+        assertEquals(SettlementProvisionStatus.SHORTAGE, restocked.humanPopulation().provision(settlement.id()).status());
+        assertFalse(FrontierReadabilityPlan.input(hungry).equals(FrontierReadabilityPlan.input(restocked)),
+                "restocking must invalidate the live board projection");
+        assertEquals(FrontierObjectBoard.Tone.WARNING, board.tone());
+        assertTrue(board.text().endsWith("LAST MEAL MISSED · BREAD 64 / " + (recipients.size() * 2)));
+        assertFalse(board.text().contains("BREAD NEEDED"));
+    }
+
+    @Test
     void makesTheExactAcceptedMarketWorkReadableAtItsOwnedWorkshop() {
         FrontierDevelopmentScenarios.MaterializedProductionFixture fixture = FrontierDevelopmentScenarios.materializedProductionInputTheftFixture(
                 new WorldId("frontier:board-market-work"), 94L);

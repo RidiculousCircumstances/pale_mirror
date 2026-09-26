@@ -29,7 +29,8 @@ final class ProductionJobStateCodec {
     static Map<SubjectId, ProductionJob> read(DataInputStream input) throws IOException {
         Map<SubjectId, ProductionJob> jobs = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
-            SubjectId id = new SubjectId(readString(input)); SubjectId task = new SubjectId(readString(input)); SubjectId settlement = new SubjectId(readString(input)); SubjectId facility = new SubjectId(readString(input)); SubjectId worker = new SubjectId(readString(input));
+            SubjectId id = new SubjectId(readString(input)); SubjectId task = new SubjectId(readString(input)); SubjectId settlement = new SubjectId(readString(input)); SubjectId facility = new
+                    SubjectId(readString(input)); SubjectId worker = new SubjectId(readString(input));
             SubjectId consumed = new SubjectId(readString(input)); ProductionInputHold hold = readHold(input, consumed);
             SubjectId output = new SubjectId(readString(input)); String outputKind = readString(input); int outputCount = input.readUnsignedByte();
             ProductionWorkProgress progress = ProductionWorkProgressStateCodec.read(input); TraversalTopology traversal = TraversalTopologyStateCodec.read(input);

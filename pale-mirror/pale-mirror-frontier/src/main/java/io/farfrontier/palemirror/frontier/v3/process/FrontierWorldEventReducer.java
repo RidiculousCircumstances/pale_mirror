@@ -3,9 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.process;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
 import io.farfrontier.palemirror.frontier.v3.kernel.DeterministicProcessRegistry;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
-import io.farfrontier.palemirror.frontier.v3.model.DiagnosticIncidentExtractor;
 import io.farfrontier.palemirror.frontier.v3.model.KernelQuarantineObserved;
-import io.farfrontier.palemirror.frontier.v3.model.DiagnosticIncidentContext;
 import io.farfrontier.palemirror.frontier.v3.model.DiagnosticProducerContract;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestTrace;
 
@@ -18,17 +16,11 @@ public final class FrontierWorldEventReducer {
         return FrontierWorldState.duringReducerTransition(() -> {
             DiagnosticProducerContract.requireAdmitted(event.payload());
             if (event.payload() instanceof KernelQuarantineObserved) {
-                var tuple = ((KernelQuarantineObserved) event.payload()).diagnostic();
-                return state.withDiagnosticIncidents(state.diagnosticIncidents().retain(tuple, event.id().value(),
-                        event.causes().commands().stream().map(command -> command.value()).collect(java.util.stream.Collectors.joining("->")),
-                        event.revision().value(), event.instant().ticks(), DiagnosticIncidentContext.capture(state, event)));
+                return FrontierEventDiagnosticSupport.reduceKernelQuarantine(state, event);
             }
             String processId = processRegistry.requireReducedEventOwner(event.payload().type());
             FrontierWorldState reduced = ResourceSiteHarvestTrace.retain(FrontierWorldProcessCatalog.reduce(processId, state, event), event);
-            return DiagnosticIncidentExtractor.tuple(event.payload()).map(tuple -> reduced.withDiagnosticIncidents(
-                    reduced.diagnosticIncidents().retain(DiagnosticIncidentExtractor.incidentId(event.payload(), reduced, tuple), tuple, event.id().value(),
-                            event.causes().commands().stream().map(command -> command.value()).collect(java.util.stream.Collectors.joining("->")),
-                            event.revision().value(), event.instant().ticks(), DiagnosticIncidentContext.capture(reduced, event)))).orElse(reduced);
+            return FrontierEventDiagnosticSupport.retainIncident(reduced, event);
         });
     }
 }
