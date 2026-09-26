@@ -22,7 +22,7 @@ if (!process.env.DISPLAY) throw new Error('a native visible pilot requires DISPL
 
 const project = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const packPilot = process.env.FRONTIER_V3_PILOT_PROFILE === 'pack';
-const PACK_PILOT_REQUIRED_MOD_IDS = Object.freeze(['bettercombat', 'ezactions', 'pale_mirror', 'simplytooltips']);
+const PACK_PILOT_REQUIRED_MOD_IDS = Object.freeze(['bettercombat', 'pale_mirror', 'simplytooltips']);
 const configuredPackPilotDirectory = process.env.FRONTIER_V3_PILOT_PACK_DIRECTORY;
 if (packPilot && (configuredPackPilotDirectory === undefined || !isAbsolute(configuredPackPilotDirectory))) {
   throw new Error('FRONTIER_V3_PILOT_PACK_DIRECTORY must name an absolute materialized full-pack directory');

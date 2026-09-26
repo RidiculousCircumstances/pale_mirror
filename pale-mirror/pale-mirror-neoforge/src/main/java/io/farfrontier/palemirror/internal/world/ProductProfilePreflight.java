@@ -20,7 +20,6 @@ public final class ProductProfilePreflight {
         if (!"product".equals(profile)) throw new IllegalStateException("Unknown Pale Mirror profile " + profile);
         requireMod("pale_mirror_visuals", null);
         requireMod("geckolib", "4.9.2");
-        requireMod("villageroverhaul", "3.10.17.16");
         requireMod("supplementaries", null);
         requireMod("create", "6.0.10");
         var provider = PaleMirrorVisuals.provider().orElseThrow(() ->

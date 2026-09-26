@@ -255,10 +255,11 @@ Every frontier starts with exactly 48 commissioned physical carriers:
 
 Each carrier has a stable UUID, region, cohort, namespaced role, exact home
 building/bed slot and exact workplace or patrol building/slot binding.
-Villager Overhaul's exact pinned API provides guard patrol/combat and worker
-behavior through one isolated bridge. A fail-closed exact-version mixin denies
-player recruitment of PM residents. Ambient breeding inside the authored fort
-is rejected unless a canonical growth permit is present.
+Visuals materializes vanilla Villagers as physical carriers; Pale Mirror owns
+their work, patrol and combat decisions. The retired third-party villager AI,
+stats, recruitment and farming modules have no authority over managed residents.
+Ambient breeding inside the authored fort is rejected unless a canonical growth
+permit is present.
 
 Missing or unloaded entities never change population. Only a confirmed death
 event for a registered UUID becomes a typed observation. Core deduplicates it,

@@ -60,11 +60,10 @@ test('monorepo content inventory stays rooted in Pale Mirror rather than pack in
 });
 
 test('Visuals compile-only dependencies are resolved from exact verified pins rather than runtime server mods', async () => {
-  const [visualsBuild, properties, gecko, villager, create, recurrence] = await Promise.all([
+  const [visualsBuild, properties, gecko, create, recurrence] = await Promise.all([
     readFile(resolve(project, 'pale-mirror-visuals', 'build.gradle'), 'utf8'),
     readFile(resolve(project, 'gradle.properties'), 'utf8'),
     readFile(resolve(monorepo, 'mods', 'geckolib.pw.toml'), 'utf8'),
-    readFile(resolve(monorepo, 'mods', 'villager-overhaul.pw.toml'), 'utf8'),
     readFile(resolve(monorepo, 'mods', 'create.pw.toml'), 'utf8'),
     readFile(resolve(project, 'tools', 'engineering', 'verify_visual_compile_dependencies.mjs'), 'utf8')
   ]);
@@ -72,11 +71,11 @@ test('Visuals compile-only dependencies are resolved from exact verified pins ra
   assert.match(visualsBuild, /tasks\.named\('compileJava'\) \{ dependsOn resolveVisualCompileDependencies \}/);
   assert.match(visualsBuild, /prepareVisualsGameTestMods.*?dependsOn resolveVisualCompileDependencies/s);
   assert.match(visualsBuild, /outputs\.upToDateWhen \{ false \}/);
-  for (const property of ['geckolib_integration_jar', 'villager_overhaul_integration_jar', 'create_integration_jar']) {
+  for (const property of ['geckolib_integration_jar', 'create_integration_jar']) {
     assert.match(visualsBuild, new RegExp(`visualCompileArtifactsByProperty\\.${property}\\.candidate`));
   }
   assert.doesNotMatch(visualsBuild, /compileOnly files\(rootProject\.findProperty/);
-  for (const [name, pack] of [['geckolib', gecko], ['villager_overhaul', villager], ['create', create]]) {
+  for (const [name, pack] of [['geckolib', gecko], ['create', create]]) {
     const url = pack.match(/url = "([^"]+)"/)[1];
     const sha512 = pack.match(/hash = "([a-f0-9]{128})"/)[1];
     assert.match(properties, new RegExp(`^${name}_integration_url=${escapeRegExp(url)}$`, 'm'));

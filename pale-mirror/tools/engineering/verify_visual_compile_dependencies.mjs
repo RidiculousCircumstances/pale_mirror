@@ -17,7 +17,6 @@ const outputRoot = await mkdtemp(join(recurrenceRoot, 'warm-'));
 const transcript = join(outputRoot, 'transcript.log');
 const artifacts = [
   ['geckolib_integration_jar', 'geckolib-neoforge-1.21.1-4.9.2.jar', 'GeckoLib'],
-  ['villager_overhaul_integration_jar', 'villageroverhaul-neoforge-1.21.1-3.10.17.16.jar', 'Villager Overhaul'],
   ['create_integration_jar', 'create-1.21.1-6.0.10.jar', 'Create']
 ].map(([property, filename, label]) => ({
   property,
@@ -94,7 +93,7 @@ try {
   await writeFile(join(outputRoot, 'result.json'), `${JSON.stringify({
     outputRoot,
     artifacts: artifacts.map(({ property, filename }) => ({ property, filename })),
-    assertions: 'all three override mutations/removals and default byte mutations were rejected by normal invocation without --rerun-tasks'
+    assertions: 'both override mutations/removals and default byte mutations were rejected by normal invocation without --rerun-tasks'
   }, null, 2)}\n`);
   process.stdout.write(`Visual compile dependency warm-cache recurrence passed; evidence: ${outputRoot}\n`);
 } catch (error) {

@@ -11,10 +11,6 @@ Fresh-world authored settlements, infrastructure, residents and dynamic physical
 '''
 
 [[mixins]]
-config="pale_mirror_visuals.mixins.json"
-requiredMods=["villageroverhaul"]
-
-[[mixins]]
 config="pale_mirror_visuals.worldgen.mixins.json"
 
 [[dependencies.pale_mirror_visuals]]
@@ -42,13 +38,6 @@ side="BOTH"
 modId="geckolib"
 type="required"
 versionRange="[4.9.2]"
-ordering="AFTER"
-side="BOTH"
-
-[[dependencies.pale_mirror_visuals]]
-modId="villageroverhaul"
-type="required"
-versionRange="[3.10.17.16]"
 ordering="AFTER"
 side="BOTH"
 
