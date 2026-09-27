@@ -299,6 +299,7 @@ public final class FrontierV3TestPilotClient {
                 case "quick_move_from_inventory" -> quickMoveFromInventory(minecraft, action);
                 case "quick_move_from_container" -> quickMoveFromContainer(minecraft, action);
                 case "split_move_from_container" -> splitMoveFromContainer(minecraft, action);
+                case "move_within_container" -> moveWithinContainer(minecraft, action);
                 default -> throw new IllegalArgumentException("unsupported visible pilot action: " + type);
             }
         } catch (RuntimeException failure) {
@@ -402,6 +403,12 @@ public final class FrontierV3TestPilotClient {
         quickMoveAttempted = result.attempted();
         if (result.complete()) { advance("split_move_from_container"); return; }
         timeout(minecraft, action, "ordinary split move did not retain exact source and player portions");
+    }
+    private static void moveWithinContainer(Minecraft minecraft, JsonObject action) {
+        var result = FrontierV3PilotInventoryActions.moveWithinContainer(minecraft, action, quickMoveAttempted);
+        quickMoveAttempted = result.attempted();
+        if (result.complete()) { advance("move_within_container"); return; }
+        timeout(minecraft, action, "ordinary chest reorder did not reach the declared destination slot");
     }
     private static void waitUntilBlock(Minecraft minecraft, JsonObject action) {
         BlockPos target = resolvedPosition(minecraft, action, "position");

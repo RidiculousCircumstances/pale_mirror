@@ -28,7 +28,9 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     // Version 199 persists the immutable initial-field layout manifest; recovery may no
     // longer regenerate non-default geometry from only world/seed/ruleset/terrain.
     // Version 206 also retains the bakery's durable-before-effect physical step.
-    static final int VERSION = 208; private static final int MAX_ENTRIES = 65_535;
+    // Reference-container fingerprints now encode bulk stock rather than positional slots.
+    // Old disposable worlds must not recover a persisted replica fingerprint under new semantics.
+    static final int VERSION = 209; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }

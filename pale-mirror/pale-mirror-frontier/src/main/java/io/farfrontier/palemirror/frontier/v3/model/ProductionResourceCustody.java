@@ -73,6 +73,7 @@ public final class ProductionResourceCustody {
         FungibleResourceLedger resources = state.inventory().fungibleResources().rebind(accountId, epoch, bindings);
         Map<SubjectId, ProductionJob> jobs = new LinkedHashMap<>(state.productionJobs());
         for (ProductionJob job : state.productionJobs().values()) {
+            if (departedBakerySource(job, accountId)) continue;
             if (job.bakeryWork().isPresent() && BakeryWorkValidation.awaitingInputReallocation(resources,
                     job, job.bakeryWork().orElseThrow())) continue;
             if (job.inputHold() instanceof ProductionInputHold.FungibleCold cold && cold.accountId().equals(accountId)) {
@@ -93,6 +94,7 @@ public final class ProductionResourceCustody {
         var intents = new LinkedHashMap<>(state.physicalIntents());
         var recovery = state.fencedRecovery();
         for (ProductionJob job : state.productionJobs().values()) {
+            if (departedBakerySource(job, accountId)) continue;
             if (job.bakeryWork().isPresent() && BakeryWorkValidation.awaitingInputReallocation(resources,
                     job, job.bakeryWork().orElseThrow())) continue;
             if (!(job.inputHold() instanceof ProductionInputHold.FungibleBound bound) || !bound.accountId().equals(accountId)) continue;
@@ -114,6 +116,12 @@ public final class ProductionResourceCustody {
         return state.withChanges(FrontierWorldStateUpdate.begin()
                 .inventory(state.inventory().withFungibleResources(resources)).productionJobs(jobs)
                 .physicalIntents(intents).fencedRecovery(recovery));
+    }
+
+    /** The input hold records the selected source; after pickup it is not a live depot authority. */
+    private static boolean departedBakerySource(ProductionJob job, SubjectId accountId) {
+        return job.bakeryWork().filter(work -> work.phase() != BakeryWorkState.Phase.DEPOT_PICKUP
+                && work.sourceAccountId().equals(accountId)).isPresent();
     }
 
     public static FungibleResourceLedger cancelBound(FrontierWorldState state, ProductionJob job, ProductionInputHold.FungibleBound bound) {

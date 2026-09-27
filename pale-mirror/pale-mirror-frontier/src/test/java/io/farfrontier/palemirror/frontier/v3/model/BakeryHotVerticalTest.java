@@ -395,6 +395,26 @@ class BakeryHotVerticalTest {
                 "minecraft:bread", 64))));
         assertEquals(BakeryWorkState.Phase.DELIVERED, state.productionJobs().get(job.id()).bakeryWork().orElseThrow().phase());
         assertEquals(StrategicTaskStatus.ACTIVE, state.strategicPlans().tasks().get(task.id()).status());
+        // The input hold still names the historical wheat source, but this depot
+        // now owns bread under a newer physical authority. Its checkpoint must
+        // not mistake the departed input hold for a live epoch-1 wheat claim.
+        assertEquals(work.sourceAccountId(), work.destinationAccountId());
+        FungibleResourceLedger deliveredResources = state.inventory().fungibleResources();
+        deliveredResources = deliveredResources.releaseBindings(work.destinationAccountId(), 1L);
+        var deliveredBread = new FungiblePhysicalObservation.Stack(
+                new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, deliverySlot)),
+                "minecraft:bread", 64);
+        deliveredResources = deliveredResources.rebind(work.destinationAccountId(), 2L,
+                FungiblePhysicalObservation.bind(deliveredResources, work.destinationAccountId(), 2L, List.of(deliveredBread)));
+        FrontierWorldState renewedDepot = state.withInventory(state.inventory().withFungibleResources(deliveredResources));
+        assertDoesNotThrow(() -> ProductionResourceCustody.bind(renewedDepot, work.destinationAccountId(), 2L,
+                renewedDepot.inventory().fungibleResources().bindings().values().stream()
+                        .filter(binding -> binding.accountId().equals(work.destinationAccountId())).toList()));
+        FrontierWorldState checkpointedDepot = ProductionResourceCustody.release(renewedDepot, work.destinationAccountId(), 2L);
+        assertTrue(checkpointedDepot.inventory().fungibleResources().bindings().values().stream()
+                .noneMatch(binding -> binding.accountId().equals(work.destinationAccountId())));
+        assertEquals(BakeryWorkState.Phase.DELIVERED,
+                checkpointedDepot.productionJobs().get(job.id()).bakeryWork().orElseThrow().phase());
         state = state.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING)
                 .releaseSceneLease(leaseId, List.of(new SceneMemberPosition(job.workerId(), actor.body(), actor.condition().health())));
         BakeryColdStep finalization = ProductionProcess.planCompletion(state, ProductionProcess.complete(job, 900L)).stream()

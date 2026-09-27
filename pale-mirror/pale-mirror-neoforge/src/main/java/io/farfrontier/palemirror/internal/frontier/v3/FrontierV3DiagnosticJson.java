@@ -700,7 +700,8 @@ final class FrontierV3DiagnosticJson {
                 + quote(record.observedFingerprint().orElse("")) + "\",\"observedProvenance\":\""
                 + quote(record.observedProvenance().orElse("")) + "\"}";
         String custody = lease == null ? "null" : "{\"status\":\"" + lease.status() + "\",\"epoch\":" + lease.authorityEpoch()
-                + ",\"replicaRevision\":" + lease.expectedReplicaRevision() + "}";
+                + ",\"replicaRevision\":" + lease.expectedReplicaRevision() + ",\"unresolvedReason\":\""
+                + quote(lease.unresolvedReason() == null ? "" : lease.unresolvedReason().name()) + "\"}";
         return ",\"replica\":" + replica + ",\"custody\":" + custody;
     }
 

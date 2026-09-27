@@ -657,6 +657,17 @@ bind quantities to contracts, cargo, equipment and process reservations.
 Physical slots are temporary bindings while HOT, not permanent identity for an
 otherwise interchangeable Vanilla stack.
 
+For ordinary bulk stock, the container's authoritative image is the exact
+quantity per item kind plus any separately identified exact items. Moving,
+splitting or merging the same fungible stock between slots changes only its
+temporary HOT bindings, never its lot, owner, reservation or replica identity.
+Declared production stations retain fixed input/output ports: moving an input
+to the output port is not the same machine state. Actor orders name a bulk
+container account or a declared station port; the physical adapter resolves
+the current source slots only at the fenced effect boundary. See
+[`frontier-v3-material-containers.md`](frontier-v3-material-containers.md) for
+the implementation boundary and unresolved player-interaction cases.
+
 An inventory reconciliation conflict is durable evidence anchored to one known
 physical container slot. It may also name the exact item that was observed, but
 that item reference is historical evidence rather than a second live-custody
@@ -688,9 +699,9 @@ player custody or create a second order for the same demand. Terminal records
 compact only after no job, reservation, cargo or physical intent refers to them.
 
 - One iron ingot is one canonical iron ingot; one stack is sixty-four units.
-- HOT warehouses and depots use ordinary Minecraft containers representing
-  those exact slots. They are displays and interaction surfaces for the same
-  inventory, not a second stock counter.
+- HOT warehouses and depots currently use ordinary Minecraft containers as
+  interaction surfaces for the same stock, not a second stock counter. Bulk
+  resource slots are temporary; exact items and station ports remain named.
 - Player deposits, withdrawals, split/merge, partial transfer, theft,
   destruction and delivery become exact zero-sum versioned observations.
 - Transport uses identified batches in real carriers while HOT and exact

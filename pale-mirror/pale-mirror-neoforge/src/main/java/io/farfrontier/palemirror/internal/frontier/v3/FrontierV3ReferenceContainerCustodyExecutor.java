@@ -10,6 +10,7 @@ import io.farfrontier.palemirror.frontier.v3.model.BakeryPhysicalAuthority;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurface;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.MaterialContainerImage;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalCustodyLease;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalCustodyLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalCustodyUnresolvedReason;
@@ -45,6 +46,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.WeakHashMap;
 
 /**
@@ -394,6 +396,8 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
             return submit(runtime, "close-confirmed-mutation", containerId, revision,
                     ReferenceContainerCustody.confirmedMutationTransition(state, containerId, revision));
         } catch (IllegalArgumentException invalid) {
+            io.farfrontier.palemirror.PaleMirrorMod.LOGGER.warn("Reference mutation closure refused for {}: {}",
+                    containerId, invalid.getMessage());
             return false;
         }
     }
@@ -466,6 +470,13 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
     private static Observed observed(FrontierWorldState state, SubjectId containerId, ChestBlockEntity chest,
                                      boolean retainedImage) {
         if (chest == null) return new Observed("sha256:missing-" + containerId.value(), "missing:" + containerId.value());
+        boolean bulk = ReferenceContainerCustody.layout(state, containerId) == MaterialContainerImage.Layout.BULK;
+        Set<String> ownedKinds = state.inventory().fungibleResources().accounts().values().stream()
+                .filter(account -> account.custody() instanceof ResourceCustody.Container location
+                        && location.containerId().equals(containerId))
+                .flatMap(account -> account.lotQuantities().keySet().stream())
+                .map(id -> state.inventory().fungibleResources().lots().get(id).itemKind())
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
         List<ReferenceContainerCustody.ObservedSlot> slots = new ArrayList<>(chest.getContainerSize());
         for (int slot = 0; slot < chest.getContainerSize(); slot++) {
             ItemStack stack = chest.getItem(slot);
@@ -474,7 +485,9 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
                 CustomData custom = stack.get(DataComponents.CUSTOM_DATA);
                 String kind = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
                 ReferenceContainerCustody.ProjectedFungibleSlot fungible = ReferenceContainerCustody.expectedFungibleSlot(state, containerId, slot).orElse(null);
-                if (custom == null && (retainedImage || fungible != null && fungible.itemKind().equals(kind)
+                if (custom == null && (retainedImage || bulk && ownedKinds.contains(kind)
+                        && state.inventory().itemAt(containerId, slot).isEmpty()
+                        || fungible != null && fungible.itemKind().equals(kind)
                         && fungible.quantity() == stack.getCount())
                         && ItemStack.isSameItemSameComponents(stack, new ItemStack(stack.getItem(), stack.getCount()))) {
                     slots.add(ReferenceContainerCustody.ObservedSlot.fungible(slot, kind, stack.getCount()));
@@ -500,6 +513,8 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
         CommandId command = new CommandId("executor:reference-container-" + phase + "-" + objectId.value().replace(':', '-') + "-" + fence);
         CommandResult result = runtime.submit(new FrontierCommand(1, command, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(command), payload)).orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
+        if (!(result instanceof CommandResult.Accepted) && phase.equals("close-confirmed-mutation"))
+            io.farfrontier.palemirror.PaleMirrorMod.LOGGER.warn("Reference mutation closure command {} refused: {}", command, result);
         return result instanceof CommandResult.Accepted;
     }
 

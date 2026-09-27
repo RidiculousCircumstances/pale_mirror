@@ -1,0 +1,78 @@
+{
+  "schema": 1,
+  "id": "disposable_bakery_owned_stock_reorder",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "bakery-fresh-job", "viewDistance": 6 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "process", "id": "job:production-1-1", "expect": {
+        "status": "ok", "result": { "workStage": "DEPOT_PICKUP" }
+      } }
+    ] }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
+      "position": { "diagnostic": { "view": "container", "id": "container:1-depot", "field": "position" } },
+      "offset": { "x": -2, "y": 1, "z": 0 }, "settleMs": 0,
+      "causalMilestone": "ordinary_player_enters_depot_before_pickup" },
+    { "type": "wait_until_container_item", "containerId": "container:1-depot",
+      "item": "minecraft:wheat", "count": 64, "timeoutMs": 60000,
+      "causalMilestone": "owned_wheat_physically_available" },
+    { "type": "open_container",
+      "position": { "diagnostic": { "view": "container", "id": "container:1-depot", "field": "position" } },
+      "timeoutMs": 15000, "causalMilestone": "player_opens_actual_owned_depot" },
+    { "type": "move_within_container", "item": "minecraft:wheat", "count": 64,
+      "destinationSlot": 6, "timeoutMs": 15000,
+      "causalMilestone": "player_moves_wheat_to_another_chest_slot" },
+    { "type": "wait_until_container_item", "containerId": "container:1-depot",
+      "item": "minecraft:wheat", "count": 64, "slot": 6, "timeoutMs": 15000,
+      "causalMilestone": "reordered_wheat_retained_at_new_slot" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
+      "position": { "diagnostic": { "view": "container", "id": "container:1-depot", "field": "position" } },
+      "offset": { "x": -8, "y": 1, "z": 0 }, "settleMs": 0,
+      "causalMilestone": "player_closes_depot_and_keeps_baker_hot" },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "job:production-1-1",
+      "expect": { "status": "ok", "result": { "workStage": "STATION_LOAD" } },
+      "timeoutMs": 90000, "causalMilestone": "baker_takes_reordered_wheat_into_hand" },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "job:production-1-1",
+      "expect": { "status": "ok", "result": { "workStage": "PROCESSING" } },
+      "timeoutMs": 90000, "causalMilestone": "reordered_wheat_loaded_into_station" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
+      "position": { "diagnostic": { "view": "process", "id": "job:production-1-1", "field": "goal.station" } },
+      "offset": { "x": -3, "y": 0, "z": -5 }, "settleMs": 0,
+      "causalMilestone": "player_observes_bakery_station" },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "job:production-1-1",
+      "expect": { "status": "ok", "result": { "workStage": "DEPOT_DELIVERY" } },
+      "timeoutMs": 120000, "causalMilestone": "bread_processed_and_taken_into_baker_hand" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
+      "position": { "diagnostic": { "view": "container", "id": "container:1-depot", "field": "position" } },
+      "offset": { "x": -8, "y": 1, "z": 0 }, "settleMs": 0,
+      "causalMilestone": "player_returns_to_finished_depot" },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "job:production-1-1",
+      "expect": { "status": "not_found" }, "timeoutMs": 120000,
+      "causalMilestone": "same_bakery_job_delivered_bread" },
+    { "type": "inspect", "view": "resource", "id": "custody:container-1-depot",
+      "causalMilestone": "canonical_bread_from_reordered_wheat" },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:1-depot",
+      "expect": { "status": "ok", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" },
+        "custody": { "status": "ACQUIRED", "unresolvedReason": "" } },
+      "timeoutMs": 30000, "causalMilestone": "bread_physically_current_on_reentry" }
+  ],
+  "assertions": [
+    { "after": 7, "view": "process", "id": "job:production-1-1", "expect": {
+      "status": "ok", "result": { "workStage": "STATION_LOAD" }
+    } },
+    { "after": 12, "view": "process", "id": "job:production-1-1", "expect": { "status": "not_found" } },
+    { "after": 13, "view": "resource", "id": "custody:container-1-depot", "expect": {
+      "status": "ok", "quantity": 64,
+      "lots": [{ "id": "lot:production-1-1-bread", "owner": "settlement:1",
+        "itemKind": "minecraft:bread", "quantity": 64 }], "claims": []
+    } },
+    { "after": 14, "view": "container", "id": "container:1-depot", "expect": {
+      "status": "ok", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" },
+      "custody": { "status": "ACQUIRED", "unresolvedReason": "" }
+    } }
+  ],
+  "frames": [{ "after": 4, "name": "player-reordered-owned-wheat", "presentation": "player" }]
+}

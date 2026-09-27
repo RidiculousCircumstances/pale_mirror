@@ -2,9 +2,6 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -161,38 +158,44 @@ public final class ReferenceContainerCustody {
         });
     }
 
-    /** Deterministic canonical fingerprint of the exact slots represented by one chest. */
+    /** Canonical stock image; depot/store fungibles are independent of Vanilla slot placement. */
     public static String canonicalFingerprint(FrontierWorldState state, SubjectId containerId) {
         ContainerRecord container = state.inventory().containers().get(Objects.requireNonNull(containerId, "container id"));
         if (container == null) throw new IllegalArgumentException("unknown reference container");
-        StringBuilder value = new StringBuilder(semanticKind(state, containerId)).append('|').append(containerId.value()).append('|');
+        java.util.ArrayList<MaterialContainerImage.Slot> image = new java.util.ArrayList<>(container.slotCount());
         for (int slot = 0; slot < container.slotCount(); slot++) {
             ExactItemStack item = state.inventory().itemAt(containerId, slot).orElse(null);
-            value.append(slot).append(':');
-            if (item != null) value.append("exact:").append(item.id().value()).append(':').append(item.itemKind()).append(':').append(item.count());
-            else expectedFungibleSlot(state, containerId, slot).ifPresentOrElse(
-                    fungible -> value.append("fungible:").append(fungible.itemKind()).append(':').append(fungible.quantity()),
-                    () -> value.append("empty"));
-            value.append('|');
+            if (item != null) image.add(MaterialContainerImage.Slot.exact(slot, item.id().value(), item.itemKind(), item.count()));
+            else {
+                ProjectedFungibleSlot fungible = expectedFungibleSlot(state, containerId, slot).orElse(null);
+                image.add(fungible == null ? MaterialContainerImage.Slot.empty(slot)
+                        : MaterialContainerImage.Slot.fungible(slot, fungible.itemKind(), fungible.quantity()));
+            }
         }
-        return sha256(value.toString());
+        return MaterialContainerImage.fingerprint(semanticKind(state, containerId), containerId.value(), layout(state, containerId), image);
     }
 
-    /** Same slot grammar as {@link #canonicalFingerprint}; the adapter supplies observed item identity/kind/count. */
+    /** Same semantic grammar as {@link #canonicalFingerprint}; the adapter supplies observed stock. */
     public static String observedFingerprint(FrontierWorldState state, SubjectId containerId, java.util.List<ObservedSlot> slots) {
         ContainerRecord container = state.inventory().containers().get(Objects.requireNonNull(containerId, "container id"));
         if (container == null || slots.size() != container.slotCount()) throw new IllegalArgumentException("observed reference slots are incomplete");
-        StringBuilder value = new StringBuilder(semanticKind(state, containerId)).append('|').append(containerId.value()).append('|');
+        java.util.ArrayList<MaterialContainerImage.Slot> image = new java.util.ArrayList<>(slots.size());
         for (int slot = 0; slot < container.slotCount(); slot++) {
             ObservedSlot observed = slots.get(slot);
             if (observed.slot() != slot) throw new IllegalArgumentException("observed reference slots are unordered");
-            value.append(slot).append(':');
-            if (observed.empty()) value.append("empty");
-            else if (observed.fungible()) value.append("fungible:").append(observed.itemKind()).append(':').append(observed.count());
-            else value.append("exact:").append(observed.itemId()).append(':').append(observed.itemKind()).append(':').append(observed.count());
-            value.append('|');
+            if (observed.empty()) image.add(MaterialContainerImage.Slot.empty(slot));
+            else if (observed.fungible()) image.add(MaterialContainerImage.Slot.fungible(slot, observed.itemKind(), observed.count()));
+            else image.add(MaterialContainerImage.Slot.exact(slot, observed.itemId(), observed.itemKind(), observed.count()));
         }
-        return sha256(value.toString());
+        return MaterialContainerImage.fingerprint(semanticKind(state, containerId), containerId.value(), layout(state, containerId), image);
+    }
+
+    /** Production stations declare fixed recipe ports; reference depot/store stock is bulk. */
+    public static MaterialContainerImage.Layout layout(FrontierWorldState state, SubjectId containerId) {
+        if (!isReferenceContainer(state, containerId)) throw new IllegalArgumentException("unknown reference material container");
+        ContainerRecord container = state.inventory().containers().get(containerId);
+        return container.productionStation().isPresent()
+                ? MaterialContainerImage.Layout.FIXED_PORTS : MaterialContainerImage.Layout.BULK;
     }
 
     /**
@@ -278,14 +281,4 @@ public final class ReferenceContainerCustody {
         public boolean empty() { return count == 0; }
     }
 
-    private static String sha256(String value) {
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
-            StringBuilder encoded = new StringBuilder("sha256:");
-            for (byte octet : digest) encoded.append(String.format("%02x", octet));
-            return encoded.toString();
-        } catch (NoSuchAlgorithmException unavailable) {
-            throw new IllegalStateException("SHA-256 is required by the Java runtime", unavailable);
-        }
-    }
 }

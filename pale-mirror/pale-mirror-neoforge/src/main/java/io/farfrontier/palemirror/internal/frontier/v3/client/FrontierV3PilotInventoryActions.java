@@ -36,6 +36,30 @@ final class FrontierV3PilotInventoryActions {
         return Result.afterClick();
     }
 
+    /** Two ordinary left-clicks move an unchanged owned stack to a declared empty chest slot. */
+    static Result moveWithinContainer(Minecraft minecraft, JsonObject action, boolean attempted) {
+        if (minecraft.player.containerMenu == minecraft.player.inventoryMenu) return Result.waiting();
+        ResourceLocation item = ResourceLocation.parse(action.get("item").getAsString());
+        int count = action.get("count").getAsInt();
+        int destinationIndex = action.get("destinationSlot").getAsInt();
+        Slot destination = minecraft.player.containerMenu.slots.stream()
+                .filter(slot -> slot.container != minecraft.player.getInventory() && slot.getSlotIndex() == destinationIndex)
+                .findFirst().orElseThrow(() -> new IllegalStateException("declared chest destination slot is absent"));
+        if (attempted) return sameStack(destination, item, count) && minecraft.player.containerMenu.getCarried().isEmpty()
+                ? Result.finished() : Result.waiting();
+        if (!destination.getItem().isEmpty() || !minecraft.player.containerMenu.getCarried().isEmpty())
+            throw new IllegalStateException("ordinary chest reorder needs an empty destination and cursor");
+        Slot source = minecraft.player.containerMenu.slots.stream()
+                .filter(slot -> slot.container != minecraft.player.getInventory() && slot.getSlotIndex() != destinationIndex)
+                .filter(slot -> sameStack(slot, item, count)).findFirst().orElse(null);
+        if (source == null) return Result.waiting();
+        int sourceSlot = minecraft.player.containerMenu.slots.indexOf(source);
+        int destinationSlot = minecraft.player.containerMenu.slots.indexOf(destination);
+        minecraft.gameMode.handleInventoryMouseClick(minecraft.player.containerMenu.containerId, sourceSlot, 0, ClickType.PICKUP, minecraft.player);
+        minecraft.gameMode.handleInventoryMouseClick(minecraft.player.containerMenu.containerId, destinationSlot, 0, ClickType.PICKUP, minecraft.player);
+        return Result.afterClick();
+    }
+
     static boolean sameStack(Slot slot, ResourceLocation item, int count) {
         return !slot.getItem().isEmpty() && slot.getItem().getCount() == count && BuiltInRegistries.ITEM.getKey(slot.getItem().getItem()).equals(item);
     }

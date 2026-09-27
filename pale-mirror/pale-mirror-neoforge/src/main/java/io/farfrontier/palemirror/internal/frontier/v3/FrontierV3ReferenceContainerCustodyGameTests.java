@@ -22,6 +22,11 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.neoforged.neoforge.gametest.GameTestHolder;
@@ -37,6 +42,59 @@ import java.util.Optional;
 @PrefixGameTestTemplate(false)
 public final class FrontierV3ReferenceContainerCustodyGameTests {
     private FrontierV3ReferenceContainerCustodyGameTests() { }
+
+    @GameTest(batch = "pm-frontier-v3-reference-projection", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    public static void declaredActorMaterialOrderTakesAndPartiallyPlacesWithoutLosingRemainder(GameTestHelper helper) {
+        SubjectId container = new SubjectId("container:actor-material-test");
+        SubjectId actorId = new SubjectId("resident:actor-material-test");
+        SubjectId lot = new SubjectId("lot:actor-material-test");
+        ChestBlockEntity chest = chest(helper, helper.absolutePos(new BlockPos(2, 2, 2)), container);
+        chest.setItem(4, new ItemStack(Items.WHEAT, 20));
+        Villager actor = EntityType.VILLAGER.create(helper.getLevel());
+        if (actor == null) throw new IllegalStateException("GameTest could not create actor");
+        actor.setPos(helper.absolutePos(new BlockPos(2, 3, 2)).getCenter());
+        helper.getLevel().addFreshEntity(actor);
+        ActorContainerItemOrder take = new ActorContainerItemOrder(new SubjectId("job:actor-material-test"), actorId,
+                ActorContainerItemOrder.Direction.TAKE,
+                new ActorContainerItemOrder.Portion.Fungible(new SubjectId("custody:actor-source"),
+                        new ResourceCustody.Container(container), new SubjectId("custody:actor-hand"),
+                        new ResourceCustody.Actor(actorId), Optional.empty(), "minecraft:wheat", Map.of(lot, 20)),
+                new ActorContainerItemOrder.ContainerEndpoint.FungibleContainer(container),
+                SurfaceAnchor.at(2, 2, 2), ActorContainerItemOrder.Hand.MAIN, 1, 1);
+        var source = List.of(new MaterialSourceSelection.Slice(new PhysicalStackAddress.ContainerSlot(
+                new InventoryCustody.ContainerSlot(container, 4)), 20, 20, 1L));
+        var pickup = new FrontierV3ActorItemTransfer.FungibleStep(take, chest, actor, actor.getUUID(), source, -1);
+        helper.assertTrue(pickup.before() && pickup.apply() && pickup.after()
+                        && chest.getItem(4).isEmpty() && actor.getItemBySlot(EquipmentSlot.MAINHAND).getCount() == 20,
+                "one declared TAKE must transfer the real stack to the real actor hand");
+        ActorContainerItemOrder place = new ActorContainerItemOrder(take.ownerId(), actorId,
+                ActorContainerItemOrder.Direction.PLACE,
+                new ActorContainerItemOrder.Portion.Fungible(new SubjectId("custody:actor-hand"),
+                        new ResourceCustody.Actor(actorId), new SubjectId("custody:actor-destination"),
+                        new ResourceCustody.Container(container), Optional.empty(), "minecraft:wheat", Map.of(lot, 12)),
+                new ActorContainerItemOrder.ContainerEndpoint.FungibleContainer(container),
+                take.station(), ActorContainerItemOrder.Hand.MAIN, 2, 1);
+        var hand = List.of(new MaterialSourceSelection.Slice(new PhysicalStackAddress.ActorHand(actorId,
+                actor.getUUID()), 20, 12, 1L));
+        var delivery = new FrontierV3ActorItemTransfer.FungibleStep(place, chest, actor, actor.getUUID(), hand, 6);
+        helper.assertTrue(delivery.before() && delivery.apply() && delivery.after()
+                        && chest.getItem(6).is(Items.WHEAT) && chest.getItem(6).getCount() == 12
+                        && actor.getItemBySlot(EquipmentSlot.MAINHAND).getCount() == 8,
+                "declared partial PLACE must retain the actor's eight remaining items");
+        chest.getPersistentData().putString(FrontierV3CargoHandoffExecutor.CONTAINER_ID_KEY, "container:foreign");
+        boolean rejected = false;
+        try { new FrontierV3ActorItemTransfer.FungibleStep(place, chest, actor, actor.getUUID(), hand, 7); }
+        catch (IllegalArgumentException expected) { rejected = true; }
+        helper.assertTrue(rejected && chest.getItem(6).getCount() == 12,
+                "an undeclared container owner must be rejected before touching physical stock");
+        chest.getPersistentData().putString(FrontierV3CargoHandoffExecutor.CONTAINER_ID_KEY, container.value());
+        rejected = false;
+        try { new FrontierV3ActorItemTransfer.FungibleStep(take, chest, actor, java.util.UUID.randomUUID(), source, -1); }
+        catch (IllegalArgumentException expected) { rejected = true; }
+        helper.assertTrue(rejected && actor.getItemBySlot(EquipmentSlot.MAINHAND).getCount() == 8,
+                "an undeclared actor body must be rejected before touching its physical hand");
+        helper.succeed();
+    }
 
     @GameTest(batch = "pm-frontier-v3-reference-projection", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
     public static void insufficientFungibleCapacityNeverWritesAPartialOwnedChest(GameTestHelper helper) {
@@ -167,8 +225,85 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
         runtime.shutdown(); helper.succeed();
     }
 
+    /** Ordinary chest rearrangement changes a HOT binding, never its stock or replica ownership. */
     @GameTest(batch = "pm-frontier-v3-reference-projection", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
-    public static void releasedMutationObservesRetainedSlotsBeforeRepackingColdLots(GameTestHelper helper) {
+    public static void movedBulkWheatRebindsWithoutReferenceConflict(GameTestHelper helper) {
+        WorldId world = new WorldId("frontier:reference-bulk-rearrangement");
+        FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(world, 91L));
+        SubjectId depot = FrontierWorldState.depotId(initial.bootstrap().settlements().getFirst().id());
+        BlockPos local = helper.absolutePos(new BlockPos(2, 2, 2));
+        BlockPosition original = initial.inventory().surfaces().get(depot).position();
+        FrontierWorldState translated = FrontierWorldState.initial(FrontierV3CargoLoadingGameTests.translatedBootstrap(
+                initial.bootstrap(), local.getX() - original.x(), local.getY() - original.y(), local.getZ() - original.z()));
+        SubjectId accountId = translated.inventory().fungibleResources().accounts().values().stream()
+                .filter(account -> account.custody().equals(new ResourceCustody.Container(depot)))
+                .map(CustodyAccount::id).findFirst().orElseThrow();
+        int sourceSlot = java.util.stream.IntStream.range(0, 27)
+                .filter(slot -> ReferenceContainerCustody.expectedFungibleSlot(translated, depot, slot).isPresent())
+                .findFirst().orElseThrow();
+        FungibleResourceLedger cold = translated.inventory().fungibleResources();
+        FungibleResourceLedger hot = cold.rebind(accountId, 1L, FungiblePhysicalObservation.bind(cold, accountId, 1L,
+                List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                        new InventoryCustody.ContainerSlot(depot, sourceSlot)), "minecraft:wheat", 64))));
+        FrontierWorldState active = activated(translated, depot);
+        FrontierWorldState state = held(active.withInventory(active.inventory().withFungibleResources(hot)), depot);
+        ChestBlockEntity chest = chest(helper, local, depot);
+        helper.assertTrue(FrontierV3ContainerSurfaceExecutor.replaceCanonicalSlots(chest, state, depot), "initial chest projection");
+        int destinationSlot = java.util.stream.IntStream.range(0, chest.getContainerSize())
+                .filter(slot -> chest.getItem(slot).isEmpty()).findFirst().orElseThrow();
+        chest.setItem(destinationSlot, chest.getItem(sourceSlot).copy()); chest.setItem(sourceSlot, ItemStack.EMPTY); chest.setChanged();
+        var runtime = runtime(world, state);
+        helper.assertTrue(FrontierV3FungibleResourceObservationExecutor.observe(helper.getLevel(), runtime, state,
+                hot.accounts().get(accountId), chest, 1L), "same stock at a new slot must publish the current physical binding");
+        FrontierWorldState rebound = runtime.decodedState().orElseThrow();
+        helper.assertTrue(rebound.inventory().fungibleResources().bindings().values().stream()
+                        .anyMatch(binding -> binding.accountId().equals(accountId)
+                                && binding.address().equals(new PhysicalStackAddress.ContainerSlot(
+                                new InventoryCustody.ContainerSlot(depot, destinationSlot))))
+                        && ReferenceContainerCustody.canonicalFingerprint(rebound, depot).equals(
+                        FrontierV3ReferenceContainerCustodyExecutor.observed(rebound, depot, chest).fingerprint()),
+                "semantic stock and the actual new slot must agree without changing economic custody");
+        FrontierV3ReferenceContainerCustodyExecutor.reconcile(helper.getLevel(), runtime, rebound,
+                rebound.inventory().surfaces().get(depot));
+        FrontierWorldState after = runtime.decodedState().orElseThrow();
+        helper.assertTrue(after.replicaCustody().replicas().get(depot).state() == PhysicalReplicaState.OBSERVED_CURRENT
+                        && ReferenceContainerCustody.hasOperationalCustody(after, depot)
+                        && chest.getItem(destinationSlot).is(net.minecraft.world.item.Items.WHEAT),
+                "ordinary slot move must neither conflict nor rewrite the physical chest");
+        int splitSlot = java.util.stream.IntStream.range(0, chest.getContainerSize())
+                .filter(slot -> chest.getItem(slot).isEmpty()).findFirst().orElseThrow();
+        ItemStack split = chest.getItem(destinationSlot).split(24);
+        chest.setItem(splitSlot, split); chest.setChanged();
+        helper.assertTrue(FrontierV3FungibleResourceObservationExecutor.observe(helper.getLevel(), runtime, after,
+                after.inventory().fungibleResources().accounts().get(accountId), chest, 1L),
+                "splitting the same owned stock must update only physical bindings");
+        FrontierWorldState splitState = runtime.decodedState().orElseThrow();
+        FrontierV3ReferenceContainerCustodyExecutor.reconcile(helper.getLevel(), runtime, splitState,
+                splitState.inventory().surfaces().get(depot));
+        FrontierWorldState splitObserved = runtime.decodedState().orElseThrow();
+        helper.assertTrue(splitObserved.replicaCustody().replicas().get(depot).state() == PhysicalReplicaState.OBSERVED_CURRENT
+                        && splitObserved.inventory().fungibleResources().bindings().values().stream()
+                        .filter(binding -> binding.accountId().equals(accountId)).count() == 2
+                        && chest.getItem(destinationSlot).getCount() == 40 && chest.getItem(splitSlot).getCount() == 24,
+                "ordinary split must conserve all 64 physical wheat without a false reference conflict");
+        var checkpoint = runtime.checkpointImage().orElseThrow();
+        runtime.shutdown();
+        var recovered = recovered(world, checkpoint, translated.bootstrap());
+        helper.assertTrue(recovered.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE,
+                "reordered bulk stock must recover under the current fingerprint schema");
+        FrontierWorldState resumed = recovered.decodedState().orElseThrow();
+        FrontierV3ReferenceContainerCustodyExecutor.reconcile(helper.getLevel(), recovered, resumed,
+                resumed.inventory().surfaces().get(depot));
+        FrontierWorldState afterRestart = recovered.decodedState().orElseThrow();
+        helper.assertTrue(afterRestart.replicaCustody().replicas().get(depot).state() == PhysicalReplicaState.OBSERVED_CURRENT
+                        && afterRestart.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(depot)).status()
+                        == PhysicalCustodyLeaseStatus.ACQUIRED,
+                "restart must retain the same owned chest, split stock and live reference custody");
+        recovered.shutdown(); helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-reference-projection", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    public static void releasedMutationPreservesBulkStockBeforeRepackingColdLots(GameTestHelper helper) {
         WorldId world = new WorldId("frontier:reference-released-repack");
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(world, 91L));
         SubjectId settlement = initial.bootstrap().settlements().getFirst().id();
@@ -202,10 +337,10 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
                 ReferenceContainerCustody.confirmedMutationTransition(state, depot, 1L));
         var emitted = released.replicaCustody().replicas().get(depot);
         helper.assertTrue(emitted.state() == PhysicalReplicaState.EXPECTED
-                        && !emitted.fingerprint().equals(ReferenceContainerCustody.canonicalFingerprint(released, depot))
+                        && emitted.fingerprint().equals(ReferenceContainerCustody.canonicalFingerprint(released, depot))
                         && FrontierV3ReferenceContainerCustodyExecutor.observedRetained(released, depot, chest).fingerprint()
                         .equals(emitted.fingerprint()),
-                "HOT release must retain its exact emitted image even when COLD lot packing changes order");
+                "HOT release preserves the same stock image even when COLD lot packing changes order");
         var runtime = runtime(world, released);
         helper.assertTrue(runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE, "released fixture startup");
         FrontierV3ReferenceContainerCustodyExecutor.reconcile(helper.getLevel(), runtime, released,

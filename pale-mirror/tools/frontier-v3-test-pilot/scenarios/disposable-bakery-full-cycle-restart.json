@@ -67,7 +67,8 @@
         "itemKind": "minecraft:bread", "quantity": 64 }], "claims": []
     } },
     { "after": 12, "view": "container", "id": "container:1-depot", "expect": {
-      "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" }
+      "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" },
+      "custody": { "status": "ACQUIRED", "unresolvedReason": "" }
     } }
   ],
   "frames": [

@@ -147,6 +147,14 @@ test('native pilot permits only a bounded ordinary proper container-stack split'
   assert.throws(() => validateScenario({ ...split, actions: [{ ...split.actions[0], movedCount: 0 }] }), /split_move_from_container/);
 });
 
+test('native pilot reorders only one exact stack into a bounded chest slot', () => {
+  const reorder = { ...scenario, actions: [{ type: 'move_within_container', item: 'minecraft:wheat', count: 64,
+    destinationSlot: 6, timeoutMs: 10_000 }], assertions: [], frames: [] };
+  assert.doesNotThrow(() => validateScenario(reorder));
+  assert.throws(() => validateScenario({ ...reorder, actions: [{ ...reorder.actions[0], destinationSlot: 27 }] }), /move_within_container/);
+  assert.throws(() => validateScenario({ ...reorder, actions: [{ ...reorder.actions[0], count: 0 }] }), /move_within_container/);
+});
+
 test('an isolated scenario has an explicit deterministic disposable-world seed', () => {
   const isolated = { ...scenario, isolation: { mode: 'disposable_lite', seed: 41 } };
   assert.doesNotThrow(() => validateScenario(isolated));

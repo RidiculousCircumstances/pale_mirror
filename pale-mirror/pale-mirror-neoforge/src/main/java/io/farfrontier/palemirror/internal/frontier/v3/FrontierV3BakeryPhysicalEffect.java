@@ -15,8 +15,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
@@ -178,17 +176,17 @@ final class FrontierV3BakeryPhysicalEffect {
                 ? new ExactItemStack(job.outputItemId(), job.settlementId(), "minecraft:bread", job.outputCount(),
                 new InventoryCustody.ContainerSlot(containerId, destinationSlot)) : null;
         if (exact && exactSource == null) throw new IllegalArgumentException("bakery physical source item absent");
-        List<Slice> slices = exact ? List.of() : sourceSlices(state, lease, job, order);
+        List<MaterialSourceSelection.Slice> slices = exact ? List.of() : sourceSlices(state, lease, job, order, kind);
         long sourceEpoch = slices.isEmpty() ? 0L : slices.getFirst().epoch();
         long destinationEpoch = exact ? 0L : (work.phase() == BakeryWorkState.Phase.DEPOT_PICKUP
                 || work.phase() == BakeryWorkState.Phase.STATION_UNLOAD ? Math.max(1L, lease.revision())
                 : state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(containerId)).authorityEpoch());
-        return new Shape(state, lease, job, worker, chest, containerId, destinationSlot,
+        return new Shape(state, lease, job, worker, chest, containerId, destinationSlot, order,
                 kind, exactSource, exactOutput, slices, sourceEpoch, destinationEpoch);
     }
 
-    private static List<Slice> sourceSlices(FrontierWorldState state, SceneLease lease, ProductionJob job,
-                                            ActorContainerItemOrder order) {
+    private static List<MaterialSourceSelection.Slice> sourceSlices(FrontierWorldState state, SceneLease lease, ProductionJob job,
+                                            ActorContainerItemOrder order, String kind) {
         BakeryWorkState work = job.bakeryWork().orElseThrow();
         SubjectId account = switch (work.phase()) {
             case DEPOT_PICKUP -> work.sourceAccountId();
@@ -196,44 +194,39 @@ final class FrontierV3BakeryPhysicalEffect {
             case PROCESSING, STATION_UNLOAD -> work.stationAccountId();
             case DELIVERED -> throw new IllegalStateException("delivered bakery work has no physical source");
         };
-        SubjectId claim = order != null && order.portion() instanceof ActorContainerItemOrder.Portion.Fungible portion
-                ? portion.claimId().orElse(null) : null;
-        List<PhysicalStackBinding> bindings = state.inventory().fungibleResources().bindings().values().stream()
-                .filter(value -> value.accountId().equals(account)).sorted(Comparator.comparing(PhysicalStackBinding::id)).toList();
-        if (bindings.isEmpty()) {
+        if (state.inventory().fungibleResources().bindings().values().stream()
+                .noneMatch(value -> value.accountId().equals(account))) {
             if (work.phase() == BakeryWorkState.Phase.DEPOT_PICKUP
                     || work.phase() == BakeryWorkState.Phase.STATION_UNLOAD
                     || work.phase() == BakeryWorkState.Phase.PROCESSING)
                 throw new UnboundContainerSource();
             throw new IllegalArgumentException("bakery actor hand is not bound to its current scene");
         }
-        List<Slice> slices = new ArrayList<>(); int moved = 0;
-        for (PhysicalStackBinding binding : bindings) {
-            int count = work.phase() == BakeryWorkState.Phase.DEPOT_PICKUP
-                    ? binding.claimQuantities().getOrDefault(claim, 0) : binding.quantity();
-            if (count == 0) continue;
-            int slot = switch (binding.address()) {
-                case PhysicalStackAddress.ContainerSlot value -> value.slot().slot();
+        List<MaterialSourceSelection.Slice> slices = order == null
+                ? MaterialSourceSelection.select(state.inventory().fungibleResources(),
+                        account, kind, job.outputCount(), Optional.empty())
+                : MaterialSourceSelection.select(state.inventory().fungibleResources(), order);
+        for (MaterialSourceSelection.Slice source : slices) {
+            switch (source.address()) {
+                case PhysicalStackAddress.ContainerSlot value -> {
+                    if (!value.slot().containerId().equals(work.phase() == BakeryWorkState.Phase.DEPOT_PICKUP
+                            ? FrontierWorldState.depotId(job.settlementId()) : station(state, work).containerId()))
+                        throw new IllegalArgumentException("bakery source is bound to another container");
+                }
                 case PhysicalStackAddress.ActorHand value -> {
                     if (!value.actorId().equals(job.workerId()) || !value.entityId().equals(lease.members().getFirst().entityId()))
                         throw new IllegalArgumentException("bakery actor hand belongs to another body");
-                    yield -1;
                 }
                 default -> throw new IllegalArgumentException("bakery source is not a declared chest or hand");
-            };
-            slices.add(new Slice(slot, binding.quantity(), count, binding.authorityEpoch())); moved += count;
+            }
         }
-        if (moved != job.outputCount() || slices.stream().map(Slice::epoch).distinct().count() != 1)
-            throw new IllegalArgumentException("bakery physical source lacks one exact batch and epoch");
-        return List.copyOf(slices);
+        return slices;
     }
 
     private static ProductionStationSpec station(FrontierWorldState state, BakeryWorkState work) {
         return state.inventory().containers().values().stream().flatMap(container -> container.productionStation().stream())
                 .filter(value -> value.id().equals(work.stationId())).findFirst().orElseThrow();
     }
-
-    private record Slice(int slot, int before, int moved, long epoch) { }
 
     private static BakeryWorkBlock observedBlock(BakeryWorkBlock.Reason reason, SubjectId containerId,
                                                   int slot, ItemStack actual) {
@@ -243,19 +236,33 @@ final class FrontierV3BakeryPhysicalEffect {
     }
 
     private record Shape(FrontierWorldState state, SceneLease lease, ProductionJob job, Villager worker,
-                         ChestBlockEntity chest, SubjectId containerId, int destinationSlot, String kind,
+                         ChestBlockEntity chest, SubjectId containerId, int destinationSlot,
+                         ActorContainerItemOrder order, String kind,
                          ExactItemStack exactSource, ExactItemStack exactOutput,
-                         List<Slice> slices, long sourceEpoch, long destinationEpoch) {
+                         List<MaterialSourceSelection.Slice> slices, long sourceEpoch, long destinationEpoch) {
         BakeryWorkState.Phase phase() { return job.bakeryWork().orElseThrow().phase(); }
         ItemStack hand() { return worker.getItemBySlot(EquipmentSlot.MAINHAND); }
-        ItemStack source(Slice slice) { return slice.slot() < 0 ? hand() : chest.getItem(slice.slot()); }
+        ItemStack source(MaterialSourceSelection.Slice slice) {
+            return switch (slice.address()) {
+                case PhysicalStackAddress.ContainerSlot address -> chest.getItem(address.slot().slot());
+                case PhysicalStackAddress.ActorHand ignored -> hand();
+                default -> throw new IllegalArgumentException("bakery source is not a chest or hand");
+            };
+        }
+        int sourceSlot(MaterialSourceSelection.Slice slice) {
+            return slice.address() instanceof PhysicalStackAddress.ContainerSlot address ? address.slot().slot() : -1;
+        }
+        FrontierV3ActorItemTransfer.FungibleStep transfer() {
+            return new FrontierV3ActorItemTransfer.FungibleStep(order, chest, worker,
+                    lease.members().getFirst().entityId(), slices, destinationSlot);
+        }
         boolean plain(ItemStack stack, String itemKind, int quantity) {
             Item item = BuiltInRegistries.ITEM.get(ResourceLocation.parse(itemKind));
             return item != Items.AIR && ItemStack.isSameItemSameComponents(stack, new ItemStack(item, quantity))
                     && stack.getCount() == quantity;
         }
         boolean sourceMatches(boolean after) {
-            for (Slice slice : slices) {
+            for (MaterialSourceSelection.Slice slice : slices) {
                 int expected = slice.before() - (after ? slice.moved() : 0);
                 if (expected == 0 ? !source(slice).isEmpty() : !plain(source(slice), kind, expected)) return false;
             }
@@ -264,8 +271,7 @@ final class FrontierV3BakeryPhysicalEffect {
         boolean before() {
             if (exactSource != null) return exactBefore();
             return switch (phase()) {
-                case DEPOT_PICKUP, STATION_UNLOAD -> sourceMatches(false) && hand().isEmpty();
-                case STATION_LOAD, DEPOT_DELIVERY -> sourceMatches(false) && chest.getItem(destinationSlot).isEmpty();
+                case DEPOT_PICKUP, STATION_UNLOAD, STATION_LOAD, DEPOT_DELIVERY -> transfer().before();
                 case PROCESSING -> sourceMatches(false) && chest.getItem(destinationSlot).isEmpty();
                 case DELIVERED -> false;
             };
@@ -281,8 +287,8 @@ final class FrontierV3BakeryPhysicalEffect {
                     if (!FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(slot), exactSource))
                         return observedBlock(BakeryWorkBlock.Reason.SOURCE_CHANGED, containerId, slot, chest.getItem(slot));
                 }
-            } else for (Slice slice : slices) {
-                int slot = slice.slot();
+            } else for (MaterialSourceSelection.Slice slice : slices) {
+                int slot = sourceSlot(slice);
                 if (!plain(source(slice), kind, slice.before()))
                     return observedBlock(sourceInHand ? BakeryWorkBlock.Reason.HAND_MISMATCH
                             : BakeryWorkBlock.Reason.SOURCE_CHANGED, containerId, slot, source(slice));
@@ -295,8 +301,7 @@ final class FrontierV3BakeryPhysicalEffect {
         boolean after() {
             if (exactSource != null) return exactAfter();
             return switch (phase()) {
-                case DEPOT_PICKUP, STATION_UNLOAD -> sourceMatches(true) && plain(hand(), kind, job.outputCount());
-                case STATION_LOAD, DEPOT_DELIVERY -> hand().isEmpty() && plain(chest.getItem(destinationSlot), kind, job.outputCount());
+                case DEPOT_PICKUP, STATION_UNLOAD, STATION_LOAD, DEPOT_DELIVERY -> transfer().after();
                 case PROCESSING -> sourceMatches(true) && plain(chest.getItem(destinationSlot), "minecraft:bread", job.outputCount());
                 case DELIVERED -> false;
             };
@@ -339,19 +344,11 @@ final class FrontierV3BakeryPhysicalEffect {
                 }
             } else {
                 switch (phase()) {
-                    case DEPOT_PICKUP, STATION_UNLOAD -> {
-                        for (Slice slice : slices) {
-                            ItemStack stack = chest.getItem(slice.slot());
-                            stack.shrink(slice.moved()); chest.setItem(slice.slot(), stack);
-                        }
-                        worker.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(BuiltInRegistries.ITEM.get(ResourceLocation.parse(kind)), job.outputCount()));
-                        chest.setChanged();
-                    }
-                    case STATION_LOAD, DEPOT_DELIVERY -> {
-                        chest.setItem(destinationSlot, hand().copy()); worker.setItemSlot(EquipmentSlot.MAINHAND, ItemStack.EMPTY); chest.setChanged();
+                    case DEPOT_PICKUP, STATION_UNLOAD, STATION_LOAD, DEPOT_DELIVERY -> {
+                        if (!transfer().apply()) throw new IllegalStateException("declared actor material transfer lost its physical postcondition");
                     }
                     case PROCESSING -> {
-                        chest.setItem(slices.getFirst().slot(), ItemStack.EMPTY);
+                        chest.setItem(sourceSlot(slices.getFirst()), ItemStack.EMPTY);
                         chest.setItem(destinationSlot, new ItemStack(Items.BREAD, job.outputCount())); chest.setChanged();
                     }
                     case DELIVERED -> throw new IllegalStateException("delivered bakery work has no effect");
