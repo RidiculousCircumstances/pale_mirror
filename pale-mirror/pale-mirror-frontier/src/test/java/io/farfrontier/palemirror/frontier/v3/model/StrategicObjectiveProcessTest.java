@@ -23,6 +23,28 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class StrategicObjectiveProcessTest {
     @Test
+    void stockWakeCannotReuseProductionIdentityFromEarlierReviewWithSameOrdinal() {
+        FrontierWorldState state = initial("frontier:stock-wake-job-identity", 407L);
+        SubjectId owner = state.bootstrap().settlements().getFirst().id();
+        List<ProposedEvent> reviewPlan = StrategicObjectiveProcess.plan(state, StrategicObjectiveProcess.review(owner, 1, 60L));
+        List<ProposedEvent> wakePlan = StrategicObjectiveProcess.planStockReconsideration(state,
+                StrategicObjectiveProcess.stockReconsideration(owner, new SubjectId("job:site-harvest-1-wheat-field-1"), -1, 61L));
+        StrategicTask reviewed = reviewPlan.stream().map(ProposedEvent::payload).filter(StrategicTaskPlanned.class::isInstance)
+                .map(StrategicTaskPlanned.class::cast).map(StrategicTaskPlanned::task)
+                .filter(task -> task.kind() == StrategicTaskKind.PRODUCE_BREAD).findFirst().orElseThrow();
+        StrategicTask woken = wakePlan.stream().map(ProposedEvent::payload).filter(StrategicTaskPlanned.class::isInstance)
+                .map(StrategicTaskPlanned.class::cast).map(StrategicTaskPlanned::task)
+                .filter(task -> task.kind() == StrategicTaskKind.PRODUCE_BREAD).findFirst().orElseThrow();
+
+        assertEquals(1, reviewPlan.stream().map(ProposedEvent::payload).filter(StrategicObjectiveSelected.class::isInstance)
+                .map(StrategicObjectiveSelected.class::cast).findFirst().orElseThrow().objective().decisionOrdinal());
+        assertEquals(1, wakePlan.stream().map(ProposedEvent::payload).filter(StrategicObjectiveSelected.class::isInstance)
+                .map(StrategicObjectiveSelected.class::cast).findFirst().orElseThrow().objective().decisionOrdinal());
+        assertTrue(!reviewed.id().equals(woken.id()));
+        assertTrue(!ProductionProcess.jobId(reviewed).equals(ProductionProcess.jobId(woken)));
+    }
+
+    @Test
     void confirmedHarvestStockWakeRechecksCurrentStateWithoutCreatingRecurringReview() {
         FrontierWorldState stocked = initial("frontier:stock-wake", 407L);
         SubjectId owner = stocked.bootstrap().settlements().getFirst().id();

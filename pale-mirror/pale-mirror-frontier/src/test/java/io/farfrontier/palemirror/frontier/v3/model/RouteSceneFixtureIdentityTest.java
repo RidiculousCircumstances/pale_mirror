@@ -30,13 +30,13 @@ class RouteSceneFixtureIdentityTest {
         var cargo = state.inventory().cargo().get(cargoId);
         assertTrue(cargo.fungibleContents());
         assertTrue(cargo.itemIds().isEmpty());
-        assertFalse(state.inventory().items().containsKey(new SubjectId("item:production-1-1-bread")));
+        assertFalse(state.inventory().items().containsKey(new SubjectId("item:production-settlement-1-settlement_produce_bread-1-bread")));
         var account = state.inventory().fungibleResources().accounts()
                 .get(new SubjectId("custody:cargo-supply-1-15"));
         assertEquals(new ResourceCustody.Cargo(cargoId), account.custody());
-        assertEquals(java.util.Map.of(new SubjectId("lot:production-1-1-bread"), 64), account.lotQuantities());
+        assertEquals(java.util.Map.of(new SubjectId("lot:production-settlement-1-settlement_produce_bread-1-bread"), 64), account.lotQuantities());
         assertEquals("minecraft:bread", state.inventory().fungibleResources().lots()
-                .get(new SubjectId("lot:production-1-1-bread")).itemKind());
+                .get(new SubjectId("lot:production-settlement-1-settlement_produce_bread-1-bread")).itemKind());
     }
 
     @Test

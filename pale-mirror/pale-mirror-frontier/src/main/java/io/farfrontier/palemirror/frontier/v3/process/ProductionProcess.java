@@ -107,7 +107,6 @@ public final class ProductionProcess {
             return List.of(reschedule(action, start(task, Math.addExact(action.dueAt().ticks(), 20L))));
         }
         if (fungible.isEmpty() && input.isEmpty()) return blocked(task, settlement, workshop, workshop.id(), ProductionDiagnosticProducer.INPUT_UNAVAILABLE);
-        int ordinal = state.strategicPlans().objectives().get(task.objectiveId()).decisionOrdinal();
         if (physicalCustody && !ReferenceContainerCustody.hasOperationalCustody(state, depot)
                 || fungible.isPresent() && input.isEmpty() && !ProductionResourceCustody.canStart(state, fungible.orElseThrow(), 64)) {
             return List.of(reschedule(action, start(task, Math.addExact(action.dueAt().ticks(), 20L))));
@@ -115,9 +114,9 @@ public final class ProductionProcess {
         // Exact and fungible stock remain distinct representations. A resource job admitted
         // under physical custody reserves the current bound epoch, never a COLD mirror.
         ProductionJob job = physicalCustody && input.isPresent()
-                ? BakeryJobAdmission.exact(state, task, settlement, workshop, input.orElseThrow(), ordinal)
-                : fungible.map(value -> BakeryJobAdmission.fungible(state, task, settlement, workshop, value, ordinal)).orElseGet(() ->
-                BakeryJobAdmission.exact(state, task, settlement, workshop, input.orElseThrow(), ordinal));
+                ? BakeryJobAdmission.exact(state, task, settlement, workshop, input.orElseThrow())
+                : fungible.map(value -> BakeryJobAdmission.fungible(state, task, settlement, workshop, value)).orElseGet(() ->
+                BakeryJobAdmission.exact(state, task, settlement, workshop, input.orElseThrow()));
         // Finance is a start precondition.  A blocked task must not leave a durable job
         // occupying its workshop: otherwise a later objective review could create a
         // second job for the same facility and quarantine the canonical engine.
@@ -692,9 +691,8 @@ public final class ProductionProcess {
                         || FrontierWorldStateSupport.availableWorkResident(state, settlement.id(), ResidentProfession.BAKER).isEmpty()) {
                     throw new IllegalArgumentException("production finance start block precondition does not hold");
                 }
-                int ordinal = state.strategicPlans().objectives().get(pending.objectiveId()).decisionOrdinal();
-                ProductionJob prospectiveJob = prospectiveFungible.map(value -> BakeryJobAdmission.fungible(state, pending, settlement, workshop, value, ordinal))
-                        .orElseGet(() -> BakeryJobAdmission.exact(state, pending, settlement, workshop, prospectiveInput.orElseThrow(), ordinal));
+                ProductionJob prospectiveJob = prospectiveFungible.map(value -> BakeryJobAdmission.fungible(state, pending, settlement, workshop, value))
+                        .orElseGet(() -> BakeryJobAdmission.exact(state, pending, settlement, workshop, prospectiveInput.orElseThrow()));
                 if (CompanyWorkPaymentProcess.canReserve(state, prospectiveJob)) {
                     throw new IllegalArgumentException("production finance start block has available funds");
                 }
@@ -942,8 +940,13 @@ public final class ProductionProcess {
     private static boolean coldHold(ProductionInputHold hold) {
         return hold instanceof ProductionInputHold.Cold || hold instanceof ProductionInputHold.FungibleCold;
     }
-    public static SubjectId jobId(Settlement settlement, int ordinal) {
-        return new SubjectId("job:production-" + settlement.id().value().substring("settlement:".length()) + "-" + ordinal);
+    public static SubjectId jobId(StrategicTask task) {
+        if (task.kind() != StrategicTaskKind.PRODUCE_BREAD) {
+            throw new IllegalArgumentException("production job identity requires a bread task");
+        }
+        // Review ordinals are local to schedule families. A stock wake can reuse
+        // one while a previous commercial order remains in the bounded audit.
+        return new SubjectId("job:production-" + task.id().value().substring("task:".length()));
     }
     private static void validateMarketOrder(FrontierWorldState state, StrategicTask task, ProductionJob job) {
         boolean demandExists = state.companies().market().demands().values().stream().anyMatch(demand -> demand.reasonId().equals(task.id()));

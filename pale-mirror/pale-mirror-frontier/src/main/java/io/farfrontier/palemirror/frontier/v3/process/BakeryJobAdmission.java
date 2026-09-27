@@ -12,30 +12,30 @@ final class BakeryJobAdmission {
     private BakeryJobAdmission() { }
 
     static ProductionJob exact(FrontierWorldState state, StrategicTask task, Settlement settlement,
-                               SettlementStructure workshop, ExactItemStack input, int ordinal) {
+                               SettlementStructure workshop, ExactItemStack input) {
         if (input.count() != 64 || !input.economicOwnerId().equals(settlement.id())
                 || !"minecraft:wheat".equals(input.itemKind()))
             throw new IllegalArgumentException("bakery exact input must be 64 settlement-owned wheat");
         ResidentProfile worker = baker(state, settlement);
-        String number = settlement.id().value().substring("settlement:".length());
-        SubjectId jobId = ProductionProcess.jobId(settlement, ordinal);
+        SubjectId jobId = ProductionProcess.jobId(task);
+        String stem = jobId.value().substring("job:".length());
         return new ProductionJob(jobId, task.id(), settlement.id(), workshop.id(), worker.id(), input.id(),
                 new ProductionInputHold.Materialized(input.id()),
-                new SubjectId("item:production-" + number + "-" + ordinal + "-bread"), "minecraft:bread", input.count(),
+                new SubjectId("item:" + stem + "-bread"), "minecraft:bread", input.count(),
                 ProductionWorkProgress.notStarted(), anchor(jobId, workshop, state.actorLocations().get(worker.id())), 0,
                 Optional.of(work(state, workshop, jobId,
-                        new SubjectId("custody:bakery-source-" + number + "-" + ordinal))));
+                        new SubjectId("custody:bakery-source-" + task.id().value().substring("task:".length())))));
     }
 
     static ProductionJob fungible(FrontierWorldState state, StrategicTask task, Settlement settlement,
-                                  SettlementStructure workshop, FungibleResourceCustodySupport.LotSelection input, int ordinal) {
+                                  SettlementStructure workshop, FungibleResourceCustodySupport.LotSelection input) {
         ResidentProfile worker = baker(state, settlement);
-        String number = settlement.id().value().substring("settlement:".length());
-        SubjectId jobId = ProductionProcess.jobId(settlement, ordinal);
+        SubjectId jobId = ProductionProcess.jobId(task);
+        String stem = jobId.value().substring("job:".length());
         ProductionInputHold hold = ProductionResourceCustody.holdForStart(state, input,
-                new SubjectId("claim:production-" + number + "-" + ordinal), 64);
+                new SubjectId("claim:" + stem), 64);
         return new ProductionJob(jobId, task.id(), settlement.id(), workshop.id(), worker.id(), input.firstLotId(), hold,
-                new SubjectId("lot:production-" + number + "-" + ordinal + "-bread"), "minecraft:bread", 64,
+                new SubjectId("lot:" + stem + "-bread"), "minecraft:bread", 64,
                 ProductionWorkProgress.notStarted(), anchor(jobId, workshop, state.actorLocations().get(worker.id())), 0,
                 Optional.of(work(state, workshop, jobId, input.accountId())));
     }

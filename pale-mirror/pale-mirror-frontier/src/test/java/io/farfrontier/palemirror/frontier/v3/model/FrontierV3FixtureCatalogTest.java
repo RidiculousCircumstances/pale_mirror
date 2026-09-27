@@ -48,9 +48,9 @@ class FrontierV3FixtureCatalogTest {
         var job = state.productionJobs().values().iterator().next();
         assertEquals(BakeryWorkState.Phase.PROCESSING, job.bakeryWork().orElseThrow().phase());
         assertEquals(7, job.bakeryWork().orElseThrow().completedWorkTicks());
-        assertEquals(new SubjectId("job:production-1-1"), job.id());
+        assertEquals(new SubjectId("job:production-" + job.taskId().value().substring("task:".length())), job.id());
         assertEquals(new SubjectId("resident:1-3"), job.workerId());
-        assertEquals(new SubjectId("lot:production-1-1-bread"), job.outputItemId());
+        assertEquals(new SubjectId("lot:" + job.id().value().substring("job:".length()) + "-bread"), job.outputItemId());
         assertTrue(state.inventory().fungibleResources().lots().containsKey(job.consumedItemId()));
         assertTrue(!state.inventory().fungibleResources().lots().containsKey(job.outputItemId()));
         assertTrue(state.sceneLeases().isEmpty(), "profile begins COLD, not in an injected HOT scene");
@@ -69,7 +69,7 @@ class FrontierV3FixtureCatalogTest {
         assertEquals(java.util.Map.of(new SubjectId("lot:production-two-field-first"), 32,
                 new SubjectId("lot:production-two-field-second"), 32), held.inputLots());
         assertEquals(1, state.inventory().fungibleResources().claims().size());
-        assertEquals(new SubjectId("claim:production-1-1"), held.claimId());
+        assertEquals(new SubjectId("claim:" + job.id().value().substring("job:".length())), held.claimId());
         assertEquals(java.util.Map.of(held.claimId(), 64), state.inventory().fungibleResources().accounts()
                 .get(job.bakeryWork().orElseThrow().stationAccountId()).claimQuantities());
         assertTrue(state.sceneLeases().isEmpty());
