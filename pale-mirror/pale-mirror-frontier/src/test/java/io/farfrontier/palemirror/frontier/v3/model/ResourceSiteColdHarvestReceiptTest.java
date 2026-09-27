@@ -83,7 +83,7 @@ class ResourceSiteColdHarvestReceiptTest {
         ResourceSiteHarvestJob beforeReturn = (ResourceSiteHarvestJob) pending.state().resourceSites().site(site).activeWork().orElseThrow();
         assertTrue(beforeReturn.progress().complete());
         assertFalse(ResourceSiteHarvestGoal.actorAtDepot(pending.state(), beforeReturn));
-        assertEquals(beforeReturn.progress().totalCropSlots() - 1,
+        assertEquals(beforeReturn.progress().lastCompletedCropSlotIndex(),
                 FrontierResourceSiteHarvestSceneSupport.candidate(pending.state(), beforeReturn).orElseThrow().cropSlotIndex(),
                 "first player ingress during the return tail must re-admit the exact worker without reopening crop work");
         BodyPosition returnIngressBody = pending.state().actorLocations().get(beforeReturn.workerId()).body();
@@ -269,7 +269,9 @@ class ResourceSiteColdHarvestReceiptTest {
         }
         ResourceSiteHarvestJob continued = (ResourceSiteHarvestJob) state.resourceSites().site(site).activeWork().orElseThrow();
         assertEquals(2, continued.progress().completedCropSlots());
-        assertEquals(2, continued.progress().nextCropSlotIndex(), "the next ingress is no longer parked at crop one");
+        assertFalse(state.resourceSites().cycle(site).cell(state.resourceSites().cycle(site).layout().cells()
+                .get(continued.progress().nextCropSlotIndex()).id()).accounted(),
+                "the next ingress selects outstanding work, not the completed count as a position");
         CustodyAccount carriedTwo = state.inventory().fungibleResources().accounts()
                 .get(continued.actorAccountId());
         assertEquals(carriedOne.lotQuantities().keySet(), carriedTwo.lotQuantities().keySet(),
@@ -414,7 +416,10 @@ class ResourceSiteColdHarvestReceiptTest {
     }
 
     private static FrontierWorldState completeColdHarvest(FrontierWorldState state, SubjectId site, ScheduledAction action) {
+        boolean yielded = false;
+        boolean stockWake = false;
         for (int step = 0; step < 1_024 && state.resourceSites().site(site).phase() == ResourceSitePhase.HARVESTING; step++) {
+            yielded |= state.resourceSites().cycle(site).harvestedCount() > 0;
             List<ProposedEvent> planned = ResourceSiteHarvestProcess.planColdProgress(state, action);
             assertFalse(planned.isEmpty(), "COLD harvest must make one bounded durable disposition at step " + step);
             for (ProposedEvent event : planned) {
@@ -427,12 +432,18 @@ class ResourceSiteColdHarvestReceiptTest {
                     case StrategicTaskTransition transition -> state = StrategicObjectiveProcess.reduceTaskTransition(state, new SubjectId("settlement:1"), transition);
                     case ScheduleEffect.Rescheduled rescheduled -> action = rescheduled.replacement();
                     case ScheduleEffect.Cancelled ignored -> { }
-                    case ScheduleEffect.Created ignored -> { }
+                    case ScheduleEffect.Created created -> {
+                        if (created.action().kind().equals("frontier.objective.stock_reconsider")) {
+                            assertEquals(state.resourceSite(site).settlementId(), created.action().subject());
+                            stockWake = true;
+                        }
+                    }
                     default -> throw new AssertionError("unexpected COLD harvest event: " + event.payload().type());
                 }
             }
         }
         ResourceSiteLifecycle remaining = state.resourceSites().site(site);
+        assertEquals(yielded, stockWake, "only an actual delivered wheat part wakes settlement work selection");
         ResourceSiteHarvestJob remainingJob = remaining.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
                 .map(ResourceSiteHarvestJob.class::cast).orElse(null);
         assertEquals(ResourceSitePhase.GROWING, remaining.phase(),

@@ -38,6 +38,8 @@ import io.farfrontier.palemirror.frontier.v3.model.RouteMaintenanceStarted;
 import io.farfrontier.palemirror.frontier.v3.model.RouteMaintenanceStateSupport;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierRouteNetwork;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentMigrationJourney;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestGoal;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.SceneMember;
@@ -67,14 +69,18 @@ class FrontierV3DiagnosticJsonTest {
         var configuration = FrontierV3FixtureCatalog.configuration("resource-site-harvest-65",
                 new WorldId("frontier:diagnostic-65-cell-field"), 125L);
         var checkpoint = FrontierEngines.create(configuration).checkpoint();
+        var state = configuration.initialState();
+        var job = (ResourceSiteHarvestJob) state.resourceSites().site(new SubjectId("site:1-wheat-field"))
+                .activeWork().orElseThrow();
         var json = JsonParser.parseString(FrontierV3DiagnosticJson.render("process",
-                "job:site-harvest-1-wheat-field-1", checkpoint, configuration.initialState(), Optional.empty())
+                "job:site-harvest-1-wheat-field-1", checkpoint, state, Optional.empty())
                 .substring(FrontierV3DiagnosticJson.PREFIX.length())).getAsJsonObject();
         var conservation = json.getAsJsonObject("conservation");
         assertEquals(65, conservation.get("totalCropSlots").getAsInt());
         assertEquals(0, conservation.get("deliveredYield").getAsInt());
         assertEquals("WORK_CELL", json.getAsJsonObject("semanticGoal").get("kind").getAsString());
-        assertEquals(0, json.getAsJsonObject("semanticGoal").get("nextWorkSlot").getAsInt());
+        assertEquals(ResourceSiteHarvestGoal.current(state, job).nextWorkSlot(),
+                json.getAsJsonObject("semanticGoal").get("nextWorkSlot").getAsInt());
         assertFalse(conservation.get("returningForBatch").getAsBoolean());
     }
 

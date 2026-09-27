@@ -144,6 +144,11 @@ final class FrontierResourceSiteHarvestFixture {
                 case ResourceSiteHarvestColdGoalHeld held ->
                         throw new IllegalStateException("harvest fixture cannot hide an unavailable COLD goal: " + held);
                 case ScheduleEffect.Rescheduled rescheduled -> next = rescheduled.replacement();
+                case ScheduleEffect.Created created -> {
+                    if (!created.action().kind().equals("frontier.objective.stock_reconsider"))
+                        throw new IllegalStateException("harvest fixture produced unrelated scheduled work: "
+                                + created.action().kind());
+                }
                 default -> throw new IllegalStateException("harvest fixture produced unexpected cold event: "
                         + proposed.payload().type());
             }

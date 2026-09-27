@@ -23,6 +23,28 @@ public final class StrategicObjectiveProcess {
                 new SimInstant(dueAt), 0, owner, "frontier.objective.review", 1);
     }
 
+    /** One confirmed field-to-depot transfer wakes the owning settlement, not a baker directly. */
+    public static ScheduledAction stockReconsideration(SubjectId settlementId, SubjectId harvestJobId,
+                                                        int deliveredBefore, long dueAt) {
+        if (deliveredBefore < -1 || !settlementId.value().startsWith("settlement:")
+                || !harvestJobId.value().startsWith("job:site-harvest-"))
+            throw new IllegalArgumentException("stock wake has no declared settlement or harvest cause");
+        String part = deliveredBefore < 0 ? "terminal" : "part-" + deliveredBefore;
+        return new ScheduledAction(new ScheduleId("schedule:objective-stock-"
+                + harvestJobId.value().substring("job:".length()) + "-" + part + "-1"),
+                new SimInstant(dueAt), 0, settlementId, "frontier.objective.stock_reconsider", 1);
+    }
+
+    public static List<ProposedEvent> planStockReconsideration(FrontierWorldState state, ScheduledAction action) {
+        if (!action.kind().equals("frontier.objective.stock_reconsider")
+                || !action.subject().value().startsWith("settlement:")
+                || state.bootstrap().settlements().stream().noneMatch(value -> value.id().equals(action.subject())))
+            throw new IllegalArgumentException("stock wake has a foreign settlement owner or action kind");
+        // The wake is only a causal hint. Policy re-reads current stock, worker, station and
+        // active lane before it may create a task. The recurring review remains a backstop.
+        return plan(state, action, false, false, action.id().value());
+    }
+
     /** A settled ration wakes only the retained pending field work of that settlement. */
     public static ScheduledAction provisionReconsideration(SettlementProvision provision, long dueAt) {
         String owner = provision.settlementId().value().replace(':', '-');

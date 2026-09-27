@@ -76,6 +76,19 @@ public record ResourceSiteHarvestJob(SubjectId id, SubjectId taskId, SubjectId s
         return copy(next, deliveredYieldQuantity, returningForBatch, batchSuccessorSlot, lastConfirmedBatch, navigationBlock);
     }
 
+    /** One external cell loss changes the work pool, not the actor's body or wheat hand. */
+    public ResourceSiteHarvestJob withObservedCellLoss(int lostSlot, int nextSelectedCropSlotIndex,
+                                                       int totalYield) {
+        ResourceSiteHarvestProgress ready = lostSlot == progress.selectedCropSlotIndex() && progress.hasPendingCrop()
+                ? progress.cancelPreparedCrop() : progress;
+        ResourceSiteHarvestProgress next = ready.accountObservedLoss(lostSlot, nextSelectedCropSlotIndex);
+        carriedYieldQuantity(totalYield);
+        boolean terminal = next.complete();
+        return copy(next, deliveredYieldQuantity, terminal ? false : returningForBatch,
+                terminal ? Optional.empty() : batchSuccessorSlot, lastConfirmedBatch,
+                terminal || lostSlot == progress.selectedCropSlotIndex() ? Optional.empty() : navigationBlock);
+    }
+
     /** A route-inaccessible target remains pending while an alternate goal clears only its local route hold. */
     public ResourceSiteHarvestJob retargetTo(int nextSelectedCropSlotIndex) {
         if (returningForBatch || progress.complete() || progress.hasPendingCrop()

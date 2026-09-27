@@ -260,6 +260,16 @@ public final class ResourceFieldCycle {
         return replace(id, new CellState(prior.soil(), Crop.ABSENT, 0, prior.accounted(), prior.yielded()));
     }
 
+    /** A witnessed external loss closes this harvest epoch's cell without a farmer visit or yield. */
+    public ResourceFieldCycle accountExternalCropLoss(ResourceFieldLayout.CellId id) {
+        CellState prior = cell(id);
+        if (prior.soil() == Soil.UNKNOWN || prior.crop() != Crop.ABSENT && prior.crop() != Crop.OBSTRUCTED
+                || prior.accounted() || prior.yielded())
+            throw new IllegalArgumentException("external crop loss is not outstanding zero-yield work");
+        return replace(id, new CellState(prior.soil(), prior.crop(), prior.growthStage(), true, false,
+                prior.workAccessBlocked()));
+    }
+
     /** Direct soil damage remains local; the observed crop cannot be credited twice. */
     public ResourceFieldCycle soilBecameDirt(ResourceFieldLayout.CellId id) {
         CellState prior = cell(id);

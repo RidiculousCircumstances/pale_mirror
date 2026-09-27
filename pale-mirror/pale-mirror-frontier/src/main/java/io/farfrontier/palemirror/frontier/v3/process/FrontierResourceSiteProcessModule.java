@@ -400,7 +400,11 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
         if (command.payload() instanceof ResourceSiteHarvestBatchDelivered delivered) {
             try {
                 ResourceSitePhysicalIntentStateSupport.deliverHarvestBatch(state, delivered);
-                return new CommandPlan.Accepted(List.of(new ProposedEvent(delivered.receipt().siteId(), delivered)));
+                SubjectId settlementId = state.resourceSite(delivered.receipt().siteId()).settlementId();
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(delivered.receipt().siteId(), delivered),
+                        new ProposedEvent(settlementId, new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created(
+                                StrategicObjectiveProcess.stockReconsideration(settlementId, delivered.receipt().jobId(),
+                                        delivered.deliveredYieldBefore(), Math.addExact(command.submittedAt().ticks(), 1L))))));
             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
         if (command.payload() instanceof ResourceSiteHarvestBatchPrepared prepared) {

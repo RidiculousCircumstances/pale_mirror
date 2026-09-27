@@ -104,7 +104,13 @@ public record ResourceSiteState(Map<SubjectId, ResourceSiteLifecycle> sites,
                 || before.soil() == ResourceFieldCycle.Soil.FARMLAND
                 && after.soil() == ResourceFieldCycle.Soil.DIRT
                 && after.crop() == ResourceFieldCycle.Crop.ABSENT;
-        return (foreign || ownedLoss) && before.accounted() == after.accounted()
+        boolean accountedLoss = !before.accounted() && after.accounted() && !before.yielded()
+                && !after.yielded()
+                && (before.crop() == ResourceFieldCycle.Crop.GROWING
+                    || before.crop() == ResourceFieldCycle.Crop.MATURE)
+                && (after.crop() == ResourceFieldCycle.Crop.ABSENT
+                    || after.crop() == ResourceFieldCycle.Crop.OBSTRUCTED);
+        return (foreign || ownedLoss) && (before.accounted() == after.accounted() || accountedLoss)
                 && before.yielded() == after.yielded();
     }
 

@@ -135,11 +135,9 @@ public final class ResourceSiteProcess {
             throw new IllegalArgumentException("player break overlaps an unresolved world field change");
         if (cycle.epoch() != prepared.epoch() || cycle.layout().revision() != prepared.layoutRevision())
             throw new IllegalArgumentException("prepared field break has a stale epoch or layout revision");
-        ResourceSiteHarvestJob job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast).orElse(null);
-        if (job != null && job.progress().hasPendingCrop()
-                && cycle.layout().cells().get(job.progress().pendingCropSlotIndex()).id().equals(prepared.cellId()))
-            throw new IllegalArgumentException("player break overlaps an unresolved farmer effect");
+        // The physical ingress refuses a cell with a pending farmer effect witness.
+        // A merely prepared job has not necessarily written a block or hand yet;
+        // its exact player postcondition may close that work target instead.
         var pending = new ResourceFieldCycle.PendingPlayerBreak(prepared.playerId(), prepared.actionId(), prepared.before());
         return state.withResourceSites(state.resourceSites().replace(lifecycle,
                 cycle.preparePlayerBreak(prepared.cellId(), pending)));
@@ -212,12 +210,7 @@ public final class ResourceSiteProcess {
                 || !cycle.cell(held.cellId()).equals(held.before()))
             throw new IllegalArgumentException("foreign field observation has a stale cell predecessor");
         ResourceFieldCycle next = cycle.observedInterference(held.cellId(), observed.after());
-        ResourceSiteHarvestJob pendingJob = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast).orElse(null);
-        if (pendingJob != null && pendingJob.progress().hasPendingCrop()
-                && cycle.layout().cells().get(pendingJob.progress().pendingCropSlotIndex()).id().equals(held.cellId()))
-            lifecycle = lifecycle.cancelPreparedHarvestCrop(held.cellId(), cycle);
-        return state.withResourceSites(state.resourceSites().replace(lifecycle, next));
+        return applyObservedCellChange(state, lifecycle, cycle, next, held.cellId());
     }
 
     public static FrontierWorldState reduceForeignChangeAcknowledged(FrontierWorldState state, SubjectId subject,
@@ -247,12 +240,6 @@ public final class ResourceSiteProcess {
         ResourceFieldCycle.CellState prior = cycle.cell(observed.cellId());
         if (!ResourceFieldPhysicalSurface.Condition.of(prior).equals(observed.before()))
             throw new IllegalArgumentException("field cell observation has a stale canonical predecessor");
-        ResourceSiteHarvestJob job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast).orElse(null);
-        boolean interruptsPreparedCrop = job != null && job.progress().hasPendingCrop()
-                && cycle.layout().cells().get(job.progress().pendingCropSlotIndex()).id().equals(observed.cellId());
-        if (interruptsPreparedCrop && observed.source() != ResourceFieldCellObserved.Source.WORLD)
-            throw new IllegalArgumentException("player field observation overlaps an unresolved farmer effect");
         ResourceFieldCycle ready = cycle;
         ResourceFieldCellObserved heldWorld = state.resourceSites().pendingWorldChange(observed.siteId());
         if (observed.source() == ResourceFieldCellObserved.Source.PLAYER) {
@@ -281,7 +268,31 @@ public final class ResourceSiteProcess {
         };
         if (!ResourceFieldPhysicalSurface.Condition.of(next.cell(observed.cellId())).equals(observed.after()))
             throw new IllegalArgumentException("field cell observation disagrees with its canonical successor");
-        if (interruptsPreparedCrop) lifecycle = lifecycle.cancelPreparedHarvestCrop(observed.cellId(), cycle);
+        return applyObservedCellChange(state, lifecycle, cycle, next, observed.cellId());
+    }
+
+    private static FrontierWorldState applyObservedCellChange(FrontierWorldState state, ResourceSiteLifecycle lifecycle,
+                                                              ResourceFieldCycle cycle, ResourceFieldCycle next,
+                                                              ResourceFieldLayout.CellId cellId) {
+        ResourceSiteHarvestJob job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
+                .map(ResourceSiteHarvestJob.class::cast).orElse(null);
+        ResourceFieldCycle.CellState before = cycle.cell(cellId);
+        ResourceFieldCycle.CellState after = next.cell(cellId);
+        boolean preparedHere = job != null && job.progress().hasPendingCrop()
+                && cycle.layout().cells().get(job.progress().pendingCropSlotIndex()).id().equals(cellId);
+        if (job != null && lifecycle.phase() == ResourceSitePhase.HARVESTING && !before.accounted()
+                && (before.crop() == ResourceFieldCycle.Crop.GROWING || before.crop() == ResourceFieldCycle.Crop.MATURE)
+                && (after.crop() == ResourceFieldCycle.Crop.ABSENT || after.crop() == ResourceFieldCycle.Crop.OBSTRUCTED)) {
+            int lostSlot = cycle.layout().cells().indexOf(cycle.layout().requireCell(cellId));
+            if (lostSlot < 0) throw new IllegalArgumentException("observed crop loss has no admitted work slot");
+            next = next.accountExternalCropLoss(cellId);
+            int nextSelected = job.progress().selectedCropSlotIndex() == lostSlot
+                    ? next.nextWorkSlotAfter(lostSlot).orElse(-1)
+                    : job.progress().selectedCropSlotIndex();
+            lifecycle = lifecycle.accountObservedLostHarvestCell(job, lostSlot, nextSelected, cycle.harvestedCount());
+        } else if (preparedHere) {
+            lifecycle = lifecycle.cancelPreparedHarvestCrop(cellId, cycle);
+        }
         return state.withResourceSites(state.resourceSites().replace(lifecycle, next));
     }
 

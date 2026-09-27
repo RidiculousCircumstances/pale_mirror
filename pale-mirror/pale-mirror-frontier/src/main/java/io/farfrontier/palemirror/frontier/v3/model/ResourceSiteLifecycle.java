@@ -226,6 +226,18 @@ public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, l
                 Optional.of(active.withProgress(active.progress().cancelPreparedCrop())));
     }
 
+    /** A confirmed crop loss closes one CellId in the same transition as the field ledger. */
+    public ResourceSiteLifecycle accountObservedLostHarvestCell(ResourceSiteHarvestJob expected,
+                                                                int lostSlot, int nextSelectedCropSlotIndex,
+                                                                int totalYield) {
+        ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance)
+                .map(ResourceSiteHarvestJob.class::cast).orElseThrow();
+        if (phase != ResourceSitePhase.HARVESTING || !active.equals(expected))
+            throw new IllegalArgumentException("observed crop loss has a stale harvest owner");
+        return next(phase, growthEpoch, growthStage, Optional.of(
+                active.withObservedCellLoss(lostSlot, nextSelectedCropSlotIndex, totalYield)));
+    }
+
     /** Closes an observed HOT harvest at its actual declared depot service station. */
     public ResourceSiteLifecycle harvestedAt(ResourceSiteHarvestGoal goal, BodyPosition terminalBody) {
         ResourceSiteHarvestJob completed = activeWork.filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)

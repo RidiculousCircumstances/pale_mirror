@@ -224,6 +224,7 @@ public final class FrontierWorldProcessCatalog {
             Map.entry("frontier.hive.scout.patrol", (state, action, autonomous) -> HiveScoutPatrolProcess.plan(state, action)),
             Map.entry("frontier.decontamination.scan", (state, action, autonomous) -> SettlementServiceWorkProcess.planDecontamination(state, action)),
             Map.entry("frontier.objective.review", StrategicObjectiveProcess::plan),
+            Map.entry("frontier.objective.stock_reconsider", (state, action, autonomous) -> StrategicObjectiveProcess.planStockReconsideration(state, action)),
             Map.entry("frontier.objective.reconsider", (state, action, autonomous) -> StrategicObjectiveProcess.planReconsideration(state, action)),
             Map.entry("frontier.objective.provision_reconsider", (state, action, autonomous) -> StrategicObjectiveProcess.planProvisionReconsideration(state, action)),
             Map.entry("frontier.objective.interrupt", (state, action, autonomous) -> StrategicObjectiveProcess.planOpportunity(state, action)),
@@ -448,7 +449,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.route_patrol.start", "frontier.route_patrol.progress"); }
     private static Set<String> serviceWorkSchedules() { return types("frontier.decontamination.scan"); }
     private static Set<String> strategySchedules() { return types(
-            "frontier.objective.review", "frontier.objective.reconsider", "frontier.objective.provision_reconsider", "frontier.objective.interrupt", "frontier.objective.assault"); }
+            "frontier.objective.review", "frontier.objective.stock_reconsider", "frontier.objective.reconsider", "frontier.objective.provision_reconsider", "frontier.objective.interrupt", "frontier.objective.assault"); }
 
     private static Set<String> types(String... values) { return Set.copyOf(List.of(values)); }
 

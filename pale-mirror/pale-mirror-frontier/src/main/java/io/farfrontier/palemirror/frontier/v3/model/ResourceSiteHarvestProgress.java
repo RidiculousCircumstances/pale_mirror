@@ -3,7 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 /**
  * Durable bounded progress for the one-cell-at-a-time work of a harvest.
  *
- * <p>Completed is a count, never a slot index. The selected and last-completed slots name
+ * <p>Completed is a count, never a slot index. The selected and retained witness slots name
  * stable CellIds through the admitted layout revision; the cell ledger validates both.
  * HOT and COLD advance the same canonical progress, never separate route cursors.</p>
  */
@@ -80,5 +80,21 @@ public record ResourceSiteHarvestProgress(int totalCropSlots, int completedCropS
             throw new IllegalArgumentException("field cannot skip a completed or prepared target");
         return new ResourceSiteHarvestProgress(totalCropSlots, Math.addExact(completedCropSlots, 1), -1,
                 nextSelectedCropSlotIndex, selectedCropSlotIndex);
+    }
+
+    /** The cell owner may close a different outstanding CellId without moving the farmer. */
+    public ResourceSiteHarvestProgress accountObservedLoss(int lostSlot, int nextSelectedCropSlotIndex) {
+        if (complete() || lostSlot < 0 || lostSlot >= totalCropSlots
+                || lostSlot == selectedCropSlotIndex && hasPendingCrop()
+                || completedCropSlots + 1 == totalCropSlots && nextSelectedCropSlotIndex != -1
+                || completedCropSlots + 1 < totalCropSlots
+                    && (nextSelectedCropSlotIndex < 0 || nextSelectedCropSlotIndex == lostSlot)
+                || lostSlot != selectedCropSlotIndex && nextSelectedCropSlotIndex != selectedCropSlotIndex)
+            throw new IllegalArgumentException("observed field loss has no consistent outstanding work target");
+        // The physical executor may still be acknowledging the preceding farmer
+        // effect. An unrelated lost cell must not replace that witness cursor.
+        int retainedWitnessSlot = lastCompletedCropSlotIndex >= 0 ? lastCompletedCropSlotIndex : lostSlot;
+        return new ResourceSiteHarvestProgress(totalCropSlots, completedCropSlots + 1,
+                pendingCropSlotIndex, nextSelectedCropSlotIndex, retainedWitnessSlot);
     }
 }

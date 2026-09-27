@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteProcess;
 import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess;
@@ -14,6 +15,37 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class ResourceFieldCellObservedTest {
+    @Test void playerBreakOfActiveTargetClosesOnlyThatCellAfterExactPostcondition() {
+        var hot = ResourceSiteHarvestProcessTest.hotHarvestAfterColdSteps(0);
+        SubjectId site = hot.site();
+        ResourceSiteHarvestJob job = hot.job();
+        ResourceFieldCycle cycle = hot.state().resourceSites().cycle(site);
+        var cell = cycle.layout().cells().get(job.progress().nextCropSlotIndex()).id();
+        var before = ResourceFieldPhysicalSurface.Condition.of(cycle.cell(cell));
+        var permission = new ResourceFieldPlayerBreakPrepared(site, cycle.epoch(), cycle.layout().revision(), cell,
+                before, java.util.UUID.fromString("00000000-0000-0000-0000-000000000124"), "player:active-harvest-loss");
+        FrontierWorldState pending = ResourceSiteProcess.reducePlayerBreakPrepared(hot.state(), site, permission);
+        assertEquals(job.progress(), ((ResourceSiteHarvestJob) pending.resourceSites().site(site).activeWork().orElseThrow()).progress(),
+                "permission alone cannot count a cancelled or not-yet-observed break");
+        var after = new ResourceFieldPhysicalSurface.Condition(ResourceFieldCycle.Soil.FARMLAND,
+                ResourceFieldCycle.Crop.ABSENT, 0);
+        var observed = new ResourceFieldCellObserved(site, cycle.epoch(), cycle.layout().revision(), cell,
+                before, after, ResourceFieldCellObserved.Change.CROP_REMOVED,
+                ResourceFieldCellObserved.Source.PLAYER, permission.actionId());
+        FrontierWorldState changed = ResourceSiteProcess.reduceCellObserved(pending, site, observed);
+        ResourceSiteHarvestJob retained = (ResourceSiteHarvestJob) changed.resourceSites().site(site).activeWork().orElseThrow();
+        assertEquals(ResourceSitePhase.HARVESTING, changed.resourceSites().site(site).phase());
+        assertEquals(job.id(), retained.id());
+        assertEquals(job.progress().completedCropSlots() + 1, retained.progress().completedCropSlots());
+        assertEquals(0, changed.resourceSites().cycle(site).harvestedCount());
+        assertTrue(changed.resourceSites().cycle(site).cell(cell).accounted());
+        assertFalse(changed.resourceSites().cycle(site).cell(cell).yielded());
+        assertEquals(0, changed.resourceSites().cycle(site).pendingPlayerBreaks().size());
+        assertEquals(hot.state().actorLocations().get(job.workerId()), changed.actorLocations().get(job.workerId()));
+        assertEquals(changed, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(changed)));
+        assertThrows(IllegalArgumentException.class, () -> ResourceSiteProcess.reduceCellObserved(changed, site, observed));
+    }
+
     @Test void physicalWorkAccessObservationRetainsCropAndSelectsAnotherAreaCell() {
         var hot = ResourceSiteHarvestProcessTest.hotHarvestAfterColdSteps(0);
         FrontierWorldState state = hot.state();
@@ -35,7 +67,7 @@ class ResourceFieldCellObservedTest {
         assertThrows(IllegalArgumentException.class, () -> ResourceSiteProcess.reduceWorkAccessObserved(blocked, site, observed));
     }
 
-    @Test void observedCropLossBeforePhysicalHarvestEffectRetainsFarmerAndReplansSameCell() {
+    @Test void observedCropLossBeforePhysicalHarvestEffectClosesCellAndRetargetsFarmer() {
         var hot = ResourceSiteHarvestProcessTest.hotHarvestAfterColdSteps(0);
         SubjectId site = hot.site();
         FrontierWorldState state = hot.state();
@@ -60,11 +92,84 @@ class ResourceFieldCellObservedTest {
         ResourceSiteHarvestJob retained = (ResourceSiteHarvestJob) changed.resourceSites().site(site).activeWork().orElseThrow();
         assertEquals(job.id(), retained.id());
         assertEquals(job.workerId(), retained.workerId());
-        assertEquals(job.progress().completedCropSlots(), retained.progress().completedCropSlots());
+        assertEquals(job.progress().completedCropSlots() + 1, retained.progress().completedCropSlots());
         assertFalse(retained.progress().hasPendingCrop());
-        assertEquals(ResourceFieldCycle.WorkOutcome.PLANTED, changed.resourceSites().cycle(site).expectedWorkOutcome(cell));
+        assertTrue(changed.resourceSites().cycle(site).cell(cell).accounted());
+        assertFalse(changed.resourceSites().cycle(site).cell(cell).yielded());
+        assertEquals(0, changed.resourceSites().cycle(site).harvestedCount());
+        assertFalse(changed.resourceSites().cycle(site).layout().cells().get(retained.progress().nextCropSlotIndex()).id().equals(cell));
         assertEquals(state.actorLocations().get(job.workerId()), changed.actorLocations().get(job.workerId()));
         assertEquals(changed, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(changed)));
+    }
+
+    @Test void lossOfUnselectedCellKeepsCurrentGoalAndClosesItWithoutAVisit() {
+        var hot = ResourceSiteHarvestProcessTest.hotHarvestAfterColdSteps(0);
+        SubjectId site = hot.site();
+        ResourceSiteHarvestJob job = hot.job();
+        ResourceFieldCycle cycle = hot.state().resourceSites().cycle(site);
+        var other = cycle.layout().cells().get(1).id();
+        var before = ResourceFieldPhysicalSurface.Condition.of(cycle.cell(other));
+        var after = new ResourceFieldPhysicalSurface.Condition(ResourceFieldCycle.Soil.FARMLAND,
+                ResourceFieldCycle.Crop.ABSENT, 0);
+        var observed = new ResourceFieldCellObserved(site, cycle.epoch(), cycle.layout().revision(), other,
+                before, after, ResourceFieldCellObserved.Change.CROP_REMOVED,
+                ResourceFieldCellObserved.Source.WORLD, "world:unselected-crop-lost");
+        FrontierWorldState held = ResourceSiteProcess.reduceWorldChangeHeld(hot.state(), site,
+                new ResourceFieldWorldChangeHeld(observed));
+        FrontierWorldState changed = ResourceSiteProcess.reduceCellObserved(held, site, observed);
+        ResourceSiteHarvestJob retained = (ResourceSiteHarvestJob) changed.resourceSites().site(site).activeWork().orElseThrow();
+        assertEquals(job.progress().nextCropSlotIndex(), retained.progress().nextCropSlotIndex());
+        assertEquals(1, retained.progress().completedCropSlots());
+        assertTrue(changed.resourceSites().cycle(site).cell(other).accounted());
+        assertEquals(0, changed.resourceSites().cycle(site).harvestedCount());
+        assertEquals(changed, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(changed)));
+        ResourceFieldCycle obstructed = changed.resourceSites().cycle(site)
+                .cropObstructed(cycle.layout().cells().get(retained.progress().nextCropSlotIndex()).id());
+        FrontierWorldState withObstruction = changed.withResourceSites(changed.resourceSites().replace(
+                changed.resourceSites().site(site), obstructed));
+        var blocked = ResourceSiteHarvestProcess.blockedPrefix(obstructed, retained.progress().nextCropSlotIndex());
+        assertEquals(1, blocked.size());
+        int expectedNext = obstructed.skipBlocked(blocked.getFirst())
+                .nextWorkSlotAfter(retained.progress().nextCropSlotIndex()).orElse(-1);
+        assertEquals(expectedNext, ResourceSiteHarvestProcess.blockedPrefixContinuationGoal(
+                withObstruction, retained, blocked).nextWorkSlot(),
+                "a noncontiguous completed cell is not the next positional route target");
+    }
+
+    @Test void lossOfLastCellAfterEarlierBatchClosesWorkWithoutAnotherCropVisit() {
+        var cold = FrontierResourceSiteHarvestFixture.createWithOneExtraCellAfterColdPart(
+                new WorldId("frontier:last-cell-external-loss"), 125L);
+        SubjectId site = cold.siteId();
+        ResourceSiteHarvestJob job = (ResourceSiteHarvestJob) cold.state().resourceSites().site(site)
+                .activeWork().orElseThrow();
+        ResourceFieldCycle cycle = cold.state().resourceSites().cycle(site);
+        var last = cycle.layout().cells().get(job.progress().nextCropSlotIndex()).id();
+        var before = ResourceFieldPhysicalSurface.Condition.of(cycle.cell(last));
+        var after = new ResourceFieldPhysicalSurface.Condition(ResourceFieldCycle.Soil.FARMLAND,
+                ResourceFieldCycle.Crop.ABSENT, 0);
+        var observed = new ResourceFieldCellObserved(site, cycle.epoch(), cycle.layout().revision(), last,
+                before, after, ResourceFieldCellObserved.Change.CROP_REMOVED,
+                ResourceFieldCellObserved.Source.WORLD, "world:last-crop-lost");
+        FrontierWorldState held = ResourceSiteProcess.reduceWorldChangeHeld(cold.state(), site,
+                new ResourceFieldWorldChangeHeld(observed));
+        FrontierWorldState changed = ResourceSiteProcess.reduceCellObserved(held, site, observed);
+        ResourceSiteHarvestJob retained = (ResourceSiteHarvestJob) changed.resourceSites().site(site).activeWork().orElseThrow();
+        assertTrue(retained.progress().complete());
+        assertEquals(job.progress().lastCompletedCropSlotIndex(), retained.progress().lastCompletedCropSlotIndex(),
+                "external loss must not hide the preceding physical farmer-effect witness");
+        assertEquals(64, changed.resourceSites().cycle(site).harvestedCount());
+        assertEquals(0, retained.carriedYieldQuantity(changed.resourceSites().cycle(site).harvestedCount()));
+        assertEquals(ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE,
+                ResourceSiteHarvestGoal.current(changed, retained).kind());
+        assertEquals(changed, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(changed)));
+    }
+
+    @Test void unrelatedLossKeepsPreviousPhysicalWitnessSlot() {
+        var progress = new ResourceSiteHarvestProgress(4, 1, -1, 2, 0);
+        var afterLoss = progress.accountObservedLoss(3, 2);
+        assertEquals(2, afterLoss.completedCropSlots());
+        assertEquals(2, afterLoss.nextCropSlotIndex());
+        assertEquals(0, afterLoss.lastCompletedCropSlotIndex());
     }
 
     @Test void declaredCropLossAndSoilDamageStayLocalAcrossSnapshotRecovery() {

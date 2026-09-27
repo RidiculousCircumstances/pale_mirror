@@ -308,9 +308,9 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 if (state.resourceSites().hasPendingWorldChange(job.siteId())) return;
                 if (level.getGameTime() % 20 != 0) return;
                 var cycle = state.resourceSites().cycle(job.siteId());
-                var prefix = ResourceSiteHarvestProcess.blockedPrefix(cycle, job.progress().completedCropSlots());
+                var prefix = ResourceSiteHarvestProcess.blockedPrefix(cycle, job.progress().nextCropSlotIndex());
                 if (ResourceSiteHarvestProcess.blockedPrefixMeetsPendingPlayerBreak(
-                        cycle, job.progress().completedCropSlots(), prefix)) return;
+                        cycle, job.progress().nextCropSlotIndex(), prefix)) return;
                 if (!prefix.isEmpty()
                         && goal.equals(ResourceSiteHarvestProcess.blockedPrefixContinuationGoal(state, job, prefix).representative())) {
                     try {
@@ -810,7 +810,8 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
     static io.farfrontier.palemirror.frontier.v3.model.BlockPosition carrierFenceWitness(
             io.farfrontier.palemirror.frontier.v3.model.ResourceSite site,
             io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestProgress progress) {
-        return progress.complete() ? site.cropSlots().getLast() : site.cropSlots().get(progress.nextCropSlotIndex());
+        return site.cropSlots().get(progress.complete()
+                ? progress.lastCompletedCropSlotIndex() : progress.nextCropSlotIndex());
     }
 
     /** Transitions and fences in the same server turn, before normal chunk expiry can hide the exact body. */

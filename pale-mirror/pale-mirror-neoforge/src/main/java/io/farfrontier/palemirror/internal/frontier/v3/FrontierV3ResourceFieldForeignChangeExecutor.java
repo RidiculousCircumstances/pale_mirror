@@ -146,7 +146,7 @@ final class FrontierV3ResourceFieldForeignChangeExecutor {
                 state = runtime.decodedState().orElseThrow();
                 cycle = state.resourceSites().cycle(held.siteId());
             }
-            if (!cycle.cell(held.cellId()).equals(target)) continue;
+            if (!sameObservedCell(cycle.cell(held.cellId()), target)) continue;
             var owner = ledger.fieldClaim(held.siteId()) instanceof FrontierV3ResourceSiteLedger.FieldOwnership value
                     ? value : null;
             if (owner == null || owner.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE) continue;
@@ -155,7 +155,7 @@ final class FrontierV3ResourceFieldForeignChangeExecutor {
                 ledger.replaceFieldClaim(owner, owner.withWitness(next)); ledger.persist(level);
             }
             ledger.retireFieldForeignChange(witness); ledger.persist(level);
-            submit(runtime, new ResourceFieldForeignChangeAcknowledged(held, target), "field-foreign-ack");
+            submit(runtime, new ResourceFieldForeignChangeAcknowledged(held, cycle.cell(held.cellId())), "field-foreign-ack");
             return true;
         }
         for (var held : state.resourceSites().pendingForeignChanges().values().stream()
@@ -239,6 +239,15 @@ final class FrontierV3ResourceFieldForeignChangeExecutor {
                                           FrontierV3ResourceFieldWitness.Cell claim,
                                           FrontierV3ResourceFieldObservation.Reading reading) {
         return matchesPredecessor(canonical, claim, reading);
+    }
+
+    /** Work accounting may advance atomically with the exact observed physical cell. */
+    private static boolean sameObservedCell(ResourceFieldCycle.CellState canonical,
+                                            ResourceFieldCycle.CellState observed) {
+        return canonical.soil() == observed.soil() && canonical.crop() == observed.crop()
+                && canonical.growthStage() == observed.growthStage()
+                && canonical.workAccessBlocked() == observed.workAccessBlocked()
+                && canonical.yielded() == observed.yielded();
     }
 
     private static boolean sameBlocks(FrontierV3ResourceFieldWitness.ForeignIncident a,

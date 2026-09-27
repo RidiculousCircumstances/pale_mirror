@@ -42,7 +42,7 @@ class ResourceFieldForeignCellObservedTest {
         assertEquals(changed, snapshot(changed));
     }
 
-    @Test void foreignCropBeforePhysicalWorkEffectReleasesOnlyThePreparedCell() {
+    @Test void foreignCropBeforePhysicalWorkEffectClosesOnlyTheLostCell() {
         var hot = ResourceSiteHarvestProcessTest.hotHarvestAfterColdSteps(0);
         FrontierWorldState state = hot.state();
         ResourceSiteHarvestJob job = hot.job();
@@ -67,9 +67,14 @@ class ResourceFieldForeignCellObservedTest {
         assertEquals(job.id(), retained.id());
         assertEquals(job.workerId(), retained.workerId());
         assertFalse(retained.progress().hasPendingCrop());
-        assertEquals(job.progress().completedCropSlots(), retained.progress().completedCropSlots());
-        assertEquals(ResourceFieldCycle.WorkOutcome.SKIPPED_BLOCKED,
-                changed.resourceSites().cycle(SITE).expectedWorkOutcome(cell));
+        assertEquals(job.progress().completedCropSlots() + 1, retained.progress().completedCropSlots());
+        assertTrue(changed.resourceSites().cycle(SITE).cell(cell).accounted());
+        assertFalse(changed.resourceSites().cycle(SITE).cell(cell).yielded());
+        FrontierWorldState applied = changed;
+        assertThrows(IllegalArgumentException.class, () -> ResourceSiteProcess.reduceForeignChangeAcknowledged(
+                applied, SITE, new ResourceFieldForeignChangeAcknowledged(held, obstructed)));
+        changed = ResourceSiteProcess.reduceForeignChangeAcknowledged(changed, SITE,
+                new ResourceFieldForeignChangeAcknowledged(held, changed.resourceSites().cycle(SITE).cell(cell)));
         assertEquals(changed, snapshot(changed));
     }
 

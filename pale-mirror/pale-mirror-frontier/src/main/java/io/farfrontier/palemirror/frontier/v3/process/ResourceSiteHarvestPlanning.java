@@ -234,7 +234,8 @@ final class ResourceSiteHarvestPlanning {
             ProposedEvent returned = new ProposedEvent(job.siteId(), new ResourceSiteHarvestReturned(job.id(), job.workerId(),
                     action.id(), action.dueAt().ticks()));
             return job.returningForBatch()
-                    ? List.of(returned, reschedule(action, coldProgress(job, nextDue)))
+                    ? List.of(returned, stockWake(state, job, job.deliveredYieldQuantity(), action.dueAt().ticks()),
+                            reschedule(action, coldProgress(job, nextDue)))
                     : coldTerminal(state, action, job, returned);
         }
         ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state, job);
@@ -298,10 +299,23 @@ final class ResourceSiteHarvestPlanning {
                 terminalIntent.status() == PhysicalIntentStatus.PREPARED,
                 ResourceSiteHarvestCausality.notCaptured(returned), actor.body());
         StrategicTask task = task(state, returned.taskId(), StrategicTaskStatus.ACTIVE);
-        return List.of(terminalEvent, transition(task, StrategicTaskStatus.COMPLETED),
-                new ProposedEvent(returned.siteId(), new ScheduleEffect.Cancelled(action.id())),
-                new ProposedEvent(returned.siteId(), new ScheduleEffect.Created(ResourceSiteProcess.nextGrowth(terminal,
-                        Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().resourceGrowthStageInterval())))));
+        List<ProposedEvent> events = new java.util.ArrayList<>();
+        events.add(terminalEvent);
+        if (state.resourceSites().cycle(returned.siteId()).harvestedCount() > returned.deliveredYieldQuantity())
+            events.add(stockWake(state, returned, -1, action.dueAt().ticks()));
+        events.add(transition(task, StrategicTaskStatus.COMPLETED));
+        events.add(new ProposedEvent(returned.siteId(), new ScheduleEffect.Cancelled(action.id())));
+        events.add(new ProposedEvent(returned.siteId(), new ScheduleEffect.Created(ResourceSiteProcess.nextGrowth(terminal,
+                Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().resourceGrowthStageInterval())))));
+        return List.copyOf(events);
+    }
+
+    static ProposedEvent stockWake(FrontierWorldState state, ResourceSiteHarvestJob job,
+                                   int deliveredBefore, long now) {
+        SubjectId settlementId = site(state, job.siteId()).settlementId();
+        return new ProposedEvent(settlementId, new ScheduleEffect.Created(
+                StrategicObjectiveProcess.stockReconsideration(settlementId, job.id(), deliveredBefore,
+                        Math.addExact(now, 1L))));
     }
 
     public static boolean coldProgressHeld(FrontierWorldState state, ScheduledAction action) {
