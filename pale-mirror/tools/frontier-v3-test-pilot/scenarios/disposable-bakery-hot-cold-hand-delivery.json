@@ -1,0 +1,69 @@
+{
+  "schema": 1,
+  "id": "disposable_bakery_hot_cold_hand_delivery",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "bakery-fresh-job", "viewDistance": 6 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "process", "id": "job:production-1-1", "expect": {
+        "status": "ok", "result": { "workStage": "DEPOT_PICKUP" }
+      } }
+    ] }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
+      "position": { "diagnostic": { "view": "container", "id": "container:1-depot", "field": "position" } },
+      "offset": { "x": -8, "y": 1, "z": 0 }, "settleMs": 0,
+      "causalMilestone": "ordinary_player_starts_depot_pickup" },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "job:production-1-1",
+      "expect": { "status": "ok", "result": { "workStage": "STATION_LOAD" } },
+      "timeoutMs": 90000, "causalMilestone": "wheat_physically_in_baker_hand" },
+    { "type": "visit", "dimension": "minecraft:overworld", "position": { "x": 24, "y": 64, "z": -132 },
+      "settleMs": 0, "causalMilestone": "player_leaves_baker_to_cold" },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "job:production-1-1",
+      "expect": { "status": "ok", "claims": { "lease": null },
+        "result": { "workStage": "STATION_LOAD" } },
+      "timeoutMs": 60000, "causalMilestone": "same_job_and_hand_released_to_cold" },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "job:production-1-1",
+      "expect": { "status": "ok", "result": {
+        "coldBlocker": "NONE", "coldRouteBlocker": "NONE" } },
+      "timeoutMs": 90000, "causalMilestone": "physical_ports_and_route_ready_for_cold" },
+    { "type": "fast_forward", "ticks": 4500, "timeoutMs": 180000,
+      "causalMilestone": "cold_baker_station_recipe_and_delivery" },
+    { "type": "inspect", "view": "process", "id": "job:production-1-1",
+      "causalMilestone": "cold_owner_before_player_reentry" },
+    { "type": "inspect", "view": "container", "id": "container:1-depot",
+      "causalMilestone": "cold_depot_authority_before_player_reentry" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
+      "position": { "diagnostic": { "view": "container", "id": "container:1-depot", "field": "position" } },
+      "offset": { "x": -8, "y": 1, "z": 0 }, "settleMs": 0,
+      "causalMilestone": "player_reenters_after_cold_completion" },
+    { "type": "inspect", "view": "process", "id": "job:production-1-1",
+      "causalMilestone": "same_bakery_job_completed" },
+    { "type": "inspect", "view": "resource", "id": "custody:container-1-depot",
+      "causalMilestone": "cold_bread_lineage_in_depot" },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:1-depot",
+      "expect": { "status": "ok", "replica": { "state": "OBSERVED_CURRENT" } },
+      "timeoutMs": 90000, "causalMilestone": "cold_bread_projected_on_reentry" }
+  ],
+  "assertions": [
+    { "after": 4, "view": "process", "id": "job:production-1-1", "expect": {
+      "status": "ok", "claims": { "lease": null }, "result": { "workStage": "STATION_LOAD" }
+    } },
+    { "after": 5, "view": "process", "id": "job:production-1-1", "expect": {
+      "status": "ok", "result": { "coldBlocker": "NONE", "coldRouteBlocker": "NONE" }
+    } },
+    { "after": 7, "view": "process", "id": "job:production-1-1", "expect": { "status": "not_found" } },
+    { "after": 10, "view": "process", "id": "job:production-1-1", "expect": { "status": "not_found" } },
+    { "after": 11, "view": "resource", "id": "custody:container-1-depot", "expect": {
+      "status": "ok", "quantity": 64,
+      "lots": [{ "id": "lot:production-1-1-bread", "owner": "settlement:1",
+        "itemKind": "minecraft:bread", "quantity": 64 }], "claims": []
+    } },
+    { "after": 12, "view": "container", "id": "container:1-depot", "expect": {
+      "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" }
+    } }
+  ],
+  "frames": []
+}

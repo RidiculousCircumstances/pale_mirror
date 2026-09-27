@@ -42,7 +42,8 @@ public final class FrontierPersistenceCodec {
     // Version 81 retains the producer-declared harvest actor account in the start payload.
     // Version 82 also retains the exact depot account declared by that producer.
     // Version 86 retains the bounded field segment and successor-slot reservation in harvest starts.
-    private static final int VERSION = 91;
+    // Fresh-world cutover: bakery station declarations change the canonical snapshot grammar.
+    private static final int VERSION = 95;
     private static final int MAX_STATE_BYTES = 16 * 1024 * 1024;
     private static final int MAX_ENTRIES = 65_535;
 

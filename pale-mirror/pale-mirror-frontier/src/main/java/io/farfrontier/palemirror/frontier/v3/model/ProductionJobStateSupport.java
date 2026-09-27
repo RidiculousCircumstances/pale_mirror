@@ -115,6 +115,13 @@ final class ProductionJobStateSupport {
     static FrontierWorldState cancel(FrontierWorldState state, SubjectId jobId) {
         ProductionJob job = state.productionJobs().get(Objects.requireNonNull(jobId, "production job id"));
         if (job == null) throw new IllegalArgumentException("unknown production job: " + jobId.value());
+        // Once a bakery batch has left the depot, cancelling the job would orphan its
+        // actor/station custody (and a completed batch would lose its payment receipt).
+        // Keep the job as the durable owner until delivery or an explicit compensation
+        // transition moves the batch back to a safe owner.
+        if (job.bakeryWork().isPresent()
+                && job.bakeryWork().orElseThrow().phase() != BakeryWorkState.Phase.DEPOT_PICKUP)
+            throw new IllegalArgumentException("bakery job with in-flight cargo cannot be cancelled");
         ExactInventory nextInventory = switch (job.inputHold()) {
             case ProductionInputHold.Cold cold -> restoreExactColdInput(state.inventory(), cold);
             case ProductionInputHold.Materialized ignored -> state.inventory();

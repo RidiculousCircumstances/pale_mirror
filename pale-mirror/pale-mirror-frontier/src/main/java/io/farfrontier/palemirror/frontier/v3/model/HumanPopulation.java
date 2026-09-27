@@ -114,8 +114,12 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
                 Resident resident = settlement.residents().get(ordinal);
                 SubjectId householdId = new SubjectId("household:" + settlement.id().value().substring("settlement:".length()) + "-" + householdOrdinal);
                 households.putIfAbsent(householdId, new Household(householdId, settlement.id()));
-                residents.put(resident.id(), new ResidentProfile(resident.id(), householdId, settlement.id(), resident.role(),
-                        -((long) (18 + (ordinal % 43)) * 24_000L * 360L), skills(resident.role(), ordinal)));
+                ResidentProfile profile = new ResidentProfile(resident.id(), householdId, settlement.id(), resident.role(),
+                        -((long) (18 + (ordinal % 43)) * 24_000L * 360L), skills(resident.role(), ordinal));
+                // The first named crafter is the settlement's baker and bread-works
+                // founder; other crafters keep their non-food industrial affinity.
+                residents.put(resident.id(), ordinal == 2 && resident.role() == ResidentRole.CRAFTER
+                        ? profile.withProfession(ResidentProfession.BAKER) : profile);
             }
         }
         return new HumanPopulation(households, residents, Map.of(), healthy(residents), normalQuarantines(residents), Map.of(), initialProvisions(residents), nourished(residents), Map.of());

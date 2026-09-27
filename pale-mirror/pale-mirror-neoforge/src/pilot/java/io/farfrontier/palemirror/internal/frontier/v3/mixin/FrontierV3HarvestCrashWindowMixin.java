@@ -21,6 +21,7 @@ abstract class FrontierV3HarvestCrashWindowMixin {
     @Inject(method = "work", at = @At(value = "INVOKE",
             target = "Lio/farfrontier/palemirror/internal/frontier/v3/FrontierV3ResourceFieldWorkExecutor;"
                     + "advance(Lnet/minecraft/server/level/ServerLevel;"
+                    + "Lio/farfrontier/palemirror/internal/frontier/v3/FrontierV3ServerRuntime;"
                     + "Lio/farfrontier/palemirror/frontier/v3/model/FrontierWorldState;"
                     + "Lio/farfrontier/palemirror/frontier/v3/model/SceneLease;"
                     + "Lio/farfrontier/palemirror/frontier/v3/model/ResourceSiteHarvestJob;"

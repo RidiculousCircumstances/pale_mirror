@@ -75,7 +75,9 @@ public final class FrontierWorldProcessCatalog {
             "frontier.market_work_order_cancelled", "frontier.market_relationship_incident_recorded", "frontier.market_demand_expired", "frontier.market_demand_cancelled",
             "frontier.production_started", "frontier.production_completed", "frontier.fungible_production_completed",
             "frontier.production_work_progressed", "frontier.production_work_traversal_advanced",
-            "frontier.production_cold_work_advanced", "frontier.production_work_traversal_blocked",
+            "frontier.production_cold_work_advanced", "frontier.bakery_cold_step", "frontier.bakery_input_reallocated", "frontier.bakery_hot_goal_arrived",
+            "frontier.bakery_hot_effect_prepared", "frontier.bakery_hot_effect_observed", "frontier.bakery_hot_work_tick",
+            "frontier.bakery_hot_hand_release", "frontier.bakery_hot_hand_materialized", "frontier.bakery_hot_block_changed", "frontier.production_work_traversal_blocked",
             "frontier.production_work_scene_lease_prepared", "frontier.production_work_scene_lease_handoff", "frontier.production_work_scene_preparation_aborted", "frontier.production_work_scene_finalized",
             "frontier.production_blocked", "frontier.production_interrupted");
     private static final Set<String> RESOURCE_SITES = types(
@@ -377,7 +379,10 @@ public final class FrontierWorldProcessCatalog {
             "frontier.resident_born", "frontier.resident_migrated", "frontier.resident_transit_advanced",
             "frontier.medical_treatment_scene_lease_prepared", "frontier.medical_treatment_scene_lease_handoff"); }
     private static Set<String> economyCommands() { return types(
-            "frontier.production_work_progressed", "frontier.production_work_traversal_advanced", "frontier.production_cold_work_advanced", "frontier.production_work_traversal_blocked",
+            "frontier.production_work_progressed", "frontier.production_work_traversal_advanced", "frontier.production_cold_work_advanced",
+            "frontier.bakery_cold_step", "frontier.bakery_input_reallocated", "frontier.bakery_hot_goal_arrived", "frontier.bakery_hot_effect_prepared",
+            "frontier.bakery_hot_effect_observed", "frontier.bakery_hot_work_tick", "frontier.bakery_hot_hand_release",
+            "frontier.bakery_hot_hand_materialized", "frontier.bakery_hot_block_changed", "frontier.production_work_traversal_blocked",
             "frontier.production_work_scene_lease_prepared", "frontier.production_work_scene_lease_handoff"); }
     private static Set<String> resourceCommands() { return types(
             "frontier.resource_site_conflict_observed",
@@ -531,7 +536,10 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.company_registered", "frontier.employment_contract_opened", "frontier.employment_contract_terminated", "frontier.market_demand_opened",
                     "frontier.market_quote_published", "frontier.market_work_order_accepted", "frontier.market_relationship_incident_recorded", "frontier.market_work_order_cancelled", "frontier.market_demand_expired",
                     "frontier.market_demand_cancelled", "frontier.production_started", "frontier.production_completed", "frontier.fungible_production_completed",
-                    "frontier.production_work_progressed", "frontier.production_work_traversal_advanced", "frontier.production_cold_work_advanced", "frontier.production_work_traversal_blocked",
+                    "frontier.production_work_progressed", "frontier.production_work_traversal_advanced", "frontier.production_cold_work_advanced",
+                    "frontier.bakery_cold_step", "frontier.bakery_input_reallocated", "frontier.bakery_hot_goal_arrived", "frontier.bakery_hot_effect_prepared",
+                    "frontier.bakery_hot_effect_observed", "frontier.bakery_hot_work_tick", "frontier.bakery_hot_hand_release",
+                    "frontier.bakery_hot_hand_materialized", "frontier.bakery_hot_block_changed", "frontier.production_work_traversal_blocked",
                     "frontier.production_work_scene_lease_prepared", "frontier.production_work_scene_lease_handoff",
                     "frontier.production_work_scene_preparation_aborted", "frontier.production_work_scene_finalized", "frontier.production_blocked", "frontier.production_interrupted",
                     "frontier.scene_lease_transition",

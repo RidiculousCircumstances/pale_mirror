@@ -583,6 +583,39 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
                 nextCarriers, conflicts, surfaces, economics, fungibleResources));
     }
 
+    /**
+     * Applies the exact-custody part of an actor item order after arrival and, in HOT,
+     * after the physical executor has confirmed both endpoint observations. This method
+     * does not itself authorize a Minecraft effect or prove that a body reached the station.
+     */
+    public ExactInventory transferActorOrder(ActorContainerItemOrder order) {
+        Objects.requireNonNull(order, "actor item order");
+        if (order.containerEndpoint() instanceof ActorContainerItemOrder.ContainerEndpoint.ExactStationSlot)
+            order.requireCurrentStation(this);
+        if (!(order.portion() instanceof ActorContainerItemOrder.Portion.Exact exact)) {
+            throw new IllegalArgumentException("resource-lot order belongs to the fungible ledger");
+        }
+        ExactItemStack current = items.get(exact.item().id());
+        if (current == null || !current.equals(exact.item())) {
+            throw new IllegalArgumentException("actor item order no longer matches its exact canonical stack");
+        }
+        InventoryCustody.Actor actor = new InventoryCustody.Actor(order.actorId());
+        InventoryCustody.ContainerSlot slot = order.exactSlot();
+        if (order.direction() == ActorContainerItemOrder.Direction.TAKE) {
+            if (items.values().stream().anyMatch(item -> item.custody().equals(actor))
+                    || fungibleResources.accounts().values().stream().anyMatch(account ->
+                    account.custody().equals(new ResourceCustody.Actor(order.actorId())))) {
+                throw new IllegalArgumentException("actor already carries a stack");
+            }
+            return moveObservedItem(current.id(), slot, actor);
+        }
+        ContainerRecord destination = containers.get(slot.containerId());
+        if (destination == null || !destination.ownerId().equals(current.economicOwnerId())) {
+            throw new IllegalArgumentException("actor may not silently transfer economic ownership on deposit");
+        }
+        return moveObservedItem(current.id(), actor, slot);
+    }
+
     public ExactInventory recordConflict(InventoryConflict conflict) {
         Objects.requireNonNull(conflict, "inventory conflict");
         InventoryConflict previous = conflicts.get(conflict.id());

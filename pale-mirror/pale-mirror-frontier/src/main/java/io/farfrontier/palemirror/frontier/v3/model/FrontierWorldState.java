@@ -241,7 +241,11 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             if (facility.kind() != StructureKind.WORKSHOP) throw new IllegalArgumentException("production job facility must be a workshop");
             ResidentProfile worker = humanPopulation.resident(job.workerId());
             if (worker == null) throw new IllegalArgumentException("production job worker must be a canonical resident");
-            if (!worker.settlementId().equals(settlement.id()) || worker.profession() != ResidentProfession.INDUSTRIAL_WORKER) throw new IllegalArgumentException("production job worker must be a settlement industrial worker");
+            if (!worker.settlementId().equals(settlement.id()) || worker.profession() != ResidentProfession.BAKER) throw new IllegalArgumentException("bread production job worker must be a settlement baker");
+            if (job.bakeryWork().isPresent()) {
+                BakeryWorkValidation.validate(inventory, job, settlement);
+                continue;
+            }
             if (inventory.items().containsKey(job.outputItemId())) {
                 throw new IllegalArgumentException("active production job must not retain its output stack");
             }

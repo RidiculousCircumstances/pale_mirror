@@ -17,7 +17,9 @@ public final class FrontierProductionWorkSceneSupport {
                 .map(job -> candidate(state, job)).flatMap(Optional::stream).toList();
     }
     public static Optional<Candidate> candidate(FrontierWorldState state, ProductionJob job) {
-        if (hasScene(state, job.id()) || !hasPhysicalInput(state, job) || job.workProgress().terminalEffectEligible()) return Optional.empty();
+        if (hasScene(state, job.id()) || !hasPhysicalInput(state, job)
+                || job.bakeryWork().isPresent() && job.bakeryWork().orElseThrow().phase() == BakeryWorkState.Phase.DELIVERED
+                || job.bakeryWork().isEmpty() && job.workProgress().terminalEffectEligible()) return Optional.empty();
         SubjectId depot = FrontierWorldState.depotId(job.settlementId());
         if (ReferenceContainerCustody.hasLiveCustody(state, depot) && !ReferenceContainerCustody.hasOperationalCustody(state, depot)) return Optional.empty();
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), job.settlementId());
@@ -25,6 +27,12 @@ public final class FrontierProductionWorkSceneSupport {
         ActorLocation worker = state.actorLocations().get(job.workerId());
         if (workshop == null || workshop.kind() != StructureKind.WORKSHOP || state.structureConditions().get(workshop.id()) != StructureCondition.INTACT
                 || worker == null || worker.condition().status() != ActorLifeStatus.ALIVE) return Optional.empty();
+        if (job.bakeryWork().isPresent()) {
+            SurfaceAnchor retained = worker.supportingSurface();
+            BlockPosition demand = BakeryWorkGoal.current(state, job).station().support();
+            return Optional.of(new Candidate(job.id(), job.settlementId(), job.workerId(), workshop.id(), demand,
+                    retained.support(), Map.of(job.workerId(), retained.support())));
+        }
         SurfaceAnchor retained = job.workTraversal().linearCorridorSurfaces().get(job.traversalCursor());
         if (!worker.supportingSurface().equals(retained)) return Optional.empty();
         return Optional.of(new Candidate(job.id(), job.settlementId(), job.workerId(), workshop.id(), workshop.anchor(), retained.support(), Map.of(job.workerId(), retained.support())));
@@ -43,6 +51,7 @@ public final class FrontierProductionWorkSceneSupport {
                 || !lease.members().getFirst().actorId().equals(job.workerId())) {
             throw new IllegalArgumentException("production work observation has no matching HOT worker lease");
         }
+        if (job.bakeryWork().isPresent()) return lease;
         BodyPosition retainedStation = job.workTraversal().linearCorridorSurfaces().get(job.traversalCursor()).standingBody();
         if (!retainedStation.equals(lease.memberPosition(job.workerId()))) {
             throw new IllegalArgumentException("production work HOT lease diverges from its retained worker cursor");
@@ -103,6 +112,7 @@ public final class FrontierProductionWorkSceneSupport {
     }
     /** The worker may not continue a visual cycle after its named player-observable input departed. */
     public static boolean hasPhysicalInput(FrontierWorldState state, ProductionJob job) {
+        if (job.bakeryWork().isPresent()) return state.productionJobs().containsKey(job.id());
         if (job.inputHold() instanceof ProductionInputHold.FungibleBound bound) {
             SubjectId depot = FrontierWorldState.depotId(job.settlementId());
             if (!ReferenceContainerCustody.hasOperationalCustody(state, depot)) return false;

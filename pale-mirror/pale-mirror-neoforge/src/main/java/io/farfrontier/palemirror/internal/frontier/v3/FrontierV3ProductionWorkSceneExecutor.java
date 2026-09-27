@@ -59,7 +59,13 @@ final class FrontierV3ProductionWorkSceneExecutor {
         switch (lease.status()) {
             case PREPARED -> materialize(level, runtime, state, lease);
             case HOT -> work(level, runtime, state, lease);
-            case DRAINING -> FrontierV3SceneExecutor.release(level, runtime, lease);
+            case DRAINING -> {
+                ProductionJob job = state.productionJobs().get(FrontierSceneBehaviors.productionWork(lease).jobId());
+                if (job != null && job.bakeryWork().isPresent()
+                        && job.bakeryWork().orElseThrow().pendingPhysicalStep().isPresent())
+                    FrontierV3BakeryWorkSceneExecutor.drainPending(level, runtime, state, lease, job);
+                else FrontierV3SceneExecutor.release(level, runtime, lease);
+            }
             case UNKNOWN_AFTER_RESTART -> FrontierV3SceneExecutor.reclaim(level, runtime, state, lease);
             case CONFLICT, CLOSED -> { }
         }
@@ -112,6 +118,22 @@ final class FrontierV3ProductionWorkSceneExecutor {
     }
     private static void work(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
         ProductionJob job = FrontierProductionWorkSceneSupport.require(state, FrontierSceneBehaviors.productionWork(lease));
+        if (job.bakeryWork().isPresent()) {
+            SettlementStructure bakery = state.bootstrap().settlements().stream()
+                    .filter(settlement -> settlement.id().equals(job.settlementId())).findFirst().orElseThrow()
+                    .structures().stream().filter(structure -> structure.id().equals(job.facilityId()))
+                    .findFirst().orElseThrow();
+            FrontierV3SceneDemand.Snapshot demand = FrontierV3SceneExecutor.demandSnapshot(level, bakery.anchor());
+            if (!demand.active() && !FrontierV3SceneExecutor.playerWithinSafeRadius(level, lease)) {
+                releaseBakeryBeforeBodyUnloads(level, runtime, lease);
+                return;
+            }
+            // A loaded container retains physical inventory authority, not permission to keep
+            // driving a worker through chunks after all observers have left the scene.
+            if (!demand.active()) return;
+            FrontierV3BakeryWorkSceneExecutor.work(level, runtime, state, lease, job);
+            return;
+        }
         if (ReferenceContainerCustody.blocksCanonicalUse(state, FrontierWorldState.depotId(job.settlementId()))) {
             drain(level, runtime, lease, DrainReason.DEPOT_CONFLICT); return;
         }
@@ -181,6 +203,18 @@ final class FrontierV3ProductionWorkSceneExecutor {
         worker.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
         FrontierV3CommandSubmission.submitBound(runtime, "production-work-progress", lease.id().value(),
                 new ProductionWorkProgressed(job.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, current), next), binding);
+    }
+    /** Close a physically carried item and its scene in one turn before chunk expiry hides the body. */
+    private static void releaseBakeryBeforeBodyUnloads(ServerLevel level,
+            FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease) {
+        CommandResult result = submit(runtime, "bakery-work-draining-no-demand", lease.id().value(),
+                new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
+        FrontierV3DiagnosticTrace.recordScene(level.getServer(), "bakery_work_draining_no_demand", lease, result);
+        if (!(result instanceof CommandResult.Accepted)) return;
+        FrontierWorldState current = runtime.decodedState().orElseThrow();
+        SceneLease draining = current.sceneLeases().get(lease.id());
+        if (draining != null && draining.status() == SceneLeaseStatus.DRAINING)
+            execute(level, runtime, current, draining);
     }
     /**
      * Keeps one admitted production body inside the fixed neighborhood of its current and next

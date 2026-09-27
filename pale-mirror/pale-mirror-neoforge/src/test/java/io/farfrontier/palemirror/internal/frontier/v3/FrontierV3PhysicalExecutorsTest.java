@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FungibleResourceLedger;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalCustodyLease;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalCustodyLeaseStatus;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaRecord;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackBinding;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceCustody;
@@ -53,6 +54,24 @@ class FrontierV3PhysicalExecutorsTest {
         assertFalse(FrontierV3ReferenceContainerCustodyExecutor.retainsUnobservedRestartFungibleHot(Map.of(lease.scopeId(), lease.authorityEpoch()), current, lease),
                 "ordinary observer loss after a current-process physical observation must checkpoint and release HOT custody");
     }
+
+    @Test
+    void unloadedChangedStationCannotRetireOldReplicaBeforeLoadedConfirmation() {
+        SubjectId station = new SubjectId("container:bakery-station");
+        PhysicalReplicaRecord replica = PhysicalReplicaRecord.expected(station, "container.production-station", 12L,
+                "sha256:before", ReferenceContainerCustody.provenance(station))
+                .observe(12L, "sha256:before", ReferenceContainerCustody.provenance(station), 12L);
+        PhysicalCustodyLease checkpointed = new PhysicalCustodyLease(ReferenceContainerCustody.scopeId(station), station,
+                ReferenceContainerCustody.PROVIDER_ID, 4L, 12L, replica.replicaRevision(),
+                PhysicalCustodyLeaseStatus.CHECKPOINTED, null);
+        assertTrue(FrontierV3ReferenceContainerCustodyExecutor.requiresLoadedMutationConfirmation(
+                checkpointed, replica, "sha256:after"),
+                "a saved bakery effect cannot release the old replica before the changed chest is observed");
+        assertFalse(FrontierV3ReferenceContainerCustodyExecutor.requiresLoadedMutationConfirmation(
+                checkpointed, replica, "sha256:before"),
+                "unchanged unloaded chests keep the ordinary bounded release path");
+    }
+
 
     private static FungibleResourceLedger ledger(SubjectId container, SubjectId account, SubjectId lot, long epoch) {
         ResourceLot resourceLot = new ResourceLot(lot, new SubjectId("settlement:one"), "minecraft:wheat", 64, "test", List.of());

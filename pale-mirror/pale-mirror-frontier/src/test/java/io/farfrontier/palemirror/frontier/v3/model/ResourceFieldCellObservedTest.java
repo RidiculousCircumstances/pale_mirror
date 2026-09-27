@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteProcess;
+import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import org.junit.jupiter.api.Test;
 
@@ -13,6 +14,38 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class ResourceFieldCellObservedTest {
+    @Test void observedCropLossBeforePhysicalHarvestEffectRetainsFarmerAndReplansSameCell() {
+        var hot = ResourceSiteHarvestProcessTest.hotHarvestAfterColdSteps(0);
+        SubjectId site = hot.site();
+        FrontierWorldState state = hot.state();
+        ResourceSiteHarvestJob job = hot.job();
+        ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state, job);
+        if (!ResourceSiteHarvestGoal.actorAtWorkCell(state, job))
+            state = ResourceSiteHarvestProcess.reduceHotGoalArrived(state, site,
+                    new ResourceSiteHarvestHotGoalArrived(job.id(), hot.lease().id(), job.workerId(),
+                            goal.layoutRevision(), goal.nextWorkSlot(), goal.kind(), goal.representative().standingBody()));
+        state = ResourceSiteHarvestProcess.reduceCropPrepared(state, site,
+                new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex()));
+        ResourceFieldCycle cycle = state.resourceSites().cycle(site);
+        ResourceFieldLayout.CellId cell = cycle.layout().cells().get(job.progress().completedCropSlots()).id();
+        var mature = ResourceFieldPhysicalSurface.Condition.of(cycle.cell(cell));
+        var bare = new ResourceFieldPhysicalSurface.Condition(ResourceFieldCycle.Soil.FARMLAND, ResourceFieldCycle.Crop.ABSENT, 0);
+        var observed = new ResourceFieldCellObserved(site, cycle.epoch(), cycle.layout().revision(), cell,
+                mature, bare, ResourceFieldCellObserved.Change.CROP_REMOVED, ResourceFieldCellObserved.Source.WORLD,
+                "world:prepared-crop-lost");
+        FrontierWorldState held = ResourceSiteProcess.reduceWorldChangeHeld(state, site, new ResourceFieldWorldChangeHeld(observed));
+        assertTrue(held.resourceSites().hasPendingWorldChange(site));
+        FrontierWorldState changed = ResourceSiteProcess.reduceCellObserved(held, site, observed);
+        ResourceSiteHarvestJob retained = (ResourceSiteHarvestJob) changed.resourceSites().site(site).activeWork().orElseThrow();
+        assertEquals(job.id(), retained.id());
+        assertEquals(job.workerId(), retained.workerId());
+        assertEquals(job.progress().completedCropSlots(), retained.progress().completedCropSlots());
+        assertFalse(retained.progress().hasPendingCrop());
+        assertEquals(ResourceFieldCycle.WorkOutcome.PLANTED, changed.resourceSites().cycle(site).expectedWorkOutcome(cell));
+        assertEquals(state.actorLocations().get(job.workerId()), changed.actorLocations().get(job.workerId()));
+        assertEquals(changed, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(changed)));
+    }
+
     @Test void declaredCropLossAndSoilDamageStayLocalAcrossSnapshotRecovery() {
         FrontierWorldState ready = ResourceSiteHarvestProcessTest.ready(ResourceSiteHarvestProcessTest.initial());
         SubjectId site = new SubjectId("site:1-wheat-field");

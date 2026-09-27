@@ -70,6 +70,7 @@ public final class FrontierV3FixtureCatalog {
             Map.entry("residentTransit", FrontierV3FixtureCatalog::residentTransitConfiguration),
             Map.entry("productionWork", FrontierV3FixtureCatalog::productionWorkConfiguration),
             Map.entry("fungibleProductionWork", FrontierV3FixtureCatalog::fungibleProductionWorkConfiguration),
+            Map.entry("bakeryFreshJob", FrontierV3FixtureCatalog::bakeryFreshJobConfiguration),
             Map.entry("fungibleProductionTwoLotWork", FrontierV3FixtureCatalog::fungibleProductionTwoLotWorkConfiguration),
             Map.entry("resourceSiteHarvest", FrontierV3FixtureCatalog::resourceSiteHarvestConfiguration),
             Map.entry("resourceSiteHarvest65", FrontierV3FixtureCatalog::resourceSiteHarvest65Configuration),
@@ -273,18 +274,23 @@ public final class FrontierV3FixtureCatalog {
         return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
     }
 
-    /** Ordinary fungible admission and COLD labor; no job/progress/output is injected. */
+    /** Ordinary fungible admission and station-local COLD labor; no job/progress/output is injected. */
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> fungibleProductionWorkConfiguration(WorldId worldId, long seed) {
-        return fungibleProductionWorkConfiguration(worldId, seed, false);
+        return fungibleProductionWorkConfiguration(worldId, seed, false, false);
+    }
+
+    /** A naturally admitted bread job before any transfer; the pilot observes the entire bakery cycle. */
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> bakeryFreshJobConfiguration(WorldId worldId, long seed) {
+        return fungibleProductionWorkConfiguration(worldId, seed, false, true);
     }
 
     /** The same ordinary work path, with two distinct 32-unit wheat lots in COLD depot custody. */
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> fungibleProductionTwoLotWorkConfiguration(WorldId worldId, long seed) {
-        return fungibleProductionWorkConfiguration(worldId, seed, true);
+        return fungibleProductionWorkConfiguration(worldId, seed, true, false);
     }
 
     private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> fungibleProductionWorkConfiguration(WorldId worldId, long seed,
-                                                                                                                                    boolean twoLots) {
+                                                                                                                                    boolean twoLots, boolean freshJob) {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(worldId, seed));
         if (twoLots) state = splitFixtureWheat(state);
         SubjectId settlement = new SubjectId("settlement:1");
@@ -307,12 +313,14 @@ public final class FrontierV3FixtureCatalog {
                     new io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget(100, 100));
             var current = engine.canonicalState().state();
             if (current.productionJobs().size() == 1 && current.productionJobs().values().iterator().next()
-                    .workProgress().equals(ProductionWorkProgress.processing(17))) {
+                    .bakeryWork().filter(work -> freshJob ? work.phase() == BakeryWorkState.Phase.DEPOT_PICKUP
+                            : work.phase() == BakeryWorkState.Phase.PROCESSING
+                            && work.completedWorkTicks() == 7).isPresent()) {
                 var boundary = engine.checkpoint();
                 return configured(worldId, current, boundary.instant(), boundary.schedules(), false);
             }
         }
-        throw new IllegalStateException("fungible production fixture did not reach ordinary COLD labor boundary");
+        throw new IllegalStateException("fungible production fixture did not reach its ordinary bakery boundary");
     }
 
     private static FrontierWorldState splitFixtureWheat(FrontierWorldState state) {

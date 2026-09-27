@@ -44,6 +44,16 @@ public final class FrontierV3SettlementServiceInputIssueGameTests {
         chest.setItem(0, FrontierV3CargoHandoffExecutor.materializedStack(reagent)); worker.setItemSlot(EquipmentSlot.MAINHAND, Items.STICK.getDefaultInstance());
         helper.assertTrue(!FrontierV3SettlementServiceInputIssueExecutor.handOff(chest, worker, reagent, slot),
                 "a nonempty worker hand is player/world conflict evidence and is never overwritten");
+        chest.setItem(0, net.minecraft.world.item.ItemStack.EMPTY);
+        worker.setItemSlot(EquipmentSlot.MAINHAND, FrontierV3CargoHandoffExecutor.materializedStack(reagent));
+        helper.assertTrue(FrontierV3ActorItemTransfer.place(chest, worker, reagent, slot, EquipmentSlot.MAINHAND),
+                "the same tagged stack can return from the named hand to one empty declared slot");
+        helper.assertTrue(worker.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty()
+                        && FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(0), reagent),
+                "a placed stack has one physical holder after the transfer");
+        worker.setItemSlot(EquipmentSlot.MAINHAND, FrontierV3CargoHandoffExecutor.materializedStack(reagent));
+        helper.assertTrue(!FrontierV3ActorItemTransfer.place(chest, worker, reagent, slot, EquipmentSlot.MAINHAND),
+                "an occupied destination cannot be overwritten or duplicate the actor's carried stack");
         // The full suite reuses a dense test grid and the village-observer test deliberately
         // scans nearby real villagers.  This fixture is evidence only, so leave no actor for a
         // later independent observer to mistake for its own input.

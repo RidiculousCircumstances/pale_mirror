@@ -316,6 +316,35 @@ class ExactInventoryTest {
     }
 
     @Test
+    void exactActorOrderMovesOneStackOutAndBackWithoutInventingANewIdentity() {
+        SubjectId container = new SubjectId("container:bakery-depot");
+        SubjectId owner = new SubjectId("settlement:one");
+        SubjectId actor = new SubjectId("resident:baker");
+        SubjectId job = new SubjectId("job:bakery");
+        SubjectId itemId = new SubjectId("item:bakery-wheat");
+        InventoryCustody.ContainerSlot slot = new InventoryCustody.ContainerSlot(container, 0);
+        ExactItemStack wheat = new ExactItemStack(itemId, owner, "minecraft:wheat", 64, slot);
+        ExactInventory stored = new ExactInventory(Map.of(container, new ContainerRecord(container, owner, 2)),
+                Map.of(itemId, wheat), Map.of(), Map.of(), Map.of(), Map.of(), surfaceFor(container));
+        ActorContainerItemOrder.ContainerEndpoint.ExactSlot endpoint =
+                new ActorContainerItemOrder.ContainerEndpoint.ExactSlot(slot);
+        ActorContainerItemOrder take = new ActorContainerItemOrder(job, actor, ActorContainerItemOrder.Direction.TAKE,
+                new ActorContainerItemOrder.Portion.Exact(wheat), endpoint, SurfaceAnchor.at(1, 64, 1),
+                ActorContainerItemOrder.Hand.MAIN, 0, 1);
+        ExactInventory carried = stored.transferActorOrder(take);
+        assertEquals(new InventoryCustody.Actor(actor), carried.items().get(itemId).custody());
+        assertTrue(carried.itemAt(container, 0).isEmpty());
+        assertThrows(IllegalArgumentException.class, () -> carried.transferActorOrder(take));
+        ExactItemStack held = carried.items().get(itemId);
+        ActorContainerItemOrder place = new ActorContainerItemOrder(job, actor, ActorContainerItemOrder.Direction.PLACE,
+                new ActorContainerItemOrder.Portion.Exact(held), endpoint, SurfaceAnchor.at(1, 64, 1),
+                ActorContainerItemOrder.Hand.MAIN, 1, 1);
+        ExactInventory returned = carried.transferActorOrder(place);
+        assertEquals(wheat, returned.items().get(itemId));
+        assertThrows(IllegalArgumentException.class, () -> returned.transferActorOrder(place));
+    }
+
+    @Test
     void cargoRetainsTheSenderClaimUntilObservedReceiptTransfersItToTheReceiver() {
         SubjectId senderContainer = new SubjectId("container:sender");
         SubjectId receiverContainer = new SubjectId("container:receiver");

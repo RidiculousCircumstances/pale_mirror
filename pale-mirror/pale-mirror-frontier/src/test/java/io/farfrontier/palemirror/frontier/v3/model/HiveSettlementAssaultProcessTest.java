@@ -57,17 +57,27 @@ class HiveSettlementAssaultProcessTest {
         Fixture fixture = fixture(true);
         ResidentProfile resident = fixture.state().humanPopulation().residents().values().stream()
                 .filter(value -> value.settlementId().equals(fixture.sighting().settlementId()))
-                .filter(value -> value.profession() == ResidentProfession.INDUSTRIAL_WORKER).findFirst().orElseThrow();
-        CustodyAccount input = fixture.state().inventory().fungibleResources().accounts().values().stream().filter(account -> account.custody()
+                .filter(value -> value.profession() == ResidentProfession.BAKER).findFirst().orElseThrow();
+        SubjectId productionOwner = resident.settlementId();
+        StrategicObjective productionObjective = new StrategicObjective(new SubjectId("objective:assault-occupied-production"),
+                productionOwner, StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, Optional.empty(), 2,
+                StrategicObjectiveStatus.ACTIVE);
+        StrategicTask productionTask = new StrategicTask(new SubjectId("task:assault-occupied-production"),
+                productionObjective.id(), productionOwner, StrategicTaskKind.PRODUCE_BREAD, Optional.empty(),
+                List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT),
+                List.of(), StrategicTaskStatus.ACTIVE);
+        FrontierWorldState withProductionTask = fixture.state().withStrategicPlans(fixture.state().strategicPlans()
+                .addObjective(productionObjective).addTask(productionTask));
+        CustodyAccount input = withProductionTask.inventory().fungibleResources().accounts().values().stream().filter(account -> account.custody()
                 .equals(new ResourceCustody.Container(FrontierWorldState.depotId(resident.settlementId())))).findFirst().orElseThrow();
-        ResourceLot wheat = input.lotQuantities().keySet().stream().map(fixture.state().inventory().fungibleResources().lots()::get)
+        ResourceLot wheat = input.lotQuantities().keySet().stream().map(withProductionTask.inventory().fungibleResources().lots()::get)
                 .filter(lot -> "minecraft:wheat".equals(lot.itemKind())).findFirst().orElseThrow();
-        ProductionJob job = new ProductionJob(new SubjectId("job:assault-occupied"), fixture.task().id(), resident.settlementId(),
-                FrontierWorldStateSupport.settlement(fixture.state().bootstrap(), resident.settlementId()).structures().stream()
+        ProductionJob job = new ProductionJob(new SubjectId("job:assault-occupied"), productionTask.id(), resident.settlementId(),
+                FrontierWorldStateSupport.settlement(withProductionTask.bootstrap(), resident.settlementId()).structures().stream()
                         .filter(structure -> structure.kind() == StructureKind.WORKSHOP).findFirst().orElseThrow().id(), resident.id(),
                 wheat.id(), new ProductionInputHold.FungibleCold(wheat.id(), input.id(), new SubjectId("claim:assault-occupied")),
                 new SubjectId("lot:occupied-output"), "minecraft:bread", 64);
-        FrontierWorldState occupied = fixture.state().startFungibleProductionJob(job);
+        FrontierWorldState occupied = withProductionTask.startFungibleProductionJob(job);
         List<ProposedEvent> events = HiveSettlementAssaultProcess.planStart(occupied,
                 HiveSettlementAssaultProcess.start(fixture.task(), fixture.sighting(), 200L));
         SettlementAssaultStarted started = assertInstanceOf(SettlementAssaultStarted.class, events.get(1).payload());

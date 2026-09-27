@@ -23,6 +23,7 @@ final class ProductionJobStateCodec {
             writeString(output, job.workerId().value()); writeString(output, job.consumedItemId().value()); writeHold(output, job.inputHold()); writeString(output, job.outputItemId().value());
             writeString(output, job.outputItemKind()); output.writeByte(job.outputCount()); ProductionWorkProgressStateCodec.write(output, job.workProgress());
             TraversalTopologyStateCodec.write(output, job.workTraversal()); output.writeShort(job.traversalCursor());
+            BakeryWorkStateCodec.write(output, job.bakeryWork());
         }
     }
 
@@ -34,13 +35,15 @@ final class ProductionJobStateCodec {
             SubjectId consumed = new SubjectId(readString(input)); ProductionInputHold hold = readHold(input, consumed);
             SubjectId output = new SubjectId(readString(input)); String outputKind = readString(input); int outputCount = input.readUnsignedByte();
             ProductionWorkProgress progress = ProductionWorkProgressStateCodec.read(input); TraversalTopology traversal = TraversalTopologyStateCodec.read(input);
-            ProductionJob job = new ProductionJob(id, task, settlement, facility, worker, consumed, hold, output, outputKind, outputCount, progress, traversal, input.readUnsignedShort());
+            int cursor = input.readUnsignedShort();
+            ProductionJob job = new ProductionJob(id, task, settlement, facility, worker, consumed, hold, output, outputKind, outputCount,
+                    progress, traversal, cursor, BakeryWorkStateCodec.read(input));
             if (jobs.put(id, job) != null) throw new IllegalArgumentException("duplicate production job id");
         }
         return jobs;
     }
 
-    private static void writeHold(DataOutputStream output, ProductionInputHold hold) throws IOException {
+    static void writeHold(DataOutputStream output, ProductionInputHold hold) throws IOException {
         if (hold instanceof ProductionInputHold.Materialized) { output.writeByte(0); return; }
         if (hold instanceof ProductionInputHold.Cold cold) {
             ExactItemStack item = cold.item(); output.writeByte(1); writeString(output, item.economicOwnerId().value()); writeString(output, item.itemKind()); output.writeByte(item.count()); writeCustody(output, item.custody());
@@ -53,7 +56,7 @@ final class ProductionJobStateCodec {
         } else throw new IllegalArgumentException("unknown production input hold");
     }
 
-    private static ProductionInputHold readHold(DataInputStream input, SubjectId itemId) throws IOException {
+    static ProductionInputHold readHold(DataInputStream input, SubjectId itemId) throws IOException {
         return switch (input.readUnsignedByte()) {
             case 0 -> new ProductionInputHold.Materialized(itemId);
             case 1 -> new ProductionInputHold.Cold(new ExactItemStack(itemId, new SubjectId(readString(input)), readString(input), input.readUnsignedByte(), readCustody(input)));

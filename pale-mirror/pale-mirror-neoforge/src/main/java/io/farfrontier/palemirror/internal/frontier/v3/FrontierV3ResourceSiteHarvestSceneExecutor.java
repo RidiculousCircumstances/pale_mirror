@@ -406,7 +406,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             ResourceFieldCycle.WorkOutcome outcome;
             Optional<ResourceSiteHarvestProgressed.HandObservation> observedHand;
             if (physicalClaim instanceof FrontierV3ResourceSiteLedger.CellSiteClaim) {
-                var work = FrontierV3ResourceFieldWorkExecutor.advance(level, state, lease, job, worker);
+                var work = FrontierV3ResourceFieldWorkExecutor.advance(level, runtime, state, lease, job, worker);
                 if (work.disposition() == FrontierV3ResourceFieldWorkExecutor.Disposition.PENDING) return;
                 if (work.disposition() == FrontierV3ResourceFieldWorkExecutor.Disposition.CONFLICT) {
                     conflict(level, runtime, lease, "pending-cell-hand-postcondition:" + work.failure()); return;

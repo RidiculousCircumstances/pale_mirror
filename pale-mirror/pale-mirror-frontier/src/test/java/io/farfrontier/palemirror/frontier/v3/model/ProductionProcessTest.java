@@ -205,7 +205,7 @@ class ProductionProcessTest {
                 .filter(structure -> structure.id().equals(job.facilityId())).findFirst().orElseThrow();
         BlockPosition target = SettlementWorkshopServicePort.forWorkshop(workshop).exteriorApproach().support();
 
-        assertEquals(new SubjectId("resident:1-15"), worker);
+        assertEquals(new SubjectId("resident:1-3"), worker);
         assertEquals(target, FrontierTestPositions.supportOf(state.actorLocations().get(worker)));
         assertTrue(state.actorLocations().entrySet().stream().filter(entry -> !entry.getKey().equals(worker))
                 .noneMatch(entry -> Math.max(Math.abs(FrontierTestPositions.supportOf(entry.getValue()).x() - target.x()),
@@ -881,10 +881,35 @@ class ProductionProcessTest {
                         .map(StrategicTaskTransition.class::cast).findFirst().orElseThrow());
         harvesting = ResourceSiteHarvestProcess.reduceStarted(harvesting, siteId, firstStarted);
         harvesting = ResourceSiteHarvestProcess.reducePrepared(harvesting, siteId, firstPrepared.intent());
-        harvesting = completeHarvest(harvesting, siteId, firstStarted.job().id());
+        ScheduledAction progress = firstPlan.stream().map(ProposedEvent::payload)
+                .filter(ScheduleEffect.Created.class::isInstance).map(ScheduleEffect.Created.class::cast)
+                .map(ScheduleEffect.Created::action).findFirst().orElseThrow();
+        for (int turn = 0; harvesting.resourceSites().site(siteId).phase() == ResourceSitePhase.HARVESTING
+                && turn < 700; turn++) {
+            List<ProposedEvent> events = ResourceSiteHarvestProcess.planColdProgress(harvesting, progress);
+            assertFalse(events.isEmpty(), "a COLD farmer must have a bounded next harvest/depot action");
+            for (ProposedEvent event : events) {
+                if (event.payload() instanceof ResourceSiteHarvestColdGoalAdvanced advanced)
+                    harvesting = ResourceSiteHarvestProcess.reduceColdGoalAdvanced(harvesting, siteId, advanced);
+                else if (event.payload() instanceof ResourceSiteHarvestColdTraversalAdvanced advanced)
+                    harvesting = ResourceSiteHarvestProcess.reduceColdTraversalAdvanced(harvesting, siteId, advanced);
+                else if (event.payload() instanceof ResourceSiteHarvestCropPrepared prepared)
+                    harvesting = ResourceSiteHarvestProcess.reduceCropPrepared(harvesting, siteId, prepared);
+                else if (event.payload() instanceof ResourceSiteHarvestProgressed advanced)
+                    harvesting = ResourceSiteHarvestProcess.reduceProgressed(harvesting, siteId, advanced);
+                else if (event.payload() instanceof ResourceSiteHarvestReturned returned)
+                    harvesting = ResourceSiteHarvestProcess.reduceReturned(harvesting, siteId, returned);
+                else if (event.payload() instanceof StrategicTaskTransition transition)
+                    harvesting = StrategicObjectiveProcess.reduceTaskTransition(harvesting, new SubjectId("settlement:1"), transition);
+                else if (event.payload() instanceof ScheduleEffect.Rescheduled rescheduled)
+                    progress = rescheduled.replacement();
+                else if (!(event.payload() instanceof ScheduleEffect.Created || event.payload() instanceof ScheduleEffect.Cancelled))
+                    throw new AssertionError("unexpected COLD harvest continuation: " + event.payload());
+            }
+        }
+        assertEquals(ResourceSitePhase.GROWING, harvesting.resourceSites().site(siteId).phase(),
+                "the farmer must deliver the harvested part before successor lineage exists");
         ResourceSiteHarvestLineage completed = harvesting.resourceSites().site(siteId).harvestLineage().orElseThrow();
-        harvesting = StrategicObjectiveProcess.reduceTaskTransition(harvesting, new SubjectId("settlement:1"),
-                new StrategicTaskTransition(completed.predecessorTaskId(), StrategicTaskStatus.COMPLETED));
         assertFalse(harvesting.physicalIntents().containsKey(firstPrepared.intent().id()),
                 "terminal COLD composition cannot leave its prior physical subject unowned before the next growth epoch");
         FrontierWorldState grown = harvesting;
@@ -943,30 +968,6 @@ class ProductionProcessTest {
                 .findFirst().orElseThrow();
     }
 
-    static FrontierWorldState completeHarvest(FrontierWorldState state, SubjectId siteId, SubjectId jobId) {
-        FrontierWorldState current = state;
-        for (int crop = 0; crop < ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS; crop++) {
-            ResourceSiteHarvestJob job = (ResourceSiteHarvestJob) current.resourceSites().site(siteId).activeWork().orElseThrow();
-            while (!ResourceSiteHarvestGoal.actorAtWorkCell(current, job)) {
-                ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(current, job);
-                BodyPosition next = ResourceSiteHarvestKnownNavigation.path(current, job)
-                        .get(1).standingBody();
-                ScheduledAction travel = ResourceSiteHarvestProcess.coldProgress(job, 22_301L);
-                current = ResourceSiteHarvestProcess.reduceColdGoalAdvanced(current, siteId,
-                        new ResourceSiteHarvestColdGoalAdvanced(job.id(), job.workerId(), goal.layoutRevision(),
-                                goal.nextWorkSlot(), goal.kind(), next, travel.id(), travel.dueAt().ticks()));
-                job = (ResourceSiteHarvestJob) current.resourceSites().site(siteId).activeWork().orElseThrow();
-            }
-            current = ResourceSiteHarvestProcess.reduceCropPrepared(current, siteId, new ResourceSiteHarvestCropPrepared(jobId, crop));
-            ResourceFieldCycle field = current.resourceSites().cycle(siteId);
-            ResourceFieldLayout.CellId cellId = field.layout().cells().get(crop).id();
-            ScheduledAction action = ResourceSiteHarvestProcess.coldProgress(job, 22_301L);
-            current = ResourceSiteHarvestProcess.reduceProgressed(current, siteId,
-                    new ResourceSiteHarvestProgressed(siteId, field.epoch(), jobId, crop + 1, field.layout().revision(), cellId,
-                            field.expectedWorkOutcome(cellId), action.id(), action.dueAt().ticks()));
-        }
-        return current;
-    }
 
     private static FrontierWorldState transition(FrontierWorldState state, SubjectId settlement, PhysicalIntent intent,
                                                  PhysicalIntentStatus status, Optional<PhysicalEffectObservation> observation) {

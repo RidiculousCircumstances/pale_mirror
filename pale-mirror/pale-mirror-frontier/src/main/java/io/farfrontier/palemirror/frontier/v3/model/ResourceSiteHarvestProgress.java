@@ -34,6 +34,12 @@ public record ResourceSiteHarvestProgress(int totalCropSlots, int completedCropS
         if (complete() || hasPendingCrop()) throw new IllegalStateException("harvest cursor cannot prepare its next crop");
         return new ResourceSiteHarvestProgress(totalCropSlots, completedCropSlots, nextCropSlotIndex());
     }
+    /** The field changed before its physical work witness began; no cell or yield was credited. */
+    public ResourceSiteHarvestProgress cancelPreparedCrop() {
+        if (!hasPendingCrop() || pendingCropSlotIndex != completedCropSlots)
+            throw new IllegalStateException("harvest cursor has no prepared crop to cancel");
+        return new ResourceSiteHarvestProgress(totalCropSlots, completedCropSlots, -1);
+    }
     public ResourceSiteHarvestProgress confirmPreparedCrop() {
         if (!hasPendingCrop() || pendingCropSlotIndex != completedCropSlots) {
             throw new IllegalStateException("harvest cursor has no exact prepared crop");

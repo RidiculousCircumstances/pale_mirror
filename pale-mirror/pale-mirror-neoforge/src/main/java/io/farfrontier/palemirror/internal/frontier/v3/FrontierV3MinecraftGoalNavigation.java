@@ -89,7 +89,8 @@ final class FrontierV3MinecraftGoalNavigation {
         if (current != null && current.legalStations().equals(legalStations) && current.envelope().equals(envelope)
                 && current.order().equals(order)) {
             Path activePath = actor.getNavigation().getPath();
-            if (!pathWithinEnvelope(level, activePath, envelope)) {
+            if (activePath != null && !actor.getNavigation().isDone()
+                    && !pathWithinEnvelope(level, activePath, envelope)) {
                 stop(actor);
                 return new Result(Status.BLOCKED, "minecraft-path-left-envelope",
                         Optional.of(FrontierV3GoalNavigation.BlockReason.OFF_CONTRACT));
@@ -102,7 +103,7 @@ final class FrontierV3MinecraftGoalNavigation {
                 return new Result(Status.BLOCKED, "minecraft-path-stalled",
                         Optional.of(FrontierV3GoalNavigation.BlockReason.PATH_STALLED));
             }
-            if (!actor.getNavigation().isDone()) {
+            if (activePath != null && !actor.getNavigation().isDone()) {
                 ACTIVE.put(actor, current.refreshed(level.getGameTime()));
                 return new Result(Status.IN_PROGRESS, "minecraft-path-active");
             }
@@ -164,8 +165,15 @@ final class FrontierV3MinecraftGoalNavigation {
             return true;
         }
         if (!(actor.level() instanceof ServerLevel level) || actor.isRemoved() || !actor.isAlive()
-                || level.getGameTime() - control.refreshedAt() > RETRY_TICKS
-                || !pathWithinEnvelope(level, actor.getNavigation().getPath(), control.envelope())) {
+                || level.getGameTime() - control.refreshedAt() > RETRY_TICKS) {
+            stop(actor);
+            return true;
+        }
+        if (actor.getNavigation().isDone() || actor.getNavigation().getPath() == null) {
+            stopPath(actor); // A completed/consumed short leg is not an off-contract path.
+            return true;
+        }
+        if (!pathWithinEnvelope(level, actor.getNavigation().getPath(), control.envelope())) {
             stop(actor);
             return true;
         }
@@ -236,13 +244,20 @@ final class FrontierV3MinecraftGoalNavigation {
                            Optional<MovementOrder> order, long refreshedAt,
                            long lastProgressAt, Vec3 lastProgressPosition) {
         private Control observed(Vec3 position, long tick) {
-            if (position.distanceToSqr(lastProgressPosition) >= 0.01D)
+            // Collision jitter and vertical bobbing are not progress. Retain the
+            // best planar approach to this exact station across path retries so
+            // oscillation against a newly materialized wall cannot renew the
+            // stall deadline forever.
+            if (goalDistance(lastProgressPosition, target) - goalDistance(position, target) >= 0.25D)
                 return new Control(legalStations, target, envelope, order, refreshedAt, tick, position);
             return this;
         }
         private Control refreshed(long tick) {
             return new Control(legalStations, target, envelope, order, tick, lastProgressAt, lastProgressPosition);
         }
+    }
+    static double goalDistance(Vec3 position, SurfaceAnchor target) {
+        return Math.hypot(position.x - (target.x() + 0.5D), position.z - (target.z() + 0.5D));
     }
     private record Failure(List<SurfaceAnchor> legalStations, LocalNavigationEnvelope envelope,
                            Optional<MovementOrder> order, long since) { }

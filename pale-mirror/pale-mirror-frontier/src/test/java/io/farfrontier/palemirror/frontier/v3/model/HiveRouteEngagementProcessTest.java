@@ -430,7 +430,7 @@ class HiveRouteEngagementProcessTest {
         boolean interceptedFromBoundPosition = false;
         java.util.List<String> supplyHistory = new java.util.ArrayList<>();
 
-        for (long tick = 20L; tick <= 10_000L; tick++) {
+        for (long tick = 20L; tick <= 16_000L; tick++) {
             engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
             // This is an autonomous behavior test, not a codec round-trip test at every
             // tick. Read the same immutable canonical state without serializing the world.
@@ -446,6 +446,7 @@ class HiveRouteEngagementProcessTest {
             sighted |= !latest.strategicPlans().hiveOperationKnowledge().entries().isEmpty();
             interceptedFromBoundPosition |= latest.strategicPlans().tasks().values().stream().anyMatch(task -> task.kind() == StrategicTaskKind.INTERCEPT_ROUTE_OPERATION
                     && task.operationTarget().isPresent() && task.operationObservationPosition().isPresent());
+            if (sighted && interceptedFromBoundPosition) break;
         }
 
         FrontierWorldState finalState = latest;

@@ -131,7 +131,8 @@ final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule 
 
     private static FrontierWorldState reduceCustodyChanged(FrontierWorldState state, SubjectId subject, ExactItemCustodyChanged changed) {
         if (!subject.equals(FrontierWorldStateSupport.itemOwner(state, changed))) throw new IllegalArgumentException("item custody observation lacks its canonical owner");
-        return state.withInventory(state.inventory().moveObservedItem(changed.itemId(), changed.from(), changed.to()));
+        return observedExactBakeryDeparture(state, changed.itemId(), changed.from(),
+                state.inventory().moveObservedItem(changed.itemId(), changed.from(), changed.to()));
     }
 
     private static FrontierWorldState reduceDestroyed(FrontierWorldState state, SubjectId subject, ExactItemDestroyed destroyed) {
@@ -139,7 +140,30 @@ final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule 
         if (item == null || !item.custody().equals(destroyed.source()) || !subject.equals(FrontierWorldStateSupport.itemOwner(state, destroyed))) {
             throw new IllegalArgumentException("item destruction lacks its canonical owner");
         }
-        return state.withInventory(state.inventory().destroyObservedItem(destroyed.itemId(), destroyed.source()));
+        return observedExactBakeryDeparture(state, destroyed.itemId(), destroyed.source(),
+                state.inventory().destroyObservedItem(destroyed.itemId(), destroyed.source()));
+    }
+
+    private static FrontierWorldState observedExactBakeryDeparture(FrontierWorldState state, SubjectId itemId,
+                                                                     InventoryCustody source, ExactInventory inventory) {
+        ProductionJob job = state.productionJobs().values().stream()
+                .filter(value -> value.consumedItemId().equals(itemId) && value.bakeryWork().isPresent()
+                        && value.inputHold() instanceof ProductionInputHold.Materialized
+                        && value.bakeryWork().orElseThrow().phase() == BakeryWorkState.Phase.DEPOT_PICKUP)
+                .findFirst().orElse(null);
+        if (job == null) return state.withInventory(inventory);
+        SubjectId depot = FrontierWorldState.depotId(job.settlementId());
+        ExactItemStack current = inventory.items().get(itemId);
+        if (current != null && current.custody() instanceof InventoryCustody.ContainerSlot slot
+                && slot.containerId().equals(depot)) return state.withInventory(inventory);
+        BakeryWorkBlock.Reason reason = job.bakeryWork().orElseThrow().pendingPhysicalStep().isPresent()
+                ? BakeryWorkBlock.Reason.AMBIGUOUS_EFFECT : BakeryWorkBlock.Reason.SOURCE_CHANGED;
+        BakeryWorkBlock block = new BakeryWorkBlock(reason, depot,
+                source instanceof InventoryCustody.ContainerSlot slot ? slot.slot() : -1,
+                "minecraft:wheat", current == null ? 0 : current.count());
+        var jobs = new java.util.LinkedHashMap<>(state.productionJobs());
+        jobs.put(job.id(), job.withBakeryWork(job.bakeryWork().orElseThrow().withBlock(java.util.Optional.of(block))));
+        return state.withChanges(FrontierWorldStateUpdate.begin().inventory(inventory).productionJobs(jobs));
     }
 
     private static FrontierWorldState reduceCarrierReleased(FrontierWorldState state, SubjectId subject, CargoCarrierReleased released) {

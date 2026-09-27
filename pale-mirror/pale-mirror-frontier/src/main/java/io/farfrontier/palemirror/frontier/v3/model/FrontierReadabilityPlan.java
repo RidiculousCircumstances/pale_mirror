@@ -296,7 +296,7 @@ public final class FrontierReadabilityPlan {
             case HALL -> "TOWN HALL";
             case HOUSING -> "HOMES";
             case FARM -> "FARM";
-            case WORKSHOP -> "WORKSHOP";
+            case WORKSHOP -> "BAKERY";
             case DEPOT -> "DEPOT";
             case INFIRMARY -> "INFIRMARY";
         };
@@ -461,9 +461,15 @@ public final class FrontierReadabilityPlan {
 
     private static int availableFood(FrontierWorldState state, SubjectId settlementId) {
         SubjectId depot = FrontierWorldState.depotId(settlementId);
-        return state.inventory().items().values().stream().filter(item -> "minecraft:bread".equals(item.itemKind()))
+        int exact = state.inventory().items().values().stream().filter(item -> "minecraft:bread".equals(item.itemKind()))
                 .filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot))
                 .mapToInt(ExactItemStack::count).reduce(0, Math::addExact);
+        int fungible = state.inventory().fungibleResources().accounts().values().stream()
+                .filter(account -> account.custody() instanceof ResourceCustody.Container container && container.containerId().equals(depot))
+                .flatMap(account -> account.lotQuantities().entrySet().stream())
+                .filter(entry -> "minecraft:bread".equals(state.inventory().fungibleResources().lots().get(entry.getKey()).itemKind()))
+                .mapToInt(java.util.Map.Entry::getValue).reduce(0, Math::addExact);
+        return Math.addExact(exact, fungible);
     }
 
     /**
@@ -481,8 +487,28 @@ public final class FrontierReadabilityPlan {
         if (order == null) return "OPERATIONAL";
         MarketDemand demand = state.companies().market().demands().get(order.demandId());
         if (demand == null) throw new IllegalStateException("accepted workshop order has no buyer demand");
+        StrategicTask task = state.strategicPlans().tasks().get(job.taskId());
+        boolean bakerLost = state.actorLocations().get(job.workerId()).condition().status() != ActorLifeStatus.ALIVE;
+        String bakery = job.bakeryWork().map(work -> "\n" + (bakerLost ? "BAKER PAUSED · WORKER UNAVAILABLE"
+                : task != null && task.status() == StrategicTaskStatus.BLOCKED ? "BAKER PAUSED · WORK BLOCKED"
+                : work.block().map(block -> switch (block.reason()) {
+            case SOURCE_CHANGED -> "BAKER PAUSED · WHEAT CHANGED";
+            case HAND_MISMATCH -> "BAKER PAUSED · HAND MISMATCH";
+            case DESTINATION_OCCUPIED -> "BAKER PAUSED · STORAGE FULL";
+            case ROUTE_BLOCKED -> "BAKER PAUSED · ROUTE BLOCKED";
+            case AMBIGUOUS_EFFECT -> "BAKER PAUSED · TRANSFER UNCERTAIN";
+            case MACHINE_UNAVAILABLE -> "BAKER PAUSED · STATION UNAVAILABLE";
+        }).orElseGet(() -> switch (work.phase()) {
+            case DEPOT_PICKUP -> "BAKER · WHEAT PICKUP";
+            case STATION_LOAD -> "BAKER · STATION INPUT";
+            case PROCESSING -> "BAKING · " + work.completedWorkTicks() + " / "
+                    + ProductionWorkProgress.REQUIRED_PROCESSING_TICKS;
+            case STATION_UNLOAD -> "BAKER · BREAD READY";
+            case DEPOT_DELIVERY -> "BAKER · BREAD DELIVERY";
+            case DELIVERED -> "BAKER · BREAD STORED";
+        }))).orElse("");
         return "ORDER · " + demand.itemCount() + " " + itemName(demand.itemKind())
-                + "\nFOR " + buyerName(state, demand.buyerId()) + " · " + credits(order.acceptedTotalPrice());
+                + "\nFOR " + buyerName(state, demand.buyerId()) + " · " + credits(order.acceptedTotalPrice()) + bakery;
     }
 
     private static SubjectId workshopId(Settlement settlement) {

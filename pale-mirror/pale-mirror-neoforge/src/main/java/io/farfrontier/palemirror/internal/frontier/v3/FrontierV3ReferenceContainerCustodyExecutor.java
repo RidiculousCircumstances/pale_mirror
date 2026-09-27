@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.model.BakeryPhysicalAuthority;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurface;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
@@ -77,12 +78,21 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
         for (PhysicalCustodyLease lease : state.replicaCustody().custodyByScope().values().stream()
                 .filter(lease -> lease.providerId().equals(ReferenceContainerCustody.PROVIDER_ID) && lease.live())
                 .sorted(Comparator.comparing(PhysicalCustodyLease::scopeId)).toList()) {
+            if (BakeryPhysicalAuthority.pendingForContainer(state, lease.objectId())) continue;
             if (FrontierV3ResourceSiteLedger.get(level).hasPendingFieldDelivery(lease.objectId())) continue;
             ContainerSurface surface = state.inventory().surfaces().get(lease.objectId());
             if (surface == null || !naturallyTicking(level, position(surface))) {
                 // Pending or contradictory writes cannot be blindly released. They also
                 // must not consume the only drain turn while making no transition.
                 if (lease.status() == PhysicalCustodyLeaseStatus.PREPARING || lease.status() == PhysicalCustodyLeaseStatus.UNRESOLVED) continue;
+                // A completed physical producer may have changed this chest and canonical
+                // stock, while the old replica still describes its pre-effect image. After
+                // restart there is no loaded physical witness yet. Releasing that old epoch
+                // would make the first honest wheat/bread observation look like foreign drift.
+                // Only a naturally ticking chest can confirm the successor fingerprint.
+                PhysicalReplicaRecord replica = state.replicaCustody().replicas().get(lease.objectId());
+                if (requiresLoadedMutationConfirmation(lease, replica,
+                        ReferenceContainerCustody.canonicalFingerprint(state, lease.objectId()))) continue;
                 // A persisted HOT fungible layout is still the only authority for a possible
                 // player/container handoff.  On restart the player is normally not connected
                 // when this first loop runs, so checkpointing an unobserved source would turn
@@ -98,6 +108,7 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
         }
         List<ContainerSurface> loaded = state.inventory().surfaces().values().stream()
                 .filter(surface -> naturallyTicking(level, position(surface))
+                        && !BakeryPhysicalAuthority.pendingForContainer(state, surface.containerId())
                         && !FrontierV3ResourceSiteLedger.get(level).hasPendingFieldDelivery(surface.containerId())).toList();
         List<ContainerSurface> eligible = eligibleReferenceSurfaces(state, loaded);
         if (!eligible.isEmpty()) reconcile(level, runtime, state, selectRoundRobin(eligible, level.getGameTime()));
@@ -314,6 +325,9 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
             return submit(runtime, "fungible-release", lease.objectId(), lease.authorityEpoch(),
                     new FungibleStackBindingsReleased(accountId, lease.authorityEpoch()));
         }
+        PhysicalReplicaRecord replica = state.replicaCustody().replicas().get(lease.objectId());
+        if (requiresLoadedMutationConfirmation(lease, replica,
+                ReferenceContainerCustody.canonicalFingerprint(state, lease.objectId()))) return false;
         return submit(runtime, "release-renew", lease.objectId(), lease.authorityEpoch(), new CustodyReleased(lease.scopeId(),
                 lease.authorityEpoch(), lease.expectedCanonicalRevision(), lease.expectedReplicaRevision()));
     }
@@ -330,6 +344,13 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
                 && resources.bindings().values().stream().anyMatch(binding -> binding.authorityEpoch() == lease.authorityEpoch()
                 && resources.accounts().get(binding.accountId()).custody() instanceof ResourceCustody.Container container
                 && container.containerId().equals(lease.objectId()));
+    }
+
+    static boolean requiresLoadedMutationConfirmation(PhysicalCustodyLease lease, PhysicalReplicaRecord replica,
+                                                      String canonicalFingerprint) {
+        return lease != null && lease.live() && replica != null
+                && replica.state() == PhysicalReplicaState.OBSERVED_CURRENT
+                && !replica.fingerprint().equals(canonicalFingerprint);
     }
 
     private static Map<SubjectId, Long> observedCustodyEpochs(ServerLevel level) {

@@ -160,11 +160,9 @@ public final class ResourceSiteProcess {
                 || !ResourceFieldPhysicalSurface.Condition.of(cycle.cell(observation.cellId())).equals(observation.before())
                 || cycle.pendingPlayerBreaks().containsKey(observation.cellId()))
             throw new IllegalArgumentException("world field hold has a stale or competing canonical predecessor");
-        ResourceSiteHarvestJob job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast).orElse(null);
-        if (job != null && job.progress().hasPendingCrop()
-                && cycle.layout().cells().get(job.progress().pendingCropSlotIndex()).id().equals(observation.cellId()))
-            throw new IllegalArgumentException("world field hold overlaps an unresolved farmer effect");
+        // The physical producer admits this hold only while the crop has no
+        // persisted field-effect witness. The held site then prevents COLD and
+        // HOT work until the observed result either applies or is cancelled.
         return state.withResourceSites(state.resourceSites().holdWorldChange(observation));
     }
 
@@ -197,11 +195,8 @@ public final class ResourceSiteProcess {
                 || !cycle.cell(held.cellId()).equals(held.before())
                 || cycle.pendingPlayerBreaks().containsKey(held.cellId()))
             throw new IllegalArgumentException("foreign field hold has a stale or competing predecessor");
-        ResourceSiteHarvestJob job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
-                .map(ResourceSiteHarvestJob.class::cast).orElse(null);
-        if (job != null && job.progress().hasPendingCrop()
-                && cycle.layout().cells().get(job.progress().pendingCropSlotIndex()).id().equals(held.cellId()))
-            throw new IllegalArgumentException("foreign field hold overlaps an unresolved farmer effect");
+        // The physical predecessor check excludes an already started cell effect;
+        // an admitted foreign hold can therefore suspend a prepared-only crop.
         return state.withResourceSites(state.resourceSites().holdForeignChange(held));
     }
 
@@ -217,6 +212,11 @@ public final class ResourceSiteProcess {
                 || !cycle.cell(held.cellId()).equals(held.before()))
             throw new IllegalArgumentException("foreign field observation has a stale cell predecessor");
         ResourceFieldCycle next = cycle.observedInterference(held.cellId(), observed.after());
+        ResourceSiteHarvestJob pendingJob = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
+                .map(ResourceSiteHarvestJob.class::cast).orElse(null);
+        if (pendingJob != null && pendingJob.progress().hasPendingCrop()
+                && cycle.layout().cells().get(pendingJob.progress().pendingCropSlotIndex()).id().equals(held.cellId()))
+            lifecycle = lifecycle.cancelPreparedHarvestCrop(held.cellId(), cycle);
         return state.withResourceSites(state.resourceSites().replace(lifecycle, next));
     }
 
@@ -249,9 +249,10 @@ public final class ResourceSiteProcess {
             throw new IllegalArgumentException("field cell observation has a stale canonical predecessor");
         ResourceSiteHarvestJob job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
                 .map(ResourceSiteHarvestJob.class::cast).orElse(null);
-        if (job != null && job.progress().hasPendingCrop()
-                && cycle.layout().cells().get(job.progress().pendingCropSlotIndex()).id().equals(observed.cellId()))
-            throw new IllegalArgumentException("field cell observation overlaps an unresolved farmer effect");
+        boolean interruptsPreparedCrop = job != null && job.progress().hasPendingCrop()
+                && cycle.layout().cells().get(job.progress().pendingCropSlotIndex()).id().equals(observed.cellId());
+        if (interruptsPreparedCrop && observed.source() != ResourceFieldCellObserved.Source.WORLD)
+            throw new IllegalArgumentException("player field observation overlaps an unresolved farmer effect");
         ResourceFieldCycle ready = cycle;
         ResourceFieldCellObserved heldWorld = state.resourceSites().pendingWorldChange(observed.siteId());
         if (observed.source() == ResourceFieldCellObserved.Source.PLAYER) {
@@ -280,6 +281,7 @@ public final class ResourceSiteProcess {
         };
         if (!ResourceFieldPhysicalSurface.Condition.of(next.cell(observed.cellId())).equals(observed.after()))
             throw new IllegalArgumentException("field cell observation disagrees with its canonical successor");
+        if (interruptsPreparedCrop) lifecycle = lifecycle.cancelPreparedHarvestCrop(observed.cellId(), cycle);
         return state.withResourceSites(state.resourceSites().replace(lifecycle, next));
     }
 

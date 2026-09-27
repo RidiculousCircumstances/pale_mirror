@@ -75,10 +75,6 @@ final class FrontierV3ResourceFieldWorldChangeExecutor {
                     || !claim.witness().matchesCycle(cycle)) return;
             var retained = claim.witness().cell(cell.id());
             if (retained.pending().isPresent() || retained.foreign().isPresent() || !retained.committed().equals(before)) return;
-            var job = state.resourceSites().site(owner.siteId()).activeWork()
-                    .filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast).orElse(null);
-            if (job != null && job.progress().hasPendingCrop()
-                    && cycle.layout().cells().get(job.progress().pendingCropSlotIndex()).id().equals(cell.id())) return;
             var reading = FrontierV3ResourceFieldObservation.read(level, cell, "world-field-prewrite");
             if (!(reading instanceof FrontierV3ResourceFieldObservation.Owned observed
                     && observed.condition().equals(before))
@@ -192,11 +188,6 @@ final class FrontierV3ResourceFieldWorldChangeExecutor {
         var before = ResourceFieldPhysicalSurface.Condition.of(cycle.cell(cellId));
         if (claim.pending().isPresent() || claim.foreign().isPresent() || !claim.committed().equals(before))
             return false; // A lagging COLD projection or an in-flight effect is not world damage.
-        var job = state.resourceSites().site(siteId).activeWork()
-                .filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast).orElse(null);
-        if (job != null && job.progress().hasPendingCrop()
-                && cycle.layout().cells().get(job.progress().pendingCropSlotIndex()).id().equals(cellId))
-            return false;
         var reading = FrontierV3ResourceFieldObservation.read(level, cycle.layout().requireCell(cellId),
                 "world-field-change-candidate");
         if (!(reading instanceof FrontierV3ResourceFieldObservation.Owned owned)) return false;

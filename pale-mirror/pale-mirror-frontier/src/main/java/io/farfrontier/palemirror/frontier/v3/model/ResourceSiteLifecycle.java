@@ -190,6 +190,18 @@ public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, l
         return next(phase, growthEpoch, growthStage, Optional.of(active.withProgress(active.progress().prepareNextCrop())));
     }
 
+    /** Retain the same farmer and work cell after a witnessed external cell change. */
+    public ResourceSiteLifecycle cancelPreparedHarvestCrop(ResourceFieldLayout.CellId cellId,
+                                                           ResourceFieldCycle cycle) {
+        ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance)
+                .map(ResourceSiteHarvestJob.class::cast).orElseThrow();
+        if (phase != ResourceSitePhase.HARVESTING || !active.progress().hasPendingCrop()
+                || !cycle.layout().cells().get(active.progress().pendingCropSlotIndex()).id().equals(cellId))
+            throw new IllegalArgumentException("field interruption lacks the current prepared farmer cell");
+        return next(phase, growthEpoch, growthStage,
+                Optional.of(active.withProgress(active.progress().cancelPreparedCrop())));
+    }
+
     /** Closes an observed HOT harvest at its actual declared depot service station. */
     public ResourceSiteLifecycle harvestedAt(ResourceSiteHarvestGoal goal, BodyPosition terminalBody) {
         ResourceSiteHarvestJob completed = activeWork.filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)

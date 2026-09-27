@@ -4,11 +4,14 @@ import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.ActorLocation;
+import io.farfrontier.palemirror.frontier.v3.model.BakeryWorkGoal;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneLabels;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.ProductionJob;
+import io.farfrontier.palemirror.frontier.v3.model.ReferenceContainerCustody;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
+import io.farfrontier.palemirror.frontier.v3.process.BakeryProcess;
 
 /** Read-only bounded production-process diagnostic; canonical ownership remains in Frontier state. */
 final class FrontierV3ProductionProcessDiagnosticJson {
@@ -29,6 +32,41 @@ final class FrontierV3ProductionProcessDiagnosticJson {
                 + "\",\"revision\":" + lease.revision() + ",\"members\":" + lease.members().size() + ",\"body\":"
                 + (lease.memberPosition(job.workerId()) == null ? "null" : FrontierV3DiagnosticJson.position(lease.memberPosition(job.workerId()))) + "}";
         int cursorLength = job.workTraversal().linearCorridorSurfaces().size();
+        String progress = job.bakeryWork().map(work -> {
+            BakeryWorkGoal goal = BakeryWorkGoal.current(state, job);
+            var station = state.inventory().containers().values().stream().flatMap(container -> container.productionStation().stream())
+                    .filter(value -> value.id().equals(work.stationId())).findFirst().orElseThrow();
+            var stationScope = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(station.containerId()));
+            var stationReplica = state.replicaCustody().replicas().get(station.containerId());
+            var depotScope = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(
+                    FrontierWorldState.depotId(job.settlementId())));
+            long stationBindings = state.inventory().fungibleResources().bindings().values().stream()
+                    .filter(value -> value.accountId().equals(work.stationAccountId())).count();
+            return ",\"cursor\":null,\"goal\":{\"kind\":\"" + work.phase()
+                    + "\",\"station\":" + FrontierV3DiagnosticJson.position(goal.station().standingBody())
+                    + "},\"result\":{\"workStage\":\"" + work.phase()
+                    + "\",\"completedTicks\":" + work.completedWorkTicks()
+                    + ",\"terminalEffectEligible\":" + (work.phase() == io.farfrontier.palemirror.frontier.v3.model.BakeryWorkState.Phase.DELIVERED)
+                    + ",\"pendingPhysicalEffect\":" + work.pendingPhysicalStep().isPresent()
+                    + ",\"localBlock\":" + work.block().map(block -> "{\"reason\":\"" + block.reason()
+                    + "\",\"scope\":\"" + FrontierV3DiagnosticJson.quote(block.scopeId().value())
+                    + "\",\"slot\":" + block.slot() + ",\"observedKind\":\""
+                    + FrontierV3DiagnosticJson.quote(block.observedKind()) + "\",\"observedCount\":"
+                    + block.observedCount() + "}").orElse("null")
+                    + ",\"stationId\":\"" + FrontierV3DiagnosticJson.quote(work.stationId().value())
+                    + "\",\"stationCustodyStatus\":\"" + (stationScope == null ? "NONE" : stationScope.status())
+                    + "\",\"stationReplicaState\":\"" + (stationReplica == null ? "NONE" : stationReplica.state())
+                    + "\",\"stationBoundStacks\":" + stationBindings
+                    + ",\"depotCustodyStatus\":\"" + (depotScope == null ? "NONE" : depotScope.status()) + "\""
+                    + ",\"coldBlocker\":\"" + BakeryProcess.coldBlocker(state, job).orElse("NONE") + "\""
+                    + ",\"coldRouteBlocker\":\"" + FrontierV3DiagnosticJson.quote(
+                    BakeryProcess.coldRouteBlocker(state, job).orElse("NONE")) + "\""
+                    + ",\"actorBody\":" + (actor == null ? "null" : FrontierV3DiagnosticJson.position(actor.body()));
+        }).orElseGet(() -> ",\"cursor\":{\"index\":" + job.traversalCursor() + ",\"length\":" + cursorLength + ",\"retainedBody\":"
+                + FrontierV3DiagnosticJson.position(job.workTraversal().linearCorridorSurfaces().get(job.traversalCursor()).standingBody())
+                + ",\"actorBody\":" + (actor == null ? "null" : FrontierV3DiagnosticJson.position(actor.body())) + "}"
+                + ",\"result\":{\"workStage\":\"" + job.workProgress().stage() + "\",\"completedTicks\":" + job.workProgress().completedTicks()
+                + ",\"terminalEffectEligible\":" + job.workProgress().terminalEffectEligible());
         return FrontierV3DiagnosticJson.base("process", job.id().value(), checkpoint) + ",\"status\":\"ok\",\"family\":\"frontier.production-work\""
                 + ",\"identity\":{\"job\":\"" + FrontierV3DiagnosticJson.quote(job.id().value()) + "\",\"worker\":\"" + FrontierV3DiagnosticJson.quote(job.workerId().value())
                 + "\",\"workerPresentation\":\"" + FrontierV3DiagnosticJson.quote(FrontierSceneLabels.actor(state, job.workerId(), false))
@@ -37,11 +75,7 @@ final class FrontierV3ProductionProcessDiagnosticJson {
                 + "\",\"worker\":\"" + FrontierV3DiagnosticJson.quote(job.workerId().value()) + "\",\"inputItem\":\"" + FrontierV3DiagnosticJson.quote(job.consumedItemId().value())
                 + "\",\"outputItem\":\"" + FrontierV3DiagnosticJson.quote(job.outputItemId().value()) + "\",\"lease\":" + leaseValue + "}"
                 + ",\"schedule\":{\"count\":" + checkpoint.schedules().stream().filter(value -> value.subject().equals(job.id())).count() + ",\"entries\":" + scheduleEntries + "}"
-                + ",\"cursor\":{\"index\":" + job.traversalCursor() + ",\"length\":" + cursorLength + ",\"retainedBody\":"
-                + FrontierV3DiagnosticJson.position(job.workTraversal().linearCorridorSurfaces().get(job.traversalCursor()).standingBody())
-                + ",\"actorBody\":" + (actor == null ? "null" : FrontierV3DiagnosticJson.position(actor.body())) + "}"
-                + ",\"result\":{\"workStage\":\"" + job.workProgress().stage() + "\",\"completedTicks\":" + job.workProgress().completedTicks()
-                + ",\"terminalEffectEligible\":" + job.workProgress().terminalEffectEligible() + ",\"inputHold\":\""
+                + progress + ",\"inputHold\":\""
                 + FrontierV3DiagnosticJson.quote(job.inputHold().getClass().getSimpleName()) + "\",\"intentKind\":\""
                 + (intent == null ? "NONE" : intent.kind().name()) + "\",\"intentStatus\":\"" + (intent == null ? "NONE" : intent.status().name()) + "\"}}";
     }

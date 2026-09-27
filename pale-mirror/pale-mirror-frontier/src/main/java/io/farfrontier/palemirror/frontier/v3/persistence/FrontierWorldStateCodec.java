@@ -27,7 +27,8 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     // reservation for its next physical depot slot.
     // Version 199 persists the immutable initial-field layout manifest; recovery may no
     // longer regenerate non-default geometry from only world/seed/ruleset/terrain.
-    static final int VERSION = 203; private static final int MAX_ENTRIES = 65_535;
+    // Version 206 also retains the bakery's durable-before-effect physical step.
+    static final int VERSION = 207; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -554,10 +555,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         return new MarketOrderBook(demands, quotes, orders);
     }
     private static void writeInventory(DataOutputStream output, ExactInventory inventory) throws IOException {
-        writeCount(output, inventory.containers().size());
-        for (ContainerRecord value : inventory.containers().values().stream().sorted(java.util.Comparator.comparing(ContainerRecord::id)).toList()) {
-            writeString(output, value.id().value()); writeString(output, value.ownerId().value()); output.writeByte(value.slotCount());
-        }
+        ContainerRecordStateCodec.write(output, inventory.containers());
         writeCount(output, inventory.surfaces().size());
         for (ContainerSurface surface : inventory.surfaces().values().stream().sorted(Comparator.comparing(ContainerSurface::containerId)).toList()) {
             writeString(output, surface.containerId().value()); writePosition(output, surface.position()); output.writeByte(surface.status().wireTag());
@@ -589,11 +587,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         FungibleResourceStateCodec.write(output, inventory.fungibleResources());
     }
     private static ExactInventory readInventory(DataInputStream input, EconomicLedger economics) throws IOException {
-        Map<SubjectId, ContainerRecord> containers = new LinkedHashMap<>();
-        for (int index = 0, count = readCount(input); index < count; index++) {
-            SubjectId id = new SubjectId(readString(input));
-            if (containers.put(id, new ContainerRecord(id, new SubjectId(readString(input)), input.readUnsignedByte())) != null) throw new IllegalArgumentException("duplicate container id");
-        }
+        Map<SubjectId, ContainerRecord> containers = ContainerRecordStateCodec.read(input);
         Map<SubjectId, ContainerSurface> surfaces = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
             SubjectId id = new SubjectId(readString(input)); BlockPosition position = readPosition(input); int status = input.readUnsignedByte();

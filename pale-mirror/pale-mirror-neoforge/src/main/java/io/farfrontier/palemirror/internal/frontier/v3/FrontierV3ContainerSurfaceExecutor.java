@@ -254,6 +254,16 @@ final class FrontierV3ContainerSurfaceExecutor {
         List<FungiblePhysicalObservation.Stack> observed = observedFungibleSlots(chest, state, containerId);
         if (overlapsHarvestOutputReservation(state, observed)) return false;
         if (accounts.isEmpty()) return observed.isEmpty();
+        if (state.inventory().containers().get(containerId).productionStation().isPresent()) {
+            for (int slot = 0; slot < chest.getContainerSize(); slot++) {
+                var expectedSlot = ReferenceContainerCustody.expectedFungibleSlot(state, containerId, slot).orElse(null);
+                ItemStack actual = chest.getItem(slot);
+                if (expectedSlot == null) {
+                    if (state.inventory().itemAt(containerId, slot).isEmpty() && !actual.isEmpty()) return false;
+                } else if (!actual.is(BuiltInRegistries.ITEM.get(ResourceLocation.parse(expectedSlot.itemKind())))
+                        || actual.getCount() != expectedSlot.quantity()) return false;
+            }
+        }
         long epoch = resources.bindings().values().stream().filter(binding -> binding.accountId().equals(accounts.getFirst().id()))
                 .mapToLong(io.farfrontier.palemirror.frontier.v3.model.PhysicalStackBinding::authorityEpoch).findFirst().orElse(1L);
         try {
@@ -284,6 +294,19 @@ final class FrontierV3ContainerSurfaceExecutor {
                 .filter(account -> account.custody() instanceof ResourceCustody.Container value && value.containerId().equals(containerId)).toList();
         if (accounts.size() > 1) return Optional.empty();
         if (accounts.isEmpty()) return Optional.of(List.copyOf(planned));
+        if (state.inventory().containers().get(containerId).productionStation().isPresent()) {
+            for (int slot = 0; slot < capacity; slot++) {
+                var expected = ReferenceContainerCustody.expectedFungibleSlot(state, containerId, slot).orElse(null);
+                if (expected == null) continue;
+                ResourceLocation id = ResourceLocation.tryParse(expected.itemKind());
+                if (id == null || !BuiltInRegistries.ITEM.containsKey(id)
+                        || BuiltInRegistries.ITEM.get(id) == net.minecraft.world.item.Items.AIR
+                        || !planned.get(slot).isEmpty()
+                        || expected.quantity() > BuiltInRegistries.ITEM.get(id).getDefaultMaxStackSize()) return Optional.empty();
+                planned.set(slot, new ItemStack(BuiltInRegistries.ITEM.get(id), expected.quantity()));
+            }
+            return Optional.of(List.copyOf(planned));
+        }
         Map<String, Long> quantities = new LinkedHashMap<>();
         accounts.getFirst().lotQuantities().entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
             String kind = resources.lots().get(entry.getKey()).itemKind();

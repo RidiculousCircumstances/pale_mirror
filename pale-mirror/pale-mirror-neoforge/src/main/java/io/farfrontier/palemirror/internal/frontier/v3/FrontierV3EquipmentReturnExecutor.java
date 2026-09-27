@@ -26,7 +26,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.npc.Villager;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 
 import java.util.List;
@@ -131,11 +130,7 @@ final class FrontierV3EquipmentReturnExecutor {
     }
 
     static boolean handOff(ChestBlockEntity chest, Villager resident, Target target) {
-        if (!handMatches(resident, target) || !chest.getItem(target.targetSlot().slot()).isEmpty()) return false;
-        ItemStack stack = resident.getItemBySlot(EquipmentSlot.MAINHAND); resident.setItemSlot(EquipmentSlot.MAINHAND, ItemStack.EMPTY);
-        chest.setItem(target.targetSlot().slot(), stack); chest.setChanged();
-        return resident.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty()
-                && FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(target.targetSlot().slot()), target.item());
+        return FrontierV3ActorItemTransfer.place(chest, resident, target.item(), target.targetSlot(), EquipmentSlot.MAINHAND);
     }
 
     private static void inspectRunning(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent, Target target,

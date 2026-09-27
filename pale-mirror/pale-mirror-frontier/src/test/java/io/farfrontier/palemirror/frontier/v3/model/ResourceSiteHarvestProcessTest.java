@@ -136,6 +136,29 @@ class ResourceSiteHarvestProcessTest {
         assertEquals(0, current.progress().completedCropSlots());
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
     }
+    @Test void blockedFinalCellCanBeSkippedWithoutRequiringItsWorkStationAsATransitNode() {
+        var fixture = FrontierResourceSiteHarvestFixture.createWithOneExtraCellAfterColdPart(
+                new WorldId("frontier:blocked-final-goal"), 125L);
+        FrontierWorldState state = fixture.state();
+        ResourceFieldCycle cycle = state.resourceSites().cycle(fixture.siteId());
+        ResourceFieldLayout.CellId lastCell = cycle.layout().cells().get(64).id();
+        ResourceFieldCycle obstructed = cycle.observedInterference(lastCell,
+                new ResourceFieldCycle.CellState(ResourceFieldCycle.Soil.FARMLAND,
+                        ResourceFieldCycle.Crop.OBSTRUCTED, 0, false, false));
+        state = state.withResourceSites(state.resourceSites().replace(
+                state.resourceSites().site(fixture.siteId()), obstructed));
+        ResourceSiteHarvestJob job = (ResourceSiteHarvestJob) state.resourceSites()
+                .site(fixture.siteId()).activeWork().orElseThrow();
+        var actors = new java.util.LinkedHashMap<>(state.actorLocations());
+        actors.put(job.workerId(), actors.get(job.workerId()).withBody(
+                BodyPosition.above(new SurfaceAnchor(new BlockPosition(-342, 64, -329)))));
+        state = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
+        var prefix = ResourceSiteHarvestProcess.blockedPrefix(obstructed, job.progress().completedCropSlots());
+        assertEquals(List.of(lastCell), prefix);
+        FrontierWorldState current = state;
+        assertDoesNotThrow(() -> ResourceSiteHarvestProcess.blockedPrefixContinuation(
+                current, fixture.siteId(), job, prefix));
+    }
     @Test void hotFieldReceiptsCoverEveryCellWithoutMovingTheWorkGoalByWaypoints() {
         HotHarvest hot = hotHarvestAfterColdSteps(0);
         ResourceSiteHarvestJob start = hot.job();

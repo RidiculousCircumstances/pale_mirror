@@ -16,6 +16,11 @@ final class ContainerSurfaceManifest {
                     SubjectId container = depotId(settlement.id());
                     surfaces.put(container, unmaterialized(container, SettlementDepotServicePort.forDepot(depot).containerPosition().offset(0, -1, 0)));
                 }));
+        bootstrap.settlements().forEach(settlement -> settlement.structures().stream()
+                .filter(structure -> structure.kind() == StructureKind.WORKSHOP).findFirst().ifPresent(workshop -> {
+                    ProductionStationSpec station = ProductionStationSpec.grayboxBakery(workshop);
+                    surfaces.put(station.containerId(), unmaterialized(station.containerId(), station.socketSurface().support()));
+                }));
         bootstrap.hive().organs().forEach(organ -> organ.containerId().ifPresent(container ->
                 surfaces.put(container, unmaterialized(container, organ.anchor()))));
         surfaces.put(FrontierRouteNetwork.MAINTENANCE_CONTAINER,

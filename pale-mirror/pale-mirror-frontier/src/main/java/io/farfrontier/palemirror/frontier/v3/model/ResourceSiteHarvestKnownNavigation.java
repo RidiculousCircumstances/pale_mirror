@@ -45,8 +45,13 @@ public final class ResourceSiteHarvestKnownNavigation {
         SurfaceAnchor start = actor.supportingSurface();
         var surveyed = ResourceSiteHarvestKnownGeometry.surveyedSupports(state.bootstrap(), site);
         SettlementDepotServicePort port = ResourceSiteHarvestGoal.depotPort(state, job);
+        SurfaceAnchor knownAtStart = surveyed.at(start.x(), start.z());
         if (!state.bootstrap().bounds().contains(start.support())
-                || !start.equals(surveyed.at(start.x(), start.z()))
+                // HOT may hand back a physically observed support one level above or
+                // below the immutable survey. The bounded route search still has to
+                // find a legal first edge from that exact body; accepting this start
+                // does not synthesize a new support or semantic arrival.
+                || Math.abs(start.y() - knownAtStart.y()) > 1
                     && !port.ownedAccessSurfaces().contains(start))
             throw new KnowledgeUnavailable("field worker body is not on retained known support");
         Set<BlockPosition> occupied = ResourceSiteHarvestKnownGeometry.occupiedBodies(state.bootstrap(), site);
@@ -63,9 +68,18 @@ public final class ResourceSiteHarvestKnownNavigation {
             occupied.remove(surface.support().offset(0, 1, 0));
             occupied.remove(surface.support().offset(0, 2, 0));
         }
-        if (occupied.contains(start.support()) || occupied.contains(start.support().offset(0, 1, 0))
-                || occupied.contains(start.support().offset(0, 2, 0)))
-            throw new KnowledgeUnavailable("field worker's observed support is no longer known traversable");
+        if (!start.equals(knownAtStart) && !port.ownedAccessSurfaces().contains(start)) {
+            // The exact retained body is a stronger predecessor than the immutable
+            // occupancy approximation at this one off-survey column. A HOT detour
+            // can stand on a newly observed support beside the field; clear only
+            // that footprint, never the neighbouring route or destination.
+            occupied.remove(start.support());
+            occupied.remove(start.support().offset(0, 1, 0));
+            occupied.remove(start.support().offset(0, 2, 0));
+        } else if (occupied.contains(start.support()) || occupied.contains(start.support().offset(0, 1, 0))
+                || occupied.contains(start.support().offset(0, 2, 0))) {
+            throw new KnowledgeUnavailable("field worker's known support is no longer traversable");
+        }
         try {
             return KnownPedestrianNavigation.route(state.bootstrap(), start, goal.movementOrder(), occupied, surveyed);
         } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {

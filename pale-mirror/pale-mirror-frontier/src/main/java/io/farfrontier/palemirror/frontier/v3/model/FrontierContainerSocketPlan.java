@@ -29,6 +29,24 @@ public final class FrontierContainerSocketPlan {
                     ? Optional.of(new GrayboxCell(position, new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK, FrontierRouteNetwork.OWNER), GrayboxMaterial.ROUTE, GrayboxSemanticPart.ROUTE_SURFACE))
                     : Optional.empty();
         }
+        ContainerRecord container = state.inventory().containers().get(surface.containerId());
+        if (container != null && container.productionStation().isPresent()) {
+            ProductionStationSpec station = container.productionStation().orElseThrow();
+            if (!station.socketSurface().support().equals(position)) return Optional.empty();
+            for (Settlement settlement : state.bootstrap().settlements()) {
+                if (!settlement.id().equals(container.ownerId())) continue;
+                for (SettlementStructure structure : settlement.structures()) {
+                    if (structure.id().equals(station.facilityId())
+                            && state.structureConditions().get(structure.id()) != StructureCondition.DESTROYED
+                            && SettlementStructureFootprint.supportSurfaces(structure).contains(station.socketSurface())) {
+                        return Optional.of(new GrayboxCell(position,
+                                new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE, structure.id()),
+                                GrayboxMaterial.WORKSHOP, GrayboxSemanticPart.FOUNDATION));
+                    }
+                }
+            }
+            return Optional.empty();
+        }
         for (Settlement settlement : state.bootstrap().settlements()) {
             SubjectId depot = FrontierWorldState.depotId(settlement.id());
             if (!surface.containerId().equals(depot)) continue;

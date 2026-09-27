@@ -73,6 +73,8 @@ public final class ProductionResourceCustody {
         FungibleResourceLedger resources = state.inventory().fungibleResources().rebind(accountId, epoch, bindings);
         Map<SubjectId, ProductionJob> jobs = new LinkedHashMap<>(state.productionJobs());
         for (ProductionJob job : state.productionJobs().values()) {
+            if (job.bakeryWork().isPresent() && BakeryWorkValidation.awaitingInputReallocation(resources,
+                    job, job.bakeryWork().orElseThrow())) continue;
             if (job.inputHold() instanceof ProductionInputHold.FungibleCold cold && cold.accountId().equals(accountId)) {
                 requireClaim(state, resources, job, accountId, cold.claimId());
                 jobs.put(job.id(), job.withInputHold(new ProductionInputHold.FungibleBound(cold.itemId(), accountId, cold.claimId(), epoch, cold.inputLots())));
@@ -91,6 +93,8 @@ public final class ProductionResourceCustody {
         var intents = new LinkedHashMap<>(state.physicalIntents());
         var recovery = state.fencedRecovery();
         for (ProductionJob job : state.productionJobs().values()) {
+            if (job.bakeryWork().isPresent() && BakeryWorkValidation.awaitingInputReallocation(resources,
+                    job, job.bakeryWork().orElseThrow())) continue;
             if (!(job.inputHold() instanceof ProductionInputHold.FungibleBound bound) || !bound.accountId().equals(accountId)) continue;
             if (bound.authorityEpoch() != epoch) throw new IllegalArgumentException("production input release has a foreign epoch");
             for (var intent : state.physicalIntents().values()) {

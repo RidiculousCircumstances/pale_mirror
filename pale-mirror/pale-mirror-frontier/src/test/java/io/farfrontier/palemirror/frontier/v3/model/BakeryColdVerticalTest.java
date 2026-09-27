@@ -1,0 +1,224 @@
+package io.farfrontier.palemirror.frontier.v3.model;
+
+import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
+import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
+import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.WorldId;
+import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
+import io.farfrontier.palemirror.frontier.v3.process.ProductionProcess;
+import io.farfrontier.palemirror.frontier.v3.process.StrategicObjectiveProcess;
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+class BakeryColdVerticalTest {
+    @Test
+    void hotReleasedBakerCanRouteFromObservedRoadSupport() {
+        FrontierWorldState state = ProductionProcessTest.productionTask(FrontierWorldState.initial(
+                FrontierBootstrapper.create(new WorldId("frontier:bakery-road-handoff"), 41L)), StrategicTaskStatus.PENDING);
+        StrategicTask task = state.strategicPlans().tasks().values().iterator().next();
+        ProductionStarted started = ProductionProcess.planStart(state, ProductionProcess.start(task, 200L)).stream()
+                .map(ProposedEvent::payload).filter(ProductionStarted.class::isInstance)
+                .map(ProductionStarted.class::cast).findFirst().orElseThrow();
+        state = StrategicObjectiveProcess.reduceTaskTransition(state, task.ownerId(),
+                new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE));
+        state = ProductionProcess.reduceStarted(state, task.ownerId(), started);
+        for (int turn = 0; turn < 100; turn++) {
+            BakeryColdStep step = ProductionProcess.planCompletion(state,
+                    ProductionProcess.complete(started.job(), 300L + turn * 20L)).stream()
+                    .map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
+                    .map(BakeryColdStep.class::cast).findFirst().orElseThrow();
+            state = ProductionProcess.reduceBakeryColdStep(state, task.ownerId(), step);
+            if (step.action() == BakeryColdStep.Action.PICKUP) break;
+        }
+        FrontierWorldState retained = state;
+        ProductionJob job = state.productionJobs().get(started.job().id());
+        assertEquals(BakeryWorkState.Phase.STATION_LOAD, job.bakeryWork().orElseThrow().phase());
+        SurfaceAnchor observed = SurfaceAnchor.at(-349, 63, -326);
+        assertDoesNotThrow(() -> BakeryKnownNavigation.pathFrom(retained, job, observed),
+                "the observed HOT body must be a valid COLD route origin");
+    }
+
+    @Test
+    void coldHeldBakerHandRequiresOneObservedHotBodyBinding() {
+        FrontierWorldState state = ProductionProcessTest.productionTask(FrontierWorldState.initial(
+                FrontierBootstrapper.create(new WorldId("frontier:bakery-cold-hand-projection"), 91L)), StrategicTaskStatus.PENDING);
+        StrategicTask task = state.strategicPlans().tasks().values().iterator().next();
+        ProductionStarted started = ProductionProcess.planStart(state, ProductionProcess.start(task, 200L)).stream()
+                .map(ProposedEvent::payload).filter(ProductionStarted.class::isInstance)
+                .map(ProductionStarted.class::cast).findFirst().orElseThrow();
+        state = StrategicObjectiveProcess.reduceTaskTransition(state, task.ownerId(),
+                new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE));
+        state = ProductionProcess.reduceStarted(state, task.ownerId(), started);
+        ProductionJob job = started.job();
+        for (int turn = 0; turn < 100; turn++) {
+            BakeryColdStep step = ProductionProcess.planCompletion(state, ProductionProcess.complete(job, 300L + turn * 20L))
+                    .stream().map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
+                    .map(BakeryColdStep.class::cast).findFirst().orElseThrow();
+            state = ProductionProcess.reduceBakeryColdStep(state, task.ownerId(), step);
+            if (step.action() == BakeryColdStep.Action.PICKUP) break;
+        }
+        BakeryWorkState work = state.productionJobs().get(job.id()).bakeryWork().orElseThrow();
+        assertEquals(BakeryWorkState.Phase.STATION_LOAD, work.phase());
+        assertTrue(state.inventory().fungibleResources().bindings().values().stream()
+                .noneMatch(binding -> binding.accountId().equals(work.actorAccountId())));
+        ActorLocation actor = state.actorLocations().get(job.workerId());
+        SceneLeaseId leaseId = new SceneLeaseId("lease:bakery-cold-hand-projection");
+        SceneLease lease = SceneLease.forCause(leaseId, state.bootstrap().worldId(),
+                new ProductionWorkSceneCause(job.id()), actor.supportingSurface().support(),
+                new SimInstant(800L), 1L, SceneLeaseStatus.PREPARED,
+                List.of(new SceneMember(job.workerId(), SceneLease.deterministicEntityId(state.bootstrap().worldId(), job.workerId()))),
+                java.util.Map.of(job.workerId(), actor.body()), java.util.Set.of(), Optional.empty());
+        state = state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+        var hand = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(job.workerId(),
+                lease.members().getFirst().entityId()), "minecraft:wheat", 64);
+        var observed = new BakeryHotHandMaterialized(job.id(), leaseId, work.actorAccountId(), 1L, hand);
+        state = ProductionProcess.reduceBakeryHotHandMaterialized(state, task.ownerId(), observed);
+        assertEquals(1, state.inventory().fungibleResources().bindings().values().stream()
+                .filter(binding -> binding.accountId().equals(work.actorAccountId())).count());
+        FrontierWorldState once = state;
+        assertThrows(IllegalArgumentException.class,
+                () -> ProductionProcess.reduceBakeryHotHandMaterialized(once, task.ownerId(), observed));
+        assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
+    }
+
+    @Test
+    void loadedPickupBindsObservedDepotAndBakerHandWithoutInventingCustody() {
+        FrontierWorldState state = ProductionProcessTest.productionTask(FrontierWorldState.initial(
+                FrontierBootstrapper.create(new WorldId("frontier:bakery-observed-pickup"), 91L)), StrategicTaskStatus.PENDING);
+        StrategicTask task = state.strategicPlans().tasks().values().iterator().next();
+        ProductionStarted started = ProductionProcess.planStart(state, ProductionProcess.start(task, 200L)).stream()
+                .map(ProposedEvent::payload).filter(ProductionStarted.class::isInstance)
+                .map(ProductionStarted.class::cast).findFirst().orElseThrow();
+        state = StrategicObjectiveProcess.reduceTaskTransition(state, task.ownerId(),
+                new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE));
+        state = ProductionProcess.reduceStarted(state, task.ownerId(), started);
+        ProductionJob job = started.job();
+        BakeryWorkState work = job.bakeryWork().orElseThrow();
+        FungibleResourceLedger cold = state.inventory().fungibleResources();
+        SubjectId depot = FrontierWorldState.depotId(job.settlementId());
+        FungiblePhysicalObservation.Stack wheat = new FungiblePhysicalObservation.Stack(
+                new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, 0)), "minecraft:wheat", 64);
+        FungibleResourceLedger hot = cold.rebind(work.sourceAccountId(), 1L,
+                FungiblePhysicalObservation.bind(cold, work.sourceAccountId(), 1L, List.of(wheat)));
+        SubjectId claim = hot.accounts().get(work.sourceAccountId()).claimQuantities().keySet().iterator().next();
+        ActorContainerItemOrder order = new ActorContainerItemOrder(job.id(), job.workerId(),
+                ActorContainerItemOrder.Direction.TAKE,
+                new ActorContainerItemOrder.Portion.Fungible(work.sourceAccountId(), new ResourceCustody.Container(depot),
+                        work.actorAccountId(), new ResourceCustody.Actor(job.workerId()), Optional.of(claim),
+                        "minecraft:wheat", job.inputQuantities()),
+                new ActorContainerItemOrder.ContainerEndpoint.FungibleContainer(depot),
+                BakeryWorkGoal.current(state, job).station(), ActorContainerItemOrder.Hand.MAIN, 1L, 1L);
+        var hand = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(job.workerId(),
+                UUID.fromString("00000000-0000-0000-0000-000000000111")), "minecraft:wheat", 64);
+        FungibleResourceLedger arrived = hot.transferActorOrderObservedStacks(order, 1L, 1L, List.of(), List.of(hand));
+        assertFalse(arrived.accounts().containsKey(work.sourceAccountId()));
+        assertEquals(new ResourceCustody.Actor(job.workerId()), arrived.accounts().get(work.actorAccountId()).custody());
+        assertEquals(64, arrived.accounts().get(work.actorAccountId()).lotQuantities().values().stream().mapToInt(Integer::intValue).sum());
+        assertThrows(IllegalArgumentException.class, () -> hot.transferActorOrderObservedStacks(order, 1L, 1L,
+                List.of(), List.of(new FungiblePhysicalObservation.Stack(
+                        new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, 2)), "minecraft:wheat", 64))));
+    }
+
+    @Test
+    void exactWheatAlsoPassesThroughStationWithoutRemoteTransformation() {
+        FrontierWorldState state = ProductionProcessTest.productionTask(ProductionProcessTest.withLegacyExactWheat(
+                FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:bakery-exact-cold"), 92L))),
+                StrategicTaskStatus.PENDING);
+        StrategicTask task = state.strategicPlans().tasks().values().iterator().next();
+        ProductionStarted started = ProductionProcess.planStart(state, ProductionProcess.start(task, 200L)).stream()
+                .map(ProposedEvent::payload).filter(ProductionStarted.class::isInstance)
+                .map(ProductionStarted.class::cast).findFirst().orElseThrow();
+        state = StrategicObjectiveProcess.reduceTaskTransition(state, task.ownerId(),
+                new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE));
+        state = ProductionProcess.reduceStarted(state, task.ownerId(), started);
+        ProductionJob job = started.job();
+        assertInstanceOf(ProductionInputHold.Materialized.class, job.inputHold());
+        int count = 0;
+        for (long due = 300L; state.productionJobs().containsKey(job.id()) && count < 700; due += 20L, count++) {
+            BakeryColdStep step = ProductionProcess.planCompletion(state, ProductionProcess.complete(job, due)).stream()
+                    .map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
+                    .map(BakeryColdStep.class::cast).findFirst().orElseThrow();
+            state = ProductionProcess.reduceBakeryColdStep(state, task.ownerId(), step);
+            state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+            if (step.action() == BakeryColdStep.Action.PICKUP) {
+                FrontierWorldState retained = state;
+                assertThrows(IllegalArgumentException.class, () -> retained.cancelProductionJob(job.id()),
+                        "an exact batch in the baker's hand must not lose its owning job");
+            }
+            if (step.action() == BakeryColdStep.Action.RECIPE) {
+                ProductionStationSpec station = state.inventory().containers().values().stream()
+                        .flatMap(container -> container.productionStation().stream())
+                        .filter(candidate -> candidate.id().equals(job.bakeryWork().orElseThrow().stationId()))
+                        .findFirst().orElseThrow();
+                assertFalse(state.inventory().items().containsKey(job.consumedItemId()));
+                assertEquals(new InventoryCustody.ContainerSlot(station.containerId(), station.outputSlot()),
+                        state.inventory().items().get(job.outputItemId()).custody());
+            }
+        }
+        assertTrue(count < 700, "exact bakery job stalled");
+        assertEquals(StrategicTaskStatus.COMPLETED, state.strategicPlans().tasks().get(task.id()).status());
+        assertEquals(new InventoryCustody.ContainerSlot(FrontierWorldState.depotId(task.ownerId()), 0),
+                state.inventory().items().get(job.outputItemId()).custody());
+    }
+
+    @Test
+    void oneFreshBreadTaskMovesWheatThroughBakerAndStationBeforeDepositingBread() {
+        FrontierWorldState state = ProductionProcessTest.productionTask(FrontierWorldState.initial(
+                FrontierBootstrapper.create(new WorldId("frontier:bakery-cold-vertical"), 41L)), StrategicTaskStatus.PENDING);
+        StrategicTask task = state.strategicPlans().tasks().values().iterator().next();
+        List<ProposedEvent> start = ProductionProcess.planStart(state, ProductionProcess.start(task, 200L));
+        ProductionStarted started = start.stream().map(ProposedEvent::payload).filter(ProductionStarted.class::isInstance)
+                .map(ProductionStarted.class::cast).findFirst().orElseThrow();
+        state = StrategicObjectiveProcess.reduceTaskTransition(state, task.ownerId(), new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE));
+        state = ProductionProcess.reduceStarted(state, task.ownerId(), started);
+        ProductionJob job = started.job();
+        assertTrue(job.bakeryWork().isPresent());
+        SubjectId wheat = job.consumedItemId(), bread = job.outputItemId();
+        int pickups = 0, loads = 0, recipes = 0, unloads = 0, deliveries = 0;
+        for (long due = 300L, steps = 0; state.productionJobs().containsKey(job.id()) && steps < 700; due += 20L, steps++) {
+            List<ProposedEvent> planned = ProductionProcess.planCompletion(state, ProductionProcess.complete(job, due));
+            BakeryColdStep step = planned.stream().map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
+                    .map(BakeryColdStep.class::cast).findFirst().orElseThrow(() -> new AssertionError("bakery COLD step stalled: " + planned));
+            state = ProductionProcess.reduceBakeryColdStep(state, task.ownerId(), step);
+            state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+            switch (step.action()) {
+                case PICKUP -> { pickups++; assertEquals(new ResourceCustody.Actor(job.workerId()),
+                        state.inventory().fungibleResources().accounts().get(job.bakeryWork().orElseThrow().actorAccountId()).custody());
+                    FrontierWorldState retained = state;
+                    assertThrows(IllegalArgumentException.class, () -> retained.cancelProductionJob(job.id()),
+                            "a fungible batch in the baker's hand must not lose its owning job"); }
+                case LOAD -> { loads++; assertEquals(new ResourceCustody.Container(state.inventory().containers().values().stream()
+                        .flatMap(record -> record.productionStation().stream()).filter(station -> station.id().equals(job.bakeryWork().orElseThrow().stationId()))
+                        .findFirst().orElseThrow().containerId()), state.inventory().fungibleResources().accounts()
+                        .get(job.bakeryWork().orElseThrow().stationAccountId()).custody()); }
+                case RECIPE -> { recipes++; assertFalse(state.inventory().fungibleResources().lots().containsKey(wheat));
+                        assertTrue(state.inventory().fungibleResources().lots().containsKey(bread)); }
+                case UNLOAD -> { unloads++; assertEquals(new ResourceCustody.Actor(job.workerId()),
+                        state.inventory().fungibleResources().accounts().get(job.bakeryWork().orElseThrow().actorAccountId()).custody()); }
+                case DELIVER -> deliveries++;
+                default -> { }
+            }
+        }
+        String remaining = state.productionJobs().containsKey(job.id())
+                ? "phase=" + state.productionJobs().get(job.id()).bakeryWork().orElseThrow().phase()
+                + " actor=" + state.actorLocations().get(job.workerId()).supportingSurface()
+                + " route=" + BakeryKnownNavigation.path(state, state.productionJobs().get(job.id())).subList(0,
+                Math.min(5, BakeryKnownNavigation.path(state, state.productionJobs().get(job.id())).size()))
+                + " depot=" + SettlementDepotServicePort.forDepot(state.bootstrap().settlements().getFirst().structures().stream()
+                .filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().orElseThrow()).serviceSurface() : "finished";
+        assertEquals(1, pickups, remaining);
+        assertEquals(1, loads, remaining);
+        assertEquals(1, recipes, remaining);
+        assertEquals(1, unloads, remaining);
+        assertEquals(1, deliveries, remaining);
+        assertTrue(state.productionJobs().isEmpty());
+        assertEquals(StrategicTaskStatus.COMPLETED, state.strategicPlans().tasks().get(task.id()).status());
+        assertEquals(64, state.inventory().fungibleResources().totalQuantity(task.ownerId(), "minecraft:bread"));
+    }
+}

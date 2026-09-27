@@ -61,6 +61,17 @@ public final class FungibleClaimForfeitureStateSupport {
         CompanyRegistry companies = state.companies();
         HiveColony hive = state.hiveColony();
         for (Plan plan : plans) {
+            ProductionJob production = plan.productionJobId() == null ? null : jobs.get(plan.productionJobId());
+            if (production != null && production.bakeryWork().isPresent()) {
+                BakeryWorkState work = production.bakeryWork().orElseThrow();
+                CustodyAccount sourceAfter = transferred.accounts().get(work.sourceAccountId());
+                int available = sourceAfter == null ? 0 : sourceAfter.lotQuantities().values().stream().mapToInt(Integer::intValue).sum();
+                jobs.put(production.id(), production.withBakeryWork(work.withBlock(java.util.Optional.of(
+                        new BakeryWorkBlock(BakeryWorkBlock.Reason.SOURCE_CHANGED,
+                                FrontierWorldState.depotId(production.settlementId()), -1,
+                                "minecraft:wheat", Math.min(available, 127))))));
+                continue; // The accepted order and its payment remain; the same baker may reallocate later.
+            }
             if (plan.reservationId() != null) inventory = inventory.withEconomics(inventory.economics().release(plan.reservationId()));
             strategic = strategic.transitionTask(plan.taskId(), StrategicTaskStatus.BLOCKED);
             if (plan.productionJobId() != null) {
@@ -173,7 +184,7 @@ public final class FungibleClaimForfeitureStateSupport {
                 || !"minecraft:wheat".equals(claim.itemKind()) || claim.quantity() != job.outputCount()
                 || !claim.lotQuantities().equals(held.inputLots())
                 || state.physicalIntents().values().stream().anyMatch(intent -> intent.causeSubjectId().equals(job.id()))
-                || state.sceneLeases().values().stream().anyMatch(lease -> lease.status() != SceneLeaseStatus.CLOSED
+                || job.bakeryWork().isEmpty() && state.sceneLeases().values().stream().anyMatch(lease -> lease.status() != SceneLeaseStatus.CLOSED
                 && FrontierSceneBehaviors.isProductionWork(lease) && FrontierSceneBehaviors.productionWork(lease).jobId().equals(job.id()))) {
             throw new IllegalArgumentException("physical theft cannot bypass an active production effect");
         }
@@ -182,6 +193,9 @@ public final class FungibleClaimForfeitureStateSupport {
         if (task == null || task.kind() != StrategicTaskKind.PRODUCE_BREAD
                 || task.status() != StrategicTaskStatus.ACTIVE || !task.ownerId().equals(job.settlementId()))
             throw new IllegalArgumentException("physical theft has no exact current production task");
+        if (job.bakeryWork().isPresent() && (job.bakeryWork().orElseThrow().phase() != BakeryWorkState.Phase.DEPOT_PICKUP
+                || job.bakeryWork().orElseThrow().pendingPhysicalStep().isPresent()))
+            throw new IllegalArgumentException("bakery input cannot be reallocated after a physical effect begins");
         if (order == null) return new Plan(job.id(), null, null, task.id(), null, null, null);
         FinancialReservation reservation = state.inventory().economics().reservations().get(order.reservationId());
         if (!order.taskId().equals(job.taskId()) || reservation == null || !reservation.reasonId().equals(job.id())

@@ -29,6 +29,12 @@ final class FrontierWorldInitialState {
         bootstrap.settlements().forEach(settlement -> settlement.structures().forEach(structure -> structures.put(structure.id(), StructureCondition.INTACT)));
         Map<SubjectId, ContainerRecord> containers = new LinkedHashMap<>();
         bootstrap.settlements().forEach(settlement -> { SubjectId id = FrontierWorldState.depotId(settlement.id()); containers.put(id, new ContainerRecord(id, settlement.id(), 27)); });
+        bootstrap.settlements().forEach(settlement -> settlement.structures().stream()
+                .filter(structure -> structure.kind() == StructureKind.WORKSHOP).findFirst().ifPresent(workshop -> {
+                    ProductionStationSpec station = ProductionStationSpec.grayboxBakery(workshop);
+                    containers.put(station.containerId(), new ContainerRecord(station.containerId(), settlement.id(), 27,
+                            java.util.Optional.of(station)));
+                }));
         bootstrap.hive().organs().forEach(organ -> organ.containerId().ifPresent(container -> containers.put(container, new ContainerRecord(container, bootstrap.hive().id(), 27))));
         containers.put(FrontierRouteNetwork.MAINTENANCE_CONTAINER, new ContainerRecord(FrontierRouteNetwork.MAINTENANCE_CONTAINER, FrontierRouteNetwork.OWNER, 27));
         SubjectId firstDepot = FrontierWorldState.depotId(bootstrap.settlements().getFirst().id()); Map<SubjectId, ExactItemStack> items = new LinkedHashMap<>();

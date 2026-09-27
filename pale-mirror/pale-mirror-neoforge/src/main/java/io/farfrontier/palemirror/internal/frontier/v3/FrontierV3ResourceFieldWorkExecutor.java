@@ -40,7 +40,8 @@ final class FrontierV3ResourceFieldWorkExecutor {
         return "harvest-cell:" + job.id().value() + ':' + cycle.epoch() + ':' + id.value();
     }
 
-    static Result advance(ServerLevel level, FrontierWorldState state, SceneLease lease,
+    static Result advance(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                          FrontierWorldState state, SceneLease lease,
                           ResourceSiteHarvestJob job, Mob worker) {
         if (!job.progress().hasPendingCrop() || lease.members().size() != 1
                 || !lease.members().getFirst().actorId().equals(job.workerId())
@@ -75,14 +76,14 @@ final class FrontierV3ResourceFieldWorkExecutor {
                     return Result.conflict("blocked-cell-foreign-witness-mismatch");
             } else if (retained.pending().isPresent()
                     || observed.disposition() != FrontierV3ResourceFieldObservation.Disposition.CURRENT)
-                return Result.conflict("unprepared-cell-" + observed.disposition().name().toLowerCase(java.util.Locale.ROOT));
+                return observeInterruption(level, runtime, job, id, observed, "unprepared-cell-");
             return handResult(level, state, lease, job, outcome, job.carriedYieldQuantity(cycle.harvestedCount()));
         }
         if (retained.pending().isEmpty()) {
             var before = FrontierV3ResourceFieldObservation.observe(level, cycle, witness, id, cause(job, cycle, id));
             if (before.disposition() == FrontierV3ResourceFieldObservation.Disposition.UNLOADED) return Result.pending();
             if (before.disposition() != FrontierV3ResourceFieldObservation.Disposition.CURRENT)
-                return Result.conflict("cell-before-" + before.disposition().name().toLowerCase(java.util.Locale.ROOT));
+                return observeInterruption(level, runtime, job, id, before, "cell-before-");
             if (outcome == ResourceFieldCycle.WorkOutcome.HARVESTED) {
                 var handBefore = FrontierV3ActorHandObservation.observe(level, state, lease, job);
                 var effect = new FrontierV3ResourceFieldWitness.HandEffect(job.siteId(), job.id(), job.workerId(),
@@ -204,6 +205,18 @@ final class FrontierV3ResourceFieldWorkExecutor {
         return Result.ready(outcome, new ResourceSiteHarvestProgressed.HandObservation(
                 new PhysicalStackAddress.ActorHand(job.workerId(), lease.members().getFirst().entityId()),
                 lease.revision(), count));
+    }
+
+    private static Result observeInterruption(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                               ResourceSiteHarvestJob job, ResourceFieldLayout.CellId id,
+                                               FrontierV3ResourceFieldObservation.Review review, String prefix) {
+        if (review.disposition() == FrontierV3ResourceFieldObservation.Disposition.OWNED_DRIFT
+                && FrontierV3ResourceFieldWorldChangeExecutor.observeOne(level, runtime, job.siteId(), id))
+            return Result.pending();
+        if (review.disposition() == FrontierV3ResourceFieldObservation.Disposition.FOREIGN
+                && FrontierV3ResourceFieldForeignChangeExecutor.observeOne(level, runtime, job.siteId(), id))
+            return Result.pending();
+        return Result.conflict(prefix + review.disposition().name().toLowerCase(java.util.Locale.ROOT));
     }
 
     private static BlockPos minecraft(io.farfrontier.palemirror.frontier.v3.model.BlockPosition position) {

@@ -13,6 +13,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurface;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
+import io.farfrontier.palemirror.frontier.v3.model.ActorContainerItemOrder;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
@@ -29,7 +30,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.npc.Villager;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 
 import java.util.Comparator;
@@ -143,7 +143,10 @@ final class FrontierV3SettlementServiceInputIssueExecutor {
                 .filter(value -> value.members().stream().anyMatch(member -> member.actorId().equals(work.workerId())))
                 .min(Comparator.comparing(SceneLease::id)).orElse(null);
         if (item == null || surface == null || surface.status() != ContainerSurfaceStatus.ACTIVE || lease == null) return null;
-        return new Target(work, item, work.inputSource(), new BlockPos(surface.position().x(), surface.position().y(), surface.position().z()), lease);
+        ActorContainerItemOrder order = new ActorContainerItemOrder(work.id(), work.workerId(), ActorContainerItemOrder.Direction.TAKE,
+                new ActorContainerItemOrder.Portion.Exact(item), new ActorContainerItemOrder.ContainerEndpoint.ExactSlot(work.inputSource()), work.inputStation(),
+                ActorContainerItemOrder.Hand.MAIN, 0L, Math.addExact(work.inputTraversal().revision(), 1L));
+        return new Target(work, item, work.inputSource(), new BlockPos(surface.position().x(), surface.position().y(), surface.position().z()), lease, order);
     }
 
     private static Villager resident(ServerLevel level, FrontierWorldState state, Target target) {
@@ -153,7 +156,7 @@ final class FrontierV3SettlementServiceInputIssueExecutor {
         var member = target.lease().members().stream().filter(value -> value.actorId().equals(target.work().workerId())).findFirst().orElseThrow();
         if (!(entity instanceof Villager villager) || !villager.isAlive()
                 || !FrontierV3SceneExecutor.owned(villager, state, target.lease(), member)) return null;
-        var body = target.work().inputStation().standingBody();
+        var body = target.order().station().standingBody();
         BlockPos station = new BlockPos(body.x(), body.y(), body.z());
         return villager.blockPosition().equals(station) ? villager : null;
     }
@@ -164,16 +167,11 @@ final class FrontierV3SettlementServiceInputIssueExecutor {
     }
 
     private static boolean handOff(ChestBlockEntity chest, Villager worker, Target target) {
-        return handOff(chest, worker, target.item(), target.sourceSlot());
+        return FrontierV3ActorItemTransfer.take(chest, worker, target.item(), target.order().exactSlot(), EquipmentSlot.MAINHAND);
     }
 
     static boolean handOff(ChestBlockEntity chest, Villager worker, ExactItemStack item, InventoryCustody.ContainerSlot sourceSlot) {
-        if (sourceSlot.slot() >= chest.getContainerSize() || !FrontierV3CargoHandoffExecutor.exactMatch(chest.getItem(sourceSlot.slot()), item)
-                || !worker.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty()) return false;
-        ItemStack stack = chest.getItem(sourceSlot.slot());
-        chest.setItem(sourceSlot.slot(), ItemStack.EMPTY); chest.setChanged(); worker.setItemSlot(EquipmentSlot.MAINHAND, stack);
-        return chest.getItem(sourceSlot.slot()).isEmpty()
-                && FrontierV3CargoHandoffExecutor.exactMatch(worker.getItemBySlot(EquipmentSlot.MAINHAND), item);
+        return FrontierV3ActorItemTransfer.take(chest, worker, item, sourceSlot, EquipmentSlot.MAINHAND);
     }
 
     private static void inspectRunning(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent, Target target,
@@ -219,5 +217,5 @@ final class FrontierV3SettlementServiceInputIssueExecutor {
     }
 
     record Target(SettlementServiceWork work, ExactItemStack item, InventoryCustody.ContainerSlot sourceSlot, BlockPos chestPosition,
-                  SceneLease lease) { }
+                  SceneLease lease, ActorContainerItemOrder order) { }
 }

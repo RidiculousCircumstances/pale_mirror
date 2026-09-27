@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteProcess;
+import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import org.junit.jupiter.api.Test;
 
@@ -14,6 +15,37 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResourceFieldForeignCellObservedTest {
     private static final SubjectId SITE = new SubjectId("site:1-wheat-field");
+
+    @Test void foreignCropBeforePhysicalWorkEffectReleasesOnlyThePreparedCell() {
+        var hot = ResourceSiteHarvestProcessTest.hotHarvestAfterColdSteps(0);
+        FrontierWorldState state = hot.state();
+        ResourceSiteHarvestJob job = hot.job();
+        ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state, job);
+        if (!ResourceSiteHarvestGoal.actorAtWorkCell(state, job))
+            state = ResourceSiteHarvestProcess.reduceHotGoalArrived(state, SITE,
+                    new ResourceSiteHarvestHotGoalArrived(job.id(), hot.lease().id(), job.workerId(),
+                            goal.layoutRevision(), goal.nextWorkSlot(), goal.kind(), goal.representative().standingBody()));
+        state = ResourceSiteHarvestProcess.reduceCropPrepared(state, SITE,
+                new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex()));
+        ResourceFieldCycle cycle = state.resourceSites().cycle(SITE);
+        ResourceFieldLayout.CellId cell = cycle.layout().cells().get(job.progress().completedCropSlots()).id();
+        var before = cycle.cell(cell);
+        var held = new ResourceFieldForeignChangeHeld(SITE, cycle.epoch(), cycle.layout().revision(), cell,
+                before, "world:prepared-crop-obstructed");
+        FrontierWorldState waiting = ResourceSiteProcess.reduceForeignChangeHeld(state, SITE, held);
+        var obstructed = new ResourceFieldCycle.CellState(ResourceFieldCycle.Soil.FARMLAND,
+                ResourceFieldCycle.Crop.OBSTRUCTED, 0, false, false);
+        FrontierWorldState changed = ResourceSiteProcess.reduceForeignCellObserved(waiting, SITE,
+                new ResourceFieldForeignCellObserved(held, obstructed, "minecraft:farmland", "minecraft:stone"));
+        ResourceSiteHarvestJob retained = (ResourceSiteHarvestJob) changed.resourceSites().site(SITE).activeWork().orElseThrow();
+        assertEquals(job.id(), retained.id());
+        assertEquals(job.workerId(), retained.workerId());
+        assertFalse(retained.progress().hasPendingCrop());
+        assertEquals(job.progress().completedCropSlots(), retained.progress().completedCropSlots());
+        assertEquals(ResourceFieldCycle.WorkOutcome.SKIPPED_BLOCKED,
+                changed.resourceSites().cycle(SITE).expectedWorkOutcome(cell));
+        assertEquals(changed, snapshot(changed));
+    }
 
     @Test void foreignSupportIsLocalHeldAndSurvivesBothRecoveryWindows() {
         FrontierWorldState ready = ResourceSiteHarvestProcessTest.ready(ResourceSiteHarvestProcessTest.initial());

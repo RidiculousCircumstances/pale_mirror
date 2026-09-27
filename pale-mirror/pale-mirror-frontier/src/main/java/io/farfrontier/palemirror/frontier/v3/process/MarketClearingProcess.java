@@ -134,6 +134,9 @@ public final class MarketClearingProcess {
             }
             throw new IllegalArgumentException("market cancellation must name one accepted active work order");
         }
+        if (job.bakeryWork().isPresent()
+                && job.bakeryWork().orElseThrow().phase() != BakeryWorkState.Phase.DEPOT_PICKUP)
+            throw new IllegalArgumentException("market cannot cancel a bakery batch held by an actor or station");
         MarketDemand demand = state.companies().market().demands().get(order.demandId());
         StrategicTask task = demand == null ? null : state.strategicPlans().tasks().get(demand.reasonId());
         if (demand == null || !subject.equals(demand.buyerId()) || task == null || task.status() != StrategicTaskStatus.ACTIVE

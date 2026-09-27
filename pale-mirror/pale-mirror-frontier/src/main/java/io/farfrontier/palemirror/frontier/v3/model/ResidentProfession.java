@@ -9,7 +9,9 @@ public enum ResidentProfession {
     LOGISTICIAN(HumanCapability.LOGISTICS),
     MEDICAL_WORKER(HumanCapability.MEDICINE),
     SECURITY_WORKER(HumanCapability.SECURITY),
-    CIVIC_WORKER(HumanCapability.CIVIC);
+    CIVIC_WORKER(HumanCapability.CIVIC),
+    /** Food-production affinity; a current bread job is still a separate assignment. */
+    BAKER(HumanCapability.INDUSTRY);
 
     private final HumanCapability primaryCapability;
 

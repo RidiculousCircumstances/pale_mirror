@@ -1,0 +1,416 @@
+package io.farfrontier.palemirror.frontier.v3.model;
+
+import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
+import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
+import io.farfrontier.palemirror.frontier.v3.api.CommandId;
+import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
+import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
+import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.WorldId;
+import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
+import io.farfrontier.palemirror.frontier.v3.process.ProductionProcess;
+import io.farfrontier.palemirror.frontier.v3.process.StrategicObjectiveProcess;
+import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
+import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration;
+import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+class BakeryHotVerticalTest {
+    @Test
+    void replacingStolenExactWheatRetainsTheSameBakerAndJob() {
+        WorldId world = new WorldId("frontier:bakery-exact-input-replacement");
+        FrontierWorldState state = ProductionProcessTest.productionTask(ProductionProcessTest.withLegacyExactWheat(
+                FrontierWorldState.initial(FrontierBootstrapper.create(world, 91L))), StrategicTaskStatus.PENDING);
+        StrategicTask task = state.strategicPlans().tasks().values().iterator().next();
+        ProductionStarted started = ProductionProcess.planStart(state, ProductionProcess.start(task, 200L)).stream()
+                .map(ProposedEvent::payload).filter(ProductionStarted.class::isInstance)
+                .map(ProductionStarted.class::cast).findFirst().orElseThrow();
+        assertInstanceOf(ProductionInputHold.Materialized.class, started.job().inputHold());
+        state = StrategicObjectiveProcess.reduceTaskTransition(state, task.ownerId(),
+                new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE));
+        state = ProductionProcess.reduceStarted(state, task.ownerId(), started);
+        ProductionJob original = state.productionJobs().get(started.job().id());
+        ExactItemStack input = state.inventory().items().get(original.consumedItemId());
+        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base =
+                FrontierWorldRuntimeDefinition.configuration(world, 91L);
+        var engine = FrontierEngines.create(new FrontierEngineConfiguration<>(world, state, SimInstant.ZERO,
+                base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(),
+                base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter()));
+        CommandId command = new CommandId("command:bakery-exact-player-takes-input");
+        var checkpoint = engine.checkpoint();
+        var player = new InventoryCustody.Player(java.util.UUID.fromString("00000000-0000-0000-0000-000000000157"));
+        CommandResult result = engine.submit(new FrontierCommand(1, command, world, checkpoint.revision(), checkpoint.instant(),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(command),
+                new ExactItemCustodyChanged(input.id(), input.custody(), player)));
+        assertInstanceOf(CommandResult.Accepted.class, result, result.toString());
+        state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertEquals(BakeryWorkBlock.Reason.SOURCE_CHANGED,
+                state.productionJobs().get(original.id()).bakeryWork().orElseThrow().block().orElseThrow().reason());
+        assertEquals(StrategicTaskStatus.ACTIVE, state.strategicPlans().tasks().get(task.id()).status());
+        assertTrue(ProductionProcess.planCompletion(state, ProductionProcess.complete(original, 300L)).stream()
+                .noneMatch(event -> event.payload() instanceof BakeryInputReallocated));
+
+        SubjectId depot = FrontierWorldState.depotId(task.ownerId());
+        SubjectId replacementId = new SubjectId("item:bakery-replacement-exact-wheat");
+        ExactItemStack replacement = new ExactItemStack(replacementId, task.ownerId(), "minecraft:wheat", 64,
+                new InventoryCustody.ContainerSlot(depot, 1));
+        state = state.withInventory(state.inventory().store(replacement));
+        BakeryInputReallocated event = ProductionProcess.planCompletion(state, ProductionProcess.complete(original, 320L)).stream()
+                .map(ProposedEvent::payload).filter(BakeryInputReallocated.class::isInstance)
+                .map(BakeryInputReallocated.class::cast).findFirst().orElseThrow();
+        assertEquals(event, FrontierWorldRuntimeDefinition.payloadCodecs().decode(event.type(),
+                FrontierWorldRuntimeDefinition.payloadCodecs().encode(event)));
+        state = ProductionProcess.reduceBakeryInputReallocated(state, task.ownerId(), event);
+        state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+        ProductionJob resumed = state.productionJobs().get(original.id());
+        assertEquals(original.workerId(), resumed.workerId());
+        assertEquals(replacementId, resumed.consumedItemId());
+        assertEquals(original.outputItemId(), resumed.outputItemId());
+        assertEquals(StrategicTaskStatus.ACTIVE, state.strategicPlans().tasks().get(task.id()).status());
+        assertTrue(resumed.bakeryWork().orElseThrow().block().isEmpty());
+
+        // A second, destructive departure is still a local input pause, not an
+        // order cancellation or a silent adoption of the first player's stack.
+        engine = FrontierEngines.create(new FrontierEngineConfiguration<>(world, state, SimInstant.ZERO,
+                base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(),
+                base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter()));
+        command = new CommandId("command:bakery-replacement-wheat-destroyed");
+        checkpoint = engine.checkpoint();
+        result = engine.submit(new FrontierCommand(1, command, world, checkpoint.revision(), checkpoint.instant(),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(command),
+                new ExactItemDestroyed(replacementId, replacement.custody(), "player destroyed depot wheat")));
+        assertInstanceOf(CommandResult.Accepted.class, result, result.toString());
+        state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertTrue(state.productionJobs().containsKey(original.id()));
+        assertEquals(BakeryWorkBlock.Reason.SOURCE_CHANGED,
+                state.productionJobs().get(original.id()).bakeryWork().orElseThrow().block().orElseThrow().reason());
+    }
+
+    @Test
+    void workerLossOrWorkshopDamageRetainsTheAcceptedPrePickupBakeryAllocation() {
+        FrontierWorldState state = ProductionProcessTest.productionTask(FrontierWorldState.initial(
+                FrontierBootstrapper.create(new WorldId("frontier:bakery-local-work-loss"), 91L)), StrategicTaskStatus.PENDING);
+        StrategicTask task = state.strategicPlans().tasks().values().iterator().next();
+        ProductionStarted started = ProductionProcess.planStart(state, ProductionProcess.start(task, 200L)).stream()
+                .map(ProposedEvent::payload).filter(ProductionStarted.class::isInstance)
+                .map(ProductionStarted.class::cast).findFirst().orElseThrow();
+        state = StrategicObjectiveProcess.reduceTaskTransition(state, task.ownerId(),
+                new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE));
+        state = ProductionProcess.reduceStarted(state, task.ownerId(), started);
+        ProductionJob job = state.productionJobs().get(started.job().id());
+
+        ActorLocation actor = state.actorLocations().get(job.workerId());
+        Map<SubjectId, ActorLocation> locations = new java.util.LinkedHashMap<>(state.actorLocations());
+        locations.put(job.workerId(), new ActorLocation(actor.body(), ActorCondition.dead()));
+        FrontierWorldState deadWorker = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(locations));
+        List<ProposedEvent> deathEvents = ProductionProcess.failPreEffectWorkForDeath(deadWorker, job.workerId());
+        assertEquals(2, deathEvents.size());
+        assertEquals(ProductionBlockReason.WORKER_UNAVAILABLE,
+                assertInstanceOf(ProductionBlocked.class, deathEvents.getFirst().payload()).reason());
+        FrontierWorldState deathBlocked = ProductionProcess.reduceBlocked(deadWorker, task.ownerId(),
+                (ProductionBlocked) deathEvents.getFirst().payload());
+        deathBlocked = StrategicObjectiveProcess.reduceTaskTransition(deathBlocked, task.ownerId(),
+                (StrategicTaskTransition) deathEvents.get(1).payload());
+        assertEquals(job, deathBlocked.productionJobs().get(job.id()));
+        assertEquals(StrategicTaskStatus.BLOCKED, deathBlocked.strategicPlans().tasks().get(task.id()).status());
+
+        FrontierWorldState damaged = state.withStructureCondition(job.facilityId(), StructureCondition.DAMAGED);
+        List<ProposedEvent> damageEvents = ProductionProcess.planFacilityUnavailable(damaged, job.facilityId());
+        assertEquals(2, damageEvents.size());
+        assertEquals(ProductionBlockReason.FACILITY_UNAVAILABLE,
+                assertInstanceOf(ProductionBlocked.class, damageEvents.getFirst().payload()).reason());
+        FrontierWorldState facilityBlocked = ProductionProcess.reduceBlocked(damaged, task.ownerId(),
+                (ProductionBlocked) damageEvents.getFirst().payload());
+        facilityBlocked = StrategicObjectiveProcess.reduceTaskTransition(facilityBlocked, task.ownerId(),
+                (StrategicTaskTransition) damageEvents.get(1).payload());
+        assertEquals(job, facilityBlocked.productionJobs().get(job.id()));
+        assertEquals(StrategicTaskStatus.BLOCKED, facilityBlocked.strategicPlans().tasks().get(task.id()).status());
+    }
+
+    @Test
+    void stolenWheatRetainsAcceptedBakeryJobUntilAnotherOwnedBatchIsAllocated() {
+        FrontierWorldState state = ProductionProcessTest.productionTask(FrontierWorldState.initial(
+                FrontierBootstrapper.create(new WorldId("frontier:bakery-source-reallocation"), 91L)), StrategicTaskStatus.PENDING);
+        StrategicTask task = state.strategicPlans().tasks().values().iterator().next();
+        ProductionStarted started = ProductionProcess.planStart(state, ProductionProcess.start(task, 200L)).stream()
+                .map(ProposedEvent::payload).filter(ProductionStarted.class::isInstance)
+                .map(ProductionStarted.class::cast).findFirst().orElseThrow();
+        state = StrategicObjectiveProcess.reduceTaskTransition(state, task.ownerId(),
+                new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE));
+        state = ProductionProcess.reduceStarted(state, task.ownerId(), started);
+        ProductionJob original = state.productionJobs().get(started.job().id());
+        BakeryWorkState work = original.bakeryWork().orElseThrow();
+        SubjectId depot = FrontierWorldState.depotId(task.ownerId());
+        FungibleResourceLedger unbound = state.inventory().fungibleResources();
+        state = ProductionResourceCustody.bind(state, work.sourceAccountId(), 1L,
+                FungiblePhysicalObservation.bind(unbound, work.sourceAccountId(), 1L,
+                        List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                                new InventoryCustody.ContainerSlot(depot, 0)), "minecraft:wheat", 64))));
+        FungibleResourceLedger bound = state.inventory().fungibleResources();
+        PhysicalStackBinding source = bound.bindings().values().stream()
+                .filter(value -> value.accountId().equals(work.sourceAccountId())).findFirst().orElseThrow();
+        var player = java.util.UUID.fromString("00000000-0000-0000-0000-000000000155");
+        FungibleResourceHandoffObserved theft = FungiblePhysicalHandoff.departToNew(bound, work.sourceAccountId(),
+                1L, source, 0, new SubjectId("custody:bakery-test-player"), new ResourceCustody.Player(player),
+                1L, new PhysicalStackAddress.PlayerSlot(player, 0)).forfeitMovedClaims()
+                .withPlayerSaveFence(java.util.UUID.fromString("00000000-0000-0000-0000-000000000156"));
+        assertTrue(FungibleClaimForfeitureStateSupport.supports(state, theft));
+        state = FungibleClaimForfeitureStateSupport.apply(state, theft);
+        state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+        assertEquals(original.workerId(), state.productionJobs().get(original.id()).workerId());
+        assertEquals(StrategicTaskStatus.ACTIVE, state.strategicPlans().tasks().get(task.id()).status());
+        assertEquals(BakeryWorkBlock.Reason.SOURCE_CHANGED,
+                state.productionJobs().get(original.id()).bakeryWork().orElseThrow().block().orElseThrow().reason());
+        assertTrue(ProductionProcess.planCompletion(state, ProductionProcess.complete(original, 300L)).stream()
+                .noneMatch(value -> value.payload() instanceof BakeryInputReallocated));
+
+        SubjectId replacementLotId = new SubjectId("lot:bakery-replacement-wheat");
+        SubjectId replacementAccountId = new SubjectId("custody:bakery-replacement-depot");
+        ResourceLot replacementLot = new ResourceLot(replacementLotId, task.ownerId(), "minecraft:wheat", 64,
+                "test-replenishment", List.of());
+        FungibleResourceLedger replenished = state.inventory().fungibleResources().issue(replacementLot,
+                new CustodyAccount(replacementAccountId, new ResourceCustody.Container(depot),
+                        Map.of(replacementLotId, 64), Map.of()));
+        state = state.withInventory(state.inventory().withFungibleResources(replenished));
+        BakeryInputReallocated event = ProductionProcess.planCompletion(state, ProductionProcess.complete(original, 320L)).stream()
+                .map(ProposedEvent::payload).filter(BakeryInputReallocated.class::isInstance)
+                .map(BakeryInputReallocated.class::cast).findFirst().orElseThrow();
+        assertEquals(event, io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition
+                .payloadCodecs().decode(event.type(), io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition
+                        .payloadCodecs().encode(event)));
+        state = ProductionProcess.reduceBakeryInputReallocated(state, task.ownerId(), event);
+        state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+        ProductionJob resumed = state.productionJobs().get(original.id());
+        assertEquals(original.workerId(), resumed.workerId());
+        assertEquals(replacementLotId, resumed.consumedItemId());
+        assertEquals(replacementAccountId, resumed.bakeryWork().orElseThrow().sourceAccountId());
+        assertTrue(resumed.bakeryWork().orElseThrow().block().isEmpty());
+        assertEquals(StrategicTaskStatus.ACTIVE, state.strategicPlans().tasks().get(task.id()).status());
+    }
+
+    @Test
+    void preparedLoadedStepsKeepOneBakerAndDeliverOnlyAfterStationRecipe() {
+        FrontierWorldState state = ProductionProcessTest.productionTask(FrontierWorldState.initial(
+                FrontierBootstrapper.create(new WorldId("frontier:bakery-hot-vertical"), 91L)), StrategicTaskStatus.PENDING);
+        StrategicTask task = state.strategicPlans().tasks().values().iterator().next();
+        ProductionStarted started = ProductionProcess.planStart(state, ProductionProcess.start(task, 200L)).stream()
+                .map(ProposedEvent::payload).filter(ProductionStarted.class::isInstance)
+                .map(ProductionStarted.class::cast).findFirst().orElseThrow();
+        ProductionJob admitted = started.job();
+        ProductionJob legacyRouteOnly = new ProductionJob(admitted.id(), admitted.taskId(), admitted.settlementId(),
+                admitted.facilityId(), admitted.workerId(), admitted.consumedItemId(), admitted.inputHold(),
+                admitted.outputItemId(), admitted.outputItemKind(), admitted.outputCount(), admitted.workProgress(),
+                admitted.workTraversal(), admitted.traversalCursor(), Optional.empty());
+        FrontierWorldState beforeAdmission = state;
+        assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceStarted(beforeAdmission,
+                task.ownerId(), new ProductionStarted(legacyRouteOnly, started.inputItemId())),
+                "a forged route-only job cannot reopen direct depot-slot bread production");
+        state = StrategicObjectiveProcess.reduceTaskTransition(state, task.ownerId(),
+                new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE));
+        state = ProductionProcess.reduceStarted(state, task.ownerId(), started);
+        ProductionJob job = started.job();
+        for (int index = 0; index < 100; index++) {
+            BakeryColdStep step = ProductionProcess.planCompletion(state, ProductionProcess.complete(job, 300L + index * 20L)).stream()
+                    .map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
+                    .map(BakeryColdStep.class::cast).findFirst().orElseThrow();
+            if (step.action() == BakeryColdStep.Action.PICKUP) break;
+            assertEquals(BakeryColdStep.Action.MOVE, step.action());
+            state = ProductionProcess.reduceBakeryColdStep(state, task.ownerId(), step);
+        }
+        BakeryWorkState work = job.bakeryWork().orElseThrow();
+        SubjectId depot = FrontierWorldState.depotId(job.settlementId());
+        var stack = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                new InventoryCustody.ContainerSlot(depot, 0)), "minecraft:wheat", 64);
+        FungibleResourceLedger cold = state.inventory().fungibleResources();
+        state = state.withInventory(state.inventory().withFungibleResources(cold.rebind(work.sourceAccountId(), 1L,
+                FungiblePhysicalObservation.bind(cold, work.sourceAccountId(), 1L, List.of(stack)))));
+        PhysicalReplicaRecord replica = PhysicalReplicaRecord.expected(depot, ReferenceContainerCustody.semanticKind(state, depot),
+                7L, ReferenceContainerCustody.canonicalFingerprint(state, depot), ReferenceContainerCustody.provenance(depot));
+        PhysicalReplicaCustodyState custody = PhysicalReplicaCustodyState.empty().declare(replica)
+                .observe(depot, 7L, 1L, replica.fingerprint(), replica.provenance(), 7L)
+                .acquire(new PhysicalCustodyLease(ReferenceContainerCustody.scopeId(depot), depot,
+                        ReferenceContainerCustody.PROVIDER_ID, 1L, 7L, 2L, PhysicalCustodyLeaseStatus.ACQUIRED, null));
+        state = state.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(custody));
+        SceneLeaseId leaseId = new SceneLeaseId("lease:bakery-hot-vertical");
+        ActorLocation actor = state.actorLocations().get(job.workerId());
+        SceneLease lease = SceneLease.forCause(leaseId, state.bootstrap().worldId(), new ProductionWorkSceneCause(job.id()),
+                actor.supportingSurface().support(), new SimInstant(300L), 1L, SceneLeaseStatus.PREPARED,
+                List.of(new SceneMember(job.workerId(), SceneLease.deterministicEntityId(state.bootstrap().worldId(), job.workerId()))),
+                Map.of(job.workerId(), actor.body()), java.util.Set.of(), Optional.empty());
+        state = state.prepareSceneLease(lease).transitionSceneLease(leaseId, SceneLeaseStatus.HOT);
+        assertEquals(BakeryWorkGoal.current(state, job).station().standingBody(), state.sceneLeases().get(leaseId).memberPosition(job.workerId()));
+        BakeryWorkBlock changedSource = new BakeryWorkBlock(BakeryWorkBlock.Reason.SOURCE_CHANGED,
+                depot, 0, "minecraft:wheat", 32);
+        BakeryHotBlockChanged blocked = new BakeryHotBlockChanged(job.id(), leaseId,
+                BakeryWorkState.Phase.DEPOT_PICKUP, Optional.of(changedSource));
+        assertEquals(blocked, io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition
+                .payloadCodecs().decode(blocked.type(), io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition
+                        .payloadCodecs().encode(blocked)));
+        state = ProductionProcess.reduceBakeryHotBlockChanged(state, task.ownerId(), blocked);
+        state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+        assertEquals(Optional.of(changedSource), state.productionJobs().get(job.id()).bakeryWork().orElseThrow().block());
+        FrontierWorldState retainedBlock = state;
+        assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceBakeryHotEffectPrepared(retainedBlock,
+                task.ownerId(), new BakeryHotEffectPrepared(job.id(), leaseId, BakeryWorkState.Phase.DEPOT_PICKUP, -1)),
+                "a physical transfer cannot cross a retained source obstruction");
+        state = ProductionProcess.reduceBakeryHotBlockChanged(state, task.ownerId(),
+                new BakeryHotBlockChanged(job.id(), leaseId, BakeryWorkState.Phase.DEPOT_PICKUP, Optional.empty()));
+        BakeryHotEffectPrepared prepared = new BakeryHotEffectPrepared(job.id(), leaseId, BakeryWorkState.Phase.DEPOT_PICKUP, -1);
+        state = ProductionProcess.reduceBakeryHotEffectPrepared(state, task.ownerId(), prepared);
+        state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+        assertTrue(state.productionJobs().get(job.id()).bakeryWork().orElseThrow().pendingPhysicalStep().isPresent());
+        assertTrue(ProductionProcess.planCompletion(state, ProductionProcess.complete(job, 400L)).stream()
+                .noneMatch(event -> event.payload() instanceof BakeryColdStep));
+        FrontierWorldState preparedPickup = state;
+        assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceBakeryHotEffectObserved(
+                preparedPickup, task.ownerId(), new BakeryHotEffectObserved(job.id(), leaseId,
+                        BakeryWorkState.Phase.DEPOT_PICKUP, actor.body(), 1L, 1L, List.of(),
+                        List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(job.workerId(),
+                                lease.members().getFirst().entityId()), "minecraft:wheat", 63)))),
+                "a depleted depot batch cannot be recorded as a complete baker pickup");
+        var hand = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(job.workerId(),
+                lease.members().getFirst().entityId()), "minecraft:wheat", 64);
+        BakeryHotEffectObserved observed = new BakeryHotEffectObserved(job.id(), leaseId,
+                BakeryWorkState.Phase.DEPOT_PICKUP, actor.body(), 1L, 1L, List.of(), List.of(hand));
+        state = ProductionProcess.reduceBakeryHotEffectObserved(state, task.ownerId(), observed);
+        assertEquals(BakeryWorkState.Phase.STATION_LOAD, state.productionJobs().get(job.id()).bakeryWork().orElseThrow().phase());
+        assertEquals(new ResourceCustody.Actor(job.workerId()), state.inventory().fungibleResources().accounts()
+                .get(work.actorAccountId()).custody());
+        FrontierWorldState blockedWithCargo = StrategicObjectiveProcess.reduceTaskTransition(state, task.ownerId(),
+                new StrategicTaskTransition(task.id(), StrategicTaskStatus.BLOCKED))
+                .transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING);
+        var release = new SceneLeaseReleased(leaseId, List.of(new SceneMemberPosition(job.workerId(), actor.body(),
+                actor.condition().health())));
+        blockedWithCargo = ProductionProcess.reduceBakeryHotHandRelease(blockedWithCargo, task.ownerId(),
+                new BakeryHotHandRelease(job.id(), work.actorAccountId(), 1L, hand, release));
+        blockedWithCargo = ProductionProcess.reduceWorkSceneFinalized(blockedWithCargo, task.ownerId(),
+                new ProductionWorkSceneFinalized(leaseId, job.id()));
+        assertTrue(blockedWithCargo.productionJobs().containsKey(job.id()),
+                "failed scene closure must retain the exact batch in baker custody");
+        assertEquals(BakeryWorkState.Phase.STATION_LOAD,
+                blockedWithCargo.productionJobs().get(job.id()).bakeryWork().orElseThrow().phase());
+        ProductionStationSpec station = state.inventory().containers().values().stream()
+                .flatMap(container -> container.productionStation().stream())
+                .filter(candidate -> candidate.id().equals(work.stationId())).findFirst().orElseThrow();
+        SubjectId machine = station.containerId();
+        PhysicalReplicaRecord machineReplica = PhysicalReplicaRecord.expected(machine,
+                ReferenceContainerCustody.semanticKind(state, machine), 8L,
+                ReferenceContainerCustody.canonicalFingerprint(state, machine), ReferenceContainerCustody.provenance(machine));
+        custody = state.replicaCustody().declare(machineReplica)
+                .observe(machine, 8L, 1L, machineReplica.fingerprint(), machineReplica.provenance(), 8L)
+                .acquire(new PhysicalCustodyLease(ReferenceContainerCustody.scopeId(machine), machine,
+                        ReferenceContainerCustody.PROVIDER_ID, 1L, 8L, 2L, PhysicalCustodyLeaseStatus.ACQUIRED, null));
+        state = state.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(custody));
+        state = at(state, leaseId, job.workerId(), station.workerStation().standingBody());
+        BakeryWorkBlock occupiedMachine = new BakeryWorkBlock(BakeryWorkBlock.Reason.DESTINATION_OCCUPIED,
+                machine, station.inputSlot(), "minecraft:stone", 1);
+        state = ProductionProcess.reduceBakeryHotBlockChanged(state, task.ownerId(),
+                new BakeryHotBlockChanged(job.id(), leaseId, BakeryWorkState.Phase.STATION_LOAD,
+                        Optional.of(occupiedMachine)));
+        FrontierWorldState blockedStation = state;
+        assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceBakeryHotEffectPrepared(
+                blockedStation, task.ownerId(), new BakeryHotEffectPrepared(job.id(), leaseId,
+                        BakeryWorkState.Phase.STATION_LOAD, station.inputSlot())));
+        state = ProductionProcess.reduceBakeryHotBlockChanged(state, task.ownerId(),
+                new BakeryHotBlockChanged(job.id(), leaseId, BakeryWorkState.Phase.STATION_LOAD, Optional.empty()));
+        state = ProductionProcess.reduceBakeryHotEffectPrepared(state, task.ownerId(),
+                new BakeryHotEffectPrepared(job.id(), leaseId, BakeryWorkState.Phase.STATION_LOAD, station.inputSlot()));
+        FrontierWorldState preparedLoad = state;
+        assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceBakeryHotEffectObserved(
+                preparedLoad, task.ownerId(), new BakeryHotEffectObserved(job.id(), leaseId,
+                        BakeryWorkState.Phase.STATION_LOAD, station.workerStation().standingBody(), 1L, 1L,
+                        List.of(), List.of(new FungiblePhysicalObservation.Stack(
+                        new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(machine, station.outputSlot())),
+                        "minecraft:wheat", 64)))),
+                "wheat placed in the output port cannot masquerade as station input");
+        state = ProductionProcess.reduceBakeryHotEffectObserved(state, task.ownerId(), new BakeryHotEffectObserved(
+                job.id(), leaseId, BakeryWorkState.Phase.STATION_LOAD, station.workerStation().standingBody(),
+                1L, 1L, List.of(), List.of(new FungiblePhysicalObservation.Stack(
+                new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(machine, station.inputSlot())),
+                "minecraft:wheat", 64))));
+        assertEquals(BakeryWorkState.Phase.PROCESSING, state.productionJobs().get(job.id()).bakeryWork().orElseThrow().phase());
+        for (int count = 1; count <= ProductionWorkProgress.REQUIRED_PROCESSING_TICKS; count++)
+            state = ProductionProcess.reduceBakeryHotWorkTick(state, task.ownerId(),
+                    new BakeryHotWorkTick(job.id(), leaseId, station.workerStation().standingBody(), count));
+        state = ProductionProcess.reduceBakeryHotEffectPrepared(state, task.ownerId(),
+                new BakeryHotEffectPrepared(job.id(), leaseId, BakeryWorkState.Phase.PROCESSING, station.outputSlot()));
+        state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+        FrontierWorldState preparedRecipe = state;
+        assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceBakeryHotEffectObserved(
+                preparedRecipe, task.ownerId(), new BakeryHotEffectObserved(job.id(), leaseId, BakeryWorkState.Phase.PROCESSING,
+                        station.workerStation().standingBody(), 1L, 1L, List.of(), List.of())));
+        state = ProductionProcess.reduceBakeryHotEffectObserved(state, task.ownerId(), new BakeryHotEffectObserved(
+                job.id(), leaseId, BakeryWorkState.Phase.PROCESSING, station.workerStation().standingBody(),
+                1L, 1L, List.of(), List.of(new FungiblePhysicalObservation.Stack(
+                new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(machine, station.outputSlot())),
+                "minecraft:bread", 64))));
+        assertEquals(BakeryWorkState.Phase.STATION_UNLOAD, state.productionJobs().get(job.id()).bakeryWork().orElseThrow().phase());
+        assertFalse(state.inventory().fungibleResources().lots().containsKey(job.consumedItemId()));
+        state = ProductionProcess.reduceBakeryHotEffectPrepared(state, task.ownerId(),
+                new BakeryHotEffectPrepared(job.id(), leaseId, BakeryWorkState.Phase.STATION_UNLOAD, -1));
+        state = ProductionProcess.reduceBakeryHotEffectObserved(state, task.ownerId(), new BakeryHotEffectObserved(
+                job.id(), leaseId, BakeryWorkState.Phase.STATION_UNLOAD, station.workerStation().standingBody(),
+                1L, 1L, List.of(), List.of(new FungiblePhysicalObservation.Stack(
+                new PhysicalStackAddress.ActorHand(job.workerId(), lease.members().getFirst().entityId()),
+                "minecraft:bread", 64))));
+        assertEquals(BakeryWorkState.Phase.DEPOT_DELIVERY, state.productionJobs().get(job.id()).bakeryWork().orElseThrow().phase());
+        assertEquals(StrategicTaskStatus.ACTIVE, state.strategicPlans().tasks().get(task.id()).status());
+        SceneLease currentLease = state.sceneLeases().get(leaseId);
+        assertInstanceOf(SceneContinuation.None.class, FrontierSceneBehaviors.releasePlan(state, currentLease, 700L,
+                new SceneLeaseReleased(leaseId, List.of(new SceneMemberPosition(job.workerId(),
+                        station.workerStation().standingBody(), actor.condition().health())))).continuation(),
+                "bakery release must leave its retained completion review intact, not invoke legacy output-ready continuation");
+        int deliverySlot = state.firstFreeContainerSlot(depot).orElseThrow();
+        state = at(state, leaseId, job.workerId(), actor.body());
+        BakeryWorkBlock fullDepot = new BakeryWorkBlock(BakeryWorkBlock.Reason.DESTINATION_OCCUPIED,
+                depot, -1, "minecraft:air", 0);
+        state = ProductionProcess.reduceBakeryHotBlockChanged(state, task.ownerId(),
+                new BakeryHotBlockChanged(job.id(), leaseId, BakeryWorkState.Phase.DEPOT_DELIVERY,
+                        Optional.of(fullDepot)));
+        FrontierWorldState blockedDelivery = state;
+        assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceBakeryHotEffectPrepared(
+                blockedDelivery, task.ownerId(), new BakeryHotEffectPrepared(job.id(), leaseId,
+                        BakeryWorkState.Phase.DEPOT_DELIVERY, deliverySlot)));
+        state = ProductionProcess.reduceBakeryHotBlockChanged(state, task.ownerId(),
+                new BakeryHotBlockChanged(job.id(), leaseId, BakeryWorkState.Phase.DEPOT_DELIVERY, Optional.empty()));
+        FrontierWorldState beforeDelivery = state;
+        assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceBakeryHotEffectPrepared(
+                beforeDelivery, task.ownerId(), new BakeryHotEffectPrepared(job.id(), leaseId,
+                        BakeryWorkState.Phase.DEPOT_DELIVERY, 20)),
+                "an occupied depot slot cannot be selected for bread delivery");
+        state = ProductionProcess.reduceBakeryHotEffectPrepared(state, task.ownerId(),
+                new BakeryHotEffectPrepared(job.id(), leaseId, BakeryWorkState.Phase.DEPOT_DELIVERY, deliverySlot));
+        state = ProductionProcess.reduceBakeryHotEffectObserved(state, task.ownerId(), new BakeryHotEffectObserved(
+                job.id(), leaseId, BakeryWorkState.Phase.DEPOT_DELIVERY, actor.body(),
+                1L, 1L, List.of(), List.of(new FungiblePhysicalObservation.Stack(
+                new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, deliverySlot)),
+                "minecraft:bread", 64))));
+        assertEquals(BakeryWorkState.Phase.DELIVERED, state.productionJobs().get(job.id()).bakeryWork().orElseThrow().phase());
+        assertEquals(StrategicTaskStatus.ACTIVE, state.strategicPlans().tasks().get(task.id()).status());
+        state = state.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING)
+                .releaseSceneLease(leaseId, List.of(new SceneMemberPosition(job.workerId(), actor.body(), actor.condition().health())));
+        BakeryColdStep finalization = ProductionProcess.planCompletion(state, ProductionProcess.complete(job, 900L)).stream()
+                .map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance).map(BakeryColdStep.class::cast)
+                .findFirst().orElseThrow();
+        assertEquals(BakeryColdStep.Action.FINALIZE, finalization.action());
+        state = ProductionProcess.reduceBakeryColdStep(state, task.ownerId(), finalization);
+        assertFalse(state.productionJobs().containsKey(job.id()));
+        assertEquals(StrategicTaskStatus.COMPLETED, state.strategicPlans().tasks().get(task.id()).status());
+        assertEquals(64, state.inventory().fungibleResources().totalQuantity(task.ownerId(), "minecraft:bread"));
+    }
+
+    private static FrontierWorldState at(FrontierWorldState state, SceneLeaseId leaseId,
+                                         SubjectId actor, BodyPosition body) {
+        Map<SceneLeaseId, SceneLease> leases = new java.util.LinkedHashMap<>(state.sceneLeases());
+        leases.put(leaseId, leases.get(leaseId).withMemberPositions(Map.of(actor, body)));
+        return state.withChanges(FrontierWorldStateUpdate.begin().sceneLeases(leases));
+    }
+}

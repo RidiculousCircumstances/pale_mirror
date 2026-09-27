@@ -8,7 +8,7 @@
     { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
       { "view": "process", "id": "job:site-harvest-1-wheat-field-1", "expect": {
         "status": "ok", "conservation": { "completedCropSlots": 64, "totalCropSlots": 65,
-          "deliveredYield": 64, "segmentStartCropSlot": 64, "segmentEndCropSlot": 65 }
+          "deliveredYield": 64, "nextCropSlot": 64 }
       } }
     ] },
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox",

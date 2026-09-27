@@ -27,15 +27,29 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrontierV3FixtureCatalogTest {
+    @Test void freshBakeryProfileStartsBeforeTheFirstWheatTransfer() {
+        var configuration = FrontierV3FixtureCatalog.configuration("bakery-fresh-job",
+                new WorldId("frontier:bakery-fresh-profile"), 41L);
+        var state = configuration.initialState();
+        assertEquals(1, state.productionJobs().size());
+        var job = state.productionJobs().values().iterator().next();
+        assertEquals(BakeryWorkState.Phase.DEPOT_PICKUP, job.bakeryWork().orElseThrow().phase());
+        assertTrue(state.inventory().fungibleResources().lots().containsKey(job.consumedItemId()));
+        assertTrue(!state.inventory().fungibleResources().lots().containsKey(job.outputItemId()));
+        assertTrue(state.sceneLeases().isEmpty());
+        assertTrue(!configuration.initialSchedules().isEmpty());
+    }
+
     @Test void fungibleProductionProfileRetainsOrdinaryUnfinishedColdWork() {
         var configuration = FrontierV3FixtureCatalog.configuration("fungible-production-work",
                 new WorldId("frontier:fungible-work-profile"), 41L);
         var state = configuration.initialState();
         assertEquals(1, state.productionJobs().size());
         var job = state.productionJobs().values().iterator().next();
-        assertEquals(ProductionWorkProgress.processing(17), job.workProgress());
+        assertEquals(BakeryWorkState.Phase.PROCESSING, job.bakeryWork().orElseThrow().phase());
+        assertEquals(7, job.bakeryWork().orElseThrow().completedWorkTicks());
         assertEquals(new SubjectId("job:production-1-1"), job.id());
-        assertEquals(new SubjectId("resident:1-15"), job.workerId());
+        assertEquals(new SubjectId("resident:1-3"), job.workerId());
         assertEquals(new SubjectId("lot:production-1-1-bread"), job.outputItemId());
         assertTrue(state.inventory().fungibleResources().lots().containsKey(job.consumedItemId()));
         assertTrue(!state.inventory().fungibleResources().lots().containsKey(job.outputItemId()));
@@ -49,14 +63,15 @@ class FrontierV3FixtureCatalogTest {
         var state = configuration.initialState();
         assertEquals(1, state.productionJobs().size());
         var job = state.productionJobs().values().iterator().next();
-        assertEquals(ProductionWorkProgress.processing(17), job.workProgress());
+        assertEquals(BakeryWorkState.Phase.PROCESSING, job.bakeryWork().orElseThrow().phase());
+        assertEquals(7, job.bakeryWork().orElseThrow().completedWorkTicks());
         var held = assertInstanceOf(ProductionInputHold.FungibleCold.class, job.inputHold());
         assertEquals(java.util.Map.of(new SubjectId("lot:production-two-field-first"), 32,
                 new SubjectId("lot:production-two-field-second"), 32), held.inputLots());
         assertEquals(1, state.inventory().fungibleResources().claims().size());
         assertEquals(new SubjectId("claim:production-1-1"), held.claimId());
         assertEquals(java.util.Map.of(held.claimId(), 64), state.inventory().fungibleResources().accounts()
-                .get(held.accountId()).claimQuantities());
+                .get(job.bakeryWork().orElseThrow().stationAccountId()).claimQuantities());
         assertTrue(state.sceneLeases().isEmpty());
         assertTrue(!configuration.initialSchedules().isEmpty());
     }

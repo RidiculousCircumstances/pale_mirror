@@ -21,7 +21,8 @@ public record ProductionJob(
         int outputCount,
         ProductionWorkProgress workProgress,
         TraversalTopology workTraversal,
-        int traversalCursor
+        int traversalCursor,
+        java.util.Optional<BakeryWorkState> bakeryWork
 ) {
     public ProductionJob {
         Objects.requireNonNull(id, "production job id");
@@ -33,6 +34,7 @@ public record ProductionJob(
         Objects.requireNonNull(inputHold, "production input hold");
         Objects.requireNonNull(outputItemId, "output item id");
         Objects.requireNonNull(workProgress, "production work progress"); workTraversal = Objects.requireNonNull(workTraversal, "production work traversal");
+        bakeryWork = Objects.requireNonNull(bakeryWork, "bakery work state");
         if (!taskId.value().startsWith("task:")) throw new IllegalArgumentException("production job needs its declared strategic task");
         if (!consumedItemId.equals(inputHold.itemId())) throw new IllegalArgumentException("production input hold must retain its exact item id");
         if (outputItemKind == null || !outputItemKind.matches("[a-z][a-z0-9_-]{0,31}:[a-z0-9][a-z0-9_./-]{0,127}")) {
@@ -46,6 +48,15 @@ public record ProductionJob(
                 || traversalCursor >= workTraversal.linearCorridorSurfaces().size()) {
             throw new IllegalArgumentException("production job must retain one open pedestrian work traversal and cursor");
         }
+    }
+
+    /** Existing test fixtures and the retiring route constructor have no bakery phase. */
+    public ProductionJob(SubjectId id, SubjectId taskId, SubjectId settlementId, SubjectId facilityId, SubjectId workerId,
+                         SubjectId consumedItemId, ProductionInputHold inputHold, SubjectId outputItemId,
+                         String outputItemKind, int outputCount, ProductionWorkProgress workProgress,
+                         TraversalTopology workTraversal, int traversalCursor) {
+        this(id, taskId, settlementId, facilityId, workerId, consumedItemId, inputHold, outputItemId,
+                outputItemKind, outputCount, workProgress, workTraversal, traversalCursor, java.util.Optional.empty());
     }
 
     /** Compatibility fixture constructor: an existing inventory stack is a materialized hold. */
@@ -63,7 +74,22 @@ public record ProductionJob(
 
     public ProductionJob withInputHold(ProductionInputHold next) {
         return new ProductionJob(id, taskId, settlementId, facilityId, workerId, consumedItemId, next, outputItemId, outputItemKind, outputCount,
-                workProgress, workTraversal, traversalCursor);
+                workProgress, workTraversal, traversalCursor, bakeryWork);
+    }
+    /** Replaces only an unconsumed bakery input allocation; the job, worker and output identity remain stable. */
+    public ProductionJob reallocateBakeryInput(ProductionInputHold next) {
+        if (bakeryWork.isEmpty() || bakeryWork.orElseThrow().phase() != BakeryWorkState.Phase.DEPOT_PICKUP
+                || bakeryWork.orElseThrow().pendingPhysicalStep().isPresent()
+                || bakeryWork.orElseThrow().block().map(value -> value.reason() != BakeryWorkBlock.Reason.SOURCE_CHANGED).orElse(true)
+                || !(next instanceof ProductionInputHold.FungibleCold || next instanceof ProductionInputHold.FungibleBound
+                        || next instanceof ProductionInputHold.Materialized))
+            throw new IllegalArgumentException("only an unconsumed bakery input can be reallocated");
+        return new ProductionJob(id, taskId, settlementId, facilityId, workerId, next.itemId(), next,
+                outputItemId, outputItemKind, outputCount, workProgress, workTraversal, traversalCursor,
+                java.util.Optional.of(bakeryWork.orElseThrow().withReallocatedDepotAccount(
+                        next instanceof ProductionInputHold.FungibleCold cold ? cold.accountId()
+                                : next instanceof ProductionInputHold.FungibleBound bound ? bound.accountId()
+                                : bakeryWork.orElseThrow().sourceAccountId())));
     }
     /** Exact resource subjects retained by this job, including every fungible input lot. */
     public java.util.Map<SubjectId, Integer> inputQuantities() {
@@ -88,12 +114,18 @@ public record ProductionJob(
 
     public ProductionJob withWorkProgress(ProductionWorkProgress next) {
         return new ProductionJob(id, taskId, settlementId, facilityId, workerId, consumedItemId, inputHold, outputItemId, outputItemKind, outputCount,
-                next, workTraversal, traversalCursor);
+                next, workTraversal, traversalCursor, bakeryWork);
     }
 
     public ProductionJob withWorkTraversal(TraversalTopology next, int nextCursor) {
         return new ProductionJob(id, taskId, settlementId, facilityId, workerId, consumedItemId, inputHold, outputItemId, outputItemKind, outputCount,
-                workProgress, next, nextCursor);
+                workProgress, next, nextCursor, bakeryWork);
+    }
+
+    public ProductionJob withBakeryWork(BakeryWorkState next) {
+        if (bakeryWork.isEmpty()) throw new IllegalArgumentException("only an admitted bakery job may advance bakery work");
+        return new ProductionJob(id, taskId, settlementId, facilityId, workerId, consumedItemId, inputHold, outputItemId,
+                outputItemKind, outputCount, workProgress, workTraversal, traversalCursor, java.util.Optional.of(next));
     }
 
     /**
@@ -107,7 +139,7 @@ public record ProductionJob(
             throw new IllegalArgumentException("only an unstarted production worker may rebase its traversal at HOT hand-off");
         }
         return new ProductionJob(id, taskId, settlementId, facilityId, workerId, consumedItemId, inputHold, outputItemId, outputItemKind, outputCount,
-                workProgress, Objects.requireNonNull(next, "rebased production-work traversal"), 0);
+                workProgress, Objects.requireNonNull(next, "rebased production-work traversal"), 0, bakeryWork);
     }
 
     private static TraversalTopology fixtureTraversal(SubjectId jobId, SubjectId facilityId) {

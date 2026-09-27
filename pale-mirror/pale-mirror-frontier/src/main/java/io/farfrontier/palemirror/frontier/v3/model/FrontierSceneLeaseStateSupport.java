@@ -138,6 +138,12 @@ public final class FrontierSceneLeaseStateSupport {
     static FrontierWorldState release(FrontierWorldState state, SceneLeaseId leaseId, List<SceneMemberPosition> positions) {
         SceneLease current = state.sceneLeases().get(leaseId);
         if (current == null || current.status() != SceneLeaseStatus.DRAINING) throw new IllegalArgumentException("only a draining scene lease can be released");
+        if (FrontierSceneBehaviors.isProductionWork(current)) {
+            ProductionJob job = state.productionJobs().get(FrontierSceneBehaviors.productionWork(current).jobId());
+            if (job != null && job.bakeryWork().isPresent()
+                    && job.bakeryWork().orElseThrow().pendingPhysicalStep().isPresent())
+                throw new IllegalArgumentException("bakery scene cannot release a possibly applied physical effect");
+        }
         requireNoBoundActorHand(state, current);
         FrontierWorldState releaseReady = SceneStrikeStateSupport.prepareRelease(state, current);
         Set<SubjectId> expected = current.members().stream().map(SceneMember::actorId).filter(actor -> state.actorLocations().get(actor).condition().status() == ActorLifeStatus.ALIVE)

@@ -493,6 +493,7 @@ final class FrontierV3SceneExecutor {
                     FrontierV3AmbientActorExecutor.bioformProfile(state, member.actorId()));
             body.setCustomName(FrontierV3ScenePresentation.actorName(state, member.actorId(), bioform));
             body.setCustomNameVisible(true);
+            if (!FrontierV3BakeryHandProjection.prepareNew(state, lease, member, body)) return BodyMaterialization.CONFLICT;
             if (!mark(body, state, lease, member)) return BodyMaterialization.CONFLICT;
             var declaration = FrontierV3AmbientActorExecutor.carrierDeclaration(state, member.actorId(),
                     FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE, member.entityId(),

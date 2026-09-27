@@ -74,7 +74,8 @@ class HumanRoleAssignmentTest {
                 .filter(value -> value.settlementId().equals(settlement.id()) && value.role() == ResidentRole.CRAFTER).findFirst().orElseThrow();
         BlockPosition replacementSurface = state.actorLocations().get(departed.id()).supportingSurface().support();
         state = killRole(state, ResidentRole.CRAFTER);
-        ResidentProfile born = born(state, "resident:1-crafter-born", ResidentRole.CRAFTER);
+        ResidentProfile born = born(state, "resident:1-crafter-born", ResidentRole.CRAFTER)
+                .withProfession(ResidentProfession.BAKER);
         state = HumanPopulationTestFixtures.withResident(state, born, replacementSurface);
         StrategicTask task = productionTask(settlement.id());
         state = state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective(task, StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD))

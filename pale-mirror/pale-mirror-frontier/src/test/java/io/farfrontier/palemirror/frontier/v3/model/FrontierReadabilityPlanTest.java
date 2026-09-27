@@ -26,7 +26,7 @@ class FrontierReadabilityPlanTest {
                 .filter(value -> value.kind() == StructureKind.WORKSHOP).findFirst().orElseThrow().id());
         assertEquals(FrontierObjectBoard.Tone.SETTLEMENT, workshop.tone());
         assertEquals(FrontierObjectBoard.Scope.LOCAL, workshop.scope());
-        assertTrue(workshop.text().contains("WORKSHOP"));
+        assertTrue(workshop.text().contains("BAKERY"));
         assertTrue(workshop.text().endsWith("OPERATIONAL"));
         ResourceSite field = FrontierResourceSitePlan.compile(state.bootstrap()).values().iterator().next();
         FrontierObjectBoard fieldBoard = plan.boards().get(field.id());
@@ -281,6 +281,28 @@ class FrontierReadabilityPlanTest {
     }
 
     @Test
+    void depotBoardCountsFungibleBakeryBreadAfterAMissedMeal() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:board-fungible-bread"), 91L));
+        Settlement settlement = state.bootstrap().settlements().getFirst();
+        java.util.List<SubjectId> recipients = state.humanPopulation().residents().values().stream()
+                .filter(resident -> resident.settlementId().equals(settlement.id())).map(ResidentProfile::id).sorted().toList();
+        SettlementProvision shortage = SettlementProvision.started(settlement.id(), 1, 100L, recipients.size(), recipients, java.util.List.of());
+        FrontierWorldState hungry = state.withHumanPopulation(state.humanPopulation().withProvision(shortage));
+        SubjectId account = new SubjectId("custody:container-1-depot");
+        SubjectId wheat = new SubjectId("lot:bootstrap-1-wheat");
+        ResourceLot bread = new ResourceLot(new SubjectId("lot:board-fungible-bread"), settlement.id(), "minecraft:bread", 64,
+                "test-board", java.util.List.of(wheat));
+        var resources = hungry.inventory().fungibleResources().transformCold(account, java.util.Map.of(wheat, 64),
+                java.util.Map.of(), bread);
+        FrontierWorldState stocked = hungry.withInventory(hungry.inventory().withFungibleResources(resources));
+        SettlementStructure depot = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
+
+        FrontierObjectBoard board = FrontierReadabilityPlan.compile(stocked).boards().get(depot.id());
+        assertTrue(board.text().endsWith("LAST MEAL MISSED · BREAD 64 / " + (recipients.size() * 2)));
+        assertFalse(board.text().contains("BREAD NEEDED"));
+    }
+
+    @Test
     void makesTheExactAcceptedMarketWorkReadableAtItsOwnedWorkshop() {
         FrontierDevelopmentScenarios.MaterializedProductionFixture fixture = FrontierDevelopmentScenarios.materializedProductionInputTheftFixture(
                 new WorldId("frontier:board-market-work"), 94L);
@@ -290,7 +312,7 @@ class FrontierReadabilityPlanTest {
         FrontierObjectBoard board = FrontierReadabilityPlan.compile(state).boards().get(workshop);
 
         assertEquals(FrontierObjectBoard.Tone.SETTLEMENT, board.tone());
-        assertTrue(board.text().contains("WORKSHOP"));
+        assertTrue(board.text().contains("BAKERY"));
         assertTrue(board.text().contains("ORDER · 64 BREAD"));
         assertTrue(board.text().contains("FOR " + settlement.displayName()));
         assertTrue(board.text().contains("2 CREDITS"));

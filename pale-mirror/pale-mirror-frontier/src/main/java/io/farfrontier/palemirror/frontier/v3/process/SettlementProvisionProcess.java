@@ -298,8 +298,8 @@ public final class SettlementProvisionProcess {
         if (nextRecipient == recipients.size()) return List.copyOf(allocations);
         int ordinal = allocations.size();
         for (CustodyAccount account : state.inventory().fungibleResources().accounts().values().stream().sorted(Comparator.comparing(CustodyAccount::id)).toList()) {
-            if (nextRecipient == recipients.size() || !(account.custody() instanceof ResourceCustody.Container container) || !container.containerId().equals(depot)
-                    || state.inventory().fungibleResources().bindings().values().stream().anyMatch(binding -> binding.accountId().equals(account.id()))) continue;
+            if (nextRecipient == recipients.size() || !(account.custody() instanceof ResourceCustody.Container container)
+                    || !container.containerId().equals(depot)) continue;
             for (var entry : account.lotQuantities().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).toList()) {
                 if (nextRecipient == recipients.size()) break;
                 ResourceLot lot = state.inventory().fungibleResources().lots().get(entry.getKey());
@@ -334,7 +334,10 @@ public final class SettlementProvisionProcess {
         }
         CustodyAccount account = state.inventory().fungibleResources().accounts().get(allocation.fungibleSource().orElseThrow().accountId());
         if (state.inventory().fungibleResources().bindings().values().stream().anyMatch(binding -> binding.accountId().equals(account.id()))) {
-            return List.of(schedule(progressAfter(provision, Math.addExact(action.dueAt().ticks(), 100L))));
+            // No ration has been consumed yet. Retry the same allocation after its
+            // physical chest custody releases; advancing the allocation cursor here
+            // would strand the retained meal (or make the final allocation invalid).
+            return List.of(schedule(progress(provision, Math.addExact(action.dueAt().ticks(), 100L))));
         }
         List<ProposedEvent> events = new ArrayList<>();
         events.add(new ProposedEvent(provision.settlementId(), new SettlementProvisionConsumed(provision.settlementId(), allocation.itemId(), allocation.count(), true)));
@@ -355,8 +358,11 @@ public final class SettlementProvisionProcess {
                     || account.lotQuantities().getOrDefault(lot.id(), 0) < allocation.count()) {
                 throw new IllegalArgumentException("fungible ration allocation lacks current owned food custody");
             }
-            resources = resources.reserve(new ClaimAllocation(source.claimId(), provision.settlementId(), provision.settlementId(), BREAD,
-                    allocation.count(), java.util.Map.of(allocation.itemId(), allocation.count()), ClaimPurpose.SETTLEMENT_RATION), account.id());
+            ClaimAllocation claim = new ClaimAllocation(source.claimId(), provision.settlementId(), provision.settlementId(), BREAD,
+                    allocation.count(), java.util.Map.of(allocation.itemId(), allocation.count()), ClaimPurpose.SETTLEMENT_RATION);
+            var bindings = resources.bindings().values().stream().filter(binding -> binding.accountId().equals(account.id())).toList();
+            resources = bindings.isEmpty() ? resources.reserve(claim, account.id())
+                    : resources.reserveBound(claim, account.id(), bindings.getFirst().authorityEpoch());
         }
         return state.inventory().withFungibleResources(resources);
     }

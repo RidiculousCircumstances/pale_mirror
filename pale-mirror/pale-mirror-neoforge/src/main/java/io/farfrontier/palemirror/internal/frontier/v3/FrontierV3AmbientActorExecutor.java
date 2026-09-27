@@ -359,6 +359,7 @@ final class FrontierV3AmbientActorExecutor {
             if (!owned(existing, actorId, bioform)) return Result.CONFLICT;
             if (existing instanceof Zombie zombie) configureBioform(zombie, bioformProfile(state, actorId));
             if (existing instanceof Mob body) {
+                if (!FrontierV3BakeryHandProjection.matchesAmbient(state, actorId, body)) return Result.CONFLICT;
                 body.getNavigation().stop();
                 body.setNoAi(true);
             }
@@ -377,6 +378,7 @@ final class FrontierV3AmbientActorExecutor {
         body.setNoAi(true);
         if (body instanceof Zombie zombie) configureBioform(zombie, bioformProfile(state, actorId));
         hydrateExactHeldEquipment(body, state, actorId);
+        if (!FrontierV3BakeryHandProjection.prepareAmbientNew(state, actorId, body)) return Result.CONFLICT;
         FrontierV3ScenePresentation.applyAmbientActorPresentation(body, state, actorId, bioform);
         body.getPersistentData().putString(ACTOR_KEY, actorId.value()); body.getPersistentData().putString(KIND_KEY, bioform ? "BIOFORM" : "RESIDENT");
         if (!level.noCollision(body, body.getBoundingBox()) || admissionColumnOccupied(level, body, body.getBoundingBox())) return Result.DEFERRED;

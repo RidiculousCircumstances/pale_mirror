@@ -153,6 +153,61 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
         if (command.payload() instanceof ProductionWorkProgressed progressed) return planHotProgress(state, command, progressed);
+        if (command.payload() instanceof BakeryHotGoalArrived arrived) {
+            try {
+                ProductionJob job = FrontierProductionWorkSceneSupport.require(state, new ProductionWorkSceneCause(arrived.jobId()));
+                ProductionProcess.reduceBakeryHotGoalArrived(state, job.settlementId(), arrived);
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(job.settlementId(), arrived)));
+            } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+        }
+        if (command.payload() instanceof BakeryHotEffectPrepared prepared) {
+            try {
+                ProductionJob job = FrontierProductionWorkSceneSupport.require(state, new ProductionWorkSceneCause(prepared.jobId()));
+                ProductionProcess.reduceBakeryHotEffectPrepared(state, job.settlementId(), prepared);
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(job.settlementId(), prepared)));
+            } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+        }
+        if (command.payload() instanceof BakeryHotEffectObserved observed) {
+            if (!command.actor().equals(io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR))
+                return FrontierWorldCommandPlanner.rejected("bakery physical receipt requires the physical executor");
+            try {
+                ProductionJob job = FrontierProductionWorkSceneSupport.require(state, new ProductionWorkSceneCause(observed.jobId()));
+                ProductionProcess.reduceBakeryHotEffectObserved(state, job.settlementId(), observed);
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(job.settlementId(), observed)));
+            } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+        }
+        if (command.payload() instanceof BakeryHotWorkTick tick) {
+            try {
+                ProductionJob job = FrontierProductionWorkSceneSupport.require(state, new ProductionWorkSceneCause(tick.jobId()));
+                ProductionProcess.reduceBakeryHotWorkTick(state, job.settlementId(), tick);
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(job.settlementId(), tick)));
+            } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+        }
+        if (command.payload() instanceof BakeryHotHandRelease released) {
+            try {
+                ProductionJob job = FrontierProductionWorkSceneSupport.require(state, new ProductionWorkSceneCause(released.jobId()));
+                ProductionProcess.reduceBakeryHotHandRelease(state, job.settlementId(), released);
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(job.settlementId(), released)));
+            } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+        }
+        if (command.payload() instanceof BakeryHotHandMaterialized observed) {
+            if (!command.actor().equals(io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR))
+                return FrontierWorldCommandPlanner.rejected("bakery hand materialization requires the physical executor");
+            try {
+                ProductionJob job = FrontierProductionWorkSceneSupport.require(state, new ProductionWorkSceneCause(observed.jobId()));
+                ProductionProcess.reduceBakeryHotHandMaterialized(state, job.settlementId(), observed);
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(job.settlementId(), observed)));
+            } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+        }
+        if (command.payload() instanceof BakeryHotBlockChanged changed) {
+            if (!command.actor().equals(io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR))
+                return FrontierWorldCommandPlanner.rejected("bakery block witness requires the physical executor");
+            try {
+                ProductionJob job = FrontierProductionWorkSceneSupport.require(state, new ProductionWorkSceneCause(changed.jobId()));
+                ProductionProcess.reduceBakeryHotBlockChanged(state, job.settlementId(), changed);
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(job.settlementId(), changed)));
+            } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+        }
         if (command.payload() instanceof ProductionWorkTraversalAdvanced advanced) return planHotTraversal(state, advanced);
         if (command.payload() instanceof ProductionWorkTraversalBlocked blocked) return planHotTraversalBlocked(state, command, blocked);
         return FrontierWorldCommandPlanner.rejected("economy process does not admit command: " + command.payload().type());
@@ -175,6 +230,15 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
             case ProductionWorkProgressed progressed -> ProductionProcess.reduceWorkProgressed(state, event.subject(), progressed);
             case ProductionWorkTraversalAdvanced advanced -> ProductionProcess.reduceWorkTraversalAdvanced(state, event.subject(), advanced);
             case ProductionColdWorkAdvanced advanced -> ProductionProcess.reduceColdWorkAdvanced(state, event.subject(), advanced);
+            case BakeryColdStep step -> ProductionProcess.reduceBakeryColdStep(state, event.subject(), step);
+            case BakeryInputReallocated reallocated -> ProductionProcess.reduceBakeryInputReallocated(state, event.subject(), reallocated);
+            case BakeryHotGoalArrived arrived -> ProductionProcess.reduceBakeryHotGoalArrived(state, event.subject(), arrived);
+            case BakeryHotEffectPrepared prepared -> ProductionProcess.reduceBakeryHotEffectPrepared(state, event.subject(), prepared);
+            case BakeryHotEffectObserved observed -> ProductionProcess.reduceBakeryHotEffectObserved(state, event.subject(), observed);
+            case BakeryHotWorkTick tick -> ProductionProcess.reduceBakeryHotWorkTick(state, event.subject(), tick);
+            case BakeryHotHandRelease released -> ProductionProcess.reduceBakeryHotHandRelease(state, event.subject(), released);
+            case BakeryHotHandMaterialized observed -> ProductionProcess.reduceBakeryHotHandMaterialized(state, event.subject(), observed);
+            case BakeryHotBlockChanged changed -> ProductionProcess.reduceBakeryHotBlockChanged(state, event.subject(), changed);
             case ProductionWorkTraversalBlocked blocked -> ProductionProcess.reduceWorkTraversalBlocked(state, event.subject(), blocked);
             case ProductionWorkSceneLeasePrepared prepared -> reduceWorkScenePrepared(state, event.subject(), event, prepared);
             case ProductionWorkSceneLeaseHandoff handoff -> reduceWorkSceneHandoff(state, event.subject(), event, handoff);

@@ -78,7 +78,7 @@ final class FrontierV3SceneDiagnosticJson {
                 + "\",\"harvestJob\":\"" + FrontierV3DiagnosticJson.quote(harvest == null ? "" : harvest.jobId().value())
                 + "\",\"productionJob\":\"" + FrontierV3DiagnosticJson.quote(production == null ? "" : production.jobId().value())
                 + "\",\"patrolTask\":\"" + FrontierV3DiagnosticJson.quote(routePatrol == null ? "" : routePatrol.taskId().value())
-                + "\"" + productionTraversal(productionJob) + serviceTraversal(serviceWork) + patrolTraversal(patrol)
+                + "\"" + productionTraversal(state, productionJob) + serviceTraversal(serviceWork) + patrolTraversal(patrol)
                 + ",\"members\":" + lease.members().size() + ",\"primaryActor\":\"" + FrontierV3DiagnosticJson.quote(primaryMember.actorId().value())
                 + "\",\"primaryEntityUuid\":\"" + primaryMember.entityId() + "\",\"explosionStatus\":\"" + (explosion == null ? "NONE" : explosion.status()) + "\""
                 + ",\"strikeStatus\":\"" + (strike == null ? "NONE" : strike.status()) + "\""
@@ -102,8 +102,18 @@ final class FrontierV3SceneDiagnosticJson {
                 + cargoCleanup + recovery + readiness.map(FrontierV3SceneDiagnosticJson::sceneReadiness).orElse("") + "}";
     }
 
-    private static String productionTraversal(ProductionJob job) {
+    private static String productionTraversal(FrontierWorldState state, ProductionJob job) {
         if (job == null) return ",\"productionStage\":\"\",\"productionCursor\":-1,\"productionCurrent\":null,\"productionNext\":null,\"productionNextBody\":null,\"productionFutureBody\":null";
+        if (job.bakeryWork().isPresent()) {
+            var work = job.bakeryWork().orElseThrow();
+            var goal = io.farfrontier.palemirror.frontier.v3.model.BakeryWorkGoal.current(state, job);
+            return ",\"productionStage\":\"" + work.phase() + "\",\"productionCursor\":-1"
+                    + ",\"productionCurrent\":" + FrontierV3DiagnosticJson.position(goal.station().support())
+                    + ",\"productionNext\":null,\"productionNextBody\":"
+                    + FrontierV3DiagnosticJson.position(goal.station().standingBody())
+                    + ",\"productionFutureBody\":null,\"bakeryCompletedTicks\":" + work.completedWorkTicks()
+                    + ",\"bakeryPendingPhysicalEffect\":" + work.pendingPhysicalStep().isPresent();
+        }
         var corridor = job.workTraversal().linearCorridorSurfaces();
         String next = job.traversalCursor() + 1 >= corridor.size() ? "null" : FrontierV3DiagnosticJson.position(corridor.get(job.traversalCursor() + 1).support());
         String nextBody = job.traversalCursor() + 1 >= corridor.size() ? "null" : FrontierV3DiagnosticJson.position(corridor.get(job.traversalCursor() + 1).standingBody());

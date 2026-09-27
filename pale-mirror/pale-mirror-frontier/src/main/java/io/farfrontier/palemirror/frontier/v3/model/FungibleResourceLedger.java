@@ -304,6 +304,54 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
     public FungibleResourceLedger transferToNewAccount(SubjectId fromId, CustodyAccount destination) {
         CustodyAccount from = requireAccount(fromId); Objects.requireNonNull(destination, "new custody account");
         requireNonActorTransfer(from, destination);
+        return transferToNewAccountChecked(from, destination);
+    }
+
+    /**
+     * One COLD work-owned container/actor handoff. The caller must have proved arrival at the
+     * order's station; this ledger proves exact account/claim/custody conservation, never motion.
+     * A loaded source or destination cannot use this operation while its physical bindings live.
+     */
+    public FungibleResourceLedger transferActorOrderCold(ActorContainerItemOrder order) {
+        FungibleActorOrderTransfer.Accounts transfer = FungibleActorOrderTransfer.accounts(this, order);
+        requireNoPhysicalBinding(transfer.source().id(), "actor item transfer");
+        if (transfer.destinationExists()) {
+            requireNoPhysicalBinding(transfer.destination().id(), "actor item transfer");
+            return transferBetweenAccounts(transfer.source(), transfer.destination(), transfer.lots(), transfer.claims());
+        }
+        return transferToNewAccountChecked(transfer.source(), transfer.destination());
+    }
+
+    /**
+     * The loaded counterpart consumes only an actual source-and-hand observation under both
+     * explicit epochs. A job/intent owner must establish durable-before-effect and confirm the
+     * physical postcondition before publishing the returned ledger.
+     */
+    public FungibleResourceLedger transferActorOrderObserved(ActorContainerItemOrder order,
+                                                              long sourceEpoch, long destinationEpoch,
+                                                              List<PhysicalStackBinding> remainingSource,
+                                                              List<PhysicalStackBinding> destinationBindings) {
+        FungibleActorOrderTransfer.Accounts transfer = FungibleActorOrderTransfer.accounts(this, order);
+        FungibleActorOrderTransfer.requireDeclaredStationPort(this, order, transfer, destinationBindings);
+        return transferObserved(transfer.source().id(), transfer.destination(), transfer.destinationExists(),
+                sourceEpoch, destinationEpoch, transfer.lots(), transfer.claims(), remainingSource, destinationBindings);
+    }
+
+    /**
+     * Turns the two *observed post-effect* physical layouts into exact lot/claim bindings.
+     * The caller still owns durable-before-effect and must prove that the same witnessed
+     * actor and container performed the handoff. This helper does not infer a resource owner
+     * or accept an arbitrary third-party stack as the destination.
+     */
+    public FungibleResourceLedger transferActorOrderObservedStacks(ActorContainerItemOrder order,
+                                                                    long sourceEpoch, long destinationEpoch,
+                                                                    List<FungiblePhysicalObservation.Stack> remainingSource,
+                                                                    List<FungiblePhysicalObservation.Stack> destination) {
+        return FungibleActorOrderTransfer.observedStacks(this, order, sourceEpoch, destinationEpoch,
+                remainingSource, destination);
+    }
+
+    private FungibleResourceLedger transferToNewAccountChecked(CustodyAccount from, CustodyAccount destination) {
         requireNoPhysicalBinding(from.id(), "transfer");
         if (accounts.containsKey(destination.id()) || from.id().equals(destination.id())) throw new IllegalArgumentException("new custody account identity is already live");
         requireSubset(from.lotQuantities(), destination.lotQuantities(), "new custody account lots");
@@ -315,6 +363,23 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         else next.put(from.id(), new CustodyAccount(from.id(), from.custody(), remainingLots, remainingClaims));
         next.put(destination.id(), destination);
         return new FungibleResourceLedger(lots, claims, next, withoutBindingsFor(from.id()));
+    }
+
+    private FungibleResourceLedger transferBetweenAccounts(CustodyAccount from, CustodyAccount to,
+                                                            Map<SubjectId, Integer> lotQuantities,
+                                                            Map<SubjectId, Integer> claimQuantities) {
+        if (from.id().equals(to.id())) throw new IllegalArgumentException("resource transfer requires distinct accounts");
+        requireSubset(from.lotQuantities(), lotQuantities, "actor transfer lots");
+        requireOptionalSubset(from.claimQuantities(), claimQuantities, "actor transfer claims");
+        if (!claimQuantities.isEmpty() && sum(lotQuantities) != sum(claimQuantities))
+            throw new IllegalArgumentException("actor transfer claims must preserve exact resource quantity");
+        Map<SubjectId, CustodyAccount> next = new HashMap<>(accounts);
+        Map<SubjectId, Integer> remainingLots = subtract(from.lotQuantities(), lotQuantities);
+        Map<SubjectId, Integer> remainingClaims = subtract(from.claimQuantities(), claimQuantities);
+        if (remainingLots.isEmpty()) next.remove(from.id());
+        else next.put(from.id(), new CustodyAccount(from.id(), from.custody(), remainingLots, remainingClaims));
+        next.put(to.id(), accountWithAdded(to, lotQuantities, claimQuantities));
+        return new FungibleResourceLedger(lots, claims, next, bindings);
     }
 
     /** Reserves one COLD contract portion and immediately gives that same portion to a new owner. */
@@ -913,11 +978,11 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
     private static Map<SubjectId, Integer> subtract(Map<SubjectId, Integer> source, Map<SubjectId, Integer> removed) {
         Map<SubjectId, Integer> next = new HashMap<>(source); removed.forEach((id, quantity) -> { int remaining = next.get(id) - quantity; if (remaining == 0) next.remove(id); else next.put(id, remaining); }); return next;
     }
-    private static void requireSubset(Map<SubjectId, Integer> source, Map<SubjectId, Integer> requested, String label) {
+    static void requireSubset(Map<SubjectId, Integer> source, Map<SubjectId, Integer> requested, String label) {
         if (requested == null || requested.isEmpty() || requested.values().stream().anyMatch(value -> value == null || value < 1)) throw new IllegalArgumentException(label + " must name a positive exact quantity");
         requested.forEach((id, quantity) -> { if (source.getOrDefault(id, 0) < quantity) throw new IllegalArgumentException(label + " exceeds its current custody"); });
     }
-    private static void requireOptionalSubset(Map<SubjectId, Integer> source, Map<SubjectId, Integer> requested, String label) {
+    static void requireOptionalSubset(Map<SubjectId, Integer> source, Map<SubjectId, Integer> requested, String label) {
         if (requested == null) throw new IllegalArgumentException(label + " is required");
         if (!requested.isEmpty()) requireSubset(source, requested, label);
     }

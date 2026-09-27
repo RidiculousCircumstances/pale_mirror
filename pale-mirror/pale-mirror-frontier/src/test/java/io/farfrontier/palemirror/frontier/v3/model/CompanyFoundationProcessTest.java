@@ -53,7 +53,7 @@ class CompanyFoundationProcessTest {
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:company-negative"), 72L));
         Settlement settlement = initial.bootstrap().settlements().getFirst();
         ResidentProfile founder = initial.humanPopulation().residents().values().stream()
-                .filter(resident -> resident.settlementId().equals(settlement.id()) && resident.role() == ResidentRole.CRAFTER).findFirst().orElseThrow();
+                .filter(resident -> resident.settlementId().equals(settlement.id()) && resident.profession() == ResidentProfession.BAKER).findFirst().orElseThrow();
         Company company = new Company(CompanyFoundationProcess.companyId(settlement.id()), settlement.id(), founder.id(), CompanyPurpose.WORKS, CompanyStatus.ACTIVE, 1L);
 
         assertThrows(IllegalArgumentException.class, () -> initial.withCompanies(new CompanyRegistry(java.util.Map.of(company.id(), company))));

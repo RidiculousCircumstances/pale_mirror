@@ -48,6 +48,7 @@ import io.farfrontier.palemirror.frontier.v3.model.SceneMember;
 import io.farfrontier.palemirror.frontier.v3.model.SceneMemberPosition;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentPrepared;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentTransition;
+import io.farfrontier.palemirror.frontier.v3.model.ProductionJob;
 import io.farfrontier.palemirror.frontier.v3.model.SceneStrikeObservation;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssault;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultCauseIdentity;
@@ -88,6 +89,11 @@ final class FrontierV3SceneReleaseExecutor {
         if (state == null) return;
         SceneLease lease = state.sceneLeases().get(selectedLease.id());
         if (lease == null || lease.status() != SceneLeaseStatus.DRAINING) return;
+        if (FrontierSceneBehaviors.isProductionWork(lease)) {
+            ProductionJob bakeryJob = state.productionJobs().get(FrontierSceneBehaviors.productionWork(lease).jobId());
+            if (bakeryJob != null && bakeryJob.bakeryWork().isPresent()
+                    && bakeryJob.bakeryWork().orElseThrow().pendingPhysicalStep().isPresent()) return;
+        }
         var unfinishedStrike = state.physicalIntents().values().stream()
                 .filter(intent -> intent.kind() == PhysicalIntentKind.SCENE_STRIKE
                         && (intent.status() == PhysicalIntentStatus.RUNNING || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART))
@@ -147,6 +153,9 @@ final class FrontierV3SceneReleaseExecutor {
             if (!(entity instanceof Mob body) || body.getHealth() <= 0.0F) {
                 conflict(level, runtime, state, lease, "release-body-dead"); return;
             }
+            if (!FrontierV3BakeryHandProjection.matchesCurrent(state, lease, member, body)) {
+                conflict(level, runtime, state, lease, "release-bakery-hand-mismatch"); return;
+            }
             long health = Math.round((double) body.getHealth() * FixedScalar.SCALE);
             var supported = releasePolicy.captureReleasedBody(level, body);
             if (supported.isEmpty()) return; // keep DRAINING until a real supported body can be captured
@@ -170,10 +179,41 @@ final class FrontierV3SceneReleaseExecutor {
         // offhand, fungible binding and scene exit must close in the same WAL transition;
         // the generic release deliberately rejects a bound hand.
         io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestHandRelease harvestHandRelease = null;
+        io.farfrontier.palemirror.frontier.v3.model.BakeryHotHandRelease bakeryHandRelease = null;
         if (io.farfrontier.palemirror.frontier.v3.model.FrontierSceneLeaseStateSupport.hasBoundActorHand(state, lease)) {
-            if (!releasePolicy.permitsBoundActorHand() || lease.members().size() != 1) {
+            if (FrontierSceneBehaviors.isProductionWork(lease)) {
+                ProductionJob job = state.productionJobs().get(FrontierSceneBehaviors.productionWork(lease).jobId());
+                if (job == null || job.bakeryWork().isEmpty() || lease.members().size() != 1) {
+                    releasePolicy.conflict(level, runtime, state, lease, "release-bakery-hand-without-owner"); return;
+                }
+                var work = job.bakeryWork().orElseThrow();
+                Entity carrier = level.getEntity(lease.members().getFirst().entityId());
+                if (!(carrier instanceof Mob worker) || !owned(carrier, state, lease, lease.members().getFirst())) {
+                    releasePolicy.conflict(level, runtime, state, lease, "release-bakery-hand-body-unavailable"); return;
+                }
+                var held = worker.getMainHandItem();
+                var bindings = state.inventory().fungibleResources().bindings().values().stream()
+                        .filter(value -> value.accountId().equals(work.actorAccountId())).toList();
+                if (bindings.size() != 1 || held.isEmpty()) {
+                    releasePolicy.conflict(level, runtime, state, lease, "release-bakery-hand-binding-unavailable"); return;
+                }
+                bakeryHandRelease = new io.farfrontier.palemirror.frontier.v3.model.BakeryHotHandRelease(
+                        job.id(), work.actorAccountId(), bindings.getFirst().authorityEpoch(),
+                        new io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalObservation.Stack(
+                                new io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress.ActorHand(
+                                        job.workerId(), lease.members().getFirst().entityId()),
+                                net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(held.getItem()).toString(), held.getCount()),
+                        new SceneLeaseReleased(lease.id(), positions));
+                try {
+                    io.farfrontier.palemirror.frontier.v3.process.ProductionProcess.reduceBakeryHotHandRelease(
+                            state, job.settlementId(), bakeryHandRelease);
+                } catch (IllegalArgumentException invalid) {
+                    releasePolicy.conflict(level, runtime, state, lease,
+                            "release-bakery-hand-preflight:" + invalid.getMessage()); return;
+                }
+            } else if (!releasePolicy.permitsBoundActorHand() || lease.members().size() != 1) {
                 releasePolicy.conflict(level, runtime, state, lease, "release-bound-hand-without-typed-owner"); return;
-            }
+            } else {
             var cause = FrontierSceneBehaviors.resourceSiteHarvest(lease);
             var job = io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSiteHarvestSceneSupport.require(state, cause);
             Entity carrier = level.getEntity(lease.members().getFirst().entityId());
@@ -200,13 +240,14 @@ final class FrontierV3SceneReleaseExecutor {
                 FrontierV3ResourceSiteHarvestSceneExecutor.releaseCustodyConflict(level, runtime, state, lease,
                         "bound-hand-release-preflight:" + invalid.getMessage()); return;
             }
+            }
         }
         if (!FrontierV3CargoDepartureObserver.prepareRelease(level, state, lease)) return;
         if (!actorLedger.fenceAll(releaseCarriers)) {
             releasePolicy.conflict(level, runtime, state, lease, "release-survivor-fence-conflict"); return;
         }
         if (!releaseCarriers.isEmpty()) actorLedger.persist(level, state.bootstrap().worldId());
-        CommandResult result = releaseLoaded(runtime, lease, positions, binding, harvestHandRelease);
+        CommandResult result = releaseLoaded(runtime, lease, positions, binding, harvestHandRelease, bakeryHandRelease);
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "scene_released", lease, result);
         if (result instanceof CommandResult.Accepted) {
             for (Mob body : retireLoadedBodies) {
@@ -226,9 +267,10 @@ final class FrontierV3SceneReleaseExecutor {
     private static CommandResult releaseLoaded(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease,
                                                List<SceneMemberPosition> positions,
                                                java.util.Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction> binding,
-                                               io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestHandRelease harvestHandRelease) {
-        io.farfrontier.palemirror.frontier.v3.api.FrontierPayload payload = harvestHandRelease == null
-                ? new SceneLeaseReleased(lease.id(), positions) : harvestHandRelease;
+                                               io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestHandRelease harvestHandRelease,
+                                               io.farfrontier.palemirror.frontier.v3.model.BakeryHotHandRelease bakeryHandRelease) {
+        io.farfrontier.palemirror.frontier.v3.api.FrontierPayload payload = bakeryHandRelease != null
+                ? bakeryHandRelease : harvestHandRelease == null ? new SceneLeaseReleased(lease.id(), positions) : harvestHandRelease;
         CommandResult result = binding.map(action -> FrontierV3CommandSubmission.submitBound(runtime, "scene-release", lease.id().value(),
                         payload, action))
                 .orElseGet(() -> submit(runtime, "scene-release", lease.id().value(), payload));

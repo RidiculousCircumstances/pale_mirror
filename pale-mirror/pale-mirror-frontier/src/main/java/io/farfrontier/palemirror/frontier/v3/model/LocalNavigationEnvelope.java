@@ -54,6 +54,17 @@ public record LocalNavigationEnvelope(Set<BlockPosition> permittedSupports) {
         return new LocalNavigationEnvelope(supports);
     }
 
+    /** A short Minecraft leg may round a corner or avoid a body two cells off its known centerline. */
+    public static LocalNavigationEnvelope localLeg(List<SurfaceAnchor> knownLeg, SurfaceAnchor target) {
+        knownLeg = List.copyOf(Objects.requireNonNull(knownLeg, "known local leg"));
+        Objects.requireNonNull(target, "local leg target");
+        if (knownLeg.isEmpty() || knownLeg.size() > 12 || !knownLeg.getLast().equals(target))
+            throw new IllegalArgumentException("local leg needs at most twelve known supports ending at its target");
+        LinkedHashSet<BlockPosition> supports = new LinkedHashSet<>();
+        for (SurfaceAnchor anchor : knownLeg) addNeighborhood(supports, anchor.standingBody(), 2);
+        return new LocalNavigationEnvelope(supports);
+    }
+
     /** HOT-only physical re-probe when retained COLD knowledge cannot authorize a path. */
     public static LocalNavigationEnvelope between(BodyPosition retainedBody, List<SurfaceAnchor> legalStations) {
         Objects.requireNonNull(retainedBody, "retained navigation body");
@@ -78,12 +89,16 @@ public record LocalNavigationEnvelope(Set<BlockPosition> permittedSupports) {
     }
 
     private static void addNeighborhood(Set<BlockPosition> supports, BodyPosition body) {
+        addNeighborhood(supports, body, 1);
+    }
+
+    private static void addNeighborhood(Set<BlockPosition> supports, BodyPosition body, int radius) {
         // BodyPosition is the feet block *above* a support. Include a legal
         // one-block drop in support height as well as a one-block ascent;
         // centring this band on feet excluded ordinary lower-ground detours.
         for (int y = body.y() - 2; y <= body.y(); y++) {
-            for (int x = body.x() - 1; x <= body.x() + 1; x++) {
-                for (int z = body.z() - 1; z <= body.z() + 1; z++) supports.add(new BlockPosition(x, y, z));
+            for (int x = body.x() - radius; x <= body.x() + radius; x++) {
+                for (int z = body.z() - radius; z <= body.z() + radius; z++) supports.add(new BlockPosition(x, y, z));
             }
         }
     }

@@ -187,10 +187,10 @@ final class FrontierV3ResourceFieldForeignChangeExecutor {
                 || !(ledger.fieldClaim(siteId) instanceof FrontierV3ResourceSiteLedger.FieldOwnership owner)
                 || owner.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE
                 || !owner.witness().matchesCycle(cycle)) return false;
-        var job = state.resourceSites().site(siteId).activeWork()
-                .filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast).orElse(null);
-        return job == null || !job.progress().hasPendingCrop()
-                || !cycle.layout().cells().get(job.progress().pendingCropSlotIndex()).id().equals(cellId);
+        // A prepared crop is interruptible until its physical work witness begins.
+        // Both the prewrite and scanner paths still require the retained cell to
+        // have no pending effect before admitting a foreign predecessor.
+        return true;
     }
 
     private static boolean matchesPredecessor(ResourceFieldCycle.CellState canonical,

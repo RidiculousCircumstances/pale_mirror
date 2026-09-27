@@ -713,7 +713,7 @@ public final class FrontierSceneBehaviors {
     private static final class ProductionWorkBehavior implements SceneBehavior<ProductionWorkSceneCause> {
         @Override public SceneLeaseStatus recoveredStatus(FrontierWorldState state, SceneLease lease) {
             ProductionJob job = FrontierProductionWorkSceneSupport.require(state, cause(lease));
-            return blocked(state, job) || job.workProgress().terminalEffectEligible()
+            return blocked(state, job) || job.bakeryWork().isEmpty() && job.workProgress().terminalEffectEligible()
                     ? SceneLeaseStatus.DRAINING : SceneLeaseStatus.HOT;
         }
         private boolean blocked(FrontierWorldState state, ProductionJob job) {
@@ -743,11 +743,16 @@ public final class FrontierSceneBehaviors {
         @Override public BodyPosition releasedBody(FrontierWorldState state, SceneLease lease, SubjectId actorId, BodyPosition observed) {
             ProductionJob job = FrontierProductionWorkSceneSupport.require(state, cause(lease));
             if (!job.workerId().equals(actorId)) throw new IllegalArgumentException("production scene release has a foreign worker");
+            if (job.bakeryWork().isPresent()) return observed;
             return job.workTraversal().linearCorridorSurfaces().get(job.traversalCursor()).standingBody();
         }
         @Override public SceneReleasePlan releasePlan(FrontierWorldState state, SceneLease lease, long submittedAt, SceneLeaseReleased released) {
             ProductionJob job = FrontierProductionWorkSceneSupport.require(state, cause(lease));
             SceneContinuation continuation = blocked(state, job) ? new SceneContinuation.FinalizeProductionWork(lease.id(), job.id())
+                    // The bakery retains its own stable scheduled review across every
+                    // custody phase. The legacy completion continuation only accepts an
+                    // output-ready corridor job and must not dispatch for a bakery handoff.
+                    : job.bakeryWork().isPresent() ? new SceneContinuation.None()
                     : job.workProgress().terminalEffectEligible()
                     ? new SceneContinuation.ResumeProductionCompletion(job.id(), Math.addExact(submittedAt, 1L))
                     : new SceneContinuation.None();

@@ -14,26 +14,32 @@ import java.util.Optional;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyPayloads.ReferenceMutationClosed;
 
 /**
- * Pure contract shared by the first depot and hive-store consumers of the replica kernel.
+ * Pure contract shared by depot, hive-store and explicitly declared production-station consumers.
  *
- * <p>It deliberately identifies only the two F0.2B reference families.  A surface status is
- * presentation history; only a live lease against the current replica grants physical custody.
+ * <p>The original F0.2B depot/store families and explicitly declared production stations share
+ * this physical boundary. A surface status is presentation history; only a live lease against
+ * the current replica grants physical custody.
  */
 public final class ReferenceContainerCustody {
     public static final SubjectId PROVIDER_ID = new SubjectId("provider:reference-container-adapter");
     private static final String DEPOT_KIND = "container.settlement-depot";
     private static final String HIVE_STORE_KIND = "container.hive-store";
+    private static final String PRODUCTION_STATION_KIND = "container.production-station";
 
     private ReferenceContainerCustody() { }
 
     public static boolean isReferenceContainer(FrontierWorldState state, SubjectId containerId) {
         Objects.requireNonNull(state, "world state"); Objects.requireNonNull(containerId, "container id");
+        ContainerRecord container = state.inventory().containers().get(containerId);
         return state.bootstrap().settlements().stream().anyMatch(settlement -> FrontierWorldState.depotId(settlement.id()).equals(containerId))
-                || state.isHiveStore(containerId);
+                || state.isHiveStore(containerId)
+                || container != null && container.productionStation().isPresent();
     }
 
     public static String semanticKind(FrontierWorldState state, SubjectId containerId) {
         if (!isReferenceContainer(state, containerId)) throw new IllegalArgumentException("container is not an F0.2B reference scope");
+        ContainerRecord container = state.inventory().containers().get(containerId);
+        if (container != null && container.productionStation().isPresent()) return PRODUCTION_STATION_KIND;
         return state.isHiveStore(containerId) ? HIVE_STORE_KIND : DEPOT_KIND;
     }
 
@@ -206,6 +212,8 @@ public final class ReferenceContainerCustody {
     }
 
     private static Map<Integer, ProjectedFungibleSlot> expectedFungibleSlots(ExactInventory inventory, SubjectId containerId) {
+        ContainerRecord container = inventory.containers().get(containerId);
+        if (container == null) throw new IllegalArgumentException("reference container is not declared");
         Map<Integer, ProjectedFungibleSlot> slots = new LinkedHashMap<>();
         List<PhysicalStackBinding> bindings = inventory.fungibleResources().bindings().values().stream()
                 .filter(candidate -> candidate.address() instanceof PhysicalStackAddress.ContainerSlot address
@@ -226,6 +234,16 @@ public final class ReferenceContainerCustody {
             if (lot == null) throw new IllegalStateException("reference custody account has unknown lot");
             quantities.merge(lot.itemKind(), entry.getValue(), Integer::sum);
         });
+        if (container.productionStation().isPresent()) {
+            ProductionStationSpec station = container.productionStation().orElseThrow();
+            for (Map.Entry<String, Integer> entry : quantities.entrySet()) {
+                int slot = ProductionStationRecipe.portForItemKind(station, entry.getKey());
+                if (entry.getValue() > 64 || inventory.itemAt(containerId, slot).isPresent()
+                        || slots.putIfAbsent(slot, new ProjectedFungibleSlot(entry.getKey(), entry.getValue())) != null)
+                    throw new IllegalStateException("station custody does not fit its declared recipe port");
+            }
+            return Map.copyOf(slots);
+        }
         int next = 0;
         for (Map.Entry<String, Integer> entry : quantities.entrySet()) {
             int remaining = entry.getValue();

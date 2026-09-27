@@ -12,7 +12,7 @@ import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import java.util.ArrayList;
 import java.util.List;
 
-/** One deterministic initial works company per settlement, emitted by the canonical scheduler. */
+/** One deterministic initial bread-works company per settlement, emitted by the canonical scheduler. */
 public final class CompanyFoundationProcess {
     private CompanyFoundationProcess() { }
 
@@ -28,7 +28,7 @@ public final class CompanyFoundationProcess {
                 && candidate.purpose() == CompanyPurpose.WORKS).sorted(java.util.Comparator.comparing(Company::id)).findFirst().orElse(null);
         if (company == null) {
             ResidentProfile founder = state.humanPopulation().residents().values().stream()
-                    .filter(resident -> resident.settlementId().equals(settlement.id()) && resident.profession() == ResidentProfession.INDUSTRIAL_WORKER)
+                    .filter(resident -> resident.settlementId().equals(settlement.id()) && resident.profession() == ResidentProfession.BAKER)
                     .sorted(java.util.Comparator.comparing(ResidentProfile::id)).findFirst()
                     .orElseThrow(() -> new IllegalStateException("settlement has no canonical works founder"));
             company = new Company(companyId(settlement.id()), settlement.id(), founder.id(), CompanyPurpose.WORKS, CompanyStatus.ACTIVE, action.dueAt().ticks());
@@ -52,8 +52,8 @@ public final class CompanyFoundationProcess {
             throw new IllegalArgumentException("company foundation must register the one active deterministic works company");
         }
         ResidentProfile founder = state.humanPopulation().resident(company.founderId());
-        if (founder == null || !founder.settlementId().equals(company.settlementId()) || founder.profession() != ResidentProfession.INDUSTRIAL_WORKER) {
-            throw new IllegalArgumentException("company founder must be a current settlement crafter");
+        if (founder == null || !founder.settlementId().equals(company.settlementId()) || founder.profession() != ResidentProfession.BAKER) {
+            throw new IllegalArgumentException("bread-works founder must be a current settlement baker");
         }
         return state.registerCompany(company);
     }

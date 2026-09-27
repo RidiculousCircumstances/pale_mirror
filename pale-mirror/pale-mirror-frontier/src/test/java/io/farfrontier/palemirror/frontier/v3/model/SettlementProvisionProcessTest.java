@@ -84,6 +84,42 @@ class SettlementProvisionProcessTest {
     }
 
     @Test
+    void physicallyBoundDepotBreadRetainsTheMealInsteadOfDeclaringAFalseShortage() {
+        FrontierWorldState initial = withFungibleBread(base(new WorldId("frontier:provision-bound-bread")).initialState());
+        SubjectId settlement = initial.bootstrap().settlements().getFirst().id();
+        SubjectId account = new SubjectId("custody:container-1-depot");
+        var resources = initial.inventory().fungibleResources();
+        var observed = List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                new InventoryCustody.ContainerSlot(FrontierWorldState.depotId(settlement), 1)), SettlementProvisionProcess.BREAD, 64));
+        resources = resources.rebind(account, 7L, FungiblePhysicalObservation.bind(resources, account, 7L, observed));
+        FrontierWorldState bound = initial.withInventory(initial.inventory().withFungibleResources(resources));
+
+        var planned = SettlementProvisionProcess.planReview(bound, SettlementProvisionProcess.review(settlement, 1, 100L));
+        SettlementProvisionStarted started = planned.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                .filter(SettlementProvisionStarted.class::isInstance).map(SettlementProvisionStarted.class::cast).findFirst().orElseThrow();
+        FrontierWorldState retained = SettlementProvisionProcess.reduceStarted(bound, settlement, started);
+        assertEquals(SettlementProvisionStatus.IN_PROGRESS, retained.humanPopulation().provision(settlement).status());
+        assertEquals(bound.inventory().fungibleResources().lots(), retained.inventory().fungibleResources().lots());
+        assertTrue(retained.inventory().fungibleResources().bindings().values().stream()
+                .anyMatch(binding -> !binding.claimQuantities().isEmpty()), "the live chest keeps its physical authority and ration claim");
+        var progress = planned.stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                .filter(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created.class::isInstance)
+                .map(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created.class::cast)
+                .map(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created::action)
+                .filter(action -> action.kind().equals("frontier.settlement.provision.progress")).findFirst().orElseThrow();
+        var waiting = SettlementProvisionProcess.planProgress(retained, progress);
+        assertTrue(waiting.stream()
+                .allMatch(event -> event.payload() instanceof io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created),
+                "a physically bound ration waits for release instead of consuming or declaring shortage");
+        var retry = ((io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created) waiting.getFirst().payload()).action();
+        var releasedResources = retained.inventory().fungibleResources().releaseBindings(account, 7L);
+        FrontierWorldState released = retained.withInventory(retained.inventory().withFungibleResources(releasedResources));
+        var resumed = SettlementProvisionProcess.planProgress(released, retry);
+        assertTrue(resumed.stream().anyMatch(event -> event.payload() instanceof SettlementProvisionConsumed),
+                "the same retained ration resumes once physical custody releases");
+    }
+
+    @Test
     void conflictedProvisionReleasesEveryUnspentFungibleRationClaimWithoutSpendingBread() {
         WorldId world = new WorldId("frontier:provision-multiple-claim-conflict");
         FrontierWorldState initial = withFungibleBread(base(world).initialState());

@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurface;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
+import io.farfrontier.palemirror.frontier.v3.model.BakeryPhysicalAuthority;
 import io.farfrontier.palemirror.frontier.v3.model.CustodyAccount;
 import io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalObservation;
 import io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalHandoff;
@@ -54,6 +55,7 @@ final class FrontierV3FungibleResourceObservationExecutor {
                 .filter(value -> value.custody() instanceof ResourceCustody.Container)
                 .sorted(Comparator.comparing(CustodyAccount::id)).toList()) {
             ResourceCustody.Container custody = (ResourceCustody.Container) account.custody();
+            if (BakeryPhysicalAuthority.pendingForContainer(state, custody.containerId())) continue;
             if (FrontierV3ResourceSiteLedger.get(level).hasPendingFieldDelivery(custody.containerId())) continue;
             ContainerSurface surface = state.inventory().surfaces().get(custody.containerId());
             if (surface == null || surface.status() != ContainerSurfaceStatus.ACTIVE) continue;
