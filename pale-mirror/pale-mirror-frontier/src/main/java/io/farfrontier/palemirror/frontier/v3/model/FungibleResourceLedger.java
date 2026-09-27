@@ -201,7 +201,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         Objects.requireNonNull(economicOwnerId, "field delivery economic owner");
         Objects.requireNonNull(actorId, "field delivery actor");
         ResourceLot part = ResourceFieldYield.nextReadyLot(cycle.siteId(), economicOwnerId, cycle,
-                cycle.accountedPrefixCount(), issuedQuantityBefore)
+                cycle.accountedCount(), issuedQuantityBefore)
                 .orElseThrow(() -> new IllegalArgumentException("field delivery has no completed positive part"));
         CustodyAccount source = requireAccount(actorAccountId);
         if (!(source.custody() instanceof ResourceCustody.Actor actor) || !actor.actorId().equals(actorId)

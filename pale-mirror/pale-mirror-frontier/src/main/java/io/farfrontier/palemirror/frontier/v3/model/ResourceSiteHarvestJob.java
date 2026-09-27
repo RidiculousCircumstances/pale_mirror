@@ -76,6 +76,17 @@ public record ResourceSiteHarvestJob(SubjectId id, SubjectId taskId, SubjectId s
         return copy(next, deliveredYieldQuantity, returningForBatch, batchSuccessorSlot, lastConfirmedBatch, navigationBlock);
     }
 
+    /** A route-inaccessible target remains pending while an alternate goal clears only its local route hold. */
+    public ResourceSiteHarvestJob retargetTo(int nextSelectedCropSlotIndex) {
+        if (returningForBatch || progress.complete() || progress.hasPendingCrop()
+                || navigationBlock.filter(block -> block.reason()
+                    != ResourceSiteHarvestNavigationBlock.Reason.PATH_UNAVAILABLE
+                    && block.reason() != ResourceSiteHarvestNavigationBlock.Reason.PATH_STALLED).isPresent())
+            throw new IllegalArgumentException("area work cannot retarget a different movement obligation");
+        return copy(progress.withSelectedCropSlot(nextSelectedCropSlotIndex), deliveredYieldQuantity,
+                false, batchSuccessorSlot, lastConfirmedBatch, Optional.empty());
+    }
+
     /** Account a physically/currently witnessed contiguous obstructed CellId prefix at zero yield. */
     public ResourceSiteHarvestJob withBlockedCellsSkipped(int count, int totalYield) {
         if (count < 1 || count > progress.totalCropSlots() - progress.completedCropSlots()
@@ -85,6 +96,15 @@ public record ResourceSiteHarvestJob(SubjectId id, SubjectId taskId, SubjectId s
         ResourceSiteHarvestProgress advanced = progress;
         for (int index = 0; index < count; index++) advanced = advanced.prepareNextCrop().confirmPreparedCrop();
         return copy(advanced, deliveredYieldQuantity, false, Optional.empty(), lastConfirmedBatch, Optional.empty());
+    }
+
+    /** One observed unavailable target advances the area ledger, not a path cursor. */
+    public ResourceSiteHarvestJob withSelectedCellSkipped(int nextSelectedCropSlotIndex, int totalYield) {
+        if (progress.complete() || progress.hasPendingCrop() || returningForBatch
+                || batchSuccessorSlot.isPresent() || carriedYieldQuantity(totalYield) >= 64)
+            throw new IllegalArgumentException("unavailable field target cannot replace another work result");
+        return copy(progress.skipSelectedCrop(nextSelectedCropSlotIndex), deliveredYieldQuantity,
+                false, Optional.empty(), lastConfirmedBatch, Optional.empty());
     }
 
     /** The current hand filled before the final CellId; the next goal is the depot. */
@@ -125,7 +145,7 @@ public record ResourceSiteHarvestJob(SubjectId id, SubjectId taskId, SubjectId s
         return !progress.complete() && !returningForBatch && navigationBlock.isEmpty()
                 && goal.kind() == ResourceSiteHarvestGoal.Kind.WORK_CELL
                 && goal.jobId().equals(id) && goal.siteId().equals(siteId) && goal.workerId().equals(workerId)
-                && goal.nextWorkSlot() == progress.completedCropSlots() && goal.arrivedAt(observedStation);
+                && goal.nextWorkSlot() == progress.nextCropSlotIndex() && goal.arrivedAt(observedStation);
     }
 
     /** Arrival changes only an exact goal block; the actor body is retained by the owner reducer. */
@@ -134,7 +154,7 @@ public record ResourceSiteHarvestJob(SubjectId id, SubjectId taskId, SubjectId s
         if (!goal.jobId().equals(id) || !goal.siteId().equals(siteId) || !goal.workerId().equals(workerId)
                 || goal.capability() != TraversalCapability.PEDESTRIAN || progress.hasPendingCrop()
                 || goal.kind() == ResourceSiteHarvestGoal.Kind.WORK_CELL
-                    && (returningForBatch || progress.complete() || goal.nextWorkSlot() != progress.completedCropSlots())
+                    && (returningForBatch || progress.complete() || goal.nextWorkSlot() != progress.nextCropSlotIndex())
                 || goal.kind() == ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE
                     && ((!returningForBatch && !progress.complete()) || goal.nextWorkSlot() != progress.totalCropSlots())
                 || navigationBlock.filter(block -> block.reason() == ResourceSiteHarvestNavigationBlock.Reason.CONTINUATION_UNAVAILABLE

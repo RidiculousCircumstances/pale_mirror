@@ -44,6 +44,30 @@ class ResourceFieldCycleTest {
         assertEquals(ResourceFieldCycle.Crop.GROWING, next.cell(second).crop());
     }
 
+    @Test void areaWorkSelectsAnUnaccountedCellAfterABlockedTargetWithoutInventingYield() {
+        var geometry = layout(4);
+        var cells = geometry.cells();
+        var cycle = ResourceFieldCycle.seeded(SITE, geometry, 1);
+        for (int stage = 0; stage < 7; stage++) cycle = cycle.advanceGrowthStage();
+        var origin = cells.getFirst().workstation();
+        assertEquals(0, cycle.nextWorkSlot(origin).orElseThrow());
+        cycle = cycle.observedWorkAccess(cells.getFirst().id(), true).skipBlocked(cells.getFirst().id());
+        assertEquals(0, cycle.harvestedCount());
+        assertEquals(ResourceFieldCycle.Crop.MATURE, cycle.cell(cells.getFirst().id()).crop());
+        assertNotEquals(0, cycle.nextWorkSlot(origin).orElseThrow());
+        cycle = cycle.worked(cells.get(3).id());
+        assertEquals(1, cycle.harvestedCount());
+        assertEquals(2, cycle.accountedCount());
+        assertFalse(cycle.cell(cells.get(1).id()).accounted());
+        assertFalse(cycle.cell(cells.get(2).id()).accounted());
+        assertEquals(1, cycle.nextWorkSlotAfter(3).orElseThrow(),
+                "continuation wraps through pending CellIds rather than equating count with slot");
+        cycle = cycle.worked(cells.get(1).id()).worked(cells.get(2).id());
+        assertTrue(cycle.cycleAccounted());
+        var next = cycle.nextEpoch().observedWorkAccess(cells.getFirst().id(), false);
+        assertEquals(ResourceFieldCycle.WorkOutcome.HARVESTED, next.expectedWorkOutcome(cells.getFirst().id()));
+    }
+
     @Test void workOutcomesExposeTheSameExactCellProjectionForHotAndCold() {
         var geometry = layout(3);
         var first = geometry.cells().get(0).id();

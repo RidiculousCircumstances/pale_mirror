@@ -34,6 +34,21 @@ class ResourceFieldCycleStateCodecTest {
         assertEquals(0, recovered.harvestedCount());
     }
 
+    @Test void roundTripsBlockedWorkAccessIndependentlyOfAnIntactCrop() throws IOException {
+        var support = SurfaceAnchor.at(17, 63, -2);
+        var id = new ResourceFieldLayout.CellId(1);
+        var layout = new ResourceFieldLayout(1, 2,
+                List.of(new ResourceFieldLayout.Cell(id, support.support().offset(0, 1, 0), support, support)), List.of());
+        var cycle = ResourceFieldCycle.seeded(new SubjectId("site:field-access-codec"), layout, 1)
+                .observedWorkAccess(id, true).skipBlocked(id).nextEpoch();
+        var bytes = new ByteArrayOutputStream();
+        ResourceFieldCycleStateCodec.write(new DataOutputStream(bytes), cycle);
+        var recovered = ResourceFieldCycleStateCodec.read(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray())));
+        assertEquals(cycle, recovered);
+        assertEquals(ResourceFieldCycle.Crop.GROWING, recovered.cell(id).crop());
+        assertEquals(ResourceFieldCycle.WorkOutcome.SKIPPED_BLOCKED, recovered.expectedWorkOutcome(id));
+    }
+
     @Test void snapshotRejectsAFieldCycleOwnedByAnotherSiteDespiteMatchingGeometry() throws IOException {
         var outerSite = new SubjectId("site:outer");
         var foreignSite = new SubjectId("site:foreign");
@@ -49,6 +64,8 @@ class ResourceFieldCycleStateCodecTest {
         output.writeBoolean(false);
         output.writeBoolean(false);
         ResourceFieldCycleStateCodec.write(output, ResourceFieldCycle.unsurveyed(foreignSite, layout, 0));
+        output.writeBoolean(false);
+        output.writeBoolean(false);
         assertThrows(IllegalArgumentException.class, () -> ResourceSiteStateCodec.read(
                 new DataInputStream(new ByteArrayInputStream(bytes.toByteArray()))));
     }

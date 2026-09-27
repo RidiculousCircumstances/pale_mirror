@@ -14,6 +14,27 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class ResourceFieldCellObservedTest {
+    @Test void physicalWorkAccessObservationRetainsCropAndSelectsAnotherAreaCell() {
+        var hot = ResourceSiteHarvestProcessTest.hotHarvestAfterColdSteps(0);
+        FrontierWorldState state = hot.state();
+        SubjectId site = hot.site();
+        ResourceSiteHarvestJob job = hot.job();
+        ResourceFieldCycle cycle = state.resourceSites().cycle(site);
+        var cell = cycle.layout().cells().get(job.progress().nextCropSlotIndex());
+        var head = cell.workstation().support().offset(0, 2, 0);
+        var observed = new ResourceFieldWorkAccessObserved(site, cycle.epoch(), cycle.layout().revision(),
+                cell.id(), head, true, "minecraft:stone", java.util.Optional.of(hot.lease().id()));
+        assertEquals(observed, FrontierWorldRuntimeDefinition.payloadCodecs().decode(observed.type(),
+                FrontierWorldRuntimeDefinition.payloadCodecs().encode(observed)));
+        FrontierWorldState blocked = ResourceSiteProcess.reduceWorkAccessObserved(state, site, observed);
+        assertEquals(ResourceFieldCycle.Crop.MATURE, blocked.resourceSites().cycle(site).cell(cell.id()).crop());
+        assertEquals(0, blocked.resourceSites().cycle(site).harvestedCount());
+        assertEquals(ResourceFieldCycle.WorkOutcome.SKIPPED_BLOCKED,
+                blocked.resourceSites().cycle(site).expectedWorkOutcome(cell.id()));
+        assertEquals(blocked, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(blocked)));
+        assertThrows(IllegalArgumentException.class, () -> ResourceSiteProcess.reduceWorkAccessObserved(blocked, site, observed));
+    }
+
     @Test void observedCropLossBeforePhysicalHarvestEffectRetainsFarmerAndReplansSameCell() {
         var hot = ResourceSiteHarvestProcessTest.hotHarvestAfterColdSteps(0);
         SubjectId site = hot.site();
@@ -27,7 +48,7 @@ class ResourceFieldCellObservedTest {
         state = ResourceSiteHarvestProcess.reduceCropPrepared(state, site,
                 new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex()));
         ResourceFieldCycle cycle = state.resourceSites().cycle(site);
-        ResourceFieldLayout.CellId cell = cycle.layout().cells().get(job.progress().completedCropSlots()).id();
+        ResourceFieldLayout.CellId cell = cycle.layout().cells().get(job.progress().nextCropSlotIndex()).id();
         var mature = ResourceFieldPhysicalSurface.Condition.of(cycle.cell(cell));
         var bare = new ResourceFieldPhysicalSurface.Condition(ResourceFieldCycle.Soil.FARMLAND, ResourceFieldCycle.Crop.ABSENT, 0);
         var observed = new ResourceFieldCellObserved(site, cycle.epoch(), cycle.layout().revision(), cell,

@@ -145,6 +145,7 @@ final class FrontierV3ResourceSiteExecutor {
             int index = Math.floorMod(cursors.getOrDefault(siteId, 0), cycle.layout().cells().size());
             cursors.put(siteId, (index + 1) % cycle.layout().cells().size());
             var cell = cycle.layout().cells().get(index);
+            if (FrontierV3ResourceFieldWorkAccessExecutor.observeOne(level, runtime, siteId, cell.id())) return true;
             if (FrontierV3ResourceFieldWorldChangeExecutor.observeOne(level, runtime, siteId, cell.id())) return true;
         }
         return false;

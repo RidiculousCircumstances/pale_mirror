@@ -52,7 +52,7 @@ public final class FrontierResourceSiteHarvestSceneSupport {
         // reopened when a player first reaches the worker near the depot.
         boolean workerSide = job.navigationBlock().isPresent() || job.progress().complete() || job.returningForBatch();
         int demandCropIndex = workerSide
-                ? Math.max(0, job.progress().completedCropSlots() - 1) : job.progress().nextCropSlotIndex();
+                ? Math.max(0, job.progress().lastCompletedCropSlotIndex()) : job.progress().nextCropSlotIndex();
         BodyPosition body = worker.body();
         BlockPosition crop = workerSide
                 ? new BlockPosition(body.x(), body.y(), body.z()) : site.cropSlots().get(demandCropIndex);

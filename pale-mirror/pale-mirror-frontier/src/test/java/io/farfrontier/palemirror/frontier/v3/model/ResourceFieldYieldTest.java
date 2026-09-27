@@ -247,7 +247,7 @@ class ResourceFieldYieldTest {
         assertThrows(IllegalArgumentException.class, () -> ResourceFieldYield.nextReadyLot(SITE, OWNER, pending, 65, 0));
     }
 
-    @Test void cachedWorkPrefixRejectsHolesAndSurvivesRecoveryWithoutScanningEveryBatch() {
+    @Test void outOfOrderAreaWorkEarnsOnlyItsActualYieldAndSurvivesRecovery() {
         ResourceFieldCycle cycle = ResourceFieldCycle.seeded(SITE, layout(65), 1);
         for (int stage = 0; stage < 7; stage++) cycle = cycle.advanceGrowthStage();
         var first = cycle.layout().cells().getFirst().id();
@@ -255,7 +255,8 @@ class ResourceFieldYieldTest {
         cycle = cycle.worked(second);
         assertEquals(0, cycle.accountedPrefixCount());
         ResourceFieldCycle gap = cycle;
-        assertThrows(IllegalArgumentException.class, () -> ResourceFieldYield.nextReadyLot(SITE, OWNER, gap, 1, 0));
+        assertEquals(1, ResourceFieldYield.currentCarriedLot(SITE, OWNER, gap, 1, 0).orElseThrow().quantity());
+        assertTrue(ResourceFieldYield.nextReadyLot(SITE, OWNER, gap, 1, 0).isEmpty());
         cycle = cycle.worked(first);
         assertEquals(2, cycle.accountedPrefixCount());
         for (int index = 2; index < 64; index++) cycle = cycle.worked(cycle.layout().cells().get(index).id());

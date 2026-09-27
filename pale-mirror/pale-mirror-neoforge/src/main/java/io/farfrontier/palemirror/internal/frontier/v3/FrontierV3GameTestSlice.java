@@ -55,6 +55,7 @@ public final class FrontierV3GameTestSlice {
             case "route-construction" -> batchName.equals("pm-frontier-v3-scene-route-construction");
             case "production-effect" -> batchName.equals("pm-frontier-v3-production");
             case "resource-prefix" -> batchName.equals("pm-frontier-v3-resource-site-prefix");
+            case "resource-site-cold" -> batchName.equals("pm-frontier-v3-resource-site-cold");
             case "field-turns" -> batchName.equals("pm-frontier-v3-field-turns");
             case "physical-ownership-fences" -> batchName.equals("pm-frontier-v3-object-boards")
                     || batchName.equals("pm-frontier-v3-resource-harvest");

@@ -52,6 +52,12 @@ public record ResourceSiteState(Map<SubjectId, ResourceSiteLifecycle> sites,
                     throw new IllegalArgumentException("farmer's blocked goal has a foreign field layout revision");
                 if (cycle.accountedCount() != job.progress().completedCropSlots())
                     throw new IllegalArgumentException("field cell work and retained farmer cursor disagree");
+                if (!job.progress().complete() && cycle.cell(cycle.layout().cells().get(
+                        job.progress().nextCropSlotIndex()).id()).accounted()
+                        || job.progress().lastCompletedCropSlotIndex() >= 0
+                        && !cycle.cell(cycle.layout().cells().get(
+                                job.progress().lastCompletedCropSlotIndex()).id()).accounted())
+                    throw new IllegalArgumentException("field target selection disagrees with the cell work pool");
                 // The job's delivered offset is authority for the next part identity.  It
                 // cannot outrun observed yield or leave more than one physical hand stack
                 // outstanding, including when completed cells had no crop to collect.

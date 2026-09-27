@@ -238,7 +238,7 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
             return true;
         }
         var part = ResourceFieldYield.currentCarriedLot(job.siteId(), state.resourceSite(job.siteId()).settlementId(),
-                cycle, cycle.accountedPrefixCount(), job.deliveredYieldQuantity()).orElse(null);
+                cycle, cycle.accountedCount(), job.deliveredYieldQuantity()).orElse(null);
         var resources = state.inventory().fungibleResources();
         var account = resources.accounts().get(job.actorAccountId());
         var bindings = resources.bindings().values().stream()

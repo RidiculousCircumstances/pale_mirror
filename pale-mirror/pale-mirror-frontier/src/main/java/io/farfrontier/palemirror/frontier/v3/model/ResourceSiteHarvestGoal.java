@@ -77,7 +77,7 @@ public record ResourceSiteHarvestGoal(SubjectId jobId, SubjectId siteId, Subject
     public static ResourceSiteHarvestGoal current(FrontierWorldState state, ResourceSiteHarvestJob job) {
         int slot = job.returningForBatch() || job.progress().complete()
                 ? state.resourceSites().cycle(job.siteId()).layout().cells().size()
-                : job.progress().completedCropSlots();
+                : job.progress().nextCropSlotIndex();
         return forSlot(state, job, slot);
     }
 
@@ -86,7 +86,7 @@ public record ResourceSiteHarvestGoal(SubjectId jobId, SubjectId siteId, Subject
         Objects.requireNonNull(state, "field goal world");
         Objects.requireNonNull(job, "field goal farmer");
         ResourceFieldCycle cycle = state.resourceSites().cycle(job.siteId());
-        if (nextSlot < job.progress().completedCropSlots() || nextSlot > cycle.layout().cells().size())
+        if (nextSlot < 0 || nextSlot > cycle.layout().cells().size())
             throw new IllegalArgumentException("field goal slot is outside retained work progress");
         if (nextSlot < cycle.layout().cells().size()) {
             ResourceFieldLayout.Cell cell = cycle.layout().cells().get(nextSlot);

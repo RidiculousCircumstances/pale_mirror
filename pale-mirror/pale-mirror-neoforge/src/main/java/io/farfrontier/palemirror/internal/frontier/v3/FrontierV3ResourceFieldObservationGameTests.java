@@ -39,6 +39,29 @@ public final class FrontierV3ResourceFieldObservationGameTests {
 
     @GameTest(batch = "pm-frontier-v3-field-turns", templateNamespace = "minecraft",
             template = "bastion/mobs/empty", timeoutTicks = 30)
+    public static void soundCropWithBlockedWorkerHeadroomHasAnIndependentAccessObservation(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos soil = helper.absolutePos(new BlockPos(4, 0, 4));
+        var cell = cell(1, soil);
+        level.setBlock(soil, Blocks.FARMLAND.defaultBlockState(), 3);
+        level.setBlock(soil.above(), Blocks.WHEAT.defaultBlockState()
+                .setValue(CropBlock.AGE, 7), 3);
+        level.setBlock(soil.above(2), Blocks.AIR.defaultBlockState(), 3);
+        helper.runAtTickTime(1, () -> {
+            helper.assertTrue(FrontierV3ResourceFieldWorkAccessExecutor.read(level, cell).orElseThrow()
+                            .equals(new FrontierV3ResourceFieldWorkAccessExecutor.Reading(false, "minecraft:air")),
+                    "an intact crop does not obstruct standing headroom");
+            level.setBlock(soil.above(2), Blocks.STONE.defaultBlockState(), 3);
+            helper.assertTrue(FrontierV3ResourceFieldWorkAccessExecutor.read(level, cell).orElseThrow()
+                            .equals(new FrontierV3ResourceFieldWorkAccessExecutor.Reading(true, "minecraft:stone"))
+                            && level.getBlockState(soil.above()).is(Blocks.WHEAT),
+                    "the physical workstation is blocked while the crop remains intact");
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "pm-frontier-v3-field-turns", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 30)
     public static void growthAdmissionRejectsForeignDimensionAndUnregisteredRuntime(GameTestHelper helper) {
         var configuration = FrontierWorldRuntimeDefinition.configuration(FrontierV3PhysicalWorld.WORLD_ID, 91L);
         var unregistered = FrontierV3ServerRuntime.failedStart(configuration,

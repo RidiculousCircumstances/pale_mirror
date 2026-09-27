@@ -222,7 +222,7 @@ public final class ResourceSitePhysicalIntentStateSupport {
         if (intent == null || intent.status() != PhysicalIntentStatus.RUNNING
                 || !job.returningForBatch() || job.progress().complete()
                 || job.deliveredYieldQuantity() != delivered.deliveredYieldBefore()
-                || cycle.accountedPrefixCount() != job.progress().completedCropSlots()
+                || cycle.accountedCount() != job.progress().completedCropSlots()
                 || !cycle.pendingPlayerBreaks().isEmpty() || job.carriedYieldQuantity(cycle.harvestedCount()) != 64
                 || !receipt.jobId().equals(job.id()) || !receipt.workerId().equals(job.workerId())
                 || !receipt.actorAccountId().equals(job.actorAccountId())

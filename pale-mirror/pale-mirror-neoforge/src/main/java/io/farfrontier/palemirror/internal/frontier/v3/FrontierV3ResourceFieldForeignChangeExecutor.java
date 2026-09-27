@@ -252,7 +252,7 @@ final class FrontierV3ResourceFieldForeignChangeExecutor {
         if (reading instanceof FrontierV3ResourceFieldObservation.Owned owned) {
             var condition = owned.condition();
             return new ResourceFieldCycle.CellState(condition.soil(), condition.crop(), condition.growthStage(),
-                    before.accounted(), before.yielded());
+                    before.accounted(), before.yielded(), before.workAccessBlocked());
         }
         if (!(reading instanceof FrontierV3ResourceFieldObservation.Foreign)) return null;
         String soil = blocks.soil().getString("Name");
@@ -260,7 +260,7 @@ final class FrontierV3ResourceFieldForeignChangeExecutor {
                 ? ResourceFieldCycle.Soil.FARMLAND : Objects.equals(soil, "minecraft:dirt")
                 ? ResourceFieldCycle.Soil.DIRT : ResourceFieldCycle.Soil.OBSTRUCTED;
         return new ResourceFieldCycle.CellState(kind, ResourceFieldCycle.Crop.OBSTRUCTED, 0,
-                before.accounted(), before.yielded());
+                before.accounted(), before.yielded(), before.workAccessBlocked());
     }
 
     private static FrontierV3ResourceFieldForeignChangeWitness.Blocks readBlocks(ServerLevel level,

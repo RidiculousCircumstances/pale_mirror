@@ -7,12 +7,14 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCycle;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldWorkAccessObserved;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestCropPrepared;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestProgressed;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestSegmentRenewed;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestBlockedCellSkipped;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestNavigationBlock;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestRouteBlocked;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestTargetRetargeted;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestRouteCleared;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestHotGoalArrived;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestHotTransitObserved;
@@ -23,6 +25,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestSceneLease
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestSceneLeaseHandoff;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestHandProjected;
 import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess;
+import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestRetargeting;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
@@ -257,18 +260,32 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         if (!(entity instanceof Mob worker) || !worker.isAlive() || !FrontierV3SceneExecutor.recognizes(runtime, worker)) {
             conflict(level, runtime, lease, "hot-worker-unavailable"); return;
         }
-        if (job.navigationBlock().isEmpty() && !job.progress().complete()
+        if (!job.progress().complete() && !job.returningForBatch() && !job.progress().hasPendingCrop()
+                && !state.resourceSites().hasPendingWorldChange(job.siteId())) {
+            ResourceFieldCycle cycle = state.resourceSites().cycle(job.siteId());
+            var cell = cycle.layout().cells().get(job.progress().nextCropSlotIndex());
+            var head = cell.workstation().support().offset(0, 2, 0);
+            var access = FrontierV3ResourceFieldWorkAccessExecutor.read(level, cell);
+            if (access.isPresent() && !cycle.pendingPlayerBreaks().containsKey(cell.id())) {
+                boolean blockedAccess = access.orElseThrow().blocked();
+                if (blockedAccess != cycle.cell(cell.id()).workAccessBlocked()) {
+                    var observed = new ResourceFieldWorkAccessObserved(job.siteId(), cycle.epoch(),
+                            cycle.layout().revision(), cell.id(), head, blockedAccess,
+                            access.orElseThrow().blockId(), Optional.of(lease.id()));
+                    var accepted = submit(runtime, "resource-site-harvest-work-access", lease.id().value(), observed);
+                    FrontierV3DiagnosticTrace.recordScene(level.getServer(), "resource_site_harvest_work_access", lease, accepted);
+                    return;
+                }
+            }
+        }
+        if (!job.progress().complete()
                 && !job.returningForBatch() && !job.progress().hasPendingCrop()) {
             var cycle = state.resourceSites().cycle(job.siteId());
-            var blockedCell = cycle.layout().cells().get(job.progress().completedCropSlots());
+            var blockedCell = cycle.layout().cells().get(job.progress().nextCropSlotIndex());
             if (cycle.expectedWorkOutcome(blockedCell.id()) == ResourceFieldCycle.WorkOutcome.SKIPPED_BLOCKED) {
                 if (state.resourceSites().hasPendingWorldChange(job.siteId())) return;
-                // A foreign crop is a work-target obstruction, not a pedestrian demand to
-                // walk into the foreign block. Each CellId in the contiguous prefix must
-                // still have its exact physical witness before a shared skip/replan.
-                var blockedIds = ResourceSiteHarvestProcess.blockedPrefix(cycle, job.progress().completedCropSlots());
-                if (ResourceSiteHarvestProcess.blockedPrefixMeetsPendingPlayerBreak(
-                        cycle, job.progress().completedCropSlots(), blockedIds)) return;
+                // One witnessed unavailable target cannot hold the whole area task.
+                var blockedIds = List.of(blockedCell.id());
                 if (!blockedCellsPhysicallyCurrent(level, state, site, blockedIds)) return;
                 if (retainInterruptedTransit(level, runtime, state, lease, job, worker)) return;
                 var binding = FrontierV3TraversalScheduleGate.binding(runtime.checkpointImage().orElseThrow(), job.siteId());
@@ -277,20 +294,6 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 var skipped = new ResourceSiteHarvestBlockedCellSkipped(job.siteId(), job.id(), job.workerId(),
                         cycle.layout().revision(), blockedIds, action.id(),
                         action.dueAt().ticks(), Optional.of(lease.id()));
-                try {
-                    ResourceSiteHarvestProcess.blockedPrefixContinuation(state, job.siteId(), job, blockedIds);
-                } catch (ResourceSiteHarvestProcess.ContinuationUnavailable unavailable) {
-                    var block = new ResourceSiteHarvestNavigationBlock(
-                            ResourceSiteHarvestProcess.blockedPrefixContinuationGoal(state, job, blockedIds).representative(),
-                            cycle.layout().revision(),
-                            ResourceSiteHarvestNavigationBlock.Reason.CONTINUATION_UNAVAILABLE);
-                    var blocked = new ResourceSiteHarvestRouteBlocked(job.siteId(), job.id(), job.workerId(),
-                            block, lease.id(), action.id(), action.dueAt().ticks());
-                    ResourceSiteHarvestProcess.reduceRouteBlocked(state, job.siteId(), blocked);
-                    var accepted = submitBound(runtime, "resource-site-harvest-continuation-blocked", lease.id().value(), blocked, action);
-                    FrontierV3DiagnosticTrace.recordScene(level.getServer(), "resource_site_harvest_goal_blocked", lease, accepted);
-                    return;
-                }
                 ResourceSiteHarvestProcess.reduceBlockedCellSkipped(state, job.siteId(), skipped);
                 var accepted = submitBound(runtime, "resource-site-harvest-blocked-cell-skipped", lease.id().value(), skipped, action);
                 FrontierV3DiagnosticTrace.recordScene(level.getServer(), "resource_site_harvest_blocked_cell_skipped", lease, accepted);
@@ -327,6 +330,10 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 return;
             }
             if (state.resourceSites().hasPendingWorldChange(job.siteId())) return;
+            if ((blocked.reason() == ResourceSiteHarvestNavigationBlock.Reason.PATH_UNAVAILABLE
+                    || blocked.reason() == ResourceSiteHarvestNavigationBlock.Reason.PATH_STALLED)
+                    && level.getGameTime() % 20 == 0
+                    && tryRetargetWorkTarget(level, runtime, state, lease, job, worker)) return;
             ResourceSiteHarvestGoal currentGoal = ResourceSiteHarvestGoal.current(state, job);
             io.farfrontier.palemirror.frontier.v3.model.LocalNavigationEnvelope envelope;
             try {
@@ -340,7 +347,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         }
         io.farfrontier.palemirror.frontier.v3.model.BlockPosition crop = site.cropSlots().get(
                 job.progress().complete() || job.returningForBatch()
-                        ? Math.max(0, job.progress().completedCropSlots() - 1) : job.progress().nextCropSlotIndex());
+                        ? Math.max(0, job.progress().lastCompletedCropSlotIndex()) : job.progress().nextCropSlotIndex());
         if (acceptObservedSemanticGoal(level, runtime, state, lease, job, worker)) return;
         ResourceSiteHarvestGoal semanticGoal = ResourceSiteHarvestGoal.current(state, job);
         var atGoal = semanticGoal.legalStations().stream()
@@ -351,7 +358,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 envelope = hotGoalEnvelope(state, job, semanticGoal);
             } catch (IllegalArgumentException tooWide) {
                 if (retainInterruptedTransit(level, runtime, state, lease, job, worker)) return;
-                holdSemanticGoal(level, runtime, state, lease, job,
+                holdSemanticGoal(level, runtime, state, lease, job, worker,
                         FrontierV3GoalNavigation.BlockReason.PATH_UNAVAILABLE);
                 return;
             }
@@ -361,7 +368,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 // A finite physical failure needs a job-local typed disposition before
                 // COLD can resume.  The old route's waypoint must not be that target.
                 if (retainInterruptedTransit(level, runtime, state, lease, job, worker)) return;
-                holdSemanticGoal(level, runtime, state, lease, job, motion.blockReason().orElseThrow());
+                holdSemanticGoal(level, runtime, state, lease, job, worker, motion.blockReason().orElseThrow());
             } else if (motion.status() == FrontierV3GoalNavigation.Status.AMBIGUOUS) {
                 conflict(level, runtime, lease, "field-work-goal-ambiguous");
             }
@@ -419,7 +426,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 conflict(level, runtime, lease, "legacy-harvest-owner-retired"); return;
             }
             var field = state.resourceSites().cycle(job.siteId());
-            var cellId = field.layout().cells().get(job.progress().completedCropSlots()).id();
+            var cellId = field.layout().cells().get(job.progress().nextCropSlotIndex()).id();
             var admittedContinuation = dueBinding.orElseThrow();
             submitBound(runtime, "resource-site-harvest-progress", lease.id().value(),
                     new ResourceSiteHarvestProgressed(job.siteId(), field.epoch(), job.id(), job.progress().completedCropSlots() + 1,
@@ -491,7 +498,10 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
 
     private static void holdSemanticGoal(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                          FrontierWorldState state, SceneLease lease, ResourceSiteHarvestJob job,
-                                         FrontierV3GoalNavigation.BlockReason reason) {
+                                         Mob worker, FrontierV3GoalNavigation.BlockReason reason) {
+        if ((reason == FrontierV3GoalNavigation.BlockReason.PATH_UNAVAILABLE
+                || reason == FrontierV3GoalNavigation.BlockReason.PATH_STALLED)
+                && tryRetargetWorkTarget(level, runtime, state, lease, job, worker)) return;
         var binding = FrontierV3TraversalScheduleGate.binding(runtime.checkpointImage().orElseThrow(), job.siteId());
         if (binding.isEmpty()) return;
         ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state, job);
@@ -508,6 +518,50 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 lease.id(), action.id(), action.dueAt().ticks());
         ResourceSiteHarvestProcess.reduceRouteBlocked(state, job.siteId(), blocked);
         submitBound(runtime, "resource-site-harvest-goal-blocked", lease.id().value(), blocked, action);
+    }
+
+    private static boolean tryRetargetWorkTarget(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                                  FrontierWorldState state, SceneLease lease,
+                                                  ResourceSiteHarvestJob job, Mob worker) {
+        if (job.progress().complete() || job.returningForBatch() || job.progress().hasPendingCrop()
+                || state.resourceSites().hasPendingWorldChange(job.siteId())) return false;
+        ResourceFieldCycle cycle = state.resourceSites().cycle(job.siteId());
+        var alternate = cycle.reachableWorkSlotAfter(job.progress().nextCropSlotIndex(), index -> {
+                var cell = cycle.layout().cells().get(index);
+                var access = FrontierV3ResourceFieldWorkAccessExecutor.read(level, cell);
+                if (access.isEmpty() || access.orElseThrow().blocked()) return false;
+                ResourceSiteHarvestJob candidate = job.retargetTo(index);
+                FrontierWorldState candidateState = state.withResourceSites(state.resourceSites().replace(
+                        state.resourceSites().site(job.siteId()).retargetHarvestCell(job, index)));
+                ResourceSiteHarvestGoal candidateGoal = ResourceSiteHarvestGoal.current(candidateState, candidate);
+                io.farfrontier.palemirror.frontier.v3.model.LocalNavigationEnvelope envelope;
+                try {
+                    envelope = hotGoalEnvelope(candidateState, candidate, candidateGoal);
+                } catch (IllegalArgumentException unavailable) {
+                    return false;
+                }
+                for (var station : candidateGoal.legalStations()) {
+                    var feet = new BlockPos(station.x(), station.y() + 1, station.z());
+                    if (!level.hasChunkAt(feet)) continue;
+                    var path = worker.getNavigation().createPath(feet, 0);
+                    if (path != null && path.canReach()
+                            && FrontierV3MinecraftGoalNavigation.pathWithinEnvelope(level, path, envelope))
+                        return true;
+                }
+                return false;
+        });
+        if (alternate.isEmpty()) return false;
+        var binding = FrontierV3TraversalScheduleGate.binding(runtime.checkpointImage().orElseThrow(), job.siteId());
+        if (binding.isEmpty()) return false;
+        var action = binding.orElseThrow();
+        var retargeted = new ResourceSiteHarvestTargetRetargeted(job.siteId(), job.id(), job.workerId(),
+                cycle.layout().revision(), job.progress().nextCropSlotIndex(), alternate.getAsInt(),
+                action.id(), action.dueAt().ticks(), Optional.of(lease.id()));
+        ResourceSiteHarvestRetargeting.reduceTargetRetargeted(state, job.siteId(), retargeted);
+        var accepted = submitBound(runtime, "resource-site-harvest-target-retargeted", lease.id().value(),
+                retargeted, action);
+        FrontierV3DiagnosticTrace.recordScene(level.getServer(), "resource_site_harvest_target_retargeted", lease, accepted);
+        return true;
     }
 
     private static io.farfrontier.palemirror.frontier.v3.model.LocalNavigationEnvelope hotGoalEnvelope(
@@ -565,10 +619,10 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 .anyMatch(binding -> binding.accountId().equals(job.actorAccountId()))) return false;
         var cycle = state.resourceSites().cycle(job.siteId());
         var part = io.farfrontier.palemirror.frontier.v3.model.ResourceFieldYield.currentCarriedLot(job.siteId(),
-                state.resourceSite(job.siteId()).settlementId(), cycle, cycle.accountedPrefixCount(),
+                state.resourceSite(job.siteId()).settlementId(), cycle, cycle.accountedCount(),
                 job.deliveredYieldQuantity()).orElse(null);
         if (part == null || job.progress().hasPendingCrop()
-                || cycle.accountedPrefixCount() != job.progress().completedCropSlots()
+                || cycle.accountedCount() != job.progress().completedCropSlots()
                 || !account.custody().equals(new io.farfrontier.palemirror.frontier.v3.model.ResourceCustody.Actor(job.workerId()))
                 || !account.lotQuantities().equals(java.util.Map.of(part.id(), part.quantity()))
                 || !account.claimQuantities().isEmpty()) {
@@ -576,7 +630,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         }
         var expected = new FrontierV3ResourceSiteHandProjectionWitness(job.siteId(), job.id(), job.actorAccountId(),
                 part.id(), job.workerId(), lease.members().getFirst().entityId(), lease.id(), lease.revision(),
-                cycle.epoch(), cycle.accountedPrefixCount(), part.quantity());
+                cycle.epoch(), cycle.accountedCount(), part.quantity());
         if (pending != null && !pending.equals(expected)) {
             conflict(level, runtime, lease, "cold-carried-hand-witness-foreign"); return true;
         }
@@ -649,7 +703,20 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             if (cycle.pendingPlayerBreaks().containsKey(id)) return false;
             if (!level.hasChunkAt(new BlockPos(cell.crop().x(), cell.crop().y(), cell.crop().z()))) return false;
             var retained = owner.witness().cell(id);
-            if (retained.pending().isPresent() || retained.foreign().isEmpty()) return false;
+            if (retained.pending().isPresent()) return false;
+            if (cycle.cell(id).workAccessBlocked()) {
+                var head = cell.workstation().support().offset(0, 2, 0);
+                BlockPos physicalHead = new BlockPos(head.x(), head.y(), head.z());
+                if (!level.hasChunkAt(physicalHead)
+                        || level.getBlockState(physicalHead).getCollisionShape(level, physicalHead).isEmpty()) return false;
+                if (retained.foreign().isEmpty()) {
+                    var reading = FrontierV3ResourceFieldObservation.read(level, cell, "harvest-scene-work-access");
+                    if (!(reading instanceof FrontierV3ResourceFieldObservation.Owned owned)
+                            || !owned.condition().equals(retained.committed())) return false;
+                }
+                continue;
+            }
+            if (retained.foreign().isEmpty()) return false;
             var reading = FrontierV3ResourceFieldObservation.read(level, cell, "harvest-scene-blocked-cell");
             if (!(reading instanceof FrontierV3ResourceFieldObservation.Foreign foreign)
                     || !retained.foreign().orElseThrow().observedSoil().equals(foreign.incident().observedSoil())

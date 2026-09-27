@@ -103,6 +103,12 @@ public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, l
     }
     public ResourceSiteLifecycle advanceHarvest(ResourceSiteHarvestJob expected, int completedCropSlots,
                                                 ResourceSiteHarvestGoal goal, SurfaceAnchor observedStation) {
+        return advanceHarvest(expected, completedCropSlots, goal, observedStation,
+                completedCropSlots == expected.progress().totalCropSlots() ? -1 : completedCropSlots);
+    }
+    public ResourceSiteLifecycle advanceHarvest(ResourceSiteHarvestJob expected, int completedCropSlots,
+                                                ResourceSiteHarvestGoal goal, SurfaceAnchor observedStation,
+                                                int nextSelectedCropSlotIndex) {
         ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
                 .orElseThrow(() -> new IllegalStateException("resource site has no active harvest"));
         if (phase != ResourceSitePhase.HARVESTING || !active.equals(expected)
@@ -110,7 +116,8 @@ public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, l
                 || completedCropSlots != active.progress().completedCropSlots() + 1) {
             throw new IllegalArgumentException("resource-site harvest progress is stale or invalid");
         }
-        return next(phase, growthEpoch, growthStage, Optional.of(active.withProgress(active.progress().confirmPreparedCrop())));
+        return next(phase, growthEpoch, growthStage, Optional.of(active.withProgress(
+                active.progress().confirmPreparedCrop(nextSelectedCropSlotIndex))));
     }
     public ResourceSiteLifecycle returnFullHarvestBatch(ResourceSiteHarvestJob expected, int totalYield) {
         ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
@@ -128,6 +135,23 @@ public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, l
             throw new IllegalArgumentException("blocked field cell has a stale harvest job");
         return next(phase, growthEpoch, growthStage,
                 Optional.of(active.withBlockedCellsSkipped(count, totalYield)));
+    }
+    public ResourceSiteLifecycle skipSelectedHarvestCell(ResourceSiteHarvestJob expected,
+                                                         int nextSelectedCropSlotIndex, int totalYield) {
+        ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance)
+                .map(ResourceSiteHarvestJob.class::cast).orElseThrow();
+        if (phase != ResourceSitePhase.HARVESTING || !active.equals(expected))
+            throw new IllegalArgumentException("unavailable field target has a stale harvest owner");
+        return next(phase, growthEpoch, growthStage,
+                Optional.of(active.withSelectedCellSkipped(nextSelectedCropSlotIndex, totalYield)));
+    }
+    public ResourceSiteLifecycle retargetHarvestCell(ResourceSiteHarvestJob expected, int nextSelectedCropSlotIndex) {
+        ResourceSiteHarvestJob active = activeWork.filter(ResourceSiteHarvestJob.class::isInstance)
+                .map(ResourceSiteHarvestJob.class::cast).orElseThrow();
+        if (phase != ResourceSitePhase.HARVESTING || !active.equals(expected))
+            throw new IllegalArgumentException("area work retarget has a stale harvest owner");
+        return next(phase, growthEpoch, growthStage, Optional.of(
+                active.retargetTo(nextSelectedCropSlotIndex)));
     }
     public ResourceSiteLifecycle deliverFullHarvestBatch(ResourceSiteHarvestJob expected,
                                                          InventoryCustody.ContainerSlot nextSlot, int totalYield,

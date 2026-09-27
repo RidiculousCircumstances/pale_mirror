@@ -97,15 +97,15 @@ public final class ResourceFieldYield {
 
     /**
      * One full 64-yield batch may close before the field is finished; only the
-     * final accounted prefix may close a smaller batch. The caller retains the
+     * final accounted area may close a smaller batch. The caller retains the
      * previously issued quantity in its durable work/receipt owner and must
      * rederive this value before crediting it, never trust a client-supplied lot.
      */
     public static Optional<ResourceLot> nextReadyLot(SubjectId siteId, SubjectId economicOwnerId,
-                                                      ResourceFieldCycle cycle, int accountedPrefix,
+                                                      ResourceFieldCycle cycle, int accountedCount,
                                                       int issuedQuantityBefore) {
         Optional<ResourceLot> carried = currentCarriedLot(siteId, economicOwnerId, cycle,
-                accountedPrefix, issuedQuantityBefore);
+                accountedCount, issuedQuantityBefore);
         return carried.filter(lot -> lot.quantity() == 64 || cycle.cycleAccounted());
     }
 
@@ -115,24 +115,20 @@ public final class ResourceFieldYield {
      * No lot exists before the first actual yield in this part.
      */
     public static Optional<ResourceLot> currentCarriedLot(SubjectId siteId, SubjectId economicOwnerId,
-                                                          ResourceFieldCycle cycle, int accountedPrefix,
+                                                          ResourceFieldCycle cycle, int accountedCount,
                                                           int issuedQuantityBefore) {
         Objects.requireNonNull(siteId, "yield site");
         Objects.requireNonNull(economicOwnerId, "yield owner");
         Objects.requireNonNull(cycle, "field cycle");
         if (!siteId.equals(cycle.siteId()) || !economicOwnerId.value().startsWith("settlement:")
-                || accountedPrefix < 0 || accountedPrefix > cycle.layout().cells().size()
-                || cycle.accountedCount() != accountedPrefix || cycle.accountedPrefixCount() != accountedPrefix
+                || accountedCount < 0 || accountedCount > cycle.layout().cells().size()
+                || cycle.accountedCount() != accountedCount
                 || issuedQuantityBefore < 0
+                || cycle.pendingPlayerBreaks().keySet().stream().anyMatch(id -> cycle.cell(id).accounted())
                 || (issuedQuantityBefore % 64 != 0
                         && !(cycle.cycleAccounted() && issuedQuantityBefore == cycle.harvestedCount()))
                 || issuedQuantityBefore > cycle.harvestedCount()) {
-            throw new IllegalArgumentException("field output batch has a foreign identity or work prefix");
-        }
-        for (ResourceFieldLayout.CellId id : cycle.pendingPlayerBreaks().keySet()) {
-            if (cycle.layout().workIndex(id) < accountedPrefix) {
-                throw new IllegalArgumentException("field output batch lacks an exact resolved cell prefix");
-            }
+            throw new IllegalArgumentException("field output batch has a foreign identity or work count");
         }
         int unissued = cycle.harvestedCount() - issuedQuantityBefore;
         if (unissued > 64) throw new IllegalArgumentException("field output batch skipped an earlier full lot");

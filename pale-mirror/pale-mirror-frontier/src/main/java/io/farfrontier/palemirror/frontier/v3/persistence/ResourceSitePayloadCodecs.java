@@ -61,6 +61,8 @@ final class ResourceSitePayloadCodecs {
                     output.writeByte(job.outputSlot().slot()); FrontierWorldPayloadCodecs.writeString(output, job.intentId().value());
                     output.writeInt(job.progress().totalCropSlots()); output.writeInt(job.progress().completedCropSlots());
                     output.writeInt(job.progress().pendingCropSlotIndex());
+                    output.writeInt(job.progress().selectedCropSlotIndex());
+                    output.writeInt(job.progress().lastCompletedCropSlotIndex());
                     output.writeInt(job.deliveredYieldQuantity());
                     output.writeBoolean(job.returningForBatch());
                     output.writeBoolean(job.batchSuccessorSlot().isPresent());
@@ -82,6 +84,7 @@ final class ResourceSitePayloadCodecs {
                     SubjectId output = FrontierWorldPayloadCodecs.readSubject(input).value(), depot = FrontierWorldPayloadCodecs.readSubject(input).value();
                     int slot = input.readUnsignedByte(); String intent = FrontierWorldPayloadCodecs.readString(input);
                     int total = input.readInt(), completed = input.readInt(), pending = input.readInt();
+                    int selected = input.readInt(), lastCompleted = input.readInt();
                     int delivered = input.readInt(); boolean returningForBatch = input.readBoolean();
                     java.util.Optional<InventoryCustody.ContainerSlot> successorSlot = input.readBoolean()
                             ? java.util.Optional.of(new InventoryCustody.ContainerSlot(depot, input.readUnsignedByte()))
@@ -96,7 +99,7 @@ final class ResourceSitePayloadCodecs {
                     }
                     return new ResourceSiteHarvestStarted(new ResourceSiteHarvestJob(id, task, site, worker, actorAccount, depotAccount, output,
                             new InventoryCustody.ContainerSlot(depot, slot), new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(intent),
-                            new ResourceSiteHarvestProgress(total, completed, pending), delivered,
+                            new ResourceSiteHarvestProgress(total, completed, pending, selected, lastCompleted), delivered,
                             returningForBatch, successorSlot, lastBatch, java.util.Optional.empty()));
                 });
             }
@@ -239,6 +242,35 @@ final class ResourceSitePayloadCodecs {
             }
         };
     }
+    static PayloadCodec workAccessObserved() {
+        return new PayloadCodec() {
+            @Override public String type() { return "frontier.resource_field_work_access_observed"; }
+            @Override public byte[] encode(FrontierPayload payload) {
+                ResourceFieldWorkAccessObserved observed = (ResourceFieldWorkAccessObserved) payload;
+                return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+                    FrontierWorldPayloadCodecs.writeSubject(output, observed.siteId());
+                    output.writeLong(observed.epoch()); output.writeLong(observed.layoutRevision());
+                    output.writeLong(observed.cellId().value());
+                    output.writeInt(observed.headroom().x()); output.writeInt(observed.headroom().y());
+                    output.writeInt(observed.headroom().z());
+                    output.writeBoolean(observed.blocked());
+                    FrontierWorldPayloadCodecs.writeString(output, observed.observedBlock());
+                    output.writeBoolean(observed.hotLeaseId().isPresent());
+                    if (observed.hotLeaseId().isPresent())
+                        FrontierWorldPayloadCodecs.writeString(output, observed.hotLeaseId().orElseThrow().value());
+                });
+            }
+            @Override public FrontierPayload decode(byte[] bytes) {
+                return FrontierWorldPayloadCodecs.decodeProduction(bytes, input ->
+                        new ResourceFieldWorkAccessObserved(FrontierWorldPayloadCodecs.readSubject(input).value(),
+                                input.readLong(), input.readLong(), new ResourceFieldLayout.CellId(input.readLong()),
+                                new BlockPosition(input.readInt(), input.readInt(), input.readInt()),
+                                input.readBoolean(), FrontierWorldPayloadCodecs.readString(input),
+                                input.readBoolean() ? java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(
+                                        FrontierWorldPayloadCodecs.readString(input))) : java.util.Optional.empty()));
+            }
+        };
+    }
     static PayloadCodec harvestBlockedCellSkipped() {
         return new PayloadCodec() {
             @Override public String type() { return "frontier.resource_site_harvest_blocked_cell_skipped"; }
@@ -276,6 +308,38 @@ final class ResourceSitePayloadCodecs {
                                     ? java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(
                                     FrontierWorldPayloadCodecs.readString(input))) : java.util.Optional.empty());
                 });
+            }
+        };
+    }
+    static PayloadCodec harvestTargetRetargeted() {
+        return new PayloadCodec() {
+            @Override public String type() { return "frontier.resource_site_harvest_target_retargeted"; }
+            @Override public byte[] encode(FrontierPayload payload) {
+                ResourceSiteHarvestTargetRetargeted value = (ResourceSiteHarvestTargetRetargeted) payload;
+                return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+                    FrontierWorldPayloadCodecs.writeSubject(output, value.siteId());
+                    FrontierWorldPayloadCodecs.writeSubject(output, value.jobId());
+                    FrontierWorldPayloadCodecs.writeSubject(output, value.workerId());
+                    output.writeLong(value.layoutRevision());
+                    output.writeInt(value.fromSlot());
+                    output.writeInt(value.toSlot());
+                    FrontierWorldPayloadCodecs.writeString(output, value.coldScheduleId().value());
+                    output.writeLong(value.coldDueAt());
+                    output.writeBoolean(value.hotLeaseId().isPresent());
+                    if (value.hotLeaseId().isPresent())
+                        FrontierWorldPayloadCodecs.writeString(output, value.hotLeaseId().orElseThrow().value());
+                });
+            }
+            @Override public FrontierPayload decode(byte[] bytes) {
+                return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new ResourceSiteHarvestTargetRetargeted(
+                        FrontierWorldPayloadCodecs.readSubject(input).value(),
+                        FrontierWorldPayloadCodecs.readSubject(input).value(),
+                        FrontierWorldPayloadCodecs.readSubject(input).value(),
+                        input.readLong(), input.readInt(), input.readInt(),
+                        new io.farfrontier.palemirror.frontier.v3.api.ScheduleId(FrontierWorldPayloadCodecs.readString(input)),
+                        input.readLong(), input.readBoolean()
+                        ? java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(
+                                FrontierWorldPayloadCodecs.readString(input))) : java.util.Optional.empty()));
             }
         };
     }
@@ -620,7 +684,7 @@ final class ResourceSitePayloadCodecs {
             @Override public byte[] encode(FrontierPayload payload) {
                 var held = (ResourceFieldForeignChangeHeld) payload;
                 byte[] site = bytes(held.siteId().value()), cause = bytes(held.causationId());
-                return ByteBuffer.allocate(1 + site.length + Long.BYTES * 3 + 5 + 1 + cause.length)
+                return ByteBuffer.allocate(1 + site.length + Long.BYTES * 3 + 6 + 1 + cause.length)
                         .put((byte) site.length).put(site).putLong(held.epoch()).putLong(held.layoutRevision())
                         .putLong(held.cellId().value()).put(foreignCellBytes(held.before()))
                         .put((byte) cause.length).put(cause).array();
@@ -628,7 +692,7 @@ final class ResourceSitePayloadCodecs {
             @Override public FrontierPayload decode(byte[] bytes) {
                 ByteBuffer input = ByteBuffer.wrap(bytes);
                 String site = read(input);
-                if (input.remaining() < Long.BYTES * 3 + 6)
+                if (input.remaining() < Long.BYTES * 3 + 7)
                     throw new IllegalArgumentException("truncated foreign field hold");
                 long epoch = input.getLong(), revision = input.getLong(), cell = input.getLong();
                 var before = readForeignCell(input);
@@ -647,7 +711,7 @@ final class ResourceSitePayloadCodecs {
                 var observed = (ResourceFieldForeignCellObserved) payload;
                 byte[] held = foreignChangeHeld().encode(observed.hold());
                 byte[] soil = bytes(observed.soilBlockName()), crop = bytes(observed.cropBlockName());
-                return ByteBuffer.allocate(Integer.BYTES + held.length + 5 + 1 + soil.length + 1 + crop.length)
+                return ByteBuffer.allocate(Integer.BYTES + held.length + 6 + 1 + soil.length + 1 + crop.length)
                         .putInt(held.length).put(held).put(foreignCellBytes(observed.after()))
                         .put((byte) soil.length).put(soil).put((byte) crop.length).put(crop).array();
             }
@@ -655,7 +719,7 @@ final class ResourceSitePayloadCodecs {
                 ByteBuffer input = ByteBuffer.wrap(bytes);
                 if (input.remaining() < Integer.BYTES) throw new IllegalArgumentException("truncated foreign field observation");
                 int length = input.getInt();
-                if (length < 1 || length > 600 || input.remaining() < length + 7)
+                if (length < 1 || length > 600 || input.remaining() < length + 8)
                     throw new IllegalArgumentException("invalid held foreign field cause length");
                 byte[] held = new byte[length]; input.get(held);
                 var after = readForeignCell(input);
@@ -673,14 +737,14 @@ final class ResourceSitePayloadCodecs {
             @Override public byte[] encode(FrontierPayload payload) {
                 var acknowledged = (ResourceFieldForeignChangeAcknowledged) payload;
                 byte[] held = foreignChangeHeld().encode(acknowledged.hold());
-                return ByteBuffer.allocate(Integer.BYTES + held.length + 5)
+                return ByteBuffer.allocate(Integer.BYTES + held.length + 6)
                         .putInt(held.length).put(held).put(foreignCellBytes(acknowledged.physical())).array();
             }
             @Override public FrontierPayload decode(byte[] bytes) {
                 ByteBuffer input = ByteBuffer.wrap(bytes);
                 if (input.remaining() < Integer.BYTES) throw new IllegalArgumentException("truncated foreign field acknowledgement");
                 int length = input.getInt();
-                if (length < 1 || length > 600 || input.remaining() != length + 5)
+                if (length < 1 || length > 600 || input.remaining() != length + 6)
                     throw new IllegalArgumentException("invalid held foreign field acknowledgement length");
                 byte[] held = new byte[length]; input.get(held);
                 return new ResourceFieldForeignChangeAcknowledged(
@@ -696,11 +760,12 @@ final class ResourceSitePayloadCodecs {
         }, (byte) switch (cell.crop()) {
             case ABSENT -> 1; case GROWING -> 2; case MATURE -> 3; case OBSTRUCTED -> 4;
             case UNKNOWN -> throw new IllegalArgumentException("unknown foreign field crop");
-        }, (byte) cell.growthStage(), (byte) (cell.accounted() ? 1 : 0), (byte) (cell.yielded() ? 1 : 0)};
+        }, (byte) cell.growthStage(), (byte) (cell.accounted() ? 1 : 0), (byte) (cell.yielded() ? 1 : 0),
+                (byte) (cell.workAccessBlocked() ? 1 : 0)};
     }
 
     private static ResourceFieldCycle.CellState readForeignCell(ByteBuffer input) {
-        if (input.remaining() < 5) throw new IllegalArgumentException("truncated foreign field cell");
+        if (input.remaining() < 6) throw new IllegalArgumentException("truncated foreign field cell");
         var soil = switch (Byte.toUnsignedInt(input.get())) {
             case 1 -> ResourceFieldCycle.Soil.FARMLAND; case 2 -> ResourceFieldCycle.Soil.DIRT;
             case 3 -> ResourceFieldCycle.Soil.OBSTRUCTED;
@@ -713,8 +778,9 @@ final class ResourceSitePayloadCodecs {
         };
         int stage = Byte.toUnsignedInt(input.get());
         int accounted = Byte.toUnsignedInt(input.get()), yielded = Byte.toUnsignedInt(input.get());
-        if (accounted > 1 || yielded > 1) throw new IllegalArgumentException("invalid foreign field work flags");
-        return new ResourceFieldCycle.CellState(soil, crop, stage, accounted == 1, yielded == 1);
+        int blocked = Byte.toUnsignedInt(input.get());
+        if (accounted > 1 || yielded > 1 || blocked > 1) throw new IllegalArgumentException("invalid foreign field work flags");
+        return new ResourceFieldCycle.CellState(soil, crop, stage, accounted == 1, yielded == 1, blocked == 1);
     }
     static PayloadCodec playerBreakPrepared() {
         return new PayloadCodec() {

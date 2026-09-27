@@ -285,6 +285,31 @@ public final class ResourceSiteProcess {
         return state.withResourceSites(state.resourceSites().replace(lifecycle, next));
     }
 
+    /** A loaded physical observation changes work access only, never crop or yield. */
+    public static FrontierWorldState reduceWorkAccessObserved(FrontierWorldState state, SubjectId subject,
+                                                              ResourceFieldWorkAccessObserved observed) {
+        if (!subject.equals(observed.siteId()))
+            throw new IllegalArgumentException("field work access has a foreign site owner");
+        ResourceSiteLifecycle lifecycle = state.resourceSites().site(subject);
+        ResourceFieldCycle cycle = state.resourceSites().cycle(subject);
+        ResourceFieldLayout.Cell cell = cycle.layout().requireCell(observed.cellId());
+        if (lifecycle.phase() == ResourceSitePhase.UNPREPARED || lifecycle.phase() == ResourceSitePhase.DESTROYED
+                || lifecycle.phase() == ResourceSitePhase.CONFLICT
+                || observed.epoch() != cycle.epoch() || observed.layoutRevision() != cycle.layout().revision()
+                || !observed.headroom().equals(cell.workstation().support().offset(0, 2, 0))
+                || state.resourceSites().hasPendingWorldChange(subject)
+                || cycle.pendingPlayerBreaks().containsKey(cell.id()))
+            throw new IllegalArgumentException("field work access has a stale or unresolved cell observation");
+        if (observed.hotLeaseId().isPresent()) {
+            ResourceSiteHarvestJob job = lifecycle.activeWork().filter(ResourceSiteHarvestJob.class::isInstance)
+                    .map(ResourceSiteHarvestJob.class::cast).orElseThrow(
+                            () -> new IllegalArgumentException("field work access has no physical farmer owner"));
+            FrontierResourceSiteHarvestSceneSupport.requireHotLease(state, job, observed.hotLeaseId().orElseThrow());
+        }
+        return state.withResourceSites(state.resourceSites().replace(lifecycle,
+                cycle.observedWorkAccess(cell.id(), observed.blocked())));
+    }
+
     public static FrontierWorldState reduceConflict(FrontierWorldState state, SubjectId subject, ResourceSiteConflictObserved conflict) {
         if (!subject.equals(conflict.siteId())) throw new IllegalArgumentException("resource-site conflict has a foreign event owner");
         ResourceSite site = state.resourceSite(conflict.siteId());

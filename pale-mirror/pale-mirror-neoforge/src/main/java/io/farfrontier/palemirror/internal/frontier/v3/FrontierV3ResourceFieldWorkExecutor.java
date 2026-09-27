@@ -161,7 +161,7 @@ final class FrontierV3ResourceFieldWorkExecutor {
         if (job.progress().completedCropSlots() == 0) return Disposition.READY;
         FrontierWorldState state = accepted.state();
         ResourceFieldCycle cycle = state.resourceSites().cycle(job.siteId());
-        ResourceFieldLayout.CellId id = cycle.layout().cells().get(job.progress().completedCropSlots() - 1).id();
+        ResourceFieldLayout.CellId id = cycle.layout().cells().get(job.progress().lastCompletedCropSlotIndex()).id();
         FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
         if (!(ledger.fieldClaim(job.siteId()) instanceof FrontierV3ResourceSiteLedger.FieldOwnership owner)
                 || owner.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE

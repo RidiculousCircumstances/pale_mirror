@@ -33,7 +33,11 @@ public final class ResourceFieldCycle {
         }
     }
 
-    public record CellState(Soil soil, Crop crop, int growthStage, boolean accounted, boolean yielded) {
+    public record CellState(Soil soil, Crop crop, int growthStage, boolean accounted, boolean yielded,
+                            boolean workAccessBlocked) {
+        public CellState(Soil soil, Crop crop, int growthStage, boolean accounted, boolean yielded) {
+            this(soil, crop, growthStage, accounted, yielded, false);
+        }
         public CellState {
             Objects.requireNonNull(soil, "field soil condition");
             Objects.requireNonNull(crop, "field crop condition");
@@ -197,6 +201,44 @@ public final class ResourceFieldCycle {
     public int accountedCount() {
         return accountedCount;
     }
+    /** Select from the outstanding CellIds, not from a completed list prefix. */
+    public java.util.OptionalInt nextWorkSlot(SurfaceAnchor from) {
+        Objects.requireNonNull(from, "field work selection origin");
+        return AreaWorkSelection.choose(layout.cells().size(), index -> {
+            ResourceFieldLayout.Cell cell = layout.cells().get(index);
+            return !cell(cell.id()).accounted();
+        }, index -> {
+            SurfaceAnchor station = layout.cells().get(index).workstation();
+            long distance = Math.abs((long) station.x() - from.x())
+                    + Math.abs((long) station.y() - from.y())
+                    + Math.abs((long) station.z() - from.z());
+            CellState condition = cell(layout.cells().get(index).id());
+            if (pendingPlayerBreaks.containsKey(layout.cells().get(index).id()))
+                return distance + (Long.MAX_VALUE >>> 2);
+            return condition.workAccessBlocked() || condition.crop() == Crop.OBSTRUCTED
+                    ? distance + (Long.MAX_VALUE >>> 3) : distance;
+        });
+    }
+    /** Continuation starts after the last CellId slot and does not rescore the whole area by distance. */
+    public java.util.OptionalInt nextWorkSlotAfter(int previousIndex) {
+        return AreaWorkSelection.nextAfter(layout.cells().size(), previousIndex, index -> {
+            ResourceFieldLayout.CellId id = layout.cells().get(index).id();
+            CellState condition = cell(id);
+            return !pendingPlayerBreaks.containsKey(id) && !condition.workAccessBlocked()
+                    && condition.crop() != Crop.OBSTRUCTED;
+        }, index -> !cell(layout.cells().get(index).id()).accounted());
+    }
+    /** Route-failure fallback keeps the old target pending; it selects only a witnessed alternative. */
+    public java.util.OptionalInt reachableWorkSlotAfter(int previousIndex, java.util.function.IntPredicate reachable) {
+        Objects.requireNonNull(reachable, "area work reachability witness");
+        return AreaWorkSelection.reachableAfter(layout.cells().size(), previousIndex, index -> {
+            ResourceFieldLayout.CellId id = layout.cells().get(index).id();
+            CellState condition = cell(id);
+            return !condition.accounted() && !condition.workAccessBlocked()
+                    && condition.crop() != Crop.OBSTRUCTED && !pendingPlayerBreaks.containsKey(id)
+                    && reachable.test(index);
+        });
+    }
     /** Exact contiguous work-order prefix, maintained incrementally and rebuilt on recovery. */
     public int accountedPrefixCount() { return accountedPrefixCount; }
     public boolean cycleAccounted() { return accountedCount() == layout.cells().size(); }
@@ -270,7 +312,8 @@ public final class ResourceFieldCycle {
         boolean isForeign = after.soil() == Soil.OBSTRUCTED || after.crop() == Crop.OBSTRUCTED;
         if ((!wasForeign && !isForeign) || prior.soil() == Soil.UNKNOWN || prior.crop() == Crop.UNKNOWN
                 || after.soil() == Soil.UNKNOWN || after.crop() == Crop.UNKNOWN
-                || after.accounted() != prior.accounted() || after.yielded() != prior.yielded())
+                || after.accounted() != prior.accounted() || after.yielded() != prior.yielded()
+                || after.workAccessBlocked() != prior.workAccessBlocked())
             throw new IllegalArgumentException("foreign field observation cannot invent owned work or an unknown cell");
         return replace(id, after);
     }
@@ -296,9 +339,18 @@ public final class ResourceFieldCycle {
     /** The current work plan accounts for an inaccessible cell without changing its block. */
     public ResourceFieldCycle skipBlocked(ResourceFieldLayout.CellId id) {
         CellState prior = cell(id);
-        if (prior.crop() != Crop.OBSTRUCTED || prior.accounted())
+        if ((prior.crop() != Crop.OBSTRUCTED && !prior.workAccessBlocked()) || prior.accounted())
             throw new IllegalArgumentException("field cell has no pending obstruction to skip");
-        return replace(id, new CellState(prior.soil(), prior.crop(), 0, true, false));
+        return replace(id, new CellState(prior.soil(), prior.crop(), prior.growthStage(), true, false));
+    }
+
+    /** One physical access observation changes no crop, soil or yield. */
+    public ResourceFieldCycle observedWorkAccess(ResourceFieldLayout.CellId id, boolean blocked) {
+        CellState prior = cell(id);
+        if (prior.workAccessBlocked() == blocked)
+            throw new IllegalArgumentException("field work access observation has no new exact condition");
+        return replace(id, new CellState(prior.soil(), prior.crop(), prior.growthStage(),
+                prior.accounted(), prior.yielded(), blocked), true);
     }
 
     public ResourceFieldCycle advanceGrowth(ResourceFieldLayout.CellId id) {
@@ -318,7 +370,7 @@ public final class ResourceFieldCycle {
             if (current.crop() == Crop.GROWING && !current.accounted() && !pendingPlayerBreaks.containsKey(cell.id())) {
                 int next = Math.addExact(current.growthStage(), 1);
                 current = new CellState(current.soil(), next == ResourceSiteLifecycle.MATURE_STAGE ? Crop.MATURE : Crop.GROWING,
-                        next, false, false);
+                        next, false, false, current.workAccessBlocked());
             }
             groups.computeIfAbsent(chunkOf(cell), ignored -> new LinkedHashMap<>()).put(cell.id(), current);
         }
@@ -365,6 +417,7 @@ public final class ResourceFieldCycle {
     public WorkOutcome expectedWorkOutcome(ResourceFieldLayout.CellId id) {
         CellState prior = cell(id);
         if (prior.accounted()) throw new IllegalArgumentException("field cell work was already accounted");
+        if (prior.workAccessBlocked()) return WorkOutcome.SKIPPED_BLOCKED;
         return switch (prior.crop()) {
             case MATURE -> WorkOutcome.HARVESTED;
             case GROWING -> WorkOutcome.SKIPPED_IMMATURE;
@@ -406,7 +459,7 @@ public final class ResourceFieldCycle {
         for (ResourceFieldLayout.Cell cell : layout.cells()) {
             CellState prior = cell(cell.id());
             CellState next = new CellState(prior.soil(), prior.crop(), prior.growthStage(),
-                    false, false);
+                    false, false, prior.workAccessBlocked());
             groups.computeIfAbsent(chunkOf(cell), ignored -> new LinkedHashMap<>()).put(cell.id(), next);
         }
         return new ResourceFieldCycle(siteId, layout, Math.addExact(epoch, 1), groups, true);
@@ -440,11 +493,18 @@ public final class ResourceFieldCycle {
     }
 
     private ResourceFieldCycle replace(ResourceFieldLayout.CellId id, CellState next) {
+        return replace(id, next, false);
+    }
+
+    private ResourceFieldCycle replace(ResourceFieldLayout.CellId id, CellState next, boolean observedAccess) {
         if (pendingPlayerBreaks.containsKey(id)) throw new IllegalArgumentException("field cell has an unresolved player action");
         ResourceFieldLayout.ChunkColumn chunk = chunkOf(layout.requireCell(id));
         var groups = new LinkedHashMap<>(byChunk);
         var cells = new LinkedHashMap<>(groups.get(chunk));
         CellState prior = cells.get(id);
+        if (!observedAccess && prior.workAccessBlocked() && !next.workAccessBlocked())
+            next = new CellState(next.soil(), next.crop(), next.growthStage(),
+                    next.accounted(), next.yielded(), true);
         cells.put(id, Objects.requireNonNull(next));
         groups.put(chunk, Map.copyOf(cells));
         int prefix = accountedPrefixCount;

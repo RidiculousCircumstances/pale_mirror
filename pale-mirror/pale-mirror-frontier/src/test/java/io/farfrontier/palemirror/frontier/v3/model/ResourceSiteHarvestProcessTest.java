@@ -9,6 +9,7 @@ import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess;
+import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestRetargeting;
 import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteProcess;
 import io.farfrontier.palemirror.frontier.v3.process.StrategicObjectiveProcess;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
@@ -71,7 +72,8 @@ class ResourceSiteHarvestProcessTest {
     static SceneLease newHarvestLease(FrontierWorldState state, SubjectId site, ResourceSiteHarvestJob job, String suffix) {
         BodyPosition current = state.actorLocations().get(job.workerId()).body();
         BlockPosition anchor = FrontierResourceSitePlan.compile(state.bootstrap()).get(site).cropSlots()
-                .get(Math.min(job.progress().completedCropSlots(), job.progress().totalCropSlots() - 1));
+                .get(job.progress().complete() ? job.progress().lastCompletedCropSlotIndex()
+                        : job.progress().nextCropSlotIndex());
         return SceneLease.forCause(new SceneLeaseId("lease:site-harvest-" + suffix), state.bootstrap().worldId(),
                 new ResourceSiteHarvestSceneCause(site, job.id()), anchor, new SimInstant(22_300L), 1L,
                 SceneLeaseStatus.PREPARED,
@@ -88,16 +90,17 @@ class ResourceSiteHarvestProcessTest {
                 state = ResourceSiteHarvestProcess.reduceHotGoalArrived(state, site,
                         new ResourceSiteHarvestHotGoalArrived(current.id(), leaseId, current.workerId(),
                                 goal.layoutRevision(), goal.nextWorkSlot(), goal.kind(), station));
+            int selected = current.progress().nextCropSlotIndex();
             state = ResourceSiteHarvestProcess.reduceCropPrepared(state, site,
-                    new ResourceSiteHarvestCropPrepared(current.id(), slot));
+                    new ResourceSiteHarvestCropPrepared(current.id(), selected));
             ResourceFieldCycle field = state.resourceSites().cycle(site);
-            ResourceFieldLayout.CellId cell = field.layout().cells().get(slot).id();
+            ResourceFieldLayout.CellId cell = field.layout().cells().get(selected).id();
             ScheduledAction due = ResourceSiteHarvestProcess.coldProgress(current, 22_301L);
             SceneLease lease = state.sceneLeases().get(leaseId);
             int hand = field.harvestedCount() - current.deliveredYieldQuantity() +
                     (field.expectedWorkOutcome(cell) == ResourceFieldCycle.WorkOutcome.HARVESTED ? 1 : 0);
             state = ResourceSiteHarvestProcess.reduceProgressed(state, site,
-                    new ResourceSiteHarvestProgressed(site, field.epoch(), current.id(), slot + 1,
+                    new ResourceSiteHarvestProgressed(site, field.epoch(), current.id(), current.progress().completedCropSlots() + 1,
                             field.layout().revision(), cell, field.expectedWorkOutcome(cell), due.id(), due.dueAt().ticks(),
                             Optional.of(new ResourceSiteHarvestProgressed.HandObservation(
                                     new PhysicalStackAddress.ActorHand(current.workerId(), lease.members().getFirst().entityId()),
@@ -115,6 +118,7 @@ class ResourceSiteHarvestProcessTest {
                 case ResourceSiteHarvestReturned returned -> state = ResourceSiteHarvestProcess.reduceReturned(state, site, returned);
                 case ResourceSiteHarvestColdGoalHeld held -> state = ResourceSiteHarvestProcess.reduceColdGoalHeld(state, site, held);
                 case ResourceSiteHarvestBlockedCellSkipped skipped -> state = ResourceSiteHarvestProcess.reduceBlockedCellSkipped(state, site, skipped);
+                case ResourceSiteHarvestTargetRetargeted retargeted -> state = ResourceSiteHarvestRetargeting.reduceTargetRetargeted(state, site, retargeted);
                 case ScheduleEffect.Rescheduled scheduled -> next = scheduled.replacement();
                 default -> { }
             }
@@ -141,23 +145,54 @@ class ResourceSiteHarvestProcessTest {
                 new WorldId("frontier:blocked-final-goal"), 125L);
         FrontierWorldState state = fixture.state();
         ResourceFieldCycle cycle = state.resourceSites().cycle(fixture.siteId());
-        ResourceFieldLayout.CellId lastCell = cycle.layout().cells().get(64).id();
-        ResourceFieldCycle obstructed = cycle.observedInterference(lastCell,
-                new ResourceFieldCycle.CellState(ResourceFieldCycle.Soil.FARMLAND,
-                        ResourceFieldCycle.Crop.OBSTRUCTED, 0, false, false));
-        state = state.withResourceSites(state.resourceSites().replace(
-                state.resourceSites().site(fixture.siteId()), obstructed));
         ResourceSiteHarvestJob job = (ResourceSiteHarvestJob) state.resourceSites()
                 .site(fixture.siteId()).activeWork().orElseThrow();
-        var actors = new java.util.LinkedHashMap<>(state.actorLocations());
-        actors.put(job.workerId(), actors.get(job.workerId()).withBody(
-                BodyPosition.above(new SurfaceAnchor(new BlockPosition(-342, 64, -329)))));
-        state = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
-        var prefix = ResourceSiteHarvestProcess.blockedPrefix(obstructed, job.progress().completedCropSlots());
-        assertEquals(List.of(lastCell), prefix);
-        FrontierWorldState current = state;
-        assertDoesNotThrow(() -> ResourceSiteHarvestProcess.blockedPrefixContinuation(
-                current, fixture.siteId(), job, prefix));
+        ResourceFieldLayout.CellId lastCell = cycle.layout().cells().get(job.progress().nextCropSlotIndex()).id();
+        ResourceFieldCycle obstructed = cycle.observedWorkAccess(lastCell, true);
+        state = state.withResourceSites(state.resourceSites().replace(
+                state.resourceSites().site(fixture.siteId()), obstructed));
+        ScheduledAction due = fixture.schedules().getFirst();
+        FrontierWorldState skipped = ResourceSiteHarvestProcess.reduceBlockedCellSkipped(state, fixture.siteId(),
+                new ResourceSiteHarvestBlockedCellSkipped(fixture.siteId(), job.id(), job.workerId(),
+                        cycle.layout().revision(), List.of(lastCell), due.id(), due.dueAt().ticks(), Optional.empty()));
+        assertEquals(65, skipped.resourceSites().cycle(fixture.siteId()).accountedCount());
+        assertEquals(cycle.harvestedCount(), skipped.resourceSites().cycle(fixture.siteId()).harvestedCount());
+        assertTrue(((ResourceSiteHarvestJob) skipped.resourceSites().site(fixture.siteId()).activeWork().orElseThrow())
+                .progress().complete());
+    }
+    @Test void unreachableHotTargetCanBeDeferredWithoutCreditingOrLosingItsCell() {
+        HotHarvest hot = hotHarvestAfterColdSteps(0);
+        ResourceSiteHarvestJob job = hot.job();
+        ResourceFieldCycle field = hot.state().resourceSites().cycle(hot.site());
+        int from = job.progress().nextCropSlotIndex();
+        int to = field.reachableWorkSlotAfter(from, index -> true).orElseThrow();
+        ScheduledAction due = ResourceSiteHarvestProcess.coldProgress(job, 22_301L);
+        var event = new ResourceSiteHarvestTargetRetargeted(hot.site(), job.id(), job.workerId(),
+                field.layout().revision(), from, to, due.id(), due.dueAt().ticks(), Optional.of(hot.lease().id()));
+        FrontierWorldState redirected = ResourceSiteHarvestRetargeting.reduceTargetRetargeted(
+                hot.state(), hot.site(), event);
+        ResourceSiteHarvestJob active = (ResourceSiteHarvestJob) redirected.resourceSites().site(hot.site())
+                .activeWork().orElseThrow();
+        assertEquals(to, active.progress().nextCropSlotIndex());
+        assertEquals(0, active.progress().completedCropSlots());
+        assertFalse(redirected.resourceSites().cycle(hot.site()).cell(field.layout().cells().get(from).id()).accounted());
+        assertEquals(redirected, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(redirected)));
+        assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestRetargeting.reduceTargetRetargeted(
+                redirected, hot.site(), event));
+
+        for (var reason : List.of(ResourceSiteHarvestNavigationBlock.Reason.PATH_UNAVAILABLE,
+                ResourceSiteHarvestNavigationBlock.Reason.PATH_STALLED)) {
+            var routeBlock = new ResourceSiteHarvestNavigationBlock(
+                    ResourceSiteHarvestGoal.current(hot.state(), job).representative(), field.layout().revision(), reason);
+            FrontierWorldState held = hot.state().withResourceSites(hot.state().resourceSites().replace(
+                    hot.state().resourceSites().site(hot.site()).blockHarvestRoute(job, routeBlock)));
+            FrontierWorldState resumedAtAlternate = ResourceSiteHarvestRetargeting.reduceTargetRetargeted(
+                    held, hot.site(), event);
+            var resumedJob = (ResourceSiteHarvestJob) resumedAtAlternate.resourceSites().site(hot.site())
+                    .activeWork().orElseThrow();
+            assertEquals(to, resumedJob.progress().nextCropSlotIndex());
+            assertTrue(resumedJob.navigationBlock().isEmpty());
+        }
     }
     @Test void hotFieldReceiptsCoverEveryCellWithoutMovingTheWorkGoalByWaypoints() {
         HotHarvest hot = hotHarvestAfterColdSteps(0);

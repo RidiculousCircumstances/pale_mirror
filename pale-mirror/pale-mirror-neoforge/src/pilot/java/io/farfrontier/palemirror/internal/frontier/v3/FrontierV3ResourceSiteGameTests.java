@@ -188,6 +188,8 @@ public final class FrontierV3ResourceSiteGameTests {
         prepareGrayboxBaseline(level, site);
         helper.runAfterDelay(10, () -> {
             FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.fixture();
+            helper.assertTrue(FrontierV3ResourceSiteExecutor.baseline(level, site),
+                    "neutral field predecessor must be current: " + firstGrayboxBaselineMismatch(level, site));
             helper.assertValueEqual(FrontierV3ResourceSiteExecutor.projectStage(level, ledger, site, 5), FrontierV3ResourceSiteExecutor.StageProjectionResult.UPDATED,
                     "a COLD-completed field may materialize its canonical stage from one neutral unloaded-world baseline");
             helper.assertTrue(FrontierV3ResourceSiteExecutor.matches(level, site, 5) && ledger.claim(site.id()).status() == FrontierV3ResourceSiteLedger.Status.ACTIVE,
@@ -304,6 +306,15 @@ public final class FrontierV3ResourceSiteGameTests {
                     BlockPos minecraft = minecraft(position); return !level.getBlockState(minecraft).is(Blocks.DIRT) || level.getBlockState(minecraft.below()).isAir();
                 }).findFirst().map(position -> "irrigation " + position + "=" + level.getBlockState(minecraft(position)) + ", below=" + level.getBlockState(minecraft(position).below())))
                 .orElse("baseline appears valid");
+    }
+    private static String firstGrayboxBaselineMismatch(ServerLevel level, ResourceSite site) {
+        return site.managedSlots().stream().filter(slot -> {
+            BlockPos position = minecraft(slot);
+            if (site.cropSlots().contains(slot)) return !level.getBlockState(position).isAir();
+            return !level.getBlockState(position).is(Blocks.LIGHT_GRAY_CONCRETE)
+                    || level.getBlockState(position.below()).isAir();
+        }).findFirst().map(slot -> slot + "=" + level.getBlockState(minecraft(slot))
+                + ", below=" + level.getBlockState(minecraft(slot).below())).orElse("no mismatched slot");
     }
     private static String firstFieldMismatch(ServerLevel level, ResourceSite site) {
         return site.soilSlots().stream().filter(position -> !level.getBlockState(minecraft(position)).is(Blocks.FARMLAND))

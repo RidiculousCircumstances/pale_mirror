@@ -31,6 +31,7 @@ final class ResourceFieldCycleStateCodec {
             ResourceFieldCycle.CellState state = cycle.cell(cell.id());
             output.writeByte(soilTag(state.soil())); output.writeByte(cropTag(state.crop()));
             output.writeByte(state.growthStage()); output.writeBoolean(state.accounted()); output.writeBoolean(state.yielded());
+            output.writeBoolean(state.workAccessBlocked());
             ResourceFieldCycle.PendingPlayerBreak pending = cycle.pendingPlayerBreaks().get(cell.id());
             output.writeBoolean(pending != null);
             if (pending != null) {
@@ -60,7 +61,7 @@ final class ResourceFieldCycleStateCodec {
                     new SurfaceAnchor(readPosition(input)), new SurfaceAnchor(readPosition(input)));
             ResourceFieldCycle.CellState state = new ResourceFieldCycle.CellState(
                     soil(input.readUnsignedByte()), crop(input.readUnsignedByte()), input.readUnsignedByte(),
-                    input.readBoolean(), input.readBoolean());
+                    input.readBoolean(), input.readBoolean(), input.readBoolean());
             if (input.readBoolean()) {
                 var player = new java.util.UUID(input.readLong(), input.readLong());
                 String action = FrontierWorldStateCodec.readString(input);

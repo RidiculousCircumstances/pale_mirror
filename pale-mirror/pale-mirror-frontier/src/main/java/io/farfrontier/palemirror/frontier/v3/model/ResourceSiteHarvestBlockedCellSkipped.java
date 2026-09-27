@@ -9,7 +9,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.List;
 
-/** One contiguous, bounded obstructed CellId prefix is accounted without crop effect or worker displacement. */
+/** One selected unavailable CellId is accounted without crop effect or worker displacement. */
 public record ResourceSiteHarvestBlockedCellSkipped(SubjectId siteId, SubjectId jobId, SubjectId workerId,
                                                     long layoutRevision, List<ResourceFieldLayout.CellId> cellIds,
                                                     ScheduleId coldScheduleId,
@@ -24,7 +24,7 @@ public record ResourceSiteHarvestBlockedCellSkipped(SubjectId siteId, SubjectId 
         hotLeaseId = Objects.requireNonNull(hotLeaseId, "blocked field physical owner");
         if (!siteId.value().startsWith("site:") || !jobId.value().startsWith("job:site-harvest-")
                 || !workerId.value().startsWith("resident:") || layoutRevision < 1
-                || cellIds.isEmpty() || cellIds.size() > ResourceFieldLayout.MAX_CELLS
+                || cellIds.size() != 1
                 || coldDueAt < 0)
             throw new IllegalArgumentException("blocked field cell has invalid declared identity or due instant");
     }

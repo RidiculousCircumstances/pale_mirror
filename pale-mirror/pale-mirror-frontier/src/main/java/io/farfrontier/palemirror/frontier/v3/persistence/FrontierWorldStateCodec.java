@@ -28,7 +28,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     // Version 199 persists the immutable initial-field layout manifest; recovery may no
     // longer regenerate non-default geometry from only world/seed/ruleset/terrain.
     // Version 206 also retains the bakery's durable-before-effect physical step.
-    static final int VERSION = 207; private static final int MAX_ENTRIES = 65_535;
+    static final int VERSION = 208; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }

@@ -168,6 +168,70 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
     }
 
     @GameTest(batch = "pm-frontier-v3-reference-projection", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    public static void releasedMutationObservesRetainedSlotsBeforeRepackingColdLots(GameTestHelper helper) {
+        WorldId world = new WorldId("frontier:reference-released-repack");
+        FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(world, 91L));
+        SubjectId settlement = initial.bootstrap().settlements().getFirst().id();
+        SubjectId depot = FrontierWorldState.depotId(settlement);
+        BlockPos local = helper.absolutePos(new BlockPos(2, 2, 2));
+        BlockPosition original = initial.inventory().surfaces().get(depot).position();
+        FrontierWorldState state = activated(FrontierWorldState.initial(FrontierV3CargoLoadingGameTests.translatedBootstrap(
+                initial.bootstrap(), local.getX() - original.x(), local.getY() - original.y(), local.getZ() - original.z())), depot);
+        SubjectId accountId = new SubjectId("custody:reference-repack");
+        ResourceLot wheat = new ResourceLot(new SubjectId("lot:field-repack"), settlement, "minecraft:wheat", 64, "field", List.of());
+        ResourceLot bread = new ResourceLot(new SubjectId("lot:production-repack"), settlement, "minecraft:bread", 64, "recipe:bread", List.of());
+        FungibleResourceLedger cold = new FungibleResourceLedger(Map.of(wheat.id(), wheat, bread.id(), bread), Map.of(),
+                Map.of(accountId, new CustodyAccount(accountId, new ResourceCustody.Container(depot),
+                        Map.of(wheat.id(), 64, bread.id(), 64), Map.of())), Map.of());
+        var breadSlot = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                new InventoryCustody.ContainerSlot(depot, 0)), bread.itemKind(), 64);
+        var wheatSlot = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                new InventoryCustody.ContainerSlot(depot, 1)), wheat.itemKind(), 64);
+        FungibleResourceLedger hot = cold.rebind(accountId, 1L,
+                FungiblePhysicalObservation.bind(cold, accountId, 1L, List.of(breadSlot, wheatSlot)));
+        state = held(state.withInventory(state.inventory().withFungibleResources(hot)), depot);
+        ChestBlockEntity chest = chest(helper, local, depot);
+        FrontierV3ContainerSurfaceExecutor.replaceCanonicalSlots(chest, state, depot);
+        chest.setItem(0, new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.BREAD, 64));
+        chest.setItem(1, new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.WHEAT, 64));
+        chest.setChanged();
+        helper.assertTrue(FrontierV3ReferenceContainerCustodyExecutor.observed(state, depot, chest).fingerprint()
+                        .equals(ReferenceContainerCustody.canonicalFingerprint(state, depot)),
+                "fixture must retain the observed bread-then-wheat HOT slot order");
+        FrontierWorldState released = ReferenceContainerCustody.closeConfirmedMutation(state,
+                ReferenceContainerCustody.confirmedMutationTransition(state, depot, 1L));
+        var emitted = released.replicaCustody().replicas().get(depot);
+        helper.assertTrue(emitted.state() == PhysicalReplicaState.EXPECTED
+                        && !emitted.fingerprint().equals(ReferenceContainerCustody.canonicalFingerprint(released, depot))
+                        && FrontierV3ReferenceContainerCustodyExecutor.observedRetained(released, depot, chest).fingerprint()
+                        .equals(emitted.fingerprint()),
+                "HOT release must retain its exact emitted image even when COLD lot packing changes order");
+        var runtime = runtime(world, released);
+        helper.assertTrue(runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE, "released fixture startup");
+        FrontierV3ReferenceContainerCustodyExecutor.reconcile(helper.getLevel(), runtime, released,
+                released.inventory().surfaces().get(depot));
+        FrontierWorldState observed = runtime.decodedState().orElseThrow();
+        helper.assertTrue(observed.replicaCustody().replicas().get(depot).state() == PhysicalReplicaState.OBSERVED_CURRENT
+                        && observed.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(depot)).status()
+                        == PhysicalCustodyLeaseStatus.RELEASED,
+                "first observation must confirm the retained physical image without a false conflict");
+        FrontierV3ReferenceContainerCustodyExecutor.reconcile(helper.getLevel(), runtime, observed,
+                observed.inventory().surfaces().get(depot));
+        FrontierWorldState preparing = runtime.decodedState().orElseThrow();
+        PhysicalCustodyLease fence = preparing.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(depot));
+        helper.assertTrue(fence.status() == PhysicalCustodyLeaseStatus.PREPARING,
+                "only after retained observation may the canonical COLD repack acquire a write fence");
+        helper.assertTrue(FrontierV3ContainerSurfaceExecutor.replaceCanonicalSlots(chest, preparing, depot)
+                        && chest.getItem(0).is(net.minecraft.world.item.Items.WHEAT)
+                        && chest.getItem(1).is(net.minecraft.world.item.Items.BREAD),
+                "the fenced catch-up write must project the same lots in canonical COLD order");
+        helper.assertTrue(FrontierV3ReferenceContainerCustodyExecutor.reconcilePreparedProjection(runtime, preparing, fence, chest)
+                        && ReferenceContainerCustody.hasOperationalCustody(runtime.decodedState().orElseThrow(), depot),
+                "actual repacked slots confirm the next exact physical custody epoch");
+        runtime.shutdown(); helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-reference-projection", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
     public static void loadedUnchangedCheckpointedChestFinishesItsRecordedDrain(GameTestHelper helper) {
         WorldId world = new WorldId("frontier:reference-loaded-checkpointed");
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(world, 91L));

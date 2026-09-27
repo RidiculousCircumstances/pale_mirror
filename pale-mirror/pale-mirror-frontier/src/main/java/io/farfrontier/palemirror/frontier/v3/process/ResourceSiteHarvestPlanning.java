@@ -63,11 +63,19 @@ final class ResourceSiteHarvestPlanning {
         if (worker == null) throw new IllegalArgumentException("resource-site harvest worker has no canonical body");
         ResourceSiteHarvestJob job = job(site, lifecycle, task, farmer,
                 new InventoryCustody.ContainerSlot(depot, slot.getAsInt()));
-        try {
-            ResourceSiteHarvestKnownNavigation.path(state.withResourceSites(
-                    state.resourceSites().replace(lifecycle.harvesting(job))), job);
-        } catch (ResourceSiteHarvestKnownNavigation.KnowledgeUnavailable unavailable) {
-            return blocked(task);
+        int selected = state.resourceSites().cycle(site.id()).nextWorkSlot(worker.supportingSurface()).orElseThrow();
+        job = job.withProgress(job.progress().withSelectedCropSlot(selected));
+        if (state.resourceSites().cycle(site.id()).expectedWorkOutcome(
+                site.layout().cells().get(selected).id()) != ResourceFieldCycle.WorkOutcome.SKIPPED_BLOCKED) {
+            try {
+                ResourceSiteHarvestKnownNavigation.path(state.withResourceSites(
+                        state.resourceSites().replace(lifecycle.harvesting(job))), job);
+            } catch (ResourceSiteHarvestKnownNavigation.KnowledgeUnavailable unavailable) {
+                FrontierWorldState admitted = state.withResourceSites(state.resourceSites().replace(lifecycle.harvesting(job)));
+                var alternate = ResourceSiteHarvestRetargeting.coldReachableWorkTarget(admitted, job);
+                if (alternate.isEmpty()) return blocked(task);
+                job = job.withProgress(job.progress().withSelectedCropSlot(alternate.getAsInt()));
+            }
         }
         PhysicalIntent intent = intent(site, job);
         long firstColdStep = Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().resourceHarvestTraversalInterval());
@@ -203,21 +211,13 @@ final class ResourceSiteHarvestPlanning {
             return List.of(reschedule(action, coldProgress(job, nextDue)));
         }
         if (!job.progress().complete() && !job.returningForBatch() && !job.progress().hasPendingCrop()) {
-            ResourceFieldLayout.Cell nextCell = currentField.layout().cells().get(job.progress().completedCropSlots());
+            ResourceFieldLayout.Cell nextCell = currentField.layout().cells().get(job.progress().nextCropSlotIndex());
             if (currentField.expectedWorkOutcome(nextCell.id()) == ResourceFieldCycle.WorkOutcome.SKIPPED_BLOCKED) {
-                var prefix = blockedPrefix(currentField, job.progress().completedCropSlots());
-                if (blockedPrefixMeetsPendingPlayerBreak(currentField, job.progress().completedCropSlots(), prefix))
+                if (currentField.pendingPlayerBreaks().containsKey(nextCell.id()))
                     return List.of(reschedule(action, action));
                 ResourceSiteHarvestBlockedCellSkipped skipped = new ResourceSiteHarvestBlockedCellSkipped(
-                        job.siteId(), job.id(), job.workerId(), currentField.layout().revision(), prefix,
+                        job.siteId(), job.id(), job.workerId(), currentField.layout().revision(), List.of(nextCell.id()),
                         action.id(), action.dueAt().ticks(), java.util.Optional.empty());
-                try {
-                    blockedPrefixContinuation(state, job.siteId(), job, prefix);
-                } catch (ContinuationUnavailable noKnownRoute) {
-                    return coldGoalHold(state, job, action, nextDue,
-                            blockedPrefixContinuationGoal(state, job, prefix),
-                            ResourceSiteHarvestNavigationBlock.Reason.CONTINUATION_UNAVAILABLE);
-                }
                 reduceBlockedCellSkipped(state, job.siteId(), skipped);
                 return List.of(new ProposedEvent(job.siteId(), skipped),
                         reschedule(action, coldProgress(job, nextDue)));
@@ -251,6 +251,17 @@ final class ResourceSiteHarvestPlanning {
         try {
             path = ResourceSiteHarvestKnownNavigation.path(state, job);
         } catch (ResourceSiteHarvestKnownNavigation.KnowledgeUnavailable unavailable) {
+            if (goal.kind() == ResourceSiteHarvestGoal.Kind.WORK_CELL) {
+                var alternate = ResourceSiteHarvestRetargeting.coldReachableWorkTarget(state, job);
+                if (alternate.isPresent()) {
+                    var retargeted = new ResourceSiteHarvestTargetRetargeted(job.siteId(), job.id(), job.workerId(),
+                            goal.layoutRevision(), job.progress().nextCropSlotIndex(), alternate.getAsInt(),
+                            action.id(), action.dueAt().ticks(), java.util.Optional.empty());
+                    ResourceSiteHarvestRetargeting.reduceTargetRetargeted(state, job.siteId(), retargeted);
+                    return List.of(new ProposedEvent(job.siteId(), retargeted),
+                            reschedule(action, coldProgress(job, nextDue)));
+                }
+            }
             return coldGoalHold(state, job, action, nextDue, goal,
                     ResourceSiteHarvestNavigationBlock.Reason.KNOWN_GEOMETRY_UNAVAILABLE);
         }
@@ -323,7 +334,7 @@ final class ResourceSiteHarvestPlanning {
     private static boolean pendingPlayerBreakAtNextCell(FrontierWorldState state, ResourceSiteHarvestJob job) {
         if (job.progress().complete()) return false;
         ResourceFieldCycle cycle = state.resourceSites().cycle(job.siteId());
-        ResourceFieldLayout.CellId nextCell = cycle.layout().cells().get(job.progress().completedCropSlots()).id();
+        ResourceFieldLayout.CellId nextCell = cycle.layout().cells().get(job.progress().nextCropSlotIndex()).id();
         // A durable Vanilla removal permission is not yet a crop-loss observation.  Neither
         // travel onto the workstation nor a COLD receipt may overtake that unresolved effect.
         return cycle.pendingPlayerBreaks().containsKey(nextCell);
@@ -332,10 +343,12 @@ final class ResourceSiteHarvestPlanning {
     private static List<ProposedEvent> coldCropReceipt(FrontierWorldState state, ScheduledAction action, ResourceSiteHarvestJob job, ProposedEvent... prefix) {
         if (!ResourceSiteHarvestGoal.actorAtWorkCell(state, job))
             throw new IllegalArgumentException("resource-site COLD crop receipt requires its actual farmer at the current CellId station");
-        ResourceSiteHarvestProgress progressed = job.progress().prepareNextCrop().confirmPreparedCrop();
-        ResourceSiteHarvestJob replacement = job.withProgress(progressed);
         ResourceFieldCycle field = state.resourceSites().cycle(job.siteId());
-        ResourceFieldLayout.CellId cellId = field.layout().cells().get(job.progress().completedCropSlots()).id();
+        ResourceFieldLayout.CellId cellId = field.layout().cells().get(job.progress().nextCropSlotIndex()).id();
+        ResourceFieldCycle worked = field.worked(cellId, field.expectedWorkOutcome(cellId));
+        int nextSelected = worked.nextWorkSlotAfter(job.progress().nextCropSlotIndex()).orElse(-1);
+        ResourceSiteHarvestProgress progressed = job.progress().prepareNextCrop().confirmPreparedCrop(nextSelected);
+        ResourceSiteHarvestJob replacement = job.withProgress(progressed);
         List<ProposedEvent> events = new java.util.ArrayList<>(List.of(prefix));
         events.add(new ProposedEvent(job.siteId(), new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex())));
         events.add(new ProposedEvent(job.siteId(), new ResourceSiteHarvestProgressed(job.siteId(), field.epoch(), job.id(), progressed.completedCropSlots(),

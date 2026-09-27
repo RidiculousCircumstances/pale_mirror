@@ -255,7 +255,16 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
 
     private static void observe(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
                                 PhysicalReplicaRecord replica, ChestBlockEntity chest) {
-        Observed observed = observed(state, replica.objectId(), chest);
+        PhysicalCustodyLease lease = state.replicaCustody().custodyByScope()
+                .get(ReferenceContainerCustody.scopeId(replica.objectId()));
+        // A confirmed HOT mutation emits the exact witnessed slot image, then releases its
+        // transient fungible bindings in the same transaction. COLD may pack those same lots
+        // in another order. The first EXPECTED observation still belongs to the emitted HOT
+        // image; compare that image before preparing the separate canonical catch-up write.
+        boolean retainedImage = lease != null && !lease.live()
+                && !replica.fingerprint().equals(ReferenceContainerCustody.canonicalFingerprint(state, replica.objectId()));
+        Observed observed = retainedImage ? observedRetained(state, replica.objectId(), chest)
+                : observed(state, replica.objectId(), chest);
         submit(runtime, "observe", replica.objectId(), replica.replicaRevision(), new ReplicaObserved(replica.objectId(),
                 replica.emittedCanonicalRevision(), replica.replicaRevision(), observed.fingerprint(), observed.provenance(),
                 replica.emittedCanonicalRevision()));

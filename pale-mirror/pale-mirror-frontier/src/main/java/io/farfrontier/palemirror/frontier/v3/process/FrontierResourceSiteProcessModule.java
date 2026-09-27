@@ -350,6 +350,21 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
                 return new CommandPlan.Accepted(List.of(new ProposedEvent(skipped.siteId(), skipped)));
             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
+        if (command.payload() instanceof ResourceSiteHarvestTargetRetargeted retargeted) {
+            try {
+                ScheduledAction binding = command.scheduleBinding().map(
+                        io.farfrontier.palemirror.frontier.v3.api.EngineScheduleBinding::action).orElseThrow(
+                        () -> new IllegalArgumentException("HOT area work retarget has no continuation binding"));
+                if (retargeted.hotLeaseId().isEmpty()
+                        || !binding.kind().equals(ResourceSiteHarvestProcess.COLD_PROGRESS_KIND)
+                        || !binding.subject().equals(retargeted.siteId())
+                        || !binding.id().equals(retargeted.coldScheduleId())
+                        || binding.dueAt().ticks() != retargeted.coldDueAt())
+                    throw new IllegalArgumentException("HOT area work retarget has a foreign owner");
+                ResourceSiteHarvestRetargeting.reduceTargetRetargeted(state, retargeted.siteId(), retargeted);
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(retargeted.siteId(), retargeted)));
+            } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+        }
         if (command.payload() instanceof ResourceSiteHarvestRouteBlocked blocked) {
             try {
                 ScheduledAction binding = command.scheduleBinding().map(
@@ -401,6 +416,12 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
         if (command.payload() instanceof ResourceFieldCellObserved observed) {
             try {
                 ResourceSiteProcess.reduceCellObserved(state, observed.siteId(), observed);
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(observed.siteId(), observed)));
+            } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+        }
+        if (command.payload() instanceof ResourceFieldWorkAccessObserved observed) {
+            try {
+                ResourceSiteProcess.reduceWorkAccessObserved(state, observed.siteId(), observed);
                 return new CommandPlan.Accepted(List.of(new ProposedEvent(observed.siteId(), observed)));
             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
@@ -457,6 +478,7 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
             case ResourceSiteHarvestReturned returned -> ResourceSiteHarvestProcess.reduceReturned(state, event.subject(), returned);
             case ResourceSiteHarvestSegmentRenewed renewed -> ResourceSiteHarvestProcess.reduceSegmentRenewed(state, event.subject(), renewed);
             case ResourceSiteHarvestBlockedCellSkipped skipped -> ResourceSiteHarvestProcess.reduceBlockedCellSkipped(state, event.subject(), skipped);
+            case ResourceSiteHarvestTargetRetargeted retargeted -> ResourceSiteHarvestRetargeting.reduceTargetRetargeted(state, event.subject(), retargeted);
             case ResourceSiteHarvestRouteBlocked blocked -> ResourceSiteHarvestProcess.reduceRouteBlocked(state, event.subject(), blocked);
             case ResourceSiteHarvestRouteCleared cleared -> ResourceSiteHarvestProcess.reduceRouteCleared(state, event.subject(), cleared);
             case ResourceSiteHarvestBatchDelivered delivered -> {
@@ -474,6 +496,7 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
             case ResourceSiteHarvestSceneLeaseHandoff handoff -> reduceHarvestSceneHandoff(state, event.subject(), event, handoff);
             case ResourceSiteConflictObserved conflict -> ResourceSiteProcess.reduceConflict(state, event.subject(), conflict);
             case ResourceFieldCellObserved observed -> ResourceSiteProcess.reduceCellObserved(state, event.subject(), observed);
+            case ResourceFieldWorkAccessObserved observed -> ResourceSiteProcess.reduceWorkAccessObserved(state, event.subject(), observed);
             case ResourceFieldWorldChangeHeld held -> ResourceSiteProcess.reduceWorldChangeHeld(state, event.subject(), held);
             case ResourceFieldWorldChangeAcknowledged acknowledged -> ResourceSiteProcess.reduceWorldChangeAcknowledged(state, event.subject(), acknowledged);
             case ResourceFieldForeignChangeHeld held -> ResourceSiteProcess.reduceForeignChangeHeld(state, event.subject(), held);

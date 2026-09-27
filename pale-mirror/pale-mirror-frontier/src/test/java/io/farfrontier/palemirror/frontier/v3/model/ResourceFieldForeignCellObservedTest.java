@@ -16,6 +16,32 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ResourceFieldForeignCellObservedTest {
     private static final SubjectId SITE = new SubjectId("site:1-wheat-field");
 
+    @Test void foreignCropObservationPreservesIndependentBlockedHeadroomAcrossWalAndSnapshot() {
+        FrontierWorldState ready = ResourceSiteHarvestProcessTest.ready(ResourceSiteHarvestProcessTest.initial());
+        ResourceFieldCycle cycle = ready.resourceSites().cycle(SITE);
+        var id = cycle.layout().cells().getFirst().id();
+        ready = ready.withResourceSites(ready.resourceSites().replace(
+                ready.resourceSites().site(SITE), cycle.observedWorkAccess(id, true)));
+        cycle = ready.resourceSites().cycle(SITE);
+        var held = new ResourceFieldForeignChangeHeld(SITE, cycle.epoch(), cycle.layout().revision(), id,
+                cycle.cell(id), "world:crop-blocked-with-headroom-blocked");
+        assertEquals(held, roundTrip(held));
+        var after = new ResourceFieldCycle.CellState(ResourceFieldCycle.Soil.FARMLAND,
+                ResourceFieldCycle.Crop.OBSTRUCTED, 0, false, false, true);
+        var observed = new ResourceFieldForeignCellObserved(held, after, "minecraft:farmland", "minecraft:stone");
+        assertEquals(observed, roundTrip(observed));
+        FrontierWorldState waiting = ResourceSiteProcess.reduceForeignChangeHeld(ready, SITE, held);
+        FrontierWorldState heldState = waiting;
+        assertThrows(IllegalArgumentException.class, () -> ResourceSiteProcess.reduceForeignCellObserved(heldState, SITE,
+                new ResourceFieldForeignCellObserved(held,
+                        new ResourceFieldCycle.CellState(ResourceFieldCycle.Soil.FARMLAND,
+                                ResourceFieldCycle.Crop.OBSTRUCTED, 0, false, false, false),
+                        "minecraft:farmland", "minecraft:stone")));
+        FrontierWorldState changed = ResourceSiteProcess.reduceForeignCellObserved(waiting, SITE, observed);
+        assertTrue(changed.resourceSites().cycle(SITE).cell(id).workAccessBlocked());
+        assertEquals(changed, snapshot(changed));
+    }
+
     @Test void foreignCropBeforePhysicalWorkEffectReleasesOnlyThePreparedCell() {
         var hot = ResourceSiteHarvestProcessTest.hotHarvestAfterColdSteps(0);
         FrontierWorldState state = hot.state();
@@ -28,7 +54,7 @@ class ResourceFieldForeignCellObservedTest {
         state = ResourceSiteHarvestProcess.reduceCropPrepared(state, SITE,
                 new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex()));
         ResourceFieldCycle cycle = state.resourceSites().cycle(SITE);
-        ResourceFieldLayout.CellId cell = cycle.layout().cells().get(job.progress().completedCropSlots()).id();
+        ResourceFieldLayout.CellId cell = cycle.layout().cells().get(job.progress().nextCropSlotIndex()).id();
         var before = cycle.cell(cell);
         var held = new ResourceFieldForeignChangeHeld(SITE, cycle.epoch(), cycle.layout().revision(), cell,
                 before, "world:prepared-crop-obstructed");

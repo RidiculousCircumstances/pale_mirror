@@ -60,6 +60,8 @@ public final class ResourceSiteHarvestKnownNavigation {
             if (condition.crop() == ResourceFieldCycle.Crop.OBSTRUCTED
                     || condition.soil() == ResourceFieldCycle.Soil.OBSTRUCTED)
                 occupied.add(cell.soil().support());
+            if (condition.workAccessBlocked())
+                occupied.add(cell.workstation().support().offset(0, 2, 0));
         }
         // These stations are retained infrastructure, including when a successor
         // begins at the exact port where its predecessor deposited a full batch.
