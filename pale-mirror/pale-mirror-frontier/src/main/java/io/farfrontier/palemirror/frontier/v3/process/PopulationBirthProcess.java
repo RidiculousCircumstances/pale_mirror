@@ -37,7 +37,7 @@ public final class PopulationBirthProcess {
         // owner still has an unresolved cycle.  In particular, do not let a
         // birth permit retain the only COLD bread stack between a visible
         // shortage and its next ordinary provision review.
-        if (!SettlementProvisionProcess.allowsPopulationGrowth(state, settlement.id())) return List.copyOf(events);
+        if (!SettlementFoodPolicy.allowsPopulationGrowth(state, settlement.id())) return List.copyOf(events);
         // A current physical custodian fences its item scope, but historical
         // replica status never changes autonomous demographic eligibility.
         // COLD therefore commits the exact one-bread semantic consequence and
@@ -74,7 +74,7 @@ public final class PopulationBirthProcess {
     public static FrontierWorldState reduceStarted(FrontierWorldState state, SubjectId subject, ResidentBirthStarted started) {
         ResidentBirthJob job = started.job();
         if (!subject.equals(job.settlementId()) || !hasHousing(state, job.settlementId())
-                || !SettlementProvisionProcess.allowsPopulationGrowth(state, job.settlementId())
+                || !SettlementFoodPolicy.allowsPopulationGrowth(state, job.settlementId())
                 || !food(state, job.settlementId()).map(item -> item.id().equals(job.foodItemId())).orElse(false)) {
             throw new IllegalArgumentException("resident birth start lacks unfenced canonical food and housing");
         }

@@ -163,7 +163,7 @@ class HumanPopulationProcessTest {
         assertEquals(3, proposed.size(), "COLD birth emits only its review, semantic commitment and delayed completion");
         assertEquals(activeStarted, coldStarted, "historical replica materialization cannot alter the canonical birth subject");
         FrontierWorldState committed = PopulationBirthProcess.reduceStarted(released, coldStarted.job().settlementId(), coldStarted);
-        assertEquals(63, SettlementProvisionProcess.availableFood(committed, new SubjectId("settlement:1")),
+        assertEquals(63, SettlementFoodPolicy.coldUsableBread(committed, new SubjectId("settlement:1")),
                 "the semantic birth consumes one ration and leaves the remaining exact stack available to provisioning");
         assertTrue(committed.physicalIntents().isEmpty(), "COLD birth creates no physical consumption permit");
 

@@ -458,10 +458,13 @@ class FrontierV3DiagnosticJsonTest {
         assertTrue(settlementJson.contains("\"strategic\":{"));
         assertTrue(settlementJson.contains("\"quarantine\":\"NORMAL\"") && settlementJson.contains("\"activeCases\":0"),
                 "one named settlement view exposes bounded health policy facts without resident histories");
-        assertTrue(settlementJson.contains("\"food\":{\"status\":\"IDLE\",\"available\":0,\"reserve\":"),
-                "one named settlement view exposes exact available food and its derived reserve without creating a second ledger");
         var food = JsonParser.parseString(settlementJson.substring(FrontierV3DiagnosticJson.PREFIX.length()))
                 .getAsJsonObject().getAsJsonObject("food");
+        assertEquals("IDLE", food.get("status").getAsString());
+        assertEquals(0, food.get("stock").getAsInt());
+        assertEquals(0, food.get("available").getAsInt());
+        assertTrue(food.get("reserve").getAsInt() > 0,
+                "one named settlement view distinguishes current stock from COLD-usable bread and derived reserve");
         long due = checkpoint.schedules().stream().filter(action -> action.subject().equals(settlement)
                 && action.kind().equals("frontier.settlement.provision.review")).findFirst().orElseThrow().dueAt().ticks();
         assertEquals(due, food.get("nextReviewAt").getAsLong());

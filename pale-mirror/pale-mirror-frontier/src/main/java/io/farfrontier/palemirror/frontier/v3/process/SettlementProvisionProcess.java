@@ -27,7 +27,7 @@ import java.util.List;
  * the matching physical executor, while an unmaterialized depot is a legitimate COLD custody.
  */
 public final class SettlementProvisionProcess {
-    public static final String BREAD = "minecraft:bread";
+    public static final String BREAD = SettlementFoodPolicy.BREAD;
     private SettlementProvisionProcess() { }
 
     public static ScheduledAction review(SubjectId settlementId, int ordinal, long dueAt) {
@@ -51,66 +51,6 @@ public final class SettlementProvisionProcess {
         return List.copyOf(events);
     }
 
-    /** Derived, bounded food reserve; inventory remains the sole stock ledger. */
-    public static int reserveRequirement(FrontierWorldState state, SubjectId settlementId) {
-        int living = Math.toIntExact(state.humanPopulation().residents().values().stream()
-                .filter(resident -> resident.settlementId().equals(settlementId))
-                .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE).count());
-        SettlementProvision provision = state.humanPopulation().provision(settlementId);
-        int pending = provision.status() == SettlementProvisionStatus.IN_PROGRESS ? provision.requiredRations() - provision.fulfilledRations() : 0;
-        return Math.addExact(Math.multiplyExact(living, 2), pending);
-    }
-
-    /**
-     * Population growth may only reserve exact food after this settlement's
-     * current ration outcome is settled.  The provision aggregate remains the
-     * sole authority for that determination and for the food itself.
-     */
-    public static boolean allowsPopulationGrowth(FrontierWorldState state, SubjectId settlementId) {
-        SettlementProvisionStatus status = state.humanPopulation().provision(settlementId).status();
-        return status == SettlementProvisionStatus.IDLE || status == SettlementProvisionStatus.SECURE;
-    }
-
-    public static int availableFood(FrontierWorldState state, SubjectId settlementId) {
-        SubjectId depot = FrontierWorldState.depotId(settlementId);
-        if (ReferenceContainerCustody.blocksCanonicalUse(state, depot)) return 0;
-        int exact = state.inventory().items().values().stream().filter(item -> BREAD.equals(item.itemKind()))
-                .filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot))
-                .filter(item -> !hasUnconfirmedPhysicalCustody(state, item.id()))
-                .mapToInt(ExactItemStack::count).reduce(0, Math::addExact);
-        int fungible = state.inventory().fungibleResources().accounts().values().stream()
-                .filter(account -> account.custody() instanceof ResourceCustody.Container container && container.containerId().equals(depot))
-                .filter(account -> state.inventory().fungibleResources().bindings().values().stream().noneMatch(binding -> binding.accountId().equals(account.id())))
-                .flatMap(account -> account.lotQuantities().entrySet().stream())
-                .filter(entry -> BREAD.equals(state.inventory().fungibleResources().lots().get(entry.getKey()).itemKind()))
-                .mapToInt(java.util.Map.Entry::getValue).sum();
-        return Math.addExact(exact, fungible);
-    }
-
-    public static java.util.Optional<ExactItemStack> exportableBread(FrontierWorldState state, SubjectId settlementId) {
-        int reserve = reserveRequirement(state, settlementId); int available = availableFood(state, settlementId); SubjectId depot = FrontierWorldState.depotId(settlementId);
-        return state.inventory().items().values().stream().sorted(Comparator.comparing(ExactItemStack::id)).filter(item -> BREAD.equals(item.itemKind()))
-                .filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot))
-                .filter(item -> !hasUnconfirmedPhysicalCustody(state, item.id()))
-                .filter(item -> item.count() == 64 && available - item.count() >= reserve).findFirst();
-    }
-
-    /** COLD reserve query for ordinary food lots; physical bindings remain unavailable to planning. */
-    public static java.util.Optional<FungibleResourceCustodySupport.LotAtContainer> exportableFungibleBread(FrontierWorldState state, SubjectId settlementId) {
-        SubjectId depot = FrontierWorldState.depotId(settlementId);
-        if (ReferenceContainerCustody.blocksCanonicalUse(state, depot)) return java.util.Optional.empty();
-        int reserve = reserveRequirement(state, settlementId);
-        int available = state.inventory().fungibleResources().accounts().values().stream()
-                .filter(account -> account.custody() instanceof ResourceCustody.Container container && container.containerId().equals(depot))
-                .filter(account -> state.inventory().fungibleResources().bindings().values().stream().noneMatch(binding -> binding.accountId().equals(account.id())))
-                .flatMap(account -> account.lotQuantities().entrySet().stream())
-                .filter(entry -> BREAD.equals(state.inventory().fungibleResources().lots().get(entry.getKey()).itemKind()))
-                .mapToInt(java.util.Map.Entry::getValue).sum();
-        if (availableFood(state, settlementId) - 64 < reserve) return java.util.Optional.empty();
-        return FungibleResourceCustodySupport.firstAtContainer(state, depot, BREAD, 64).filter(lot ->
-                state.inventory().fungibleResources().bindings().values().stream().noneMatch(binding -> binding.accountId().equals(lot.accountId())));
-    }
-
     public static List<ProposedEvent> planProgress(FrontierWorldState state, ScheduledAction action) {
         SettlementProvision provision = state.humanPopulation().provision(action.subject());
         if (provision.status() != SettlementProvisionStatus.IN_PROGRESS || provision.activeIntentId().isPresent()
@@ -128,7 +68,7 @@ public final class SettlementProvisionProcess {
         // A review can race an already prepared cargo (or another exact physical owner) on a
         // later COLD turn.  Do not manufacture a second intent for its still-retained source:
         // settle this provision locally and leave the original owner to finish or recover.
-        if (hasUnconfirmedPhysicalCustody(state, allocation.itemId())) {
+        if (SettlementFoodPolicy.hasUnconfirmedPhysicalCustody(state, allocation.itemId())) {
             return List.of(new ProposedEvent(provision.settlementId(), TerminalDiagnosticProducer.provisionConflict(provision.settlementId())));
         }
         ContainerSurface surface = state.inventory().surfaces().get(depot);
@@ -291,7 +231,7 @@ public final class SettlementProvisionProcess {
             // another current stack or report its own shortage, but it may not consume the
             // subject underneath an unrelated birth/operation intent and leave global state
             // structurally invalid on the next COLD schedule turn.
-            if (hasUnconfirmedPhysicalCustody(state, item.id())) continue;
+            if (SettlementFoodPolicy.hasUnconfirmedPhysicalCustody(state, item.id())) continue;
             int count = Math.min(recipients.size() - nextRecipient, item.count());
             allocations.add(new SettlementRationAllocation(item.id(), recipients.subList(nextRecipient, nextRecipient + count))); nextRecipient += count;
         }
@@ -315,16 +255,6 @@ public final class SettlementProvisionProcess {
             }
         }
         return List.copyOf(allocations);
-    }
-
-    private static boolean hasUnconfirmedPhysicalCustody(FrontierWorldState state, SubjectId itemId) {
-        return state.physicalIntents().values().stream()
-                .anyMatch(intent -> intent.status() != PhysicalIntentStatus.CONFIRMED
-                        // The physical boundary's typed roles are the sole declaration of an
-                        // intent's exact subject custody.  CARGO_LOADING names its retained
-                        // depot stack as SOURCE_ITEM, whereas provision uses ITEM; restricting
-                        // this fence to the latter admitted the r10 double ownership.
-                        && intent.roles().namedRoles().containsValue(itemId));
     }
 
     private static List<ProposedEvent> planFungibleProgress(FrontierWorldState state, ScheduledAction action, SettlementProvision provision,

@@ -396,9 +396,9 @@ public final class SupplyOperationProcess {
                 .orElseThrow(() -> new IllegalArgumentException("supply preparation has no matching delivery task"));
     }
     private static Optional<BreadSource> bread(FrontierWorldState state, Settlement settlement) {
-        Optional<ExactItemStack> exact = SettlementProvisionProcess.exportableBread(state, settlement.id());
+        Optional<ExactItemStack> exact = SettlementFoodPolicy.exportableBread(state, settlement.id());
         if (exact.isPresent()) return exact.map(BreadSource::exact);
-        return SettlementProvisionProcess.exportableFungibleBread(state, settlement.id()).map(BreadSource::fungible);
+        return SettlementFoodPolicy.exportableFungibleBread(state, settlement.id()).map(BreadSource::fungible);
     }
     private static boolean participantsAvailable(FrontierWorldState state, Settlement settlement) {
         return FrontierWorldStateSupport.availableRouteResident(state, settlement.id(), ResidentProfession.LOGISTICIAN).isPresent()

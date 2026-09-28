@@ -291,7 +291,7 @@ class SettlementProvisionProcessTest {
                 .observe(depot, 0L, 1L, "sha256:changed-by-player", "foreign:player", 0L);
         FrontierWorldState localConflict = stocked.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(conflicted));
 
-        assertEquals(0, SettlementProvisionProcess.availableFood(localConflict, stocked.bootstrap().settlements().getFirst().id()),
+        assertEquals(0, SettlementFoodPolicy.coldUsableBread(localConflict, stocked.bootstrap().settlements().getFirst().id()),
                 "a conflicted depot cannot contribute canonical provision stock");
         SubjectId hiveStore = stocked.bootstrap().hive().organs().stream().flatMap(organ -> organ.containerId().stream()).findFirst().orElseThrow();
         assertTrue(!ReferenceContainerCustody.blocksCanonicalUse(localConflict, hiveStore),

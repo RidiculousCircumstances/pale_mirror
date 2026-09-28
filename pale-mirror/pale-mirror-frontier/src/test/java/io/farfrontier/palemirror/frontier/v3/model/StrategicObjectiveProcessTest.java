@@ -300,13 +300,43 @@ class StrategicObjectiveProcessTest {
                         new CustodyAccount(new SubjectId("custody:surplus-bread"), new ResourceCustody.Container(depot),
                                 Map.of(breadLot, 512), Map.of()));
         state = state.withInventory(state.inventory().withFungibleResources(resources));
-        assertTrue(SettlementProvisionProcess.exportableFungibleBread(state, settlement.id()).isPresent());
+        assertTrue(SettlementFoodPolicy.exportableFungibleBread(state, settlement.id()).isPresent());
 
         List<ProposedEvent> planned = StrategicObjectiveProcess.plan(state,
                 StrategicObjectiveProcess.review(settlement.id(), 1, 60L));
 
         assertTrue(planned.stream().noneMatch(event -> event.payload() instanceof StrategicObjectiveSelected),
                 "surplus alone cannot authorize an invented shipment to the hive");
+    }
+
+    @Test
+    void hotBoundDepotBreadIsStockNotColdExportPermissionOrAFalseShortage() {
+        FrontierWorldState state = initial("frontier:hot-bread-stock", 407L);
+        Settlement settlement = state.bootstrap().settlements().getFirst();
+        SubjectId depot = FrontierWorldState.depotId(settlement.id());
+        SubjectId lotId = new SubjectId("lot:hot-bread-stock");
+        SubjectId accountId = new SubjectId("custody:hot-bread-stock");
+        FungibleResourceLedger cold = state.inventory().fungibleResources()
+                .destroy(new SubjectId("custody:container-1-depot"),
+                        Map.of(new SubjectId("lot:bootstrap-1-wheat"), 64), Map.of())
+                .issue(new ResourceLot(lotId, settlement.id(), SettlementFoodPolicy.BREAD,
+                                64, "test-hot-stock", List.of()),
+                        new CustodyAccount(accountId, new ResourceCustody.Container(depot),
+                                Map.of(lotId, 64), Map.of()));
+        var stack = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                new InventoryCustody.ContainerSlot(depot, 0)), SettlementFoodPolicy.BREAD, 64);
+        FungibleResourceLedger hot = cold.rebind(accountId, 2L,
+                FungiblePhysicalObservation.bind(cold, accountId, 2L, List.of(stack)));
+        state = state.withInventory(state.inventory().withFungibleResources(hot));
+
+        assertEquals(64, SettlementFoodPolicy.breadStock(state, settlement.id()));
+        assertEquals(64, SettlementFoodPolicy.reserveCoverageBread(state, settlement.id()));
+        assertEquals(0, SettlementFoodPolicy.coldUsableBread(state, settlement.id()));
+        List<ProposedEvent> planned = StrategicObjectiveProcess.plan(state,
+                StrategicObjectiveProcess.review(settlement.id(), 1, 60L));
+        assertTrue(planned.stream().noneMatch(event -> event.payload() instanceof StrategicObjectiveSelected selected
+                && selected.objective().kind() == StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD),
+                "a physically bound but current depot stack must not fabricate a bread shortage");
     }
 
     @Test

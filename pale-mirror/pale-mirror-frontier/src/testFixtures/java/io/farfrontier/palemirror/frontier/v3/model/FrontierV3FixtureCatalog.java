@@ -468,7 +468,7 @@ public final class FrontierV3FixtureCatalog {
     private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> withReserve(FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base,
                                                                                                            boolean autonomousInterception, int birthFoodAllowance) {
         Settlement settlement = base.initialState().bootstrap().settlements().getFirst(); SubjectId depot = FrontierWorldState.depotId(settlement.id());
-        int remaining = Math.addExact(SettlementProvisionProcess.reserveRequirement(base.initialState(), settlement.id()), birthFoodAllowance);
+        int remaining = Math.addExact(SettlementFoodPolicy.reserveRequirement(base.initialState(), settlement.id()), birthFoodAllowance);
         ExactInventory inventory = base.initialState().inventory(); int ordinal = 0;
         while (remaining > 0) {
             int count = Math.min(63, remaining);
@@ -533,8 +533,8 @@ public final class FrontierV3FixtureCatalog {
                 || state.strategicPlans().objectives().values().stream().anyMatch(objective -> objective.ownerId().equals(owner)
                         && objective.kind() == StrategicObjectiveKind.SETTLEMENT_DELIVER_BREAD_TO_HIVE)
                 || state.humanPopulation().quarantined(owner)
-                || SettlementProvisionProcess.exportableBread(state, owner).isEmpty()
-                        && SettlementProvisionProcess.exportableFungibleBread(state, owner).isEmpty()) return planned;
+                || SettlementFoodPolicy.exportableBread(state, owner).isEmpty()
+                        && SettlementFoodPolicy.exportableFungibleBread(state, owner).isEmpty()) return planned;
 
         int ordinal = FrontierWorldScheduleSupport.ordinal(action.id().value());
         String suffix = owner.value().substring("settlement:".length()) + "-" + ordinal;

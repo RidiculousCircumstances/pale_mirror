@@ -437,8 +437,8 @@ class HiveRouteEngagementProcessTest {
             latest = engine.canonicalState().state();
             if (tick % 1_000L == 0L) {
                 SubjectId settlement = latest.bootstrap().settlements().getFirst().id();
-                supplyHistory.add(tick + ": food=" + SettlementProvisionProcess.availableFood(latest, settlement)
-                        + ", reserve=" + SettlementProvisionProcess.reserveRequirement(latest, settlement)
+                supplyHistory.add(tick + ": food=" + SettlementFoodPolicy.coldUsableBread(latest, settlement)
+                        + ", reserve=" + SettlementFoodPolicy.reserveRequirement(latest, settlement)
                         + ", provision=" + latest.humanPopulation().provision(settlement).status()
                         + ", operations=" + latest.operations().keySet() + ", jobs=" + latest.productionJobs().values().stream()
                                 .map(job -> job.id().value() + ":" + job.workProgress()).toList());

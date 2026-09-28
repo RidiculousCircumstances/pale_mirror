@@ -22,12 +22,12 @@ import io.farfrontier.palemirror.frontier.v3.model.HumanAssignment;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSettlementWorkDiagnostic;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierMarketOrderDiagnostic;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.SettlementFoodPolicy;
 import io.farfrontier.palemirror.frontier.v3.model.DiagnosticIncident;
 import io.farfrontier.palemirror.frontier.v3.model.DiagnosticSubject;
 import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess;
 import io.farfrontier.palemirror.frontier.v3.model.DiagnosticSubjectKind;
 import io.farfrontier.palemirror.frontier.v3.process.HivePerceptionProcess;
-import io.farfrontier.palemirror.frontier.v3.process.SettlementProvisionProcess;
 import io.farfrontier.palemirror.frontier.v3.model.HiveNutrientReceipt;
 import io.farfrontier.palemirror.frontier.v3.model.HiveNutrientTransfer;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
@@ -368,27 +368,24 @@ final class FrontierV3DiagnosticJson {
         if (value == null || geometry == null) return unavailable("settlement", id, checkpoint, "not_found");
         SettlementProvision provision = state.humanPopulation().provision(subject);
         SubjectId depot = FrontierWorldState.depotId(subject);
-        int availableFood = SettlementProvisionProcess.availableFood(state, subject);
+        int availableFood = SettlementFoodPolicy.coldUsableBread(state, subject);
         var nextProvisionReview = checkpoint.schedules().stream()
                 .filter(action -> action.subject().equals(subject) && action.kind().equals("frontier.settlement.provision.review"))
                 .mapToLong(action -> action.dueAt().ticks()).min();
         int heldFood = state.inventory().fungibleResources().bindings().values().stream()
-                .filter(binding -> binding.itemKind().equals(SettlementProvisionProcess.BREAD))
+                .filter(binding -> binding.itemKind().equals(SettlementFoodPolicy.BREAD))
                 .filter(binding -> {
                     CustodyAccount account = state.inventory().fungibleResources().accounts().get(binding.accountId());
                     return account != null && account.custody() instanceof ResourceCustody.Container container && container.containerId().equals(depot);
                 }).mapToInt(PhysicalStackBinding::quantity).sum();
         int reservedFood = state.inventory().fungibleResources().claims().values().stream()
-                .filter(claim -> claim.itemKind().equals(SettlementProvisionProcess.BREAD))
+                .filter(claim -> claim.itemKind().equals(SettlementFoodPolicy.BREAD))
                 .filter(claim -> claim.economicOwnerId().equals(subject)).mapToInt(ClaimAllocation::quantity).sum();
         int allocatedFood = Math.max(0, provision.allocations().stream().mapToInt(allocation -> allocation.count()).sum() - provision.fulfilledRations());
         int inTransferFood = provision.activeIntentId().isPresent()
                 && provision.status() == io.farfrontier.palemirror.frontier.v3.model.SettlementProvisionStatus.IN_PROGRESS
                 ? provision.currentOrActiveAllocation().count() : 0;
-        int living = (int) state.humanPopulation().residents().values().stream().filter(resident -> resident.settlementId().equals(subject))
-                .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.ALIVE).count();
-        int reserve = Math.addExact(Math.multiplyExact(living, 2), provision.status().name().equals("IN_PROGRESS")
-                ? provision.requiredRations() - provision.fulfilledRations() : 0);
+        int reserve = SettlementFoodPolicy.reserveRequirement(state, subject);
         int nourished = (int) state.humanPopulation().residents().values().stream().filter(resident -> resident.settlementId().equals(subject))
                 .filter(resident -> state.humanPopulation().nutrition(resident.id()).status() == ResidentNutritionStatus.NOURISHED).count();
         int hungry = (int) state.humanPopulation().residents().values().stream().filter(resident -> resident.settlementId().equals(subject))
@@ -403,7 +400,8 @@ final class FrontierV3DiagnosticJson {
                 + "\",\"depotSurface\":\"" + quote(value.depotSurface()) + "\",\"depotHasFreeSlot\":" + value.depotHasFreeSlot()
                 + ",\"quarantine\":\"" + (state.humanPopulation().quarantined(subject) ? "QUARANTINED" : "NORMAL") + "\",\"activeCases\":"
                 + state.humanPopulation().activeCases(subject) + ",\"food\":{\"status\":\"" + provision.status()
-                + "\",\"available\":" + availableFood + ",\"reserve\":" + reserve + ",\"held\":" + heldFood + ",\"reserved\":" + reservedFood
+                + "\",\"stock\":" + SettlementFoodPolicy.breadStock(state, subject)
+                + ",\"available\":" + availableFood + ",\"reserve\":" + reserve + ",\"held\":" + heldFood + ",\"reserved\":" + reservedFood
                 + ",\"allocated\":" + allocatedFood + ",\"inTransfer\":" + inTransferFood + ",\"required\":" + provision.requiredRations()
                 + ",\"fulfilled\":" + provision.fulfilledRations() + ",\"nourished\":" + nourished + ",\"hungry\":" + hungry
                 + ",\"starving\":" + starving + ",\"intent\":\""

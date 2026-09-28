@@ -328,7 +328,7 @@ public final class StrategicObjectiveProcess {
     }
     private static boolean emergencyFoodCandidate(FrontierWorldState state, SubjectId owner, Candidate candidate) {
         return candidate.kind() == StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD && !state.bootstrap().hive().id().equals(owner)
-                && SettlementProvisionProcess.availableFood(state, owner) < SettlementProvisionProcess.reserveRequirement(state, owner);
+                && SettlementFoodPolicy.reserveCoverageBread(state, owner) < SettlementFoodPolicy.reserveRequirement(state, owner);
     }
     private static List<ProposedEvent> preemptForEmergencyProvision(FrontierWorldState state, SubjectId settlementId) {
         return state.strategicPlans().tasks().values().stream().filter(task -> task.ownerId().equals(settlementId))
@@ -361,7 +361,7 @@ public final class StrategicObjectiveProcess {
         boolean workshop = settlement.structures().stream().anyMatch(structure -> structure.kind() == StructureKind.WORKSHOP
                 && state.structureConditions().get(structure.id()) == StructureCondition.INTACT);
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
-        boolean reserveShort = SettlementProvisionProcess.availableFood(state, settlement.id()) < SettlementProvisionProcess.reserveRequirement(state, settlement.id());
+        boolean reserveShort = SettlementFoodPolicy.reserveCoverageBread(state, settlement.id()) < SettlementFoodPolicy.reserveRequirement(state, settlement.id());
         boolean wheat = state.inventory().items().values().stream().anyMatch(item -> item.itemKind().equals("minecraft:wheat")
                 && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot)
                 && !ResourceSiteHarvestLineage.hasPendingOutputReceipt(state.resourceSites().sites().values(), item.id()))
