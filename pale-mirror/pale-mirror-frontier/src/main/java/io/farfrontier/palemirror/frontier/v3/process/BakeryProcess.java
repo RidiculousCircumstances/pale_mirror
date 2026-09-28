@@ -48,10 +48,6 @@ public final class BakeryProcess {
         return CompanyWorkPaymentProcess.reserve(state.startFungibleProductionJob(job), job);
     }
 
-    static boolean coldAvailable(FrontierWorldState state, ProductionJob job) {
-        return coldBlocker(state, job).isEmpty();
-    }
-
     /** A witnessed source loss does not retire the accepted order; choose only currently unclaimed depot wheat. */
     static Optional<BakeryInputReallocated> planInputReallocation(FrontierWorldState state, ProductionJob job) {
         BakeryWorkState work = job.bakeryWork().orElseThrow();
@@ -109,6 +105,10 @@ public final class BakeryProcess {
 
     /** Read-only reason for a retained bakery job not receiving its next COLD turn. */
     public static Optional<String> coldBlocker(FrontierWorldState state, ProductionJob job) {
+        return coldBlocker(state, job, true);
+    }
+
+    private static Optional<String> coldBlocker(FrontierWorldState state, ProductionJob job, boolean checkOutputCapacity) {
         if (job.bakeryWork().orElseThrow().block().isPresent())
             return Optional.of("BAKERY_" + job.bakeryWork().orElseThrow().block().orElseThrow().reason());
         if (job.bakeryWork().orElseThrow().pendingPhysicalStep().isPresent()) return Optional.of("PENDING_PHYSICAL_EFFECT");
@@ -126,7 +126,8 @@ public final class BakeryProcess {
             return Optional.of("STATION_PHYSICAL_AUTHORITY");
         if (ReferenceContainerCustody.blocksCanonicalUse(state, station.containerId()))
             return Optional.of("STATION_CONFLICT");
-        if (ProductionOutputCapacity.depotDeliveryUnavailable(state, job)) return Optional.of("DEPOT_STORAGE_FULL");
+        if (checkOutputCapacity && ProductionOutputCapacity.depotDeliveryUnavailable(state, job))
+            return Optional.of("DEPOT_STORAGE_FULL");
         return Optional.empty();
     }
 
@@ -142,6 +143,11 @@ public final class BakeryProcess {
     }
 
     static Optional<BakeryColdStep> planColdStep(FrontierWorldState state, ProductionJob job) {
+        return planColdStep(state, job, true);
+    }
+
+    private static Optional<BakeryColdStep> planColdStep(FrontierWorldState state, ProductionJob job,
+                                                         boolean checkOutputCapacity) {
         BakeryWorkState work = job.bakeryWork().orElseThrow();
         if (work.phase() == BakeryWorkState.Phase.DELIVERED) {
             boolean openScene = state.sceneLeases().values().stream().anyMatch(lease ->
@@ -150,7 +156,7 @@ public final class BakeryProcess {
             return openScene ? Optional.empty() : Optional.of(new BakeryColdStep(job.id(), work.phase(),
                     BakeryColdStep.Action.FINALIZE, state.actorLocations().get(job.workerId()).supportingSurface()));
         }
-        if (!coldAvailable(state, job)) return Optional.empty();
+        if (coldBlocker(state, job, checkOutputCapacity).isPresent()) return Optional.empty();
         List<SurfaceAnchor> route;
         try { route = BakeryKnownNavigation.path(state, job); }
         catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { return Optional.empty(); }
@@ -172,8 +178,13 @@ public final class BakeryProcess {
         ProductionJob job = state.productionJobs().get(step.jobId());
         if (job == null || !job.settlementId().equals(subject)
                 || job.bakeryWork().isEmpty() || job.bakeryWork().orElseThrow().phase() != step.expectedPhase()
-                || !step.equals(planColdStep(state, job).orElse(null)))
+                // WAL replay must validate historically committed movement using the old
+                // capacity-independent route. New planning still stops at a full depot.
+                || !step.equals(planColdStep(state, job, false).orElse(null)))
             throw new IllegalArgumentException("bakery COLD step is not the current exclusive planned successor");
+        if (step.action() == BakeryColdStep.Action.DELIVER
+                && ProductionOutputCapacity.depotDeliveryUnavailable(state, job))
+            throw new IllegalArgumentException("bakery output cannot enter a full depot");
         BakeryWorkState work = job.bakeryWork().orElseThrow();
         if (step.action() == BakeryColdStep.Action.FINALIZE) return finish(state, job, state.inventory());
         if (step.action() == BakeryColdStep.Action.MOVE) {

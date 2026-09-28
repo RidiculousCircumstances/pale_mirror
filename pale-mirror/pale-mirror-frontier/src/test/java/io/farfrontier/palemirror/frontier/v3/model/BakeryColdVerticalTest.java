@@ -33,8 +33,7 @@ class BakeryColdVerticalTest {
         long due = 300L;
         for (int turn = 0; turn < 700; turn++, due += 20L) {
             ProductionJob current = state.productionJobs().get(job.id());
-            if (current.bakeryWork().orElseThrow().phase() == BakeryWorkState.Phase.DEPOT_DELIVERY
-                    && BakeryKnownNavigation.path(state, current).size() == 1) break;
+            if (current.bakeryWork().orElseThrow().phase() == BakeryWorkState.Phase.DEPOT_DELIVERY) break;
             BakeryColdStep step = ProductionProcess.planCompletion(state, ProductionProcess.complete(current, due)).stream()
                     .map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
                     .map(BakeryColdStep.class::cast).findFirst().orElseThrow();
@@ -42,7 +41,12 @@ class BakeryColdVerticalTest {
         }
         assertEquals(BakeryWorkState.Phase.DEPOT_DELIVERY,
                 state.productionJobs().get(job.id()).bakeryWork().orElseThrow().phase());
-        assertEquals(1, BakeryKnownNavigation.path(state, state.productionJobs().get(job.id())).size());
+        assertTrue(BakeryKnownNavigation.path(state, state.productionJobs().get(job.id())).size() > 1);
+        BakeryColdStep historicalMove = ProductionProcess.planCompletion(state,
+                ProductionProcess.complete(state.productionJobs().get(job.id()), due)).stream()
+                .map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
+                .map(BakeryColdStep.class::cast).findFirst().orElseThrow();
+        assertEquals(BakeryColdStep.Action.MOVE, historicalMove.action());
         SubjectId depot = FrontierWorldState.depotId(task.ownerId());
         ExactInventory inventory = state.inventory();
         while (state.withInventory(inventory).firstFreeContainerSlot(depot).isPresent()) {
@@ -53,17 +57,27 @@ class BakeryColdVerticalTest {
         FrontierWorldState full = state.withInventory(inventory);
         assertFalse(full.inventory().canReceiveFungible(depot, "minecraft:bread", job.outputCount()));
         assertEquals(Optional.of("DEPOT_STORAGE_FULL"), BakeryProcess.coldBlocker(full, full.productionJobs().get(job.id())));
-        var action = ProductionProcess.complete(job, due);
+        // A MOVE already committed to the old WAL remains replayable after this planner change.
+        full = ProductionProcess.reduceBakeryColdStep(full, task.ownerId(), historicalMove);
+        var action = ProductionProcess.complete(job, due + 20L);
         List<ProposedEvent> deferred = ProductionProcess.planCompletion(full, action);
         var retry = assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class,
                 deferred.getFirst().payload()).replacement();
         assertEquals(1, deferred.size());
         assertEquals(action.id(), retry.id());
-        assertEquals(due + full.bootstrap().ruleset().cadence().strategicReviewInterval(), retry.dueAt().ticks());
+        assertEquals(action.dueAt().ticks() + full.bootstrap().ruleset().cadence().strategicReviewInterval(),
+                retry.dueAt().ticks());
         SubjectId freed = inventory.items().values().stream().filter(item -> item.itemKind().equals("minecraft:stone"))
                 .findFirst().orElseThrow().id();
         FrontierWorldState recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(full));
         FrontierWorldState withSpace = recovered.withInventory(recovered.inventory().consumeOne(freed));
+        while (BakeryKnownNavigation.path(withSpace, withSpace.productionJobs().get(job.id())).size() > 1) {
+            BakeryColdStep move = ProductionProcess.planCompletion(withSpace, retry).stream()
+                    .map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
+                    .map(BakeryColdStep.class::cast).findFirst().orElseThrow();
+            assertEquals(BakeryColdStep.Action.MOVE, move.action());
+            withSpace = ProductionProcess.reduceBakeryColdStep(withSpace, task.ownerId(), move);
+        }
         BakeryColdStep deliver = ProductionProcess.planCompletion(withSpace, retry).stream()
                 .map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
                 .map(BakeryColdStep.class::cast).findFirst().orElseThrow();
