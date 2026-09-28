@@ -31,6 +31,7 @@ public final class FrontierResourceSiteHarvestSceneSupport {
     }
     private static Optional<Candidate> candidate(FrontierWorldState state, ResourceSiteHarvestJob job, boolean rejectExistingScene) {
         if ((rejectExistingScene && hasNonClosedScene(state, job))
+                || state.humanPopulation().meals().containsKey(job.workerId())
                 || ResourceSiteHarvestGoal.actorAtDepot(state, job)) return Optional.empty();
         // An exact physical-effect lifecycle is not a scene-readiness bit.  Before F0.2, the
         // retained traversal may use a PREPARED intent but must leave its non-replayable effect

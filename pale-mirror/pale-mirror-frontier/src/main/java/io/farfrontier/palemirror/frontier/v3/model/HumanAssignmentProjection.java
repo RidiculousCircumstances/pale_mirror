@@ -10,7 +10,7 @@ import java.util.Collections;
 import java.util.IdentityHashMap;
 
 /**
- * Canonical read model for exclusive current human work.  It introduces no
+ * Canonical read model for exclusive retained human work. It introduces no
  * second persisted truth: every non-idle value is compiled from its owning job,
  * operation, patrol or Transit journey.
  */

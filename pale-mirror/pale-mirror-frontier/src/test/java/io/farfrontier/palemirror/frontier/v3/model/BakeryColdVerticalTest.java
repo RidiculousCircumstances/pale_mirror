@@ -8,6 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.process.BakeryProcess;
 import io.farfrontier.palemirror.frontier.v3.process.ProductionProcess;
+import io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess;
 import io.farfrontier.palemirror.frontier.v3.process.StrategicObjectiveProcess;
 import org.junit.jupiter.api.Test;
 
@@ -18,6 +19,55 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 class BakeryColdVerticalTest {
+    @Test
+    void hungryBakerYieldsAtEmptyHandAndResumesSameJobAfterColdMeal() {
+        FrontierWorldState state = ProductionProcessTest.productionTask(FrontierWorldState.initial(
+                FrontierBootstrapper.create(new WorldId("frontier:bakery-resident-meal"), 41L)), StrategicTaskStatus.PENDING);
+        StrategicTask task = state.strategicPlans().tasks().values().iterator().next();
+        ProductionStarted started = ProductionProcess.planStart(state, ProductionProcess.start(task, 200L)).stream()
+                .map(ProposedEvent::payload).filter(ProductionStarted.class::isInstance)
+                .map(ProductionStarted.class::cast).findFirst().orElseThrow();
+        state = StrategicObjectiveProcess.reduceTaskTransition(state, task.ownerId(),
+                new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE));
+        state = ProductionProcess.reduceStarted(state, task.ownerId(), started);
+        ProductionJob job = started.job();
+        SubjectId resident = job.workerId();
+        SubjectId depot = FrontierWorldState.depotId(job.settlementId());
+        SubjectId accountId = ReferenceContainerCustody.scopeId(depot);
+        SubjectId breadId = new SubjectId("lot:bakery-resident-meal-bread");
+        FungibleResourceLedger prior = state.inventory().fungibleResources();
+        var lots = new java.util.LinkedHashMap<>(prior.lots());
+        lots.put(breadId, new ResourceLot(breadId, job.settlementId(), "minecraft:bread", 4, "test", List.of()));
+        var accounts = new java.util.LinkedHashMap<>(prior.accounts());
+        CustodyAccount account = accounts.get(accountId);
+        var quantities = new java.util.LinkedHashMap<>(account.lotQuantities());
+        quantities.put(breadId, 4);
+        accounts.put(accountId, new CustodyAccount(accountId, account.custody(), quantities, account.claimQuantities()));
+        state = state.withChanges(FrontierWorldStateUpdate.begin()
+                .inventory(state.inventory().withFungibleResources(new FungibleResourceLedger(
+                        lots, prior.claims(), accounts, prior.bindings())))
+                .humanPopulation(state.humanPopulation().accrueHunger(resident, 24_000L)));
+        assertEquals(ResidentWorkYield.Status.READY, ResidentWorkYield.assess(state,
+                HumanAssignmentProjection.compile(state).assignment(resident)).status());
+        ResidentMealStarted meal = ResidentMealProcess.selectSourceAtYield(state, resident, 24_000L).orElseThrow();
+        assertEquals(Optional.of(job.id()), meal.meal().retainedWorkOwner());
+        state = ResidentMealProcess.reduceStarted(state, resident, meal);
+        assertTrue(FrontierProductionWorkSceneSupport.candidate(state, job).isEmpty());
+        var held = ProductionProcess.planCompletion(state, ProductionProcess.complete(job, 24_001L));
+        assertEquals(1, held.size());
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class,
+                held.getFirst().payload());
+        for (int turn = 0; turn < 200 && state.humanPopulation().meals().containsKey(resident); turn++) {
+            ResidentMealColdStep step = ResidentMealProcess.planColdStep(state, resident, 24_002L + turn).orElseThrow();
+            state = ResidentMealProcess.reduceColdStep(state, resident, step);
+        }
+        assertFalse(state.humanPopulation().meals().containsKey(resident));
+        assertEquals(job, state.productionJobs().get(job.id()));
+        assertEquals(3, state.inventory().fungibleResources().totalQuantity(job.settlementId(), "minecraft:bread"));
+        assertTrue(ProductionProcess.planCompletion(state, ProductionProcess.complete(job, 24_300L))
+                .stream().anyMatch(event -> event.payload() instanceof BakeryColdStep));
+    }
+
     @Test
     void fullDepotWaitsForColdBreadDeliveryWithoutQuarantiningAndResumesAfterSpaceReturns() {
         FrontierWorldState state = ProductionProcessTest.productionTask(FrontierWorldState.initial(

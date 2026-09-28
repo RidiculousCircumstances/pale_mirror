@@ -88,6 +88,29 @@ public final class FrontierV3ServerLifecycle {
     }
     static boolean v3LaunchOwnsPhysicalWorld() { return enabled(); }
     public static boolean freezesLegacySourceRuntime() { return v3LaunchOwnsPhysicalWorld(); }
+    public enum DepotClickDisposition { NOT_OWNED, ACCEPTED, REJECTED }
+    public static DepotClickDisposition beforeDepotMenuClick(ServerPlayer player,
+            net.minecraft.world.inventory.AbstractContainerMenu menu, int slot, int button,
+            net.minecraft.world.inventory.ClickType kind) {
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(player.getServer());
+        if (runtime == null) return v3LaunchOwnsPhysicalWorld()
+                && menu instanceof net.minecraft.world.inventory.ChestMenu
+                ? DepotClickDisposition.REJECTED : DepotClickDisposition.NOT_OWNED;
+        if (runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE)
+            return FrontierV3DepotClickExecutor.ownsDepot(player, menu, runtime)
+                    ? DepotClickDisposition.REJECTED : DepotClickDisposition.NOT_OWNED;
+        return switch (FrontierV3DepotClickExecutor.before(player, menu, slot, button, kind, runtime)) {
+            case NOT_OWNED -> DepotClickDisposition.NOT_OWNED;
+            case ACCEPTED -> DepotClickDisposition.ACCEPTED;
+            case REJECTED -> DepotClickDisposition.REJECTED;
+        };
+    }
+    public static void afterDepotMenuClick(ServerPlayer player,
+            net.minecraft.world.inventory.AbstractContainerMenu menu) {
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(player.getServer());
+        if (runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE)
+            FrontierV3DepotClickExecutor.after(player, menu, runtime);
+    }
     public static String status(MinecraftServer server) {
         Objects.requireNonNull(server, "server");
         if (!ownsPhysicalWorld(server)) return "Frontier v3 is not selected for this server.";

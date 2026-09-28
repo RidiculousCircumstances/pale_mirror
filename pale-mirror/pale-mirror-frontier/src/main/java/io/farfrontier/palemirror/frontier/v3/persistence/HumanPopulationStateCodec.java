@@ -80,10 +80,26 @@ final class HumanPopulationStateCodec {
             FrontierWorldStateCodec.writeString(output, operation.supplyItemId().value()); FrontierWorldStateCodec.writeString(output, operation.consumptionIntentId().value());
             output.writeByte(operation.status().wireTag()); output.writeLong(operation.terminalAtTick());
         }
+        FrontierWorldStateCodec.writeCount(output, population.schedules().size());
+        for (Map.Entry<SubjectId, SettlementDailySchedule> entry : population.schedules().entrySet().stream()
+                .sorted(Map.Entry.comparingByKey()).toList()) {
+            FrontierWorldStateCodec.writeString(output, entry.getKey().value());
+            output.writeInt(entry.getValue().dayTicks());
+            FrontierWorldStateCodec.writeCount(output, entry.getValue().segments().size());
+            for (SettlementDailySchedule.Segment segment : entry.getValue().segments()) {
+                output.writeInt(segment.startInclusive()); output.writeInt(segment.endExclusive());
+                output.writeByte(FrontierWireTags.tag(segment.window()));
+            }
+        }
+        FrontierWorldStateCodec.writeCount(output, population.meals().size());
+        for (ResidentMeal meal : population.meals().values().stream().sorted(Comparator.comparing(ResidentMeal::residentId)).toList()) {
+            writeMeal(output, meal);
+        }
     }
 
     static HumanPopulation read(DataInputStream input, boolean hasHealth, boolean hasMigrations, boolean hasProvisions, boolean hasNutrition,
-                                boolean hasCapabilityProfile, boolean hasMedicalOperations, boolean hasMedicalTerminalTick) throws IOException {
+                                boolean hasCapabilityProfile, boolean hasMedicalOperations, boolean hasMedicalTerminalTick,
+                                boolean hasResidentLife) throws IOException {
         Map<SubjectId, Household> households = new LinkedHashMap<>();
         for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) {
             SubjectId id = new SubjectId(FrontierWorldStateCodec.readString(input));
@@ -198,7 +214,65 @@ final class HumanPopulationStateCodec {
                 if (medicalOperations.put(id, operation) != null) throw new IllegalArgumentException("duplicate medical operation id");
             }
         }
-        return new HumanPopulation(households, residents, birthJobs, health, quarantines, migrations, provisions, nutrition, medicalOperations);
+        if (!hasResidentLife) return new HumanPopulation(households, residents, birthJobs, health, quarantines,
+                migrations, provisions, nutrition, medicalOperations);
+        Map<SubjectId, SettlementDailySchedule> schedules = new LinkedHashMap<>();
+        for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) {
+            SubjectId id = new SubjectId(FrontierWorldStateCodec.readString(input));
+            int dayTicks = input.readInt();
+            java.util.List<SettlementDailySchedule.Segment> segments = new java.util.ArrayList<>();
+            for (int segment = 0, segmentCount = FrontierWorldStateCodec.readCount(input);
+                 segment < segmentCount; segment++) {
+                int start = input.readInt(), end = input.readInt(), tag = input.readUnsignedByte();
+                segments.add(new SettlementDailySchedule.Segment(start, end,
+                        FrontierWireTags.require(SettlementDailySchedule.Window.class, tag)));
+            }
+            if (schedules.put(id, new SettlementDailySchedule(dayTicks, segments)) != null)
+                throw new IllegalArgumentException("duplicate settlement schedule");
+        }
+        Map<SubjectId, ResidentMeal> meals = new LinkedHashMap<>();
+        for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) {
+            ResidentMeal meal = readMeal(input);
+            if (meals.put(meal.residentId(), meal) != null) throw new IllegalArgumentException("duplicate resident meal");
+        }
+        return new HumanPopulation(households, residents, birthJobs, health, quarantines, migrations,
+                provisions, nutrition, medicalOperations, schedules, meals);
+    }
+
+    static void writeMeal(DataOutputStream output, ResidentMeal meal) throws IOException {
+        FrontierWorldStateCodec.writeString(output, meal.residentId().value());
+        FrontierWorldStateCodec.writeString(output, meal.settlementId().value());
+        FrontierWorldStateCodec.writeString(output, meal.depotId().value());
+        FrontierWorldStateCodec.writeString(output, meal.sourceAccountId().value());
+        FrontierWorldStateCodec.writeString(output, meal.actorAccountId().value());
+        FrontierWorldStateCodec.writeString(output, meal.lotId().value());
+        FrontierWorldStateCodec.writeString(output, meal.claimId().value());
+        output.writeBoolean(meal.retainedWorkOwner().isPresent());
+        if (meal.retainedWorkOwner().isPresent()) FrontierWorldStateCodec.writeString(output, meal.retainedWorkOwner().orElseThrow().value());
+        output.writeByte(FrontierWireTags.tag(meal.phase())); output.writeLong(meal.startedAtTick());
+        output.writeBoolean(meal.waitReason().isPresent());
+        if (meal.waitReason().isPresent()) output.writeByte(FrontierWireTags.tag(meal.waitReason().orElseThrow()));
+    }
+
+    static ResidentMeal readMeal(DataInputStream input) throws IOException {
+        SubjectId resident = new SubjectId(FrontierWorldStateCodec.readString(input));
+        SubjectId settlement = new SubjectId(FrontierWorldStateCodec.readString(input));
+        SubjectId depot = new SubjectId(FrontierWorldStateCodec.readString(input));
+        SubjectId source = new SubjectId(FrontierWorldStateCodec.readString(input));
+        SubjectId actor = new SubjectId(FrontierWorldStateCodec.readString(input));
+        SubjectId lot = new SubjectId(FrontierWorldStateCodec.readString(input));
+        SubjectId claim = new SubjectId(FrontierWorldStateCodec.readString(input));
+        java.util.Optional<SubjectId> retained = input.readBoolean()
+                ? java.util.Optional.of(new SubjectId(FrontierWorldStateCodec.readString(input)))
+                : java.util.Optional.empty();
+        int phase = input.readUnsignedByte(); long started = input.readLong();
+        java.util.Optional<ResidentActivityChoice.Wait> wait = java.util.Optional.empty();
+        if (input.readBoolean()) {
+            int tag = input.readUnsignedByte();
+            wait = java.util.Optional.of(FrontierWireTags.require(ResidentActivityChoice.Wait.class, tag));
+        }
+        return new ResidentMeal(resident, settlement, depot, source, actor, lot,
+                claim, retained, FrontierWireTags.require(ResidentMeal.Phase.class, phase), started, wait);
     }
 
     private static java.util.List<SubjectId> legacyRecipients(Map<SubjectId, ResidentProfile> residents, SubjectId settlement, int required) {

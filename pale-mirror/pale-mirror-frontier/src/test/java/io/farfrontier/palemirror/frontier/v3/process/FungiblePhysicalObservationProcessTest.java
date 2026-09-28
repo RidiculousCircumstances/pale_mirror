@@ -17,6 +17,8 @@ import io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalObservation;
 import io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalHandoff;
 import io.farfrontier.palemirror.frontier.v3.model.FungibleResourceLedger;
 import io.farfrontier.palemirror.frontier.v3.model.FungibleResourceHandoffObserved;
+import io.farfrontier.palemirror.frontier.v3.model.FungibleStockDepartureObserved;
+import io.farfrontier.palemirror.frontier.v3.model.FungibleStockContributionObserved;
 import io.farfrontier.palemirror.frontier.v3.model.FungibleStackLayoutObserved;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
@@ -59,6 +61,95 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FungiblePhysicalObservationProcessTest {
+    @Test
+    void playerGiftCreatesFreshSettlementLotAtTheSameObservedDepotEpoch() {
+        WorldId world = new WorldId("frontier:stock-contribution");
+        var base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
+        FrontierWorldState state = base.initialState();
+        SubjectId owner = state.bootstrap().settlements().getFirst().id();
+        SubjectId depot = FrontierWorldState.depotId(owner);
+        SubjectId account = ReferenceContainerCustody.scopeId(depot);
+        var wheat = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                new InventoryCustody.ContainerSlot(depot, 0)), "minecraft:wheat", 64);
+        FungibleResourceLedger cold = state.inventory().fungibleResources();
+        FungibleResourceLedger hot = cold.rebind(account, 1L,
+                FungiblePhysicalObservation.bind(cold, account, 1L, List.of(wheat)));
+        state = ReferenceContainerCustodyFixtures.observedAndHeld(
+                state.withInventory(state.inventory().withFungibleResources(hot)
+                        .withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED)
+                        .withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE)), depot);
+        ResourceLot gift = new ResourceLot(new SubjectId("lot:player-gift-test"), owner,
+                "minecraft:bread", 16, "player-gift", List.of());
+        var bread = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                new InventoryCustody.ContainerSlot(depot, 1)), "minecraft:bread", 16);
+        FungibleStockContributionObserved observed = new FungibleStockContributionObserved(account, depot, 1L,
+                UUID.fromString("00000000-0000-0000-0000-000000000193"),
+                UUID.fromString("00000000-0000-0000-0000-000000000194"), gift, List.of(wheat, bread));
+        var giftPlan = assertInstanceOf(CommandPlan.Accepted.class,
+                FrontierWorldPhysicalObservationProcess.planFungibleStockContribution(state, observed, 0L));
+        assertEquals(2, giftPlan.events().size());
+        assertEquals(StrategicObjectiveProcess.playerStockReconsideration(owner, observed.interactionId(), 1L),
+                ((io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created) giftPlan.events().get(1).payload()).action());
+        FrontierWorldState reduced = FrontierWorldPhysicalObservationProcess.reduceFungibleStockContribution(state, owner, observed);
+        assertEquals(16, reduced.inventory().fungibleResources().totalQuantity(owner, "minecraft:bread"));
+        var configuration = new FrontierEngineConfiguration<>(world, state, base.initialInstant(),
+                base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(),
+                base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter(),
+                base.stateValidator(), base.executionMetrics());
+        var engine = FrontierEngines.create(configuration);
+        assertInstanceOf(CommandResult.Accepted.class,
+                engine.submit(command(engine, world, "stock-gift", observed)));
+        FrontierWorldState recovered = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec()
+                .decode(engine.checkpoint().canonicalState());
+        assertEquals(reduced.inventory().fungibleResources(), recovered.inventory().fungibleResources());
+    }
+
+    @Test
+    void stockDepartureUsesExactDepotRemainderWithoutInventingPlayerInventoryCustody() {
+        WorldId world = new WorldId("frontier:stock-departure");
+        var base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
+        FrontierWorldState state = base.initialState();
+        SubjectId owner = state.bootstrap().settlements().getFirst().id();
+        SubjectId depot = FrontierWorldState.depotId(owner);
+        SubjectId account = ReferenceContainerCustody.scopeId(depot);
+        SubjectId wheat = new SubjectId("lot:bootstrap-1-wheat");
+        FungibleResourceLedger cold = state.inventory().fungibleResources();
+        var before = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                new InventoryCustody.ContainerSlot(depot, 0)), "minecraft:wheat", 64);
+        FungibleResourceLedger hot = cold.rebind(account, 1L,
+                FungiblePhysicalObservation.bind(cold, account, 1L, List.of(before)));
+        state = state.withInventory(state.inventory().withFungibleResources(hot)
+                .withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED)
+                .withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE));
+        state = ReferenceContainerCustodyFixtures.observedAndHeld(state, depot);
+        var after = new FungiblePhysicalObservation.Stack(before.address(), "minecraft:wheat", 32);
+        FungibleStockDepartureObserved observed = new FungibleStockDepartureObserved(account, depot, owner, 1L,
+                UUID.fromString("00000000-0000-0000-0000-000000000191"),
+                UUID.fromString("00000000-0000-0000-0000-000000000192"), Map.of(wheat, 32), List.of(after));
+
+        var departurePlan = assertInstanceOf(CommandPlan.Accepted.class,
+                FrontierWorldPhysicalObservationProcess.planFungibleStockDeparture(state, observed, 0L));
+        assertEquals(2, departurePlan.events().size());
+        assertEquals(StrategicObjectiveProcess.playerStockReconsideration(owner, observed.interactionId(), 1L),
+                ((io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created) departurePlan.events().get(1).payload()).action());
+        FrontierWorldState reduced = FrontierWorldPhysicalObservationProcess.reduceFungibleStockDeparture(state, owner, observed);
+        assertEquals(32, reduced.inventory().fungibleResources().totalQuantity(owner, "minecraft:wheat"));
+        assertFalse(reduced.inventory().fungibleResources().accounts().values().stream()
+                .anyMatch(value -> value.custody() instanceof ResourceCustody.Player));
+        assertInstanceOf(CommandPlan.Rejected.class,
+                FrontierWorldPhysicalObservationProcess.planFungibleStockDeparture(reduced, observed, 0L));
+        var configuration = new FrontierEngineConfiguration<>(world, state, base.initialInstant(),
+                base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(),
+                base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter(),
+                base.stateValidator(), base.executionMetrics());
+        var engine = FrontierEngines.create(configuration);
+        assertInstanceOf(CommandResult.Accepted.class,
+                engine.submit(command(engine, world, "stock-exit", observed)));
+        FrontierWorldState recovered = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec()
+                .decode(engine.checkpoint().canonicalState());
+        assertEquals(reduced.inventory().fungibleResources(), recovered.inventory().fungibleResources());
+    }
+
     @Test
     void oneObservedBreadStackRetiresMultipleRationClaimsThroughTheRegisteredHandoffOwner() {
         WorldId world = new WorldId("frontier:multi-ration-physical-handoff");

@@ -54,6 +54,25 @@ class FrontierRulesetTest {
     }
 
     @Test
+    void residentLifePolicyIsHashedOnlyByTheNewSchema() {
+        FrontierRuleset prior = FrontierRulesets.production();
+        var changedLife = new FrontierRuleset.ResidentLife(24_000, 10_000,
+                24_000L, 1, 3, 1, 255);
+        FrontierRuleset retained = new FrontierRuleset(prior.id(), prior.schemaVersion(),
+                prior.cadence(), prior.spatial(), prior.rates(), prior.facilityCapacity(),
+                prior.combat(), prior.hiveCommand(), changedLife);
+        assertEquals(prior.contentSha256(), retained.contentSha256());
+        FrontierRuleset next = new FrontierRuleset("frontier-v3-resident-life-test", 7,
+                prior.cadence(), prior.spatial(), prior.rates(), prior.facilityCapacity(),
+                prior.combat(), prior.hiveCommand(), changedLife);
+        FrontierRuleset other = new FrontierRuleset("frontier-v3-resident-life-test", 7,
+                prior.cadence(), prior.spatial(), prior.rates(), prior.facilityCapacity(),
+                prior.combat(), prior.hiveCommand(), FrontierRuleset.ResidentLife.initial());
+        assertNotEquals(next.contentSha256(), other.contentSha256());
+        assertEquals(10_000, SettlementDailySchedule.from(changedLife).nextWindowBoundaryAfter(0));
+    }
+
+    @Test
     void canonicalFacilityAndColdCombatReadTheSelectedRuleset() {
         FrontierRuleset production = FrontierRulesets.production();
         FrontierRuleset selected = new FrontierRuleset("frontier-v3-test-ruleset-r2", production.schemaVersion(), production.cadence(), production.spatial(),

@@ -26,7 +26,7 @@ class FrontierPersistenceCodecTest {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:footprint-version"), 91L));
         var codec = new FrontierWorldStateCodec();
         var encoded = codec.encode(state);
-        assertEquals(209, Byte.toUnsignedInt(encoded[4]));
+        assertEquals(210, Byte.toUnsignedInt(encoded[4]));
         assertArrayEquals(encoded, codec.encode(codec.decode(encoded)));
         for (int legacy : new int[]{177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208}) {
             var old = encoded.clone(); old[4] = (byte) legacy;

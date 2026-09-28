@@ -642,6 +642,64 @@ class FungibleResourceLedgerTest {
         assertEquals(resources, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(retained)).inventory().fungibleResources());
     }
 
+    @Test
+    void observedExternalExitRetiresOnlyDepartedStockAndPreservesOtherClaims() {
+        SubjectId reservedLot = new SubjectId("lot:reserved-bread");
+        SubjectId reservedClaim = new SubjectId("claim:reserved-bread");
+        ResourceLot free = new ResourceLot(LOT, OWNER, "minecraft:bread", 64, "bootstrap", List.of());
+        ResourceLot reserved = new ResourceLot(reservedLot, OWNER, "minecraft:bread", 8, "bootstrap", List.of());
+        FungibleResourceLedger cold = new FungibleResourceLedger(Map.of(LOT, free, reservedLot, reserved),
+                Map.of(), Map.of(DEPOT_ACCOUNT, new CustodyAccount(DEPOT_ACCOUNT,
+                        new ResourceCustody.Container(DEPOT), Map.of(LOT, 64, reservedLot, 8), Map.of())), Map.of());
+        cold = cold.reserve(new ClaimAllocation(reservedClaim, new SubjectId("process:meal"), OWNER,
+                "minecraft:bread", 8, Map.of(reservedLot, 8), ClaimPurpose.EXTERNAL_RESERVATION), DEPOT_ACCOUNT);
+        List<FungiblePhysicalObservation.Stack> before = List.of(
+                new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                        new InventoryCustody.ContainerSlot(DEPOT, 0)), "minecraft:bread", 64),
+                new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                        new InventoryCustody.ContainerSlot(DEPOT, 1)), "minecraft:bread", 8));
+        FungibleResourceLedger hot = cold.rebind(DEPOT_ACCOUNT, 4,
+                FungiblePhysicalObservation.bind(cold, DEPOT_ACCOUNT, 4, before));
+        List<FungiblePhysicalObservation.Stack> after = List.of(
+                new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                        new InventoryCustody.ContainerSlot(DEPOT, 0)), "minecraft:bread", 32),
+                before.get(1));
+
+        FungibleResourceLedger departed = hot.departObserved(DEPOT_ACCOUNT, 4, Map.of(LOT, 32), after);
+
+        assertEquals(32, departed.lots().get(LOT).quantity());
+        assertEquals(8, departed.lots().get(reservedLot).quantity());
+        assertEquals(Map.of(reservedClaim, 8), departed.accounts().get(DEPOT_ACCOUNT).claimQuantities());
+        assertEquals(40, departed.totalQuantity(OWNER, "minecraft:bread"));
+        assertThrows(IllegalArgumentException.class, () -> hot.departObserved(DEPOT_ACCOUNT, 5, Map.of(LOT, 32), after));
+        assertThrows(IllegalArgumentException.class, () -> hot.departObserved(DEPOT_ACCOUNT, 4, Map.of(LOT, 31), after));
+        assertThrows(IllegalArgumentException.class, () -> departed.departObserved(DEPOT_ACCOUNT, 4, Map.of(LOT, 32), after));
+    }
+
+    @Test
+    void observedPlayerContributionIsFreshSettlementStockNotReturnedHistoricCustody() {
+        SubjectId depot = FrontierWorldState.depotId(OWNER);
+        SubjectId accountId = new SubjectId("custody:settlement-one-depot");
+        ResourceLot existing = new ResourceLot(LOT, OWNER, "minecraft:bread", 32, "bootstrap", List.of());
+        FungibleResourceLedger cold = FungibleResourceLedger.empty().issue(existing,
+                new CustodyAccount(accountId, new ResourceCustody.Container(depot), Map.of(LOT, 32), Map.of()));
+        List<FungiblePhysicalObservation.Stack> before = List.of(new FungiblePhysicalObservation.Stack(
+                new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, 0)), "minecraft:bread", 32));
+        FungibleResourceLedger hot = cold.rebind(accountId, 7,
+                FungiblePhysicalObservation.bind(cold, accountId, 7, before));
+        ResourceLot gift = new ResourceLot(new SubjectId("lot:player-gift-one"), OWNER,
+                "minecraft:bread", 16, "player-gift", List.of());
+        List<FungiblePhysicalObservation.Stack> after = List.of(new FungiblePhysicalObservation.Stack(
+                new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, 0)), "minecraft:bread", 48));
+
+        FungibleResourceLedger contributed = hot.contributeObserved(accountId, 7, gift, after);
+
+        assertEquals(48, contributed.totalQuantity(OWNER, "minecraft:bread"));
+        assertEquals(Map.of(LOT, 32, gift.id(), 16), contributed.accounts().get(accountId).lotQuantities());
+        assertThrows(IllegalArgumentException.class, () -> hot.contributeObserved(accountId, 8, gift, after));
+        assertThrows(IllegalArgumentException.class, () -> contributed.contributeObserved(accountId, 7, gift, after));
+    }
+
     private static FungibleResourceLedger issue(int quantity) {
         ResourceLot lot = new ResourceLot(LOT, OWNER, "minecraft:bread", quantity, "bootstrap", List.of());
         CustodyAccount account = new CustodyAccount(DEPOT_ACCOUNT, new ResourceCustody.Container(DEPOT), Map.of(LOT, quantity), Map.of());

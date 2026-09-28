@@ -33,6 +33,8 @@ public enum FrontierV3DiagnosticView {
     HIVE_TRANSFER("hive_transfer", true),
     HIVE_MOBILIZATION("hive_mobilization", true),
     ACTOR("actor", true),
+    /** Exact resident need, settlement policy, selected activity and retained meal. */
+    RESIDENT_LIFE("resident_life", true),
     ITEM("item", true),
     RESOURCE("resource", true),
     /** One authenticated player's current physical stack, fenced by its canonical resource account. */

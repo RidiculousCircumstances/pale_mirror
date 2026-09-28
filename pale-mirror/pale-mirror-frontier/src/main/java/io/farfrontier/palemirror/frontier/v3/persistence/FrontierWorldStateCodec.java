@@ -30,7 +30,8 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     // Version 206 also retains the bakery's durable-before-effect physical step.
     // Reference-container fingerprints now encode bulk stock rather than positional slots.
     // Old disposable worlds must not recover a persisted replica fingerprint under new semantics.
-    static final int VERSION = 209; private static final int MAX_ENTRIES = 65_535;
+    // Version 210 retains exact settlement schedule policies and resident meal stages.
+    static final int VERSION = 210; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -118,13 +119,14 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             RouteTopology topology = RouteTopologyStateCodec.read(input, bootstrap);
             constructions = RouteConstructionStateSupport.hydrateWorkCells(bootstrap, topology, constructions);
             StrategicPlanState plans = StrategicPlanStateCodec.read(input, false, true, true, true, true, true, true, true, true, VERSION);
-            HumanPopulation population = HumanPopulationStateCodec.read(input, true, true, true, true, true, true, true);
+            HumanPopulation population = HumanPopulationStateCodec.read(input, true, true, true, true, true, true, true, true);
             ResourceSiteState sites = ResourceSiteStateCodec.read(input);
             FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, inventory, jobs, serviceWorks, contracts, operations, history,
                     intents, observations, scenes, colony, structureDamage, physicalDeltas, ambient, constructions, maintenances, topology, plans, population, companies, sites, replicaCustody, deferredAftermath, fencedRecovery, diagnosticIncidents);
             if (input.available() != 0) throw new IllegalArgumentException("trailing Frontier v3 state bytes");
             FrontierWorldProcessCatalog.requirePhysicalLifecycleState(state);
             FrontierDomainRelationships.validate(state);
+            ResidentMealReferenceClosure.validate(state);
             FrontierDurationProcessDriverRegistry.requireRetainedSceneLeases(state.sceneLeases().values());
             return state;
         } catch (IOException error) { throw new IllegalArgumentException("truncated Frontier v3 state", error); }

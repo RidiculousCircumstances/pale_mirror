@@ -327,6 +327,7 @@ final class ResourceSiteHarvestPlanning {
         return job != null && action.equals(coldProgress(job, action.dueAt().ticks()))
                 && state.resourceSites().site(job.siteId()).phase() == ResourceSitePhase.HARVESTING
                 && (state.resourceSites().hasPendingWorldChange(job.siteId())
+                    || state.humanPopulation().meals().containsKey(job.workerId())
                     || FrontierResourceSiteHarvestSceneSupport.hasNonClosedScene(state, job)
                     || !FrontierSceneAdmission.available(state, List.of(job.workerId()))
                     || pendingPlayerBreakAtNextCell(state, job)

@@ -15,6 +15,7 @@
     "FrontierV3EntitySavePassMixin",
     "FrontierV3CargoCarrierMinecartMixin",
     "FrontierV3VehicleEntityMixin",
-    "FrontierV3PlayerActionMixin"
+    "FrontierV3PlayerActionMixin",
+    "FrontierV3DepotMenuClickMixin"
   ]
 }

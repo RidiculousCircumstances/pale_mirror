@@ -24,7 +24,8 @@ public record ClaimAllocation(SubjectId id, SubjectId claimantId, SubjectId econ
         if (purpose != ClaimPurpose.EXTERNAL_RESERVATION && lotQuantities.isEmpty()
                 || purpose == ClaimPurpose.PRODUCTION_WORK && !itemKind.equals("minecraft:wheat")
                 || purpose == ClaimPurpose.HIVE_GROWTH && !itemKind.equals("minecraft:rotten_flesh")
-                || purpose == ClaimPurpose.SETTLEMENT_RATION && !itemKind.equals("minecraft:bread")) {
+                || purpose == ClaimPurpose.SETTLEMENT_RATION && !itemKind.equals("minecraft:bread")
+                || purpose == ClaimPurpose.RESIDENT_MEAL && (!itemKind.equals("minecraft:bread") || quantity != 1)) {
             throw new IllegalArgumentException("claim purpose does not match its declared resource allocation");
         }
     }

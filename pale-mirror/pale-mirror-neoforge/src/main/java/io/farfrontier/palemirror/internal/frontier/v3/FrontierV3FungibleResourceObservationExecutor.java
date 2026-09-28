@@ -46,6 +46,7 @@ final class FrontierV3FungibleResourceObservationExecutor {
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return;
+        if (FrontierV3DepotClickExecutor.reconcileOne(level, runtime, state)) return;
         // This is deliberately before ordinary return/departure observation: only an exact
         // canonical-first fence without its later persisted player witness is reversible.
         if (FrontierV3PlayerCustodyRecovery.reconcileOne(level, runtime, state)) return;
@@ -55,6 +56,7 @@ final class FrontierV3FungibleResourceObservationExecutor {
                 .filter(value -> value.custody() instanceof ResourceCustody.Container)
                 .sorted(Comparator.comparing(CustodyAccount::id)).toList()) {
             ResourceCustody.Container custody = (ResourceCustody.Container) account.custody();
+            if (FrontierV3DepotClickLedger.get(level).pending(custody.containerId()) != null) continue;
             if (BakeryPhysicalAuthority.pendingForContainer(state, custody.containerId())) continue;
             if (FrontierV3ResourceSiteLedger.get(level).hasPendingFieldDelivery(custody.containerId())) continue;
             ContainerSurface surface = state.inventory().surfaces().get(custody.containerId());
@@ -91,8 +93,10 @@ final class FrontierV3FungibleResourceObservationExecutor {
         try {
             expected = FungiblePhysicalObservation.bind(state.inventory().fungibleResources(), account.id(), epoch, stacks);
         } catch (IllegalArgumentException invalid) {
-            if (observeOnePlayerReturn(level, runtime, state, account, chest, epoch)) return false;
-            if (observeOnePlayerDeparture(level, runtime, state, account, chest, epoch)) return false;
+            if (!managedDepot(state, containerId)) {
+                if (observeOnePlayerReturn(level, runtime, state, account, chest, epoch)) return false;
+                if (observeOnePlayerDeparture(level, runtime, state, account, chest, epoch)) return false;
+            }
             if (observeOneExternalDeparture(level, runtime, state, account, chest, epoch)) return false;
             FrontierV3ContainerSurfaceExecutor.reportConflict(runtime, ((ResourceCustody.Container) account.custody()).containerId());
             return false;
@@ -107,6 +111,12 @@ final class FrontierV3FungibleResourceObservationExecutor {
         CommandResult result = FrontierV3CommandSubmission.submit(runtime, "fungible-layout", account.id().value(),
                 new FungibleStackLayoutObserved(account.id(), epoch, stacks));
         return result instanceof CommandResult.Accepted;
+    }
+
+    private static boolean managedDepot(FrontierWorldState state, SubjectId containerId) {
+        var container = state.inventory().containers().get(containerId);
+        return container != null && container.ownerId().value().startsWith("settlement:")
+                && FrontierWorldState.depotId(container.ownerId()).equals(containerId);
     }
 
     /**

@@ -5,7 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.util.Objects;
 import java.util.Optional;
 
-/** One exact resident's current activity, derived from the canonical record that owns it. */
+/** One exact resident's retained work assignment, derived from the canonical job that owns it. */
 public record HumanAssignment(SubjectId residentId, HumanAssignmentKind kind, Optional<SubjectId> ownerId) {
     public HumanAssignment {
         Objects.requireNonNull(residentId, "assignment resident"); Objects.requireNonNull(kind, "assignment kind");

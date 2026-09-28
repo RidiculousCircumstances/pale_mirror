@@ -35,7 +35,10 @@ public final class FrontierWorldProcessCatalog {
             "frontier.kernel_quarantine_observed");
     private static final Set<String> PHYSICAL = types(
             "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition",
-            "frontier.structure_damaged", "frontier.resource_deposited", "frontier.fungible_stack_layout_observed", "frontier.fungible_resource_handoff_observed", "frontier.fungible_stack_bindings_released", "frontier.exact_item_custody_changed",
+            "frontier.structure_damaged", "frontier.resource_deposited", "frontier.fungible_stack_layout_observed",
+            "frontier.fungible_resource_handoff_observed", "frontier.fungible_stock_departure_observed",
+            "frontier.fungible_stock_contribution_observed", "frontier.fungible_stack_bindings_released",
+            "frontier.exact_item_custody_changed",
             "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed", "frontier.container_surface_transition",
             "frontier.cargo_carrier_released");
     private static final Set<String> REPLICA_CUSTODY = types(
@@ -66,6 +69,9 @@ public final class FrontierWorldProcessCatalog {
             "frontier.resident_migration_resumed", "frontier.resident_birth_started", "frontier.resident_birth_cancelled",
             "frontier.settlement_provision_started", "frontier.settlement_provision_started_v2",
             "frontier.settlement_provision_consumed", "frontier.settlement_provision_resolved",
+            "frontier.resident_need_integrated",
+            "frontier.resident_meal_started",
+            "frontier.resident_meal_cold_step",
             "frontier.resident_health_transition", "frontier.settlement_quarantine_transition",
             "frontier.medical_treatment_started", "frontier.medical_treatment_transition",
             "frontier.medical_treatment_scene_lease_prepared", "frontier.medical_treatment_scene_lease_handoff");
@@ -174,6 +180,9 @@ public final class FrontierWorldProcessCatalog {
             Map.entry(DefenderEquipmentReturnProcess.REVIEW_ACTION, (state, action, autonomous) -> DefenderEquipmentReturnProcess.plan(state, action)),
             Map.entry("frontier.settlement.provision.review", (state, action, autonomous) -> SettlementProvisionProcess.planReview(state, action)),
             Map.entry("frontier.settlement.provision.progress", (state, action, autonomous) -> SettlementProvisionProcess.planProgress(state, action)),
+            Map.entry(ResidentNeedProcess.REVIEW, (state, action, autonomous) -> ResidentNeedProcess.plan(state, action)),
+            Map.entry(ResidentActivityProcess.REVIEW, (state, action, autonomous) -> ResidentActivityProcess.plan(state, action)),
+            Map.entry(ResidentMealProcess.PROGRESS, (state, action, autonomous) -> ResidentMealProcess.planProgress(state, action)),
             Map.entry("frontier.company.foundation.review", (state, action, autonomous) -> CompanyFoundationProcess.plan(state, action)),
             Map.entry("frontier.market.clear", (state, action, autonomous) -> MarketClearingProcess.plan(state, action)),
             Map.entry("frontier.resource_site.growth", new ScheduledPlanner() {
@@ -362,7 +371,7 @@ public final class FrontierWorldProcessCatalog {
     private static Set<String> physicalCommands() { return types(
             "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
             "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.resource_deposited",
-            "frontier.fungible_stack_layout_observed", "frontier.fungible_resource_handoff_observed",
+            "frontier.fungible_stack_layout_observed", "frontier.fungible_resource_handoff_observed", "frontier.fungible_stock_departure_observed", "frontier.fungible_stock_contribution_observed",
             "frontier.fungible_stack_bindings_released", "frontier.exact_item_custody_changed",
             "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed", "frontier.container_surface_transition",
             "frontier.cargo_carrier_released"); }
@@ -430,7 +439,8 @@ public final class FrontierWorldProcessCatalog {
     private static Set<String> populationSchedules() { return types(
             "frontier.population.birth.review", "frontier.population.birth.complete", "frontier.population.migration.review",
             "frontier.population.migration.progress", DefenderEquipmentProcess.REVIEW_ACTION, DefenderEquipmentReturnProcess.REVIEW_ACTION,
-            "frontier.settlement.provision.review", "frontier.settlement.provision.progress"); }
+            "frontier.settlement.provision.review", "frontier.settlement.provision.progress",
+            ResidentNeedProcess.REVIEW, ResidentActivityProcess.REVIEW, ResidentMealProcess.PROGRESS); }
     private static Set<String> economySchedules() { return types(
             "frontier.settlement.production.task.start", "frontier.settlement.production.task.complete",
             "frontier.company.foundation.review", "frontier.market.clear"); }
@@ -465,7 +475,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.physical_custody_checkpointed", "frontier.physical_custody_released",
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
                     "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
-                    "frontier.resource_deposited", "frontier.fungible_stack_layout_observed", "frontier.fungible_resource_handoff_observed",
+                    "frontier.resource_deposited", "frontier.fungible_stack_layout_observed", "frontier.fungible_resource_handoff_observed", "frontier.fungible_stock_departure_observed", "frontier.fungible_stock_contribution_observed",
                     "frontier.fungible_stack_bindings_released", "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed",
                     "frontier.inventory_conflict_observed",
                     "frontier.container_surface_transition", "frontier.cargo_carrier_released", "frontier.route_construction_material_loaded",
@@ -527,7 +537,9 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.resident_born", "frontier.resident_migrated", "frontier.resident_migration_started", "frontier.resident_migration_advanced",
                     "frontier.resident_transit_advanced", "frontier.resident_migration_blocked", "frontier.resident_migration_resumed", "frontier.resident_birth_started",
                     "frontier.resident_birth_cancelled", "frontier.settlement_provision_started", "frontier.settlement_provision_started_v2", "frontier.settlement_provision_consumed",
-                    "frontier.settlement_provision_resolved", "frontier.resident_health_transition", "frontier.settlement_quarantine_transition",
+                    "frontier.settlement_provision_resolved", "frontier.resident_need_integrated",
+                    "frontier.resident_meal_started", "frontier.resident_meal_cold_step",
+                    "frontier.resident_health_transition", "frontier.settlement_quarantine_transition",
                     "frontier.medical_treatment_started", "frontier.medical_treatment_transition",
                     "frontier.medical_treatment_scene_lease_prepared", "frontier.medical_treatment_scene_lease_handoff", "frontier.physical_delta_observed", "frontier.physical_deltas_observed",
                     "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged", "frontier.resource_deposited",

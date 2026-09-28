@@ -35,6 +35,16 @@ public final class StrategicObjectiveProcess {
                 new SimInstant(dueAt), 0, settlementId, "frontier.objective.stock_reconsider", 1);
     }
 
+    /** One durable, cause-identified wake after a player changes an owned depot's stock. */
+    public static ScheduledAction playerStockReconsideration(SubjectId settlementId,
+                                                             java.util.UUID interactionId, long dueAt) {
+        if (!settlementId.value().startsWith("settlement:"))
+            throw new IllegalArgumentException("player stock wake requires one settlement owner");
+        return new ScheduledAction(new ScheduleId("schedule:objective-stock-player-"
+                + interactionId.toString().replace("-", "") + "-1"), new SimInstant(dueAt),
+                0, settlementId, "frontier.objective.stock_reconsider", 1);
+    }
+
     public static List<ProposedEvent> planStockReconsideration(FrontierWorldState state, ScheduledAction action) {
         if (!action.kind().equals("frontier.objective.stock_reconsider")
                 || !action.subject().value().startsWith("settlement:")

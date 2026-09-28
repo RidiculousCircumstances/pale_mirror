@@ -148,6 +148,7 @@ final class FrontierV3DiagnosticJson {
             case "hive" -> hive(id, checkpoint, state);
             case "hive_transfer" -> hiveTransfer(id, checkpoint, state);
             case "actor" -> actor(id, checkpoint, state, admission);
+            case "resident_life" -> FrontierV3ResidentLifeDiagnostic.render(id, checkpoint, state);
             case "item" -> item(id, checkpoint, state);
             case "resource" -> resource(id, checkpoint, state);
             case "container" -> container(id, checkpoint, state, containerReadiness);
@@ -522,6 +523,7 @@ final class FrontierV3DiagnosticJson {
                 + (lifecycle == null ? "" : ",\"lifecycle\":\"" + lifecycle.phase().name() + "\",\"cocoonHome\":" + cocoonHome)
                 + admission.map(FrontierV3DiagnosticJson::admission).orElse("") + "}";
     }
+
 
     /** One immutable assignment lookup gives the client a phase at its already-bounded actor cadence. */
     private static String harvestDutyPhase(FrontierWorldState state, SubjectId actor, HumanAssignment assignment) {

@@ -23,6 +23,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class StrategicObjectiveProcessTest {
     @Test
+    void playerDepotStockWakeHasAParseableDecisionOrdinal() {
+        FrontierWorldState state = initial("frontier:player-stock-wake", 407L);
+        SubjectId owner = state.bootstrap().settlements().getFirst().id();
+        var wake = StrategicObjectiveProcess.playerStockReconsideration(owner,
+                java.util.UUID.fromString("9f9d3942-cff8-4790-96e3-ca5bdb0ba17b"), 61L);
+        assertEquals(1, FrontierWorldScheduleSupport.ordinal(wake.id().value()));
+        assertTrue(StrategicObjectiveProcess.planStockReconsideration(state, wake).stream()
+                .noneMatch(event -> event.payload() instanceof io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created created
+                        && created.action().kind().equals("frontier.objective.review")));
+    }
+
+    @Test
     void fullDepotSuppressesNewBreadWorkAndRetainsASelectedMarketDemand() {
         FrontierWorldState initial = initial("frontier:full-depot-bread-admission", 407L);
         SubjectId owner = initial.bootstrap().settlements().getFirst().id();

@@ -65,6 +65,25 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class FrontierV3DiagnosticJsonTest {
     @Test
+    void residentLifeDiagnosticShowsEffectiveNeedAndRetainedActivityWithoutMutation() {
+        var configuration = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:resident-life-diagnostic"), 47L);
+        FrontierWorldState state = configuration.initialState();
+        SubjectId resident = state.humanPopulation().residents().keySet().stream().sorted().findFirst().orElseThrow();
+        CheckpointImage checkpoint = new CheckpointImage(configuration.worldId(),
+                new io.farfrontier.palemirror.frontier.v3.api.Revision(3L),
+                new SimInstant(24_000L), new byte[] {1}, List.of(), List.of());
+        var json = JsonParser.parseString(FrontierV3DiagnosticJson.render("resident_life", resident.value(),
+                checkpoint, state, Optional.empty()).substring(FrontierV3DiagnosticJson.PREFIX.length())).getAsJsonObject();
+        assertEquals("ok", json.get("status").getAsString());
+        assertEquals(1, json.get("hungerDeficit").getAsInt());
+        assertEquals(0, json.get("storedHungerDeficit").getAsInt());
+        assertEquals("WORK", json.get("scheduleWindow").getAsString());
+        assertEquals("EAT", json.get("activity").getAsString());
+        assertEquals("NONE", json.get("mealPhase").getAsString());
+        assertEquals(configuration.initialState(), state);
+    }
+
+    @Test
     void authored65CellHarvestDiagnosticReportsItsSemanticGoalAndYield() {
         var configuration = FrontierV3FixtureCatalog.configuration("resource-site-harvest-65",
                 new WorldId("frontier:diagnostic-65-cell-field"), 125L);

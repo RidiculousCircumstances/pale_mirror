@@ -171,6 +171,90 @@ public final class FrontierWorldPhysicalObservationProcess {
         return new CommandPlan.Accepted(List.of(new ProposedEvent(owner, observed)));
     }
 
+    static CommandPlan planFungibleStockDeparture(FrontierWorldState state, FungibleStockDepartureObserved observed,
+                                                  long now) {
+        try {
+            reduceFungibleStockDeparture(state, observed.economicOwnerId(), observed);
+        } catch (IllegalArgumentException invalid) {
+            return new CommandPlan.Rejected(new CommandRejection(RejectionCode.REJECTED_BY_POLICY, invalid.getMessage()));
+        }
+        return new CommandPlan.Accepted(List.of(new ProposedEvent(observed.economicOwnerId(), observed),
+                playerStockWake(observed.economicOwnerId(), observed.interactionId(), now)));
+    }
+
+    static FrontierWorldState reduceFungibleStockDeparture(FrontierWorldState state, SubjectId subject,
+                                                          FungibleStockDepartureObserved observed) {
+        FungibleResourceLedger ledger = state.inventory().fungibleResources();
+        CustodyAccount source = ledger.accounts().get(observed.sourceAccountId());
+        ContainerRecord container = state.inventory().containers().get(observed.containerId());
+        ContainerSurface surface = state.inventory().surfaces().get(observed.containerId());
+        if (source == null || !(source.custody() instanceof ResourceCustody.Container actual)
+                || !actual.containerId().equals(observed.containerId()) || container == null
+                || surface == null || ReferenceContainerCustody.blocksCanonicalUse(state, observed.containerId())
+                || !container.ownerId().equals(subject) || !subject.equals(observed.economicOwnerId())
+                || observed.departedLots().keySet().stream().anyMatch(id -> {
+                    ResourceLot lot = ledger.lots().get(id);
+                    return lot == null || !lot.economicOwnerId().equals(subject);
+                })) {
+            throw new IllegalArgumentException("stock departure lacks its declared current owner and container");
+        }
+        if (ReferenceContainerCustody.isReferenceContainer(state, observed.containerId())) {
+            PhysicalCustodyLease lease = state.replicaCustody().custodyByScope()
+                    .get(ReferenceContainerCustody.scopeId(observed.containerId()));
+            if (lease == null || lease.status() != PhysicalCustodyLeaseStatus.ACQUIRED
+                    || !ReferenceContainerCustody.hasOperationalCustody(state, observed.containerId())
+                    || lease.authorityEpoch() != observed.authorityEpoch()) {
+                throw new IllegalArgumentException("stock departure lacks its current physical custody epoch");
+            }
+        }
+        FungibleResourceLedger departed = ledger.departObserved(observed.sourceAccountId(),
+                observed.authorityEpoch(), observed.departedLots(), observed.remaining());
+        return state.withInventory(state.inventory().withFungibleResources(departed));
+    }
+
+    static CommandPlan planFungibleStockContribution(FrontierWorldState state,
+                                                     FungibleStockContributionObserved observed, long now) {
+        try {
+            reduceFungibleStockContribution(state, observed.contribution().economicOwnerId(), observed);
+        } catch (IllegalArgumentException invalid) {
+            return new CommandPlan.Rejected(new CommandRejection(RejectionCode.REJECTED_BY_POLICY, invalid.getMessage()));
+        }
+        return new CommandPlan.Accepted(List.of(new ProposedEvent(observed.contribution().economicOwnerId(), observed),
+                playerStockWake(observed.contribution().economicOwnerId(), observed.interactionId(), now)));
+    }
+
+    private static ProposedEvent playerStockWake(SubjectId settlementId, java.util.UUID interactionId,
+                                                 long now) {
+        return new ProposedEvent(settlementId, new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created(
+                StrategicObjectiveProcess.playerStockReconsideration(settlementId, interactionId,
+                        Math.addExact(now, 1L))));
+    }
+
+    static FrontierWorldState reduceFungibleStockContribution(FrontierWorldState state, SubjectId subject,
+                                                              FungibleStockContributionObserved observed) {
+        FungibleResourceLedger ledger = state.inventory().fungibleResources();
+        CustodyAccount account = ledger.accounts().get(observed.accountId());
+        ContainerRecord container = state.inventory().containers().get(observed.containerId());
+        ContainerSurface surface = state.inventory().surfaces().get(observed.containerId());
+        if (account != null && !(account.custody() instanceof ResourceCustody.Container custody
+                && custody.containerId().equals(observed.containerId())) || container == null
+                || surface == null || ReferenceContainerCustody.blocksCanonicalUse(state, observed.containerId())
+                || !container.ownerId().equals(subject) || !subject.equals(observed.contribution().economicOwnerId())
+                || !FrontierWorldState.depotId(subject).equals(observed.containerId())) {
+            throw new IllegalArgumentException("stock contribution lacks its declared settlement depot");
+        }
+        PhysicalCustodyLease lease = state.replicaCustody().custodyByScope()
+                .get(ReferenceContainerCustody.scopeId(observed.containerId()));
+        if (lease == null || lease.status() != PhysicalCustodyLeaseStatus.ACQUIRED
+                || !ReferenceContainerCustody.hasOperationalCustody(state, observed.containerId())
+                || lease.authorityEpoch() != observed.authorityEpoch()) {
+            throw new IllegalArgumentException("stock contribution lacks current physical custody authority");
+        }
+        FungibleResourceLedger contributed = ledger.contributeObserved(observed.accountId(),
+                observed.authorityEpoch(), observed.contribution(), observed.observed());
+        return state.withInventory(state.inventory().withFungibleResources(contributed));
+    }
+
     static FrontierWorldState reduceFungibleHandoff(FrontierWorldState state, SubjectId subject, FungibleResourceHandoffObserved observed) {
         FungibleResourceLedger ledger = state.inventory().fungibleResources(); CustodyAccount source = ledger.accounts().get(observed.sourceAccountId());
         if (source == null || !subject.equals(owner(state, source))) throw new IllegalArgumentException("fungible handoff has no owning subject");

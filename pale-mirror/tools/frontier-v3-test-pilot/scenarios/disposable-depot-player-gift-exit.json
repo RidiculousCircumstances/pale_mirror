@@ -1,0 +1,50 @@
+{
+  "schema": 1,
+  "id": "disposable_depot_player_gift_exit",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "world", "viewDistance": 6 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/clear PMTestPilot" },
+    { "type": "command", "command": "/give PMTestPilot minecraft:bread 64" }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
+      "position": { "diagnostic": { "view": "container", "id": "container:1-depot", "field": "position" } },
+      "offset": { "x": -2, "y": 1, "z": 0 }, "settleMs": 0,
+      "causalMilestone": "ordinary_player_reaches_owned_depot" },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:1-depot",
+      "expect": { "status": "ok", "surface": "ACTIVE", "custody": { "status": "ACQUIRED" } },
+      "timeoutMs": 30000, "causalMilestone": "depot_has_current_physical_custody" },
+    { "type": "open_container",
+      "position": { "diagnostic": { "view": "container", "id": "container:1-depot", "field": "position" } },
+      "timeoutMs": 15000, "causalMilestone": "player_opens_owned_chest" },
+    { "type": "quick_move_from_inventory", "item": "minecraft:bread", "count": 64,
+      "timeoutMs": 15000, "causalMilestone": "player_gifts_bread_through_normal_click" },
+    { "type": "wait_until_diagnostic", "view": "resource", "id": "custody:container-1-depot",
+      "expect": { "status": "ok", "quantity": 128, "bindingCount": 2 },
+      "timeoutMs": 30000, "causalMilestone": "gift_owned_and_bound_at_depot" },
+    { "type": "quick_move_from_container", "item": "minecraft:bread", "count": 64,
+      "timeoutMs": 15000, "causalMilestone": "player_removes_bread_without_slot_provenance_requirement" },
+    { "type": "wait_until_diagnostic", "view": "resource", "id": "custody:container-1-depot",
+      "expect": { "status": "ok", "quantity": 64, "bindingCount": 1 },
+      "timeoutMs": 30000, "causalMilestone": "depot_account_debited_once" },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:1-depot",
+      "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" },
+        "custody": { "status": "ACQUIRED", "unresolvedReason": "" } },
+      "timeoutMs": 30000, "causalMilestone": "physical_depot_remains_current" }
+  ],
+  "assertions": [
+    { "after": 5, "view": "resource", "id": "custody:container-1-depot",
+      "expect": { "status": "ok", "quantity": 128, "bindingCount": 2 } },
+    { "after": 7, "view": "resource", "id": "custody:container-1-depot",
+      "expect": { "status": "ok", "quantity": 64, "bindingCount": 1 } },
+    { "after": 8, "view": "container", "id": "container:1-depot",
+      "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" },
+        "custody": { "status": "ACQUIRED", "unresolvedReason": "" } } }
+  ],
+  "frames": [
+    { "after": 4, "name": "player-gift-in-owned-depot", "presentation": "player" },
+    { "after": 6, "name": "player-exit-from-owned-depot", "presentation": "player" }
+  ]
+}

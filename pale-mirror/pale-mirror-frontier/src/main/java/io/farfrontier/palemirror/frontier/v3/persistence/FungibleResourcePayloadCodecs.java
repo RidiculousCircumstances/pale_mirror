@@ -24,6 +24,7 @@ final class FungibleResourcePayloadCodecs {
 
     static PayloadCodecs observationCodecs() {
         return new PayloadCodecs(List.of(new FungibleStackLayoutObservedCodec(), new FungibleResourceHandoffObservedCodec(),
+                new FungibleStockDepartureObservedCodec(), new FungibleStockContributionObservedCodec(),
                 new FungibleStackBindingsReleasedCodec()));
     }
 
@@ -78,6 +79,70 @@ final class FungibleResourcePayloadCodecs {
                 readFungibleAccount(input), input.readLong(), input.readLong(), readFungibleQuantities(input), readFungibleQuantities(input),
                 readFungibleBindings(input), readFungibleBindings(input), readSubjects(input), readString(input),
                 input.readBoolean() ? java.util.Optional.of(readDiagnosticTuple(input)) : java.util.Optional.empty())); }
+    }
+
+    private static final class FungibleStockDepartureObservedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.fungible_stock_departure_observed"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
+            FungibleStockDepartureObserved observed = (FungibleStockDepartureObserved) payload;
+            writeSubject(output, observed.sourceAccountId()); writeSubject(output, observed.containerId());
+            writeSubject(output, observed.economicOwnerId()); output.writeLong(observed.authorityEpoch());
+            writeString(output, observed.playerId().toString()); writeString(output, observed.interactionId().toString());
+            writeFungibleQuantities(output, observed.departedLots()); output.writeShort(observed.remaining().size());
+            for (FungiblePhysicalObservation.Stack stack : observed.remaining()) {
+                writePhysicalStackAddress(output, stack.address()); writeString(output, stack.itemKind()); output.writeByte(stack.quantity());
+            }
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
+            SubjectId account = readSubject(input).value(); SubjectId container = readSubject(input).value();
+            SubjectId owner = readSubject(input).value(); long epoch = input.readLong();
+            java.util.UUID player = java.util.UUID.fromString(readString(input));
+            java.util.UUID interaction = java.util.UUID.fromString(readString(input));
+            Map<SubjectId, Integer> lots = readFungibleQuantities(input);
+            int count = input.readUnsignedShort();
+            if (count > FungibleResourceLedger.MAX_BINDINGS) throw new IllegalArgumentException("invalid stock departure stack count");
+            List<FungiblePhysicalObservation.Stack> remaining = new ArrayList<>();
+            for (int index = 0; index < count; index++) remaining.add(new FungiblePhysicalObservation.Stack(
+                    readPhysicalStackAddress(input), readString(input), input.readUnsignedByte()));
+            return new FungibleStockDepartureObserved(account, container, owner, epoch, player, interaction, lots, remaining);
+        }); }
+    }
+
+    private static final class FungibleStockContributionObservedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.fungible_stock_contribution_observed"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(output -> {
+            FungibleStockContributionObserved observed = (FungibleStockContributionObserved) payload;
+            ResourceLot lot = observed.contribution();
+            writeSubject(output, observed.accountId()); writeSubject(output, observed.containerId());
+            output.writeLong(observed.authorityEpoch());
+            writeString(output, observed.playerId().toString()); writeString(output, observed.interactionId().toString());
+            writeSubject(output, lot.id()); writeSubject(output, lot.economicOwnerId());
+            writeString(output, lot.itemKind()); output.writeShort(lot.quantity());
+            writeString(output, lot.provenance()); output.writeByte(lot.lineage().size());
+            for (SubjectId ancestor : lot.lineage()) writeSubject(output, ancestor);
+            output.writeShort(observed.observed().size());
+            for (FungiblePhysicalObservation.Stack stack : observed.observed()) {
+                writePhysicalStackAddress(output, stack.address()); writeString(output, stack.itemKind());
+                output.writeByte(stack.quantity());
+            }
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, input -> {
+            SubjectId account = readSubject(input).value(); SubjectId container = readSubject(input).value();
+            long epoch = input.readLong(); java.util.UUID player = java.util.UUID.fromString(readString(input));
+            java.util.UUID interaction = java.util.UUID.fromString(readString(input));
+            SubjectId id = readSubject(input).value(); SubjectId owner = readSubject(input).value();
+            String kind = readString(input); int quantity = input.readUnsignedShort(); String provenance = readString(input);
+            int ancestorCount = input.readUnsignedByte();
+            List<SubjectId> ancestors = new ArrayList<>();
+            for (int index = 0; index < ancestorCount; index++) ancestors.add(readSubject(input).value());
+            ResourceLot lot = new ResourceLot(id, owner, kind, quantity, provenance, ancestors);
+            int count = input.readUnsignedShort();
+            if (count == 0 || count > FungibleResourceLedger.MAX_BINDINGS) throw new IllegalArgumentException("invalid stock contribution stack count");
+            List<FungiblePhysicalObservation.Stack> stacks = new ArrayList<>();
+            for (int index = 0; index < count; index++) stacks.add(new FungiblePhysicalObservation.Stack(
+                    readPhysicalStackAddress(input), readString(input), input.readUnsignedByte()));
+            return new FungibleStockContributionObserved(account, container, epoch, player, interaction, lot, stacks);
+        }); }
     }
 
     private static final class FungibleStackBindingsReleasedCodec implements PayloadCodec {

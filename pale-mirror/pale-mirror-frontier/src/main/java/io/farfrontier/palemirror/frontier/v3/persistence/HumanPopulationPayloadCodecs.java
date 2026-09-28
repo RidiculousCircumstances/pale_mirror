@@ -14,6 +14,67 @@ final class HumanPopulationPayloadCodecs {
     private static final int BORN_FORMAT = 0x52424f32;
     private HumanPopulationPayloadCodecs() { }
 
+    static PayloadCodec needIntegrated() {
+        return new PayloadCodec() {
+            @Override public String type() { return "frontier.resident_need_integrated"; }
+            @Override public byte[] encode(FrontierPayload payload) {
+                return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+                    ResidentNeedIntegrated value = (ResidentNeedIntegrated) payload;
+                    FrontierWorldPayloadCodecs.writeSubject(output, value.residentId());
+                    output.writeLong(value.atTick()); output.writeInt(value.previousDay());
+                    output.writeInt(value.integratedDay()); output.writeInt(value.hungerDeficit());
+                });
+            }
+            @Override public FrontierPayload decode(byte[] bytes) {
+                return FrontierWorldPayloadCodecs.decodeProduction(bytes, input ->
+                        new ResidentNeedIntegrated(FrontierWorldPayloadCodecs.readSubject(input).value(),
+                                input.readLong(), input.readInt(), input.readInt(), input.readInt()));
+            }
+        };
+    }
+
+    static PayloadCodec mealStarted() {
+        return new PayloadCodec() {
+            @Override public String type() { return "frontier.resident_meal_started"; }
+            @Override public byte[] encode(FrontierPayload payload) {
+                return FrontierWorldPayloadCodecs.encodeProduction(output ->
+                        HumanPopulationStateCodec.writeMeal(output, ((ResidentMealStarted) payload).meal()));
+            }
+            @Override public FrontierPayload decode(byte[] bytes) {
+                return FrontierWorldPayloadCodecs.decodeProduction(bytes,
+                        input -> new ResidentMealStarted(HumanPopulationStateCodec.readMeal(input)));
+            }
+        };
+    }
+
+    static PayloadCodec mealColdStep() {
+        return new PayloadCodec() {
+            @Override public String type() { return "frontier.resident_meal_cold_step"; }
+            @Override public byte[] encode(FrontierPayload payload) {
+                return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+                    ResidentMealColdStep value = (ResidentMealColdStep) payload;
+                    FrontierWorldPayloadCodecs.writeSubject(output, value.residentId());
+                    output.writeByte(FrontierWireTags.tag(value.expectedPhase()));
+                    output.writeLong(value.atTick());
+                    output.writeBoolean(value.nextSurface().isPresent());
+                    if (value.nextSurface().isPresent()) FrontierWorldPayloadCodecs.writePosition(output,
+                            value.nextSurface().orElseThrow().support());
+                });
+            }
+            @Override public FrontierPayload decode(byte[] bytes) {
+                return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
+                    var resident = FrontierWorldPayloadCodecs.readSubject(input).value();
+                    var phase = FrontierWireTags.require(ResidentMeal.Phase.class, input.readUnsignedByte());
+                    long atTick = input.readLong();
+                    var next = input.readBoolean() ? java.util.Optional.of(
+                            new SurfaceAnchor(FrontierWorldPayloadCodecs.readPosition(input)))
+                            : java.util.Optional.<SurfaceAnchor>empty();
+                    return new ResidentMealColdStep(resident, phase, atTick, next);
+                });
+            }
+        };
+    }
+
     static PayloadCodec born() {
         return new PayloadCodec() {
             @Override public String type() { return "frontier.resident_born"; }

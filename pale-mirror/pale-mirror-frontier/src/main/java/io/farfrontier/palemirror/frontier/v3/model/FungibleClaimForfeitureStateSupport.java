@@ -133,7 +133,7 @@ public final class FungibleClaimForfeitureStateSupport {
                 yield hivePlan(state, job, claim);
             }
             case SETTLEMENT_RATION -> throw new IllegalArgumentException("physical theft cannot mix a provision with another owner kind");
-            case SUPPLY_CONTRACT, EXTERNAL_RESERVATION ->
+            case RESIDENT_MEAL, SUPPLY_CONTRACT, EXTERNAL_RESERVATION ->
                     throw new IllegalArgumentException("physical theft has no declared retirement transition for " + claim.purpose());
         }).toList();
     }

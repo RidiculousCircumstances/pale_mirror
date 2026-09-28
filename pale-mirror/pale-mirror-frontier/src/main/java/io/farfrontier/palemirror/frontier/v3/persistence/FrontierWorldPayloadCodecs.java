@@ -26,7 +26,9 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
     static PayloadCodecs populationCodecs() { return PayloadCodecs.merge(new PayloadCodecs(List.of(
             HumanPopulationPayloadCodecs.born(), HumanPopulationPayloadCodecs.migrated(), HumanPopulationPayloadCodecs.birthStarted(), HumanPopulationPayloadCodecs.birthCancelled(),
             HumanPopulationPayloadCodecs.migrationStarted(), HumanPopulationPayloadCodecs.migrationAdvanced(), HumanPopulationPayloadCodecs.transitAdvanced(),
-            HumanPopulationPayloadCodecs.migrationBlocked(), HumanPopulationPayloadCodecs.migrationResumed(), SettlementProvisionPayloadCodecs.legacyStarted(),
+            HumanPopulationPayloadCodecs.migrationBlocked(), HumanPopulationPayloadCodecs.migrationResumed(),
+            HumanPopulationPayloadCodecs.needIntegrated(), HumanPopulationPayloadCodecs.mealStarted(),
+            HumanPopulationPayloadCodecs.mealColdStep(), SettlementProvisionPayloadCodecs.legacyStarted(),
             SettlementProvisionPayloadCodecs.started(), SettlementProvisionPayloadCodecs.consumed(), SettlementProvisionPayloadCodecs.resolved(),
             HumanHealthPayloadCodecs.residentTransition(), HumanHealthPayloadCodecs.quarantineTransition(),
             MedicalTreatmentPayloadCodecs.started(), MedicalTreatmentPayloadCodecs.transition())),

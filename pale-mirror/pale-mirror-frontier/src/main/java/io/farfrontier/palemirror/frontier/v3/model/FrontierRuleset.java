@@ -16,7 +16,15 @@ import java.util.Objects;
  * Limits which merely protect memory or bounded algorithms do not belong here.</p>
  */
 public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spatial spatial, Rates rates,
-                              FacilityCapacity facilityCapacity, Combat combat, HiveCommand hiveCommand) {
+                              FacilityCapacity facilityCapacity, Combat combat, HiveCommand hiveCommand,
+                              ResidentLife residentLife) {
+    /** Retains exact historical R4-and-earlier digests while those selectors remain installed. */
+    public FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spatial spatial, Rates rates,
+                           FacilityCapacity facilityCapacity, Combat combat, HiveCommand hiveCommand) {
+        this(id, schemaVersion, cadence, spatial, rates, facilityCapacity, combat, hiveCommand,
+                ResidentLife.initial());
+    }
+
     public FrontierRuleset {
         if (id == null || id.isBlank() || !id.matches("[a-z0-9][a-z0-9._-]*")) {
             throw new IllegalArgumentException("ruleset id must be a stable lowercase identifier");
@@ -28,6 +36,7 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
         facilityCapacity = Objects.requireNonNull(facilityCapacity, "facility capacity");
         combat = Objects.requireNonNull(combat, "combat");
         hiveCommand = Objects.requireNonNull(hiveCommand, "hive command");
+        residentLife = Objects.requireNonNull(residentLife, "resident life");
     }
 
     /** SHA-256 of the complete stable selector and canonical field values. */
@@ -42,7 +51,31 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
 
     private String canonicalText() {
         return id + '|' + schemaVersion + '|' + cadence.canonicalText() + '|' + spatial.canonicalText() + '|' + rates.canonicalText()
-                + '|' + facilityCapacity.canonicalText() + '|' + combat.canonicalText() + '|' + hiveCommand.canonicalText();
+                + '|' + facilityCapacity.canonicalText() + '|' + combat.canonicalText() + '|' + hiveCommand.canonicalText()
+                + (schemaVersion >= 7 ? "|" + residentLife.canonicalText() : "");
+    }
+
+    /** Balance and settlement policy for exact resident activities. No competing due-time queue. */
+    public record ResidentLife(int dayTicks, int workTicks, long hungerUnitTicks,
+                               int hungryThreshold, int starvingThreshold,
+                               int breadReliefUnits, int maxHungerUnits) {
+        public ResidentLife {
+            if (dayTicks < 2 || workTicks < 1 || workTicks >= dayTicks || hungerUnitTicks < 1
+                    || hungryThreshold != 1 || starvingThreshold != ResidentNutrition.STARVING_AFTER_MISSED_CYCLES
+                    || breadReliefUnits < 1 || maxHungerUnits < starvingThreshold
+                    || maxHungerUnits > ResidentNutrition.MAX_HUNGER_UNITS) {
+                throw new IllegalArgumentException("resident life policy has invalid schedule or hunger bounds");
+            }
+        }
+
+        public static ResidentLife initial() {
+            return new ResidentLife(24_000, 12_000, 24_000L, 1, 3, 1, 255);
+        }
+
+        private String canonicalText() {
+            return dayTicks + "," + workTicks + "," + hungerUnitTicks + "," + hungryThreshold
+                    + "," + starvingThreshold + "," + breadReliefUnits + "," + maxHungerUnits;
+        }
     }
 
     /** All elapsed-time choices used by the canonical process layer. */

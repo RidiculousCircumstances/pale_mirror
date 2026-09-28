@@ -114,7 +114,7 @@ public final class HumanPopulationStateSupport {
             throw new IllegalArgumentException("resident birth lost required housing before completion");
         }
         var actors = new LinkedHashMap<>(state.actorLocations()); actors.put(job.resident().id(), ActorLocation.standingOn(new SurfaceAnchor(job.position())));
-        return copy(state, actors, state.humanPopulation().completeBirth(job.id()));
+        return copy(state, actors, state.humanPopulation().completeBirth(job.id(), state.bootstrap().ruleset().residentLife()));
     }
 
     static FrontierWorldState cancelBirth(FrontierWorldState state, SubjectId jobId) {

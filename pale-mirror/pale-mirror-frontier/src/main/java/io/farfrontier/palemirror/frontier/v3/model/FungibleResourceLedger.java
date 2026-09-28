@@ -708,33 +708,33 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
     /** Consumes a claimed HOT portion and atomically replaces its observed remaining layout. */
     public FungibleResourceLedger destroyObserved(SubjectId accountId, long authorityEpoch, Map<SubjectId, Integer> lotQuantities,
                                                   Map<SubjectId, Integer> claimQuantities, List<FungiblePhysicalObservation.Stack> remaining) {
-        CustodyAccount account = requireAccount(accountId); requireSubset(account.lotQuantities(), lotQuantities, "observed destruction lots");
-        requireOptionalSubset(account.claimQuantities(), claimQuantities, "observed destruction claims");
-        if (authorityEpoch < 1 || sum(lotQuantities) != sum(claimQuantities)) throw new IllegalArgumentException("observed destruction must consume one claimed exact portion");
-        List<PhysicalStackBinding> current = bindings.values().stream().filter(binding -> binding.accountId().equals(account.id())).toList();
-        if (current.isEmpty() || current.stream().anyMatch(binding -> binding.authorityEpoch() != authorityEpoch)) {
-            throw new IllegalArgumentException("observed destruction has no current physical authority");
-        }
-        Map<SubjectId, ResourceLot> nextLots = new HashMap<>(lots); lotQuantities.forEach((id, quantity) -> {
-            ResourceLot lot = requireLot(id); int remainingQuantity = lot.quantity() - quantity;
-            if (remainingQuantity == 0) nextLots.remove(id); else nextLots.put(id, lot.withQuantity(remainingQuantity));
-        });
-        Map<SubjectId, ClaimAllocation> nextClaims = new HashMap<>(claims); claimQuantities.forEach((id, quantity) -> {
-            ClaimAllocation claim = claims.get(id); int remainingQuantity = claim.quantity() - quantity;
-            if (!claim.lotQuantities().isEmpty() && remainingQuantity != 0) throw new IllegalArgumentException("pinned claim cannot be partly destroyed");
-            if (remainingQuantity == 0) nextClaims.remove(id); else nextClaims.put(id, claim.withQuantity(remainingQuantity));
-        });
-        Map<SubjectId, Integer> remainingLots = subtract(account.lotQuantities(), lotQuantities);
-        Map<SubjectId, Integer> remainingClaims = subtract(account.claimQuantities(), claimQuantities);
-        Map<SubjectId, CustodyAccount> nextAccounts = new HashMap<>(accounts);
-        if (remainingLots.isEmpty()) {
-            if (!remaining.isEmpty()) throw new IllegalArgumentException("empty observed destruction account retains physical stacks");
-            nextAccounts.remove(account.id());
-            return new FungibleResourceLedger(nextLots, nextClaims, nextAccounts, withoutBindingsFor(account.id()));
-        }
-        nextAccounts.put(account.id(), new CustodyAccount(account.id(), account.custody(), remainingLots, remainingClaims));
-        FungibleResourceLedger reduced = new FungibleResourceLedger(nextLots, nextClaims, nextAccounts, withoutBindingsFor(account.id()));
-        return reduced.rebind(account.id(), authorityEpoch, FungiblePhysicalObservation.bind(reduced, account.id(), authorityEpoch, remaining));
+        return FungibleObservedStockTransitions.destroy(this, accountId, authorityEpoch,
+                lotQuantities, claimQuantities, remaining);
+    }
+
+    /**
+     * Accounts an observed external stock exit after the owning process has released every
+     * affected claim. Unlike recipe consumption, no claim or player-inventory binding is
+     * required: the physically witnessed container remainder is the postcondition. This
+     * method never guesses that an unexplained layout delta was caused by a player.
+     */
+    public FungibleResourceLedger departObserved(SubjectId accountId, long authorityEpoch,
+                                                 Map<SubjectId, Integer> departedLots,
+                                                 List<FungiblePhysicalObservation.Stack> remaining) {
+        return FungibleObservedStockTransitions.depart(this, accountId, authorityEpoch,
+                departedLots, remaining);
+    }
+
+    /**
+     * Accepts an observed player contribution into one already-owned HOT depot. The new
+     * lot is a settlement gift, not a resurrection of a previously withdrawn lot; its fresh
+     * identity and economic owner are checked before the complete post-click layout is bound.
+     */
+    public FungibleResourceLedger contributeObserved(SubjectId accountId, long authorityEpoch,
+                                                     ResourceLot contribution,
+                                                     List<FungiblePhysicalObservation.Stack> observed) {
+        return FungibleObservedStockTransitions.contribute(this, accountId, authorityEpoch,
+                contribution, observed);
     }
 
     /**

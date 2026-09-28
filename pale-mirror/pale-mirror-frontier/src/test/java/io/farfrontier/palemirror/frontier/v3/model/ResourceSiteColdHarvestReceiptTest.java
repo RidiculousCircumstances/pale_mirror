@@ -12,6 +12,7 @@ import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess;
 import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteProcess;
 import io.farfrontier.palemirror.frontier.v3.process.ProductionProcess;
+import io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess;
 import io.farfrontier.palemirror.frontier.v3.process.StrategicObjectiveProcess;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import org.junit.jupiter.api.Test;
@@ -24,6 +25,66 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResourceSiteColdHarvestReceiptTest {
+    @Test
+    void emptyHandFarmerYieldsAndResumesSameFieldJobAfterColdMeal() {
+        SubjectId site = new SubjectId("site:1-wheat-field");
+        SubjectId owner = new SubjectId("settlement:1");
+        FrontierWorldState state = matureField();
+        SubjectId depot = FrontierWorldState.depotId(owner);
+        SubjectId accountId = ReferenceContainerCustody.scopeId(depot);
+        SubjectId breadId = new SubjectId("lot:field-yield-meal-bread");
+        FungibleResourceLedger prior = state.inventory().fungibleResources();
+        var lots = new java.util.LinkedHashMap<>(prior.lots());
+        lots.put(breadId, new ResourceLot(breadId, owner, "minecraft:bread", 4, "test", List.of()));
+        var accounts = new java.util.LinkedHashMap<>(prior.accounts());
+        CustodyAccount account = accounts.get(accountId);
+        var quantities = new java.util.LinkedHashMap<>(account.lotQuantities());
+        quantities.put(breadId, 4);
+        accounts.put(accountId, new CustodyAccount(accountId, account.custody(), quantities, account.claimQuantities()));
+        state = state.withInventory(state.inventory().withFungibleResources(new FungibleResourceLedger(
+                lots, prior.claims(), accounts, prior.bindings())));
+        List<ProposedEvent> opportunity = StrategicObjectiveProcess.planResourceHarvestOpportunity(state,
+                StrategicObjectiveProcess.resourceHarvestOpportunity(state, state.resourceSites().site(site), 22_000L));
+        state = StrategicObjectiveProcess.reduceObjective(state, owner,
+                (StrategicObjectiveSelected) opportunity.getFirst().payload());
+        state = StrategicObjectiveProcess.reduceTask(state, owner,
+                (StrategicTaskPlanned) opportunity.get(1).payload());
+        StrategicTask task = state.strategicPlans().tasks().values().stream()
+                .filter(candidate -> candidate.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE).findFirst().orElseThrow();
+        List<ProposedEvent> planned = ResourceSiteHarvestProcess.plan(state,
+                ResourceSiteHarvestProcess.start(task, 22_100L));
+        state = StrategicObjectiveProcess.reduceTaskTransition(state, owner,
+                (StrategicTaskTransition) planned.getFirst().payload());
+        ResourceSiteHarvestJob job = ((ResourceSiteHarvestStarted) planned.get(1).payload()).job();
+        state = ResourceSiteHarvestProcess.reduceStarted(state, site, (ResourceSiteHarvestStarted) planned.get(1).payload());
+        state = prepareThroughRuntime(state, site, (PhysicalIntentPrepared) planned.get(2).payload());
+        ScheduledAction continuation = ((ScheduleEffect.Created) planned.get(3).payload()).action();
+        state = state.withChanges(FrontierWorldStateUpdate.begin()
+                .humanPopulation(state.humanPopulation().accrueHunger(job.workerId(), 24_000L)));
+        assertEquals(ResidentWorkYield.Status.READY, ResidentWorkYield.assess(state,
+                HumanAssignmentProjection.compile(state).assignment(job.workerId())).status());
+        ResidentMealStarted meal = ResidentMealProcess.selectSourceAtYield(state, job.workerId(), 24_000L).orElseThrow();
+        assertEquals(java.util.Optional.of(job.id()), meal.meal().retainedWorkOwner());
+        state = ResidentMealProcess.reduceStarted(state, job.workerId(), meal);
+        assertTrue(ResourceSiteHarvestProcess.coldProgressHeld(state, continuation));
+        assertEquals(List.of(new ScheduleEffect.Rescheduled(continuation.id(), continuation)),
+                ResourceSiteHarvestProcess.planColdProgress(state, continuation).stream()
+                        .map(ProposedEvent::payload).toList());
+        assertTrue(FrontierResourceSiteHarvestSceneSupport.candidate(state, job).isEmpty());
+        assertEquals(job, state.resourceSites().site(site).activeWork().orElseThrow());
+        for (int turn = 0; turn < 300 && state.humanPopulation().meals().containsKey(job.workerId()); turn++) {
+            ResidentMealColdStep step = ResidentMealProcess.planColdStep(state, job.workerId(), 24_001L + turn)
+                    .orElseThrow();
+            state = ResidentMealProcess.reduceColdStep(state, job.workerId(), step);
+        }
+        assertFalse(state.humanPopulation().meals().containsKey(job.workerId()));
+        assertEquals(job, state.resourceSites().site(site).activeWork().orElseThrow());
+        assertFalse(ResourceSiteHarvestProcess.coldProgressHeld(state, continuation));
+        assertTrue(ResourceSiteHarvestProcess.planColdProgress(state, continuation).stream()
+                .anyMatch(event -> event.payload() instanceof ResourceSiteHarvestColdGoalAdvanced),
+                "the same farmer must resume by walking from the depot, not teleporting to a crop");
+    }
+
     @Test
     void coldFieldCreditsOnlyActuallyHarvestedCellsAndCompletesZeroYield() {
         SubjectId site = new SubjectId("site:1-wheat-field");

@@ -141,6 +141,8 @@ public final class ProductionProcess {
         // A blocked scene retires its job durably before this one-shot action becomes due.
         // The consumed schedule must then be a harmless deterministic no-op, not a quarantine.
         if (job == null) return List.of();
+        if (state.humanPopulation().meals().containsKey(job.workerId()))
+            return List.of(reschedule(action, complete(job, Math.addExact(action.dueAt().ticks(), 20L))));
         if (job.bakeryWork().isPresent()) return planBakeryCompletion(state, job, action);
         Settlement settlement = settlement(state, job.settlementId()); StrategicTask task = activeTask(state, job); SettlementStructure workshop = workshop(settlement);
         if (state.structureConditions().get(workshop.id()) != StructureCondition.INTACT) return failActiveJob(state, task, settlement, workshop, job, ProductionDiagnosticProducer.FACILITY_UNAVAILABLE);

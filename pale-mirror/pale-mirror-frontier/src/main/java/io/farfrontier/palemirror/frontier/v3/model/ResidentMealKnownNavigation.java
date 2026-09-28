@@ -1,0 +1,87 @@
+package io.farfrontier.palemirror.frontier.v3.model;
+
+import io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder;
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+
+/** Ephemeral COLD route to a resident's declared depot service station. */
+public final class ResidentMealKnownNavigation {
+    private ResidentMealKnownNavigation() { }
+
+    public static List<SurfaceAnchor> path(FrontierWorldState state, ResidentMeal meal) {
+        Objects.requireNonNull(state, "meal navigation state");
+        Objects.requireNonNull(meal, "meal navigation owner");
+        ActorLocation actor = state.actorLocations().get(meal.residentId());
+        if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE)
+            throw new IllegalArgumentException("meal navigation has no living resident body");
+        return pathFrom(state, meal, actor.supportingSurface());
+    }
+
+    /** A HOT release can resume from its last witnessed body without replaying an old path. */
+    public static List<SurfaceAnchor> pathFrom(FrontierWorldState state, ResidentMeal meal, SurfaceAnchor start) {
+        Objects.requireNonNull(state, "meal navigation state");
+        Objects.requireNonNull(meal, "meal navigation owner");
+        Objects.requireNonNull(start, "meal navigation start");
+        Settlement settlement = state.bootstrap().settlements().stream()
+                .filter(value -> value.id().equals(meal.settlementId())).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("meal navigation has no retained settlement"));
+        SettlementStructure depot = settlement.structures().stream()
+                .filter(value -> value.kind() == StructureKind.DEPOT).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("meal navigation has no retained depot"));
+        SettlementDepotServicePort port = SettlementDepotServicePort.forDepot(depot);
+        if (!meal.depotId().equals(FrontierWorldState.depotId(settlement.id())))
+            throw new IllegalArgumentException("meal navigation has a foreign depot identity");
+        if (start.equals(port.serviceSurface())) return List.of(start);
+        if (start.equals(port.exteriorApproach())) return List.of(start, port.serviceSurface());
+
+        List<SurfaceAnchor> prefix = workshopExit(settlement, start);
+        SurfaceAnchor outdoorStart = prefix.getLast();
+        Set<BlockPosition> occupied = new HashSet<>();
+        for (Settlement candidate : state.bootstrap().settlements())
+            occupied.addAll(FrontierSettlementActorSlots.intactStructureOccupancy(state.bootstrap().terrain(), candidate.structures()));
+        occupied.addAll(FrontierGrayboxPlan.intactOrganOccupancy(state.bootstrap().hive().organs()));
+        clear(occupied, port.exteriorApproach());
+        clear(occupied, port.serviceSurface());
+        // Only a declared workshop exit may clear interior occupancy. An arbitrary
+        // start inside another structure is not permission to walk through its wall.
+        if (prefix.size() > 1) prefix.forEach(surface -> clear(occupied, surface));
+        state.actorLocations().forEach((id, location) -> {
+            if (!id.equals(meal.residentId()) && location.condition().status() == ActorLifeStatus.ALIVE)
+                occupied.add(location.supportingSurface().support().offset(0, 1, 0));
+        });
+        Map<TerrainColumn, SurfaceAnchor> known = SettlementPedestrianGround.localSupports(state.bootstrap(), meal.settlementId());
+        MovementOrder outdoor = new MovementOrder(meal.residentId(), meal.residentId(),
+                FrontierWireTags.tag(meal.phase()), 1L, List.of(port.exteriorApproach()),
+                TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
+        List<SurfaceAnchor> route = KnownPedestrianNavigation.route(state.bootstrap(), outdoorStart, outdoor,
+                occupied, (x, z) -> SettlementPedestrianGround.surveyedSupport(state.bootstrap(), known, x, z));
+        List<SurfaceAnchor> result = new ArrayList<>(prefix);
+        result.addAll(route.subList(1, route.size()));
+        result.add(port.serviceSurface());
+        return List.copyOf(result);
+    }
+
+    private static List<SurfaceAnchor> workshopExit(Settlement settlement, SurfaceAnchor start) {
+        for (SettlementStructure structure : settlement.structures()) {
+            if (structure.kind() != StructureKind.WORKSHOP) continue;
+            SettlementWorkshopServicePort port = SettlementWorkshopServicePort.forWorkshop(structure);
+            List<SurfaceAnchor> exit = List.of(port.workStation(), port.inputStation(),
+                    port.interiorSurface(), port.throatSurface(), port.approachSurface(), port.exteriorApproach());
+            int index = exit.indexOf(start);
+            if (index >= 0) return exit.subList(index, exit.size());
+        }
+        return List.of(start);
+    }
+
+    private static void clear(Set<BlockPosition> occupied, SurfaceAnchor surface) {
+        occupied.remove(surface.support());
+        occupied.remove(surface.support().offset(0, 1, 0));
+        occupied.remove(surface.support().offset(0, 2, 0));
+    }
+}

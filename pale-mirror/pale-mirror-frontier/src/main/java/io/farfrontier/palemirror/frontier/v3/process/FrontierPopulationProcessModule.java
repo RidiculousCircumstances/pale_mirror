@@ -259,6 +259,9 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
             case SettlementProvisionStarted started -> SettlementProvisionProcess.reduceStarted(state, event.subject(), started);
             case SettlementProvisionConsumed consumed -> SettlementProvisionProcess.reduceConsumed(state, event.subject(), consumed);
             case SettlementProvisionResolved resolved -> SettlementProvisionProcess.reduceResolved(state, event.subject(), resolved);
+            case ResidentNeedIntegrated integrated -> ResidentNeedProcess.reduce(state, event.subject(), integrated);
+            case ResidentMealStarted started -> ResidentMealProcess.reduceStarted(state, event.subject(), started);
+            case ResidentMealColdStep step -> ResidentMealProcess.reduceColdStep(state, event.subject(), step);
             case ResidentHealthTransition transition -> HumanHealthProcess.reduceResidentTransition(state, event.subject(), event.instant().ticks(), transition);
             case SettlementQuarantineTransition transition -> HumanHealthProcess.reduceQuarantineTransition(state, event.subject(), event.instant().ticks(), transition);
             case MedicalTreatmentStarted started -> MedicalTreatmentProcess.reduceStarted(state, event.subject(), started);

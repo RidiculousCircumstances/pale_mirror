@@ -28,6 +28,7 @@ final class FrontierReferenceClosure {
     static void validate(FrontierWorldState state, List<ScheduledAction> schedules) {
         FrontierDomainRelationships.verifyCurrentOwnerSurfaces();
         FrontierDomainRelationships.validate(state);
+        ResidentMealReferenceClosure.validate(state);
         validateExactPhysicalCustody(state);
         validateScheduledSubjects(state, schedules);
     }
