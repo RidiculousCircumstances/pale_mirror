@@ -500,7 +500,8 @@ public final class FrontierReadabilityPlan {
             case ROUTE_BLOCKED -> "BAKER PAUSED · ROUTE BLOCKED";
             case AMBIGUOUS_EFFECT -> "BAKER PAUSED · TRANSFER UNCERTAIN";
             case MACHINE_UNAVAILABLE -> "BAKER PAUSED · STATION UNAVAILABLE";
-        }).orElseGet(() -> switch (work.phase()) {
+        }).orElseGet(() -> ProductionOutputCapacity.depotDeliveryUnavailable(state, job)
+                ? "BAKER PAUSED · STORAGE FULL" : switch (work.phase()) {
             case DEPOT_PICKUP -> "BAKER · WHEAT PICKUP";
             case STATION_LOAD -> "BAKER · STATION INPUT";
             case PROCESSING -> "BAKING · " + work.completedWorkTicks() + " / "

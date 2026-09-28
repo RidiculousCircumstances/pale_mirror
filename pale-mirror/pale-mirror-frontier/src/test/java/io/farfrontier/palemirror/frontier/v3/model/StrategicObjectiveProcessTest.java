@@ -23,6 +23,50 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class StrategicObjectiveProcessTest {
     @Test
+    void fullDepotSuppressesNewBreadWorkAndRetainsASelectedMarketDemand() {
+        FrontierWorldState initial = initial("frontier:full-depot-bread-admission", 407L);
+        SubjectId owner = initial.bootstrap().settlements().getFirst().id();
+        List<ProposedEvent> selected = StrategicObjectiveProcess.plan(initial,
+                StrategicObjectiveProcess.review(owner, 1, 60L));
+        StrategicObjective objective = selected.stream().map(ProposedEvent::payload)
+                .filter(StrategicObjectiveSelected.class::isInstance)
+                .map(StrategicObjectiveSelected.class::cast).map(StrategicObjectiveSelected::objective)
+                .filter(value -> value.kind() == StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD)
+                .findFirst().orElseThrow();
+        StrategicTask task = selected.stream().map(ProposedEvent::payload)
+                .filter(StrategicTaskPlanned.class::isInstance)
+                .map(StrategicTaskPlanned.class::cast).map(StrategicTaskPlanned::task)
+                .filter(value -> value.objectiveId().equals(objective.id())).findFirst().orElseThrow();
+        MarketDemand demand = selected.stream().map(ProposedEvent::payload)
+                .filter(MarketDemandOpened.class::isInstance)
+                .map(MarketDemandOpened.class::cast).map(MarketDemandOpened::demand)
+                .findFirst().orElseThrow();
+        FrontierWorldState pending = StrategicObjectiveProcess.reduceTask(
+                StrategicObjectiveProcess.reduceObjective(initial, owner, new StrategicObjectiveSelected(objective)),
+                owner, new StrategicTaskPlanned(task));
+        pending = MarketClearingProcess.reduceOpened(pending, owner, new MarketDemandOpened(demand));
+        SubjectId depot = FrontierWorldState.depotId(owner);
+        ExactInventory inventory = pending.inventory();
+        while (pending.withInventory(inventory).firstFreeContainerSlot(depot).isPresent()) {
+            int slot = pending.withInventory(inventory).firstFreeContainerSlot(depot).orElseThrow();
+            inventory = inventory.store(new ExactItemStack(new SubjectId("item:bread-capacity-" + slot), owner,
+                    "minecraft:stone", 1, new InventoryCustody.ContainerSlot(depot, slot)));
+        }
+        FrontierWorldState full = pending.withInventory(inventory);
+        assertTrue(!ProductionOutputCapacity.canAdmitBreadBatch(full, owner));
+        assertTrue(StrategicObjectiveProcess.plan(full, StrategicObjectiveProcess.review(owner, 2, 61L)).stream()
+                .noneMatch(event -> event.payload() instanceof StrategicObjectiveSelected value
+                        && value.objective().kind() == StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD));
+        var clearing = MarketClearingProcess.clear(demand, 1, 160L);
+        List<ProposedEvent> waiting = MarketClearingProcess.plan(full, clearing);
+        assertEquals(1, waiting.size());
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created.class,
+                waiting.getFirst().payload());
+        assertEquals(StrategicTaskStatus.PENDING, full.strategicPlans().tasks().get(task.id()).status());
+        assertTrue(full.productionJobs().isEmpty());
+    }
+
+    @Test
     void fullDepotWaitsTruthfullyAndReadyFieldResumesAfterCapacityReturns() {
         FrontierWorldState state = ResourceSiteHarvestProcessTest.ready(initial("frontier:full-depot-harvest", 407L));
         Settlement settlement = state.bootstrap().settlements().getFirst();

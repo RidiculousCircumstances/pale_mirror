@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
+import io.farfrontier.palemirror.frontier.v3.process.BakeryProcess;
 import io.farfrontier.palemirror.frontier.v3.process.ProductionProcess;
 import io.farfrontier.palemirror.frontier.v3.process.StrategicObjectiveProcess;
 import org.junit.jupiter.api.Test;
@@ -17,6 +18,61 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 class BakeryColdVerticalTest {
+    @Test
+    void fullDepotWaitsForColdBreadDeliveryWithoutQuarantiningAndResumesAfterSpaceReturns() {
+        FrontierWorldState state = ProductionProcessTest.productionTask(FrontierWorldState.initial(
+                FrontierBootstrapper.create(new WorldId("frontier:bakery-full-depot-delivery"), 41L)), StrategicTaskStatus.PENDING);
+        StrategicTask task = state.strategicPlans().tasks().values().iterator().next();
+        ProductionStarted started = ProductionProcess.planStart(state, ProductionProcess.start(task, 200L)).stream()
+                .map(ProposedEvent::payload).filter(ProductionStarted.class::isInstance)
+                .map(ProductionStarted.class::cast).findFirst().orElseThrow();
+        state = StrategicObjectiveProcess.reduceTaskTransition(state, task.ownerId(),
+                new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE));
+        state = ProductionProcess.reduceStarted(state, task.ownerId(), started);
+        ProductionJob job = started.job();
+        long due = 300L;
+        for (int turn = 0; turn < 700; turn++, due += 20L) {
+            ProductionJob current = state.productionJobs().get(job.id());
+            if (current.bakeryWork().orElseThrow().phase() == BakeryWorkState.Phase.DEPOT_DELIVERY
+                    && BakeryKnownNavigation.path(state, current).size() == 1) break;
+            BakeryColdStep step = ProductionProcess.planCompletion(state, ProductionProcess.complete(current, due)).stream()
+                    .map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
+                    .map(BakeryColdStep.class::cast).findFirst().orElseThrow();
+            state = ProductionProcess.reduceBakeryColdStep(state, task.ownerId(), step);
+        }
+        assertEquals(BakeryWorkState.Phase.DEPOT_DELIVERY,
+                state.productionJobs().get(job.id()).bakeryWork().orElseThrow().phase());
+        assertEquals(1, BakeryKnownNavigation.path(state, state.productionJobs().get(job.id())).size());
+        SubjectId depot = FrontierWorldState.depotId(task.ownerId());
+        ExactInventory inventory = state.inventory();
+        while (state.withInventory(inventory).firstFreeContainerSlot(depot).isPresent()) {
+            int slot = state.withInventory(inventory).firstFreeContainerSlot(depot).orElseThrow();
+            inventory = inventory.store(new ExactItemStack(new SubjectId("item:bakery-capacity-" + slot), task.ownerId(),
+                    "minecraft:stone", 1, new InventoryCustody.ContainerSlot(depot, slot)));
+        }
+        FrontierWorldState full = state.withInventory(inventory);
+        assertFalse(full.inventory().canReceiveFungible(depot, "minecraft:bread", job.outputCount()));
+        assertEquals(Optional.of("DEPOT_STORAGE_FULL"), BakeryProcess.coldBlocker(full, full.productionJobs().get(job.id())));
+        var action = ProductionProcess.complete(job, due);
+        List<ProposedEvent> deferred = ProductionProcess.planCompletion(full, action);
+        var retry = assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class,
+                deferred.getFirst().payload()).replacement();
+        assertEquals(1, deferred.size());
+        assertEquals(action.id(), retry.id());
+        assertEquals(due + full.bootstrap().ruleset().cadence().strategicReviewInterval(), retry.dueAt().ticks());
+        SubjectId freed = inventory.items().values().stream().filter(item -> item.itemKind().equals("minecraft:stone"))
+                .findFirst().orElseThrow().id();
+        FrontierWorldState recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(full));
+        FrontierWorldState withSpace = recovered.withInventory(recovered.inventory().consumeOne(freed));
+        BakeryColdStep deliver = ProductionProcess.planCompletion(withSpace, retry).stream()
+                .map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
+                .map(BakeryColdStep.class::cast).findFirst().orElseThrow();
+        assertEquals(BakeryColdStep.Action.DELIVER, deliver.action());
+        FrontierWorldState completed = ProductionProcess.reduceBakeryColdStep(withSpace, task.ownerId(), deliver);
+        assertFalse(completed.productionJobs().containsKey(job.id()));
+        assertEquals(StrategicTaskStatus.COMPLETED, completed.strategicPlans().tasks().get(task.id()).status());
+    }
+
     @Test
     void hotReleasedBakerCanRouteFromObservedRoadSupport() {
         FrontierWorldState state = ProductionProcessTest.productionTask(FrontierWorldState.initial(

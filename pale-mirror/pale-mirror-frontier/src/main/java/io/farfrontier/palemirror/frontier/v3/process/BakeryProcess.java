@@ -126,6 +126,7 @@ public final class BakeryProcess {
             return Optional.of("STATION_PHYSICAL_AUTHORITY");
         if (ReferenceContainerCustody.blocksCanonicalUse(state, station.containerId()))
             return Optional.of("STATION_CONFLICT");
+        if (ProductionOutputCapacity.depotDeliveryUnavailable(state, job)) return Optional.of("DEPOT_STORAGE_FULL");
         return Optional.empty();
     }
 
@@ -164,8 +165,6 @@ public final class BakeryProcess {
             case DEPOT_DELIVERY -> BakeryColdStep.Action.DELIVER;
             case DELIVERED -> throw new IllegalStateException("delivered bakery work is handled before routing");
         };
-        if (action == BakeryColdStep.Action.DELIVER && job.inputHold() instanceof ProductionInputHold.Materialized
-                && state.firstFreeContainerSlot(FrontierWorldState.depotId(job.settlementId())).isEmpty()) return Optional.empty();
         return Optional.of(new BakeryColdStep(job.id(), work.phase(), action, current));
     }
 

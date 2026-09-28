@@ -386,7 +386,8 @@ public final class StrategicObjectiveProcess {
         }
         // Food may preempt a pending containment task that is waiting for an infirmary reagent,
         // but never a physical effect already under execution.
-        if (workshop && wheat && reserveShort) {
+        boolean breadCapacity = ProductionOutputCapacity.canAdmitBreadBatch(state, settlement.id());
+        if (workshop && wheat && breadCapacity && reserveShort) {
             return Optional.of(new Candidate(StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, Optional.empty(), Long.MAX_VALUE - 1L));
         }
         Optional<SettlementStructure> infirmary = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.INFIRMARY)
@@ -397,7 +398,7 @@ public final class StrategicObjectiveProcess {
                     .sorted(Candidate.HIGHEST_UTILITY).findFirst();
             if (containment.isPresent()) return containment;
         }
-        if (workshop && wheat) return Optional.of(new Candidate(StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, Optional.empty(),
+        if (workshop && wheat && breadCapacity) return Optional.of(new Candidate(StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, Optional.empty(),
                 reserveShort ? Long.MAX_VALUE - 1L : FixedScalar.SCALE));
         // A READY site may have lost its one-shot opportunity to an older
         // terminal blocked task. The recurring review is the liveness fallback;

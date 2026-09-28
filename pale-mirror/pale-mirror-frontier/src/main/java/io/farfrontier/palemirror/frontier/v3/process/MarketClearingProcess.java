@@ -45,6 +45,9 @@ public final class MarketClearingProcess {
         if (task == null || task.status() != StrategicTaskStatus.PENDING || !task.ownerId().equals(demand.buyerId()) || task.kind() != StrategicTaskKind.PRODUCE_BREAD) {
             return List.of(new ProposedEvent(demand.buyerId(), new MarketDemandCancelled(demand.id(), MarketDemandCancellationReason.TASK_NO_LONGER_PENDING)));
         }
+        // Capacity may disappear between objective selection and market clearing. Keep the
+        // pending demand rather than accepting work that cannot return its output.
+        if (!ProductionOutputCapacity.canAdmitBreadBatch(state, demand.buyerId())) return retry(state, demand, action, now);
         List<ProposedEvent> start = ProductionProcess.planStart(state, ProductionProcess.start(task, now));
         ProductionStarted started = start.stream().map(ProposedEvent::payload).filter(ProductionStarted.class::isInstance)
                 .map(ProductionStarted.class::cast).findFirst().orElse(null);

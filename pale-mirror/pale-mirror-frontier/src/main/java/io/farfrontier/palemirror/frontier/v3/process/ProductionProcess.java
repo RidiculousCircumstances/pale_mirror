@@ -316,7 +316,11 @@ public final class ProductionProcess {
         var replacement = BakeryProcess.planInputReallocation(state, job);
         if (replacement.isPresent()) return List.of(new ProposedEvent(job.settlementId(), replacement.orElseThrow()),
                 reschedule(action, complete(job, Math.addExact(action.dueAt().ticks(), 20L))));
-        if (step.isEmpty()) return List.of(reschedule(action, complete(job, Math.addExact(action.dueAt().ticks(), 20L))));
+        if (step.isEmpty()) {
+            long interval = ProductionOutputCapacity.depotDeliveryUnavailable(state, job)
+                    ? state.bootstrap().ruleset().cadence().strategicReviewInterval() : 20L;
+            return List.of(reschedule(action, complete(job, Math.addExact(action.dueAt().ticks(), interval))));
+        }
         long due = Math.addExact(action.dueAt().ticks(), ProductionWorkProgress.SIMULATION_TICKS_PER_WORK_UNIT);
         if (step.orElseThrow().action() == BakeryColdStep.Action.DELIVER
                 || step.orElseThrow().action() == BakeryColdStep.Action.FINALIZE)

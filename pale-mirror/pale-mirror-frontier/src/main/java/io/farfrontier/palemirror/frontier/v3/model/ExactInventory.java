@@ -210,6 +210,16 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         return after <= Math.max(target.slotCount(), before);
     }
 
+    /** Pure capacity admission for a fungible actor batch entering one owned container. */
+    public boolean canReceiveFungible(SubjectId targetContainerId, String itemKind, int quantity) {
+        ContainerRecord target = containers.get(Objects.requireNonNull(targetContainerId, "target container id"));
+        Objects.requireNonNull(itemKind, "item kind");
+        if (target == null || quantity <= 0) throw new IllegalArgumentException("invalid fungible container admission");
+        long before = slotBudget(targetContainerId).requiredSlots();
+        long after = slotBudget(targetContainerId, Map.of(itemKind, (long) quantity)).requiredSlots();
+        return after <= Math.max(target.slotCount(), before);
+    }
+
     /** Restored old overcommit may be inspected and reduced, but no transition may make it worse. */
     private ExactInventory admitNoNewContainerOvercommit(ExactInventory next) {
         for (ContainerRecord container : containers.values()) {
