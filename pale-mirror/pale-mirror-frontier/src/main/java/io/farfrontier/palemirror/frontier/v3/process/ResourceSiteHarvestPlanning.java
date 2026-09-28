@@ -58,7 +58,11 @@ final class ResourceSiteHarvestPlanning {
             return List.of(reschedule(action, start(task, retryAt)));
         }
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
-        OptionalInt slot = state.firstFreeContainerSlot(depot); if (slot.isEmpty()) return blocked(task);
+        OptionalInt slot = state.firstFreeContainerSlot(depot);
+        if (slot.isEmpty()) {
+            long retryAt = Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().strategicReviewInterval());
+            return List.of(reschedule(action, start(task, retryAt)));
+        }
         ActorLocation worker = state.actorLocations().get(farmer.id());
         if (worker == null) throw new IllegalArgumentException("resource-site harvest worker has no canonical body");
         ResourceSiteHarvestJob job = job(site, lifecycle, task, farmer,

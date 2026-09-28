@@ -380,6 +380,8 @@ public final class FrontierReadabilityPlan {
                 .map(ResidentProfile::id).map(state.ambientLeases()::get)
                 .anyMatch(lease -> lease != null && lease.status() == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART);
         if (unknownFarmer) return "READY TO HARVEST · FARMER RECOVERY IN PROGRESS";
+        if (state.firstFreeContainerSlot(FrontierWorldState.depotId(site.settlementId())).isEmpty())
+            return "READY TO HARVEST · DEPOT FULL";
         boolean pendingExactHarvest = state.strategicPlans().tasks().values().stream()
                 .anyMatch(task -> task.ownerId().equals(site.settlementId())
                         && task.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE

@@ -40,8 +40,13 @@ public record FrontierSettlementWorkDiagnostic(
         Lane strategic = lane(state, settlementId, StrategicObjectiveLane.STRATEGIC);
         Lane facility = lane(state, settlementId, StrategicObjectiveLane.FACILITY);
         List<String> pendingSchedules = checkpoint.schedules().stream()
-                .filter(action -> action.kind().equals("frontier.objective.resource_harvest"))
-                .filter(action -> sites.stream().anyMatch(site -> site.id().equals(action.subject())))
+                .filter(action -> (action.kind().equals("frontier.objective.resource_harvest")
+                        && sites.stream().anyMatch(site -> site.id().equals(action.subject()))
+                        || action.kind().equals("frontier.resource_site.harvest")
+                        && Optional.ofNullable(state.strategicPlans().tasks().get(action.subject()))
+                        .filter(task -> task.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE)
+                        .flatMap(StrategicTask::resourceSiteTarget)
+                        .filter(siteId -> sites.stream().anyMatch(site -> site.id().equals(siteId))).isPresent()))
                 .sorted(Comparator.comparing(action -> action.dueAt()))
                 .map(action -> action.id().value() + "@" + action.dueAt().ticks()).toList();
         int livingFarmers = (int) state.humanPopulation().residents().values().stream()

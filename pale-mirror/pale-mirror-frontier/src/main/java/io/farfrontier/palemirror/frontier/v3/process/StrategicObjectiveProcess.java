@@ -173,6 +173,12 @@ public final class StrategicObjectiveProcess {
             return List.of(new ProposedEvent(lifecycle.siteId(), new ScheduleEffect.Created(resourceHarvestOpportunity(state, lifecycle,
                     Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval())))));
         }
+        // A full depot is a reversible admission condition, not a failed harvest.
+        // Keep the one exact opportunity alive without creating a doomed task.
+        if (state.firstFreeContainerSlot(FrontierWorldState.depotId(owner)).isEmpty()) {
+            return List.of(new ProposedEvent(lifecycle.siteId(), new ScheduleEffect.Created(resourceHarvestOpportunity(state, lifecycle,
+                    Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().strategicReviewInterval())))));
+        }
         int ordinal = FrontierWorldScheduleSupport.ordinal(action.id().value());
         Candidate candidate = new Candidate(StrategicObjectiveKind.SETTLEMENT_HARVEST_RESOURCE_SITE, Optional.empty(), Optional.of(lifecycle.siteId()), FixedScalar.SCALE);
         DecisionPolicyRegistry.require(state.strategicPlans().requireDecisionAuthority(owner));
@@ -393,6 +399,20 @@ public final class StrategicObjectiveProcess {
         }
         if (workshop && wheat) return Optional.of(new Candidate(StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, Optional.empty(),
                 reserveShort ? Long.MAX_VALUE - 1L : FixedScalar.SCALE));
+        // A READY site may have lost its one-shot opportunity to an older
+        // terminal blocked task. The recurring review is the liveness fallback;
+        // the serial facility lane prevents a second owner when an ordinary
+        // opportunity is also due in this interval.
+        Optional<ResourceSite> recoverableField = state.resourceSiteDescriptors().values().stream()
+                .filter(site -> site.settlementId().equals(settlement.id()))
+                .filter(site -> state.resourceSites().site(site.id()).phase() == ResourceSitePhase.READY)
+                .filter(site -> state.structureConditions().get(site.facilityId()) == StructureCondition.INTACT)
+                .min(Comparator.comparing(ResourceSite::id));
+        if (recoverableField.isPresent() && state.firstFreeContainerSlot(depot).isPresent()
+                && FrontierWorldStateSupport.availableFieldResident(state, settlement.id(), ResidentProfession.AGRICULTURAL_WORKER).isPresent())
+            return Optional.of(new Candidate(
+                StrategicObjectiveKind.SETTLEMENT_HARVEST_RESOURCE_SITE, Optional.empty(),
+                Optional.of(recoverableField.orElseThrow().id()), FixedScalar.SCALE));
         // The development cargo/escort fixture targets the hive, but ordinary settlements
         // have no treaty, trade demand or recipient-side use for such a shipment. Surplus
         // bread stays in its owned depot until a real settlement-to-settlement trade policy exists.

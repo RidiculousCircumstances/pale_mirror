@@ -23,6 +23,71 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class StrategicObjectiveProcessTest {
     @Test
+    void fullDepotWaitsTruthfullyAndReadyFieldResumesAfterCapacityReturns() {
+        FrontierWorldState state = ResourceSiteHarvestProcessTest.ready(initial("frontier:full-depot-harvest", 407L));
+        Settlement settlement = state.bootstrap().settlements().getFirst();
+        SubjectId site = new SubjectId("site:1-wheat-field");
+        SubjectId depot = FrontierWorldState.depotId(settlement.id());
+        state = state.withInventory(state.inventory().withFungibleResources(state.inventory().fungibleResources().destroy(
+                new SubjectId("custody:container-1-depot"), Map.of(new SubjectId("lot:bootstrap-1-wheat"), 64), Map.of())));
+        ExactInventory inventory = state.inventory();
+        int added = 0;
+        while (state.withInventory(inventory).firstFreeContainerSlot(depot).isPresent()) {
+            int slot = state.withInventory(inventory).firstFreeContainerSlot(depot).orElseThrow();
+            inventory = inventory.store(new ExactItemStack(new SubjectId("item:full-depot-" + slot), settlement.id(),
+                    "minecraft:stone", 1, new InventoryCustody.ContainerSlot(depot, slot)));
+            added++;
+        }
+        assertTrue(added > 0);
+        FrontierWorldState full = state.withInventory(inventory);
+        assertEquals("READY TO HARVEST · DEPOT FULL",
+                FrontierReadabilityPlan.compile(full).boards().get(site).text().split("\\n")[2]);
+
+        var due = StrategicObjectiveProcess.resourceHarvestOpportunity(full, full.resourceSites().site(site), 22_000L);
+        List<ProposedEvent> waiting = StrategicObjectiveProcess.planResourceHarvestOpportunity(full, due);
+        var deferred = assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created.class,
+                waiting.getFirst().payload()).action();
+        assertEquals(1, waiting.size());
+        assertEquals(22_000L + full.bootstrap().ruleset().cadence().strategicReviewInterval(), deferred.dueAt().ticks());
+        assertTrue(full.strategicPlans().tasks().isEmpty(), "capacity pressure must not create a doomed task");
+
+        List<ProposedEvent> admitted = StrategicObjectiveProcess.planResourceHarvestOpportunity(state,
+                StrategicObjectiveProcess.resourceHarvestOpportunity(state, state.resourceSites().site(site), 22_000L));
+        FrontierWorldState pending = StrategicObjectiveProcess.reduceObjective(full, settlement.id(),
+                assertInstanceOf(StrategicObjectiveSelected.class, admitted.getFirst().payload()));
+        pending = StrategicObjectiveProcess.reduceTask(pending, settlement.id(),
+                assertInstanceOf(StrategicTaskPlanned.class, admitted.get(1).payload()));
+        StrategicTask task = pending.strategicPlans().tasks().values().stream().findFirst().orElseThrow();
+        var start = ResourceSiteHarvestProcess.start(task, 22_085L);
+        List<ProposedEvent> retry = ResourceSiteHarvestProcess.plan(pending, start);
+        var replacement = assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class,
+                retry.getFirst().payload()).replacement();
+        assertEquals(1, retry.size());
+        assertEquals(start.id(), replacement.id());
+        assertEquals(StrategicTaskStatus.PENDING, pending.strategicPlans().tasks().get(task.id()).status());
+        var checkpoint = new io.farfrontier.palemirror.frontier.v3.api.CheckpointImage(
+                pending.bootstrap().worldId(), io.farfrontier.palemirror.frontier.v3.api.Revision.ZERO,
+                new io.farfrontier.palemirror.frontier.v3.api.SimInstant(22_085L),
+                new FrontierWorldStateCodec().encode(pending), List.of(replacement), List.of());
+        assertEquals(List.of(replacement.id().value() + "@" + replacement.dueAt().ticks()),
+                FrontierSettlementWorkDiagnostic.inspect(checkpoint, pending, settlement.id()).orElseThrow().pendingHarvestSchedules());
+
+        SubjectId freed = inventory.items().values().stream().filter(item -> item.itemKind().equals("minecraft:stone"))
+                .findFirst().orElseThrow().id();
+        FrontierWorldState recoveredPending = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(pending));
+        FrontierWorldState withSpace = recoveredPending.withInventory(inventory.consumeOne(freed));
+        assertTrue(ResourceSiteHarvestProcess.plan(withSpace, replacement).stream()
+                .anyMatch(event -> event.payload() instanceof ResourceSiteHarvestStarted));
+
+        FrontierWorldState legacyBlocked = StrategicObjectiveProcess.reduceTaskTransition(withSpace, settlement.id(),
+                new StrategicTaskTransition(task.id(), StrategicTaskStatus.BLOCKED));
+        List<ProposedEvent> recovered = StrategicObjectiveProcess.plan(legacyBlocked,
+                StrategicObjectiveProcess.review(settlement.id(), 2, 24_000L));
+        assertTrue(recovered.stream().anyMatch(event -> event.payload() instanceof StrategicObjectiveSelected selected
+                && selected.objective().kind() == StrategicObjectiveKind.SETTLEMENT_HARVEST_RESOURCE_SITE));
+    }
+
+    @Test
     void stockWakeCannotReuseProductionIdentityFromEarlierReviewWithSameOrdinal() {
         FrontierWorldState state = initial("frontier:stock-wake-job-identity", 407L);
         SubjectId owner = state.bootstrap().settlements().getFirst().id();
