@@ -59,7 +59,11 @@ public final class ResidentActivityProcess {
         ActorLocation body = state.actorLocations().get(action.subject());
         if (resident == null || body == null || body.condition().status() != ActorLifeStatus.ALIVE)
             return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Consumed(action.id())));
-        long now = action.dueAt().ticks();
+        // A HOT consumption can advance this resident's need clock after an older
+        // activity review was queued. The review is still due, but assessing hunger
+        // at its historical instant would run time backwards and quarantine the world.
+        long now = Math.max(action.dueAt().ticks(),
+                state.humanPopulation().nutrition(action.subject()).lastEvaluatedTick());
         ResidentActivityChoice choice = ResidentActivityCoordinator.assess(state, action.subject(), now);
         List<ProposedEvent> events = new ArrayList<>();
         if (choice.kind() == ResidentActivityChoice.Kind.EAT

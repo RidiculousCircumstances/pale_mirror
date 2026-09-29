@@ -264,6 +264,18 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         if (!(entity instanceof Mob worker) || !worker.isAlive() || !FrontierV3SceneExecutor.recognizes(runtime, worker)) {
             conflict(level, runtime, lease, "hot-worker-unavailable"); return;
         }
+        var supportedExit = FrontierV3SupportedBodyCapture.observe(level, worker);
+        if (supportedExit.isPresent() && ServiceAccessCoordinator.witnessedHarvestExit(
+                state, job, lease.id(), supportedExit.orElseThrow())) {
+            var binding = FrontierV3TraversalScheduleGate.binding(runtime.checkpointImage().orElseThrow(), job.siteId());
+            if (binding.isEmpty()) return;
+            ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state, job);
+            var exit = new ResourceSiteHarvestHotTransitObserved(job.id(), lease.id(), job.workerId(),
+                    goal.layoutRevision(), goal.nextWorkSlot(), goal.kind(), supportedExit.orElseThrow());
+            ResourceSiteHarvestProcess.reduceHotTransitObserved(state, job.siteId(), exit);
+            submitBound(runtime, "resource-site-harvest-access-cleared", lease.id().value(), exit, binding.orElseThrow());
+            return;
+        }
         // The scene owns its safe point: never interrupt a prepared crop or carried wheat.
         // Once the exact stationary worker is empty-handed, return the same body to the
         // resident coordinator before beginning another crop or route leg.

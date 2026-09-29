@@ -40,5 +40,10 @@ final class FrontierV3SurfaceObservation {
         return surface.standingBody();
     }
 
+    static BodyPosition observedBody(Mob body) {
+        BlockPos support = Objects.requireNonNull(body, "surface observation body").getOnPos();
+        return BodyPosition.above(SurfaceAnchor.at(support.getX(), support.getY(), support.getZ()));
+    }
+
     static Vec3 point(SurfaceAnchor surface) { return FrontierV3SemanticMovement.point(surface); }
 }

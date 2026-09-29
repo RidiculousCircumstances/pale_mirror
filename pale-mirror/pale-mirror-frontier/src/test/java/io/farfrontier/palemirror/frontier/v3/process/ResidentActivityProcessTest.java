@@ -50,4 +50,24 @@ class ResidentActivityProcessTest {
         assertEquals(action.id(), next.id());
         assertEquals(24_200L, next.dueAt().ticks());
     }
+
+    @Test void staleActivityReviewDoesNotEvaluateBeforeConfirmedNeedClock() {
+        FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:resident-activity-after-hot-bread"), 421L));
+        SubjectId resident = initial.bootstrap().settlements().getFirst().residents().getFirst().id();
+        var action = ResidentActivityProcess.review(resident, 24_000L);
+        FrontierWorldState state = initial.withHumanPopulation(initial.humanPopulation()
+                .accrueHunger(resident, 24_000L).consumeResidentBread(resident, 24_050L));
+
+        assertEquals(ResidentActivityCoordinator.assess(state, resident, 24_050L),
+                ResidentActivityCoordinator.assess(state, resident, 24_000L),
+                "the shared arbiter cannot run this resident's need clock backwards");
+
+        var planned = FrontierWorldRuntimeDefinition.planScheduled(state, action);
+
+        assertEquals(1, planned.size());
+        var next = assertInstanceOf(ScheduleEffect.Rescheduled.class, planned.getFirst().payload()).replacement();
+        assertEquals(action.id(), next.id());
+        assertTrue(next.dueAt().ticks() > 24_050L);
+    }
 }

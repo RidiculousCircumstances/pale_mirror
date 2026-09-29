@@ -254,6 +254,11 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
                     command.submittedAt().ticks())); }
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
+        if (command.payload() instanceof ResidentMealHotAccessCleared cleared) {
+            try { ResidentMealProcess.reduceHotAccessCleared(state, cleared.residentId(), cleared); }
+            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(cleared.residentId(), cleared)));
+        }
         if (command.payload() instanceof MedicalTreatmentSceneLeasePrepared prepared) {
             try {
                 return new CommandPlan.Accepted(List.of(new ProposedEvent(FrontierMedicalTreatmentSceneSupport.owner(state,
@@ -292,6 +297,7 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
             case ResidentMealHotEffectObserved observed -> ResidentMealProcess.reduceHotObserved(state, event.subject(), observed, event.instant().ticks());
             case ResidentMealHotHandMaterialized observed -> ResidentMealProcess.reduceHotHandMaterialized(state, event.subject(), observed);
             case ResidentMealHotHandReleased observed -> ResidentMealProcess.reduceHotHandReleased(state, event.subject(), observed);
+            case ResidentMealHotAccessCleared cleared -> ResidentMealProcess.reduceHotAccessCleared(state, event.subject(), cleared);
             case ResidentMealHotReturned returned -> ResidentActivityProcess.reduceMealReturned(state, event.subject(), returned,
                     event.instant().ticks());
             case ResidentHealthTransition transition -> HumanHealthProcess.reduceResidentTransition(state, event.subject(), event.instant().ticks(), transition);

@@ -31,7 +31,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             HumanPopulationPayloadCodecs.mealHotArrived(), HumanPopulationPayloadCodecs.mealHotEffectPrepared(),
             HumanPopulationPayloadCodecs.mealHotEffectObserved(),
             HumanPopulationPayloadCodecs.mealHotHandMaterialized(), HumanPopulationPayloadCodecs.mealHotHandReleased(),
-            HumanPopulationPayloadCodecs.mealHotReturned(),
+            HumanPopulationPayloadCodecs.mealHotAccessCleared(), HumanPopulationPayloadCodecs.mealHotReturned(),
             HumanPopulationPayloadCodecs.mealColdStep(), SettlementProvisionPayloadCodecs.legacyStarted(),
             SettlementProvisionPayloadCodecs.started(), SettlementProvisionPayloadCodecs.consumed(), SettlementProvisionPayloadCodecs.resolved(),
             HumanHealthPayloadCodecs.residentTransition(), HumanHealthPayloadCodecs.quarantineTransition(),
@@ -43,7 +43,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             SettlementEconomyPayloadCodecs.companyRegistered(), SettlementEconomyPayloadCodecs.employmentOpened(),
             SettlementEconomyPayloadCodecs.employmentTerminated(), MarketPayloadCodecs.opened(),
             MarketPayloadCodecs.quote(), MarketPayloadCodecs.accepted(), MarketPayloadCodecs.relationshipIncident(), MarketPayloadCodecs.workOrderCancelled(), MarketPayloadCodecs.expired(),
-            MarketPayloadCodecs.cancelled(), new BakeryColdStepCodec(), new BakeryInputReallocatedCodec(), new BakeryHotGoalArrivedCodec(),
+            MarketPayloadCodecs.cancelled(), new BakeryColdStepCodec(), new BakeryInputReallocatedCodec(), new BakeryHotGoalArrivedCodec(), new BakeryHotAccessClearedCodec(),
             new BakeryHotEffectPreparedCodec(), new BakeryHotEffectObservedCodec(), new BakeryHotWorkTickCodec(),
             new BakeryHotHandReleaseCodec(), new BakeryHotHandMaterializedCodec(), new BakeryHotBlockChangedCodec())),
             ProductionWorkScenePayloadCodecs.codecs(), ProductionWorkScenePayloadCodecs.productionEvents()); }

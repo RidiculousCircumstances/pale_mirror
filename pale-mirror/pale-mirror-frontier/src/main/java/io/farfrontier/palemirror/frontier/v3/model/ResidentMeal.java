@@ -14,7 +14,7 @@ public record ResidentMeal(SubjectId residentId, SubjectId settlementId, Subject
                            long startedAtTick, Optional<ResidentActivityChoice.Wait> waitReason,
                            Optional<ResidentMealPhysicalStep> pendingPhysicalStep) {
     public static final String BREAD_KIND = "minecraft:bread";
-    /** RETURN retains meal ownership until the shared depot approach is physically cleared. */
+    /** RETURN retains the meal journey; service access may be released before it finishes. */
     public enum Phase { MOVE, TAKE, CONSUME, RETURN }
 
     public ResidentMeal {

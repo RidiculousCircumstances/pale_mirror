@@ -58,6 +58,11 @@ public record SettlementDepotServicePort(SubjectId settlementId, SubjectId depot
         java.util.ArrayList<SurfaceAnchor> owned = new java.util.ArrayList<>(); owned.add(serviceSurface); owned.addAll(stations);
         return List.copyOf(owned);
     }
+    public ServiceAccessBoundary accessBoundary() {
+        java.util.HashSet<SurfaceAnchor> occupied = new java.util.HashSet<>(ownedAccessSurfaces());
+        occupied.add(exteriorApproach);
+        return new ServiceAccessBoundary(occupied);
+    }
     public List<BlockPosition> throatAirCells() {
         BlockPosition threshold = thresholdSurface.support();
         return List.of(threshold.offset(0, 1, 0), threshold.offset(0, 2, 0));

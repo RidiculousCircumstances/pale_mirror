@@ -344,6 +344,10 @@ public final class ProductionProcess {
     public static FrontierWorldState reduceBakeryHotGoalArrived(FrontierWorldState state, SubjectId subject, BakeryHotGoalArrived arrived) {
         return BakeryProcess.hotGoalArrived(state, subject, arrived);
     }
+    public static FrontierWorldState reduceBakeryHotAccessCleared(FrontierWorldState state, SubjectId subject,
+                                                                   BakeryHotAccessCleared cleared) {
+        return BakeryProcess.hotAccessCleared(state, subject, cleared);
+    }
     public static FrontierWorldState reduceBakeryHotEffectPrepared(FrontierWorldState state, SubjectId subject, BakeryHotEffectPrepared prepared) {
         return BakeryProcess.prepareHotEffect(state, subject, prepared);
     }

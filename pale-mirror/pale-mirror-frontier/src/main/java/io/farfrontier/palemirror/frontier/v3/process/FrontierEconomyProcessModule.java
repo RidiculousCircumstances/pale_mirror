@@ -160,6 +160,14 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
                 return new CommandPlan.Accepted(List.of(new ProposedEvent(job.settlementId(), arrived)));
             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
+        if (command.payload() instanceof BakeryHotAccessCleared cleared) {
+            try {
+                ProductionJob job = FrontierProductionWorkSceneSupport.require(state,
+                        new ProductionWorkSceneCause(cleared.jobId()));
+                ProductionProcess.reduceBakeryHotAccessCleared(state, job.settlementId(), cleared);
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(job.settlementId(), cleared)));
+            } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+        }
         if (command.payload() instanceof BakeryHotEffectPrepared prepared) {
             try {
                 ProductionJob job = FrontierProductionWorkSceneSupport.require(state, new ProductionWorkSceneCause(prepared.jobId()));
@@ -233,6 +241,7 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
             case BakeryColdStep step -> ProductionProcess.reduceBakeryColdStep(state, event.subject(), step);
             case BakeryInputReallocated reallocated -> ProductionProcess.reduceBakeryInputReallocated(state, event.subject(), reallocated);
             case BakeryHotGoalArrived arrived -> ProductionProcess.reduceBakeryHotGoalArrived(state, event.subject(), arrived);
+            case BakeryHotAccessCleared cleared -> ProductionProcess.reduceBakeryHotAccessCleared(state, event.subject(), cleared);
             case BakeryHotEffectPrepared prepared -> ProductionProcess.reduceBakeryHotEffectPrepared(state, event.subject(), prepared);
             case BakeryHotEffectObserved observed -> ProductionProcess.reduceBakeryHotEffectObserved(state, event.subject(), observed);
             case BakeryHotWorkTick tick -> ProductionProcess.reduceBakeryHotWorkTick(state, event.subject(), tick);

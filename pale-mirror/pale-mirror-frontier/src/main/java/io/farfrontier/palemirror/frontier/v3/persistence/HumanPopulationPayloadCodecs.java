@@ -180,6 +180,25 @@ final class HumanPopulationPayloadCodecs {
         };
     }
 
+    static PayloadCodec mealHotAccessCleared() {
+        return new PayloadCodec() {
+            @Override public String type() { return "frontier.resident_meal_hot_access_cleared"; }
+            @Override public byte[] encode(FrontierPayload payload) {
+                return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+                    ResidentMealHotAccessCleared cleared = (ResidentMealHotAccessCleared) payload;
+                    FrontierWorldPayloadCodecs.writeSubject(output, cleared.residentId());
+                    output.writeLong(cleared.ambientRevision());
+                    FrontierWorldPayloadCodecs.writePosition(output, cleared.observedBody().supportingSurface().support());
+                });
+            }
+            @Override public FrontierPayload decode(byte[] bytes) {
+                return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new ResidentMealHotAccessCleared(
+                        FrontierWorldPayloadCodecs.readSubject(input).value(), input.readLong(),
+                        BodyPosition.above(new SurfaceAnchor(FrontierWorldPayloadCodecs.readPosition(input)))));
+            }
+        };
+    }
+
     private static PayloadCodec mealHand(String type, boolean materialized) {
         return new PayloadCodec() {
             @Override public String type() { return type; }

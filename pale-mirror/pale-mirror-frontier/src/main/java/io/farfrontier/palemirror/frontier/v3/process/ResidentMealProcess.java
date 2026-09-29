@@ -250,9 +250,29 @@ public final class ResidentMealProcess {
                 || lease.revision() != ambientRevision
                 || !lease.goalBody().equals((meal.phase() == ResidentMeal.Phase.RETURN
                         ? meal.clearingSurface() : serviceSurface(state, meal)).standingBody())
-                || !state.actorLocations().get(subject).body().equals(serviceSurface(state, meal).standingBody()))
+                || !state.actorLocations().get(subject).body().equals(serviceSurface(state, meal).standingBody())
+                    && !(meal.phase() == ResidentMeal.Phase.RETURN
+                        && port(state, meal).accessBoundary().cleared(state.actorLocations().get(subject).body())))
             throw new IllegalArgumentException("HOT meal step lacks its exact resident, body or lease");
         return meal;
+    }
+
+    private static SettlementDepotServicePort port(FrontierWorldState state, ResidentMeal meal) {
+        Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), meal.settlementId());
+        return SettlementDepotServicePort.forDepot(settlement.structures().stream()
+                .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow());
+    }
+
+    /** Checkpoint only the witnessed exit; neither eating nor the return journey ends here. */
+    public static FrontierWorldState reduceHotAccessCleared(FrontierWorldState state, SubjectId subject,
+                                                             ResidentMealHotAccessCleared cleared) {
+        ResidentMeal meal = hotMeal(state, subject, cleared.residentId(), cleared.ambientRevision());
+        if (meal.phase() != ResidentMeal.Phase.RETURN || meal.pendingPhysicalStep().isPresent()
+                || !ServiceAccessCoordinator.witnessedMealExit(state, meal, cleared.observedBody()))
+            throw new IllegalArgumentException("HOT meal access clearance lacks a witnessed route exit");
+        Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
+        actors.put(subject, actors.get(subject).withBody(cleared.observedBody()));
+        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
     }
 
     public static FrontierWorldState reduceHotHandMaterialized(FrontierWorldState state, SubjectId subject,

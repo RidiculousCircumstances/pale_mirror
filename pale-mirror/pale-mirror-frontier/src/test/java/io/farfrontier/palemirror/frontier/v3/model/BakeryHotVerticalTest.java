@@ -446,6 +446,26 @@ class BakeryHotVerticalTest {
         assertFalse(ServiceAccessCoordinator.depotAvailableForMeal(checkpointedDepot, depot,
                 checkpointedDepot.bootstrap().settlements().getFirst().residents().getFirst().id()),
                 "delivered bread does not release the shared entrance until the baker leaves it");
+        ServiceAccessBoundary access = SettlementDepotServicePort.forDepot(
+                checkpointedDepot.bootstrap().settlements().getFirst().structures().stream()
+                        .filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().orElseThrow())
+                .accessBoundary();
+        SurfaceAnchor exit = BakeryKnownNavigation.pathFrom(checkpointedDepot,
+                        checkpointedDepot.productionJobs().get(job.id()),
+                        checkpointedDepot.sceneLeases().get(leaseId).memberPosition(job.workerId()).supportingSurface())
+                .stream().filter(surface -> access.cleared(surface.standingBody())).findFirst().orElseThrow();
+        BakeryHotAccessCleared exitObserved = new BakeryHotAccessCleared(job.id(), leaseId, exit.standingBody());
+        assertEquals(exitObserved, FrontierWorldRuntimeDefinition.payloadCodecs().decode(exitObserved.type(),
+                FrontierWorldRuntimeDefinition.payloadCodecs().encode(exitObserved)));
+        FrontierWorldState departedDepot = ProductionProcess.reduceBakeryHotAccessCleared(checkpointedDepot,
+                task.ownerId(), exitObserved);
+        assertTrue(departedDepot.productionJobs().containsKey(job.id()),
+                "leaving shared access must not complete the bakery job");
+        assertTrue(ServiceAccessCoordinator.depotAvailableForMeal(departedDepot, depot,
+                departedDepot.bootstrap().settlements().getFirst().residents().getFirst().id()),
+                "the next resident may enter before the baker returns to the workshop");
+        assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceBakeryHotAccessCleared(
+                departedDepot, task.ownerId(), exitObserved), "one physical exit cannot be applied twice");
         state = state.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING)
                 .releaseSceneLease(leaseId, List.of(new SceneMemberPosition(job.workerId(), actor.body(), actor.condition().health())));
         BakeryColdStep finalization = null;

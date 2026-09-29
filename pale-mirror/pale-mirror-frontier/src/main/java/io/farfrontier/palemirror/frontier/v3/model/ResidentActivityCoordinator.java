@@ -72,22 +72,23 @@ public final class ResidentActivityCoordinator {
         Objects.requireNonNull(state, "activity state");
         ResidentProfile resident = state.humanPopulation().resident(residentId);
         if (resident == null) throw new IllegalArgumentException("activity has no exact resident");
+        long assessedAt = Math.max(canonicalTick, state.humanPopulation().nutrition(residentId).lastEvaluatedTick());
         HumanAssignment assignment = HumanAssignmentProjection.compile(state).assignment(residentId);
         ResidentWorkYield checkpoint = ResidentWorkYield.assess(state, assignment);
-        ResidentActivityChoice choice = choose(state.humanPopulation().schedule(resident.settlementId()), canonicalTick,
+        ResidentActivityChoice choice = choose(state.humanPopulation().schedule(resident.settlementId()), assessedAt,
                 state.humanPopulation().nutrition(residentId), assignment,
                 Optional.ofNullable(state.humanPopulation().meals().get(residentId)),
                 state.bootstrap().ruleset().residentLife(), checkpoint.ready(),
-                resident.characteristics().effectiveMetabolismPermille(canonicalTick));
+                resident.characteristics().effectiveMetabolismPermille(assessedAt));
         if (state.humanPopulation().meals().containsKey(residentId)
-                || state.humanPopulation().nutrition(residentId).accrueThrough(canonicalTick,
+                || state.humanPopulation().nutrition(residentId).accrueThrough(assessedAt,
                         state.bootstrap().ruleset().residentLife(),
-                        resident.characteristics().effectiveMetabolismPermille(canonicalTick)).hungerDeficit()
+                        resident.characteristics().effectiveMetabolismPermille(assessedAt)).hungerDeficit()
                     < state.bootstrap().ruleset().residentLife().hungryThreshold()
                 || ResidentMealOpportunity.find(state, residentId).isPresent()) return choice;
         // No executable meal exists. Keep working in WORK, or obey FREE at a safe point;
         // the activity wake still retries food independently without losing the assignment.
-        if (state.humanPopulation().schedule(resident.settlementId()).windowAt(canonicalTick)
+        if (state.humanPopulation().schedule(resident.settlementId()).windowAt(assessedAt)
                 == SettlementDailySchedule.Window.WORK && assignment.active())
             return new ResidentActivityChoice(residentId, ResidentActivityChoice.Kind.WORK,
                     assignment.ownerId(), Optional.empty());

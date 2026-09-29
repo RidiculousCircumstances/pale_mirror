@@ -250,6 +250,20 @@ public final class BakeryProcess {
         return state.withChanges(FrontierWorldStateUpdate.begin().sceneLeases(leases));
     }
 
+    static FrontierWorldState hotAccessCleared(FrontierWorldState state, SubjectId subject,
+                                               BakeryHotAccessCleared cleared) {
+        ProductionJob job = state.productionJobs().get(cleared.jobId());
+        if (job == null || !job.settlementId().equals(subject) || job.bakeryWork().isEmpty()
+                || job.bakeryWork().orElseThrow().phase() != BakeryWorkState.Phase.DELIVERED)
+            throw new IllegalArgumentException("bakery access exit has no delivered owner");
+        SceneLease lease = FrontierProductionWorkSceneSupport.requireHotLease(state, job, cleared.leaseId());
+        if (!ServiceAccessCoordinator.witnessedBakeryExit(state, job, cleared.observedWorker()))
+            throw new IllegalArgumentException("bakery access exit lacks its physical boundary witness");
+        Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases());
+        leases.put(lease.id(), lease.withMemberPositions(Map.of(job.workerId(), cleared.observedWorker())));
+        return state.withChanges(FrontierWorldStateUpdate.begin().sceneLeases(leases));
+    }
+
     static FrontierWorldState hotBlockChanged(FrontierWorldState state, SubjectId subject, BakeryHotBlockChanged changed) {
         ProductionJob job = state.productionJobs().get(changed.jobId());
         if (job == null || !job.settlementId().equals(subject) || job.bakeryWork().isEmpty()

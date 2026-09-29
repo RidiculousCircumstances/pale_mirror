@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ResidentMealProcessTest {
-    @Test void secondHungryResidentWaitsOutsideDepotUntilFirstHasPhysicallyClearedIt() {
+    @Test void secondHungryResidentCanStartAfterFirstClearsAccessWhileReturnContinues() {
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:resident-depot-service-queue"), 421L));
         Settlement settlement = initial.bootstrap().settlements().getFirst();
@@ -37,14 +37,27 @@ class ResidentMealProcessTest {
         state = ResidentMealProcess.reduceStarted(state, first, started);
         assertTrue(ResidentMealProcess.selectSourceAtYield(state, second, 27_000L).isEmpty());
         state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+        boolean releasedDuringReturn = false;
+        boolean secondStartedBeforeFirstFinished = false;
         for (int turn = 0; state.humanPopulation().meals().containsKey(first) && turn < 300; turn++) {
             ResidentMealColdStep step = ResidentMealProcess.planColdStep(state, first, 27_001L + turn).orElseThrow();
             state = ResidentMealProcess.reduceColdStep(state, first, step);
-            if (state.humanPopulation().meals().containsKey(first))
-                assertTrue(ResidentMealProcess.selectSourceAtYield(state, second, 27_001L + turn).isEmpty());
+            if (!secondStartedBeforeFirstFinished && state.humanPopulation().meals().containsKey(first)
+                    && state.humanPopulation().meals().get(first).phase() == ResidentMeal.Phase.RETURN
+                    && ResidentMealProcess.selectSourceAtYield(state, second, 27_001L + turn).isPresent()) {
+                releasedDuringReturn = true;
+                ResidentMealStarted next = ResidentMealProcess.selectSourceAtYield(state, second,
+                        27_001L + turn).orElseThrow();
+                state = ResidentMealProcess.reduceStarted(state, second, next);
+                secondStartedBeforeFirstFinished = true;
+                state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+            }
         }
+        assertTrue(releasedDuringReturn, "access must release before the first resident finishes returning home");
+        assertTrue(secondStartedBeforeFirstFinished);
         assertFalse(state.humanPopulation().meals().containsKey(first));
-        assertTrue(ResidentMealProcess.selectSourceAtYield(state, second, 27_301L).isPresent());
+        assertTrue(state.humanPopulation().meals().containsKey(second),
+                "the second resident's independent meal must survive the first return");
         assertEquals(63, state.inventory().fungibleResources().totalQuantity(settlement.id(), ResidentMeal.BREAD_KIND));
     }
 
@@ -275,6 +288,19 @@ class ResidentMealProcessTest {
         assertThrows(IllegalArgumentException.class, () -> ResidentActivityProcess.reduceMealReturned(stillAtDepot,
                 resident, new ResidentMealHotReturned(resident, 1L, service.standingBody()), 48_003L),
                 "a meal cannot release service access while the body still blocks the depot");
+        ServiceAccessBoundary boundary = SettlementDepotServicePort.forDepot(settlement.structures().stream()
+                .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow()).accessBoundary();
+        SurfaceAnchor exit = ResidentMealKnownNavigation.returnPath(state, state.humanPopulation().meals().get(resident))
+                .stream().filter(surface -> boundary.cleared(surface.standingBody())).findFirst().orElseThrow();
+        ResidentMealHotAccessCleared accessCleared = new ResidentMealHotAccessCleared(resident, 1L, exit.standingBody());
+        assertEquals(accessCleared, FrontierWorldRuntimeDefinition.payloadCodecs().decode(accessCleared.type(),
+                FrontierWorldRuntimeDefinition.payloadCodecs().encode(accessCleared)));
+        state = ResidentMealProcess.reduceHotAccessCleared(state, resident, accessCleared);
+        assertEquals(ResidentMeal.Phase.RETURN, state.humanPopulation().meals().get(resident).phase());
+        assertEquals(exit.standingBody(), state.actorLocations().get(resident).body());
+        FrontierWorldState alreadyCleared = state;
+        assertThrows(IllegalArgumentException.class, () -> ResidentMealProcess.reduceHotAccessCleared(
+                alreadyCleared, resident, accessCleared), "one physical exit cannot be applied twice");
         var returnedEvents = ResidentMealProcess.planHotReturned(state, cleared, 48_003L);
         assertEquals(3, returnedEvents.size());
         assertEquals(ResidentMealProcess.progress(meal, 48_003L).id(),

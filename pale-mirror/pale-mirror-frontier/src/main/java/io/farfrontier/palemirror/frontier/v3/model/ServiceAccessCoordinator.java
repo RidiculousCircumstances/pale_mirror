@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 
 import java.util.Comparator;
 import java.util.ArrayList;
@@ -9,22 +10,24 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Read-only admission policy for the depot's shared access throat. Each contender carries
- * an explicit meal or work owner; this projection does not own a second job, item ledger or
- * due-time queue. Waiting processes retain their normal schedule and retry at their own tick.
+ * Read-only admission policy for a shared physical service boundary. The depot is
+ * the first provider; each contender keeps its own exact meal or work owner. This
+ * projection owns no second job, item ledger or due-time queue. Waiting processes
+ * retain their normal schedule and retry at their own tick.
  */
 public final class ServiceAccessCoordinator {
     private ServiceAccessCoordinator() { }
 
     private record Applicant(SubjectId jobId, SubjectId workerId, boolean alreadyAtPort) { }
 
-    /** A meal reserves the throat from start until its witnessed departure. */
+    /** A meal reserves the throat only until its body has actually cleared it. */
     public static boolean depotAvailableForMeal(FrontierWorldState state, SubjectId depotId,
                                                 SubjectId residentId) {
         Objects.requireNonNull(state, "service access state");
         Objects.requireNonNull(depotId, "service access depot");
         Objects.requireNonNull(residentId, "service access resident");
-        return state.humanPopulation().meals().values().stream().noneMatch(meal -> meal.depotId().equals(depotId))
+        return state.humanPopulation().meals().values().stream().noneMatch(meal -> meal.depotId().equals(depotId)
+                        && mealOccupiesAccess(state, meal))
                 // A safe-yielded baker or farmer retains the job but can eat with the
                 // same body; only another worker's depot turn excludes this resident.
                 && workApplicants(state, depotId).stream().allMatch(applicant -> applicant.workerId().equals(residentId));
@@ -37,7 +40,8 @@ public final class ServiceAccessCoordinator {
         Objects.requireNonNull(depotId, "service access depot");
         Objects.requireNonNull(jobId, "service access job");
         Objects.requireNonNull(workerId, "service access worker");
-        if (state.humanPopulation().meals().values().stream().anyMatch(meal -> meal.depotId().equals(depotId)))
+        if (state.humanPopulation().meals().values().stream().anyMatch(meal -> meal.depotId().equals(depotId)
+                && mealOccupiesAccess(state, meal)))
             return false;
         return workApplicants(state, depotId).stream().findFirst()
                 .map(first -> first.jobId().equals(jobId) && first.workerId().equals(workerId))
@@ -47,6 +51,52 @@ public final class ServiceAccessCoordinator {
     public static boolean depotAvailableForHarvest(FrontierWorldState state, ResourceSiteHarvestJob job) {
         SubjectId settlementId = ResourceSiteHarvestGoal.depotPort(state, job).settlementId();
         return depotAvailableForWork(state, FrontierWorldState.depotId(settlementId), job.id(), job.workerId());
+    }
+
+    private static boolean mealOccupiesAccess(FrontierWorldState state, ResidentMeal meal) {
+        if (meal.phase() != ResidentMeal.Phase.RETURN) return true;
+        ActorLocation actor = state.actorLocations().get(meal.residentId());
+        return actor == null || !port(state, meal.depotId()).accessBoundary().cleared(actor.body());
+    }
+
+    /** The same physical boundary test is used before HOT submission and by its reducer. */
+    public static boolean witnessedMealExit(FrontierWorldState state, ResidentMeal meal, BodyPosition observedBody) {
+        if (meal.phase() != ResidentMeal.Phase.RETURN || meal.pendingPhysicalStep().isPresent()) return false;
+        ServiceAccessBoundary boundary = port(state, meal.depotId()).accessBoundary();
+        ActorLocation actor = state.actorLocations().get(meal.residentId());
+        if (actor == null || !boundary.occupied(actor.body()) || !boundary.cleared(observedBody)) return false;
+        return witnessedExit(boundary, actor.body(), observedBody);
+    }
+
+    public static boolean witnessedBakeryExit(FrontierWorldState state, ProductionJob job, BodyPosition observedBody) {
+        if (job.bakeryWork().isEmpty() || job.bakeryWork().orElseThrow().phase() != BakeryWorkState.Phase.DELIVERED)
+            return false;
+        SceneLease lease = state.sceneLeases().values().stream()
+                .filter(candidate -> candidate.status() == SceneLeaseStatus.HOT
+                        && FrontierSceneBehaviors.isProductionWork(candidate)
+                        && FrontierSceneBehaviors.productionWork(candidate).jobId().equals(job.id()))
+                .findFirst().orElse(null);
+        if (lease == null) return false;
+        BodyPosition previous = lease.memberPosition(job.workerId());
+        ServiceAccessBoundary boundary = port(state, FrontierWorldState.depotId(job.settlementId())).accessBoundary();
+        if (!boundary.occupied(previous) || !boundary.cleared(observedBody)) return false;
+        return witnessedExit(boundary, previous, observedBody);
+    }
+
+    /** Field work also releases its depot turn before its next crop goal is reached. */
+    public static boolean witnessedHarvestExit(FrontierWorldState state, ResourceSiteHarvestJob job,
+                                               SceneLeaseId leaseId, BodyPosition observedBody) {
+        if (ResourceSiteHarvestGoal.current(state, job).kind() == ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE)
+            return false;
+        SceneLease lease = FrontierResourceSiteHarvestSceneSupport.requireHotLease(state, job, leaseId);
+        ServiceAccessBoundary boundary = ResourceSiteHarvestGoal.depotPort(state, job).accessBoundary();
+        return witnessedExit(boundary, lease.memberPosition(job.workerId()), observedBody);
+    }
+
+    /** A service permit ends at the first witnessed exit, independently of the owner's later route. */
+    public static boolean witnessedExit(ServiceAccessBoundary boundary, BodyPosition previous,
+                                        BodyPosition observed) {
+        return boundary.occupied(previous) && boundary.cleared(observed);
     }
 
     private static List<Applicant> workApplicants(FrontierWorldState state, SubjectId depotId) {
@@ -137,7 +187,7 @@ public final class ServiceAccessCoordinator {
                 .noneMatch(entry -> entry.getValue().supportingSurface().equals(candidate));
     }
 
-    /** A consumed meal does not free the socket until its exact actor has left the throat. */
+    /** Final return requires the exact target; access may already have been released. */
     public static boolean cleared(FrontierWorldState state, ResidentMeal meal, BodyPosition body) {
         Objects.requireNonNull(state, "service access state");
         Objects.requireNonNull(meal, "service access meal");
@@ -148,8 +198,7 @@ public final class ServiceAccessCoordinator {
     }
 
     private static boolean outsideThroat(SettlementDepotServicePort port, SurfaceAnchor surface) {
-        return !port.ownedAccessSurfaces().contains(surface)
-                && !port.exteriorApproach().equals(surface);
+        return port.accessBoundary().cleared(surface.standingBody());
     }
 
     private static boolean atPort(SettlementDepotServicePort port, SurfaceAnchor surface) {

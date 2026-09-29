@@ -44,6 +44,12 @@ final class FrontierV3BakeryWorkSceneExecutor {
         Entity entity = level.getEntity(lease.members().getFirst().entityId());
         if (!(entity instanceof Mob worker) || !worker.isAlive() || !FrontierV3SceneExecutor.recognizes(runtime, worker)) return;
         BakeryWorkGoal goal = BakeryWorkGoal.current(state, job);
+        if (ServiceAccessCoordinator.witnessedBakeryExit(state, job, FrontierV3SurfaceObservation.observedBody(worker))) {
+            LEGS.remove(worker);
+            FrontierV3CommandSubmission.submit(runtime, "bakery-access-cleared", lease.id().value(),
+                    new BakeryHotAccessCleared(job.id(), lease.id(), FrontierV3SurfaceObservation.observedBody(worker)));
+            return;
+        }
         if ((goal.phase() == BakeryWorkState.Phase.DEPOT_PICKUP
                 || goal.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY)
                 && !ServiceAccessCoordinator.depotAvailableForWork(state,

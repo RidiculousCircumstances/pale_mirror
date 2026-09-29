@@ -5,7 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.Objects;
 
-/** Witnesses that the eaten meal's exact HOT actor physically cleared the service throat. */
+/** Witnesses that the eaten meal's exact HOT actor reached its retained return target. */
 public record ResidentMealHotReturned(SubjectId residentId, long ambientRevision,
                                       BodyPosition observedBody) implements FrontierPayload {
     public ResidentMealHotReturned {

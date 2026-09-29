@@ -6,7 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.Objects;
 
-/** Exact owned-body checkpoint only when a HOT obstruction interrupts a semantic journey. */
+/** Exact owned-body checkpoint at a HOT interruption or shared-service boundary exit. */
 public record ResourceSiteHarvestHotTransitObserved(SubjectId jobId, SceneLeaseId leaseId,
                                                     SubjectId workerId, long layoutRevision,
                                                     int nextWorkSlot, ResourceSiteHarvestGoal.Kind kind,
