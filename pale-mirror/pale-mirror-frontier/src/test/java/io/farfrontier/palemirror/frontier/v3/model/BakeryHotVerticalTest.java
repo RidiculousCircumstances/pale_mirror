@@ -374,6 +374,20 @@ class BakeryHotVerticalTest {
                 new SceneLeaseReleased(leaseId, List.of(new SceneMemberPosition(job.workerId(),
                         station.workerStation().standingBody(), actor.condition().health())))).continuation(),
                 "bakery release must leave its retained completion review intact, not invoke legacy output-ready continuation");
+        // The real shared depot already contains bread when a later batch arrives.
+        // Its physical receipt describes the whole occupied layout, not only the
+        // baker's newly prepared destination slot.
+        var existingBreadId = new SubjectId("lot:bakery-hot-existing-bread");
+        var existingBread = new ResourceLot(existingBreadId, task.ownerId(), "minecraft:bread", 59,
+                "test-existing-depot-bread", List.of());
+        FungibleResourceLedger stocked = state.inventory().fungibleResources().issue(existingBread,
+                new CustodyAccount(work.destinationAccountId(), new ResourceCustody.Container(depot),
+                        Map.of(existingBreadId, 59), Map.of()));
+        var firstBread = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                new InventoryCustody.ContainerSlot(depot, 0)), "minecraft:bread", 59);
+        stocked = stocked.rebind(work.destinationAccountId(), 1L,
+                FungiblePhysicalObservation.bind(stocked, work.destinationAccountId(), 1L, List.of(firstBread)));
+        state = state.withInventory(state.inventory().withFungibleResources(stocked));
         int deliverySlot = state.firstFreeContainerSlot(depot).orElseThrow();
         state = at(state, leaseId, job.workerId(), actor.body());
         BakeryWorkBlock fullDepot = new BakeryWorkBlock(BakeryWorkBlock.Reason.DESTINATION_OCCUPIED,
@@ -394,9 +408,16 @@ class BakeryHotVerticalTest {
                 "an occupied depot slot cannot be selected for bread delivery");
         state = ProductionProcess.reduceBakeryHotEffectPrepared(state, task.ownerId(),
                 new BakeryHotEffectPrepared(job.id(), leaseId, BakeryWorkState.Phase.DEPOT_DELIVERY, deliverySlot));
+        FrontierWorldState beforeObservedDelivery = state;
+        assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceBakeryHotEffectObserved(
+                beforeObservedDelivery, task.ownerId(), new BakeryHotEffectObserved(
+                        job.id(), leaseId, BakeryWorkState.Phase.DEPOT_DELIVERY, actor.body(),
+                        1L, 1L, List.of(), List.of(new FungiblePhysicalObservation.Stack(
+                        new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, deliverySlot)),
+                        "minecraft:bread", 64)))), "an observed receipt cannot erase existing depot bread");
         state = ProductionProcess.reduceBakeryHotEffectObserved(state, task.ownerId(), new BakeryHotEffectObserved(
                 job.id(), leaseId, BakeryWorkState.Phase.DEPOT_DELIVERY, actor.body(),
-                1L, 1L, List.of(), List.of(new FungiblePhysicalObservation.Stack(
+                1L, 1L, List.of(), List.of(firstBread, new FungiblePhysicalObservation.Stack(
                 new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, deliverySlot)),
                 "minecraft:bread", 64))));
         assertEquals(BakeryWorkState.Phase.DELIVERED, state.productionJobs().get(job.id()).bakeryWork().orElseThrow().phase());
@@ -411,7 +432,8 @@ class BakeryHotVerticalTest {
                 new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, deliverySlot)),
                 "minecraft:bread", 64);
         deliveredResources = deliveredResources.rebind(work.destinationAccountId(), 2L,
-                FungiblePhysicalObservation.bind(deliveredResources, work.destinationAccountId(), 2L, List.of(deliveredBread)));
+                FungiblePhysicalObservation.bind(deliveredResources, work.destinationAccountId(), 2L,
+                        List.of(firstBread, deliveredBread)));
         FrontierWorldState renewedDepot = state.withInventory(state.inventory().withFungibleResources(deliveredResources));
         assertDoesNotThrow(() -> ProductionResourceCustody.bind(renewedDepot, work.destinationAccountId(), 2L,
                 renewedDepot.inventory().fungibleResources().bindings().values().stream()
@@ -438,7 +460,8 @@ class BakeryHotVerticalTest {
         assertEquals(BakeryColdStep.Action.FINALIZE, finalization.action());
         assertFalse(state.productionJobs().containsKey(job.id()));
         assertEquals(StrategicTaskStatus.COMPLETED, state.strategicPlans().tasks().get(task.id()).status());
-        assertEquals(64, state.inventory().fungibleResources().totalQuantity(task.ownerId(), "minecraft:bread"));
+        assertEquals(123, state.inventory().fungibleResources().totalQuantity(task.ownerId(), "minecraft:bread"),
+                "delivery adds 64 bread without replacing the depot's existing 59");
     }
 
     private static FrontierWorldState at(FrontierWorldState state, SceneLeaseId leaseId,

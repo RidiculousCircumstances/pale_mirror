@@ -211,6 +211,38 @@ class FrontierV3ResourceSiteCellClaimTest {
         }
     }
 
+    @Test void coldActorHandAndDepotDeliveryDoNotWaitForRemoteFieldBlockProjection() {
+        var hand = new FrontierV3ResourceSiteHandProjectionWitness(SITE,
+                new SubjectId("job:site-harvest-cell-claim-cold"), new SubjectId("custody:field-actor-cold"),
+                new SubjectId("lot:field-part-cold"), new SubjectId("resident:field-cold"),
+                java.util.UUID.fromString("00000000-0000-0000-0000-000000000092"),
+                new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:field-cold"),
+                2L, 2L, 64, 64);
+        var delivery = new FrontierV3ResourceSiteDeliveryWitness(SITE, hand.jobId(),
+                new PhysicalIntentId("intent:site-harvest-cell-claim-cold"), hand.workerId(),
+                hand.entityId(), hand.leaseId(), hand.actorEpoch(), new SubjectId("container:1-depot"),
+                1, 64, 3L, "sha256:" + "a".repeat(64), "sha256:" + "b".repeat(64),
+                "witness:field-cold-delivery");
+        var pendingField = FrontierV3ResourceSiteLedger.fixture();
+        pendingField.reserveFieldInitialization(site(), INTENT);
+        for (var ledger : List.of(FrontierV3ResourceSiteLedger.fixture(), pendingField)) {
+            ledger.beginFieldHandProjection(hand);
+            var recoveredHand = FrontierV3ResourceSiteLedger.load(ledger.save(new CompoundTag(), null), null);
+            assertEquals(hand, recoveredHand.fieldHandProjection(SITE));
+            assertThrows(IllegalStateException.class, () -> recoveredHand.beginFieldDelivery(delivery),
+                    "delivery cannot overtake the durable hand write");
+            recoveredHand.retireFieldHandProjection(hand);
+            recoveredHand.beginFieldDelivery(delivery);
+            var recoveredDelivery = FrontierV3ResourceSiteLedger.load(recoveredHand.save(new CompoundTag(), null), null);
+            assertEquals(delivery, recoveredDelivery.fieldDelivery(SITE));
+            recoveredDelivery.retireFieldDelivery(delivery);
+        }
+        var legacy = FrontierV3ResourceSiteLedger.fixture();
+        legacy.reserve(SITE, INTENT);
+        assertThrows(IllegalStateException.class, () -> legacy.beginFieldHandProjection(hand));
+        assertThrows(IllegalStateException.class, () -> legacy.beginFieldDelivery(delivery));
+    }
+
     private static ResourceFieldLayout layout() {
         var soil = SurfaceAnchor.at(12, 63, 34);
         return new ResourceFieldLayout(1, 2, List.of(new ResourceFieldLayout.Cell(

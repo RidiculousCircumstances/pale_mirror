@@ -90,6 +90,20 @@ class FrontierV3ServerRuntimeTest {
     private static final SubjectId SUBJECT = new SubjectId("settlement:runtime");
 
     @Test
+    void rejectedBakeryPhysicalCommandCanBeClassifiedWithoutQuarantiningRuntime(@TempDir Path directory) {
+        WorldId world = new WorldId("frontier:rejected-bakery-observation-local");
+        var runtime = FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.configuration(world, 91L),
+                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 200);
+        var foreign = new io.farfrontier.palemirror.frontier.v3.model.BakeryHotEffectPrepared(
+                new SubjectId("job:foreign-bakery"), new SceneLeaseId("lease:foreign-bakery"),
+                io.farfrontier.palemirror.frontier.v3.model.BakeryWorkState.Phase.DEPOT_DELIVERY, 0);
+        assertInstanceOf(CommandResult.Rejected.class, FrontierV3CommandSubmission.submitResult(
+                runtime, "bakery-effect-prepare", "lease:foreign-bakery", foreign));
+        assertEquals(FrontierV3RuntimeStatus.Kind.ACTIVE, runtime.status().kind());
+        assertEquals(0L, runtime.checkpointImage().orElseThrow().revision().value());
+    }
+
+    @Test
     void failedRecoverySelectionRemainsAVisibleQuarantinedV3Runtime(@TempDir Path directory) {
         FrontierV3ServerRuntime<Counter, CounterProjection> runtime = FrontierV3ServerRuntime.failedStart(
                 configuration(), new FrontierFileStore(directory, codecs()), 20,

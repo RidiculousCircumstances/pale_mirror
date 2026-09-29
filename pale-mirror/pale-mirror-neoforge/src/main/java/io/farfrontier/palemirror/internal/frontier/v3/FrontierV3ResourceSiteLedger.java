@@ -61,11 +61,11 @@ final class FrontierV3ResourceSiteLedger extends SavedData {
                                          Map<SubjectId, FrontierV3ResourceFieldForeignChangeWitness> fieldForeignChanges) {
         if (claims.size() + fieldClaims.size() > MAX_SITES || claims.keySet().stream().anyMatch(fieldClaims::containsKey))
             throw new IllegalArgumentException("v3 field has competing or unbounded physical claim owners");
-        if (fieldDeliveries.size() > MAX_SITES || fieldDeliveries.keySet().stream().anyMatch(site -> !fieldClaims.containsKey(site)))
-            throw new IllegalArgumentException("field delivery lacks its one cell-owned site");
-        if (fieldHandProjections.size() > MAX_SITES || fieldHandProjections.keySet().stream().anyMatch(site -> !fieldClaims.containsKey(site))
+        if (fieldDeliveries.size() > MAX_SITES || fieldDeliveries.keySet().stream().anyMatch(claims::containsKey))
+            throw new IllegalArgumentException("field delivery competes with a legacy site owner");
+        if (fieldHandProjections.size() > MAX_SITES || fieldHandProjections.keySet().stream().anyMatch(claims::containsKey)
                 || fieldHandProjections.keySet().stream().anyMatch(fieldDeliveries::containsKey))
-            throw new IllegalArgumentException("field hand projection lacks its one cell-owned site or overlaps delivery");
+            throw new IllegalArgumentException("field hand projection competes with a legacy site owner or delivery");
         if (fieldPlayerBreaks.size() > MAX_SITES || fieldPlayerBreaks.keySet().stream().anyMatch(site -> !fieldClaims.containsKey(site)))
             throw new IllegalArgumentException("player field break lacks its one cell-owned site");
         if (fieldWorldChanges.size() > MAX_SITES || fieldWorldChanges.keySet().stream().anyMatch(site -> !fieldClaims.containsKey(site)))
@@ -240,9 +240,11 @@ final class FrontierV3ResourceSiteLedger extends SavedData {
         setDirty();
     }
     void beginFieldHandProjection(FrontierV3ResourceSiteHandProjectionWitness witness) {
-        if (!(fieldClaim(witness.siteId()) instanceof FieldOwnership owner) || owner.status() != Status.ACTIVE
-                || fieldDeliveries.containsKey(witness.siteId()))
-            throw new IllegalStateException("field hand projection has no exclusive active cell owner");
+        // A COLD-accounted lot is owned by its actor account, not by the field's
+        // independently materialized block claim. The depot-side worker can become
+        // HOT before first-field projection finishes (or while that chunk is absent).
+        if (claims.containsKey(witness.siteId()) || fieldDeliveries.containsKey(witness.siteId()))
+            throw new IllegalStateException("field hand projection has a competing physical owner");
         var prior = fieldHandProjections.putIfAbsent(witness.siteId(), witness);
         if (prior != null && !prior.equals(witness)) throw new IllegalStateException("field hand projection changes its durable predecessor");
         if (prior == null) setDirty();
@@ -259,8 +261,8 @@ final class FrontierV3ResourceSiteLedger extends SavedData {
         return fieldDeliveries.values().stream().sorted(java.util.Comparator.comparing(FrontierV3ResourceSiteDeliveryWitness::siteId)).toList();
     }
     void beginFieldDelivery(FrontierV3ResourceSiteDeliveryWitness witness) {
-        if (!(fieldClaim(witness.siteId()) instanceof FieldOwnership owner) || owner.status() != Status.ACTIVE)
-            throw new IllegalStateException("field delivery has no active cell owner");
+        if (claims.containsKey(witness.siteId()))
+            throw new IllegalStateException("field delivery has a competing legacy site owner");
         if (fieldHandProjections.containsKey(witness.siteId()))
             throw new IllegalStateException("field delivery cannot overtake an unretired actor-hand projection");
         FrontierV3ResourceSiteDeliveryWitness prior = fieldDeliveries.putIfAbsent(witness.siteId(), witness);
@@ -570,18 +572,18 @@ final class FrontierV3ResourceSiteLedger extends SavedData {
         if (deliveryRows.size() > MAX_SITES) throw new IllegalStateException("field delivery witness limit exceeded");
         for (Tag value : deliveryRows) {
             FrontierV3ResourceSiteDeliveryWitness witness = FrontierV3ResourceSiteDeliveryWitness.read((CompoundTag) value);
-            if (!(fieldClaims.get(witness.siteId()) instanceof FieldOwnership)
+            if (claims.containsKey(witness.siteId())
                     || fieldDeliveries.put(witness.siteId(), witness) != null)
-                throw new IllegalStateException("field delivery witness has no unique cell-owned site");
+                throw new IllegalStateException("field delivery witness has no unique COLD crop owner");
         }
         Map<SubjectId, FrontierV3ResourceSiteHandProjectionWitness> fieldHandProjections = new LinkedHashMap<>();
         ListTag handRows = rows(tag, "fieldHandProjections");
         if (handRows.size() > MAX_SITES) throw new IllegalStateException("field hand witness limit exceeded");
         for (Tag value : handRows) {
             var witness = FrontierV3ResourceSiteHandProjectionWitness.read((CompoundTag) value);
-            if (!(fieldClaims.get(witness.siteId()) instanceof FieldOwnership)
+            if (claims.containsKey(witness.siteId())
                     || fieldHandProjections.put(witness.siteId(), witness) != null)
-                throw new IllegalStateException("field hand witness has no unique cell-owned site");
+                throw new IllegalStateException("field hand witness has no unique COLD crop owner");
         }
         Map<SubjectId, FrontierV3ResourceFieldPlayerBreakWitness> fieldPlayerBreaks = new LinkedHashMap<>();
         ListTag playerRows = rows(tag, "fieldPlayerBreaks");

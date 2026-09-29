@@ -64,9 +64,9 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
             ResourceFieldCycle cycle = state.resourceSites().cycle(job.siteId());
             boolean intermediate = job.returningForBatch();
             if ((!intermediate && !cycle.cycleAccounted()) || !cycle.pendingPlayerBreaks().isEmpty()) continue;
-            if (!(ledger.fieldClaim(job.siteId()) instanceof FrontierV3ResourceSiteLedger.FieldOwnership owner)
-                    || owner.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE
-                    || !owner.witness().matchesCycle(cycle)) continue;
+            // Delivery is fenced by the actor lot, scene, depot replica and
+            // intent; the remote field's block-projection claim is not cargo
+            // authority and may lag a completed COLD harvest.
             var hand = FrontierV3ActorHandObservation.observe(level, state, scene, job);
             int quantity = job.carriedYieldQuantity(cycle.harvestedCount());
             if (quantity == 0) {

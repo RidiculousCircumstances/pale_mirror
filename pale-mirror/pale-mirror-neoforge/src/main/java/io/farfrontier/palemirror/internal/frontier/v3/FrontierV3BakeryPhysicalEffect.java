@@ -80,14 +80,13 @@ final class FrontierV3BakeryPhysicalEffect {
             return;
         }
         if (!pending.leaseId().equals(lease.id()) || pending.destinationSlot() != destinationSlot) return;
+        // A rejected post-effect receipt is non-replayable. Keep the physical
+        // evidence and pending step stable for explicit reconciliation.
+        if (work.block().map(value -> value.reason() == BakeryWorkBlock.Reason.AMBIGUOUS_EFFECT).orElse(false)) return;
         if (shape.after()) {
-            BakeryHotEffectObserved receipt = shape.observation();
-            CommandResult result = FrontierV3CommandSubmission.submit(runtime, "bakery-effect-observed", lease.id().value(), receipt);
-            FrontierV3DiagnosticTrace.recordScene(level.getServer(), "bakery_effect_observed", lease, result);
-            closeObservedContainerMutation(runtime, containerId, chest, result);
+            observe(level, runtime, lease, job, containerId, chest, shape.observation());
             return;
         }
-        if (work.block().map(value -> value.reason() == BakeryWorkBlock.Reason.AMBIGUOUS_EFFECT).orElse(false)) return;
         if (!shape.before()) {
             block(level, runtime, lease, job, new BakeryWorkBlock(BakeryWorkBlock.Reason.AMBIGUOUS_EFFECT,
                     containerId, destinationSlot, "minecraft:air", 0));
@@ -95,10 +94,25 @@ final class FrontierV3BakeryPhysicalEffect {
         }
         shape.apply();
         if (shape.after()) {
-            CommandResult result = FrontierV3CommandSubmission.submit(runtime, "bakery-effect-observed", lease.id().value(), shape.observation());
-            FrontierV3DiagnosticTrace.recordScene(level.getServer(), "bakery_effect_observed", lease, result);
-            closeObservedContainerMutation(runtime, containerId, chest, result);
+            observe(level, runtime, lease, job, containerId, chest, shape.observation());
         }
+    }
+
+    private static void observe(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                SceneLease lease, ProductionJob job, SubjectId containerId,
+                                ChestBlockEntity chest, BakeryHotEffectObserved receipt) {
+        CommandResult result = FrontierV3CommandSubmission.submitResult(runtime, "bakery-effect-observed", lease.id().value(), receipt);
+        FrontierV3DiagnosticTrace.recordScene(level.getServer(), "bakery_effect_observed", lease, result);
+        if (result instanceof CommandResult.Rejected) {
+            // The chest/hand may already contain the effect. Keep the prepared
+            // step and its exact worker local; do not quarantine unrelated sites.
+            block(level, runtime, lease, job, new BakeryWorkBlock(BakeryWorkBlock.Reason.AMBIGUOUS_EFFECT,
+                    containerId, receipt.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY
+                    ? job.bakeryWork().orElseThrow().pendingPhysicalStep().orElseThrow().destinationSlot() : -1,
+                    "minecraft:air", 0));
+            return;
+        }
+        closeObservedContainerMutation(runtime, containerId, chest, result);
     }
 
     private static void closeObservedContainerMutation(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,

@@ -15,15 +15,25 @@ import io.farfrontier.palemirror.frontier.v3.api.EngineScheduleBinding;
 final class FrontierV3CommandSubmission {
     private FrontierV3CommandSubmission() { }
     static CommandResult submit(FrontierV3ServerRuntime<?, ?> runtime, String phase, String id, FrontierPayload payload) {
-        return submit(runtime, phase, id, payload, Optional.empty());
+        return requireAccepted(submitResult(runtime, phase, id, payload));
+    }
+
+    /** A witnessed non-replayable effect must retain a rejected receipt as a local ambiguity. */
+    static CommandResult submitResult(FrontierV3ServerRuntime<?, ?> runtime, String phase, String id, FrontierPayload payload) {
+        return submitRaw(runtime, phase, id, payload, Optional.empty());
     }
 
     static CommandResult submitBound(FrontierV3ServerRuntime<?, ?> runtime, String phase, String id, FrontierPayload payload,
                                      ScheduledAction binding) {
-        return submit(runtime, phase, id, payload, Optional.of(binding));
+        return requireAccepted(submitRaw(runtime, phase, id, payload, Optional.of(binding)));
     }
 
-    private static CommandResult submit(FrontierV3ServerRuntime<?, ?> runtime, String phase, String id, FrontierPayload payload,
+    private static CommandResult requireAccepted(CommandResult result) {
+        if (!(result instanceof CommandResult.Accepted)) throw new IllegalStateException("Frontier v3 physical transition was rejected: " + result);
+        return result;
+    }
+
+    private static CommandResult submitRaw(FrontierV3ServerRuntime<?, ?> runtime, String phase, String id, FrontierPayload payload,
                                         Optional<ScheduledAction> binding) {
         io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = runtime.canonicalState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         CommandId commandId = FrontierV3CommandIds.physical(phase, checkpoint.revision().value());
@@ -32,7 +42,6 @@ final class FrontierV3CommandSubmission {
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), payload,
                 binding.map(action -> new EngineScheduleBinding(checkpoint.revision(), action))))
                 .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
-        if (!(result instanceof CommandResult.Accepted)) throw new IllegalStateException("Frontier v3 physical transition was rejected: " + result);
         return result;
     }
 }

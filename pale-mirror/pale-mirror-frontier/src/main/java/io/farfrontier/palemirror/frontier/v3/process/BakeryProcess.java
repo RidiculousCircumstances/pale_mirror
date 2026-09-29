@@ -421,10 +421,11 @@ public final class BakeryProcess {
             throw new IllegalArgumentException("observed bakery effect has a foreign phase, body or lease");
         if (observed.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY
                 && !(job.inputHold() instanceof ProductionInputHold.Materialized)
-                && (observed.destination().size() != 1
-                || !observed.destination().getFirst().address().equals(new PhysicalStackAddress.ContainerSlot(
-                new InventoryCustody.ContainerSlot(FrontierWorldState.depotId(job.settlementId()),
-                        pending.destinationSlot())))))
+                && observed.destination().stream().filter(stack -> stack.address().equals(
+                new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(
+                        FrontierWorldState.depotId(job.settlementId()), pending.destinationSlot()))))
+                .filter(stack -> stack.itemKind().equals(job.outputItemKind()) && stack.quantity() == job.outputCount())
+                .count() != 1)
             throw new IllegalArgumentException("observed bakery delivery differs from its prepared depot slot");
         BakeryWorkState ready = work.withBlock(Optional.empty()).withoutPhysical();
         ExactInventory inventory;

@@ -675,11 +675,9 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             if (hand.disposition() != FrontierV3ActorHandObservation.Disposition.EMPTY) {
                 conflict(level, runtime, lease, "cold-carried-hand-unwitnessed-item"); return true;
             }
-            if (!(ledger.fieldClaim(job.siteId()) instanceof FrontierV3ResourceSiteLedger.FieldOwnership owner)
-                    || owner.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE
-                    || !owner.witness().matchesCycle(cycle)) {
-                conflict(level, runtime, lease, "cold-carried-hand-cell-owner-missing"); return true;
-            }
+            // The already-accounted COLD wheat belongs to the actor account. A
+            // first-visibility field writer is a separate physical owner and may
+            // still be initializing while this worker appears by the depot.
             ledger.beginFieldHandProjection(expected); ledger.persist(level);
             Entity entity = level.getEntity(lease.members().getFirst().entityId());
             if (!(entity instanceof Mob worker) || !FrontierV3SceneExecutor.owned(entity, state, lease, lease.members().getFirst())) {
