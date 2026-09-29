@@ -29,6 +29,23 @@ public final class ResidentNeedProcess {
                 .nextThresholdTick(rules, ResidentCharacteristics.DEFAULT_METABOLISM_PERMILLE));
     }
 
+    /** A witnessed meal changes the next threshold, including when its old due action is queued but not yet run. */
+    public static ProposedEvent requeueAfterConfirmedBread(FrontierWorldState state, SubjectId residentId,
+                                                            long consumedAtTick) {
+        ResidentProfile resident = state.humanPopulation().resident(residentId);
+        if (resident == null || state.actorLocations().get(residentId) == null
+                || state.actorLocations().get(residentId).condition().status() != ActorLifeStatus.ALIVE)
+            throw new IllegalArgumentException("need review replacement requires one living resident");
+        FrontierRuleset.ResidentLife rules = state.bootstrap().ruleset().residentLife();
+        ResidentNutrition before = state.humanPopulation().nutrition(residentId);
+        int rate = resident.characteristics().effectiveMetabolismPermille(consumedAtTick);
+        long oldDue = before.nextThresholdTick(rules, rate);
+        ResidentNutrition after = before.consumeBreadAt(consumedAtTick, rules, rate);
+        long nextDue = after.nextThresholdTick(rules, rate);
+        return new ProposedEvent(residentId, new ScheduleEffect.Rescheduled(
+                review(residentId, oldDue).id(), review(residentId, nextDue)));
+    }
+
     public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
         if (!action.kind().equals(REVIEW) || !action.id().equals(review(action.subject(), action.dueAt().ticks()).id()))
             throw new IllegalArgumentException("need review has a foreign action identity");

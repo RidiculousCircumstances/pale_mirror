@@ -236,9 +236,8 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
             return new CommandPlan.Accepted(List.of(new ProposedEvent(prepared.residentId(), prepared)));
         }
         if (command.payload() instanceof ResidentMealHotEffectObserved observed) {
-            try { ResidentMealProcess.reduceHotObserved(state, observed.residentId(), observed, command.submittedAt().ticks()); }
+            try { return new CommandPlan.Accepted(ResidentMealProcess.planHotObserved(state, observed, command.submittedAt().ticks())); }
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
-            return new CommandPlan.Accepted(List.of(new ProposedEvent(observed.residentId(), observed)));
         }
         if (command.payload() instanceof ResidentMealHotHandMaterialized observed) {
             try { ResidentMealProcess.reduceHotHandMaterialized(state, observed.residentId(), observed); }

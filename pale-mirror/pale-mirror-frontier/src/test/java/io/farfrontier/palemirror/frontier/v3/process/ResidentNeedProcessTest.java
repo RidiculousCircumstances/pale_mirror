@@ -53,4 +53,19 @@ class ResidentNeedProcessTest {
         FrontierWorldState recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(hungry));
         assertEquals(hungry.humanPopulation().nutrition(resident), recovered.humanPopulation().nutrition(resident));
     }
+
+    @Test void confirmedBreadReplacesAnOverdueThresholdBeforeItsQueuedReviewCanRun() {
+        FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:resident-need-meal-before-review"), 419L));
+        SubjectId resident = initial.bootstrap().settlements().getFirst().residents().getFirst().id();
+        var replacement = assertInstanceOf(ScheduleEffect.Rescheduled.class,
+                ResidentNeedProcess.requeueAfterConfirmedBread(initial, resident, 24_001L).payload());
+        assertEquals(ResidentNeedProcess.review(resident, 24_000L).id(), replacement.scheduleId());
+        assertEquals(ResidentNeedProcess.review(resident, 48_000L), replacement.replacement());
+        FrontierWorldState afterMeal = initial.withHumanPopulation(initial.humanPopulation()
+                .consumeResidentBread(resident, 24_001L, initial.bootstrap().ruleset().residentLife()));
+        assertThrows(IllegalArgumentException.class, () -> ResidentNeedProcess.plan(afterMeal,
+                ResidentNeedProcess.review(resident, 24_000L)), "the old due action must be retired atomically");
+        assertEquals(2, ResidentNeedProcess.plan(afterMeal, replacement.replacement()).size());
+    }
 }

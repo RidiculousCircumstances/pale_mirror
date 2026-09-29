@@ -11,6 +11,7 @@ import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec
 import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess;
 import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestRetargeting;
 import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteProcess;
+import io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess;
 import io.farfrontier.palemirror.frontier.v3.process.StrategicObjectiveProcess;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import org.junit.jupiter.api.Test;
@@ -23,6 +24,43 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Goal-navigation regression and shared fixture; obsolete route-cursor tests are archived. */
 class ResourceSiteHarvestProcessTest {
+    @Test void readyFieldRetainsPendingStartWhileEveryLivingFarmerEats() {
+        FrontierWorldState state = ready(initial());
+        SubjectId site = new SubjectId("site:1-wheat-field");
+        SubjectId settlement = new SubjectId("settlement:1");
+        SubjectId depot = FrontierWorldState.depotId(settlement);
+        var ledger = state.inventory().fungibleResources().transformCold(
+                ReferenceContainerCustody.scopeId(depot),
+                Map.of(new SubjectId("lot:bootstrap-1-wheat"), 64), Map.of(),
+                new ResourceLot(new SubjectId("lot:harvest-meal-bread"), settlement,
+                        "minecraft:bread", 64, "test", List.of()));
+        state = state.withInventory(state.inventory().withFungibleResources(ledger));
+        for (ResidentProfile farmer : state.humanPopulation().residents().values().stream()
+                .filter(resident -> resident.settlementId().equals(settlement)
+                        && resident.profession() == ResidentProfession.AGRICULTURAL_WORKER).toList()) {
+            var started = ResidentMealProcess.selectSourceAtYield(state, farmer.id(), 24_000L).orElseThrow();
+            state = ResidentMealProcess.reduceStarted(state, farmer.id(), started);
+        }
+        assertTrue(state.humanPopulation().meals().size() > 0);
+        assertTrue(FrontierWorldStateSupport.availableFieldResident(state, settlement,
+                ResidentProfession.AGRICULTURAL_WORKER).isEmpty());
+        var opportunity = StrategicObjectiveProcess.planResourceHarvestOpportunity(state,
+                StrategicObjectiveProcess.resourceHarvestOpportunity(state, state.resourceSites().site(site), 24_000L));
+        state = StrategicObjectiveProcess.reduceObjective(state, settlement,
+                (StrategicObjectiveSelected) opportunity.getFirst().payload());
+        state = StrategicObjectiveProcess.reduceTask(state, settlement,
+                (StrategicTaskPlanned) opportunity.get(1).payload());
+        StrategicTask task = state.strategicPlans().tasks().values().stream()
+                .filter(value -> value.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE).findFirst().orElseThrow();
+        ScheduledAction due = ResourceSiteHarvestProcess.start(task, 24_085L);
+        var planned = ResourceSiteHarvestProcess.plan(state, due);
+        assertEquals(1, planned.size());
+        var retry = assertInstanceOf(ScheduleEffect.Rescheduled.class, planned.getFirst().payload());
+        assertEquals(due.id(), retry.scheduleId());
+        assertTrue(retry.replacement().dueAt().ticks() > due.dueAt().ticks());
+        assertEquals(StrategicTaskStatus.PENDING, state.strategicPlans().tasks().get(task.id()).status());
+    }
+
     static FrontierWorldState initial() { return initial(125L); }
     static FrontierWorldState initial(long seed) {
         return FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:resource-site-harvest-" + seed), seed));

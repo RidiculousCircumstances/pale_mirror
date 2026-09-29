@@ -48,6 +48,8 @@ public final class ResidentMealProcess {
                 new ScheduleEffect.Rescheduled(action.id(), progress(meal, nextDue))));
         List<ProposedEvent> events = new java.util.ArrayList<>();
         events.add(new ProposedEvent(meal.residentId(), step.orElseThrow()));
+        if (meal.phase() == ResidentMeal.Phase.CONSUME)
+            events.add(ResidentNeedProcess.requeueAfterConfirmedBread(state, meal.residentId(), action.dueAt().ticks()));
         if (meal.phase() == ResidentMeal.Phase.RETURN)
             events.add(ResidentActivityProcess.wakeAfterMeal(meal.residentId(), action.dueAt().ticks()));
         events.add(new ProposedEvent(meal.residentId(), meal.phase() == ResidentMeal.Phase.RETURN
@@ -226,6 +228,16 @@ public final class ResidentMealProcess {
                 .advanceMeal(meal, meal.advance(ResidentMeal.Phase.RETURN));
         return state.withChanges(FrontierWorldStateUpdate.begin()
                 .inventory(state.inventory().withFungibleResources(ledger)).humanPopulation(people));
+    }
+
+    /** The physical consumption receipt and its exact need-clock replacement form one command transaction. */
+    public static List<ProposedEvent> planHotObserved(FrontierWorldState state,
+                                                       ResidentMealHotEffectObserved observed, long atTick) {
+        reduceHotObserved(state, observed.residentId(), observed, atTick);
+        if (observed.phase() != ResidentMeal.Phase.CONSUME)
+            return List.of(new ProposedEvent(observed.residentId(), observed));
+        return List.of(new ProposedEvent(observed.residentId(), observed),
+                ResidentNeedProcess.requeueAfterConfirmedBread(state, observed.residentId(), atTick));
     }
 
     private static ResidentMeal hotMeal(FrontierWorldState state, SubjectId subject,

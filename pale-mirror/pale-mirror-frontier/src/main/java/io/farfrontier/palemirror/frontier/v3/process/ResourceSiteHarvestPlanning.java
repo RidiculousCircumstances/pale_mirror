@@ -46,7 +46,15 @@ final class ResourceSiteHarvestPlanning {
         }
         if (state.structureConditions().get(site.facilityId()) != StructureCondition.INTACT) return blocked(task);
         ResidentProfile farmer = successorFarmer(state, lifecycle, settlement.id());
-        if (farmer == null) return blocked(task);
+        if (farmer == null) {
+            // A meal, starvation or another assignment can temporarily remove every farmer
+            // from the available pool. None of those is evidence that this READY field or its
+            // retained worker has disappeared. Keep the same task/start identity pending until
+            // a living farmer can take it; only a genuinely missing/dead worker is terminal.
+            if (!livingFarmerExists(state, lifecycle, settlement.id())) return blocked(task);
+            long retryAt = Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval());
+            return List.of(reschedule(action, start(task, retryAt)));
+        }
         if (!ResidentActivityCoordinator.mayStartOrdinaryWork(state, farmer.id(), action.dueAt().ticks()))
             return List.of(reschedule(action, start(task, ResidentActivityCoordinator.nextOrdinaryWorkAdmission(
                     state, farmer.id(), action.dueAt().ticks()))));
@@ -108,6 +116,16 @@ final class ResourceSiteHarvestPlanning {
             return null;
         }
         return farmer;
+    }
+
+    private static boolean livingFarmerExists(FrontierWorldState state, ResourceSiteLifecycle lifecycle, SubjectId settlementId) {
+        return state.humanPopulation().residents().values().stream()
+                .filter(resident -> lifecycle.harvestLineage().isEmpty()
+                        || lifecycle.harvestLineage().orElseThrow().workerId().equals(resident.id()))
+                .anyMatch(resident -> resident.settlementId().equals(settlementId)
+                        && resident.profession() == ResidentProfession.AGRICULTURAL_WORKER
+                        && state.actorLocations().containsKey(resident.id())
+                        && state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE);
     }
 
     /**
