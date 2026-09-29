@@ -282,6 +282,64 @@ public final class FrontierV3LocalNavigationGameTests {
         });
     }
 
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
+            template = "bastion/treasure/big_air_full", timeoutTicks = 180)
+    public static void minecraftGoalNavigatorKeepsFarmerAboveEveryCropOnRepeatedFieldEdges(GameTestHelper helper) {
+        var level = helper.getLevel();
+        List<BlockPos> route = new ArrayList<>();
+        for (int z = 4; z <= 5; z++) {
+            for (int step = 0; step < 8; step++) {
+                int x = z == 4 ? 4 + step : 11 - step;
+                BlockPos soil = helper.absolutePos(new BlockPos(x, 30, z));
+                level.setBlock(soil.below(), Blocks.STONE.defaultBlockState(), 3);
+                level.setBlock(soil, Blocks.FARMLAND.defaultBlockState()
+                        .setValue(net.minecraft.world.level.block.FarmBlock.MOISTURE, 7), 3);
+                level.setBlock(soil.above(), Blocks.WHEAT.defaultBlockState()
+                        .setValue(net.minecraft.world.level.block.CropBlock.AGE, 7), 3);
+                level.setBlock(soil.above(2), Blocks.AIR.defaultBlockState(), 3);
+                route.add(soil);
+            }
+        }
+        Villager farmer = helper.spawnWithNoFreeWill(EntityType.VILLAGER,
+                new Vec3(4.5D, 30.9375D, 4.5D));
+        helper.runAfterDelay(1, () -> {
+            for (int index = 1; index < route.size(); index++) {
+                BlockPos previous = route.get(index - 1), next = route.get(index);
+                SurfaceAnchor from = SurfaceAnchor.at(previous.getX(), previous.getY(), previous.getZ());
+                SurfaceAnchor target = SurfaceAnchor.at(next.getX(), next.getY(), next.getZ());
+                var goal = new FrontierV3GoalNavigation.Goal(target,
+                        io.farfrontier.palemirror.frontier.v3.model.TraversalCapability.PEDESTRIAN,
+                        LocalNavigationEnvelope.around(from.standingBody(), target.standingBody()));
+                for (int turn = 0; turn < 80 && !FrontierV3SemanticMovement.arrived(level, farmer, target); turn++) {
+                    var motion = FrontierV3GoalNavigation.pursue(level, farmer, goal);
+                    helper.assertTrue(motion.status() == FrontierV3GoalNavigation.Status.IN_PROGRESS,
+                            "field edge " + index + " blocked: " + motion + " body=" + farmer.position());
+                    FrontierV3GoalNavigation.advanceAtEntityBoundary(farmer);
+                    farmer.aiStep();
+                }
+                helper.assertTrue(FrontierV3SemanticMovement.arrived(level, farmer, target),
+                        "field edge " + index + " missed exact crop support: " + farmer.position()
+                                + " on=" + farmer.getOnPos());
+                helper.assertValueEqual(FrontierV3SupportedBodyCapture.observe(level, farmer),
+                        java.util.Optional.of(new BodyPosition(next.getX(), next.getY() + 1, next.getZ())),
+                        "field edge " + index + " may not retain a body inside farmland");
+                FrontierV3GoalNavigation.stop(farmer);
+                level.setBlock(next.above(), Blocks.AIR.defaultBlockState(), 3);
+                for (int workTurn = 0; workTurn < 20; workTurn++) {
+                    FrontierV3ControlledMobMotion.tendCurrentCrop(level, farmer,
+                            new BlockPosition(next.getX(), next.getY() + 1, next.getZ()));
+                    FrontierV3ControlledMobMotion.advanceAtEntityBoundary(farmer);
+                    farmer.aiStep();
+                }
+                helper.assertValueEqual(FrontierV3SupportedBodyCapture.observe(level, farmer),
+                        java.util.Optional.of(new BodyPosition(next.getX(), next.getY() + 1, next.getZ())),
+                        "field work " + index + " may not lower the retained body into its soil");
+                FrontierV3ControlledMobMotion.stop(farmer);
+            }
+            FrontierV3GoalNavigation.stop(farmer); farmer.discard(); helper.succeed();
+        });
+    }
+
     @GameTest(batch = "pm-frontier-v3-scene-harvest-support", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 140)
     public static void tendingThenLeavingHydratedFarmlandDoesNotInventTrampling(GameTestHelper helper) {
         var level = helper.getLevel();

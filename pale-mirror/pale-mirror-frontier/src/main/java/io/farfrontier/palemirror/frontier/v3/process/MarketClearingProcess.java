@@ -52,6 +52,16 @@ public final class MarketClearingProcess {
         ProductionStarted started = start.stream().map(ProposedEvent::payload).filter(ProductionStarted.class::isInstance)
                 .map(ProductionStarted.class::cast).findFirst().orElse(null);
         if (started == null) {
+            // Production owns the worker's schedule and may defer an otherwise valid start.
+            // The market still owns the open demand: translate that exact due time into a
+            // market retry instead of treating ordinary FREE time as a broken decision.
+            if (start.size() == 1 && start.getFirst().payload() instanceof ScheduleEffect.Rescheduled deferred
+                    && deferred.scheduleId().equals(ProductionProcess.start(task, now).id())
+                    && deferred.replacement().kind().equals(ProductionProcess.start(task, now).kind())
+                    && deferred.replacement().subject().equals(task.id())
+                    && deferred.replacement().dueAt().ticks() > now) {
+                return retryAt(demand, action, deferred.replacement().dueAt().ticks());
+            }
             if (start.stream().map(ProposedEvent::payload).noneMatch(ProductionBlocked.class::isInstance)) {
                 throw new IllegalStateException("market clearing failed without a terminal production decision");
             }
@@ -205,8 +215,10 @@ public final class MarketClearingProcess {
                 && slot.containerId().equals(FrontierWorldState.depotId(job.settlementId()));
     }
     private static List<ProposedEvent> retry(FrontierWorldState state, MarketDemand demand, ScheduledAction action, long now) {
-        return List.of(new ProposedEvent(demand.id(), new ScheduleEffect.Created(clear(demand, nextOrdinal(action), Math.addExact(now,
-                state.bootstrap().ruleset().cadence().marketRetryInterval())))));
+        return retryAt(demand, action, Math.addExact(now, state.bootstrap().ruleset().cadence().marketRetryInterval()));
+    }
+    private static List<ProposedEvent> retryAt(MarketDemand demand, ScheduledAction action, long dueAt) {
+        return List.of(new ProposedEvent(demand.id(), new ScheduleEffect.Created(clear(demand, nextOrdinal(action), dueAt))));
     }
     private static int nextOrdinal(ScheduledAction action) {
         String suffix = action.id().value().substring(action.id().value().lastIndexOf('-') + 1);
