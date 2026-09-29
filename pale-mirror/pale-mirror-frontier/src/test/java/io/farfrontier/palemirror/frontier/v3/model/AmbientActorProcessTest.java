@@ -14,6 +14,28 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 class AmbientActorProcessTest {
     @Test
+    void retainedFieldJobDoesNotBecomeAnAmbientWorkGoalWhenActivityYields() {
+        var fixture = FrontierV3FixtureCatalog.configuration("resident-worker-meal",
+                new WorldId("frontier:ambient-worker-activity"), 125L);
+        FrontierWorldState state = fixture.initialState();
+        var job = (ResourceSiteHarvestJob) state.resourceSites().site(new SubjectId("site:1-wheat-field"))
+                .activeWork().orElseThrow();
+        long workTick = fixture.initialInstant().ticks();
+
+        assertEquals(ResidentActivityChoice.Kind.WORK,
+                ResidentActivityCoordinator.assess(state, job.workerId(), workTick).kind());
+        assertEquals(AmbientGoalKind.WORK, AmbientActorProcess.goalFor(state, job.workerId(), workTick).kind());
+
+        long freeTick = 12_001L;
+        assertEquals(ResidentActivityChoice.Kind.EAT,
+                ResidentActivityCoordinator.assess(state, job.workerId(), freeTick).kind());
+        assertEquals(AmbientGoalKind.PATROL,
+                AmbientActorProcess.goalFor(state, job.workerId(), freeTick).kind());
+        assertEquals(state.actorLocations().get(job.workerId()).supportingSurface().support(),
+                AmbientActorProcess.goalFor(state, job.workerId(), freeTick).position());
+    }
+
+    @Test
     void liveBodyDepartureCapturesExactPositionAndHealth() {
         var worldId = new WorldId("frontier:ambient-observation");
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(worldId, 91L));
@@ -38,7 +60,7 @@ class AmbientActorProcessTest {
                         && profile.profession() != ResidentProfession.SECURITY_WORKER)
                 .map(ResidentProfile::id).findFirst().orElseThrow();
 
-        AmbientActorProcess.AmbientGoal goal = AmbientActorProcess.goalFor(state, resident);
+        AmbientActorProcess.AmbientGoal goal = AmbientActorProcess.goalFor(state, resident, 1L);
 
         assertEquals(HumanAssignmentKind.IDLE, HumanAssignmentProjection.compile(state).assignment(resident).kind());
         assertEquals(AmbientGoalKind.PATROL, goal.kind());

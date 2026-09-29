@@ -378,7 +378,7 @@ class RouteMaintenanceProcessTest {
         EngineeringWorkAssembly assembly = EngineeringWorksite.compile(equipped, started.maintenance());
         FrontierWorldState assembled = RouteMaintenanceStateSupport.reduceAssemblyStarted(equipped, FrontierRouteNetwork.OWNER,
                 new RouteMaintenanceAssemblyStarted(started.maintenance().id(), assembly));
-        assertEquals(AmbientGoalKind.ENGINEERING_ASSEMBLY, AmbientActorProcess.goalFor(assembled, engineer).kind(),
+        assertEquals(AmbientGoalKind.ENGINEERING_ASSEMBLY, AmbientActorProcess.goalFor(assembled, engineer, 100L).kind(),
                 "a restart/re-entry must recover the retained maintenance assembly rather than inventing ordinary work");
         assertTrue(RouteMaintenanceProcess.plan(equipped, RouteMaintenanceProcess.scan(2, 200L)).stream()
                 .map(ProposedEvent::payload).anyMatch(RouteMaintenanceAssemblyStarted.class::isInstance),

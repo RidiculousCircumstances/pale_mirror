@@ -97,7 +97,9 @@ class FrontierV3ResourceSiteExecutorTest {
     @Test
     void canonicalPreparationDoesNotWaitForAnyNaturallyLoadedField() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:loaded-field-selection"), 77L));
-        engine.advanceTo(new SimInstant(100L), new WorkBudget(64, 512));
+        // Initial exact-resident schedule actions share this bounded queue with
+        // the twelve fields; drain the same due instant before asserting phase.
+        engine.advanceTo(new SimInstant(100L), new WorkBudget(4_096, 32_768));
         FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
 
         assertEquals(io.farfrontier.palemirror.frontier.v3.model.ResourceSitePhase.GROWING,

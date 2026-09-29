@@ -58,12 +58,28 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
     /** Balance and settlement policy for exact resident activities. No competing due-time queue. */
     public record ResidentLife(int dayTicks, int workTicks, long hungerUnitTicks,
                                int hungryThreshold, int starvingThreshold,
-                               int breadReliefUnits, int maxHungerUnits) {
+                               int breadReliefUnits, int maxHungerUnits,
+                               int metabolismDefaultPermille, int metabolismMinPermille,
+                               int metabolismMaxPermille) {
+        public ResidentLife(int dayTicks, int workTicks, long hungerUnitTicks,
+                            int hungryThreshold, int starvingThreshold,
+                            int breadReliefUnits, int maxHungerUnits) {
+            this(dayTicks, workTicks, hungerUnitTicks, hungryThreshold, starvingThreshold,
+                    breadReliefUnits, maxHungerUnits,
+                    ResidentCharacteristics.DEFAULT_METABOLISM_PERMILLE,
+                    ResidentCharacteristics.MIN_METABOLISM_PERMILLE,
+                    ResidentCharacteristics.MAX_METABOLISM_PERMILLE);
+        }
+
         public ResidentLife {
             if (dayTicks < 2 || workTicks < 1 || workTicks >= dayTicks || hungerUnitTicks < 1
                     || hungryThreshold != 1 || starvingThreshold != ResidentNutrition.STARVING_AFTER_MISSED_CYCLES
                     || breadReliefUnits < 1 || maxHungerUnits < starvingThreshold
-                    || maxHungerUnits > ResidentNutrition.MAX_HUNGER_UNITS) {
+                    || maxHungerUnits > ResidentNutrition.MAX_HUNGER_UNITS
+                    || metabolismMinPermille < ResidentCharacteristics.MIN_METABOLISM_PERMILLE
+                    || metabolismDefaultPermille < metabolismMinPermille
+                    || metabolismDefaultPermille > metabolismMaxPermille
+                    || metabolismMaxPermille > ResidentCharacteristics.MAX_METABOLISM_PERMILLE) {
                 throw new IllegalArgumentException("resident life policy has invalid schedule or hunger bounds");
             }
         }
@@ -74,7 +90,8 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
 
         private String canonicalText() {
             return dayTicks + "," + workTicks + "," + hungerUnitTicks + "," + hungryThreshold
-                    + "," + starvingThreshold + "," + breadReliefUnits + "," + maxHungerUnits;
+                    + "," + starvingThreshold + "," + breadReliefUnits + "," + maxHungerUnits
+                    + "," + metabolismDefaultPermille + "," + metabolismMinPermille + "," + metabolismMaxPermille;
         }
     }
 

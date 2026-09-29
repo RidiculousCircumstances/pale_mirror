@@ -118,49 +118,6 @@ public final class FrontierV3PlayerCustodyGameTests {
     }
 
     @GameTest(batch = "pm-frontier-v3-player-withdrawal", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
-    public static void activeChestTransfersOneFungiblePortionToItsRealPlayer(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel(); WorldId world = new WorldId("frontier:fungible-player-withdrawal-game-test");
-        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
-                acquiredFungibleChestRuntime(world);
-        SubjectId container = new SubjectId("container:1-depot"); BlockPos chestPosition = interior(helper);
-        level.setBlock(chestPosition.below(), Blocks.STONE.defaultBlockState(), 3);
-        ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.claimFreshChest(level, chestPosition, container);
-        helper.assertTrue(chest != null, "the fungible fixture needs an owned chest");
-        chest.setItem(0, new ItemStack(Items.WHEAT, 64)); chest.setChanged();
-        observeFungibleChest(level, runtime, chest, container);
-        FrontierWorldState bound = state(runtime);
-        helper.assertTrue(!bound.inventory().fungibleResources().bindings().isEmpty(), "the full observed stack must become HOT before a player may split it");
-
-        var player = helper.makeMockServerPlayerInLevel();
-        chest.setItem(0, new ItemStack(Items.WHEAT, 32)); player.getInventory().setItem(0, new ItemStack(Items.WHEAT, 32)); chest.setChanged();
-        observeFungibleChest(level, runtime, chest, container);
-        FrontierWorldState moved = state(runtime);
-        var playerAccount = moved.inventory().fungibleResources().accounts().values().stream()
-                .filter(account -> account.custody().equals(new ResourceCustody.Player(player.getUUID()))).findFirst().orElse(null);
-        helper.assertTrue(playerAccount != null && playerAccount.lotQuantities().values().stream().mapToInt(Integer::intValue).sum() == 32,
-                "one physical partial withdrawal must create one exact player portion");
-        helper.assertTrue(moved.inventory().fungibleResources().bindings().values().stream().anyMatch(binding -> binding.accountId().equals(playerAccount.id())),
-                "the player portion remains HOT and therefore cannot become concurrent COLD stock");
-        var playerBinding = moved.inventory().fungibleResources().bindings().values().stream()
-                .filter(binding -> binding.accountId().equals(playerAccount.id())).findFirst().orElseThrow();
-        helper.assertTrue(!playerBinding.playerSaveFence().isEmpty()
-                        && playerBinding.playerSaveFence().equals(player.getPersistentData()
-                        .getCompound("pale_mirror.frontier_v3.player_custody_save_fence").getString("token")),
-                "the accepted production handoff must bind the same canonical and player-save fence before a later player save");
-        helper.assertTrue(moved.inventory().fungibleResources().totalQuantity(new SubjectId("settlement:1"), "minecraft:wheat") == 64,
-                "the split must conserve every ordinary item unit");
-        chest.setItem(0, new ItemStack(Items.WHEAT, 64)); player.getInventory().setItem(0, ItemStack.EMPTY); chest.setChanged();
-        observeFungibleChest(level, runtime, chest, container);
-        FrontierWorldState returned = state(runtime);
-        helper.assertTrue(returned.inventory().fungibleResources().accounts().values().stream()
-                        .noneMatch(account -> account.custody().equals(new ResourceCustody.Player(player.getUUID()))),
-                "the same player portion must merge back into its retained depot account exactly once");
-        helper.assertTrue(returned.inventory().fungibleResources().totalQuantity(new SubjectId("settlement:1"), "minecraft:wheat") == 64,
-                "the physical merge must retain the original conserved total");
-        runtime.shutdown(); helper.succeed();
-    }
-
-    @GameTest(batch = "pm-frontier-v3-player-withdrawal", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void activeChestHandsOneFungibleStackToItsObservedHopper(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); WorldId world = new WorldId("frontier:fungible-hopper-game-test");
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =

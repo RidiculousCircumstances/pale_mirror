@@ -181,10 +181,16 @@ public final class FrontierV3AmbientActorGameTests {
         var initial = base.initialState();
         var settlement = initial.bootstrap().settlements().getFirst().id();
         var food = new SubjectId("item:scheduled-resident-first-body-bread");
-        var stocked = initial.withInventory(initial.inventory().store(new io.farfrontier.palemirror.frontier.v3.model.ExactItemStack(
-                food, settlement, io.farfrontier.palemirror.frontier.v3.process.PopulationBirthProcess.BREAD, 64,
-                new io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.ContainerSlot(
-                        FrontierWorldState.depotId(settlement), 1))));
+        var stocked = initial.withInventory(initial.inventory()
+                .store(new io.farfrontier.palemirror.frontier.v3.model.ExactItemStack(
+                        food, settlement, io.farfrontier.palemirror.frontier.v3.process.PopulationBirthProcess.BREAD, 64,
+                        new io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.ContainerSlot(
+                                FrontierWorldState.depotId(settlement), 1)))
+                .store(new io.farfrontier.palemirror.frontier.v3.model.ExactItemStack(
+                        new SubjectId("item:scheduled-resident-first-body-reserve"), settlement,
+                        io.farfrontier.palemirror.frontier.v3.process.PopulationBirthProcess.BREAD, 64,
+                        new io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.ContainerSlot(
+                                FrontierWorldState.depotId(settlement), 2))));
         var config = new io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<>(world, stocked,
                 base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(),
                 base.projectionMapper(), base.limits(), List.of(

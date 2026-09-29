@@ -6,9 +6,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ResidentNutritionNeedTest {
-    @Test void needIntegratesCanonicalDaysAndOneBreadRelievesOneUnit() {
+    @Test void needIntegratesFractionalCanonicalTimeAndOneBreadRelievesOneUnit() {
         ResidentNutrition initial = ResidentNutrition.nourishedAt(0);
-        assertEquals(initial, initial.accrueThrough(23_999));
+        ResidentNutrition beforeThreshold = initial.accrueThrough(23_999);
+        assertEquals(0, beforeThreshold.hungerDeficit());
+        assertEquals(23_999_000L, beforeThreshold.fractionalProgress());
         ResidentNutrition hungry = initial.accrueThrough(24_000);
         assertEquals(ResidentNutritionStatus.HUNGRY, hungry.status());
         assertEquals(1, hungry.hungerDeficit());
@@ -21,6 +23,18 @@ class ResidentNutritionNeedTest {
         assertEquals(4, fedOnce.lastIntegratedDay());
         assertEquals(ResidentNutritionStatus.STARVING, fedOnce.status());
         assertThrows(IllegalArgumentException.class, () -> initial.consumeBreadAt(0));
+    }
+
+    @Test void unequalRatesAndMidCycleChangePreserveElapsedFraction() {
+        var rules = FrontierRuleset.ResidentLife.initial();
+        ResidentNutrition slow = ResidentNutrition.nourishedAt(0).accrueThrough(12_000, rules, 500);
+        ResidentNutrition fast = ResidentNutrition.nourishedAt(0).accrueThrough(12_000, rules, 2_000);
+        assertEquals(0, slow.hungerDeficit());
+        assertEquals(1, fast.hungerDeficit());
+        assertEquals(6_000_000L, slow.fractionalProgress());
+        assertEquals(48_000L, slow.nextThresholdTick(rules, 500));
+        assertEquals(30_000L, slow.nextThresholdTick(rules, 1_000));
+        assertEquals(1, slow.accrueThrough(30_000, rules, 1_000).hungerDeficit());
     }
 
     @Test void deficitIsBoundedAfterLongColdInterval() {

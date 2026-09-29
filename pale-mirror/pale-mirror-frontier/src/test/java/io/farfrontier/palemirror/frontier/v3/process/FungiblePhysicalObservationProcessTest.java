@@ -18,6 +18,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalHandoff;
 import io.farfrontier.palemirror.frontier.v3.model.FungibleResourceLedger;
 import io.farfrontier.palemirror.frontier.v3.model.FungibleResourceHandoffObserved;
 import io.farfrontier.palemirror.frontier.v3.model.FungibleStockDepartureObserved;
+import io.farfrontier.palemirror.frontier.v3.model.FungibleDepotPlayerEdit;
 import io.farfrontier.palemirror.frontier.v3.model.FungibleStockContributionObserved;
 import io.farfrontier.palemirror.frontier.v3.model.FungibleStackLayoutObserved;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection;
@@ -39,6 +40,8 @@ import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaRecord;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalCustodyLease;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalCustodyLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateUpdate;
+import io.farfrontier.palemirror.frontier.v3.model.ResidentMeal;
+import io.farfrontier.palemirror.frontier.v3.model.ResidentMealStarted;
 import io.farfrontier.palemirror.frontier.v3.model.StrategicObjective;
 import io.farfrontier.palemirror.frontier.v3.model.StrategicObjectiveKind;
 import io.farfrontier.palemirror.frontier.v3.model.StrategicObjectiveStatus;
@@ -61,6 +64,59 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FungiblePhysicalObservationProcessTest {
+    @Test
+    void playerTakingClaimedBreadAtomicallyRetiresOnlyThatUnconsumedMealAndWakesItsResident() {
+        WorldId world = new WorldId("frontier:meal-claimed-stock-exit");
+        var base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
+        FrontierWorldState initial = base.initialState();
+        SubjectId owner = initial.bootstrap().settlements().getFirst().id();
+        SubjectId resident = initial.bootstrap().settlements().getFirst().residents().getFirst().id();
+        SubjectId depot = FrontierWorldState.depotId(owner);
+        SubjectId account = ReferenceContainerCustody.scopeId(depot);
+        SubjectId lotId = new SubjectId("lot:meal-claimed-exit-bread");
+        FungibleResourceLedger cold = initial.inventory().fungibleResources().transformCold(account,
+                Map.of(new SubjectId("lot:bootstrap-1-wheat"), 64), Map.of(),
+                new ResourceLot(lotId, owner, "minecraft:bread", 64, "test", List.of()));
+        var stack = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                new InventoryCustody.ContainerSlot(depot, 0)), "minecraft:bread", 64);
+        FungibleResourceLedger hot = cold.rebind(account, 1L,
+                FungiblePhysicalObservation.bind(cold, account, 1L, List.of(stack)));
+        FrontierWorldState state = initial.withChanges(FrontierWorldStateUpdate.begin()
+                .inventory(initial.inventory().withFungibleResources(hot)
+                        .withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED)
+                        .withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE))
+                .humanPopulation(initial.humanPopulation().accrueHunger(resident, 48_000L)));
+        state = ReferenceContainerCustodyFixtures.observedAndHeld(state, depot);
+        ResidentMealStarted started = ResidentMealProcess.selectSourceAtYield(state, resident, 48_000L).orElseThrow();
+        state = ResidentMealProcess.reduceStarted(state, resident, started);
+        ResidentMeal meal = started.meal();
+        UUID player = UUID.fromString("00000000-0000-0000-0000-000000000193");
+        UUID interaction = UUID.fromString("00000000-0000-0000-0000-000000000194");
+        FungibleStockDepartureObserved observed = assertInstanceOf(FungibleStockDepartureObserved.class,
+                FungibleDepotPlayerEdit.classify(state.inventory().fungibleResources(), account, depot, owner,
+                        1L, player, interaction, List.of()));
+        assertEquals(java.util.Set.of(meal.claimId()), observed.forfeitedClaimIds());
+        var plan = assertInstanceOf(CommandPlan.Accepted.class,
+                FrontierWorldPhysicalObservationProcess.planFungibleStockDeparture(state, observed, 48_000L));
+        assertEquals(4, plan.events().size());
+        FrontierWorldState reduced = FrontierWorldPhysicalObservationProcess.reduceFungibleStockDeparture(state, owner, observed);
+        assertFalse(reduced.humanPopulation().meals().containsKey(resident));
+        assertFalse(reduced.inventory().fungibleResources().claims().containsKey(meal.claimId()));
+        assertEquals(0, reduced.inventory().fungibleResources().totalQuantity(owner, "minecraft:bread"));
+        var configuration = new FrontierEngineConfiguration<>(world, state,
+                new io.farfrontier.palemirror.frontier.v3.api.SimInstant(48_000L),
+                base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(),
+                base.projectionMapper(), base.limits(), List.of(ResidentMealProcess.progress(meal, 48_001L),
+                        ResidentActivityProcess.review(resident, 49_000L)), base.transactionCommitter(),
+                base.stateValidator(), base.executionMetrics());
+        var engine = FrontierEngines.create(configuration);
+        assertInstanceOf(CommandResult.Accepted.class, engine.submit(command(engine, world, "claimed-meal-exit", observed)));
+        FrontierWorldState recovered = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec()
+                .decode(engine.checkpoint().canonicalState());
+        assertEquals(reduced.humanPopulation(), recovered.humanPopulation());
+        assertEquals(reduced.inventory().fungibleResources(), recovered.inventory().fungibleResources());
+    }
+
     @Test
     void playerGiftCreatesFreshSettlementLotAtTheSameObservedDepotEpoch() {
         WorldId world = new WorldId("frontier:stock-contribution");
@@ -151,7 +207,7 @@ class FungiblePhysicalObservationProcessTest {
     }
 
     @Test
-    void oneObservedBreadStackRetiresMultipleRationClaimsThroughTheRegisteredHandoffOwner() {
+    void retiredRationClaimCannotReopenThePhysicalTheftOwner() {
         WorldId world = new WorldId("frontier:multi-ration-physical-handoff");
         FrontierWorldState state = FrontierWorldRuntimeDefinition.configuration(world, 91L).initialState();
         SubjectId settlement = state.bootstrap().settlements().getFirst().id();
@@ -159,15 +215,9 @@ class FungiblePhysicalObservationProcessTest {
         FungibleResourceLedger resources = state.inventory().fungibleResources().transformCold(account,
                 Map.of(new SubjectId("lot:bootstrap-1-wheat"), 64), Map.of(),
                 new ResourceLot(bread, settlement, "minecraft:bread", 64, "multi-ration", List.of()));
-        resources = resources.split(account, bread, resources.lots().get(bread).splitChild(new SubjectId("lot:bread-a"), 8), 8);
-        resources = resources.split(account, bread, resources.lots().get(bread).splitChild(new SubjectId("lot:bread-b"), 8), 8);
-        state = state.withInventory(state.inventory().withFungibleResources(resources));
-        var started = SettlementProvisionProcess.planReview(state, SettlementProvisionProcess.review(settlement, 1, 100L))
-                .stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
-                .filter(io.farfrontier.palemirror.frontier.v3.model.SettlementProvisionStarted.class::isInstance)
-                .map(io.farfrontier.palemirror.frontier.v3.model.SettlementProvisionStarted.class::cast).findFirst().orElseThrow();
-        state = SettlementProvisionProcess.reduceStarted(state, settlement, started);
-        resources = state.inventory().fungibleResources();
+        SubjectId retired = new SubjectId("claim:retired-settlement-ration");
+        resources = resources.reserve(new ClaimAllocation(retired, settlement, settlement,
+                "minecraft:bread", 1, Map.of(bread, 1), ClaimPurpose.SETTLEMENT_RATION), account);
         SubjectId depot = FrontierWorldState.depotId(settlement);
         resources = resources.rebind(account, 7L, FungiblePhysicalObservation.bind(resources, account, 7L, List.of(
                 new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
@@ -179,31 +229,9 @@ class FungiblePhysicalObservationProcessTest {
                 resources.bindings().values().iterator().next(), 0, playerAccount, new ResourceCustody.Player(player), 1L,
                 new PhysicalStackAddress.PlayerSlot(player, 0)).forfeitAffectedClaims(resources);
         assertInstanceOf(CommandPlan.Rejected.class, FrontierWorldPhysicalObservationProcess.planFungibleHandoff(bound, unstamped));
-        FungibleResourceHandoffObserved observed = FungibleClaimForfeitureStateSupport.stampOwnerDiagnostic(bound, unstamped)
-                .withPlayerSaveFence(UUID.fromString("00000000-0000-0000-0000-000000000190"));
-        org.junit.jupiter.api.Assertions.assertTrue(observed.forfeitedClaimIds().size() >= 2);
-        assertEquals(observed, FrontierWorldRuntimeDefinition.payloadCodecs().decode(observed.type(),
-                FrontierWorldRuntimeDefinition.payloadCodecs().encode(observed)));
-        io.farfrontier.palemirror.frontier.v3.model.DiagnosticProducerContract.requireAdmitted(observed);
-        assertInstanceOf(CommandPlan.Accepted.class, FrontierWorldPhysicalObservationProcess.planFungibleHandoff(bound, observed));
-        FrontierWorldState after = FrontierWorldPhysicalObservationProcess.reduceFungibleHandoff(bound, settlement, observed);
-        assertEquals(io.farfrontier.palemirror.frontier.v3.model.SettlementProvisionStatus.CONFLICT,
-                after.humanPopulation().provision(settlement).status());
-        assertEquals(Map.of(), after.inventory().fungibleResources().claims());
-        assertEquals(64, after.inventory().fungibleResources().accounts().get(playerAccount).lotQuantities()
-                .values().stream().mapToInt(Integer::intValue).sum());
-        var base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
-        var configuration = new FrontierEngineConfiguration<>(world, bound, base.initialInstant(), base.commandPlanner(),
-                base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(), List.of(),
-                base.transactionCommitter(), base.stateValidator(), base.executionMetrics());
-        var engine = FrontierEngines.create(configuration);
-        assertInstanceOf(CommandResult.Accepted.class, engine.submit(command(engine, world, "multi-ration-theft", observed)));
-        FrontierWorldState committed = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec()
-                .decode(engine.checkpoint().canonicalState());
-        assertEquals(io.farfrontier.palemirror.frontier.v3.model.DiagnosticReason.SETTLEMENT_PROVISION_CONFLICT,
-                committed.diagnosticIncidents().why(new io.farfrontier.palemirror.frontier.v3.model.DiagnosticSubject(
-                        io.farfrontier.palemirror.frontier.v3.model.DiagnosticSubjectKind.SETTLEMENT_PROVISION, settlement))
-                        .orElseThrow().diagnostic().reason());
+        assertFalse(FungibleClaimForfeitureStateSupport.supports(bound, unstamped));
+        assertThrows(IllegalArgumentException.class,
+                () -> FungibleClaimForfeitureStateSupport.stampOwnerDiagnostic(bound, unstamped));
     }
 
     @Test

@@ -77,7 +77,7 @@ final class FrontierV3DepotClickExecutor {
                         state.inventory().fungibleResources(), accountId, lease.authorityEpoch(), before)))
                 return Admission.REJECTED;
         } catch (IllegalArgumentException invalid) { return Admission.REJECTED; }
-        if (account != null && mayRemoveReserved(menu, slot, button, kind, canonical, account))
+        if (account != null && mayRemoveReserved(menu, slot, button, kind, canonical, account, state))
             return Admission.REJECTED;
         if (kind == ClickType.PICKUP && slot >= 0 && slot < chest.getContainerSize()) {
             ItemStack cursor = menu.getCarried(), source = chest.getItem(slot);
@@ -224,15 +224,29 @@ final class FrontierV3DepotClickExecutor {
     }
 
     private static boolean mayRemoveReserved(AbstractContainerMenu menu, int slot, int button, ClickType kind,
-                                             List<PhysicalStackBinding> bindings, CustodyAccount account) {
+                                             List<PhysicalStackBinding> bindings, CustodyAccount account,
+                                             FrontierWorldState state) {
         if (account.claimQuantities().isEmpty()) return false;
-        if (kind == ClickType.PICKUP_ALL) return true;
+        if (kind == ClickType.PICKUP_ALL) return hasUnretirableClaim(account, state);
         if (slot < 0 || !(menu instanceof ChestMenu chestMenu) || slot >= chestMenu.getContainer().getContainerSize()) return false;
         if (kind != ClickType.PICKUP && kind != ClickType.QUICK_MOVE && kind != ClickType.THROW) return false;
         var matching = bindings.stream().filter(binding -> binding.address() instanceof PhysicalStackAddress.ContainerSlot source
                 && source.slot().slot() == slot).findFirst().orElse(null);
         if (matching == null) return false;
-        return exceedsUnclaimedPortion(matching, kind, button, menu.getCarried().isEmpty());
+        if (!exceedsUnclaimedPortion(matching, kind, button, menu.getCarried().isEmpty())) return false;
+        return hasUnretirableClaim(account, state);
+    }
+
+    private static boolean hasUnretirableClaim(CustodyAccount account, FrontierWorldState state) {
+        // Only an unconsumed resident meal has an atomic source-loss disposition.
+        // Other owners remain protected before vanilla can mutate their claimed stock.
+        return account.claimQuantities().keySet().stream().anyMatch(id -> {
+            ClaimAllocation claim = state.inventory().fungibleResources().claims().get(id);
+            ResidentMeal meal = claim == null ? null : state.humanPopulation().meals().get(claim.claimantId());
+            return claim == null || claim.purpose() != ClaimPurpose.RESIDENT_MEAL || meal == null
+                    || !meal.claimId().equals(id) || meal.pendingPhysicalStep().isPresent()
+                    || meal.phase() != ResidentMeal.Phase.MOVE && meal.phase() != ResidentMeal.Phase.TAKE;
+        });
     }
 
     static boolean exceedsUnclaimedPortion(PhysicalStackBinding matching, ClickType kind,

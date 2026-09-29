@@ -13,6 +13,8 @@ import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseTransition;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientActorLease;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientGoalKind;
+import io.farfrontier.palemirror.frontier.v3.model.ResidentMeal;
+import io.farfrontier.palemirror.frontier.v3.model.ResidentMealHotArrived;
 import io.farfrontier.palemirror.frontier.v3.model.Bioform;
 import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
@@ -88,6 +90,11 @@ final class FrontierV3AmbientMovementExecutor {
     private FrontierV3AmbientMovementExecutor() { }
 
     static boolean pursueLocalGoal(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SubjectId actorId, Mob body, AmbientActorLease lease) {
+        if (lease.goal() == AmbientGoalKind.MEAL) {
+            FrontierV3ResidentMealNavigation.pursue(level, state, body, lease,
+                    state.humanPopulation().meals().get(actorId));
+            return false;
+        }
         if (lease.goal() == AmbientGoalKind.TRANSIT) {
             ResidentMigrationJourney journey = state.humanPopulation().migration(actorId);
             if (journey == null || journey.status() != ResidentMigrationStatus.EN_ROUTE || journey.arriving()
@@ -205,6 +212,19 @@ final class FrontierV3AmbientMovementExecutor {
     }
     static boolean observeDirectedArrival(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
                                                    SubjectId actorId, Mob body, AmbientActorLease lease) {
+        if (lease.goal() == AmbientGoalKind.MEAL) {
+            ResidentMeal meal = state.humanPopulation().meals().get(actorId);
+            if (meal == null) return false;
+            if (meal.phase() == ResidentMeal.Phase.MOVE && observedBody(body).equals(lease.goalBody())) {
+                body.getNavigation().stop();
+                var result = submit(runtime, "ambient-meal-arrived", actorId.value(),
+                        new ResidentMealHotArrived(actorId, lease.revision(), observedBody(body)));
+                FrontierV3DiagnosticTrace.record(level.getServer(), "resident-meal:" + actorId.value(),
+                        "resident_meal_hot_arrived", actorId, result);
+                return result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted;
+            }
+            return FrontierV3ResidentMealPhysicalEffect.tick(level, runtime, state, actorId, body, lease);
+        }
         if (lease.goal() == AmbientGoalKind.OPERATION_ASSEMBLY) return observeAssemblyArrival(level, runtime, state, actorId, body, lease);
         if (lease.goal() == AmbientGoalKind.ENGINEERING_ASSEMBLY) return observeEngineeringAssemblyArrival(level, runtime, state, actorId, body, lease);
         if (lease.goal() == AmbientGoalKind.HIVE_TASK_ASSEMBLY) return observeHiveAssemblyArrival(level, runtime, state, actorId, body, lease);

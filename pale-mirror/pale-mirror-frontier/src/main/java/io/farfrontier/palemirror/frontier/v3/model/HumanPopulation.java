@@ -52,7 +52,8 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
         if (!nutrition.keySet().equals(residents.keySet())) throw new IllegalArgumentException("resident nutrition must cover every and only exact resident");
         java.util.Set<SubjectId> residentSettlements = residents.values().stream().map(ResidentProfile::settlementId).collect(java.util.stream.Collectors.toUnmodifiableSet());
         if (!quarantines.keySet().containsAll(residentSettlements)) throw new IllegalArgumentException("settlement quarantine must cover every resident settlement");
-        if (!provisions.keySet().containsAll(residentSettlements)) throw new IllegalArgumentException("settlement provision must cover every resident settlement");
+        // A fresh world has no settlement-wide ration owner. Older provision records can
+        // still be decoded for explicit rejection, but resident needs own current nutrition.
         if (!schedules.keySet().containsAll(residentSettlements) || schedules.size() > MAX_HOUSEHOLDS)
             throw new IllegalArgumentException("daily schedule must cover every inhabited settlement");
         for (Map.Entry<SubjectId, ResidentMeal> entry : meals.entrySet()) {
@@ -142,12 +143,13 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
                         -((long) (18 + (ordinal % 43)) * 24_000L * 360L), skills(resident.role(), ordinal));
                 // The first named crafter is the settlement's baker and bread-works
                 // founder; other crafters keep their non-food industrial affinity.
+                profile = profile.withCharacteristics(ResidentCharacteristics.initial(bootstrap.ruleset().residentLife()));
                 residents.put(resident.id(), ordinal == 2 && resident.role() == ResidentRole.CRAFTER
                         ? profile.withProfession(ResidentProfession.BAKER) : profile);
             }
         }
         return new HumanPopulation(households, residents, Map.of(), healthy(residents), normalQuarantines(residents),
-                Map.of(), initialProvisions(residents), nourished(residents), Map.of(),
+                Map.of(), Map.of(), nourished(residents), Map.of(),
                 initialSchedules(residents, bootstrap.ruleset().residentLife()), Map.of());
     }
 
@@ -172,6 +174,21 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
         ResidentNutrition value = nutrition.get(Objects.requireNonNull(id, "resident nutrition resident"));
         if (value == null) throw new IllegalArgumentException("unknown resident nutrition subject");
         return value;
+    }
+    public HumanPopulation changeMetabolism(SubjectId residentId, ResidentCharacteristics expected,
+                                            ResidentCharacteristics nextCharacteristics, long atTick,
+                                            FrontierRuleset.ResidentLife rules) {
+        ResidentProfile profile = resident(residentId);
+        if (profile == null || !profile.characteristics().equals(expected))
+            throw new IllegalArgumentException("metabolism edit lacks its exact previous resident state");
+        int oldRate = expected.effectiveMetabolismPermille(atTick);
+        ResidentNutrition integrated = nutrition(residentId).accrueThrough(atTick, rules, oldRate);
+        Map<SubjectId, ResidentProfile> nextResidents = new LinkedHashMap<>(residents);
+        nextResidents.put(residentId, profile.withCharacteristics(nextCharacteristics));
+        Map<SubjectId, ResidentNutrition> nextNutrition = new LinkedHashMap<>(nutrition);
+        nextNutrition.put(residentId, integrated);
+        return new HumanPopulation(households, nextResidents, birthJobs, health, quarantines,
+                migrations, provisions, nextNutrition, medicalOperations, schedules, meals);
     }
     public SettlementDailySchedule schedule(SubjectId settlementId) {
         SettlementDailySchedule policy = schedules.get(Objects.requireNonNull(settlementId, "schedule settlement"));
@@ -202,6 +219,16 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
     public HumanPopulation completeMeal(ResidentMeal expected) {
         if (!expected.equals(meals.get(expected.residentId())) || expected.phase() != ResidentMeal.Phase.RETURN)
             throw new IllegalArgumentException("meal completion lacks its exact return-stage predecessor");
+        Map<SubjectId, ResidentMeal> next = new LinkedHashMap<>(meals); next.remove(expected.residentId());
+        return new HumanPopulation(households, residents, birthJobs, health, quarantines, migrations,
+                provisions, nutrition, medicalOperations, schedules, next);
+    }
+    /** An external stock exit may retire only an unconsumed, unfenced source claim. */
+    public HumanPopulation abandonMealSource(ResidentMeal expected) {
+        if (!expected.equals(meals.get(expected.residentId()))
+                || expected.phase() != ResidentMeal.Phase.MOVE && expected.phase() != ResidentMeal.Phase.TAKE
+                || expected.pendingPhysicalStep().isPresent())
+            throw new IllegalArgumentException("meal source loss cannot discard an in-flight or consumed hand");
         Map<SubjectId, ResidentMeal> next = new LinkedHashMap<>(meals); next.remove(expected.residentId());
         return new HumanPopulation(households, residents, birthJobs, health, quarantines, migrations,
                 provisions, nutrition, medicalOperations, schedules, next);
@@ -296,7 +323,8 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
     public HumanPopulation accrueHunger(SubjectId residentId, long canonicalTick,
                                         FrontierRuleset.ResidentLife rules) {
         ResidentNutrition current = nutrition(residentId);
-        ResidentNutrition advanced = current.accrueThrough(canonicalTick, rules);
+        ResidentNutrition advanced = current.accrueThrough(canonicalTick, rules,
+                resident(residentId).characteristics().effectiveMetabolismPermille(canonicalTick));
         if (advanced.equals(current)) return this;
         Map<SubjectId, ResidentNutrition> next = new LinkedHashMap<>(nutrition);
         next.put(residentId, advanced);
@@ -310,7 +338,8 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
 
     public HumanPopulation consumeResidentBread(SubjectId residentId, long canonicalTick,
                                                 FrontierRuleset.ResidentLife rules) {
-        ResidentNutrition advanced = nutrition(residentId).consumeBreadAt(canonicalTick, rules);
+        ResidentNutrition advanced = nutrition(residentId).consumeBreadAt(canonicalTick, rules,
+                resident(residentId).characteristics().effectiveMetabolismPermille(canonicalTick));
         Map<SubjectId, ResidentNutrition> next = new LinkedHashMap<>(nutrition);
         next.put(residentId, advanced);
         return new HumanPopulation(households, residents, birthJobs, health, quarantines, migrations, provisions, next, medicalOperations, schedules, meals);
@@ -462,8 +491,8 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
     private static Map<SubjectId, ResidentNutrition> withNourished(Map<SubjectId, ResidentNutrition> source, SubjectId id,
                                                                     long birthTick, FrontierRuleset.ResidentLife rules) {
         Map<SubjectId, ResidentNutrition> next = new LinkedHashMap<>(source);
-        int birthDay = Math.toIntExact(Math.max(0L, birthTick) / rules.hungerUnitTicks());
-        if (next.putIfAbsent(id, ResidentNutrition.nourishedAt(birthDay)) != null) throw new IllegalArgumentException("resident nutrition identity already exists");
+        if (next.putIfAbsent(id, ResidentNutrition.nourishedAtTick(birthTick)) != null)
+            throw new IllegalArgumentException("resident nutrition identity already exists");
         return next;
     }
 

@@ -436,10 +436,13 @@ class HiveRouteEngagementProcessTest {
             // tick. Read the same immutable canonical state without serializing the world.
             latest = engine.canonicalState().state();
             if (tick % 1_000L == 0L) {
+                FrontierWorldState sampled = latest;
                 SubjectId settlement = latest.bootstrap().settlements().getFirst().id();
                 supplyHistory.add(tick + ": food=" + SettlementFoodPolicy.coldUsableBread(latest, settlement)
                         + ", reserve=" + SettlementFoodPolicy.reserveRequirement(latest, settlement)
-                        + ", provision=" + latest.humanPopulation().provision(settlement).status()
+                        + ", hungry=" + sampled.humanPopulation().residents().values().stream()
+                                .filter(resident -> resident.settlementId().equals(settlement))
+                                .filter(resident -> sampled.humanPopulation().nutrition(resident.id()).hungerDeficit() > 0).count()
                         + ", operations=" + latest.operations().keySet() + ", jobs=" + latest.productionJobs().values().stream()
                                 .map(job -> job.id().value() + ":" + job.workProgress()).toList());
             }

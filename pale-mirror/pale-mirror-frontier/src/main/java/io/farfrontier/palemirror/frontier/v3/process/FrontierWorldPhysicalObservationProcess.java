@@ -178,8 +178,17 @@ public final class FrontierWorldPhysicalObservationProcess {
         } catch (IllegalArgumentException invalid) {
             return new CommandPlan.Rejected(new CommandRejection(RejectionCode.REJECTED_BY_POLICY, invalid.getMessage()));
         }
-        return new CommandPlan.Accepted(List.of(new ProposedEvent(observed.economicOwnerId(), observed),
-                playerStockWake(observed.economicOwnerId(), observed.interactionId(), now)));
+        List<ProposedEvent> events = new java.util.ArrayList<>();
+        events.add(new ProposedEvent(observed.economicOwnerId(), observed));
+        for (SubjectId claimId : observed.forfeitedClaimIds().stream().sorted().toList()) {
+            ClaimAllocation claim = state.inventory().fungibleResources().claims().get(claimId);
+            ResidentMeal meal = state.humanPopulation().meals().get(claim.claimantId());
+            events.add(new ProposedEvent(meal.residentId(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Cancelled(
+                    ResidentMealProcess.progress(meal, meal.startedAtTick() + 1L).id())));
+            events.add(ResidentActivityProcess.wakeAfterMeal(meal.residentId(), now));
+        }
+        events.add(playerStockWake(observed.economicOwnerId(), observed.interactionId(), now));
+        return new CommandPlan.Accepted(List.copyOf(events));
     }
 
     static FrontierWorldState reduceFungibleStockDeparture(FrontierWorldState state, SubjectId subject,
@@ -207,9 +216,33 @@ public final class FrontierWorldPhysicalObservationProcess {
                 throw new IllegalArgumentException("stock departure lacks its current physical custody epoch");
             }
         }
-        FungibleResourceLedger departed = ledger.departObserved(observed.sourceAccountId(),
+        if (!observed.equals(FungibleDepotPlayerEdit.classify(ledger, observed.sourceAccountId(),
+                observed.containerId(), observed.economicOwnerId(), observed.authorityEpoch(),
+                observed.playerId(), observed.interactionId(), observed.remaining())))
+            throw new IllegalArgumentException("stock departure differs from its exact witnessed edit classification");
+        HumanPopulation population = state.humanPopulation();
+        for (SubjectId claimId : observed.forfeitedClaimIds().stream().sorted().toList()) {
+            ClaimAllocation claim = ledger.claims().get(claimId);
+            ResidentMeal meal = claim == null ? null : population.meals().get(claim.claimantId());
+            if (claim == null || claim.purpose() != ClaimPurpose.RESIDENT_MEAL || meal == null
+                    || !meal.claimId().equals(claimId) || !meal.sourceAccountId().equals(observed.sourceAccountId())
+                    || !meal.lotId().equals(claim.lotQuantities().keySet().iterator().next())
+                    || ledger.accounts().containsKey(meal.actorAccountId()))
+                throw new IllegalArgumentException("stock exit cannot retire a foreign or physically held meal claim");
+            population = population.abandonMealSource(meal);
+        }
+        FungibleResourceLedger cleared = observed.forfeitedClaimIds().isEmpty()
+                ? ledger : ledger.releaseClaims(observed.forfeitedClaimIds());
+        FungibleResourceLedger departed = cleared.departObserved(observed.sourceAccountId(),
                 observed.authorityEpoch(), observed.departedLots(), observed.remaining());
-        return state.withInventory(state.inventory().withFungibleResources(departed));
+        FrontierWorldState next = state.withChanges(FrontierWorldStateUpdate.begin()
+                .inventory(state.inventory().withFungibleResources(departed)).humanPopulation(population));
+        for (SubjectId claimId : observed.forfeitedClaimIds().stream().sorted().toList()) {
+            ClaimAllocation claim = ledger.claims().get(claimId);
+            next = ResidentActivityProcess.retargetHotResident(next, claim.claimantId(),
+                    Math.max(1L, state.humanPopulation().meals().get(claim.claimantId()).startedAtTick()));
+        }
+        return next;
     }
 
     static CommandPlan planFungibleStockContribution(FrontierWorldState state,

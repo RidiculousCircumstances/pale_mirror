@@ -34,6 +34,12 @@ class PopulationMigrationProcessTest {
                 PopulationMigrationProcess.review(1, 100L));
         ResidentMigrationStarted started = payload(review, ResidentMigrationStarted.class);
         state = HumanPopulationStateSupport.startMigration(state, started.journey());
+        ResidentProfile selected = state.humanPopulation().resident(started.journey().residentId());
+        ResidentCharacteristics changedRate = selected.characteristics().withBaseMetabolism(1_500);
+        state = state.withHumanPopulation(state.humanPopulation().changeMetabolism(selected.id(),
+                selected.characteristics(), changedRate, 100L, state.bootstrap().ruleset().residentLife()));
+        ResidentNutrition needBeforeMigration = state.humanPopulation().nutrition(selected.id());
+        assertTrue(needBeforeMigration.fractionalProgress() > 0);
         assertEquals(started.journey(), state.humanPopulation().migration(started.journey().residentId()));
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
 
@@ -54,6 +60,10 @@ class PopulationMigrationProcessTest {
         state = state.recordResidentMigration(migration);
         assertEquals(migration.destinationSettlementId(), state.humanPopulation().resident(before.id()).settlementId());
         assertEquals(migration.destinationHouseholdId(), state.humanPopulation().resident(before.id()).householdId());
+        assertEquals(changedRate, state.humanPopulation().resident(before.id()).characteristics(),
+                "migration must retain this resident's typed physiological characteristics");
+        assertEquals(needBeforeMigration, state.humanPopulation().nutrition(before.id()),
+                "migration must retain fractional need progress rather than restarting hunger");
         assertEquals(migration.destination(), state.actorLocations().get(before.id()).supportingSurface().support());
         assertEquals(null, state.humanPopulation().migration(before.id()));
         assertTrue(!state.humanPopulation().residents().values().stream().anyMatch(person -> person.id().equals(before.id()) && person.settlementId().equals(source.id())));
@@ -192,7 +202,7 @@ class PopulationMigrationProcessTest {
         ResidentMigrationJourney before = state.humanPopulation().migration(resident);
         ResidentTransitAdvanced first = new ResidentTransitAdvanced(resident, before.nextRouteIndex());
         assertEquals(first, roundTrip(first));
-        state = PopulationMigrationProcess.reduceHotAdvance(state, first);
+        state = PopulationMigrationProcess.reduceHotAdvance(state, first, 101L);
         ResidentMigrationJourney after = state.humanPopulation().migration(resident);
         assertEquals(before.nextRouteIndex(), after.routeIndex());
         assertEquals(after.currentPosition(), state.actorLocations().get(resident).supportingSurface().support());
@@ -202,7 +212,8 @@ class PopulationMigrationProcessTest {
 
         while (state.humanPopulation().migration(resident) != null) {
             ResidentMigrationJourney journey = state.humanPopulation().migration(resident);
-            state = PopulationMigrationProcess.reduceHotAdvance(state, new ResidentTransitAdvanced(resident, journey.nextRouteIndex()));
+            state = PopulationMigrationProcess.reduceHotAdvance(state,
+                    new ResidentTransitAdvanced(resident, journey.nextRouteIndex()), 101L);
         }
         assertEquals(started.journey().destinationSettlementId(), state.humanPopulation().resident(resident).settlementId());
         assertEquals(started.journey().route().getLast(), state.actorLocations().get(resident).supportingSurface().support());

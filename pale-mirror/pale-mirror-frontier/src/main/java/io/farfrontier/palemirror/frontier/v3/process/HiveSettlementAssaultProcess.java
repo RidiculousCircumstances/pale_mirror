@@ -296,7 +296,7 @@ public final class HiveSettlementAssaultProcess {
         HumanAssignmentProjection assignments = HumanAssignmentProjection.compile(state);
         List<SubjectId> defenders = state.humanPopulation().residents().values().stream().filter(value -> value.settlementId().equals(sighting.settlementId()))
                 .filter(value -> assignments.idle(value.id()) || ProductionProcess.interruptibleForSettlementDefence(state, value.id()).isPresent())
-                .filter(value -> FrontierWorldStateSupport.workCapable(state, value))
+                .filter(value -> FrontierWorldStateSupport.availableForNewAssignment(state, value))
                 .sorted(Comparator.comparing((ResidentProfile value) -> value.profession() != ResidentProfession.SECURITY_WORKER)
                         .thenComparing(Comparator.comparing((ResidentProfile value) -> value.capability(HumanCapability.SECURITY)).reversed())
                         .thenComparing(Comparator.comparing((ResidentProfile value) -> value.capability(HumanCapability.CIVIC)).reversed())

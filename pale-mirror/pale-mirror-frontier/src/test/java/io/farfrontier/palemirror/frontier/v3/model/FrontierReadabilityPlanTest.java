@@ -244,12 +244,8 @@ class FrontierReadabilityPlanTest {
     void makesExactSettlementFoodShortageReadableAtTheOwnedDepot() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:board-food-shortage"), 91L));
         Settlement settlement = state.bootstrap().settlements().getFirst();
-        java.util.List<SubjectId> recipients = state.humanPopulation().residents().values().stream()
-                .filter(resident -> resident.settlementId().equals(settlement.id())).map(ResidentProfile::id).sorted().toList();
-        SettlementProvision shortage = SettlementProvision.started(settlement.id(), 1, 100L, settlement.residents().size(), recipients, java.util.List.of());
-        FrontierWorldState hungry = state.withHumanPopulation(state.humanPopulation().withProvision(shortage));
         SettlementStructure depot = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
-        FrontierObjectBoard board = FrontierReadabilityPlan.compile(hungry).boards().get(depot.id());
+        FrontierObjectBoard board = FrontierReadabilityPlan.compile(state).boards().get(depot.id());
 
         assertEquals(FrontierObjectBoard.Tone.WARNING, board.tone());
         assertTrue(board.text().endsWith("FOOD SHORTAGE · BREAD NEEDED"));
@@ -257,13 +253,14 @@ class FrontierReadabilityPlanTest {
     }
 
     @Test
-    void showsRestockedBreadWithoutRewritingTheMissedRationOutcome() {
+    void showsRestockedBreadAndCurrentExactResidentHunger() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:board-restocked-food"), 91L));
         Settlement settlement = state.bootstrap().settlements().getFirst();
         java.util.List<SubjectId> recipients = state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(settlement.id())).map(ResidentProfile::id).sorted().toList();
-        SettlementProvision shortage = SettlementProvision.started(settlement.id(), 1, 100L, recipients.size(), recipients, java.util.List.of());
-        FrontierWorldState hungry = state.withHumanPopulation(state.humanPopulation().withProvision(shortage));
+        HumanPopulation needs = state.humanPopulation();
+        for (SubjectId resident : recipients) needs = needs.accrueHunger(resident, 24_000L);
+        FrontierWorldState hungry = state.withHumanPopulation(needs);
         SubjectId depotId = FrontierWorldState.depotId(settlement.id());
         int slot = hungry.inventory().availableSlots(depotId).getFirst();
         FrontierWorldState restocked = hungry.withInventory(hungry.inventory().store(new ExactItemStack(
@@ -272,22 +269,25 @@ class FrontierReadabilityPlanTest {
         SettlementStructure depot = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
         FrontierObjectBoard board = FrontierReadabilityPlan.compile(restocked).boards().get(depot.id());
 
-        assertEquals(SettlementProvisionStatus.SHORTAGE, restocked.humanPopulation().provision(settlement.id()).status());
+        assertTrue(recipients.stream().allMatch(resident ->
+                restocked.humanPopulation().nutrition(resident).status() == ResidentNutritionStatus.HUNGRY));
         assertFalse(FrontierReadabilityPlan.input(hungry).equals(FrontierReadabilityPlan.input(restocked)),
                 "restocking must invalidate the live board projection");
         assertEquals(FrontierObjectBoard.Tone.WARNING, board.tone());
-        assertTrue(board.text().endsWith("LAST MEAL MISSED · BREAD 64 / " + (recipients.size() * 2)));
+        assertTrue(board.text().endsWith("RESIDENTS HUNGRY · " + recipients.size()
+                + " · BREAD 64 / " + (recipients.size() * 3)));
         assertFalse(board.text().contains("BREAD NEEDED"));
     }
 
     @Test
-    void depotBoardCountsFungibleBakeryBreadAfterAMissedMeal() {
+    void depotBoardCountsFungibleBakeryBreadAgainstExactResidentNeed() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:board-fungible-bread"), 91L));
         Settlement settlement = state.bootstrap().settlements().getFirst();
         java.util.List<SubjectId> recipients = state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(settlement.id())).map(ResidentProfile::id).sorted().toList();
-        SettlementProvision shortage = SettlementProvision.started(settlement.id(), 1, 100L, recipients.size(), recipients, java.util.List.of());
-        FrontierWorldState hungry = state.withHumanPopulation(state.humanPopulation().withProvision(shortage));
+        HumanPopulation needs = state.humanPopulation();
+        for (SubjectId resident : recipients) needs = needs.accrueHunger(resident, 24_000L);
+        FrontierWorldState hungry = state.withHumanPopulation(needs);
         SubjectId account = new SubjectId("custody:container-1-depot");
         SubjectId wheat = new SubjectId("lot:bootstrap-1-wheat");
         ResourceLot bread = new ResourceLot(new SubjectId("lot:board-fungible-bread"), settlement.id(), "minecraft:bread", 64,
@@ -298,7 +298,8 @@ class FrontierReadabilityPlanTest {
         SettlementStructure depot = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
 
         FrontierObjectBoard board = FrontierReadabilityPlan.compile(stocked).boards().get(depot.id());
-        assertTrue(board.text().endsWith("LAST MEAL MISSED · BREAD 64 / " + (recipients.size() * 2)));
+        assertTrue(board.text().endsWith("RESIDENTS HUNGRY · " + recipients.size()
+                + " · BREAD 64 / " + (recipients.size() * 3)));
         assertFalse(board.text().contains("BREAD NEEDED"));
     }
 

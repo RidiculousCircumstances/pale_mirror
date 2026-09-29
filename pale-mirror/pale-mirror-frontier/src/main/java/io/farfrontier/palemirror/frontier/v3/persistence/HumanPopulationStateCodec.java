@@ -36,7 +36,8 @@ final class HumanPopulationStateCodec {
         FrontierWorldStateCodec.writeCount(output, population.nutrition().size());
         for (Map.Entry<SubjectId, ResidentNutrition> entry : population.nutrition().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
             FrontierWorldStateCodec.writeString(output, entry.getKey().value()); output.writeByte(entry.getValue().status().wireTag());
-            FrontierWorldStateCodec.writeCount(output, entry.getValue().consecutiveMissedCycles()); FrontierWorldStateCodec.writeCount(output, entry.getValue().resolvedCycle());
+            FrontierWorldStateCodec.writeCount(output, entry.getValue().hungerDeficit());
+            output.writeLong(entry.getValue().lastEvaluatedTick()); output.writeLong(entry.getValue().fractionalProgress());
         }
         FrontierWorldStateCodec.writeCount(output, population.quarantines().size());
         for (Map.Entry<SubjectId, SettlementQuarantine> entry : population.quarantines().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
@@ -131,7 +132,7 @@ final class HumanPopulationStateCodec {
             for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) {
                 SubjectId id = new SubjectId(FrontierWorldStateCodec.readString(input)); int status = input.readUnsignedByte();
                 if (status >= ResidentNutritionStatus.values().length || nutrition.put(id, new ResidentNutrition(FrontierWireTags.require(ResidentNutritionStatus.class, status),
-                        FrontierWorldStateCodec.readCount(input), FrontierWorldStateCodec.readCount(input))) != null) {
+                        FrontierWorldStateCodec.readCount(input), input.readLong(), input.readLong())) != null) {
                     throw new IllegalArgumentException("invalid or duplicate resident nutrition");
                 }
             }
@@ -252,6 +253,13 @@ final class HumanPopulationStateCodec {
         output.writeByte(FrontierWireTags.tag(meal.phase())); output.writeLong(meal.startedAtTick());
         output.writeBoolean(meal.waitReason().isPresent());
         if (meal.waitReason().isPresent()) output.writeByte(FrontierWireTags.tag(meal.waitReason().orElseThrow()));
+        output.writeBoolean(meal.pendingPhysicalStep().isPresent());
+        if (meal.pendingPhysicalStep().isPresent()) {
+            ResidentMealPhysicalStep step = meal.pendingPhysicalStep().orElseThrow();
+            output.writeByte(FrontierWireTags.tag(step.phase())); output.writeByte(step.sourceSlot());
+            output.writeByte(step.sourceCount()); output.writeLong(step.sourceEpoch());
+            output.writeLong(step.destinationEpoch()); output.writeLong(step.ambientRevision());
+        }
     }
 
     static ResidentMeal readMeal(DataInputStream input) throws IOException {
@@ -271,8 +279,12 @@ final class HumanPopulationStateCodec {
             int tag = input.readUnsignedByte();
             wait = java.util.Optional.of(FrontierWireTags.require(ResidentActivityChoice.Wait.class, tag));
         }
+        java.util.Optional<ResidentMealPhysicalStep> pending = java.util.Optional.empty();
+        if (input.readBoolean()) pending = java.util.Optional.of(new ResidentMealPhysicalStep(
+                FrontierWireTags.require(ResidentMeal.Phase.class, input.readUnsignedByte()),
+                input.readByte(), input.readUnsignedByte(), input.readLong(), input.readLong(), input.readLong()));
         return new ResidentMeal(resident, settlement, depot, source, actor, lot,
-                claim, retained, FrontierWireTags.require(ResidentMeal.Phase.class, phase), started, wait);
+                claim, retained, FrontierWireTags.require(ResidentMeal.Phase.class, phase), started, wait, pending);
     }
 
     private static java.util.List<SubjectId> legacyRecipients(Map<SubjectId, ResidentProfile> residents, SubjectId settlement, int required) {
@@ -298,6 +310,13 @@ final class HumanPopulationStateCodec {
         output.writeByte(resident.profession().wireTag()); output.writeLong(resident.birthTick());
         for (ResidentSkill skill : ResidentSkill.values()) output.writeByte(resident.skill(skill));
         for (HumanCapability capability : HumanCapability.values()) output.writeByte(resident.capability(capability));
+        ResidentCharacteristics characteristics = resident.characteristics();
+        output.writeByte(characteristics.version()); output.writeInt(characteristics.baseMetabolismPermille());
+        FrontierWorldStateCodec.writeCount(output, characteristics.metabolismModifiers().size());
+        for (var entry : characteristics.metabolismModifiers().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
+            FrontierWorldStateCodec.writeString(output, entry.getKey().value());
+            output.writeInt(entry.getValue().deltaPermille());
+        }
     }
 
     private static ResidentProfile readProfile(DataInputStream input, boolean hasCapabilityProfile) throws IOException {
@@ -315,6 +334,14 @@ final class HumanPopulationStateCodec {
         if (!hasCapabilityProfile) return new ResidentProfile(id, household, settlement, FrontierWireTags.require(ResidentRole.class, role), birthTick, skills);
         var capabilities = new java.util.EnumMap<HumanCapability, Integer>(HumanCapability.class);
         for (HumanCapability capability : HumanCapability.values()) capabilities.put(capability, input.readUnsignedByte());
-        return new ResidentProfile(id, household, settlement, FrontierWireTags.require(ResidentRole.class, role), profession, birthTick, skills, capabilities);
+        int version = input.readUnsignedByte(); int base = input.readInt();
+        Map<SubjectId, ResidentCharacteristics.MetabolismModifier> modifiers = new LinkedHashMap<>();
+        for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) {
+            SubjectId source = new SubjectId(FrontierWorldStateCodec.readString(input));
+            var modifier = new ResidentCharacteristics.MetabolismModifier(source, input.readInt());
+            if (modifiers.put(source, modifier) != null) throw new IllegalArgumentException("duplicate resident characteristic modifier");
+        }
+        return new ResidentProfile(id, household, settlement, FrontierWireTags.require(ResidentRole.class, role), profession,
+                birthTick, skills, capabilities, new ResidentCharacteristics(version, base, modifiers));
     }
 }

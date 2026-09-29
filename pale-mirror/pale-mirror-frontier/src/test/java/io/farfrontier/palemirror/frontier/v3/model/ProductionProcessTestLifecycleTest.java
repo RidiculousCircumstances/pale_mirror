@@ -244,17 +244,9 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         assertTrue(view.causalChain(terminalJob).stream().anyMatch(edge -> edge.kind() == FrontierDomainRelationships.Kind.JOB_OUTPUT && edge.target().stableKey().contains(receipt.outputId().value())));
         assertTrue(view.causalChain(terminalJob).stream().anyMatch(edge -> edge.kind() == FrontierDomainRelationships.Kind.JOB_OUTPUT
                 && edge.target().kind() == FrontierDomainRelationships.EntityKind.RESOURCE_LOT), "fungible terminal output retains its lot type");
-        Settlement settlement = recovered.bootstrap().settlements().stream().filter(value -> value.id().equals(demand.buyerId())).findFirst().orElseThrow();
-        List<ProposedEvent> provisionPlan = SettlementProvisionProcess.planReview(recovered,
-                SettlementProvisionProcess.review(settlement.id(), 99, 2_300L));
-        SettlementProvisionStarted provision = provisionPlan.stream().map(ProposedEvent::payload).filter(SettlementProvisionStarted.class::isInstance)
-                .map(SettlementProvisionStarted.class::cast).findFirst().orElseThrow();
-        FrontierWorldState provisioned = SettlementProvisionProcess.reduceStarted(recovered, settlement.id(), provision);
-        FrontierDomainRelationships.View provisionView = FrontierDomainRelationships.view(provisioned, 100L);
-        assertTrue(provisionView.causalChain(terminalJob).stream().anyMatch(edge -> edge.kind() == FrontierDomainRelationships.Kind.ALLOCATION_RESOURCE
-                && edge.target().equals(new FrontierDomainRelationships.SubjectEndpoint(FrontierDomainRelationships.EntityKind.RESOURCE_LOT, receipt.outputId()))));
-        assertTrue(provisionView.causalChain(terminalJob).stream().anyMatch(edge -> edge.kind() == FrontierDomainRelationships.Kind.ALLOCATION_RECIPIENT),
-                "the retained terminal output reaches only the named provision recipients");
+        assertTrue(recovered.humanPopulation().provisions().isEmpty(),
+                "terminal bread enters the resource ledger, not a settlement ration cycle");
+        assertTrue(SettlementFoodPolicy.breadStock(recovered, demand.buyerId()) >= 64);
         assertTrue(completed.inventory().economics().reservations().isEmpty());
     }
 
@@ -272,7 +264,7 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
     }
 
     @Test
-    void terminalFungibleBreadProvisionConnectsItsNamedFarmerToTheExactHarvestSuccessorWithoutReselection() {
+    void terminalFungibleBreadAndFieldLineageRetainTheirExactWorkersWithoutReselection() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:production-harvest-relation"), 91L));
         for (long tick = 100L; tick <= 2_200L; tick += 100L) engine.advanceTo(new SimInstant(tick), new WorkBudget(64, 512));
         finishRetainedColdWork(engine);
@@ -284,12 +276,8 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         HarvestLineage harvest = completedHarvestAndSuccessor(terminal, new SubjectId("site:1-wheat-field"));
         assertEquals(ResidentProfession.AGRICULTURAL_WORKER,
                 harvest.state().humanPopulation().resident(harvest.farmerId()).profession());
-        SettlementProvisionStarted started = SettlementProvisionProcess.planReview(harvest.state(),
-                        SettlementProvisionProcess.review(new SubjectId("settlement:1"), 1, 2_300L)).stream()
-                .map(ProposedEvent::payload).filter(SettlementProvisionStarted.class::isInstance)
-                .map(SettlementProvisionStarted.class::cast).findFirst().orElseThrow();
-        FrontierWorldState provisioned = SettlementProvisionProcess.reduceStarted(harvest.state(), new SubjectId("settlement:1"), started);
-        FrontierDomainRelationships.View view = FrontierDomainRelationships.view(provisioned, 160L);
+        assertTrue(harvest.state().humanPopulation().provisions().isEmpty());
+        FrontierDomainRelationships.View view = FrontierDomainRelationships.view(harvest.state(), 160L);
         FrontierDomainRelationships.Endpoint terminalJob = new FrontierDomainRelationships.SubjectEndpoint(
                 FrontierDomainRelationships.EntityKind.PRODUCTION_JOB, receipt.jobId());
         FrontierDomainRelationships.Endpoint outputLot = new FrontierDomainRelationships.SubjectEndpoint(
@@ -303,24 +291,20 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
 
         assertTrue(view.causalChain(terminalJob).stream().anyMatch(edge -> edge.kind() == FrontierDomainRelationships.Kind.JOB_OUTPUT
                 && edge.target().equals(outputLot)));
-        assertTrue(view.causalChain(terminalJob).stream().anyMatch(edge -> edge.kind() == FrontierDomainRelationships.Kind.ALLOCATION_RESOURCE
-                && edge.target().equals(outputLot)));
-        assertTrue(view.causalChain(terminalJob).stream().anyMatch(edge -> edge.kind() == FrontierDomainRelationships.Kind.ALLOCATION_RECIPIENT
+        assertTrue(view.edges().stream().anyMatch(edge -> edge.kind() == FrontierDomainRelationships.Kind.HARVEST_WORKER
                 && edge.target().equals(farmer)));
-        assertTrue(view.causalChain(terminalJob).stream().anyMatch(edge -> edge.kind() == FrontierDomainRelationships.Kind.HARVEST_WORKER
-                && edge.target().equals(farmer)));
-        assertTrue(view.causalChain(terminalJob).stream().anyMatch(edge -> edge.kind() == FrontierDomainRelationships.Kind.HARVEST_SUCCESSOR_TASK
+        assertTrue(view.edges().stream().anyMatch(edge -> edge.kind() == FrontierDomainRelationships.Kind.HARVEST_SUCCESSOR_TASK
                 && edge.target().equals(successorTask)));
-        assertTrue(view.causalChain(terminalJob).stream().anyMatch(edge -> edge.kind() == FrontierDomainRelationships.Kind.HARVEST_SUCCESSOR_JOB
+        assertTrue(view.edges().stream().anyMatch(edge -> edge.kind() == FrontierDomainRelationships.Kind.HARVEST_SUCCESSOR_JOB
                 && edge.target().equals(successorJob)));
-        assertTrue(view.causalChain(successorJob).stream().anyMatch(edge -> edge.kind() == FrontierDomainRelationships.Kind.JOB_OUTPUT
-                && edge.target().equals(outputLot)), "reverse inspection reaches the same terminal production lot");
+        assertFalse(view.causalChain(terminalJob).stream().anyMatch(edge -> edge.kind() == FrontierDomainRelationships.Kind.HARVEST_WORKER
+                && edge.target().equals(farmer)), "without a ration allocation, unrelated bread and field work must not be falsely linked");
         assertEquals(harvest.farmerId(), harvest.successor().workerId(), "the successor retains the completed agricultural worker");
         assertFalse(view.edges().stream().filter(edge -> edge.kind() == FrontierDomainRelationships.Kind.HARVEST_SUCCESSOR_JOB)
                 .anyMatch(edge -> !edge.target().equals(successorJob)), "another same-kind harvest job cannot become this lineage successor");
         assertFalse(view.edges().stream().filter(edge -> edge.kind() == FrontierDomainRelationships.Kind.HARVEST_SUCCESSOR_TASK)
                 .anyMatch(edge -> !edge.target().equals(successorTask)), "another same-kind task cannot replace the retained successor task");
-        assertFalse(view.causalChain(successorJob).stream().anyMatch(edge -> edge.kind() == FrontierDomainRelationships.Kind.ALLOCATION_RESOURCE
+        assertFalse(view.causalChain(successorJob).stream().anyMatch(edge -> edge.kind() == FrontierDomainRelationships.Kind.JOB_OUTPUT
                 && edge.target().kind() == FrontierDomainRelationships.EntityKind.EXACT_ITEM),
                 "the successor does not reselect a different exact bread resource");
     }

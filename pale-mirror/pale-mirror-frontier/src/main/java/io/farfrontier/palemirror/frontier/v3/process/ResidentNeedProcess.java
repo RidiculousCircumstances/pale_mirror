@@ -10,7 +10,7 @@ import io.farfrontier.palemirror.frontier.v3.model.*;
 
 import java.util.List;
 
-/** Sparse canonical need clock. This owner remains dormant until provision retirement. */
+/** Sparse canonical need clock; settlement-wide provision no longer advances nutrition. */
 public final class ResidentNeedProcess {
     public static final String REVIEW = "frontier.resident.need.review";
     private ResidentNeedProcess() { }
@@ -25,9 +25,8 @@ public final class ResidentNeedProcess {
 
     public static ScheduledAction firstReviewAfter(SubjectId residentId, long birthOrStartTick,
                                                     FrontierRuleset.ResidentLife rules) {
-        if (birthOrStartTick < 0) birthOrStartTick = 0;
-        long day = birthOrStartTick / rules.hungerUnitTicks();
-        return review(residentId, Math.multiplyExact(Math.addExact(day, 1L), rules.hungerUnitTicks()));
+        return review(residentId, ResidentNutrition.nourishedAtTick(birthOrStartTick)
+                .nextThresholdTick(rules, ResidentCharacteristics.DEFAULT_METABOLISM_PERMILLE));
     }
 
     public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
@@ -40,17 +39,18 @@ public final class ResidentNeedProcess {
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE)
             return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Consumed(action.id())));
         FrontierRuleset.ResidentLife rules = state.bootstrap().ruleset().residentLife();
-        if (action.dueAt().ticks() % rules.hungerUnitTicks() != 0)
-            throw new IllegalArgumentException("need review is not a selected hunger boundary");
         ResidentNutrition previous = state.humanPopulation().nutrition(resident.id());
-        ResidentNutrition next = previous.accrueThrough(action.dueAt().ticks(), rules);
-        if (next.lastIntegratedDay() <= previous.lastIntegratedDay())
-            throw new IllegalArgumentException("need review cannot replay an integrated day");
+        int rate = resident.characteristics().effectiveMetabolismPermille(action.dueAt().ticks());
+        if (action.dueAt().ticks() != previous.nextThresholdTick(rules, rate))
+            throw new IllegalArgumentException("need review is not this resident's exact threshold");
+        ResidentNutrition next = previous.accrueThrough(action.dueAt().ticks(), rules, rate);
+        if (next.hungerDeficit() <= previous.hungerDeficit() && next.hungerDeficit() < rules.maxHungerUnits())
+            throw new IllegalArgumentException("need review did not advance its exact threshold");
         return List.of(new ProposedEvent(resident.id(), new ResidentNeedIntegrated(resident.id(),
-                        action.dueAt().ticks(), previous.lastIntegratedDay(), next.lastIntegratedDay(),
-                        next.hungerDeficit())),
+                        action.dueAt().ticks(), previous.lastEvaluatedTick(), next.hungerDeficit(),
+                        next.fractionalProgress())),
                 new ProposedEvent(resident.id(), new ScheduleEffect.Created(
-                        review(resident.id(), Math.addExact(action.dueAt().ticks(), rules.hungerUnitTicks())))));
+                        review(resident.id(), next.nextThresholdTick(rules, rate)))));
     }
 
     public static FrontierWorldState reduce(FrontierWorldState state, SubjectId subject,
@@ -59,10 +59,11 @@ public final class ResidentNeedProcess {
                 || state.actorLocations().get(subject).condition().status() != ActorLifeStatus.ALIVE)
             throw new IllegalArgumentException("need integration has no living exact resident");
         ResidentNutrition previous = state.humanPopulation().nutrition(subject);
-        ResidentNutrition next = previous.accrueThrough(integrated.atTick(), state.bootstrap().ruleset().residentLife());
-        if (previous.lastIntegratedDay() != integrated.previousDay()
-                || next.lastIntegratedDay() != integrated.integratedDay()
-                || next.hungerDeficit() != integrated.hungerDeficit())
+        ResidentNutrition next = previous.accrueThrough(integrated.atTick(), state.bootstrap().ruleset().residentLife(),
+                state.humanPopulation().resident(subject).characteristics().effectiveMetabolismPermille(integrated.atTick()));
+        if (previous.lastEvaluatedTick() != integrated.previousTick()
+                || next.hungerDeficit() != integrated.hungerDeficit()
+                || next.fractionalProgress() != integrated.fractionalProgress())
             throw new IllegalArgumentException("need integration differs from its deterministic predecessor");
         return state.withHumanPopulation(state.humanPopulation().accrueHunger(subject,
                 integrated.atTick(), state.bootstrap().ruleset().residentLife()));

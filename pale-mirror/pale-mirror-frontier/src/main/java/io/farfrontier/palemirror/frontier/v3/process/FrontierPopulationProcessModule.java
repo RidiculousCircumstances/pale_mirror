@@ -84,27 +84,20 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
     }
 
     private static PhysicalIntentLifecycleCapability provisionConsumptionCapability() {
+        // The wire owner remains declared so old bytes fail at their exact boundary instead
+        // of being misrouted to medical consumption. No current world may prepare, advance or
+        // replay settlement-wide ration consumption after resident meals own nutrition.
         return new FunctionalPhysicalIntentLifecycleCapability(PhysicalIntentLifecycleDeclaration.physical(PhysicalIntentLifecycleOwner.SETTLEMENT_PROVISION,
                 Set.of(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EXACT_ITEM_CONSUMPTION),
                 Set.of(PhysicalIntentRoleSchema.SETTLEMENT_PROVISION_CONSUMPTION)),
-                (state, command, prepared) -> FrontierWorldCommandPlanner.rejected("physical executor cannot prepare settlement provision"),
-                (state, command, intent, transition) -> new CommandPlan.Accepted(
-                        SettlementProvisionProcess.planTransition(state, intent, transition, command.submittedAt().ticks())),
-                SettlementProvisionProcess::reducePrepared,
-                (state, subject, intent, transition) -> {
-                    if (!state.humanPopulation().provisions().containsKey(intent.causeSubjectId()) || !subject.equals(intent.causeSubjectId())) {
-                        throw new IllegalArgumentException("settlement provision consumption transition lacks settlement ownership");
-                    }
-                    return reducePopulationConsumption(state, intent, transition);
-                }, PhysicalIntentLifecycleRetirementPolicy.of(
-                        (state, command, intent, transition) -> new CommandPlan.Accepted(
-                                SettlementProvisionProcess.planTransition(state, intent, transition, command.submittedAt().ticks())),
-                        (state, subject, intent, transition) -> {
-                            if (!state.humanPopulation().provisions().containsKey(intent.causeSubjectId()) || !subject.equals(intent.causeSubjectId())) {
-                                throw new IllegalArgumentException("settlement provision consumption retirement lacks settlement ownership");
-                            }
-                            return reducePopulationConsumption(state, intent, transition);
-                }), intent -> FencedRecoveryAsset.EFFECT,
+                (state, command, prepared) -> FrontierWorldCommandPlanner.rejected("settlement-wide provision is retired"),
+                (state, command, intent, transition) -> FrontierWorldCommandPlanner.rejected("settlement-wide provision is retired"),
+                (state, subject, intent) -> { throw new IllegalArgumentException("settlement-wide provision is retired"); },
+                (state, subject, intent, transition) -> { throw new IllegalArgumentException("settlement-wide provision is retired"); },
+                PhysicalIntentLifecycleRetirementPolicy.of(
+                        (state, command, intent, transition) -> FrontierWorldCommandPlanner.rejected("settlement-wide provision is retired"),
+                        (state, subject, intent, transition) -> { throw new IllegalArgumentException("settlement-wide provision is retired"); }),
+                intent -> FencedRecoveryAsset.EFFECT,
                 retirementAccount(PhysicalIntentLifecycleOwner.SETTLEMENT_PROVISION), PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery(), PhysicalIntentRecoveryDiagnosticProducer.SETTLEMENT_PROVISION);
     }
 
@@ -208,10 +201,6 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
         observations.put(consumed.id(), consumed);
         FrontierWorldState consumedState = state.withChanges(FrontierWorldStateUpdate.begin().physicalIntents(intents)
                 .physicalObservations(observations).inventory(state.inventory().consume(itemId, consumed.consumedCount())));
-        if (state.humanPopulation().provisions().values().stream()
-                .anyMatch(provision -> provision.activeIntentId().filter(intent.id()::equals).isPresent())) {
-            return SettlementProvisionStateSupport.reducePhysicalConsumptionAfterInventory(consumedState, intent, consumed);
-        }
         return consumedState;
     }
     @Override public CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
@@ -226,9 +215,46 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
         if (command.payload() instanceof ResidentTransitAdvanced advanced) {
             ResidentMigrationJourney journey = state.humanPopulation().migration(advanced.residentId());
             if (journey == null) return FrontierWorldCommandPlanner.rejected("HOT transit observation has no active migration journey");
-            try { PopulationMigrationProcess.reduceHotAdvance(state, advanced); }
+            try { PopulationMigrationProcess.reduceHotAdvance(state, advanced, command.submittedAt().ticks()); }
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
             return new CommandPlan.Accepted(List.of(new ProposedEvent(journey.originSettlementId(), advanced)));
+        }
+        if (command.payload() instanceof ResidentMetabolismChanged changed) {
+            if (command.submittedAt().ticks() != changed.atTick())
+                return FrontierWorldCommandPlanner.rejected("metabolism edit must use its canonical submission instant");
+            try { return new CommandPlan.Accepted(ResidentMetabolismProcess.plan(state, changed)); }
+            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+        }
+        if (command.payload() instanceof ResidentMealHotArrived arrived) {
+            try { ResidentMealProcess.reduceHotArrived(state, arrived.residentId(), arrived); }
+            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(arrived.residentId(), arrived)));
+        }
+        if (command.payload() instanceof ResidentMealHotEffectPrepared prepared) {
+            try { ResidentMealProcess.reduceHotPrepared(state, prepared.residentId(), prepared); }
+            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(prepared.residentId(), prepared)));
+        }
+        if (command.payload() instanceof ResidentMealHotEffectObserved observed) {
+            try { ResidentMealProcess.reduceHotObserved(state, observed.residentId(), observed, command.submittedAt().ticks()); }
+            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(observed.residentId(), observed)));
+        }
+        if (command.payload() instanceof ResidentMealHotHandMaterialized observed) {
+            try { ResidentMealProcess.reduceHotHandMaterialized(state, observed.residentId(), observed); }
+            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(observed.residentId(), observed)));
+        }
+        if (command.payload() instanceof ResidentMealHotHandReleased observed) {
+            try { ResidentMealProcess.reduceHotHandReleased(state, observed.residentId(), observed); }
+            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(observed.residentId(), observed)));
+        }
+        if (command.payload() instanceof ResidentMealHotReturned returned) {
+            try { ResidentActivityProcess.reduceMealReturned(state, returned.residentId(), returned,
+                    command.submittedAt().ticks()); }
+            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(returned.residentId(), returned)));
         }
         if (command.payload() instanceof MedicalTreatmentSceneLeasePrepared prepared) {
             try {
@@ -251,17 +277,25 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
             case ResidentMigrated migration -> reduceMigrated(state, event.subject(), migration);
             case ResidentMigrationStarted started -> reduceStarted(state, event.subject(), started);
             case ResidentMigrationAdvanced advanced -> reduceAdvanced(state, event.subject(), advanced);
-            case ResidentTransitAdvanced advanced -> reduceTransit(state, event.subject(), advanced);
+            case ResidentTransitAdvanced advanced -> reduceTransit(state, event.subject(), advanced, event.instant().ticks());
             case ResidentMigrationBlocked blocked -> reduceBlocked(state, event.subject(), blocked);
             case ResidentMigrationResumed resumed -> reduceResumed(state, event.subject(), resumed);
             case ResidentBirthStarted started -> PopulationBirthProcess.reduceStarted(state, event.subject(), started);
-            case LegacySettlementProvisionStarted started -> SettlementProvisionProcess.reduceLegacyStarted(state, event.subject(), started);
-            case SettlementProvisionStarted started -> SettlementProvisionProcess.reduceStarted(state, event.subject(), started);
-            case SettlementProvisionConsumed consumed -> SettlementProvisionProcess.reduceConsumed(state, event.subject(), consumed);
-            case SettlementProvisionResolved resolved -> SettlementProvisionProcess.reduceResolved(state, event.subject(), resolved);
+            case LegacySettlementProvisionStarted ignored -> throw new IllegalArgumentException("legacy settlement ration event is retired by resident nutrition");
+            case SettlementProvisionStarted ignored -> throw new IllegalArgumentException("settlement provision start is retired by resident nutrition");
+            case SettlementProvisionConsumed ignored -> throw new IllegalArgumentException("settlement provision consumption is retired by resident nutrition");
+            case SettlementProvisionResolved ignored -> throw new IllegalArgumentException("settlement provision resolution is retired by resident nutrition");
             case ResidentNeedIntegrated integrated -> ResidentNeedProcess.reduce(state, event.subject(), integrated);
-            case ResidentMealStarted started -> ResidentMealProcess.reduceStarted(state, event.subject(), started);
+            case ResidentMetabolismChanged changed -> ResidentMetabolismProcess.reduce(state, event.subject(), changed);
+            case ResidentMealStarted started -> ResidentActivityProcess.reduceMealStarted(state, event.subject(), started);
             case ResidentMealColdStep step -> ResidentMealProcess.reduceColdStep(state, event.subject(), step);
+            case ResidentMealHotArrived arrived -> ResidentMealProcess.reduceHotArrived(state, event.subject(), arrived);
+            case ResidentMealHotEffectPrepared prepared -> ResidentMealProcess.reduceHotPrepared(state, event.subject(), prepared);
+            case ResidentMealHotEffectObserved observed -> ResidentMealProcess.reduceHotObserved(state, event.subject(), observed, event.instant().ticks());
+            case ResidentMealHotHandMaterialized observed -> ResidentMealProcess.reduceHotHandMaterialized(state, event.subject(), observed);
+            case ResidentMealHotHandReleased observed -> ResidentMealProcess.reduceHotHandReleased(state, event.subject(), observed);
+            case ResidentMealHotReturned returned -> ResidentActivityProcess.reduceMealReturned(state, event.subject(), returned,
+                    event.instant().ticks());
             case ResidentHealthTransition transition -> HumanHealthProcess.reduceResidentTransition(state, event.subject(), event.instant().ticks(), transition);
             case SettlementQuarantineTransition transition -> HumanHealthProcess.reduceQuarantineTransition(state, event.subject(), event.instant().ticks(), transition);
             case MedicalTreatmentStarted started -> MedicalTreatmentProcess.reduceStarted(state, event.subject(), started);
@@ -288,10 +322,11 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
         return HumanPopulationStateSupport.advanceMigration(state, advanced);
     }
 
-    private static FrontierWorldState reduceTransit(FrontierWorldState state, SubjectId subject, ResidentTransitAdvanced advanced) {
+    private static FrontierWorldState reduceTransit(FrontierWorldState state, SubjectId subject,
+                                                     ResidentTransitAdvanced advanced, long atTick) {
         ResidentMigrationJourney journey = state.humanPopulation().migration(advanced.residentId());
         if (journey == null || !subject.equals(journey.originSettlementId())) throw new IllegalArgumentException("HOT transit observation lacks its origin settlement owner");
-        return PopulationMigrationProcess.reduceHotAdvance(state, advanced);
+        return PopulationMigrationProcess.reduceHotAdvance(state, advanced, atTick);
     }
 
     private static FrontierWorldState reduceBlocked(FrontierWorldState state, SubjectId subject, ResidentMigrationBlocked blocked) {

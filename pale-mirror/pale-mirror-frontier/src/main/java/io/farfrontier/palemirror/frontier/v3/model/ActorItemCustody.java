@@ -33,6 +33,7 @@ public final class ActorItemCustody {
         if (order.portion() instanceof ActorContainerItemOrder.Portion.Exact)
             return inventory.transferActorOrder(order);
         if (order.direction() == ActorContainerItemOrder.Direction.TAKE
+                && order.hand() == ActorContainerItemOrder.Hand.MAIN
                 && !inventory.actorItems(order.actorId()).isEmpty())
             throw new IllegalArgumentException("actor already holds an exact item");
         return inventory.withFungibleResources(inventory.fungibleResources().transferActorOrderCold(order));
@@ -50,7 +51,8 @@ public final class ActorItemCustody {
         if (container == null || !container.ownerId().equals(resourceOwner(inventory, order))
                 || !(ReferenceContainerCustody.hasOperationalCustody(state, container.id())
                 || ReferenceContainerCustody.hasLiveCustody(state, container.id())
-                && BakeryPhysicalAuthority.pendingForContainer(state, container.id()))
+                && (BakeryPhysicalAuthority.pendingForContainer(state, container.id())
+                    || ResidentMealPhysicalAuthority.pendingForContainer(state, container.id())))
                 || ReferenceContainerCustody.blocksCanonicalUse(state, container.id()))
             throw new IllegalArgumentException("observed handoff has no current owned physical endpoint");
         if (order.containerEndpoint() instanceof ActorContainerItemOrder.ContainerEndpoint.ExactStationSlot
@@ -61,7 +63,9 @@ public final class ActorItemCustody {
                 throw new IllegalArgumentException("exact actor handoff may not retain fungible witness layouts");
             return inventory.transferActorOrder(order);
         }
-        if (order.direction() == ActorContainerItemOrder.Direction.TAKE && !inventory.actorItems(order.actorId()).isEmpty())
+        if (order.direction() == ActorContainerItemOrder.Direction.TAKE
+                && order.hand() == ActorContainerItemOrder.Hand.MAIN
+                && !inventory.actorItems(order.actorId()).isEmpty())
             throw new IllegalArgumentException("observed actor handoff would overwrite an exact item");
         return inventory.withFungibleResources(inventory.fungibleResources()
                 .transferActorOrderObservedStacks(order, sourceEpoch, destinationEpoch, remainingSource, destination));

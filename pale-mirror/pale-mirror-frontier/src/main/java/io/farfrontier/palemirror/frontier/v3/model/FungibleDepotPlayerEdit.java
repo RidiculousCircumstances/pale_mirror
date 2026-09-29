@@ -7,6 +7,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.HashSet;
 import java.util.UUID;
 
 /**
@@ -72,10 +74,39 @@ public final class FungibleDepotPlayerEdit {
             return new FungibleStockContributionObserved(accountId, containerId, epoch, playerId, interactionId, lot, observed);
         }
         if (account == null) throw new IllegalArgumentException("empty depot cannot lose stock");
-        Map<SubjectId, Integer> departed = unclaimedDepartures(ledger, account, losses);
-        ledger.departObserved(accountId, epoch, departed, observed);
+        Set<SubjectId> forfeited = mealClaimsNeededForExit(ledger, account, losses);
+        FungibleResourceLedger cleared = forfeited.isEmpty() ? ledger : ledger.releaseClaims(forfeited);
+        Map<SubjectId, Integer> departed = unclaimedDepartures(cleared, cleared.accounts().get(accountId), losses);
+        cleared.departObserved(accountId, epoch, departed, observed);
         return new FungibleStockDepartureObserved(accountId, containerId, settlementId, epoch,
-                playerId, interactionId, departed, observed);
+                playerId, interactionId, departed, forfeited, observed);
+    }
+
+    /** Only an unconsumed resident meal has a declared local replan on source loss. */
+    private static Set<SubjectId> mealClaimsNeededForExit(FungibleResourceLedger ledger,
+                                                            CustodyAccount account,
+                                                            Map<String, Integer> losses) {
+        Set<SubjectId> forfeited = new HashSet<>();
+        for (var loss : losses.entrySet()) {
+            int stock = account.lotQuantities().entrySet().stream()
+                    .filter(entry -> ledger.lots().get(entry.getKey()).itemKind().equals(loss.getKey()))
+                    .mapToInt(Map.Entry::getValue).sum();
+            int held = account.claimQuantities().entrySet().stream()
+                    .filter(entry -> ledger.claims().get(entry.getKey()).itemKind().equals(loss.getKey()))
+                    .mapToInt(Map.Entry::getValue).sum();
+            int need = loss.getValue() - (stock - held);
+            if (need <= 0) continue;
+            for (SubjectId id : account.claimQuantities().keySet().stream().sorted().toList()) {
+                ClaimAllocation claim = ledger.claims().get(id);
+                if (!claim.itemKind().equals(loss.getKey()) || claim.purpose() != ClaimPurpose.RESIDENT_MEAL)
+                    continue;
+                forfeited.add(id);
+                need -= account.claimQuantities().get(id);
+                if (need <= 0) break;
+            }
+            if (need > 0) throw new IllegalArgumentException("player edit touches a claim without a source-loss replan");
+        }
+        return Set.copyOf(forfeited);
     }
 
     private static Map<String, Integer> quantitiesByKind(FungibleResourceLedger ledger, CustodyAccount account) {
@@ -87,7 +118,7 @@ public final class FungibleDepotPlayerEdit {
         return totals;
     }
 
-    /** Preserve every live claim; affected-claim retirement is a separate owner transition. */
+    /** Selects physical stock exits only after any declared owner-local claim retirement. */
     private static Map<SubjectId, Integer> unclaimedDepartures(FungibleResourceLedger ledger,
                                                                 CustodyAccount account,
                                                                 Map<String, Integer> losses) {

@@ -47,6 +47,9 @@ final class ResourceSiteHarvestPlanning {
         if (state.structureConditions().get(site.facilityId()) != StructureCondition.INTACT) return blocked(task);
         ResidentProfile farmer = successorFarmer(state, lifecycle, settlement.id());
         if (farmer == null) return blocked(task);
+        if (!ResidentActivityCoordinator.mayStartOrdinaryWork(state, farmer.id(), action.dueAt().ticks()))
+            return List.of(reschedule(action, start(task, ResidentActivityCoordinator.nextOrdinaryWorkAdmission(
+                    state, farmer.id(), action.dueAt().ticks()))));
         // Selecting an idle strategic worker is not enough to take its physical body.  In
         // particular, an ordinary ambient lease can still be carrying its prior post-work
         // return goal through restart recovery. Starting a field job from that body would
@@ -200,6 +203,10 @@ final class ResourceSiteHarvestPlanning {
             return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Consumed(action.id())));
         if (state.resourceSites().site(job.siteId()).phase() != ResourceSitePhase.HARVESTING)
             throw new IllegalArgumentException("resource-site harvest continuation has an active job outside HARVESTING or terminal CONFLICT");
+        if (!state.humanPopulation().meals().containsKey(job.workerId())
+                && !ResidentActivityCoordinator.ordinaryWorkPermitted(state, job.workerId(), action.dueAt().ticks()))
+            return List.of(reschedule(action, coldProgress(job, ResidentActivityCoordinator.nextOrdinaryWorkCheck(
+                    state, job.workerId(), action.dueAt().ticks()))));
         long nextDue = Math.addExact(action.dueAt().ticks(), continuationInterval(state, job));
         if (coldProgressHeld(state, action)) {
             // The current engine action is also the HOT checkpoint's only binding.  Advancing its

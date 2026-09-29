@@ -163,7 +163,7 @@ class HumanPopulationProcessTest {
         assertEquals(3, proposed.size(), "COLD birth emits only its review, semantic commitment and delayed completion");
         assertEquals(activeStarted, coldStarted, "historical replica materialization cannot alter the canonical birth subject");
         FrontierWorldState committed = PopulationBirthProcess.reduceStarted(released, coldStarted.job().settlementId(), coldStarted);
-        assertEquals(63, SettlementFoodPolicy.coldUsableBread(committed, new SubjectId("settlement:1")),
+        assertEquals(127, SettlementFoodPolicy.coldUsableBread(committed, new SubjectId("settlement:1")),
                 "the semantic birth consumes one ration and leaves the remaining exact stack available to provisioning");
         assertTrue(committed.physicalIntents().isEmpty(), "COLD birth creates no physical consumption permit");
 
@@ -281,7 +281,9 @@ class HumanPopulationProcessTest {
     private static FrontierWorldState stateWithBread(FrontierWorldState state, SubjectId settlementId) {
         SubjectId depot = FrontierWorldState.depotId(settlementId); SubjectId bread = new SubjectId("item:birth-test-bread");
         ExactInventory inventory = state.inventory().store(new ExactItemStack(bread, settlementId, PopulationBirthProcess.BREAD, 64,
-                new InventoryCustody.ContainerSlot(depot, 1)));
+                new InventoryCustody.ContainerSlot(depot, 1)))
+                .store(new ExactItemStack(new SubjectId("item:birth-zreserve-bread"), settlementId,
+                        PopulationBirthProcess.BREAD, 64, new InventoryCustody.ContainerSlot(depot, 2)));
         return state.withInventory(inventory);
     }
     private static FrontierCommand command(WorldId world, io.farfrontier.palemirror.frontier.v3.api.FrontierEngine<FrontierWorldProjection> engine,

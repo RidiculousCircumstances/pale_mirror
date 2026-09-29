@@ -48,6 +48,16 @@ final class FrontierV3BakeryWorkSceneExecutor {
         Entity entity = level.getEntity(lease.members().getFirst().entityId());
         if (!(entity instanceof Mob worker) || !worker.isAlive() || !FrontierV3SceneExecutor.recognizes(runtime, worker)) return;
         BakeryWorkGoal goal = BakeryWorkGoal.current(state, job);
+        if (job.bakeryWork().orElseThrow().pendingPhysicalStep().isEmpty()
+                && !state.inventory().fungibleResources().accounts().containsKey(
+                        job.bakeryWork().orElseThrow().actorAccountId())
+                && ResidentActivityCoordinator.requestsYield(state, job.workerId(),
+                        runtime.checkpointImage().orElseThrow().instant().ticks())
+                && FrontierV3SemanticMovement.arrived(level, worker, goal.station())) {
+            FrontierV3CommandSubmission.submit(runtime, "bakery-resident-yield", lease.id().value(),
+                    new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
+            return;
+        }
         if (FrontierV3SemanticMovement.arrived(level, worker, goal.station())) {
             LEGS.remove(worker);
             FrontierV3GoalNavigation.stop(worker);

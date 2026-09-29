@@ -18,11 +18,11 @@
     { "type": "place", "position": { "diagnostic": { "view": "scene", "id": "job:production-development-input-theft", "field": "productionFutureBody" } }, "item": "minecraft:gray_concrete", "timeoutMs": 15000 },
     { "type": "wait_until_diagnostic", "view": "market_order", "id": "order:development-production-input-theft", "expect": { "status": "ok", "orderStatus": "CANCELLED", "jobActive": false, "reservationActive": false, "taskStatus": "BLOCKED" }, "timeoutMs": 30000 },
     { "type": "fast_forward", "ticks": 1100, "timeoutMs": 120000 },
-    { "type": "wait_until_diagnostic", "view": "settlement", "id": "settlement:2", "expect": { "status": "ok", "food": { "status": "SECURE", "fulfilled": 8 } }, "requireIncreaseAt": "food.fulfilled", "timeoutMs": 30000 }
+    { "type": "wait_until_diagnostic", "view": "resident_life", "id": "resident:2-1", "expect": { "status": "ok", "nutrition": "HUNGRY", "storedHungerDeficit": 1 }, "requireIncreaseAt": "storedHungerDeficit", "timeoutMs": 30000 }
   ],
   "assertions": [
     { "after": 3, "view": "market_order", "id": "order:development-production-input-theft", "expect": { "status": "ok", "orderStatus": "CANCELLED", "jobActive": false, "reservationActive": false, "taskStatus": "BLOCKED" } },
-    { "after": 5, "view": "settlement", "id": "settlement:2", "expect": { "status": "ok", "food": { "status": "SECURE", "fulfilled": 8 } } }
+    { "after": 5, "view": "resident_life", "id": "resident:2-1", "expect": { "status": "ok", "nutrition": "HUNGRY", "storedHungerDeficit": 1 } }
   ],
   "frames": [
     { "after": 2, "name": "player-blocked-industrial-worker-route" }

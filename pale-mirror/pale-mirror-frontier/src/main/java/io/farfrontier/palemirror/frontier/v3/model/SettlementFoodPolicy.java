@@ -6,27 +6,28 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.util.Comparator;
 import java.util.Optional;
 
-/** Read-only settlement food policy; the provision process is an executor, not a stock-query API. */
+/** Read-only food policy derived from exact residents and current ledger stock. */
 public final class SettlementFoodPolicy {
     public static final String BREAD = "minecraft:bread";
 
     private SettlementFoodPolicy() { }
 
-    /** Transitional ration reserve: replace the pending legacy cycle with exact resident demand at adoption. */
+    /** Two ordinary meals per living resident, plus currently accrued unmet individual need. */
     public static int reserveRequirement(FrontierWorldState state, SubjectId settlementId) {
-        int living = Math.toIntExact(state.humanPopulation().residents().values().stream()
+        return state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(settlementId))
-                .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE).count());
-        SettlementProvision provision = state.humanPopulation().provision(settlementId);
-        int pending = provision.status() == SettlementProvisionStatus.IN_PROGRESS
-                ? provision.requiredRations() - provision.fulfilledRations() : 0;
-        return Math.addExact(Math.multiplyExact(living, 2), pending);
+                .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE)
+                .mapToInt(resident -> Math.addExact(2, state.humanPopulation().nutrition(resident.id()).hungerDeficit()))
+                .reduce(0, Math::addExact);
     }
 
-    /** Birth policy still reads the active provision outcome until resident-life adoption. */
+    /** A discretionary birth cannot spend the next resident's meal or mask current hunger. */
     public static boolean allowsPopulationGrowth(FrontierWorldState state, SubjectId settlementId) {
-        SettlementProvisionStatus status = state.humanPopulation().provision(settlementId).status();
-        return status == SettlementProvisionStatus.IDLE || status == SettlementProvisionStatus.SECURE;
+        return state.humanPopulation().residents().values().stream()
+                .filter(resident -> resident.settlementId().equals(settlementId))
+                .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE)
+                .noneMatch(resident -> state.humanPopulation().nutrition(resident.id()).hungerDeficit() > 0)
+                && breadStock(state, settlementId) > reserveRequirement(state, settlementId);
     }
 
     /** Current canonical depot stock, including physically bound HOT stacks; not a spending permit. */
@@ -103,17 +104,28 @@ public final class SettlementFoodPolicy {
         SubjectId depot = FrontierWorldState.depotId(settlementId);
         if (ReferenceContainerCustody.blocksCanonicalUse(state, depot)) return Optional.empty();
         int reserve = reserveRequirement(state, settlementId);
-        int available = state.inventory().fungibleResources().accounts().values().stream()
-                .filter(account -> account.custody() instanceof ResourceCustody.Container container && container.containerId().equals(depot))
-                .filter(account -> state.inventory().fungibleResources().bindings().values().stream()
-                        .noneMatch(binding -> binding.accountId().equals(account.id())))
-                .flatMap(account -> account.lotQuantities().entrySet().stream())
-                .filter(entry -> BREAD.equals(state.inventory().fungibleResources().lots().get(entry.getKey()).itemKind()))
+        FungibleResourceLedger resources = state.inventory().fungibleResources();
+        CustodyAccount account = FungibleResourceCustodySupport.accountAtContainer(state, depot).orElse(null);
+        if (account == null || resources.bindings().values().stream()
+                .anyMatch(binding -> binding.accountId().equals(account.id()))) return Optional.empty();
+        int unclaimed = resources.unclaimedQuantity(account.id(), settlementId, BREAD);
+        int accountBread = account.lotQuantities().entrySet().stream()
+                .filter(entry -> BREAD.equals(resources.lots().get(entry.getKey()).itemKind()))
                 .mapToInt(java.util.Map.Entry::getValue).sum();
-        if (coldUsableBread(state, settlementId) - 64 < reserve) return Optional.empty();
-        return FungibleResourceCustodySupport.firstAtContainer(state, depot, BREAD, 64).filter(lot ->
-                state.inventory().fungibleResources().bindings().values().stream()
-                        .noneMatch(binding -> binding.accountId().equals(lot.accountId())));
+        // The reserve may reside in other exact stacks at this depot. Subtract the
+        // account's claimed portion from total COLD stock, not the whole reserve from
+        // this single fungible account; doing the latter prevents legitimate exports.
+        if (coldUsableBread(state, settlementId) - (accountBread - unclaimed) - 64 < reserve)
+            return Optional.empty();
+        java.util.Map<SubjectId, Integer> pinned = new java.util.HashMap<>();
+        account.claimQuantities().keySet().forEach(id -> resources.claims().get(id).lotQuantities()
+                .forEach((lot, count) -> pinned.merge(lot, count, Math::addExact)));
+        return account.lotQuantities().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey())
+                .filter(entry -> entry.getValue() - pinned.getOrDefault(entry.getKey(), 0) >= 64)
+                .map(entry -> new FungibleResourceCustodySupport.LotAtContainer(account.id(),
+                        resources.lots().get(entry.getKey()), entry.getValue()))
+                .filter(candidate -> candidate.lot().economicOwnerId().equals(settlementId)
+                        && candidate.lot().itemKind().equals(BREAD)).findFirst();
     }
 
     public static boolean hasUnconfirmedPhysicalCustody(FrontierWorldState state, SubjectId itemId) {

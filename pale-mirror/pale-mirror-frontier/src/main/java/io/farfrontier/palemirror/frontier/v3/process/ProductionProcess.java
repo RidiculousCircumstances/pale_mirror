@@ -87,9 +87,14 @@ public final class ProductionProcess {
         StrategicTask task = task(state, action.subject(), StrategicTaskStatus.PENDING); Settlement settlement = settlement(state, task.ownerId());
         SettlementStructure workshop = workshop(settlement);
         if (state.structureConditions().get(workshop.id()) != StructureCondition.INTACT) return blocked(task, settlement, workshop, workshop.id(), ProductionDiagnosticProducer.FACILITY_UNAVAILABLE);
-        if (FrontierWorldStateSupport.availableWorkResident(state, settlement.id(), ResidentProfession.BAKER).isEmpty()) {
+        Optional<ResidentProfile> availableBaker = FrontierWorldStateSupport.availableWorkResident(
+                state, settlement.id(), ResidentProfession.BAKER);
+        if (availableBaker.isEmpty()) {
             return blocked(task, settlement, workshop, workshop.id(), ProductionDiagnosticProducer.WORKER_UNAVAILABLE);
         }
+        if (!ResidentActivityCoordinator.mayStartOrdinaryWork(state, availableBaker.orElseThrow().id(), action.dueAt().ticks()))
+            return List.of(reschedule(action, start(task, ResidentActivityCoordinator.nextOrdinaryWorkAdmission(
+                    state, availableBaker.orElseThrow().id(), action.dueAt().ticks()))));
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
         if (ReferenceContainerCustody.blocksCanonicalUse(state, depot)) {
             return blocked(task, settlement, workshop, depot, ProductionDiagnosticProducer.INPUT_UNAVAILABLE);
@@ -143,6 +148,9 @@ public final class ProductionProcess {
         if (job == null) return List.of();
         if (state.humanPopulation().meals().containsKey(job.workerId()))
             return List.of(reschedule(action, complete(job, Math.addExact(action.dueAt().ticks(), 20L))));
+        if (!ResidentActivityCoordinator.ordinaryWorkPermitted(state, job.workerId(), action.dueAt().ticks()))
+            return List.of(reschedule(action, complete(job, ResidentActivityCoordinator.nextOrdinaryWorkCheck(
+                    state, job.workerId(), action.dueAt().ticks()))));
         if (job.bakeryWork().isPresent()) return planBakeryCompletion(state, job, action);
         Settlement settlement = settlement(state, job.settlementId()); StrategicTask task = activeTask(state, job); SettlementStructure workshop = workshop(settlement);
         if (state.structureConditions().get(workshop.id()) != StructureCondition.INTACT) return failActiveJob(state, task, settlement, workshop, job, ProductionDiagnosticProducer.FACILITY_UNAVAILABLE);

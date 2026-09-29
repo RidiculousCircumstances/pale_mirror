@@ -10,6 +10,11 @@ import java.util.List;
 
 /** Exact owner for ambient body observations and leases. */
 final class FrontierAmbientProcessModule implements FrontierWorldProcessModule {
+    @Override public List<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction> retiredSchedules(
+            FrontierWorldState previous, FrontierWorldState next,
+            java.util.function.Supplier<List<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction>> pending) {
+        return ResidentLifeScheduleRetirement.afterDeath(previous, next, pending);
+    }
     @Override public List<PhysicalIntentLifecycleCapability> physicalIntentLifecycleCapabilities() {
         return List.of(new NoPhysicalIntentLifecyclePolicy(
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.AMBIENT_ACTOR_CUSTODY));

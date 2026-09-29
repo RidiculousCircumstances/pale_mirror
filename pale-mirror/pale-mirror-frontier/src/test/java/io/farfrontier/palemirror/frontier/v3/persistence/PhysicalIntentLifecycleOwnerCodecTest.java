@@ -126,7 +126,7 @@ class PhysicalIntentLifecycleOwnerCodecTest {
         byte[] snapshot = FrontierPersistenceCodec.encodeSnapshot(new SnapshotRecord(new CheckpointImage(new WorldId("frontier:owner-boundary"),
                 Revision.ZERO, SimInstant.ZERO, new byte[0], List.of(), List.of()), 0L));
         snapshot[4] = 66; // The immediately preceding envelope version had typed roles but no closed role-schema bytes.
-        assertMessage(() -> FrontierPersistenceCodec.decodeSnapshot(snapshot), "typed-role codec");
+        assertMessage(() -> FrontierPersistenceCodec.decodeSnapshot(snapshot), "incompatible");
     }
 
     @Test

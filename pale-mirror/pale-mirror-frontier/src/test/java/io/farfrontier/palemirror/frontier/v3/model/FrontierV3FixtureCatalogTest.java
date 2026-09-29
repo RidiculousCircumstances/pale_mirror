@@ -96,16 +96,16 @@ class FrontierV3FixtureCatalogTest {
         assertEquals(PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS, committed.physicalDeltas().get(aftermath.cells().getFirst().position()).kind());
         assertEquals(aftermath.causeId().value(), committed.physicalDeltas().get(aftermath.cells().getFirst().position()).cause());
     }
-    @Test void obstructionLivenessProfileRetainsASeparateDueProvisionWithoutAnInjectedOutcome() {
+    @Test void obstructionLivenessProfileRetainsASeparateDueResidentNeedWithoutAnInjectedOutcome() {
         var configuration = FrontierV3FixtureCatalog.productionObstructionLivenessConfiguration(
                 new WorldId("frontier:obstruction-liveness-profile"), 41L);
-        FrontierWorldState state = configuration.initialState(); SubjectId settlement = new SubjectId("settlement:2");
-        assertEquals(SettlementProvisionStatus.IDLE, state.humanPopulation().provision(settlement).status());
-        assertTrue(configuration.initialSchedules().stream().anyMatch(action -> action.subject().equals(settlement)
-                && action.kind().equals("frontier.settlement.provision.review") && action.dueAt().ticks() == 1_000L));
-        assertTrue(state.inventory().items().containsKey(new SubjectId("item:development-unrelated-provision-bread")));
+        FrontierWorldState state = configuration.initialState(); SubjectId resident = new SubjectId("resident:2-1");
+        assertEquals(ResidentNutritionStatus.NOURISHED, state.humanPopulation().nutrition(resident).status());
+        assertTrue(configuration.initialSchedules().stream().anyMatch(action -> action.subject().equals(resident)
+                && action.kind().equals("frontier.resident.need.review") && action.dueAt().ticks() == 1_000L));
+        assertTrue(state.humanPopulation().provisions().isEmpty());
     }
-    @Test void obstructionLivenessProvisionAdvancesThroughTheOrdinaryScheduledConsumer() {
+    @Test void obstructionLivenessNeedAdvancesThroughTheOrdinaryScheduledConsumer() {
         var configuration = FrontierV3FixtureCatalog.productionObstructionLivenessConfiguration(
                 new WorldId("frontier:obstruction-liveness-consumer"), 41L);
         var engine = (io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalStateAccess<FrontierWorldState, FrontierWorldProjection>)
@@ -113,10 +113,10 @@ class FrontierV3FixtureCatalogTest {
         engine.advanceTo(new SimInstant(1_000L), new WorkBudget(64, 512));
         var result = engine.advanceTo(new SimInstant(1_001L), new WorkBudget(64, 512));
         assertEquals(EngineStatus.Kind.ACTIVE, result.status().kind(), result.status().failureDetail().orElse("active"));
-        SettlementProvision provision = engine.canonicalState().state().humanPopulation().provision(new SubjectId("settlement:2"));
-        assertEquals(SettlementProvisionStatus.SECURE, provision.status(),
+        ResidentNutrition need = engine.canonicalState().state().humanPopulation().nutrition(new SubjectId("resident:2-1"));
+        assertEquals(ResidentNutritionStatus.HUNGRY, need.status(),
                 "revision=" + engine.canonicalState().revision().value() + " schedules=" + engine.checkpoint().schedules());
-        assertEquals(provision.requiredRations(), provision.fulfilledRations());
+        assertEquals(1, need.hungerDeficit());
     }
 
     @Test

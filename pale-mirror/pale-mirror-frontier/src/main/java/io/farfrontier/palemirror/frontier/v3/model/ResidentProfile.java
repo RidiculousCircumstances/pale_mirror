@@ -13,7 +13,7 @@ import java.util.Objects;
 public record ResidentProfile(
         SubjectId id, SubjectId householdId, SubjectId settlementId, ResidentRole role,
         ResidentProfession profession, long birthTick, Map<ResidentSkill, Integer> skills,
-        Map<HumanCapability, Integer> capabilities
+        Map<HumanCapability, Integer> capabilities, ResidentCharacteristics characteristics
 ) {
     public static final int MAX_SKILL = 100;
 
@@ -42,6 +42,14 @@ public record ResidentProfile(
         });
         if (capabilityCopy.size() != HumanCapability.values().length) throw new IllegalArgumentException("resident profile must own every capability");
         capabilities = Map.copyOf(capabilityCopy);
+        characteristics = Objects.requireNonNull(characteristics, "resident characteristics");
+    }
+
+    public ResidentProfile(SubjectId id, SubjectId householdId, SubjectId settlementId, ResidentRole role,
+                           ResidentProfession profession, long birthTick, Map<ResidentSkill, Integer> skills,
+                           Map<HumanCapability, Integer> capabilities) {
+        this(id, householdId, settlementId, role, profession, birthTick, skills, capabilities,
+                ResidentCharacteristics.initial());
     }
 
     /** Compatibility constructor for snapshots and WAL payloads before the human-capability migration. */
@@ -54,19 +62,24 @@ public record ResidentProfile(
     public int capability(HumanCapability capability) { return capabilities.get(Objects.requireNonNull(capability, "capability")); }
 
     public ResidentProfile relocated(SubjectId nextSettlementId, SubjectId nextHouseholdId) {
-        return new ResidentProfile(id, nextHouseholdId, nextSettlementId, role, profession, birthTick, skills, capabilities);
+        return new ResidentProfile(id, nextHouseholdId, nextSettlementId, role, profession, birthTick, skills, capabilities, characteristics);
     }
 
     public ResidentProfile withRole(ResidentRole nextRole) {
-        return new ResidentProfile(id, householdId, settlementId, nextRole, profession, birthTick, skills, capabilities);
+        return new ResidentProfile(id, householdId, settlementId, nextRole, profession, birthTick, skills, capabilities, characteristics);
     }
 
     public ResidentProfile withProfession(ResidentProfession nextProfession) {
-        return new ResidentProfile(id, householdId, settlementId, role, nextProfession, birthTick, skills, capabilities);
+        return new ResidentProfile(id, householdId, settlementId, role, nextProfession, birthTick, skills, capabilities, characteristics);
     }
 
     public ResidentProfile withCapabilities(Map<HumanCapability, Integer> nextCapabilities) {
-        return new ResidentProfile(id, householdId, settlementId, role, profession, birthTick, skills, nextCapabilities);
+        return new ResidentProfile(id, householdId, settlementId, role, profession, birthTick, skills, nextCapabilities, characteristics);
+    }
+
+    public ResidentProfile withCharacteristics(ResidentCharacteristics nextCharacteristics) {
+        return new ResidentProfile(id, householdId, settlementId, role, profession, birthTick, skills,
+                capabilities, nextCharacteristics);
     }
 
     private static Map<HumanCapability, Integer> legacyCapabilities(Map<ResidentSkill, Integer> skills) {

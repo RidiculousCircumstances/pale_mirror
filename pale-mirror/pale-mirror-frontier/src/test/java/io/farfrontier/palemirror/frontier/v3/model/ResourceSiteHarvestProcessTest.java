@@ -41,6 +41,12 @@ class ResourceSiteHarvestProcessTest {
     static ColdHarvest coldHarvestAfterSteps(long seed, int coldSteps) {
         FrontierWorldState state = ready(initial(seed));
         SubjectId site = new SubjectId("site:1-wheat-field");
+        // These older harvest fixtures exercise the 22k work instant. Keep that
+        // instant within a declared WORK window instead of bypassing activity policy.
+        state = state.withHumanPopulation(state.humanPopulation().withSchedule(new SubjectId("settlement:1"),
+                new SettlementDailySchedule(24_000, List.of(
+                        new SettlementDailySchedule.Segment(0, 23_999, SettlementDailySchedule.Window.WORK),
+                        new SettlementDailySchedule.Segment(23_999, 24_000, SettlementDailySchedule.Window.FREE)))));
         var opportunity = StrategicObjectiveProcess.planResourceHarvestOpportunity(state,
                 StrategicObjectiveProcess.resourceHarvestOpportunity(state, state.resourceSites().site(site), 22_000L));
         state = StrategicObjectiveProcess.reduceObjective(state, new SubjectId("settlement:1"),

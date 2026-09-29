@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 /** One player-caused, physically witnessed exit from an exact owned container. */
@@ -13,6 +14,7 @@ public record FungibleStockDepartureObserved(SubjectId sourceAccountId, SubjectI
                                              SubjectId economicOwnerId, long authorityEpoch,
                                              UUID playerId, UUID interactionId,
                                              Map<SubjectId, Integer> departedLots,
+                                             Set<SubjectId> forfeitedClaimIds,
                                              List<FungiblePhysicalObservation.Stack> remaining)
         implements FrontierPayload {
     public FungibleStockDepartureObserved {
@@ -22,8 +24,10 @@ public record FungibleStockDepartureObserved(SubjectId sourceAccountId, SubjectI
         Objects.requireNonNull(playerId, "departure player");
         Objects.requireNonNull(interactionId, "departure interaction");
         departedLots = Map.copyOf(Objects.requireNonNull(departedLots, "departed lots"));
+        forfeitedClaimIds = Set.copyOf(Objects.requireNonNull(forfeitedClaimIds, "forfeited claims"));
         remaining = List.copyOf(Objects.requireNonNull(remaining, "remaining physical stacks"));
         if (authorityEpoch < 1 || departedLots.isEmpty() || departedLots.size() > 64
+                || forfeitedClaimIds.size() > 64
                 || departedLots.values().stream().anyMatch(q -> q == null || q < 1 || q > ResourceLot.MAX_QUANTITY)
                 || remaining.size() > FungibleResourceLedger.MAX_BINDINGS
                 || remaining.stream().anyMatch(stack -> !(stack.address() instanceof PhysicalStackAddress.ContainerSlot slot)
@@ -31,6 +35,15 @@ public record FungibleStockDepartureObserved(SubjectId sourceAccountId, SubjectI
                 || remaining.stream().map(FungiblePhysicalObservation.Stack::address).distinct().count() != remaining.size()) {
             throw new IllegalArgumentException("stock departure requires bounded current container evidence");
         }
+    }
+
+    public FungibleStockDepartureObserved(SubjectId sourceAccountId, SubjectId containerId,
+                                           SubjectId economicOwnerId, long authorityEpoch,
+                                           UUID playerId, UUID interactionId,
+                                           Map<SubjectId, Integer> departedLots,
+                                           List<FungiblePhysicalObservation.Stack> remaining) {
+        this(sourceAccountId, containerId, economicOwnerId, authorityEpoch, playerId, interactionId,
+                departedLots, Set.of(), remaining);
     }
 
     @Override public String type() { return "frontier.fungible_stock_departure_observed"; }

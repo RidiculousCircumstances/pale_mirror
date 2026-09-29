@@ -43,6 +43,10 @@ public final class FrontierV3FixtureCatalog {
     private static final Map<String, FrontierRuleset> RULESETS = Map.of("production", FrontierRulesets.production());
     private static final Map<String, BiFunction<WorldId, Long, FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection>>> PROVIDERS = Map.ofEntries(
             Map.entry("world", FrontierWorldRuntimeDefinition::configuration),
+            Map.entry("residentMeal", FrontierV3FixtureCatalog::residentMealConfiguration),
+            Map.entry("residentMealClaimedSource", FrontierV3FixtureCatalog::residentMealClaimedSourceConfiguration),
+            Map.entry("residentMealAfterColdTake", FrontierV3FixtureCatalog::residentMealAfterColdTakeConfiguration),
+            Map.entry("residentWorkerMeal", FrontierV3FixtureCatalog::residentWorkerMealConfiguration),
             Map.entry("uncontestedSupply", FrontierV3FixtureCatalog::uncontestedSupplyConfiguration),
             Map.entry("autonomousSupplyInterception", FrontierV3FixtureCatalog::autonomousSupplyInterceptionConfiguration),
             Map.entry("hotSceneStrike", FrontierV3FixtureCatalog::hotSceneStrikeConfiguration),
@@ -58,7 +62,6 @@ public final class FrontierV3FixtureCatalog {
             Map.entry("hiveMobilization", FrontierV3FixtureCatalog::hiveMobilizationConfiguration),
             Map.entry("hiveReturn", FrontierV3FixtureCatalog::hiveReturnConfiguration),
             Map.entry("hiveNutrientTransfer", FrontierV3FixtureCatalog::hiveNutrientTransferConfiguration),
-            Map.entry("settlementProvision", FrontierV3FixtureCatalog::settlementProvisionConfiguration),
             Map.entry("routeSceneReturn", FrontierV3FixtureCatalog::routeSceneReturnConfiguration),
             Map.entry("hotScoutSighting", FrontierV3FixtureCatalog::hotScoutSightingConfiguration),
             Map.entry("hotScoutIntercept", FrontierV3FixtureCatalog::hotScoutInterceptConfiguration),
@@ -391,6 +394,140 @@ public final class FrontierV3FixtureCatalog {
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> routePatrolConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.RoutePatrolFixture fixture = FrontierDevelopmentScenarios.routePatrolFixture(worldId, seed);
         return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules(), false);
+    }
+
+    /** One naturally stocked resident reaches hunger before the rest of the normal world. */
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> residentMealConfiguration(WorldId worldId, long seed) {
+        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base =
+                FrontierWorldRuntimeDefinition.configuration(worldId, seed, false);
+        FrontierWorldState original = base.initialState();
+        SubjectId id = new SubjectId("resident:6-1");
+        ResidentCharacteristics previous = original.humanPopulation().resident(id).characteristics();
+        ResidentCharacteristics faster = previous.withBaseMetabolism(4_000);
+        FrontierWorldState state = original.withHumanPopulation(original.humanPopulation().changeMetabolism(id,
+                previous, faster, 0L, original.bootstrap().ruleset().residentLife()));
+        // The normal bootstrap now stocks this depot with one finite ledger lot.
+        // The fixture changes only the resident's rate; custody stays on the production path.
+        long due = state.humanPopulation().nutrition(id).nextThresholdTick(state.bootstrap().ruleset().residentLife(),
+                faster.effectiveMetabolismPermille(0L));
+        List<ScheduledAction> schedules = new ArrayList<>(base.initialSchedules());
+        schedules.removeIf(action -> action.subject().equals(id) && action.kind().equals(ResidentNeedProcess.REVIEW));
+        schedules.add(ResidentNeedProcess.review(id, due));
+        return configured(worldId, state, base.initialInstant(), schedules, false);
+    }
+
+    /** One hungry resident has a real reserved depot bread before any physical TAKE. */
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> residentMealClaimedSourceConfiguration(
+            WorldId worldId, long seed) {
+        var base = residentMealConfiguration(worldId, seed);
+        FrontierWorldState initial = base.initialState();
+        SubjectId resident = new SubjectId("resident:6-1");
+        long hungryAt = initial.humanPopulation().nutrition(resident).nextThresholdTick(
+                initial.bootstrap().ruleset().residentLife(),
+                initial.humanPopulation().resident(resident).characteristics().effectiveMetabolismPermille(0L));
+        FrontierWorldState state = initial.withHumanPopulation(initial.humanPopulation().accrueHunger(
+                resident, hungryAt, initial.bootstrap().ruleset().residentLife()));
+        ResidentMealStarted started = ResidentMealProcess.selectSourceAtYield(state, resident, hungryAt).orElseThrow();
+        state = ResidentMealProcess.reduceStarted(state, resident, started);
+        if (state.humanPopulation().meals().get(resident).phase() != ResidentMeal.Phase.MOVE
+                || !state.inventory().fungibleResources().claims().containsKey(started.meal().claimId()))
+            throw new IllegalStateException("claimed-source fixture lacks its resident-owned bread hold");
+        long nextNeed = state.humanPopulation().nutrition(resident).nextThresholdTick(
+                state.bootstrap().ruleset().residentLife(),
+                state.humanPopulation().resident(resident).characteristics().effectiveMetabolismPermille(hungryAt));
+        return configured(worldId, state, new SimInstant(hungryAt),
+                List.of(ResidentMealProcess.progress(started.meal(), hungryAt + 1_000L),
+                        ResidentActivityProcess.review(resident, hungryAt + 1_000L),
+                        ResidentNeedProcess.review(resident, nextNeed)), false);
+    }
+
+    /** A real COLD meal has already moved one claimed bread into the exact resident hand. */
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> residentMealAfterColdTakeConfiguration(WorldId worldId, long seed) {
+        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = residentMealConfiguration(worldId, seed);
+        FrontierWorldState initial = base.initialState();
+        SubjectId residentId = new SubjectId("resident:6-1");
+        Settlement settlement = initial.bootstrap().settlements().get(5);
+        SettlementStructure depot = settlement.structures().stream()
+                .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
+        SurfaceAnchor service = SettlementDepotServicePort.forDepot(depot).serviceSurface();
+        Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(initial.actorLocations());
+        actors.put(residentId, ActorLocation.standingOn(service));
+        long hungryAt = initial.humanPopulation().nutrition(residentId).nextThresholdTick(
+                initial.bootstrap().ruleset().residentLife(),
+                initial.humanPopulation().resident(residentId).characteristics().effectiveMetabolismPermille(0L));
+        FrontierWorldState state = initial.withChanges(FrontierWorldStateUpdate.begin()
+                .actorLocations(actors).humanPopulation(initial.humanPopulation().accrueHunger(residentId,
+                        hungryAt, initial.bootstrap().ruleset().residentLife())));
+        ResidentMealStarted started = ResidentMealProcess.selectSourceAtYield(state, residentId, hungryAt).orElseThrow();
+        state = ResidentMealProcess.reduceStarted(state, residentId, started);
+        for (long due : List.of(hungryAt + 1L, hungryAt + 2L)) {
+            ResidentMealColdStep step = ResidentMealProcess.planColdStep(state, residentId, due).orElseThrow();
+            state = ResidentMealProcess.reduceColdStep(state, residentId, step);
+        }
+        if (state.humanPopulation().meals().get(residentId).phase() != ResidentMeal.Phase.CONSUME
+                || state.inventory().fungibleResources().accounts().get(started.meal().actorAccountId()) == null)
+            throw new IllegalStateException("after-take fixture lacks its exact claimed actor-held bread");
+        long instant = hungryAt + 2L;
+        // The retained action remains the only due-time owner. A deliberate later due time
+        // makes the post-take snapshot stable through an ordinary server restart and ingress.
+        long nextNeed = state.humanPopulation().nutrition(residentId).nextThresholdTick(
+                state.bootstrap().ruleset().residentLife(),
+                state.humanPopulation().resident(residentId).characteristics().effectiveMetabolismPermille(instant));
+        return configured(worldId, state, new SimInstant(instant),
+                List.of(ResidentMealProcess.progress(started.meal(), instant + 1_000L),
+                        ResidentActivityProcess.review(residentId, instant + 1_000L),
+                        ResidentNeedProcess.review(residentId, nextNeed)), false);
+    }
+
+    /** A retained field job reaches an exact resident hunger threshold while visibly HOT. */
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> residentWorkerMealConfiguration(WorldId worldId, long seed) {
+        // A 65-cell field has already completed and delivered its first 64-cell
+        // batch by ordinary COLD transitions. The exact same job still owns
+        // its final cell, but the farmer's hand is free at a real work-family
+        // yield checkpoint. This avoids fabricating a mid-batch hand release.
+        FrontierWorldState state = FrontierResourceSiteHarvestFixture.initialWithOneExtraCell(worldId, seed);
+        FungibleResourceLedger current = state.inventory().fungibleResources();
+        SubjectId settlement = new SubjectId("settlement:1");
+        SubjectId depot = FrontierWorldState.depotId(settlement);
+        SubjectId accountId = ReferenceContainerCustody.scopeId(depot);
+        CustodyAccount account = current.accounts().get(accountId);
+        SubjectId breadId = new SubjectId("lot:resident-worker-meal-bread");
+        Map<SubjectId, ResourceLot> lots = new java.util.LinkedHashMap<>(current.lots());
+        lots.put(breadId, new ResourceLot(breadId, settlement, ResidentMeal.BREAD_KIND, 64,
+                "fixture:resident-worker-meal-stock", List.of()));
+        Map<SubjectId, Integer> quantities = new java.util.LinkedHashMap<>(account.lotQuantities());
+        quantities.put(breadId, 64);
+        Map<SubjectId, CustodyAccount> accounts = new java.util.LinkedHashMap<>(current.accounts());
+        accounts.put(accountId, new CustodyAccount(accountId, account.custody(), quantities, account.claimQuantities()));
+        state = state.withInventory(state.inventory().withFungibleResources(new FungibleResourceLedger(
+                lots, current.claims(), accounts, current.bindings())));
+        FrontierResourceSiteHarvestFixture.Fixture fixture =
+                FrontierResourceSiteHarvestFixture.createWithOneExtraCellAfterColdPart(state);
+        state = fixture.state();
+        ResourceSiteHarvestJob job = (ResourceSiteHarvestJob) state.resourceSites().site(fixture.siteId()).activeWork().orElseThrow();
+        SubjectId resident = job.workerId();
+        long at = fixture.instant().ticks();
+        HumanPopulation people = state.humanPopulation();
+        ResidentCharacteristics prior = people.resident(resident).characteristics();
+        people = people.changeMetabolism(resident, prior, prior.withBaseMetabolism(4_000), at,
+                state.bootstrap().ruleset().residentLife());
+        Map<SubjectId, ResidentNutrition> needs = new java.util.LinkedHashMap<>(people.nutrition());
+        long unit = Math.multiplyExact(state.bootstrap().ruleset().residentLife().hungerUnitTicks(), 1_000L);
+        // Hold this exact retained final-cell continuation until the pilot has
+        // observed the resident's meal and the work owner can resume it.
+        long workDue = Math.addExact(at, 600L);
+        long hungerDue = Math.addExact(at, 150L);
+        needs.put(resident, new ResidentNutrition(ResidentNutritionStatus.NOURISHED, 0, at,
+                Math.subtractExact(unit, Math.multiplyExact(150L, 4_000L))));
+        people = new HumanPopulation(people.households(), people.residents(), people.birthJobs(), people.health(),
+                people.quarantines(), people.migrations(), people.provisions(), needs, people.medicalOperations(),
+                people.schedules(), people.meals());
+        state = state.withHumanPopulation(people);
+        List<ScheduledAction> schedules = new ArrayList<>();
+        schedules.add(ResourceSiteHarvestProcess.coldProgress(job, workDue));
+        schedules.add(ResidentNeedProcess.review(resident, hungerDue));
+        schedules.add(ResidentActivityProcess.review(resident, hungerDue));
+        return configured(worldId, state, fixture.instant(), schedules, false);
     }
 
     /**

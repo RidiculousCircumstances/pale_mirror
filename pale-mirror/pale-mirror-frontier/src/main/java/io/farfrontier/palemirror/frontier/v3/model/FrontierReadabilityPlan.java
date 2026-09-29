@@ -431,25 +431,26 @@ public final class FrontierReadabilityPlan {
     }
 
     private static String foodText(FrontierWorldState state, SubjectId settlementId) {
-        SettlementProvision provision = state.humanPopulation().provision(settlementId);
         int available = SettlementFoodPolicy.breadStock(state, settlementId);
         int reserve = SettlementFoodPolicy.reserveRequirement(state, settlementId);
-        return switch (provision.status()) {
-            case IDLE -> "FOOD REVIEW PENDING · " + available + " / " + reserve;
-            case IN_PROGRESS -> "FOOD SERVING · " + provision.fulfilledRations() + " / " + provision.requiredRations();
-            case SECURE -> "FOOD SECURE · " + available + " / " + reserve;
-            case RATIONED -> "FOOD RATIONED · " + provision.fulfilledRations() + " / " + provision.requiredRations();
-            // SHORTAGE is the outcome of the last ration cycle, not a live stock
-            // measurement. Bread may arrive before the next scheduled review.
-            case SHORTAGE -> available == 0 ? "FOOD SHORTAGE · BREAD NEEDED"
-                    : "LAST MEAL MISSED · BREAD " + available + " / " + reserve;
-            case CONFLICT -> "FOOD CONFLICT · INSPECT DEPOT";
-        };
+        if (ReferenceContainerCustody.blocksCanonicalUse(state, FrontierWorldState.depotId(settlementId)))
+            return "FOOD CONFLICT · INSPECT DEPOT";
+        int hungry = (int) state.humanPopulation().residents().values().stream()
+                .filter(resident -> resident.settlementId().equals(settlementId))
+                .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE)
+                .filter(resident -> state.humanPopulation().nutrition(resident.id()).hungerDeficit() > 0).count();
+        if (available == 0) return "FOOD SHORTAGE · BREAD NEEDED";
+        if (hungry > 0) return "RESIDENTS HUNGRY · " + hungry + " · BREAD " + available + " / " + reserve;
+        return available < reserve ? "FOOD RESERVE LOW · " + available + " / " + reserve
+                : "FOOD SECURE · " + available + " / " + reserve;
     }
 
     private static boolean foodRisk(FrontierWorldState state, SubjectId settlementId) {
-        SettlementProvisionStatus status = state.humanPopulation().provision(settlementId).status();
-        return status == SettlementProvisionStatus.RATIONED || status == SettlementProvisionStatus.SHORTAGE || status == SettlementProvisionStatus.CONFLICT;
+        return ReferenceContainerCustody.blocksCanonicalUse(state, FrontierWorldState.depotId(settlementId))
+                || SettlementFoodPolicy.breadStock(state, settlementId) < SettlementFoodPolicy.reserveRequirement(state, settlementId)
+                || state.humanPopulation().residents().values().stream()
+                    .filter(resident -> resident.settlementId().equals(settlementId))
+                    .anyMatch(resident -> state.humanPopulation().nutrition(resident.id()).hungerDeficit() > 0);
     }
 
     /**

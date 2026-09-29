@@ -19,6 +19,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestRouteClear
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestHotGoalArrived;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestHotTransitObserved;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestGoal;
+import io.farfrontier.palemirror.frontier.v3.model.ResidentActivityCoordinator;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestSceneCause;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestSceneLeasePrepared;
@@ -63,6 +64,8 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         // made that exact mature/partial crop state current in the loaded world.
         Optional<FrontierResourceSiteHarvestSceneSupport.Candidate> candidate = FrontierV3SceneDemand.nextDemandedCandidate(
                 level, runtime, io.farfrontier.palemirror.frontier.v3.model.SceneCauseKind.RESOURCE_SITE_HARVEST, FrontierResourceSiteHarvestSceneSupport.candidates(state).stream()
+                        .filter(value -> !ResidentActivityCoordinator.requestsYield(state, value.workerId(),
+                                runtime.checkpointImage().orElseThrow().instant().ticks()))
                         .filter(value -> fieldPresentationCurrent(level, state, value)).toList(),
                 FrontierResourceSiteHarvestSceneSupport.Candidate::cropSlot, FrontierResourceSiteHarvestSceneSupport.Candidate::jobId);
         if (candidate.isEmpty()) return false;
@@ -259,6 +262,18 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         Entity entity = level.getEntity(lease.members().getFirst().entityId());
         if (!(entity instanceof Mob worker) || !worker.isAlive() || !FrontierV3SceneExecutor.recognizes(runtime, worker)) {
             conflict(level, runtime, lease, "hot-worker-unavailable"); return;
+        }
+        // The scene owns its safe point: never interrupt a prepared crop or carried wheat.
+        // Once the exact stationary worker is empty-handed, return the same body to the
+        // resident coordinator before beginning another crop or route leg.
+        if (!job.progress().hasPendingCrop() && !state.resourceSites().hasPendingWorldChange(job.siteId())
+                && !state.inventory().fungibleResources().accounts().containsKey(job.actorAccountId())
+                && ResidentActivityCoordinator.requestsYield(state, job.workerId(),
+                        runtime.checkpointImage().orElseThrow().instant().ticks())
+                && ResourceSiteHarvestGoal.current(state, job).legalStations().stream().anyMatch(station ->
+                        FrontierV3SurfaceObservation.at(worker, station))) {
+            beginImmediateColdRelease(level, runtime, state, lease);
+            return;
         }
         if (!job.progress().complete() && !job.returningForBatch() && !job.progress().hasPendingCrop()
                 && !state.resourceSites().hasPendingWorldChange(job.siteId())) {

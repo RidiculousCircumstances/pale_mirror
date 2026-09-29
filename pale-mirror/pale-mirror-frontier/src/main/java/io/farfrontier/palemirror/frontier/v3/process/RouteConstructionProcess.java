@@ -278,7 +278,7 @@ public final class RouteConstructionProcess {
         List<SubjectId> members = state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(settlementId))
                 .filter(resident -> assignments.idle(resident.id()))
-                .filter(resident -> FrontierWorldStateSupport.workCapable(state, resident))
+                .filter(resident -> FrontierWorldStateSupport.availableForNewAssignment(state, resident))
                 .filter(resident -> resident.capability(HumanCapability.ENGINEERING) > 0)
                 .sorted(Comparator.comparing((ResidentProfile resident) -> resident.profession() != ResidentProfession.ENGINEER)
                         .thenComparing(Comparator.comparing((ResidentProfile resident) -> resident.capability(HumanCapability.ENGINEERING)).reversed())

@@ -22,7 +22,7 @@ public final class FrontierWireTags {
             entry(AmbientGoalKind.class,
                     tag(0, AmbientGoalKind.WORK), tag(1, AmbientGoalKind.GUARD), tag(2, AmbientGoalKind.PATROL), tag(3, AmbientGoalKind.SCOUT_PATROL),
                     tag(4, AmbientGoalKind.TRANSIT), tag(5, AmbientGoalKind.OPERATION_ASSEMBLY), tag(6, AmbientGoalKind.ENGINEERING_ASSEMBLY),
-                    tag(7, AmbientGoalKind.HIVE_TASK_ASSEMBLY), tag(8, AmbientGoalKind.HIVE_TASK_RETURN)),
+                    tag(7, AmbientGoalKind.HIVE_TASK_ASSEMBLY), tag(8, AmbientGoalKind.HIVE_TASK_RETURN), tag(9, AmbientGoalKind.MEAL)),
             entry(AmbientLeaseStatus.class,
                     tag(0, AmbientLeaseStatus.PREPARED), tag(1, AmbientLeaseStatus.HOT), tag(2, AmbientLeaseStatus.DRAINING), tag(3, AmbientLeaseStatus.CLOSED),
                     tag(4, AmbientLeaseStatus.UNKNOWN_AFTER_RESTART)),

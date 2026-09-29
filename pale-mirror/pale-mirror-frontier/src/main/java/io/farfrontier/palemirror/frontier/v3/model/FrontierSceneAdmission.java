@@ -170,6 +170,7 @@ public final class FrontierSceneAdmission {
         // it or promote this COLD continuation to HOT work.
         state.productionJobs().values().stream()
                 .filter(job -> job.inputHold() instanceof ProductionInputHold.Cold)
+                .filter(job -> !state.humanPopulation().meals().containsKey(job.workerId()))
                 .filter(job -> !job.workProgress().terminalEffectEligible())
                 .filter(job -> state.actorLocations().get(job.workerId()) != null)
                 .filter(job -> state.actorLocations().get(job.workerId()).condition().status() == ActorLifeStatus.ALIVE)

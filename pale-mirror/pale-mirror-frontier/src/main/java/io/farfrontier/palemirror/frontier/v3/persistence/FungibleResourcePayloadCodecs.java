@@ -88,7 +88,10 @@ final class FungibleResourcePayloadCodecs {
             writeSubject(output, observed.sourceAccountId()); writeSubject(output, observed.containerId());
             writeSubject(output, observed.economicOwnerId()); output.writeLong(observed.authorityEpoch());
             writeString(output, observed.playerId().toString()); writeString(output, observed.interactionId().toString());
-            writeFungibleQuantities(output, observed.departedLots()); output.writeShort(observed.remaining().size());
+            writeFungibleQuantities(output, observed.departedLots());
+            output.writeShort(observed.forfeitedClaimIds().size());
+            for (SubjectId claim : observed.forfeitedClaimIds().stream().sorted().toList()) writeSubject(output, claim);
+            output.writeShort(observed.remaining().size());
             for (FungiblePhysicalObservation.Stack stack : observed.remaining()) {
                 writePhysicalStackAddress(output, stack.address()); writeString(output, stack.itemKind()); output.writeByte(stack.quantity());
             }
@@ -99,12 +102,18 @@ final class FungibleResourcePayloadCodecs {
             java.util.UUID player = java.util.UUID.fromString(readString(input));
             java.util.UUID interaction = java.util.UUID.fromString(readString(input));
             Map<SubjectId, Integer> lots = readFungibleQuantities(input);
+            int forfeitedCount = input.readUnsignedShort();
+            if (forfeitedCount > 64) throw new IllegalArgumentException("invalid stock departure claim count");
+            java.util.Set<SubjectId> forfeited = new java.util.HashSet<>();
+            for (int index = 0; index < forfeitedCount; index++)
+                if (!forfeited.add(readSubject(input).value()))
+                    throw new IllegalArgumentException("duplicate stock departure claim");
             int count = input.readUnsignedShort();
             if (count > FungibleResourceLedger.MAX_BINDINGS) throw new IllegalArgumentException("invalid stock departure stack count");
             List<FungiblePhysicalObservation.Stack> remaining = new ArrayList<>();
             for (int index = 0; index < count; index++) remaining.add(new FungiblePhysicalObservation.Stack(
                     readPhysicalStackAddress(input), readString(input), input.readUnsignedByte()));
-            return new FungibleStockDepartureObserved(account, container, owner, epoch, player, interaction, lots, remaining);
+            return new FungibleStockDepartureObserved(account, container, owner, epoch, player, interaction, lots, forfeited, remaining);
         }); }
     }
 

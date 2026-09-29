@@ -11,7 +11,8 @@ public final class FrontierRulesets {
      * semantic checkpoint left a HOT farmer visibly pausing at every grid cell even though the
      * motion actuator was continuous.  Crop work remains a slower, distinct boundary.
      */
-    private static final FrontierRuleset PRODUCTION = ruleset("frontier-v3-production-r4", 6, 1L, 20L);
+    private static final FrontierRuleset PRODUCTION = ruleset("frontier-v3-production-r5", 7, 1L, 20L);
+    private static final FrontierRuleset PREVIOUS_PRODUCTION_R4 = ruleset("frontier-v3-production-r4", 6, 1L, 20L);
     /** Exact decoder for the accepted R3 world; it is never selected for a new world. */
     private static final FrontierRuleset PREVIOUS_PRODUCTION_R3 = ruleset("frontier-v3-production-r3", 5, 5L, 20L);
     /** Exact decoder for the accepted R2 world; it is never selected for a new world. */
@@ -22,6 +23,7 @@ public final class FrontierRulesets {
      */
     private static final FrontierRuleset LEGACY_PRE_RULESET_R79 = ruleset("frontier-v3-legacy-pre-ruleset-r79", 3, 200L, 100L);
     private static final Map<String, FrontierRuleset> INSTALLED = Map.of(PRODUCTION.id(), PRODUCTION,
+            PREVIOUS_PRODUCTION_R4.id(), PREVIOUS_PRODUCTION_R4,
             PREVIOUS_PRODUCTION_R3.id(), PREVIOUS_PRODUCTION_R3,
             PREVIOUS_PRODUCTION_R2.id(), PREVIOUS_PRODUCTION_R2,
             LEGACY_PRE_RULESET_R79.id(), LEGACY_PRE_RULESET_R79);

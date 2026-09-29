@@ -70,7 +70,7 @@ public final class AmbientActorProcess {
         if (!HivePhysiologySupport.permitsAmbientLease(state, actorId)) throw new IllegalArgumentException("cocoon-retained or unconfirmed waking bioform may not receive an ambient lease");
         AmbientActorLease previous = state.ambientLeases().get(actorId);
         long revision = previous == null ? 1L : Math.addExact(previous.revision(), 1L);
-        AmbientGoal goal = goalFor(state, actorId);
+        AmbientGoal goal = goalFor(state, actorId, instant.ticks());
         return new AmbientActorLease(actorId, actor.body(), instant, revision, AmbientLeaseStatus.PREPARED, goal.kind(), BodyPosition.above(new SurfaceAnchor(goal.position())));
     }
 
@@ -143,7 +143,7 @@ public final class AmbientActorProcess {
         if (owner(state, actorId) == null) throw new IllegalArgumentException("ambient actor has no canonical owner");
     }
 
-    public static AmbientGoal goalFor(FrontierWorldState state, SubjectId actorId) {
+    public static AmbientGoal goalFor(FrontierWorldState state, SubjectId actorId, long atTick) {
         HiveMobilization assemblingMobilization = state.hiveColony().mobilizations().values().stream()
                 .filter(mobilization -> mobilization.status() == HiveMobilizationStatus.ASSEMBLING)
                 .filter(mobilization -> mobilization.assembly().map(assembly -> assembly.members().containsKey(actorId)).orElse(false))
@@ -188,8 +188,13 @@ public final class AmbientActorProcess {
         }
         ResidentProfile resident = state.humanPopulation().resident(actorId);
         if (resident != null) {
+            ResidentMeal meal = state.humanPopulation().meals().get(actorId);
+            if (meal != null) return new AmbientGoal(AmbientGoalKind.MEAL,
+                    ResidentMealProcess.serviceSurface(state, meal).support());
+            ResidentActivityChoice choice = ResidentActivityCoordinator.assess(state, actorId, atTick);
             HumanAssignment assignment = HumanAssignmentProjection.compile(state).assignment(actorId);
             ResourceSiteHarvestJob harvest = assignment.kind() == HumanAssignmentKind.FIELD_HARVEST
+                    && choice.kind() == ResidentActivityChoice.Kind.WORK
                     ? state.resourceSites().sites().values().stream().map(ResourceSiteLifecycle::activeWork).flatMap(java.util.Optional::stream)
                     .filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
                     .filter(job -> job.id().equals(assignment.ownerId().orElseThrow(() ->

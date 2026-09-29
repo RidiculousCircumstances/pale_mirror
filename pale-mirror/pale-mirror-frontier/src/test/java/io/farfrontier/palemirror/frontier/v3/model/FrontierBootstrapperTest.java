@@ -14,6 +14,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrontierBootstrapperTest {
     @Test
+    void freshPopulationHasExactResidentNeedsButNoLegacySettlementRationCounters() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:resident-needs-only"), 71L));
+        assertTrue(state.humanPopulation().provisions().isEmpty());
+        assertEquals(state.humanPopulation().residents().keySet(),
+                state.humanPopulation().nutrition().keySet());
+        assertEquals(0, SettlementFoodPolicy.breadStock(state, state.bootstrap().settlements().getFirst().id()),
+                "the primary bakery vertical must still transform its initial wheat");
+        state.bootstrap().settlements().stream().skip(1).forEach(settlement ->
+                assertEquals(64, SettlementFoodPolicy.breadStock(state, settlement.id()),
+                        "every other settlement needs finite ledger-backed starter food before first field maturity"));
+    }
+
+    @Test
     void createsTheExactFiniteProfileWithIndependentCanonicalSubjects() {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:bootstrap"), 918_273L);
 
@@ -44,8 +58,8 @@ class FrontierBootstrapperTest {
     void bootstrapIsSeedDeterministicAndLocaleIndependent() {
         WorldId world = new WorldId("frontier:bootstrap");
         FrontierBootstrap first = FrontierBootstrapper.create(world, 7L);
-        assertEquals("46d6505129f17b0f1af9853c1f5c4f7305e83e63d5a567adcf11c1194cb9acd8", first.canonicalSha256());
-        assertEquals("7b7a08c95fd5b300aaddca2b8510f533d969cac94d5fc52509a8960e4f313d75", FrontierBootstrapper.create(world, 8L).canonicalSha256());
+        assertEquals("c5d3db27f89b6e341b1f0732b78bca1c08f9e7d48ed71f5ca3f3cca8a7bb2ab5", first.canonicalSha256());
+        assertEquals("aad76c88c38070c877b4c43e3184425e20e368d12bbd576388fcb20a0f38c129", FrontierBootstrapper.create(world, 8L).canonicalSha256());
         assertEquals(first.canonicalSha256(), FrontierBootstrapper.create(world, 7L).canonicalSha256());
         assertNotEquals(first.canonicalSha256(), FrontierBootstrapper.create(world, 8L).canonicalSha256());
 

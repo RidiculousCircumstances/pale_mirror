@@ -1,0 +1,58 @@
+{
+  "schema": 1,
+  "id": "disposable_resident_worker_meal",
+  "isolation": { "mode": "disposable_lite", "seed": 125 },
+  "server": { "host": "127.0.0.1", "port": 25591, "profile": "resident-worker-meal", "viewDistance": 6 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "process", "id": "job:site-harvest-1-wheat-field-1", "expect": {
+        "status": "ok", "conservation": { "completedCropSlots": 64, "deliveredYield": 64,
+          "totalCropSlots": 65 } } },
+      { "view": "resident_life", "id": "resident:1-13", "expect": {
+        "status": "ok", "nutrition": "NOURISHED", "assignment": "FIELD_HARVEST",
+        "metabolismEffectivePermille": 4000, "depotBread": 64 } }
+    ] }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
+      "position": { "diagnostic": { "view": "site", "id": "site:1-wheat-field", "field": "firstCrop" } },
+      "offset": { "x": -8, "y": 0, "z": -8 }, "settleMs": 1000 },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "job:site-harvest-1-wheat-field-1",
+      "expect": { "status": "ok", "claims": { "lease": { "status": "HOT", "members": 1 } } },
+      "timeoutMs": 60000 },
+    { "type": "release_fast_forward_hold" },
+    { "type": "wait_until_diagnostic", "view": "resident_life", "id": "resident:1-13",
+      "expect": { "status": "ok", "nutrition": "HUNGRY", "assignment": "FIELD_HARVEST",
+        "activity": "EAT", "depotBread": 64 }, "timeoutMs": 60000,
+      "causalMilestone": "retained_field_worker_yields_for_exact_hunger" },
+    { "type": "inspect", "view": "process", "id": "job:site-harvest-1-wheat-field-1" },
+    { "type": "wait_until_diagnostic", "view": "resident_life", "id": "resident:1-13",
+      "expect": { "status": "ok", "nutrition": "NOURISHED", "assignment": "FIELD_HARVEST",
+        "activity": "WORK", "mealPhase": "NONE", "depotBread": 63, "depotBreadClaimed": 0 },
+      "timeoutMs": 120000, "causalMilestone": "same_field_worker_eats_and_resumes" },
+    { "type": "look_nearest_entity", "entityType": "minecraft:villager",
+      "nameContains": "Northwatch AGRICULTURAL WORKER", "maxDistance": 64, "timeoutMs": 30000 },
+    { "type": "assert_visible_entity", "entityType": "minecraft:villager",
+      "nameContains": "Northwatch AGRICULTURAL WORKER", "maxDistance": 64,
+      "maxAngleDeg": 50, "timeoutMs": 10000 },
+    { "type": "inspect", "view": "process", "id": "job:site-harvest-1-wheat-field-1" },
+    { "type": "inspect", "view": "actor", "id": "resident:1-13" },
+    { "type": "wait_until_diagnostic", "view": "site", "id": "site:1-wheat-field",
+      "expect": { "status": "ok", "phase": "GROWING", "growthEpoch": 2,
+        "terminalHarvest": { "physicalReceiptResolved": true } },
+      "timeoutMs": 120000, "causalMilestone": "same_worker_completes_last_cell_and_depot_delivery" },
+    { "type": "inspect", "view": "container", "id": "container:1-depot" }
+  ],
+  "assertions": [
+    { "after": 6, "view": "resident_life", "id": "resident:1-13",
+      "expect": { "status": "ok", "nutrition": "NOURISHED", "assignment": "FIELD_HARVEST",
+        "activity": "WORK", "mealPhase": "NONE", "depotBread": 63 } },
+    { "after": 12, "view": "container", "id": "container:1-depot",
+      "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" } } }
+  ],
+  "frames": [
+    { "after": 8, "name": "worker-after-meal", "presentation": "player" },
+    { "after": 11, "name": "field-after-worker-return", "presentation": "player" }
+  ]
+}

@@ -35,7 +35,7 @@ class ResidentNeedProcessTest {
         assertEquals(10, due.priority());
         assertEquals(due, ResidentNeedProcess.firstReviewAfter(resident, 0L,
                 initial.bootstrap().ruleset().residentLife()));
-        assertEquals(ResidentNeedProcess.review(resident, 48_000L),
+        assertEquals(ResidentNeedProcess.review(resident, 48_100L),
                 ResidentNeedProcess.firstReviewAfter(resident, 24_100L,
                         initial.bootstrap().ruleset().residentLife()));
         var events = ResidentNeedProcess.plan(initial, due);

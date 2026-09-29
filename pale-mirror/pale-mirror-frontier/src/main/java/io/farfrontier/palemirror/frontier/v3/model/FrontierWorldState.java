@@ -207,6 +207,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             }
         }
         Set<SubjectId> expectedStructures = FrontierWorldStateSupport.structureIds(bootstrap);
+        Set<SubjectId> expectedSettlements = bootstrap.settlements().stream()
+                .map(Settlement::id).collect(java.util.stream.Collectors.toUnmodifiableSet());
         if (!expectedStructures.equals(structureConditions.keySet())) throw new IllegalArgumentException("structure condition index must own every and only bootstrap structure");
         int damageCellCount = 0;
         for (Map.Entry<SubjectId, StructureDamage> entry : structureDamage.entrySet()) {
@@ -361,7 +363,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                     && !humanPopulation.birthJobs().containsKey(intent.causeSubjectId())
                     && !humanPopulation.medicalOperations().containsKey(intent.causeSubjectId())
                     && !humanPopulation.provisions().containsKey(intent.causeSubjectId())
-                    && !expectedStructures.contains(intent.causeSubjectId()) && !productionJobs.containsKey(intent.causeSubjectId())
+                    && !expectedStructures.contains(intent.causeSubjectId()) && !expectedSettlements.contains(intent.causeSubjectId())
+                    && !productionJobs.containsKey(intent.causeSubjectId())
                     && !serviceWorks.containsKey(intent.causeSubjectId())
                     && !contracts.containsKey(intent.causeSubjectId()) && !FrontierWorldStateSupport.isHiveOrgan(bootstrap, hiveColony, intent.causeSubjectId())
                     && !strategicPlans.settlementAssaults().containsKey(intent.causeSubjectId()) && !SceneStrikeStateSupport.isSettlementAssaultCause(strategicPlans, intent)
@@ -384,7 +387,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                         || subject.equals(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.RESOURCE_CONTAINER))
                         && inventory.containers().containsKey(subject));
                 if (!productionResourceSubject && !hiveNutrientSubject && !expectedActors.contains(subject) && !inventory.cargo().containsKey(subject) && !operations.containsKey(subject) &&
-                        !expectedStructures.contains(subject) && !inventory.items().containsKey(subject)
+                        !expectedStructures.contains(subject) && !expectedSettlements.contains(subject)
+                        && !inventory.items().containsKey(subject)
                         && !hiveColony.growthJobs().containsKey(subject) && !humanPopulation.birthJobs().containsKey(subject) && !productionJobs.containsKey(subject) && !contracts.containsKey(subject)
                         && !inventory.fungibleResources().lots().containsKey(subject) && !inventory.fungibleResources().claims().containsKey(subject)
                         && !humanPopulation.provisions().containsKey(subject) && !humanPopulation.medicalOperations().containsKey(subject)

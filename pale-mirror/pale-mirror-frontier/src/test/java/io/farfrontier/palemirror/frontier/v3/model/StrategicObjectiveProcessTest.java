@@ -108,13 +108,13 @@ class StrategicObjectiveProcessTest {
         assertTrue(full.strategicPlans().tasks().isEmpty(), "capacity pressure must not create a doomed task");
 
         List<ProposedEvent> admitted = StrategicObjectiveProcess.planResourceHarvestOpportunity(state,
-                StrategicObjectiveProcess.resourceHarvestOpportunity(state, state.resourceSites().site(site), 22_000L));
+                StrategicObjectiveProcess.resourceHarvestOpportunity(state, state.resourceSites().site(site), 10_000L));
         FrontierWorldState pending = StrategicObjectiveProcess.reduceObjective(full, settlement.id(),
                 assertInstanceOf(StrategicObjectiveSelected.class, admitted.getFirst().payload()));
         pending = StrategicObjectiveProcess.reduceTask(pending, settlement.id(),
                 assertInstanceOf(StrategicTaskPlanned.class, admitted.get(1).payload()));
         StrategicTask task = pending.strategicPlans().tasks().values().stream().findFirst().orElseThrow();
-        var start = ResourceSiteHarvestProcess.start(task, 22_085L);
+        var start = ResourceSiteHarvestProcess.start(task, 10_085L);
         List<ProposedEvent> retry = ResourceSiteHarvestProcess.plan(pending, start);
         var replacement = assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class,
                 retry.getFirst().payload()).replacement();
@@ -123,7 +123,7 @@ class StrategicObjectiveProcessTest {
         assertEquals(StrategicTaskStatus.PENDING, pending.strategicPlans().tasks().get(task.id()).status());
         var checkpoint = new io.farfrontier.palemirror.frontier.v3.api.CheckpointImage(
                 pending.bootstrap().worldId(), io.farfrontier.palemirror.frontier.v3.api.Revision.ZERO,
-                new io.farfrontier.palemirror.frontier.v3.api.SimInstant(22_085L),
+                new io.farfrontier.palemirror.frontier.v3.api.SimInstant(10_085L),
                 new FrontierWorldStateCodec().encode(pending), List.of(replacement), List.of());
         assertEquals(List.of(replacement.id().value() + "@" + replacement.dueAt().ticks()),
                 FrontierSettlementWorkDiagnostic.inspect(checkpoint, pending, settlement.id()).orElseThrow().pendingHarvestSchedules());
@@ -138,7 +138,7 @@ class StrategicObjectiveProcessTest {
         FrontierWorldState legacyBlocked = StrategicObjectiveProcess.reduceTaskTransition(withSpace, settlement.id(),
                 new StrategicTaskTransition(task.id(), StrategicTaskStatus.BLOCKED));
         List<ProposedEvent> recovered = StrategicObjectiveProcess.plan(legacyBlocked,
-                StrategicObjectiveProcess.review(settlement.id(), 2, 24_000L));
+                StrategicObjectiveProcess.review(settlement.id(), 2, 10_200L));
         assertTrue(recovered.stream().anyMatch(event -> event.payload() instanceof StrategicObjectiveSelected selected
                 && selected.objective().kind() == StrategicObjectiveKind.SETTLEMENT_HARVEST_RESOURCE_SITE));
     }

@@ -37,6 +37,56 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FrontierWorldProcessCatalogTest {
     @Test
+    void residentLifePhysicalObservationsHaveOneCommandOwner() {
+        DeterministicProcessRegistry registry = FrontierWorldRuntimeDefinition.processRegistry();
+        for (String type : List.of("frontier.resident_metabolism_changed", "frontier.resident_meal_hot_arrived",
+                "frontier.resident_meal_hot_effect_prepared", "frontier.resident_meal_hot_effect_observed",
+                "frontier.resident_meal_hot_hand_materialized", "frontier.resident_meal_hot_hand_released",
+                "frontier.resident_meal_hot_returned")) {
+            assertEquals("population", registry.requireCommandOwner(type), type);
+        }
+    }
+
+    @Test
+    void workerMealFixtureRetainsFieldJobAndExactFutureNeedWake() {
+        var fixture = FrontierV3FixtureCatalog.configuration("resident-worker-meal",
+                new WorldId("frontier:worker-meal-fixture"), 125L);
+        var state = fixture.initialState();
+        var job = (ResourceSiteHarvestJob) state.resourceSites().site(new SubjectId("site:1-wheat-field"))
+                .activeWork().orElseThrow();
+        assertEquals(new SubjectId("job:site-harvest-1-wheat-field-1"), job.id());
+        assertEquals(64, job.progress().completedCropSlots());
+        assertEquals(64, job.deliveredYieldQuantity());
+        assertEquals(65, job.progress().totalCropSlots());
+        assertEquals(ResidentNutritionStatus.NOURISHED,
+                state.humanPopulation().nutrition(job.workerId()).status());
+        assertTrue(fixture.initialSchedules().stream().anyMatch(action -> action.subject().equals(job.workerId())
+                && action.kind().equals(io.farfrontier.palemirror.frontier.v3.process.ResidentNeedProcess.REVIEW)
+                && action.dueAt().ticks() == fixture.initialInstant().ticks() + 150L));
+        assertTrue(fixture.initialSchedules().stream().anyMatch(action -> action.subject().equals(job.siteId())
+                && action.kind().equals(io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess.COLD_PROGRESS_KIND)
+                && action.dueAt().ticks() == fixture.initialInstant().ticks() + 600L));
+        assertEquals(64, state.inventory().fungibleResources().totalQuantity(
+                state.humanPopulation().resident(job.workerId()).settlementId(), "minecraft:bread"));
+        var engine = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.create(fixture);
+        // One engine turn per canonical tick, as on the real server. Coarse
+        // advanceTo calls execute fewer recurrent actions and falsely extend
+        // a field job past the resident's hunger threshold.
+        for (long tick = fixture.initialInstant().ticks() + 1L;
+             tick <= fixture.initialInstant().ticks() + 200L; tick++)
+            engine.advanceTo(new SimInstant(tick),
+                    new io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget(1_024, 4_096));
+        assertEquals(io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.ACTIVE,
+                engine.status().kind());
+        var advanced = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec()
+                .decode(engine.checkpoint().canonicalState());
+        assertEquals(job.id(), advanced.resourceSites().site(job.siteId()).activeWork().orElseThrow().id());
+        assertEquals(64, ((ResourceSiteHarvestJob) advanced.resourceSites().site(job.siteId())
+                .activeWork().orElseThrow()).progress().completedCropSlots());
+    }
+
+
+    @Test
     void everyWorldPayloadCodecHasOneReducerOwnerBeforeRuntimeConfiguration() {
         DeterministicProcessRegistry registry = FrontierWorldRuntimeDefinition.processRegistry();
         for (String type : FrontierWorldProcessCatalog.allWorldPayloadTypes()) {

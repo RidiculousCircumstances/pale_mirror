@@ -78,7 +78,7 @@ public final class FrontierWorldStateSupport {
         HumanAssignmentProjection assignments = HumanAssignmentProjection.compile(state);
         return state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(settlementId) && resident.profession() == profession)
-                .filter(resident -> workCapable(state, resident))
+                .filter(resident -> availableForNewAssignment(state, resident))
                 .filter(resident -> assignments.idle(resident.id()))
                 .sorted(byProfessionCapability(profession)).findFirst();
     }
@@ -92,7 +92,7 @@ public final class FrontierWorldStateSupport {
         HumanAssignmentProjection assignments = HumanAssignmentProjection.compile(state);
         return state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(settlementId) && resident.profession() == profession)
-                .filter(resident -> workCapable(state, resident))
+                .filter(resident -> availableForNewAssignment(state, resident))
                 .filter(resident -> assignments.idle(resident.id()))
                 .sorted(byProfessionCapability(profession)).toList();
     }
@@ -101,7 +101,7 @@ public final class FrontierWorldStateSupport {
         HumanAssignmentProjection assignments = HumanAssignmentProjection.compile(state);
         return state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(settlementId) && resident.profession() == profession)
-                .filter(resident -> workCapable(state, resident))
+                .filter(resident -> availableForNewAssignment(state, resident))
                 .filter(resident -> assignments.idle(resident.id()))
                 .sorted(byProfessionCapability(profession)).findFirst();
     }
@@ -129,6 +129,11 @@ public final class FrontierWorldStateSupport {
     public static boolean workCapable(FrontierWorldState state, ResidentProfile resident) {
         return state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE
                 && state.humanPopulation().nutrition(resident.id()).status() != ResidentNutritionStatus.STARVING;
+    }
+
+    /** New owners cannot borrow a person during retained self-care; existing work keeps its claim. */
+    public static boolean availableForNewAssignment(FrontierWorldState state, ResidentProfile resident) {
+        return workCapable(state, resident) && !state.humanPopulation().meals().containsKey(resident.id());
     }
 
     static boolean retainsParticipantClaim(FrontierWorldState state, RouteOperation operation) {

@@ -460,21 +460,23 @@ class FrontierV3DiagnosticJsonTest {
                 "one named settlement view exposes bounded health policy facts without resident histories");
         var food = JsonParser.parseString(settlementJson.substring(FrontierV3DiagnosticJson.PREFIX.length()))
                 .getAsJsonObject().getAsJsonObject("food");
-        assertEquals("IDLE", food.get("status").getAsString());
+        assertEquals("SHORTAGE", food.get("status").getAsString());
         assertEquals(0, food.get("stock").getAsInt());
         assertEquals(0, food.get("available").getAsInt());
         assertTrue(food.get("reserve").getAsInt() > 0,
                 "one named settlement view distinguishes current stock from COLD-usable bread and derived reserve");
-        long due = checkpoint.schedules().stream().filter(action -> action.subject().equals(settlement)
-                && action.kind().equals("frontier.settlement.provision.review")).findFirst().orElseThrow().dueAt().ticks();
-        assertEquals(due, food.get("nextReviewAt").getAsLong());
-        assertEquals(0L, food.get("reviewOverdueTicks").getAsLong());
+        long due = checkpoint.schedules().stream().filter(action -> action.kind().equals("frontier.resident.need.review"))
+                .filter(action -> state.humanPopulation().resident(action.subject()).settlementId().equals(settlement))
+                .mapToLong(action -> action.dueAt().ticks()).min().orElseThrow();
+        assertEquals(due, food.get("nextNeedReviewAt").getAsLong());
         var noReview = new CheckpointImage(checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
-                checkpoint.canonicalState(), checkpoint.schedules().stream().filter(action -> !action.subject().equals(settlement)).toList(), checkpoint.receipts());
+                checkpoint.canonicalState(), checkpoint.schedules().stream().filter(action ->
+                    !action.kind().equals("frontier.resident.need.review")
+                    || !state.humanPopulation().resident(action.subject()).settlementId().equals(settlement)).toList(), checkpoint.receipts());
         var missingReviewFood = JsonParser.parseString(FrontierV3DiagnosticJson.render("settlement", settlement.value(),
                 noReview, state, Optional.empty()).substring(FrontierV3DiagnosticJson.PREFIX.length())).getAsJsonObject().getAsJsonObject("food");
-        assertTrue(missingReviewFood.get("nextReviewAt").isJsonNull(), "never invent a review from cadence when the actual schedule is missing");
-        assertTrue(missingReviewFood.get("reviewOverdueTicks").isJsonNull());
+        assertTrue(missingReviewFood.get("nextNeedReviewAt").isJsonNull(),
+                "never invent a need deadline when the exact resident schedule is missing");
         assertTrue(settlementJson.contains("\"nourished\":" + state.bootstrap().settlements().getFirst().residents().size()
                         + ",\"hungry\":0,\"starving\":0"),
                 "one named settlement view exposes bounded individual nutrition totals without a separate aggregate owner");

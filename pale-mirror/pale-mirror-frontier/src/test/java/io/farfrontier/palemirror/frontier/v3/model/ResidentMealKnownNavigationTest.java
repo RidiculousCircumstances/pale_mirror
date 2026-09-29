@@ -11,6 +11,23 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResidentMealKnownNavigationTest {
+    @Test void sixthSettlementResidentHasKnownRouteToItsDepot() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:resident-meal-route-six"), 41L));
+        Settlement settlement = state.bootstrap().settlements().get(5);
+        SubjectId resident = settlement.residents().getFirst().id();
+        SubjectId depot = FrontierWorldState.depotId(settlement.id());
+        ResidentMeal meal = new ResidentMeal(resident, settlement.id(), depot,
+                ReferenceContainerCustody.scopeId(depot), new SubjectId("custody:resident-meal-six"),
+                new SubjectId("lot:resident-meal-six"), new SubjectId("claim:resident-meal-six"),
+                Optional.empty(), ResidentMeal.Phase.MOVE, 6_000L, Optional.empty());
+        List<SurfaceAnchor> route = ResidentMealKnownNavigation.path(state, meal);
+        assertEquals(state.actorLocations().get(resident).supportingSurface(), route.getFirst());
+        assertEquals(SettlementDepotServicePort.forDepot(settlement.structures().stream()
+                .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow()).serviceSurface(), route.getLast());
+        assertTrue(route.size() > 1);
+    }
+
     @Test void idleResidentAndWorkshopWorkerUseSameKnownDepotGoal() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:resident-meal-route"), 422L));

@@ -685,6 +685,11 @@ class ProductionProcessTest {
     void coldProductionRetainsItsWorkerOnlyForAmbientBodyReleaseNotForAnotherHotHandoff() {
         ColdMarketJob cold = coldMarketJob();
         SubjectId worker = cold.job().workerId();
+        HumanAssignment assignment = HumanAssignmentProjection.compile(cold.state()).assignment(worker);
+        assertEquals(HumanAssignmentKind.PRODUCTION, assignment.kind());
+        assertEquals(ResidentWorkYield.Status.OWNER_SAFETY_HOLD,
+                ResidentWorkYield.assess(cold.state(), assignment).status(),
+                "a non-bakery production job is a real assignment, but has no meal-yield contract yet");
         AmbientActorLease formerBody = AmbientActorProcess.nextLease(cold.state(), worker, new SimInstant(400L))
                 .withStatus(AmbientLeaseStatus.HOT);
         FrontierWorldState held = cold.state().withChanges(FrontierWorldStateUpdate.begin()
@@ -869,9 +874,9 @@ class ProductionProcessTest {
 
     static HarvestLineage completedHarvestAndSuccessor(FrontierWorldState state, SubjectId siteId) {
         FrontierWorldState ready = readyHarvestSite(state, siteId);
-        FrontierWorldState firstTasked = planHarvestTask(ready, siteId, 22_000L);
+        FrontierWorldState firstTasked = planHarvestTask(ready, siteId, 5_000L);
         StrategicTask firstTask = harvestTask(firstTasked, siteId);
-        List<ProposedEvent> firstPlan = ResourceSiteHarvestProcess.plan(firstTasked, ResourceSiteHarvestProcess.start(firstTask, 22_100L));
+        List<ProposedEvent> firstPlan = ResourceSiteHarvestProcess.plan(firstTasked, ResourceSiteHarvestProcess.start(firstTask, 5_100L));
         ResourceSiteHarvestStarted firstStarted = firstPlan.stream().map(ProposedEvent::payload).filter(ResourceSiteHarvestStarted.class::isInstance)
                 .map(ResourceSiteHarvestStarted.class::cast).findFirst().orElseThrow();
         PhysicalIntentPrepared firstPrepared = firstPlan.stream().map(ProposedEvent::payload).filter(PhysicalIntentPrepared.class::isInstance)
@@ -918,10 +923,10 @@ class ProductionProcessTest {
             grown = ResourceSiteProcess.reduceGrowth(grown, siteId,
                     new ResourceSiteGrowthAdvanced(siteId, lifecycle.growthEpoch(), lifecycle.growthStage()));
         }
-        FrontierWorldState successorTasked = planHarvestTask(grown, siteId, 22_400L);
+        FrontierWorldState successorTasked = planHarvestTask(grown, siteId, 9_000L);
         StrategicTask successorTask = harvestTask(successorTasked, siteId);
         List<ProposedEvent> successorPlan = ResourceSiteHarvestProcess.plan(successorTasked,
-                ResourceSiteHarvestProcess.start(successorTask, 22_500L));
+                ResourceSiteHarvestProcess.start(successorTask, 9_100L));
         ResourceSiteHarvestStarted successorStarted = successorPlan.stream().map(ProposedEvent::payload)
                 .filter(ResourceSiteHarvestStarted.class::isInstance).map(ResourceSiteHarvestStarted.class::cast).findFirst().orElseThrow();
         FrontierWorldState successorState = StrategicObjectiveProcess.reduceTaskTransition(successorTasked, new SubjectId("settlement:1"),

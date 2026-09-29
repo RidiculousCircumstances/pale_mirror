@@ -34,7 +34,7 @@ final class BakeryHotEffectObservedCodec implements PayloadCodec {
                 input.readLong(), input.readLong(), readStacks(input), readStacks(input)));
     }
 
-    private static void writeStacks(DataOutputStream output, List<FungiblePhysicalObservation.Stack> stacks) throws IOException {
+    static void writeStacks(DataOutputStream output, List<FungiblePhysicalObservation.Stack> stacks) throws IOException {
         output.writeByte(stacks.size());
         for (FungiblePhysicalObservation.Stack stack : stacks) {
             if (stack.address() instanceof PhysicalStackAddress.ContainerSlot slot) {
@@ -47,7 +47,7 @@ final class BakeryHotEffectObservedCodec implements PayloadCodec {
         }
     }
 
-    private static List<FungiblePhysicalObservation.Stack> readStacks(DataInputStream input) throws IOException {
+    static List<FungiblePhysicalObservation.Stack> readStacks(DataInputStream input) throws IOException {
         int count = input.readUnsignedByte();
         if (count > 27) throw new IllegalArgumentException("bakery physical witness exceeds one bounded chest");
         List<FungiblePhysicalObservation.Stack> result = new ArrayList<>();

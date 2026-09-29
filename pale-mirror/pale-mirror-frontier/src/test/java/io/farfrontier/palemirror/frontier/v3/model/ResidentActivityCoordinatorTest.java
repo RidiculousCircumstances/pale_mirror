@@ -87,9 +87,15 @@ class ResidentActivityCoordinatorTest {
                 ResidentActivityCoordinator.assess(state, resident, 12_000L).kind());
         assertEquals(ResidentActivityChoice.Kind.EAT,
                 ResidentActivityCoordinator.assess(state, resident, 24_000L).kind());
-        var unadapted = new HumanAssignment(resident, HumanAssignmentKind.SETTLEMENT_SERVICE,
-                Optional.of(new SubjectId("job:service-test")));
-        assertEquals(ResidentWorkYield.Status.OWNER_SAFETY_HOLD,
-                ResidentWorkYield.assess(state, unadapted).status());
+        for (HumanAssignmentKind family : List.of(HumanAssignmentKind.CARGO_TRANSPORT,
+                HumanAssignmentKind.ESCORT, HumanAssignmentKind.ROUTE_PATROL,
+                HumanAssignmentKind.SETTLEMENT_DEFENCE, HumanAssignmentKind.ENGINEERING_RECOVERY,
+                HumanAssignmentKind.SETTLEMENT_SERVICE, HumanAssignmentKind.MEDICAL_EVACUATION,
+                HumanAssignmentKind.TRANSIT)) {
+            var unadapted = new HumanAssignment(resident, family,
+                    Optional.of(new SubjectId("job:unadapted-" + family.name().toLowerCase(java.util.Locale.ROOT))));
+            assertEquals(ResidentWorkYield.Status.OWNER_SAFETY_HOLD,
+                    ResidentWorkYield.assess(state, unadapted).status(), family.name());
+        }
     }
 }

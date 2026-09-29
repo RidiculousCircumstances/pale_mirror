@@ -58,6 +58,24 @@ class FungibleDepotPlayerEditTest {
                 .totalQuantity(OWNER, "minecraft:bread"));
     }
 
+    @Test void claimedMealBreadMayLeaveOnlyWithExplicitForfeiture() {
+        FungibleResourceLedger cold = FungibleResourceLedger.empty().issue(
+                new ResourceLot(HELD, OWNER, "minecraft:bread", 1, "test-meal", List.of()),
+                new CustodyAccount(ACCOUNT, new ResourceCustody.Container(DEPOT), Map.of(HELD, 1), Map.of()));
+        SubjectId claimId = new SubjectId("claim:resident-meal-one");
+        cold = cold.reserve(new ClaimAllocation(claimId, new SubjectId("resident:1-1"), OWNER,
+                "minecraft:bread", 1, Map.of(HELD, 1), ClaimPurpose.RESIDENT_MEAL), ACCOUNT);
+        FungibleResourceLedger hot = cold.rebind(ACCOUNT, 2,
+                FungiblePhysicalObservation.bind(cold, ACCOUNT, 2, List.of(stack(0, 1))));
+        FungibleStockDepartureObserved exit = assertInstanceOf(FungibleStockDepartureObserved.class,
+                FungibleDepotPlayerEdit.classify(hot, ACCOUNT, DEPOT, OWNER, 2, PLAYER, INTERACTION, List.of()));
+        assertEquals(Map.of(HELD, 1), exit.departedLots());
+        assertEquals(java.util.Set.of(claimId), exit.forfeitedClaimIds());
+        assertEquals(0, hot.releaseClaims(exit.forfeitedClaimIds())
+                .departObserved(ACCOUNT, 2, exit.departedLots(), exit.remaining())
+                .totalQuantity(OWNER, "minecraft:bread"));
+    }
+
     @Test void firstGiftMayCreateTheVacantDepotAccount() {
         SubjectId canonicalAccount = ReferenceContainerCustody.scopeId(DEPOT);
         var observed = List.of(stack(0, 16));

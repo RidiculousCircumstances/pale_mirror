@@ -44,7 +44,7 @@ class ResourceSiteColdHarvestReceiptTest {
         state = state.withInventory(state.inventory().withFungibleResources(new FungibleResourceLedger(
                 lots, prior.claims(), accounts, prior.bindings())));
         List<ProposedEvent> opportunity = StrategicObjectiveProcess.planResourceHarvestOpportunity(state,
-                StrategicObjectiveProcess.resourceHarvestOpportunity(state, state.resourceSites().site(site), 22_000L));
+                StrategicObjectiveProcess.resourceHarvestOpportunity(state, state.resourceSites().site(site), 5_000L));
         state = StrategicObjectiveProcess.reduceObjective(state, owner,
                 (StrategicObjectiveSelected) opportunity.getFirst().payload());
         state = StrategicObjectiveProcess.reduceTask(state, owner,
@@ -52,7 +52,7 @@ class ResourceSiteColdHarvestReceiptTest {
         StrategicTask task = state.strategicPlans().tasks().values().stream()
                 .filter(candidate -> candidate.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE).findFirst().orElseThrow();
         List<ProposedEvent> planned = ResourceSiteHarvestProcess.plan(state,
-                ResourceSiteHarvestProcess.start(task, 22_100L));
+                ResourceSiteHarvestProcess.start(task, 5_100L));
         state = StrategicObjectiveProcess.reduceTaskTransition(state, owner,
                 (StrategicTaskTransition) planned.getFirst().payload());
         ResourceSiteHarvestJob job = ((ResourceSiteHarvestStarted) planned.get(1).payload()).job();
@@ -96,7 +96,7 @@ class ResourceSiteColdHarvestReceiptTest {
                 cycle = cycle.cropRemoved(cycle.layout().cells().get(index).id());
             state = state.withResourceSites(state.resourceSites().replace(state.resourceSites().site(site), cycle));
             List<ProposedEvent> opportunity = StrategicObjectiveProcess.planResourceHarvestOpportunity(state,
-                    StrategicObjectiveProcess.resourceHarvestOpportunity(state, state.resourceSites().site(site), 22_000L));
+                    StrategicObjectiveProcess.resourceHarvestOpportunity(state, state.resourceSites().site(site), 5_000L));
             state = StrategicObjectiveProcess.reduceObjective(state, owner,
                     (StrategicObjectiveSelected) opportunity.getFirst().payload());
             state = StrategicObjectiveProcess.reduceTask(state, owner,
@@ -104,7 +104,7 @@ class ResourceSiteColdHarvestReceiptTest {
             StrategicTask task = state.strategicPlans().tasks().values().stream()
                     .filter(candidate -> candidate.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE).findFirst().orElseThrow();
             List<ProposedEvent> planned = ResourceSiteHarvestProcess.plan(state,
-                    ResourceSiteHarvestProcess.start(task, 22_100L));
+                    ResourceSiteHarvestProcess.start(task, 5_100L));
             state = StrategicObjectiveProcess.reduceTaskTransition(state, owner,
                     (StrategicTaskTransition) planned.getFirst().payload());
             ResourceSiteHarvestJob job = ((ResourceSiteHarvestStarted) planned.get(1).payload()).job();
@@ -126,14 +126,14 @@ class ResourceSiteColdHarvestReceiptTest {
         SubjectId site = new SubjectId("site:1-wheat-field");
         FrontierWorldState state = matureField();
         List<ProposedEvent> opportunity = StrategicObjectiveProcess.planResourceHarvestOpportunity(state,
-                StrategicObjectiveProcess.resourceHarvestOpportunity(state, state.resourceSites().site(site), 22_000L));
+                StrategicObjectiveProcess.resourceHarvestOpportunity(state, state.resourceSites().site(site), 5_000L));
         state = StrategicObjectiveProcess.reduceObjective(state, new SubjectId("settlement:1"),
                 (StrategicObjectiveSelected) opportunity.getFirst().payload());
         state = StrategicObjectiveProcess.reduceTask(state, new SubjectId("settlement:1"),
                 (StrategicTaskPlanned) opportunity.get(1).payload());
         StrategicTask task = state.strategicPlans().tasks().values().stream()
                 .filter(candidate -> candidate.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE).findFirst().orElseThrow();
-        List<ProposedEvent> planned = ResourceSiteHarvestProcess.plan(state, ResourceSiteHarvestProcess.start(task, 22_100L));
+        List<ProposedEvent> planned = ResourceSiteHarvestProcess.plan(state, ResourceSiteHarvestProcess.start(task, 5_100L));
         state = StrategicObjectiveProcess.reduceTaskTransition(state, new SubjectId("settlement:1"),
                 (StrategicTaskTransition) planned.getFirst().payload());
         ResourceSiteHarvestStarted started = (ResourceSiteHarvestStarted) planned.get(1).payload();
@@ -251,14 +251,14 @@ class ResourceSiteColdHarvestReceiptTest {
                     new ResourceSiteGrowthAdvanced(site, lifecycle.growthEpoch(), lifecycle.growthStage()));
         }
         List<ProposedEvent> successorOpportunity = StrategicObjectiveProcess.planResourceHarvestOpportunity(renewed,
-                StrategicObjectiveProcess.resourceHarvestOpportunity(renewed, renewed.resourceSites().site(site), 40_000L));
+                StrategicObjectiveProcess.resourceHarvestOpportunity(renewed, renewed.resourceSites().site(site), 9_000L));
         renewed = StrategicObjectiveProcess.reduceObjective(renewed, new SubjectId("settlement:1"),
                 (StrategicObjectiveSelected) successorOpportunity.getFirst().payload());
         renewed = StrategicObjectiveProcess.reduceTask(renewed, new SubjectId("settlement:1"),
                 (StrategicTaskPlanned) successorOpportunity.get(1).payload());
         StrategicTask successorTask = renewed.strategicPlans().tasks().values().stream()
                 .filter(candidate -> candidate.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE && candidate.status() == StrategicTaskStatus.PENDING).findFirst().orElseThrow();
-        List<ProposedEvent> successorPlan = ResourceSiteHarvestProcess.plan(renewed, ResourceSiteHarvestProcess.start(successorTask, 40_100L));
+        List<ProposedEvent> successorPlan = ResourceSiteHarvestProcess.plan(renewed, ResourceSiteHarvestProcess.start(successorTask, 9_100L));
         ResourceSiteHarvestStarted successor = (ResourceSiteHarvestStarted) successorPlan.stream().map(ProposedEvent::payload)
                 .filter(ResourceSiteHarvestStarted.class::isInstance).findFirst().orElseThrow();
         renewed = StrategicObjectiveProcess.reduceTaskTransition(renewed, new SubjectId("settlement:1"),
@@ -279,14 +279,14 @@ class ResourceSiteColdHarvestReceiptTest {
         SubjectId site = new SubjectId("site:1-wheat-field");
         FrontierWorldState state = matureField();
         List<ProposedEvent> opportunity = StrategicObjectiveProcess.planResourceHarvestOpportunity(state,
-                StrategicObjectiveProcess.resourceHarvestOpportunity(state, state.resourceSites().site(site), 22_000L));
+                StrategicObjectiveProcess.resourceHarvestOpportunity(state, state.resourceSites().site(site), 5_000L));
         state = StrategicObjectiveProcess.reduceObjective(state, new SubjectId("settlement:1"),
                 (StrategicObjectiveSelected) opportunity.getFirst().payload());
         state = StrategicObjectiveProcess.reduceTask(state, new SubjectId("settlement:1"),
                 (StrategicTaskPlanned) opportunity.get(1).payload());
         StrategicTask task = state.strategicPlans().tasks().values().stream()
                 .filter(candidate -> candidate.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE).findFirst().orElseThrow();
-        List<ProposedEvent> planned = ResourceSiteHarvestProcess.plan(state, ResourceSiteHarvestProcess.start(task, 22_100L));
+        List<ProposedEvent> planned = ResourceSiteHarvestProcess.plan(state, ResourceSiteHarvestProcess.start(task, 5_100L));
         state = StrategicObjectiveProcess.reduceTaskTransition(state, new SubjectId("settlement:1"),
                 (StrategicTaskTransition) planned.getFirst().payload());
         ResourceSiteHarvestStarted started = (ResourceSiteHarvestStarted) planned.get(1).payload();
@@ -345,14 +345,14 @@ class ResourceSiteColdHarvestReceiptTest {
         SubjectId site = new SubjectId("site:1-wheat-field");
         FrontierWorldState state = matureField();
         List<ProposedEvent> opportunity = StrategicObjectiveProcess.planResourceHarvestOpportunity(state,
-                StrategicObjectiveProcess.resourceHarvestOpportunity(state, state.resourceSites().site(site), 22_000L));
+                StrategicObjectiveProcess.resourceHarvestOpportunity(state, state.resourceSites().site(site), 5_000L));
         state = StrategicObjectiveProcess.reduceObjective(state, new SubjectId("settlement:1"),
                 (StrategicObjectiveSelected) opportunity.getFirst().payload());
         state = StrategicObjectiveProcess.reduceTask(state, new SubjectId("settlement:1"),
                 (StrategicTaskPlanned) opportunity.get(1).payload());
         StrategicTask task = state.strategicPlans().tasks().values().stream()
                 .filter(candidate -> candidate.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE).findFirst().orElseThrow();
-        List<ProposedEvent> planned = ResourceSiteHarvestProcess.plan(state, ResourceSiteHarvestProcess.start(task, 22_100L));
+        List<ProposedEvent> planned = ResourceSiteHarvestProcess.plan(state, ResourceSiteHarvestProcess.start(task, 5_100L));
         state = StrategicObjectiveProcess.reduceTaskTransition(state, new SubjectId("settlement:1"),
                 (StrategicTaskTransition) planned.getFirst().payload());
         ResourceSiteHarvestStarted started = (ResourceSiteHarvestStarted) planned.get(1).payload();
@@ -437,14 +437,14 @@ class ResourceSiteColdHarvestReceiptTest {
                     new ResourceSiteGrowthAdvanced(site, lifecycle.growthEpoch(), lifecycle.growthStage()));
         }
         List<ProposedEvent> successorOpportunity = StrategicObjectiveProcess.planResourceHarvestOpportunity(state,
-                StrategicObjectiveProcess.resourceHarvestOpportunity(state, state.resourceSites().site(site), 40_000L));
+                StrategicObjectiveProcess.resourceHarvestOpportunity(state, state.resourceSites().site(site), 9_000L));
         state = StrategicObjectiveProcess.reduceObjective(state, new SubjectId("settlement:1"),
                 (StrategicObjectiveSelected) successorOpportunity.getFirst().payload());
         state = StrategicObjectiveProcess.reduceTask(state, new SubjectId("settlement:1"),
                 (StrategicTaskPlanned) successorOpportunity.get(1).payload());
         StrategicTask successorTask = state.strategicPlans().tasks().values().stream().filter(candidate -> candidate.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE
                 && candidate.status() == StrategicTaskStatus.PENDING).findFirst().orElseThrow();
-        List<ProposedEvent> successorPlan = ResourceSiteHarvestProcess.plan(state, ResourceSiteHarvestProcess.start(successorTask, 40_100L));
+        List<ProposedEvent> successorPlan = ResourceSiteHarvestProcess.plan(state, ResourceSiteHarvestProcess.start(successorTask, 9_100L));
         ResourceSiteHarvestStarted successor = (ResourceSiteHarvestStarted) successorPlan.stream()
                 .map(ProposedEvent::payload).filter(ResourceSiteHarvestStarted.class::isInstance).findFirst().orElseThrow();
         assertEquals(complete.workerId(), successor.job().workerId(),

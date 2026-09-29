@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.process.ResidentNeedProcess;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import org.junit.jupiter.api.Test;
 
@@ -19,13 +20,14 @@ class FrontierExecutionMetricsTest {
     @Test
     void reportsCompleteDueActionStagesWithoutChangingCanonicalBytes() {
         WorldId world = new WorldId("frontier:execution-metrics");
-        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> baseline = FrontierWorldRuntimeDefinition.configuration(world, 712L);
+        FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> baseline = withExactReview(
+                FrontierWorldRuntimeDefinition.configuration(world, 712L));
         CapturingMetrics metrics = new CapturingMetrics();
         FrontierEngine<FrontierWorldProjection> measured = FrontierEngines.create(baseline.withExecutionMetrics(metrics));
         FrontierEngine<FrontierWorldProjection> control = FrontierEngines.create(baseline);
 
-        measured.advanceTo(new SimInstant(1L), new WorkBudget(128, 512));
-        control.advanceTo(new SimInstant(1L), new WorkBudget(128, 512));
+        measured.advanceTo(new SimInstant(24_000L), new WorkBudget(128, 512));
+        control.advanceTo(new SimInstant(24_000L), new WorkBudget(128, 512));
 
         assertArrayEquals(control.checkpoint().canonicalState(), measured.checkpoint().canonicalState());
         assertTrue(metrics.stages.contains(FrontierExecutionMetrics.Stage.SCHEDULE_ALLOCATION));
@@ -34,6 +36,17 @@ class FrontierExecutionMetricsTest {
         assertTrue(metrics.stages.contains(FrontierExecutionMetrics.Stage.VALIDATION));
         assertTrue(metrics.stages.contains(FrontierExecutionMetrics.Stage.TRANSACTION));
         assertTrue(metrics.queueObserved, "queue depth and deferred-lag observation is emitted on every canonical advance");
+    }
+
+    private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> withExactReview(
+            FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base) {
+        var resident = base.initialState().bootstrap().settlements().getFirst().residents().getFirst().id();
+        return new FrontierEngineConfiguration<>(base.worldId(), base.initialState(), base.initialInstant(),
+                base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(),
+                base.projectionMapper(), base.limits(), List.of(ResidentNeedProcess.firstReviewAfter(
+                        resident, 0L, base.initialState().bootstrap().ruleset().residentLife())),
+                base.transactionCommitter(), base.stateValidator(), base.executionMetrics(),
+                base.kernelQuarantineReporter());
     }
 
     @Test

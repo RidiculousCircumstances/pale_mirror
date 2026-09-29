@@ -10,8 +10,10 @@ public record ResidentMeal(SubjectId residentId, SubjectId settlementId, Subject
                            SubjectId sourceAccountId, SubjectId actorAccountId,
                            SubjectId lotId, SubjectId claimId,
                            Optional<SubjectId> retainedWorkOwner, Phase phase,
-                           long startedAtTick, Optional<ResidentActivityChoice.Wait> waitReason) {
+                           long startedAtTick, Optional<ResidentActivityChoice.Wait> waitReason,
+                           Optional<ResidentMealPhysicalStep> pendingPhysicalStep) {
     public static final String BREAD_KIND = "minecraft:bread";
+    /** RETURN releases meal activity ownership; it never retraces a route to an old work cell. */
     public enum Phase { MOVE, TAKE, CONSUME, RETURN }
 
     public ResidentMeal {
@@ -25,6 +27,9 @@ public record ResidentMeal(SubjectId residentId, SubjectId settlementId, Subject
         retainedWorkOwner = Objects.requireNonNull(retainedWorkOwner, "meal retained assignment");
         Objects.requireNonNull(phase, "meal phase");
         waitReason = Objects.requireNonNull(waitReason, "meal wait reason");
+        pendingPhysicalStep = Objects.requireNonNull(pendingPhysicalStep, "meal physical step");
+        if (pendingPhysicalStep.isPresent() && pendingPhysicalStep.orElseThrow().phase() != phase)
+            throw new IllegalArgumentException("meal physical fence differs from current phase");
         if (!residentId.value().startsWith("resident:") || !settlementId.value().startsWith("settlement:")
                 || !FrontierWorldState.depotId(settlementId).equals(depotId)
                 || !sourceAccountId.equals(ReferenceContainerCustody.scopeId(depotId))
@@ -32,6 +37,21 @@ public record ResidentMeal(SubjectId residentId, SubjectId settlementId, Subject
                 || sourceAccountId.equals(actorAccountId) || startedAtTick < 0) {
             throw new IllegalArgumentException("meal must retain one exact resident, depot and custody pair");
         }
+    }
+
+    public ResidentMeal(SubjectId residentId, SubjectId settlementId, SubjectId depotId,
+                        SubjectId sourceAccountId, SubjectId actorAccountId, SubjectId lotId,
+                        SubjectId claimId, Optional<SubjectId> retainedWorkOwner, Phase phase,
+                        long startedAtTick, Optional<ResidentActivityChoice.Wait> waitReason) {
+        this(residentId, settlementId, depotId, sourceAccountId, actorAccountId, lotId,
+                claimId, retainedWorkOwner, phase, startedAtTick, waitReason, Optional.empty());
+    }
+
+    public ResidentMeal prepare(ResidentMealPhysicalStep step) {
+        if (pendingPhysicalStep.isPresent() || step.phase() != phase)
+            throw new IllegalArgumentException("meal cannot prepare a second or foreign physical effect");
+        return new ResidentMeal(residentId, settlementId, depotId, sourceAccountId, actorAccountId,
+                lotId, claimId, retainedWorkOwner, phase, startedAtTick, waitReason, Optional.of(step));
     }
 
     public ResidentMeal advance(Phase next) {
@@ -43,17 +63,17 @@ public record ResidentMeal(SubjectId residentId, SubjectId settlementId, Subject
         };
         if (!legal) throw new IllegalArgumentException("meal phase cannot skip a physical custody receipt");
         return new ResidentMeal(residentId, settlementId, depotId, sourceAccountId, actorAccountId,
-                lotId, claimId, retainedWorkOwner, next, startedAtTick, Optional.empty());
+                lotId, claimId, retainedWorkOwner, next, startedAtTick, Optional.empty(), Optional.empty());
     }
 
     public ResidentMeal waitFor(ResidentActivityChoice.Wait reason) {
         return new ResidentMeal(residentId, settlementId, depotId, sourceAccountId, actorAccountId,
-                lotId, claimId, retainedWorkOwner, phase, startedAtTick, Optional.of(reason));
+                lotId, claimId, retainedWorkOwner, phase, startedAtTick, Optional.of(reason), pendingPhysicalStep);
     }
 
     public ResidentMeal clearWait() {
         return waitReason.isEmpty() ? this : new ResidentMeal(residentId, settlementId, depotId,
                 sourceAccountId, actorAccountId, lotId, claimId, retainedWorkOwner, phase,
-                startedAtTick, Optional.empty());
+                startedAtTick, Optional.empty(), pendingPhysicalStep);
     }
 }

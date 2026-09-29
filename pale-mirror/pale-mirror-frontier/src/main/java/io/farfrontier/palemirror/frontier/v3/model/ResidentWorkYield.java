@@ -25,7 +25,14 @@ public record ResidentWorkYield(SubjectId residentId, HumanAssignment assignment
     public static ResidentWorkYield assess(FrontierWorldState state, HumanAssignment assignment) {
         Objects.requireNonNull(state, "yield state");
         SubjectId resident = assignment.residentId();
-        if (!FrontierSceneAdmission.available(state, java.util.List.of(resident))
+        AmbientActorLease ambient = state.ambientLeases().get(resident);
+        // A completed meal still owns the HOT lease until the activity hand-off retargets it.
+        // That transient goal is not a work-scene or cargo claim and may safely choose
+        // another meal when one bread has not relieved the resident's whole deficit.
+        boolean safeAmbient = ambient != null && ambient.status() == AmbientLeaseStatus.HOT
+                && (ambient.goal() == AmbientGoalKind.PATROL || ambient.goal() == AmbientGoalKind.WORK
+                    || ambient.goal() == AmbientGoalKind.MEAL);
+        if ((!FrontierSceneAdmission.available(state, java.util.List.of(resident)) && !safeAmbient)
                 || state.sceneLeases().values().stream().anyMatch(lease -> lease.retainsMemberCustody(resident)))
             return new ResidentWorkYield(resident, assignment, Status.SCENE_OR_AMBIENT_AUTHORITY);
         // Exact actor custody also includes durable equipment; it is not an occupied work
@@ -35,7 +42,7 @@ public record ResidentWorkYield(SubjectId residentId, HumanAssignment assignment
             return new ResidentWorkYield(resident, assignment, Status.CARRYING_RESOURCE);
         Status status = switch (assignment.kind()) {
             case IDLE -> Status.READY;
-            case BAKING -> bakery(state, assignment.ownerId().orElseThrow());
+            case PRODUCTION -> production(state, assignment.ownerId().orElseThrow());
             case FIELD_HARVEST -> harvest(state, assignment.ownerId().orElseThrow());
             case CARGO_TRANSPORT, ESCORT, ROUTE_PATROL, SETTLEMENT_DEFENCE,
                     ENGINEERING_RECOVERY, SETTLEMENT_SERVICE, MEDICAL_EVACUATION,
@@ -44,10 +51,13 @@ public record ResidentWorkYield(SubjectId residentId, HumanAssignment assignment
         return new ResidentWorkYield(resident, assignment, status);
     }
 
-    private static Status bakery(FrontierWorldState state, SubjectId owner) {
+    private static Status production(FrontierWorldState state, SubjectId owner) {
         ProductionJob job = state.productionJobs().get(owner);
-        if (job == null || job.bakeryWork().isEmpty())
-            throw new IllegalArgumentException("baking yield lost its exact production job");
+        if (job == null)
+            throw new IllegalArgumentException("production yield lost its exact job");
+        // The production assignment covers bakery and non-bakery jobs. A non-bakery
+        // production owner has no declared suspend/resume seam in this cut.
+        if (job.bakeryWork().isEmpty()) return Status.OWNER_SAFETY_HOLD;
         return job.bakeryWork().orElseThrow().pendingPhysicalStep().isPresent()
                 ? Status.PENDING_PHYSICAL_EFFECT : Status.READY;
     }

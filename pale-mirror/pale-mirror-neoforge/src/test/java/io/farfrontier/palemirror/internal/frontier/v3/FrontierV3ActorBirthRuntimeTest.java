@@ -23,8 +23,12 @@ class FrontierV3ActorBirthRuntimeTest {
         var initial = base.initialState();
         var settlement = initial.bootstrap().settlements().getFirst().id();
         var food = new SubjectId("item:birth-runtime-bread");
-        var stocked = initial.withInventory(initial.inventory().store(new ExactItemStack(food, settlement,
-                PopulationBirthProcess.BREAD, 64, new InventoryCustody.ContainerSlot(FrontierWorldState.depotId(settlement), 1))));
+        var stocked = initial.withInventory(initial.inventory()
+                .store(new ExactItemStack(food, settlement, PopulationBirthProcess.BREAD, 64,
+                        new InventoryCustody.ContainerSlot(FrontierWorldState.depotId(settlement), 1)))
+                .store(new ExactItemStack(new SubjectId("item:birth-runtime-reserve"), settlement,
+                        PopulationBirthProcess.BREAD, 64,
+                        new InventoryCustody.ContainerSlot(FrontierWorldState.depotId(settlement), 2))));
         var configuration = new FrontierEngineConfiguration<>(WORLD, stocked, base.initialInstant(),
                 base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(),
                 base.limits(), List.of(PopulationBirthProcess.review(settlement, 1, 100L)), base.transactionCommitter(),
@@ -137,8 +141,13 @@ class FrontierV3ActorBirthRuntimeTest {
         net.minecraft.SharedConstants.tryDetectVersion();
         var base = FrontierWorldRuntimeDefinition.configuration(WORLD, 91L);
         var initial = base.initialState(); var settlement = initial.bootstrap().settlements().getFirst().id();
-        var stocked = initial.withInventory(initial.inventory().store(new ExactItemStack(new SubjectId("item:interrupted-birth"),
-                settlement, PopulationBirthProcess.BREAD, 64, new InventoryCustody.ContainerSlot(FrontierWorldState.depotId(settlement), 1))));
+        var stocked = initial.withInventory(initial.inventory()
+                .store(new ExactItemStack(new SubjectId("item:interrupted-birth"), settlement,
+                        PopulationBirthProcess.BREAD, 64,
+                        new InventoryCustody.ContainerSlot(FrontierWorldState.depotId(settlement), 1)))
+                .store(new ExactItemStack(new SubjectId("item:interrupted-birth-reserve"), settlement,
+                        PopulationBirthProcess.BREAD, 64,
+                        new InventoryCustody.ContainerSlot(FrontierWorldState.depotId(settlement), 2))));
         var configuration = new FrontierEngineConfiguration<>(WORLD, stocked, base.initialInstant(),
                 base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(),
                 base.limits(), List.of(PopulationBirthProcess.review(settlement, 1, 100L)), base.transactionCommitter(),

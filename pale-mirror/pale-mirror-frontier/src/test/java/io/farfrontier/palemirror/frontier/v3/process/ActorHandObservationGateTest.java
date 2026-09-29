@@ -17,6 +17,9 @@ class ActorHandObservationGateTest {
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:actor-hand-generic-gate"), 59L));
         SubjectId actor = initial.bootstrap().settlements().getFirst().residents().getFirst().id();
+        initial = AmbientLeaseStateProcess.transition(AmbientLeaseStateProcess.prepare(initial,
+                AmbientActorProcess.nextLease(initial, actor, io.farfrontier.palemirror.frontier.v3.api.SimInstant.ZERO)),
+                actor, AmbientLeaseStatus.HOT);
         SubjectId accountId = new SubjectId("custody:generic-gate-actor");
         SubjectId lotId = new SubjectId("lot:generic-gate-wheat");
         ResourceLot wheat = new ResourceLot(lotId, initial.bootstrap().settlements().getFirst().id(),

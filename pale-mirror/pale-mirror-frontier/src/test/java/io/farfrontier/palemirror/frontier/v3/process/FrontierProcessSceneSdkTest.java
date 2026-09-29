@@ -251,10 +251,10 @@ class FrontierProcessSceneSdkTest {
         @Override public HarvestContext initial() {
             SubjectId site = new SubjectId("site:1-wheat-field");
             FrontierWorldState prepared = admitHarvestTask(matureField(FrontierWorldState.initial(FrontierBootstrapper.create(
-                    new WorldId("frontier:f0v-sdk-harvest"), 125L)), site), site, 22_000L);
+                    new WorldId("frontier:f0v-sdk-harvest"), 125L)), site), site, 5_000L);
             StrategicTask task = prepared.strategicPlans().tasks().values().stream()
                     .filter(value -> value.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE).findFirst().orElseThrow();
-            EngineContext engine = advance(launch(prepared, List.of(ResourceSiteHarvestProcess.start(task, 22_100L))), new SimInstant(22_100L), 8);
+            EngineContext engine = advance(launch(prepared, List.of(ResourceSiteHarvestProcess.start(task, 5_100L))), new SimInstant(5_100L), 8);
             ResourceSiteHarvestJob job = FrontierProcessSceneSdkTest.harvest(engine, site);
             // Travel alone cannot admit physical crop/output effects. The real planner must reject both
             // effect-bearing transitions before either can mutate the durable intent.

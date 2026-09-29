@@ -775,22 +775,23 @@ final class FrontierDevelopmentScenarios {
 
     /**
      * The production obstruction remains local to Northwatch. A second, unvisited settlement
-     * retains an ordinary provision review at a later canonical instant, proving that the
+     * retains an ordinary exact-resident need review at a later canonical instant, proving that the
      * obstruction neither stalls nor borrows capacity from an unrelated COLD process.
      */
     static MaterializedProductionFixture materializedProductionObstructionLivenessFixture(WorldId worldId, long seed) {
         MaterializedProductionFixture base = materializedProductionWorkFixture(worldId, seed);
         FrontierWorldState state = base.state(); Settlement settlement = state.bootstrap().settlements().get(1);
-        SubjectId depot = FrontierWorldState.depotId(settlement.id()); SubjectId bread = new SubjectId("item:development-unrelated-provision-bread");
-        List<SubjectId> recipients = state.humanPopulation().residents().values().stream().filter(resident -> resident.settlementId().equals(settlement.id()))
-                .map(ResidentProfile::id).sorted().toList();
+        SubjectId resident = settlement.residents().getFirst().id();
         HumanPopulation population = state.humanPopulation();
-        for (SubjectId recipient : recipients) population = population.resolveNutrition(recipient, 1, false);
-        ExactItemStack stack = new ExactItemStack(bread, settlement.id(), SettlementProvisionProcess.BREAD, 64,
-                new InventoryCustody.ContainerSlot(depot, 1));
-        state = state.withInventory(state.inventory().store(stack)).withHumanPopulation(population);
+        Map<SubjectId, ResidentNutrition> nutrition = new LinkedHashMap<>(population.nutrition());
+        long unit = Math.multiplyExact(state.bootstrap().ruleset().residentLife().hungerUnitTicks(), 1_000L);
+        nutrition.put(resident, new ResidentNutrition(ResidentNutritionStatus.NOURISHED, 0, 0L,
+                unit - 1_000_000L));
+        state = state.withHumanPopulation(new HumanPopulation(population.households(), population.residents(),
+                population.birthJobs(), population.health(), population.quarantines(), population.migrations(),
+                population.provisions(), nutrition, population.medicalOperations(), population.schedules(), population.meals()));
         List<ScheduledAction> schedules = new java.util.ArrayList<>();
-        schedules.add(SettlementProvisionProcess.review(settlement.id(), 1, 1_000L));
+        schedules.add(ResidentNeedProcess.review(resident, 1_000L));
         return new MaterializedProductionFixture(state, base.instant(), schedules, base.orderId());
     }
 

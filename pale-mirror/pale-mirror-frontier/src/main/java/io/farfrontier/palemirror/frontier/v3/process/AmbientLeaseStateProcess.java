@@ -119,10 +119,15 @@ public final class AmbientLeaseStateProcess {
                 .reduce((left, right) -> { throw new IllegalArgumentException("ambient farmer belongs to more than one active field job"); })
                 .orElse(null);
         if (harvest != null) {
-            if (current.goal() != AmbientGoalKind.PATROL && current.goal() != AmbientGoalKind.WORK) {
+            if (current.goal() != AmbientGoalKind.PATROL && current.goal() != AmbientGoalKind.WORK
+                    && !(current.goal() == AmbientGoalKind.MEAL
+                        && state.humanPopulation().meals().containsKey(release.actorId()))) {
                 throw new IllegalArgumentException("HOT field worker has a foreign ambient purpose");
             }
         }
+        if (state.humanPopulation().meals().containsKey(release.actorId())
+                && state.humanPopulation().meals().get(release.actorId()).pendingPhysicalStep().isPresent())
+            throw new IllegalArgumentException("ambient meal has an unresolved physical effect");
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
         actors.put(release.actorId(), new ActorLocation(release.body(), actor.condition().withHealth(release.health())));
         Map<SubjectId, AmbientActorLease> leases = new LinkedHashMap<>(state.ambientLeases()); leases.put(release.actorId(), current.withStatus(AmbientLeaseStatus.CLOSED));

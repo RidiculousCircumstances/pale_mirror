@@ -23,6 +23,8 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentMigrationJourney;
+import io.farfrontier.palemirror.frontier.v3.model.ResidentMeal;
+import io.farfrontier.palemirror.frontier.v3.model.ResidentMealHotHandReleased;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentMigrationStatus;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentTransitAdvanced;
 import io.farfrontier.palemirror.frontier.v3.model.ScoutPatrolAdvanced;
@@ -359,7 +361,8 @@ final class FrontierV3AmbientActorExecutor {
             if (!owned(existing, actorId, bioform)) return Result.CONFLICT;
             if (existing instanceof Zombie zombie) configureBioform(zombie, bioformProfile(state, actorId));
             if (existing instanceof Mob body) {
-                if (!FrontierV3BakeryHandProjection.matchesAmbient(state, actorId, body)) return Result.CONFLICT;
+                if (!FrontierV3BakeryHandProjection.matchesAmbient(state, actorId, body)
+                        || !FrontierV3ResidentMealHandProjection.matchesAmbient(state, actorId, body)) return Result.CONFLICT;
                 body.getNavigation().stop();
                 body.setNoAi(true);
             }
@@ -378,7 +381,8 @@ final class FrontierV3AmbientActorExecutor {
         body.setNoAi(true);
         if (body instanceof Zombie zombie) configureBioform(zombie, bioformProfile(state, actorId));
         hydrateExactHeldEquipment(body, state, actorId);
-        if (!FrontierV3BakeryHandProjection.prepareAmbientNew(state, actorId, body)) return Result.CONFLICT;
+        if (!FrontierV3BakeryHandProjection.prepareAmbientNew(state, actorId, body)
+                || !FrontierV3ResidentMealHandProjection.prepareAmbientNew(state, actorId, body)) return Result.CONFLICT;
         FrontierV3ScenePresentation.applyAmbientActorPresentation(body, state, actorId, bioform);
         body.getPersistentData().putString(ACTOR_KEY, actorId.value()); body.getPersistentData().putString(KIND_KEY, bioform ? "BIOFORM" : "RESIDENT");
         if (!level.noCollision(body, body.getBoundingBox()) || admissionColumnOccupied(level, body, body.getBoundingBox())) return Result.DEFERRED;
@@ -780,6 +784,25 @@ final class FrontierV3AmbientActorExecutor {
         // inactive-carrier evidence before closing canonical custody or removing the body.
         if (!(body.level() instanceof ServerLevel level)) return Optional.empty();
         AmbientActorLease lease = state.ambientLeases().get(actorId);
+        ResidentMeal retainedMeal = state.humanPopulation().meals().get(actorId);
+        if (retainedMeal != null) {
+            if (retainedMeal.pendingPhysicalStep().isPresent()) return Optional.empty();
+            if (retainedMeal.phase() == ResidentMeal.Phase.CONSUME) {
+                var bindings = state.inventory().fungibleResources().bindings().values().stream()
+                        .filter(binding -> binding.accountId().equals(retainedMeal.actorAccountId())).toList();
+                if (!bindings.isEmpty()) {
+                    ItemStack held = body.getItemBySlot(EquipmentSlot.OFFHAND);
+                    if (bindings.size() != 1 || held.getCount() != 1
+                            || !ItemStack.isSameItemSameComponents(held, new ItemStack(Items.BREAD, 1))) return Optional.empty();
+                    var witness = new io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalObservation.Stack(
+                            new io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress.ActorHand(actorId, body.getUUID()),
+                            ResidentMeal.BREAD_KIND, 1);
+                    if (!(submit(runtime, "ambient-meal-hand-release", actorId.value(),
+                            new ResidentMealHotHandReleased(actorId, lease.revision(), witness))
+                            instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) return Optional.empty();
+                }
+            }
+        }
         long epoch = body.getPersistentData().getLong(CUSTODY_EPOCH_KEY);
         if (epoch < 1L || !FrontierV3ActorCarrierComposition.owns(body,
                 carrierDeclaration(state, actorId, FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE,

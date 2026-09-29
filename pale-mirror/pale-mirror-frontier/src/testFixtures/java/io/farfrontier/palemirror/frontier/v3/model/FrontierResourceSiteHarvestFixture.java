@@ -27,6 +27,10 @@ final class FrontierResourceSiteHarvestFixture {
 
     /** Test-only irregular genesis: one extra stable cell, no injected crop work or receipt. */
     static Fixture createWithOneExtraCell(WorldId worldId, long seed) {
+        return create(initialWithOneExtraCell(worldId, seed));
+    }
+
+    static FrontierWorldState initialWithOneExtraCell(WorldId worldId, long seed) {
         FrontierBootstrap baseline = FrontierBootstrapper.create(worldId, seed);
         SubjectId siteId = new SubjectId("site:1-wheat-field");
         ResourceFieldLayout original = FrontierResourceSitePlan.compile(baseline).get(siteId).layout();
@@ -48,7 +52,7 @@ final class FrontierResourceSiteHarvestFixture {
                 // A candidate may overlap an immutable route, structure or other field.
                 continue;
             }
-            return create(FrontierWorldState.initial(authored));
+            return FrontierWorldState.initial(authored);
         }
         throw new IllegalStateException("65-cell test fixture has no free adjacent field cell");
     }
@@ -59,7 +63,11 @@ final class FrontierResourceSiteHarvestFixture {
      * materialize their current field/depot state and physically work the last cell.
      */
     static Fixture createWithOneExtraCellAfterColdPart(WorldId worldId, long seed) {
-        Fixture original = createWithOneExtraCell(worldId, seed);
+        return createWithOneExtraCellAfterColdPart(initialWithOneExtraCell(worldId, seed));
+    }
+
+    static Fixture createWithOneExtraCellAfterColdPart(FrontierWorldState initial) {
+        Fixture original = create(initial);
         FrontierWorldState state = original.state();
         SubjectId siteId = original.siteId();
         ScheduledAction continuation = original.schedules().getFirst();
@@ -81,7 +89,14 @@ final class FrontierResourceSiteHarvestFixture {
     /** Composes the same ordinary harvest ingress with an already-retained disjoint front. */
     static Fixture create(FrontierWorldState state) {
         SubjectId siteId = new SubjectId("site:1-wheat-field");
-        List<ProposedEvent> preparation = ResourceSiteProcess.planPreparation(state, ResourceSiteProcess.preparation(siteId, 4_000L));
+        // This fixture exercises a long field job, not daily schedule arbitration. Give its
+        // settlement an explicit long WORK policy and start before the first hunger threshold.
+        SubjectId settlementId = new SubjectId("settlement:1");
+        state = state.withHumanPopulation(state.humanPopulation().withSchedule(settlementId,
+                new SettlementDailySchedule(24_000, List.of(
+                        new SettlementDailySchedule.Segment(0, 23_999, SettlementDailySchedule.Window.WORK),
+                        new SettlementDailySchedule.Segment(23_999, 24_000, SettlementDailySchedule.Window.FREE)))));
+        List<ProposedEvent> preparation = ResourceSiteProcess.planPreparation(state, ResourceSiteProcess.preparation(siteId, 400L));
         state = ResourceSiteProcess.reducePreparationStarted(state, siteId, (ResourceSitePreparationStarted) preparation.getFirst().payload());
         state = ResourceSiteProcess.reducePrepared(state, siteId, (ResourceSitePrepared) preparation.get(1).payload());
         for (int stage = 0; stage < ResourceSiteLifecycle.MATURE_STAGE; stage++) {
@@ -90,7 +105,7 @@ final class FrontierResourceSiteHarvestFixture {
                     new ResourceSiteGrowthAdvanced(siteId, current.growthEpoch(), current.growthStage()));
         }
         List<ProposedEvent> opportunity = StrategicObjectiveProcess.planResourceHarvestOpportunity(state,
-                StrategicObjectiveProcess.resourceHarvestOpportunity(state, state.resourceSites().site(siteId), 22_000L));
+                StrategicObjectiveProcess.resourceHarvestOpportunity(state, state.resourceSites().site(siteId), 2_000L));
         state = StrategicObjectiveProcess.reduceObjective(state, new SubjectId("settlement:1"),
                 (StrategicObjectiveSelected) opportunity.getFirst().payload());
         state = StrategicObjectiveProcess.reduceTask(state, new SubjectId("settlement:1"),
@@ -98,7 +113,7 @@ final class FrontierResourceSiteHarvestFixture {
         StrategicTask task = state.strategicPlans().tasks().values().stream()
                 .filter(value -> value.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE).findFirst()
                 .orElseThrow(() -> new IllegalStateException("harvest fixture has no exact strategic task"));
-        List<ProposedEvent> started = ResourceSiteHarvestProcess.plan(state, ResourceSiteHarvestProcess.start(task, 22_100L));
+        List<ProposedEvent> started = ResourceSiteHarvestProcess.plan(state, ResourceSiteHarvestProcess.start(task, 2_100L));
         state = StrategicObjectiveProcess.reduceTaskTransition(state, new SubjectId("settlement:1"),
                 (StrategicTaskTransition) started.getFirst().payload());
         ResourceSiteHarvestStarted harvest = (ResourceSiteHarvestStarted) started.get(1).payload();
@@ -107,7 +122,7 @@ final class FrontierResourceSiteHarvestFixture {
         ScheduledAction continuation = started.stream().map(ProposedEvent::payload).filter(ScheduleEffect.Created.class::isInstance)
                 .map(ScheduleEffect.Created.class::cast).map(ScheduleEffect.Created::action).findFirst()
                 .orElseThrow(() -> new IllegalStateException("harvest fixture has no retained COLD continuation"));
-        long instant = 22_100L;
+        long instant = 2_100L;
         ResourceSiteHarvestJob job = harvest.job();
         for (int step = 0; step < 256; step++) {
             ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state, job);

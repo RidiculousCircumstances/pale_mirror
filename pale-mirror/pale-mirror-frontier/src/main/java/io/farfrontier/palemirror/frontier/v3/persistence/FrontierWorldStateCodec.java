@@ -31,7 +31,9 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     // Reference-container fingerprints now encode bulk stock rather than positional slots.
     // Old disposable worlds must not recover a persisted replica fingerprint under new semantics.
     // Version 210 retains exact settlement schedule policies and resident meal stages.
-    static final int VERSION = 210; private static final int MAX_ENTRIES = 65_535;
+    // Version 212 changes the stock-exit WAL payload to include atomic meal-claim forfeiture.
+    // Earlier worlds are disposable and cannot replay that event under the new grammar.
+    static final int VERSION = 212; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }

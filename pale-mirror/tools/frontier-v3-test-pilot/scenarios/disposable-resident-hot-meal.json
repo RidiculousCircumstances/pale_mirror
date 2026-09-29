@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "id": "disposable_resident_hot_meal",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25591, "profile": "resident-meal", "viewDistance": 4 },
+  "pilot": { "username": "PMTestPilot" },
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
+      "position": { "x": -125, "y": 64, "z": -8 }, "settleMs": 1000,
+      "causalMilestone": "ordinary_player_admits_depot_and_resident" },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:6-depot",
+      "expect": { "status": "ok", "surface": "ACTIVE", "custody": { "status": "ACQUIRED" } },
+      "timeoutMs": 30000 },
+    { "type": "inspect", "view": "resident_life", "id": "resident:6-1" },
+    { "type": "fast_forward", "ticks": 6000, "timeoutMs": 180000 },
+    { "type": "inspect", "view": "actor", "id": "resident:6-1" },
+    { "type": "wait_until_diagnostic", "view": "resident_life", "id": "resident:6-1",
+      "expect": { "status": "ok", "nutrition": "NOURISHED", "mealPhase": "NONE", "depotBread": 63,
+        "metabolismEffectivePermille": 4000 }, "timeoutMs": 60000,
+      "causalMilestone": "one_physical_bread_eaten_by_exact_resident" },
+    { "type": "inspect", "view": "actor", "id": "resident:6-1" },
+    { "type": "inspect", "view": "container", "id": "container:6-depot" }
+  ],
+  "assertions": [
+    { "after": 6, "view": "resident_life", "id": "resident:6-1",
+      "expect": { "status": "ok", "nutrition": "NOURISHED", "mealPhase": "NONE", "depotBread": 63,
+        "depotBreadClaimed": 0 } },
+    { "after": 8, "view": "container", "id": "container:6-depot",
+      "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" } } }
+  ],
+  "frames": [ { "after": 6, "name": "resident-after-one-hot-meal", "presentation": "player" } ]
+}

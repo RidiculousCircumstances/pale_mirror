@@ -5,16 +5,16 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.Objects;
 
-/** One due-time integration of one exact resident's hunger, not a population scan. */
+/** One due-time, fixed-point integration of one exact resident's hunger. */
 public record ResidentNeedIntegrated(SubjectId residentId, long atTick,
-                                     int previousDay, int integratedDay,
-                                     int hungerDeficit) implements FrontierPayload {
+                                     long previousTick, int hungerDeficit,
+                                     long fractionalProgress) implements FrontierPayload {
     public ResidentNeedIntegrated {
         Objects.requireNonNull(residentId, "need resident");
-        if (!residentId.value().startsWith("resident:") || atTick < 0
-                || previousDay < 0 || integratedDay <= previousDay
-                || hungerDeficit < 1 || hungerDeficit > ResidentNutrition.MAX_HUNGER_UNITS)
-            throw new IllegalArgumentException("resident need integration lacks a valid exact due boundary");
+        if (!residentId.value().startsWith("resident:") || previousTick < 0 || atTick <= previousTick
+                || hungerDeficit < 0 || hungerDeficit > ResidentNutrition.MAX_HUNGER_UNITS
+                || fractionalProgress < 0)
+            throw new IllegalArgumentException("resident need integration lacks one exact elapsed interval");
     }
 
     @Override public String type() { return "frontier.resident_need_integrated"; }

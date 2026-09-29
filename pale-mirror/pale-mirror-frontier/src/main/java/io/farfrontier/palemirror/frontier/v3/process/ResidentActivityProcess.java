@@ -25,6 +25,33 @@ public final class ResidentActivityProcess {
                 11, residentId, REVIEW, 1);
     }
 
+    /** Activity ownership changes here; the meal owner only changes meal and bread state. */
+    public static FrontierWorldState reduceMealStarted(FrontierWorldState state, SubjectId subject,
+                                                       ResidentMealStarted started) {
+        FrontierWorldState next = ResidentMealProcess.reduceStarted(state, subject, started);
+        return retargetHotResident(next, subject, started.meal().startedAtTick());
+    }
+
+    public static FrontierWorldState reduceMealReturned(FrontierWorldState state, SubjectId subject,
+                                                        ResidentMealHotReturned returned, long atTick) {
+        FrontierWorldState next = ResidentMealProcess.reduceHotReturned(state, subject, returned);
+        return retargetHotResident(next, subject, atTick);
+    }
+
+    /** A completed meal changes activity eligibility immediately, not at the next day boundary. */
+    public static ProposedEvent wakeAfterMeal(SubjectId residentId, long atTick) {
+        ScheduledAction next = review(residentId, Math.addExact(atTick, 1L));
+        return new ProposedEvent(residentId, new ScheduleEffect.Rescheduled(next.id(), next));
+    }
+
+    static FrontierWorldState retargetHotResident(FrontierWorldState state, SubjectId residentId, long atTick) {
+        AmbientActorLease lease = state.ambientLeases().get(residentId);
+        if (lease == null || lease.status() != AmbientLeaseStatus.HOT) return state;
+        AmbientActorProcess.AmbientGoal goal = AmbientActorProcess.goalFor(state, residentId, atTick);
+        return AmbientLeaseStateProcess.retarget(state, residentId, goal.kind(),
+                BodyPosition.above(new SurfaceAnchor(goal.position())));
+    }
+
     public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
         if (!action.kind().equals(REVIEW) || !action.equals(review(action.subject(), action.dueAt().ticks())))
             throw new IllegalArgumentException("activity review has a foreign scheduled identity");
@@ -55,8 +82,10 @@ public final class ResidentActivityProcess {
                                    boolean mealAlreadyRetained) {
         FrontierRuleset.ResidentLife rules = state.bootstrap().ruleset().residentLife();
         long window = state.humanPopulation().schedule(resident.settlementId()).nextWindowBoundaryAfter(now);
-        long hunger = Math.multiplyExact(Math.addExact(now / rules.hungerUnitTicks(), 1L),
-                rules.hungerUnitTicks());
+        ResidentNutrition effective = state.humanPopulation().nutrition(resident.id()).accrueThrough(now, rules,
+                resident.characteristics().effectiveMetabolismPermille(now));
+        long hunger = effective.nextThresholdTick(rules,
+                resident.characteristics().effectiveMetabolismPermille(now));
         long next = Math.min(window, hunger);
         if (!mealStarted && !mealAlreadyRetained
                 && (choice.pending().isPresent() || choice.kind() == ResidentActivityChoice.Kind.EAT))

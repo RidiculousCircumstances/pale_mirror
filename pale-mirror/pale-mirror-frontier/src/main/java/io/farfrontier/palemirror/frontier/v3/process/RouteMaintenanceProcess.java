@@ -224,7 +224,7 @@ public final class RouteMaintenanceProcess {
         SubjectId id = new SubjectId("maintenance:route-" + loss.position().x() + "-" + loss.position().y() + "-" + loss.position().z());
         if (state.routeMaintenances().containsKey(id)) return Optional.empty();
         List<SubjectId> members = state.humanPopulation().residents().values().stream().filter(resident -> resident.settlementId().equals(settlementId))
-                .filter(resident -> assignments.idle(resident.id())).filter(resident -> FrontierWorldStateSupport.workCapable(state, resident))
+                .filter(resident -> assignments.idle(resident.id())).filter(resident -> FrontierWorldStateSupport.availableForNewAssignment(state, resident))
                 .filter(resident -> resident.capability(HumanCapability.ENGINEERING) > 0).sorted(Comparator.comparing(ResidentProfile::id))
                 .limit(EngineeringRecoveryTeam.MIN_MEMBERS).map(ResidentProfile::id).toList();
         if (members.isEmpty()) return Optional.empty();

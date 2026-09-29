@@ -41,6 +41,19 @@ final class FrontierWorldInitialState {
         SubjectId wheat = new SubjectId("lot:bootstrap-1-wheat");
         FungibleResourceLedger resources = FungibleResourceLedger.empty().issue(new ResourceLot(wheat, bootstrap.settlements().getFirst().id(), "minecraft:wheat", 64,
                 "bootstrap", List.of()), new CustodyAccount(new SubjectId("custody:container-1-depot"), new ResourceCustody.Container(firstDepot), Map.of(wheat, 64), Map.of()));
+        // Settlement one demonstrates the wheat-to-bread production vertical. Every other
+        // graybox settlement needs an explicit, finite starter food lot: its first field
+        // matures during FREE, and at the next WORK boundary the new personal hunger rule
+        // would otherwise block the very first harvest with no local bread source.
+        for (Settlement settlement : bootstrap.settlements().subList(1, bootstrap.settlements().size())) {
+            String suffix = settlement.id().value().substring("settlement:".length());
+            SubjectId bread = new SubjectId("lot:bootstrap-" + suffix + "-bread");
+            SubjectId depot = FrontierWorldState.depotId(settlement.id());
+            resources = resources.issue(new ResourceLot(bread, settlement.id(), "minecraft:bread", 64,
+                    "bootstrap-starter-food", List.of()), new CustodyAccount(
+                    new SubjectId("custody:container-" + suffix + "-depot"),
+                    new ResourceCustody.Container(depot), Map.of(bread, 64), Map.of()));
+        }
         bootstrap.settlements().forEach(settlement -> {
             SubjectId depot = FrontierWorldState.depotId(settlement.id());
             for (int index = 0; index < EngineeringRecoveryTeam.MAX_MEMBERS; index++) {

@@ -69,9 +69,12 @@ public final class FrontierWorldProcessCatalog {
             "frontier.resident_migration_resumed", "frontier.resident_birth_started", "frontier.resident_birth_cancelled",
             "frontier.settlement_provision_started", "frontier.settlement_provision_started_v2",
             "frontier.settlement_provision_consumed", "frontier.settlement_provision_resolved",
-            "frontier.resident_need_integrated",
+            "frontier.resident_need_integrated", "frontier.resident_metabolism_changed",
             "frontier.resident_meal_started",
-            "frontier.resident_meal_cold_step",
+            "frontier.resident_meal_cold_step", "frontier.resident_meal_hot_arrived",
+            "frontier.resident_meal_hot_effect_prepared", "frontier.resident_meal_hot_effect_observed",
+            "frontier.resident_meal_hot_hand_materialized", "frontier.resident_meal_hot_hand_released",
+            "frontier.resident_meal_hot_returned",
             "frontier.resident_health_transition", "frontier.settlement_quarantine_transition",
             "frontier.medical_treatment_started", "frontier.medical_treatment_transition",
             "frontier.medical_treatment_scene_lease_prepared", "frontier.medical_treatment_scene_lease_handoff");
@@ -178,8 +181,6 @@ public final class FrontierWorldProcessCatalog {
             Map.entry("frontier.population.migration.progress", (state, action, autonomous) -> PopulationMigrationProcess.planProgress(state, action)),
             Map.entry(DefenderEquipmentProcess.REVIEW_ACTION, (state, action, autonomous) -> DefenderEquipmentProcess.plan(state, action)),
             Map.entry(DefenderEquipmentReturnProcess.REVIEW_ACTION, (state, action, autonomous) -> DefenderEquipmentReturnProcess.plan(state, action)),
-            Map.entry("frontier.settlement.provision.review", (state, action, autonomous) -> SettlementProvisionProcess.planReview(state, action)),
-            Map.entry("frontier.settlement.provision.progress", (state, action, autonomous) -> SettlementProvisionProcess.planProgress(state, action)),
             Map.entry(ResidentNeedProcess.REVIEW, (state, action, autonomous) -> ResidentNeedProcess.plan(state, action)),
             Map.entry(ResidentActivityProcess.REVIEW, (state, action, autonomous) -> ResidentActivityProcess.plan(state, action)),
             Map.entry(ResidentMealProcess.PROGRESS, (state, action, autonomous) -> ResidentMealProcess.planProgress(state, action)),
@@ -235,7 +236,6 @@ public final class FrontierWorldProcessCatalog {
             Map.entry("frontier.objective.review", StrategicObjectiveProcess::plan),
             Map.entry("frontier.objective.stock_reconsider", (state, action, autonomous) -> StrategicObjectiveProcess.planStockReconsideration(state, action)),
             Map.entry("frontier.objective.reconsider", (state, action, autonomous) -> StrategicObjectiveProcess.planReconsideration(state, action)),
-            Map.entry("frontier.objective.provision_reconsider", (state, action, autonomous) -> StrategicObjectiveProcess.planProvisionReconsideration(state, action)),
             Map.entry("frontier.objective.interrupt", (state, action, autonomous) -> StrategicObjectiveProcess.planOpportunity(state, action)),
             Map.entry("frontier.objective.assault", (state, action, autonomous) -> StrategicObjectiveProcess.planAssaultOpportunity(state, action)),
             Map.entry("frontier.settlement_assault.start", (state, action, autonomous) -> HiveSettlementAssaultProcess.planStart(state, action)),
@@ -327,19 +327,27 @@ public final class FrontierWorldProcessCatalog {
                     cadence.settlementStrategicInitialReviewTick() + index * cadence.settlementInitialStagger()));
             actions.add(PopulationBirthProcess.review(bootstrap.settlements().get(index).id(), 1,
                     cadence.populationBirthInitialReviewTick() + index * cadence.settlementInitialStagger()));
-            actions.add(SettlementProvisionProcess.review(bootstrap.settlements().get(index).id(), 1,
-                    cadence.provisionInitialReviewTick() + index * cadence.settlementInitialStagger()));
             actions.add(CompanyFoundationProcess.review(bootstrap.settlements().get(index).id(), 1,
                     cadence.companyFoundationInitialReviewTick() + index * cadence.settlementInitialStagger()));
+        }
+        for (Settlement settlement : bootstrap.settlements()) {
+            for (Resident resident : settlement.residents()) {
+                actions.add(ResidentNeedProcess.firstReviewAfter(resident.id(), 0L, bootstrap.ruleset().residentLife()));
+                actions.add(ResidentActivityProcess.review(resident.id(), 1L));
+            }
         }
         actions.add(PopulationMigrationProcess.review(1, cadence.populationMigrationInitialReviewTick()));
         actions.add(TerminalLogisticsProcess.review(1, cadence.terminalLogisticsInitialReviewTick()));
         FrontierResourceSitePlan.compile(bootstrap).keySet().stream().sorted()
                 .forEach(site -> actions.add(ResourceSiteProcess.preparation(site, cadence.resourceInitialPreparationTick())));
-        bootstrap.hive().bioforms().stream().filter(Bioform::isScout).filter(scout -> HivePhysiologySupport.initiallyDeployed(bootstrap.hive(), scout))
-                .sorted(java.util.Comparator.comparing(Bioform::id))
-                .forEach(scout -> actions.add(HiveScoutPatrolProcess.patrol(scout.id(), 1,
-                        cadence.hiveScoutInitialPatrolTick() + actions.size() * cadence.hiveScoutInitialStagger())));
+        // Scout cadence must depend only on scout order. Unrelated resident timers must not
+        // delay first contact or turn the hive's initial patrol into a population-size effect.
+        List<Bioform> scouts = bootstrap.hive().bioforms().stream().filter(Bioform::isScout)
+                .filter(scout -> HivePhysiologySupport.initiallyDeployed(bootstrap.hive(), scout))
+                .sorted(java.util.Comparator.comparing(Bioform::id)).toList();
+        for (int index = 0; index < scouts.size(); index++)
+            actions.add(HiveScoutPatrolProcess.patrol(scouts.get(index).id(), 1,
+                    cadence.hiveScoutInitialPatrolTick() + index * cadence.hiveScoutInitialStagger()));
         actions.add(StrategicObjectiveProcess.review(bootstrap.hive().id(), 1, cadence.hiveStrategicInitialReviewTick()));
         return List.copyOf(actions);
     }
@@ -388,6 +396,10 @@ public final class FrontierWorldProcessCatalog {
             "frontier.engineering_work_scene_lease_prepared", "frontier.engineering_work_scene_lease_handoff"); }
     private static Set<String> populationCommands() { return types(
             "frontier.resident_born", "frontier.resident_migrated", "frontier.resident_transit_advanced",
+            "frontier.resident_metabolism_changed", "frontier.resident_meal_hot_arrived",
+            "frontier.resident_meal_hot_effect_prepared", "frontier.resident_meal_hot_effect_observed",
+            "frontier.resident_meal_hot_hand_materialized", "frontier.resident_meal_hot_hand_released",
+            "frontier.resident_meal_hot_returned",
             "frontier.medical_treatment_scene_lease_prepared", "frontier.medical_treatment_scene_lease_handoff"); }
     private static Set<String> economyCommands() { return types(
             "frontier.production_work_progressed", "frontier.production_work_traversal_advanced", "frontier.production_cold_work_advanced",
@@ -439,7 +451,6 @@ public final class FrontierWorldProcessCatalog {
     private static Set<String> populationSchedules() { return types(
             "frontier.population.birth.review", "frontier.population.birth.complete", "frontier.population.migration.review",
             "frontier.population.migration.progress", DefenderEquipmentProcess.REVIEW_ACTION, DefenderEquipmentReturnProcess.REVIEW_ACTION,
-            "frontier.settlement.provision.review", "frontier.settlement.provision.progress",
             ResidentNeedProcess.REVIEW, ResidentActivityProcess.REVIEW, ResidentMealProcess.PROGRESS); }
     private static Set<String> economySchedules() { return types(
             "frontier.settlement.production.task.start", "frontier.settlement.production.task.complete",
@@ -459,7 +470,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.route_patrol.start", "frontier.route_patrol.progress"); }
     private static Set<String> serviceWorkSchedules() { return types("frontier.decontamination.scan"); }
     private static Set<String> strategySchedules() { return types(
-            "frontier.objective.review", "frontier.objective.stock_reconsider", "frontier.objective.reconsider", "frontier.objective.provision_reconsider", "frontier.objective.interrupt", "frontier.objective.assault"); }
+            "frontier.objective.review", "frontier.objective.stock_reconsider", "frontier.objective.reconsider", "frontier.objective.interrupt", "frontier.objective.assault"); }
 
     private static Set<String> types(String... values) { return Set.copyOf(List.of(values)); }
 
@@ -537,8 +548,11 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.resident_born", "frontier.resident_migrated", "frontier.resident_migration_started", "frontier.resident_migration_advanced",
                     "frontier.resident_transit_advanced", "frontier.resident_migration_blocked", "frontier.resident_migration_resumed", "frontier.resident_birth_started",
                     "frontier.resident_birth_cancelled", "frontier.settlement_provision_started", "frontier.settlement_provision_started_v2", "frontier.settlement_provision_consumed",
-                    "frontier.settlement_provision_resolved", "frontier.resident_need_integrated",
-                    "frontier.resident_meal_started", "frontier.resident_meal_cold_step",
+                    "frontier.settlement_provision_resolved", "frontier.resident_need_integrated", "frontier.resident_metabolism_changed",
+                    "frontier.resident_meal_started", "frontier.resident_meal_cold_step", "frontier.resident_meal_hot_arrived",
+                    "frontier.resident_meal_hot_effect_prepared", "frontier.resident_meal_hot_effect_observed",
+                    "frontier.resident_meal_hot_hand_materialized", "frontier.resident_meal_hot_hand_released",
+                    "frontier.resident_meal_hot_returned",
                     "frontier.resident_health_transition", "frontier.settlement_quarantine_transition",
                     "frontier.medical_treatment_started", "frontier.medical_treatment_transition",
                     "frontier.medical_treatment_scene_lease_prepared", "frontier.medical_treatment_scene_lease_handoff", "frontier.physical_delta_observed", "frontier.physical_deltas_observed",

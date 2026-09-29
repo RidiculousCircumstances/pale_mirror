@@ -21,16 +21,56 @@ final class HumanPopulationPayloadCodecs {
                 return FrontierWorldPayloadCodecs.encodeProduction(output -> {
                     ResidentNeedIntegrated value = (ResidentNeedIntegrated) payload;
                     FrontierWorldPayloadCodecs.writeSubject(output, value.residentId());
-                    output.writeLong(value.atTick()); output.writeInt(value.previousDay());
-                    output.writeInt(value.integratedDay()); output.writeInt(value.hungerDeficit());
+                    output.writeLong(value.atTick()); output.writeLong(value.previousTick());
+                    output.writeInt(value.hungerDeficit()); output.writeLong(value.fractionalProgress());
                 });
             }
             @Override public FrontierPayload decode(byte[] bytes) {
                 return FrontierWorldPayloadCodecs.decodeProduction(bytes, input ->
                         new ResidentNeedIntegrated(FrontierWorldPayloadCodecs.readSubject(input).value(),
-                                input.readLong(), input.readInt(), input.readInt(), input.readInt()));
+                                input.readLong(), input.readLong(), input.readInt(), input.readLong()));
             }
         };
+    }
+
+    static PayloadCodec metabolismChanged() {
+        return new PayloadCodec() {
+            @Override public String type() { return "frontier.resident_metabolism_changed"; }
+            @Override public byte[] encode(FrontierPayload payload) {
+                return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+                    ResidentMetabolismChanged changed = (ResidentMetabolismChanged) payload;
+                    FrontierWorldPayloadCodecs.writeSubject(output, changed.residentId());
+                    output.writeLong(changed.atTick());
+                    writeCharacteristics(output, changed.previous());
+                    writeCharacteristics(output, changed.next());
+                });
+            }
+            @Override public FrontierPayload decode(byte[] bytes) {
+                return FrontierWorldPayloadCodecs.decodeProduction(bytes, input ->
+                        new ResidentMetabolismChanged(FrontierWorldPayloadCodecs.readSubject(input).value(),
+                                input.readLong(), readCharacteristics(input), readCharacteristics(input)));
+            }
+        };
+    }
+
+    private static void writeCharacteristics(DataOutputStream output, ResidentCharacteristics characteristics) throws IOException {
+        output.writeByte(characteristics.version()); output.writeInt(characteristics.baseMetabolismPermille());
+        FrontierWorldStateCodec.writeCount(output, characteristics.metabolismModifiers().size());
+        for (var entry : characteristics.metabolismModifiers().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).toList()) {
+            FrontierWorldPayloadCodecs.writeSubject(output, entry.getKey());
+            output.writeInt(entry.getValue().deltaPermille());
+        }
+    }
+
+    private static ResidentCharacteristics readCharacteristics(DataInputStream input) throws IOException {
+        int version = input.readUnsignedByte(); int base = input.readInt();
+        java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, ResidentCharacteristics.MetabolismModifier> modifiers = new java.util.LinkedHashMap<>();
+        for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) {
+            var source = FrontierWorldPayloadCodecs.readSubject(input).value();
+            var modifier = new ResidentCharacteristics.MetabolismModifier(source, input.readInt());
+            if (modifiers.put(source, modifier) != null) throw new IllegalArgumentException("duplicate metabolism modifier");
+        }
+        return new ResidentCharacteristics(version, base, modifiers);
     }
 
     static PayloadCodec mealStarted() {
@@ -43,6 +83,128 @@ final class HumanPopulationPayloadCodecs {
             @Override public FrontierPayload decode(byte[] bytes) {
                 return FrontierWorldPayloadCodecs.decodeProduction(bytes,
                         input -> new ResidentMealStarted(HumanPopulationStateCodec.readMeal(input)));
+            }
+        };
+    }
+
+    static PayloadCodec mealHotArrived() {
+        return new PayloadCodec() {
+            @Override public String type() { return "frontier.resident_meal_hot_arrived"; }
+            @Override public byte[] encode(FrontierPayload payload) {
+                return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+                    ResidentMealHotArrived arrived = (ResidentMealHotArrived) payload;
+                    FrontierWorldPayloadCodecs.writeSubject(output, arrived.residentId());
+                    output.writeLong(arrived.ambientRevision());
+                    output.writeInt(arrived.observedBody().x()); output.writeInt(arrived.observedBody().y());
+                    output.writeInt(arrived.observedBody().z());
+                });
+            }
+            @Override public FrontierPayload decode(byte[] bytes) {
+                return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new ResidentMealHotArrived(
+                        FrontierWorldPayloadCodecs.readSubject(input).value(), input.readLong(),
+                        new BodyPosition(input.readInt(), input.readInt(), input.readInt())));
+            }
+        };
+    }
+
+    static PayloadCodec mealHotEffectPrepared() {
+        return new PayloadCodec() {
+            @Override public String type() { return "frontier.resident_meal_hot_effect_prepared"; }
+            @Override public byte[] encode(FrontierPayload payload) {
+                return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+                    ResidentMealHotEffectPrepared prepared = (ResidentMealHotEffectPrepared) payload;
+                    FrontierWorldPayloadCodecs.writeSubject(output, prepared.residentId());
+                    ResidentMealPhysicalStep step = prepared.step();
+                    output.writeByte(FrontierWireTags.tag(step.phase())); output.writeByte(step.sourceSlot());
+                    output.writeByte(step.sourceCount()); output.writeLong(step.sourceEpoch());
+                    output.writeLong(step.destinationEpoch()); output.writeLong(step.ambientRevision());
+                });
+            }
+            @Override public FrontierPayload decode(byte[] bytes) {
+                return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new ResidentMealHotEffectPrepared(
+                        FrontierWorldPayloadCodecs.readSubject(input).value(), new ResidentMealPhysicalStep(
+                        FrontierWireTags.require(ResidentMeal.Phase.class, input.readUnsignedByte()),
+                        input.readByte(), input.readUnsignedByte(), input.readLong(), input.readLong(), input.readLong())));
+            }
+        };
+    }
+
+    static PayloadCodec mealHotEffectObserved() {
+        return new PayloadCodec() {
+            @Override public String type() { return "frontier.resident_meal_hot_effect_observed"; }
+            @Override public byte[] encode(FrontierPayload payload) {
+                return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+                    ResidentMealHotEffectObserved observed = (ResidentMealHotEffectObserved) payload;
+                    FrontierWorldPayloadCodecs.writeSubject(output, observed.residentId());
+                    output.writeByte(FrontierWireTags.tag(observed.phase())); output.writeLong(observed.ambientRevision());
+                    output.writeInt(observed.observedBody().x()); output.writeInt(observed.observedBody().y());
+                    output.writeInt(observed.observedBody().z());
+                    BakeryHotEffectObservedCodec.writeStacks(output, observed.remainingSource());
+                    BakeryHotEffectObservedCodec.writeStacks(output, observed.destination());
+                });
+            }
+            @Override public FrontierPayload decode(byte[] bytes) {
+                return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new ResidentMealHotEffectObserved(
+                        FrontierWorldPayloadCodecs.readSubject(input).value(),
+                        FrontierWireTags.require(ResidentMeal.Phase.class, input.readUnsignedByte()),
+                        input.readLong(), new BodyPosition(input.readInt(), input.readInt(), input.readInt()),
+                        BakeryHotEffectObservedCodec.readStacks(input), BakeryHotEffectObservedCodec.readStacks(input)));
+            }
+        };
+    }
+
+    static PayloadCodec mealHotHandMaterialized() {
+        return mealHand("frontier.resident_meal_hot_hand_materialized", true);
+    }
+
+    static PayloadCodec mealHotHandReleased() {
+        return mealHand("frontier.resident_meal_hot_hand_released", false);
+    }
+
+    static PayloadCodec mealHotReturned() {
+        return new PayloadCodec() {
+            @Override public String type() { return "frontier.resident_meal_hot_returned"; }
+            @Override public byte[] encode(FrontierPayload payload) {
+                return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+                    ResidentMealHotReturned returned = (ResidentMealHotReturned) payload;
+                    FrontierWorldPayloadCodecs.writeSubject(output, returned.residentId());
+                    output.writeLong(returned.ambientRevision());
+                });
+            }
+            @Override public FrontierPayload decode(byte[] bytes) {
+                return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new ResidentMealHotReturned(
+                        FrontierWorldPayloadCodecs.readSubject(input).value(), input.readLong()));
+            }
+        };
+    }
+
+    private static PayloadCodec mealHand(String type, boolean materialized) {
+        return new PayloadCodec() {
+            @Override public String type() { return type; }
+            @Override public byte[] encode(FrontierPayload payload) {
+                return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+                    io.farfrontier.palemirror.frontier.v3.api.SubjectId id;
+                    long revision;
+                    FungiblePhysicalObservation.Stack hand;
+                    if (materialized) {
+                        ResidentMealHotHandMaterialized value = (ResidentMealHotHandMaterialized) payload;
+                        id = value.residentId(); revision = value.ambientRevision(); hand = value.observedHand();
+                    } else {
+                        ResidentMealHotHandReleased value = (ResidentMealHotHandReleased) payload;
+                        id = value.residentId(); revision = value.ambientRevision(); hand = value.observedHand();
+                    }
+                    FrontierWorldPayloadCodecs.writeSubject(output, id); output.writeLong(revision);
+                    BakeryHotEffectObservedCodec.writeStacks(output, java.util.List.of(hand));
+                });
+            }
+            @Override public FrontierPayload decode(byte[] bytes) {
+                return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
+                    var id = FrontierWorldPayloadCodecs.readSubject(input).value(); long revision = input.readLong();
+                    var hands = BakeryHotEffectObservedCodec.readStacks(input);
+                    if (hands.size() != 1) throw new IllegalArgumentException("meal hand witness needs one exact stack");
+                    return materialized ? new ResidentMealHotHandMaterialized(id, revision, hands.getFirst())
+                            : new ResidentMealHotHandReleased(id, revision, hands.getFirst());
+                });
             }
         };
     }
@@ -184,15 +346,23 @@ final class HumanPopulationPayloadCodecs {
 
     private static void writeProfile(DataOutputStream output, ResidentProfile resident) throws IOException {
         FrontierWorldPayloadCodecs.writeSubject(output, resident.id()); FrontierWorldPayloadCodecs.writeSubject(output, resident.householdId());
-        FrontierWorldPayloadCodecs.writeSubject(output, resident.settlementId()); output.writeByte(resident.role().wireTag()); output.writeLong(resident.birthTick());
+        FrontierWorldPayloadCodecs.writeSubject(output, resident.settlementId()); output.writeByte(resident.role().wireTag());
+        output.writeByte(resident.profession().wireTag()); output.writeLong(resident.birthTick());
         for (ResidentSkill skill : ResidentSkill.values()) output.writeByte(resident.skill(skill));
+        for (HumanCapability capability : HumanCapability.values()) output.writeByte(resident.capability(capability));
+        writeCharacteristics(output, resident.characteristics());
     }
     private static ResidentProfile readProfile(DataInputStream input) throws IOException {
         var id = FrontierWorldPayloadCodecs.readSubject(input); var household = FrontierWorldPayloadCodecs.readSubject(input); var settlement = FrontierWorldPayloadCodecs.readSubject(input);
         int role = input.readUnsignedByte(); if (role >= ResidentRole.values().length) throw new IllegalArgumentException("unknown resident role");
+        int professionTag = input.readUnsignedByte();
+        ResidentProfession profession = FrontierWireTags.require(ResidentProfession.class, professionTag);
         long birthTick = input.readLong(); var skills = new java.util.EnumMap<ResidentSkill, Integer>(ResidentSkill.class);
         for (ResidentSkill skill : ResidentSkill.values()) skills.put(skill, input.readUnsignedByte());
-        return new ResidentProfile(id.value(), household.value(), settlement.value(), FrontierWireTags.require(ResidentRole.class, role), birthTick, skills);
+        var capabilities = new java.util.EnumMap<HumanCapability, Integer>(HumanCapability.class);
+        for (HumanCapability capability : HumanCapability.values()) capabilities.put(capability, input.readUnsignedByte());
+        return new ResidentProfile(id.value(), household.value(), settlement.value(), FrontierWireTags.require(ResidentRole.class, role),
+                profession, birthTick, skills, capabilities, readCharacteristics(input));
     }
 
     private static void writeBirthJob(DataOutputStream output, ResidentBirthJob job) throws IOException {

@@ -30,7 +30,7 @@ class ResourceSitePreparationProcessTest {
                 .allMatch(action -> action.dueAt().ticks() == configuration.initialState().bootstrap().ruleset().cadence().resourceInitialPreparationTick()));
 
         var engine = FrontierEngines.create(configuration);
-        engine.advanceTo(new SimInstant(100L), new WorkBudget(64, 512));
+        engine.advanceTo(new SimInstant(100L), new WorkBudget(4_096, 32_768));
 
         FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         assertEquals(io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.ACTIVE, engine.status().kind());
@@ -39,14 +39,9 @@ class ResourceSitePreparationProcessTest {
         assertEquals(12, engine.checkpoint().schedules().stream().filter(action -> action.kind().equals("frontier.resource_site.growth")).count());
     }
 
-    /**
-     * The recovered-duty player carrier intentionally arrives after the ordinary harvest job has
-     * become eligible, but before COLD can consume the whole field.  Keep that precondition at
-     * the canonical schedule boundary so a changed pilot prelude cannot silently turn its HOT
-     * observation into the already-completed crop-63 history that rejected r35.
-     */
+    /** First maturity falls in FREE; a retained field cannot fabricate work until eligibility returns. */
     @Test
-    void ordinaryColdCadenceCreatesSiteSevenHarvestBeforeItsFullPrefixCanBeConsumed() {
+    void firstMaturityInFreeWindowRetainsReadyFieldWithoutInventingHarvest() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(
                 new WorldId("frontier:resource-site-partial-duty"), 47L));
         // The live driver takes bounded slices.  Repeating the same absolute target drains
@@ -57,17 +52,13 @@ class ResourceSitePreparationProcessTest {
 
         FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(new SubjectId("site:7-wheat-field"));
-        ResourceSiteHarvestJob job = (ResourceSiteHarvestJob) lifecycle.activeWork().orElseThrow(() ->
-                new AssertionError("site seven has no partial harvest at 21140: " + lifecycle));
-        assertEquals("job:site-harvest-7-wheat-field-1", job.id().value());
-        String navigation;
-        try { navigation = "knownPath=" + ResourceSiteHarvestKnownNavigation.path(state, job).size(); }
-        catch (IllegalArgumentException unavailable) { navigation = "unavailable=" + unavailable.getMessage(); }
-        assertTrue(job.progress().completedCropSlots() > 0,
-                "the natural ingress discriminator must retain actual COLD work before arrival; actor="
-                        + state.actorLocations().get(job.workerId()) + " " + navigation);
-        assertTrue(job.progress().completedCropSlots() < ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS - 1,
-                "the natural ingress discriminator must not pre-complete the farmer's whole field");
+        assertEquals(io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.ACTIVE, engine.status().kind());
+        assertEquals(ResourceSitePhase.READY, lifecycle.phase());
+        assertTrue(lifecycle.activeWork().isEmpty());
+        assertEquals(SettlementDailySchedule.Window.FREE,
+                state.humanPopulation().schedule(new SubjectId("settlement:7")).windowAt(21_140L));
+        assertEquals(64, SettlementFoodPolicy.breadStock(state, new SubjectId("settlement:7")),
+                "the next work window has a finite local meal source, not a hidden ration counter");
     }
 
     @Test

@@ -45,8 +45,11 @@ public final class FrontierV3ExactItemConsumptionGameTests {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:birth-consumption-game-test"), 91L));
         var settlement = state.bootstrap().settlements().getFirst(); SubjectId depot = FrontierWorldState.depotId(settlement.id());
         SubjectId food = new SubjectId("item:birth-consumption-game-test");
-        state = state.withInventory(state.inventory().store(new ExactItemStack(food, settlement.id(), "minecraft:bread", 64,
-                new InventoryCustody.ContainerSlot(depot, 1))));
+        state = state.withInventory(state.inventory()
+                .store(new ExactItemStack(food, settlement.id(), "minecraft:bread", 64,
+                        new InventoryCustody.ContainerSlot(depot, 1)))
+                .store(new ExactItemStack(new SubjectId("item:birth-consumption-reserve"), settlement.id(),
+                        "minecraft:bread", 64, new InventoryCustody.ContainerSlot(depot, 2))));
         ResidentBirthStarted started = PopulationBirthProcess.planReview(state, PopulationBirthProcess.review(settlement.id(), 1, 100L)).stream()
                 .map(event -> event.payload()).filter(ResidentBirthStarted.class::isInstance).map(ResidentBirthStarted.class::cast).findFirst().orElseThrow();
         FrontierWorldState committed = PopulationBirthProcess.reduceStarted(state, settlement.id(), started);

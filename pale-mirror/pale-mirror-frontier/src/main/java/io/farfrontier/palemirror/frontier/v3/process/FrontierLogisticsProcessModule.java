@@ -17,6 +17,11 @@ import java.util.Set;
 
 /** Exact owner for contracts, cargo, route operations and their HOT/COLD scenes. */
 final class FrontierLogisticsProcessModule implements FrontierWorldProcessModule {
+    @Override public List<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction> retiredSchedules(
+            FrontierWorldState previous, FrontierWorldState next,
+            java.util.function.Supplier<List<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction>> pending) {
+        return ResidentLifeScheduleRetirement.afterDeath(previous, next, pending);
+    }
     @Override public List<PhysicalIntentLifecycleCapability> physicalIntentLifecycleCapabilities() {
         return List.of(new FunctionalPhysicalIntentLifecycleCapability(
                 PhysicalIntentLifecycleDeclaration.physical(PhysicalIntentLifecycleOwner.ROUTE_OPERATION,

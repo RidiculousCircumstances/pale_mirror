@@ -80,14 +80,15 @@ public final class PopulationMigrationProcess {
                 schedule(progress(journey.residentId(), Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().migrationStepInterval()))));
     }
 
-    public static FrontierWorldState reduceHotAdvance(FrontierWorldState state, ResidentTransitAdvanced advanced) {
+    public static FrontierWorldState reduceHotAdvance(FrontierWorldState state, ResidentTransitAdvanced advanced,
+                                                      long atTick) {
         FrontierWorldState advancedState = HumanPopulationStateSupport.advanceMigrationHot(state, advanced);
         ResidentMigrationJourney journey = advancedState.humanPopulation().migration(advanced.residentId());
         if (journey.arriving()) {
             advancedState = advancedState.recordResidentMigration(new ResidentMigrated(journey.residentId(), journey.destinationHouseholdId(),
                     journey.destinationSettlementId(), journey.currentPosition()));
         }
-        AmbientActorProcess.AmbientGoal goal = AmbientActorProcess.goalFor(advancedState, advanced.residentId());
+        AmbientActorProcess.AmbientGoal goal = AmbientActorProcess.goalFor(advancedState, advanced.residentId(), atTick);
         return AmbientLeaseStateProcess.retarget(advancedState, advanced.residentId(), goal.kind(), BodyPosition.above(new SurfaceAnchor(goal.position())));
     }
 
@@ -106,6 +107,7 @@ public final class PopulationMigrationProcess {
         if (destination.isEmpty()) return Optional.empty();
         Optional<ResidentProfile> resident = state.humanPopulation().residents().values().stream().filter(value -> value.settlementId().equals(source.id()))
                 .filter(value -> !state.humanPopulation().migrations().containsKey(value.id()))
+                .filter(value -> !state.humanPopulation().meals().containsKey(value.id()))
                 .filter(value -> !FrontierWorldStateSupport.activeEmploymentClaim(state, value.id()))
                 .filter(value -> state.actorLocations().get(value.id()).condition().status() == ActorLifeStatus.ALIVE).filter(value -> coldAvailable(state, value.id()))
                 .sorted(Comparator.comparing(ResidentProfile::id)).findFirst();

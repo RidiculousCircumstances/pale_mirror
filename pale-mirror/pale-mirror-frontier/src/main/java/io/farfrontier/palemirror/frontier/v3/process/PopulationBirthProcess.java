@@ -55,7 +55,8 @@ public final class PopulationBirthProcess {
                 .filter(resident -> resident.settlementId().equals(settlement.id())).count());
         ResidentBirthJob job = job(state.bootstrap().bounds(), state.bootstrap().terrain(), settlement,
                 Math.toIntExact(SettlementFacilityCapability.housingCapacity(state, settlement.id())), household, food.orElseThrow(), ordinal, placementOrdinal,
-                action.dueAt().ticks() + state.bootstrap().ruleset().cadence().populationBirthCompletionDelay());
+                action.dueAt().ticks() + state.bootstrap().ruleset().cadence().populationBirthCompletionDelay(),
+                state.bootstrap().ruleset().residentLife());
         events.add(new ProposedEvent(settlement.id(), new ResidentBirthStarted(job)));
         events.add(schedule(complete(job, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().populationBirthCompletionDelay())));
         return List.copyOf(events);
@@ -68,7 +69,11 @@ public final class PopulationBirthProcess {
             throw new IllegalArgumentException("resident birth completion lacks its exact retained schedule");
         return List.of(new ProposedEvent(job.settlementId(), new ResidentBorn(job.id(), job.resident(), job.position(),
                 new io.farfrontier.palemirror.frontier.v3.api.ActorBirthIdentity(job.resident().id(),
-                        io.farfrontier.palemirror.frontier.v3.api.ActorBirthIdentity.Kind.RESIDENT))));
+                        io.farfrontier.palemirror.frontier.v3.api.ActorBirthIdentity.Kind.RESIDENT))),
+                schedule(ResidentNeedProcess.review(job.resident().id(), ResidentNutrition.nourishedAtTick(job.resident().birthTick())
+                        .nextThresholdTick(state.bootstrap().ruleset().residentLife(),
+                                job.resident().characteristics().effectiveMetabolismPermille(job.resident().birthTick())))),
+                schedule(ResidentActivityProcess.review(job.resident().id(), Math.addExact(job.resident().birthTick(), 1L))));
     }
 
     public static FrontierWorldState reduceStarted(FrontierWorldState state, SubjectId subject, ResidentBirthStarted started) {
@@ -118,10 +123,12 @@ public final class PopulationBirthProcess {
     }
 
     private static ResidentBirthJob job(WorldBounds bounds, TerrainSurfacePlan terrain, Settlement settlement, int housingBeds,
-                                        Household household, ExactItemStack food, int ordinal, int placementOrdinal, long birthTick) {
+                                        Household household, ExactItemStack food, int ordinal, int placementOrdinal, long birthTick,
+                                        FrontierRuleset.ResidentLife residentLife) {
         String suffix = suffix(settlement.id()) + "-" + ordinal;
         ResidentProfile resident = new ResidentProfile(new SubjectId("resident:" + suffix(settlement.id()) + "-born-" + ordinal), household.id(), settlement.id(), ResidentRole.FARMER,
-                birthTick, HumanPopulation.birthSkills(ordinal));
+                birthTick, HumanPopulation.birthSkills(ordinal))
+                .withCharacteristics(ResidentCharacteristics.initial(residentLife));
         return new ResidentBirthJob(new SubjectId("job:resident-birth-" + suffix), settlement.id(), household.id(), food.id(),
                 new SubjectId("commitment:resident-birth-food-" + suffix), resident,
                 FrontierSettlementActorSlots.residentSlot(bounds, terrain, settlement, housingBeds, placementOrdinal));
