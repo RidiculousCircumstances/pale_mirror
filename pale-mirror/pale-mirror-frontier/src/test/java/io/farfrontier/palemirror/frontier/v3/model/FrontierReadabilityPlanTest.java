@@ -197,7 +197,7 @@ class FrontierReadabilityPlanTest {
     }
 
     @Test
-    void namesVisibleButStarvingFarmersInsteadOfClaimingTheyAreMissing() {
+    void hungryFarmersRemainEligibleForHarvestWhenNoMealCanStart() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:board-starving-farmers"), 91L));
         Settlement settlement = state.bootstrap().settlements().getFirst();
         ResourceSite site = FrontierResourceSitePlan.compile(state.bootstrap()).get(new SubjectId("site:1-wheat-field"));
@@ -213,7 +213,7 @@ class FrontierReadabilityPlanTest {
 
         FrontierObjectBoard board = FrontierReadabilityPlan.compile(hungry).boards().get(site.id());
 
-        assertTrue(board.text().endsWith("READY TO HARVEST · FARMERS STARVING\nCHECK DEPOT FOOD"));
+        assertTrue(board.text().endsWith("READY TO HARVEST · FARMER ASSIGNMENT PENDING"));
         assertTrue(!board.text().contains("FARMERS NEEDED"));
     }
 

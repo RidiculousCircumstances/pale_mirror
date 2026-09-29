@@ -52,9 +52,6 @@ public record FrontierSettlementWorkDiagnostic(
         int livingFarmers = (int) state.humanPopulation().residents().values().stream()
                 .filter(value -> value.settlementId().equals(settlementId) && value.profession() == ResidentProfession.AGRICULTURAL_WORKER)
                 .filter(value -> state.actorLocations().get(value.id()).condition().status() == ActorLifeStatus.ALIVE).count();
-        boolean workCapableFarmer = state.humanPopulation().residents().values().stream()
-                .filter(value -> value.settlementId().equals(settlementId) && value.profession() == ResidentProfession.AGRICULTURAL_WORKER)
-                .anyMatch(value -> FrontierWorldStateSupport.workCapable(state, value));
         String availableFarmer = FrontierWorldStateSupport.availableFieldResident(state, settlementId, ResidentProfession.AGRICULTURAL_WORKER)
                 .map(value -> value.id().value()).orElse("");
         String farmStatus = sites.stream().map(site -> state.structureConditions().get(site.facilityId()).name()).distinct().sorted()
@@ -63,7 +60,7 @@ public record FrontierSettlementWorkDiagnostic(
         String depotSurface = surface == null ? "MISSING" : surface.status().name();
         boolean depotHasFreeSlot = surface != null && surface.status() == ContainerSurfaceStatus.ACTIVE
                 && state.firstFreeContainerSlot(surface.containerId()).isPresent();
-        String admission = harvestAdmission(state, settlementId, readySites, facility, farmStatus, livingFarmers, workCapableFarmer,
+        String admission = harvestAdmission(state, settlementId, readySites, facility, farmStatus, livingFarmers,
                 availableFarmer, depotSurface, depotHasFreeSlot, pendingSchedules);
         return Optional.of(new FrontierSettlementWorkDiagnostic(settlementId.value(), strategic, facility, readySites, pendingSchedules, admission,
                 livingFarmers, availableFarmer, farmStatus, depotSurface, depotHasFreeSlot));
@@ -77,7 +74,7 @@ public record FrontierSettlementWorkDiagnostic(
     }
 
     private static String harvestAdmission(FrontierWorldState state, SubjectId settlementId, List<String> readySites, Lane facility,
-                                           String farmStatus, int livingFarmers, boolean workCapableFarmer, String availableFarmer,
+                                           String farmStatus, int livingFarmers, String availableFarmer,
                                            String depotSurface, boolean depotHasFreeSlot, List<String> pendingSchedules) {
         if (readySites.isEmpty()) return "NO_READY_SITE";
         String recoveringFarmer = state.humanPopulation().residents().values().stream()
@@ -93,7 +90,6 @@ public record FrontierSettlementWorkDiagnostic(
         if (!facility.status().equals("NONE")) return "FACILITY_LANE_BUSY:" + facility.objectiveId();
         if (!farmStatus.equals(StructureCondition.INTACT.name())) return "FARM_UNAVAILABLE";
         if (livingFarmers == 0) return "NO_LIVING_FARMER";
-        if (!workCapableFarmer) return "FARMERS_STARVING";
         if (availableFarmer.isEmpty()) return "FARMER_RESERVED";
         if (!depotSurface.equals(ContainerSurfaceStatus.ACTIVE.name())) return "DEPOT_SURFACE_" + depotSurface;
         if (!depotHasFreeSlot) return "DEPOT_FULL";

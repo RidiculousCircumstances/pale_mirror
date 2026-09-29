@@ -626,7 +626,7 @@ class ProductionProcessTest {
     }
 
     @Test
-    void productionRefusesToStartWhenEveryCrafterIsStarvingAndRecoversAfterOneExactRation() {
+    void productionCanStartWithStarvingCrafterWhenNoMealIsAvailable() {
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:starving-crafter"), 91L));
         Settlement settlement = initial.bootstrap().settlements().getFirst(); HumanPopulation population = initial.humanPopulation();
         List<ResidentProfile> crafters = population.residents().values().stream().filter(resident -> resident.settlementId().equals(settlement.id())
@@ -638,12 +638,8 @@ class ProductionProcessTest {
         StrategicTask task = starving.strategicPlans().tasks().values().iterator().next();
 
         List<ProposedEvent> planned = FrontierWorldRuntimeDefinition.planScheduled(starving, ProductionProcess.start(task, 200L));
-        ProductionBlocked block = planned.stream().map(ProposedEvent::payload).filter(ProductionBlocked.class::isInstance)
-                .map(ProductionBlocked.class::cast).findFirst().orElseThrow();
-        assertEquals(ProductionBlockReason.WORKER_UNAVAILABLE, block.reason());
-        assertEquals(block, FrontierWorldRuntimeDefinition.payloadCodecs().decode(block.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(block)));
-        FrontierWorldState reduced = ProductionProcess.reduceBlocked(starving, settlement.id(), block);
-        assertEquals(starving, reduced);
+        assertTrue(planned.stream().map(ProposedEvent::payload).anyMatch(ProductionStarted.class::isInstance),
+                "starvation without an executable meal cannot deadlock food production");
 
         for (ResidentProfile crafter : crafters) population = population.resolveNutrition(crafter.id(), ResidentNutrition.STARVING_AFTER_MISSED_CYCLES + 1, true);
         FrontierWorldState recovered = productionTask(initial.withHumanPopulation(population), StrategicTaskStatus.PENDING);
@@ -670,7 +666,7 @@ class ProductionProcessTest {
         assertEquals(ResidentNutritionStatus.STARVING, starving.humanPopulation().nutrition(workerId).status());
         assertFalse(FrontierWorldStateSupport.availableWorkResident(starving, prepared.settlementId(), ResidentProfession.INDUSTRIAL_WORKER)
                         .map(ResidentProfile::id).filter(workerId::equals).isPresent(),
-                "starvation remains an admission fence for this worker even when another crafter could begin unrelated new work");
+                "the retained production assignment, not hunger, excludes a second owner");
         assertTrue(FrontierProductionWorkSceneSupport.candidate(starving, retained).isPresent(),
                 "the existing job retains its exact worker and materialized wheat rather than becoming an admission candidate again");
         assertEquals(SceneCauseKind.PRODUCTION_WORK, FrontierSceneAdmission.genericAmbientAdmission(starving).preLeaseSceneCause(workerId).orElseThrow(),

@@ -275,7 +275,12 @@ class ResidentMealProcessTest {
         assertThrows(IllegalArgumentException.class, () -> ResidentActivityProcess.reduceMealReturned(stillAtDepot,
                 resident, new ResidentMealHotReturned(resident, 1L, service.standingBody()), 48_003L),
                 "a meal cannot release service access while the body still blocks the depot");
-        assertEquals(3, ResidentMealProcess.planHotReturned(state, cleared, 48_003L).size());
+        var returnedEvents = ResidentMealProcess.planHotReturned(state, cleared, 48_003L);
+        assertEquals(3, returnedEvents.size());
+        assertEquals(ResidentMealProcess.progress(meal, 48_003L).id(),
+                assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Cancelled.class,
+                        returnedEvents.getLast().payload()).scheduleId(),
+                "an asynchronous HOT clearance cancels its own continuation by identity, not by queue order");
         state = ResidentActivityProcess.reduceMealReturned(state, resident,
                 cleared, 48_003L);
         assertFalse(state.humanPopulation().meals().containsKey(resident));

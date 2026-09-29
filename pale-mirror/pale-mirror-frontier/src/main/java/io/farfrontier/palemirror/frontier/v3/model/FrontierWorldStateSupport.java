@@ -121,14 +121,9 @@ public final class FrontierWorldStateSupport {
         return availableFieldResident(state, settlementId, ResidentProfession.fromBootstrapAffinity(role));
     }
 
-    /**
-     * Nutrition governs admission to new work, while an already durable job retains its exact
-     * worker until that job resolves or reaches its own explicit failure boundary.  This avoids
-     * silently cancelling a physical effect halfway through its acknowledged lifecycle.
-     */
+    /** Hunger requests a feasible meal; only actual loss of life removes work capability. */
     public static boolean workCapable(FrontierWorldState state, ResidentProfile resident) {
-        return state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE
-                && state.humanPopulation().nutrition(resident.id()).status() != ResidentNutritionStatus.STARVING;
+        return state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE;
     }
 
     /** New owners cannot borrow a person during retained self-care; existing work keeps its claim. */

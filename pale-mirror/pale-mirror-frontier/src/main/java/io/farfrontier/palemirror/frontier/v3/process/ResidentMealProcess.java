@@ -62,18 +62,13 @@ public final class ResidentMealProcess {
         if (state.humanPopulation().nutrition(residentId)
                 .accrueThrough(now, state.bootstrap().ruleset().residentLife(),
                         resident.characteristics().effectiveMetabolismPermille(now)).hungerDeficit() < 1) return Optional.empty();
-        SubjectId depot = FrontierWorldState.depotId(resident.settlementId());
-        if (!ServiceAccessCoordinator.depotAvailableForMeal(state, depot, residentId)) return Optional.empty();
-        SurfaceAnchor clearing = ServiceAccessCoordinator.mealClearingSurface(state, residentId).orElse(null);
-        if (clearing == null) return Optional.empty();
-        if (ReferenceContainerCustody.blocksCanonicalUse(state, depot)) return Optional.empty();
-        var selected = FungibleResourceCustodySupport.selectAtContainer(state, depot,
-                resident.settlementId(), ResidentMeal.BREAD_KIND, 1).orElse(null);
-        if (selected == null || selected.lotQuantities().size() != 1) return Optional.empty();
+        ResidentMealOpportunity.Source source = ResidentMealOpportunity.find(state, residentId).orElse(null);
+        if (source == null) return Optional.empty();
+        var selected = source.bread();
         String suffix = residentId.value().substring("resident:".length());
         SubjectId claimId = new SubjectId("claim:resident-meal-" + suffix + "-" + now);
         SubjectId actorAccount = new SubjectId("custody:resident-meal-" + suffix);
-        ResidentMeal meal = new ResidentMeal(residentId, resident.settlementId(), depot, clearing,
+        ResidentMeal meal = new ResidentMeal(residentId, resident.settlementId(), source.depotId(), source.clearingSurface(),
                 selected.accountId(), actorAccount, selected.firstLotId(), claimId,
                 assignment.ownerId(), ResidentMeal.Phase.MOVE, now, Optional.empty());
         ResidentMealStarted started = new ResidentMealStarted(meal);
@@ -311,7 +306,7 @@ public final class ResidentMealProcess {
         ResidentActivityProcess.reduceMealReturned(state, returned.residentId(), returned, atTick);
         return List.of(new ProposedEvent(returned.residentId(), returned),
                 ResidentActivityProcess.wakeAfterMeal(returned.residentId(), atTick),
-                new ProposedEvent(returned.residentId(), new ScheduleEffect.Consumed(
+                new ProposedEvent(returned.residentId(), new ScheduleEffect.Cancelled(
                         progress(meal, Math.max(atTick, meal.startedAtTick() + 1L)).id())));
     }
 

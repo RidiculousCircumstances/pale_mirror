@@ -65,7 +65,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class FrontierV3DiagnosticJsonTest {
     @Test
-    void residentLifeDiagnosticShowsEffectiveNeedAndRetainedActivityWithoutMutation() {
+    void residentLifeDiagnosticShowsEffectiveNeedAndFeasibleActivityWithoutMutation() {
         var configuration = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:resident-life-diagnostic"), 47L);
         FrontierWorldState state = configuration.initialState();
         SubjectId resident = state.humanPopulation().residents().keySet().stream().sorted().findFirst().orElseThrow();
@@ -78,7 +78,8 @@ class FrontierV3DiagnosticJsonTest {
         assertEquals(1, json.get("hungerDeficit").getAsInt());
         assertEquals(0, json.get("storedHungerDeficit").getAsInt());
         assertEquals("WORK", json.get("scheduleWindow").getAsString());
-        assertEquals("EAT", json.get("activity").getAsString());
+        assertEquals("IDLE", json.get("activity").getAsString(),
+                "hunger remains visible, but an unavailable meal is not an executable activity");
         assertEquals("NONE", json.get("mealPhase").getAsString());
         assertEquals(configuration.initialState(), state);
     }

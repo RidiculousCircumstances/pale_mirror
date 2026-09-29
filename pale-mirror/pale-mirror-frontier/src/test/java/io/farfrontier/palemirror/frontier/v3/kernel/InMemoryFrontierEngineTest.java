@@ -306,6 +306,22 @@ class InMemoryFrontierEngineTest {
     }
 
     @Test
+    void asynchronousClearanceCancelsItsExactContinuationWithoutConsumingAnEarlierRunnableAction() {
+        ScheduledAction earlier = scheduled("schedule:other-resident", "resident:other", 5L, 1);
+        ScheduledAction meal = scheduled("schedule:resident-meal", "resident:eating", 10L, 1);
+        InMemoryFrontierEngine<Counter, CounterProjection> invalid = engine(List.of(earlier, meal), false);
+        assertRejected(invalid.submit(command("command:wrong-hot-consume", Revision.ZERO,
+                new ScheduleEffect.Consumed(meal.id()))), RejectionCode.INVARIANT_FAILURE);
+        assertEquals(List.of(earlier, meal), invalid.scheduledActions(),
+                "a rejected HOT effect must not partially mutate the durable queue");
+        InMemoryFrontierEngine<Counter, CounterProjection> engine = engine(List.of(earlier, meal), false);
+        assertInstanceOf(CommandResult.Accepted.class, engine.submit(command("command:hot-clearance", Revision.ZERO,
+                new ScheduleEffect.Cancelled(meal.id()))));
+        assertEquals(List.of(earlier), engine.scheduledActions(),
+                "the unrelated earlier resident must retain its due action");
+    }
+
+    @Test
     void scheduleOnlyReferencesAreCheckedBeforeWalWithoutReauditingStateOrUnchangedQueue() {
         List<TransactionRecord> durable = new ArrayList<>();
         List<List<ScheduledAction>> checked = new ArrayList<>();

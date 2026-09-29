@@ -16,10 +16,11 @@ public final class ResidentActivityCoordinator {
         long assessedAt = Math.max(dueAt, state.humanPopulation().nutrition(residentId).lastEvaluatedTick());
         return state.humanPopulation().schedule(resident.settlementId()).windowAt(assessedAt)
                 == SettlementDailySchedule.Window.WORK
-                && state.humanPopulation().nutrition(residentId).accrueThrough(assessedAt,
+                && (state.humanPopulation().nutrition(residentId).accrueThrough(assessedAt,
                         state.bootstrap().ruleset().residentLife(),
                         resident.characteristics().effectiveMetabolismPermille(assessedAt)).hungerDeficit()
-                    < state.bootstrap().ruleset().residentLife().hungryThreshold();
+                    < state.bootstrap().ruleset().residentLife().hungryThreshold()
+                    || ResidentMealOpportunity.find(state, residentId).isEmpty());
     }
 
     public static long nextOrdinaryWorkAdmission(FrontierWorldState state,
@@ -43,10 +44,7 @@ public final class ResidentActivityCoordinator {
         return state.humanPopulation().meals().containsKey(residentId)
                 || state.humanPopulation().schedule(resident.settlementId()).windowAt(assessedAt)
                     == SettlementDailySchedule.Window.FREE
-                || state.humanPopulation().nutrition(residentId).accrueThrough(assessedAt,
-                        state.bootstrap().ruleset().residentLife(),
-                        resident.characteristics().effectiveMetabolismPermille(assessedAt)).hungerDeficit()
-                    >= state.bootstrap().ruleset().residentLife().hungryThreshold();
+                || assess(state, residentId, assessedAt).kind() == ResidentActivityChoice.Kind.EAT;
     }
 
     /** A work owner asks the same arbiter used by self-care before admitting its next safe step. */
@@ -76,11 +74,26 @@ public final class ResidentActivityCoordinator {
         if (resident == null) throw new IllegalArgumentException("activity has no exact resident");
         HumanAssignment assignment = HumanAssignmentProjection.compile(state).assignment(residentId);
         ResidentWorkYield checkpoint = ResidentWorkYield.assess(state, assignment);
-        return choose(state.humanPopulation().schedule(resident.settlementId()), canonicalTick,
+        ResidentActivityChoice choice = choose(state.humanPopulation().schedule(resident.settlementId()), canonicalTick,
                 state.humanPopulation().nutrition(residentId), assignment,
                 Optional.ofNullable(state.humanPopulation().meals().get(residentId)),
                 state.bootstrap().ruleset().residentLife(), checkpoint.ready(),
                 resident.characteristics().effectiveMetabolismPermille(canonicalTick));
+        if (state.humanPopulation().meals().containsKey(residentId)
+                || state.humanPopulation().nutrition(residentId).accrueThrough(canonicalTick,
+                        state.bootstrap().ruleset().residentLife(),
+                        resident.characteristics().effectiveMetabolismPermille(canonicalTick)).hungerDeficit()
+                    < state.bootstrap().ruleset().residentLife().hungryThreshold()
+                || ResidentMealOpportunity.find(state, residentId).isPresent()) return choice;
+        // No executable meal exists. Keep working in WORK, or obey FREE at a safe point;
+        // the activity wake still retries food independently without losing the assignment.
+        if (state.humanPopulation().schedule(resident.settlementId()).windowAt(canonicalTick)
+                == SettlementDailySchedule.Window.WORK && assignment.active())
+            return new ResidentActivityChoice(residentId, ResidentActivityChoice.Kind.WORK,
+                    assignment.ownerId(), Optional.empty());
+        if (choice.kind() == ResidentActivityChoice.Kind.WORK) return choice;
+        return new ResidentActivityChoice(residentId, ResidentActivityChoice.Kind.IDLE,
+                assignment.ownerId(), Optional.empty());
     }
 
     public static ResidentActivityChoice choose(SettlementDailySchedule schedule, long canonicalTick,

@@ -24,7 +24,29 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Goal-navigation regression and shared fixture; obsolete route-cursor tests are archived. */
 class ResourceSiteHarvestProcessTest {
-    @Test void oneDepotMealPermitDoesNotTurnHungryFarmersIntoMissingWorkers() {
+    @Test void hungryFarmerStartsReadyHarvestWhenDepotHasNoBread() {
+        FrontierWorldState state = ready(initial(126L));
+        SubjectId site = new SubjectId("site:1-wheat-field");
+        SubjectId settlement = new SubjectId("settlement:1");
+        ResidentProfile farmer = FrontierWorldStateSupport.availableFieldResident(state, settlement,
+                ResidentProfession.AGRICULTURAL_WORKER).orElseThrow();
+        assertTrue(ResidentMealOpportunity.find(state, farmer.id()).isEmpty());
+        assertTrue(ResidentActivityCoordinator.mayStartOrdinaryWork(state, farmer.id(), 27_000L));
+        var opportunity = StrategicObjectiveProcess.planResourceHarvestOpportunity(state,
+                StrategicObjectiveProcess.resourceHarvestOpportunity(state, state.resourceSites().site(site), 27_000L));
+        state = StrategicObjectiveProcess.reduceObjective(state, settlement,
+                (StrategicObjectiveSelected) opportunity.getFirst().payload());
+        state = StrategicObjectiveProcess.reduceTask(state, settlement,
+                (StrategicTaskPlanned) opportunity.get(1).payload());
+        StrategicTask task = state.strategicPlans().tasks().values().stream()
+                .filter(value -> value.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE).findFirst().orElseThrow();
+
+        var planned = ResourceSiteHarvestProcess.plan(state, ResourceSiteHarvestProcess.start(task, 27_085L));
+        assertTrue(planned.stream().map(ProposedEvent::payload).anyMatch(ResourceSiteHarvestStarted.class::isInstance),
+                "an empty food depot must not prevent the food-producing farmer from beginning the real job");
+    }
+
+    @Test void oneDepotMealPermitDoesNotPreventAnotherFarmerFromStartingHarvest() {
         FrontierWorldState state = ready(initial());
         SubjectId site = new SubjectId("site:1-wheat-field");
         SubjectId settlement = new SubjectId("settlement:1");
@@ -52,10 +74,10 @@ class ResourceSiteHarvestProcessTest {
                 .filter(value -> value.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE).findFirst().orElseThrow();
         ScheduledAction due = ResourceSiteHarvestProcess.start(task, 27_085L);
         var planned = ResourceSiteHarvestProcess.plan(state, due);
-        assertEquals(1, planned.size());
-        var retry = assertInstanceOf(ScheduleEffect.Rescheduled.class, planned.getFirst().payload());
-        assertEquals(due.id(), retry.scheduleId());
-        assertTrue(retry.replacement().dueAt().ticks() > due.dueAt().ticks());
+        var started = planned.stream().map(ProposedEvent::payload).filter(ResourceSiteHarvestStarted.class::isInstance)
+                .map(ResourceSiteHarvestStarted.class::cast).findFirst().orElseThrow();
+        assertNotEquals(farmer.id(), started.job().workerId(),
+                "the eating farmer keeps its own body while another hungry farmer may work");
         assertEquals(StrategicTaskStatus.PENDING, state.strategicPlans().tasks().get(task.id()).status());
     }
 

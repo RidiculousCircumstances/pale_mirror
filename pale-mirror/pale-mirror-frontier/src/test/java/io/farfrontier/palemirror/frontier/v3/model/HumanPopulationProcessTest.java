@@ -53,13 +53,13 @@ class HumanPopulationProcessTest {
         assertTrue(workers.stream().allMatch(worker -> hungry.humanPopulation().nutrition(worker.id()).status() == ResidentNutritionStatus.STARVING));
         assertTrue(workers.stream().allMatch(worker -> hungry.actorLocations().get(worker.id()).condition().status() == ActorLifeStatus.ALIVE));
         assertTrue(workers.stream().allMatch(worker -> hungry.humanPopulation().health(worker.id()).status() == ResidentHealthStatus.HEALTHY));
-        assertTrue(FrontierWorldStateSupport.availableRouteResident(hungry, settlement.id(), ResidentRole.HAULER).isEmpty());
-        assertTrue(FrontierWorldStateSupport.availableRouteResident(hungry, settlement.id(), ResidentRole.GUARD).isEmpty());
-        assertTrue(FrontierWorldStateSupport.availableFieldResident(hungry, settlement.id(), ResidentRole.FARMER).isEmpty());
-        assertTrue(FrontierWorldStateSupport.availableWorkResident(hungry, settlement.id(), ResidentRole.CRAFTER).isEmpty());
+        assertTrue(FrontierWorldStateSupport.availableRouteResident(hungry, settlement.id(), ResidentRole.HAULER).isPresent());
+        assertTrue(FrontierWorldStateSupport.availableRouteResident(hungry, settlement.id(), ResidentRole.GUARD).isPresent());
+        assertTrue(FrontierWorldStateSupport.availableFieldResident(hungry, settlement.id(), ResidentRole.FARMER).isPresent());
+        assertTrue(FrontierWorldStateSupport.availableWorkResident(hungry, settlement.id(), ResidentRole.CRAFTER).isPresent());
         FrontierWorldState afterRecovery = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(hungry));
-        assertTrue(FrontierWorldStateSupport.availableRouteResident(afterRecovery, settlement.id(), ResidentRole.HAULER).isEmpty());
-        assertTrue(FrontierWorldStateSupport.availableFieldResident(afterRecovery, settlement.id(), ResidentRole.FARMER).isEmpty());
+        assertTrue(FrontierWorldStateSupport.availableRouteResident(afterRecovery, settlement.id(), ResidentRole.HAULER).isPresent());
+        assertTrue(FrontierWorldStateSupport.availableFieldResident(afterRecovery, settlement.id(), ResidentRole.FARMER).isPresent());
 
         for (ResidentProfile worker : workers) population = population.resolveNutrition(worker.id(), 4, true);
         FrontierWorldState recovered = state.withHumanPopulation(population);

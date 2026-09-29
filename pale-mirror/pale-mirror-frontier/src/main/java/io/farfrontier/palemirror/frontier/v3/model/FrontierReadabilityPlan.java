@@ -368,10 +368,6 @@ public final class FrontierReadabilityPlan {
                 .filter(resident -> resident.settlementId().equals(site.settlementId()))
                 .filter(resident -> resident.profession() == ResidentProfession.AGRICULTURAL_WORKER)
                 .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE).count();
-        boolean workCapableFarmer = state.humanPopulation().residents().values().stream()
-                .filter(resident -> resident.settlementId().equals(site.settlementId()))
-                .filter(resident -> resident.profession() == ResidentProfession.AGRICULTURAL_WORKER)
-                .anyMatch(resident -> FrontierWorldStateSupport.workCapable(state, resident));
         boolean unknownFarmer = state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(site.settlementId()))
                 .filter(resident -> resident.profession() == ResidentProfession.AGRICULTURAL_WORKER)
@@ -393,7 +389,6 @@ public final class FrontierReadabilityPlan {
                         && objective.lane() == StrategicObjectiveLane.FACILITY
                         && objective.status() == StrategicObjectiveStatus.ACTIVE);
         if (facilityLaneActive) return "READY TO HARVEST · FACILITY LANE BUSY";
-        if (livingFarmers > 0 && !workCapableFarmer) return "READY TO HARVEST · FARMERS STARVING\nCHECK DEPOT FOOD";
         return FrontierWorldStateSupport.availableFieldResident(state, site.settlementId(), ResidentProfession.AGRICULTURAL_WORKER).isPresent()
                 ? "READY TO HARVEST · FARMER ASSIGNMENT PENDING"
                 : "READY TO HARVEST · FARMERS NEEDED";

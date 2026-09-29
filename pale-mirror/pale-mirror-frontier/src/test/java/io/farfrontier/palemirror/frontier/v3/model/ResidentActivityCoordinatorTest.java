@@ -9,6 +9,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResidentActivityCoordinatorTest {
     private static final SubjectId RESIDENT = new SubjectId("resident:one");
@@ -85,8 +86,10 @@ class ResidentActivityCoordinatorTest {
                 ResidentWorkYield.assess(state, HumanAssignment.idle(resident)).status());
         assertEquals(ResidentActivityChoice.Kind.IDLE,
                 ResidentActivityCoordinator.assess(state, resident, 12_000L).kind());
-        assertEquals(ResidentActivityChoice.Kind.EAT,
+        assertEquals(ResidentActivityChoice.Kind.IDLE,
                 ResidentActivityCoordinator.assess(state, resident, 24_000L).kind());
+        assertTrue(ResidentActivityCoordinator.mayStartOrdinaryWork(state, resident, 24_000L),
+                "hunger without any executable meal must not fence new work");
         for (HumanAssignmentKind family : List.of(HumanAssignmentKind.CARGO_TRANSPORT,
                 HumanAssignmentKind.ESCORT, HumanAssignmentKind.ROUTE_PATROL,
                 HumanAssignmentKind.SETTLEMENT_DEFENCE, HumanAssignmentKind.ENGINEERING_RECOVERY,

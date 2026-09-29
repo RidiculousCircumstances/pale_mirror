@@ -88,7 +88,7 @@ public final class ResidentActivityProcess {
                 resident.characteristics().effectiveMetabolismPermille(now));
         long next = Math.min(window, hunger);
         if (!mealStarted && !mealAlreadyRetained
-                && (choice.pending().isPresent() || choice.kind() == ResidentActivityChoice.Kind.EAT))
+                && (choice.pending().isPresent() || effective.hungerDeficit() >= rules.hungryThreshold()))
             next = Math.min(next, Math.addExact(now, PENDING_RETRY_TICKS));
         return next;
     }
