@@ -11,6 +11,31 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResidentMealKnownNavigationTest {
+    @Test void residentReleasedAtDepotSideStationCanCompleteColdMealApproach() {
+        FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:resident-meal-side-station"), 20260918065L));
+        Settlement settlement = initial.bootstrap().settlements().get(6);
+        SubjectId resident = new SubjectId("resident:7-21");
+        SubjectId depot = FrontierWorldState.depotId(settlement.id());
+        SettlementDepotServicePort port = SettlementDepotServicePort.forDepot(settlement.structures().stream()
+                .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow());
+        SurfaceAnchor side = port.stations().get(3);
+        assertEquals(SurfaceAnchor.at(134, 64, 13), side);
+        var actors = new java.util.LinkedHashMap<>(initial.actorLocations());
+        actors.put(resident, ActorLocation.standingOn(side));
+        FrontierWorldState state = initial.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
+        ResidentMeal meal = new ResidentMeal(resident, settlement.id(), depot, side,
+                ReferenceContainerCustody.scopeId(depot), new SubjectId("custody:resident-meal-side"),
+                new SubjectId("lot:resident-meal-side"), new SubjectId("claim:resident-meal-side"),
+                Optional.empty(), ResidentMeal.Phase.MOVE, 22_639L, Optional.empty());
+
+        List<SurfaceAnchor> route = ResidentMealKnownNavigation.path(state, meal);
+
+        assertEquals(side, route.getFirst());
+        assertEquals(port.serviceSurface(), route.getLast());
+        assertTrue(route.size() > 1);
+    }
+
     @Test void sixthSettlementResidentHasKnownRouteToItsDepot() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:resident-meal-route-six"), 41L));

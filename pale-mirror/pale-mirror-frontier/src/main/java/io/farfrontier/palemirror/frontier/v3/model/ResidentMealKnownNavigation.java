@@ -81,7 +81,11 @@ public final class ResidentMealKnownNavigation {
             occupied.addAll(FrontierSettlementActorSlots.intactStructureOccupancy(state.bootstrap().terrain(), candidate.structures()));
         occupied.addAll(FrontierGrayboxPlan.intactOrganOccupancy(state.bootstrap().hive().organs()));
         clear(occupied, port.exteriorApproach());
-        clear(occupied, port.serviceSurface());
+        // Every declared depot station is a walkable PUBLIC_ACCESS_SURFACE. The
+        // structure occupancy set also contains its supporting block, so clearing
+        // only the center service station strands a worker released at a side
+        // station one step from the chest.
+        port.ownedAccessSurfaces().forEach(surface -> clear(occupied, surface));
         // Only a declared workshop exit may clear interior occupancy. An arbitrary
         // start inside another structure is not permission to walk through its wall.
         if (prefix.size() > 1) prefix.forEach(surface -> clear(occupied, surface));
