@@ -49,7 +49,7 @@ class ResidentActivityCoordinatorTest {
     @Test void retainedMealKeepsTheBodyUntilReturnEvenAfterHungerIsRelieved() {
         SubjectId settlement = new SubjectId("settlement:one");
         SubjectId depot = FrontierWorldState.depotId(settlement);
-        ResidentMeal meal = new ResidentMeal(RESIDENT, settlement, depot,
+        ResidentMeal meal = new ResidentMeal(RESIDENT, settlement, depot, SurfaceAnchor.at(0, 64, 0),
                 ReferenceContainerCustody.scopeId(depot),
                 new SubjectId("custody:resident-meal-one"),
                 new SubjectId("lot:bread-one"), new SubjectId("claim:meal-one"),

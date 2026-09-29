@@ -282,6 +282,10 @@ class BakeryHotVerticalTest {
                 BakeryWorkState.Phase.DEPOT_PICKUP, actor.body(), 1L, 1L, List.of(), List.of(hand));
         state = ProductionProcess.reduceBakeryHotEffectObserved(state, task.ownerId(), observed);
         assertEquals(BakeryWorkState.Phase.STATION_LOAD, state.productionJobs().get(job.id()).bakeryWork().orElseThrow().phase());
+        SubjectId nextResident = state.bootstrap().settlements().getFirst().residents().stream()
+                .map(Resident::id).filter(id -> !id.equals(job.workerId())).findFirst().orElseThrow();
+        assertFalse(ServiceAccessCoordinator.depotAvailableForMeal(state, depot, nextResident),
+                "the HOT worker still owns the depot approach after the pickup phase changes");
         assertEquals(new ResourceCustody.Actor(job.workerId()), state.inventory().fungibleResources().accounts()
                 .get(work.actorAccountId()).custody());
         FrontierWorldState blockedWithCargo = StrategicObjectiveProcess.reduceTaskTransition(state, task.ownerId(),
@@ -310,6 +314,8 @@ class BakeryHotVerticalTest {
                         ReferenceContainerCustody.PROVIDER_ID, 1L, 8L, 2L, PhysicalCustodyLeaseStatus.ACQUIRED, null));
         state = state.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(custody));
         state = at(state, leaseId, job.workerId(), station.workerStation().standingBody());
+        assertTrue(ServiceAccessCoordinator.depotAvailableForMeal(state, depot, nextResident),
+                "the witnessed baker departure must free the depot during station work");
         BakeryWorkBlock occupiedMachine = new BakeryWorkBlock(BakeryWorkBlock.Reason.DESTINATION_OCCUPIED,
                 machine, station.inputSlot(), "minecraft:stone", 1);
         state = ProductionProcess.reduceBakeryHotBlockChanged(state, task.ownerId(),
@@ -415,13 +421,21 @@ class BakeryHotVerticalTest {
                 .noneMatch(binding -> binding.accountId().equals(work.destinationAccountId())));
         assertEquals(BakeryWorkState.Phase.DELIVERED,
                 checkpointedDepot.productionJobs().get(job.id()).bakeryWork().orElseThrow().phase());
+        assertFalse(ServiceAccessCoordinator.depotAvailableForMeal(checkpointedDepot, depot,
+                checkpointedDepot.bootstrap().settlements().getFirst().residents().getFirst().id()),
+                "delivered bread does not release the shared entrance until the baker leaves it");
         state = state.transitionSceneLease(leaseId, SceneLeaseStatus.DRAINING)
                 .releaseSceneLease(leaseId, List.of(new SceneMemberPosition(job.workerId(), actor.body(), actor.condition().health())));
-        BakeryColdStep finalization = ProductionProcess.planCompletion(state, ProductionProcess.complete(job, 900L)).stream()
-                .map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance).map(BakeryColdStep.class::cast)
-                .findFirst().orElseThrow();
+        BakeryColdStep finalization = null;
+        for (int step = 0; state.productionJobs().containsKey(job.id()) && step < 300; step++) {
+            BakeryColdStep clearing = ProductionProcess.planCompletion(state,
+                            ProductionProcess.complete(job, 900L + 20L * step)).stream()
+                    .map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
+                    .map(BakeryColdStep.class::cast).findFirst().orElseThrow();
+            state = ProductionProcess.reduceBakeryColdStep(state, task.ownerId(), clearing);
+            finalization = clearing;
+        }
         assertEquals(BakeryColdStep.Action.FINALIZE, finalization.action());
-        state = ProductionProcess.reduceBakeryColdStep(state, task.ownerId(), finalization);
         assertFalse(state.productionJobs().containsKey(job.id()));
         assertEquals(StrategicTaskStatus.COMPLETED, state.strategicPlans().tasks().get(task.id()).status());
         assertEquals(64, state.inventory().fungibleResources().totalQuantity(task.ownerId(), "minecraft:bread"));

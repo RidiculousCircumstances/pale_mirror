@@ -20,9 +20,13 @@ public record BakeryWorkGoal(SubjectId jobId, SubjectId workerId, BakeryWorkStat
         BakeryWorkState work = job.bakeryWork().orElseThrow(() -> new IllegalArgumentException("job has no bakery goal"));
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), job.settlementId());
         SurfaceAnchor target;
-        if (work.phase() == BakeryWorkState.Phase.DEPOT_PICKUP
-                || work.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY
-                || work.phase() == BakeryWorkState.Phase.DELIVERED) {
+        if (work.phase() == BakeryWorkState.Phase.DELIVERED) {
+            SettlementStructure workshop = settlement.structures().stream()
+                    .filter(structure -> structure.id().equals(job.facilityId()))
+                    .findFirst().orElseThrow();
+            target = SettlementWorkshopServicePort.forWorkshop(workshop).exteriorApproach();
+        } else if (work.phase() == BakeryWorkState.Phase.DEPOT_PICKUP
+                || work.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY) {
             SettlementStructure depot = settlement.structures().stream()
                     .filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
             target = SettlementDepotServicePort.forDepot(depot).serviceSurface();

@@ -20,9 +20,11 @@ class ResidentLifeScheduleRetirementTest {
         ActorLocation prior = actors.get(dead);
         actors.put(dead, prior.deadAt(prior.body()));
         FrontierWorldState after = before.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
-        var deadNeed = ResidentNeedProcess.firstReviewAfter(dead, 0L, before.bootstrap().ruleset().residentLife());
+        var deadNeed = ResidentNeedProcess.firstReviewAfter(before.humanPopulation().resident(dead), 0L,
+                before.bootstrap().ruleset().residentLife());
         var deadActivity = ResidentActivityProcess.review(dead, 1L);
-        var aliveNeed = ResidentNeedProcess.firstReviewAfter(alive, 0L, before.bootstrap().ruleset().residentLife());
+        var aliveNeed = ResidentNeedProcess.firstReviewAfter(before.humanPopulation().resident(alive), 0L,
+                before.bootstrap().ruleset().residentLife());
         assertEquals(List.of(deadNeed, deadActivity), ResidentLifeScheduleRetirement.afterDeath(before, after,
                 () -> List.of(deadNeed, aliveNeed, deadActivity)));
         assertEquals(List.of(), ResidentLifeScheduleRetirement.afterDeath(before, before,

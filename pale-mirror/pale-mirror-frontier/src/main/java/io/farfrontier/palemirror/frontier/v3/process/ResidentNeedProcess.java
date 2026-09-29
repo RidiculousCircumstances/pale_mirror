@@ -23,10 +23,10 @@ public final class ResidentNeedProcess {
                 new SimInstant(dueAt), 10, residentId, REVIEW, 1);
     }
 
-    public static ScheduledAction firstReviewAfter(SubjectId residentId, long birthOrStartTick,
+    public static ScheduledAction firstReviewAfter(ResidentProfile resident, long birthOrStartTick,
                                                     FrontierRuleset.ResidentLife rules) {
-        return review(residentId, ResidentNutrition.nourishedAtTick(birthOrStartTick)
-                .nextThresholdTick(rules, ResidentCharacteristics.DEFAULT_METABOLISM_PERMILLE));
+        return review(resident.id(), ResidentNutrition.nourishedAtTick(birthOrStartTick)
+                .nextThresholdTick(rules, resident.characteristics().effectiveMetabolismPermille(birthOrStartTick)));
     }
 
     /** A witnessed meal changes the next threshold, including when its old due action is queued but not yet run. */

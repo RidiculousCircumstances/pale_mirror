@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Goal-navigation regression and shared fixture; obsolete route-cursor tests are archived. */
 class ResourceSiteHarvestProcessTest {
-    @Test void readyFieldRetainsPendingStartWhileEveryLivingFarmerEats() {
+    @Test void oneDepotMealPermitDoesNotTurnHungryFarmersIntoMissingWorkers() {
         FrontierWorldState state = ready(initial());
         SubjectId site = new SubjectId("site:1-wheat-field");
         SubjectId settlement = new SubjectId("settlement:1");
@@ -35,24 +35,22 @@ class ResourceSiteHarvestProcessTest {
                 new ResourceLot(new SubjectId("lot:harvest-meal-bread"), settlement,
                         "minecraft:bread", 64, "test", List.of()));
         state = state.withInventory(state.inventory().withFungibleResources(ledger));
-        for (ResidentProfile farmer : state.humanPopulation().residents().values().stream()
+        ResidentProfile farmer = state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(settlement)
-                        && resident.profession() == ResidentProfession.AGRICULTURAL_WORKER).toList()) {
-            var started = ResidentMealProcess.selectSourceAtYield(state, farmer.id(), 24_000L).orElseThrow();
-            state = ResidentMealProcess.reduceStarted(state, farmer.id(), started);
-        }
-        assertTrue(state.humanPopulation().meals().size() > 0);
-        assertTrue(FrontierWorldStateSupport.availableFieldResident(state, settlement,
-                ResidentProfession.AGRICULTURAL_WORKER).isEmpty());
+                        && resident.profession() == ResidentProfession.AGRICULTURAL_WORKER)
+                .findFirst().orElseThrow();
+        var meal = ResidentMealProcess.selectSourceAtYield(state, farmer.id(), 27_000L).orElseThrow();
+        state = ResidentMealProcess.reduceStarted(state, farmer.id(), meal);
+        assertEquals(1, state.humanPopulation().meals().size());
         var opportunity = StrategicObjectiveProcess.planResourceHarvestOpportunity(state,
-                StrategicObjectiveProcess.resourceHarvestOpportunity(state, state.resourceSites().site(site), 24_000L));
+                StrategicObjectiveProcess.resourceHarvestOpportunity(state, state.resourceSites().site(site), 27_000L));
         state = StrategicObjectiveProcess.reduceObjective(state, settlement,
                 (StrategicObjectiveSelected) opportunity.getFirst().payload());
         state = StrategicObjectiveProcess.reduceTask(state, settlement,
                 (StrategicTaskPlanned) opportunity.get(1).payload());
         StrategicTask task = state.strategicPlans().tasks().values().stream()
                 .filter(value -> value.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE).findFirst().orElseThrow();
-        ScheduledAction due = ResourceSiteHarvestProcess.start(task, 24_085L);
+        ScheduledAction due = ResourceSiteHarvestProcess.start(task, 27_085L);
         var planned = ResourceSiteHarvestProcess.plan(state, due);
         assertEquals(1, planned.size());
         var retry = assertInstanceOf(ScheduleEffect.Rescheduled.class, planned.getFirst().payload());

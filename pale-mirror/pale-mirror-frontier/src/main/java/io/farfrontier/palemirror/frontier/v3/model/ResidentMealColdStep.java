@@ -14,8 +14,9 @@ public record ResidentMealColdStep(SubjectId residentId, ResidentMeal.Phase expe
         Objects.requireNonNull(expectedPhase, "meal predecessor phase");
         nextSurface = Objects.requireNonNull(nextSurface, "optional next meal surface");
         if (atTick < 0) throw new IllegalArgumentException("meal step tick must be non-negative");
-        if (expectedPhase != ResidentMeal.Phase.MOVE && nextSurface.isPresent())
-            throw new IllegalArgumentException("only a move-stage meal can advance its body");
+        if (expectedPhase != ResidentMeal.Phase.MOVE && expectedPhase != ResidentMeal.Phase.RETURN
+                && nextSurface.isPresent())
+            throw new IllegalArgumentException("only a movement-stage meal can advance its body");
     }
 
     public ResidentMealColdStep(SubjectId residentId, ResidentMeal.Phase expectedPhase, long atTick) {

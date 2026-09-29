@@ -128,7 +128,8 @@ public final class PopulationBirthProcess {
         String suffix = suffix(settlement.id()) + "-" + ordinal;
         ResidentProfile resident = new ResidentProfile(new SubjectId("resident:" + suffix(settlement.id()) + "-born-" + ordinal), household.id(), settlement.id(), ResidentRole.FARMER,
                 birthTick, HumanPopulation.birthSkills(ordinal))
-                .withCharacteristics(ResidentCharacteristics.initial(residentLife));
+                .withCharacteristics(ResidentCharacteristics.initial(residentLife,
+                        new SubjectId("resident:" + suffix(settlement.id()) + "-born-" + ordinal)));
         return new ResidentBirthJob(new SubjectId("job:resident-birth-" + suffix), settlement.id(), household.id(), food.id(),
                 new SubjectId("commitment:resident-birth-food-" + suffix), resident,
                 FrontierSettlementActorSlots.residentSlot(bounds, terrain, settlement, housingBeds, placementOrdinal));

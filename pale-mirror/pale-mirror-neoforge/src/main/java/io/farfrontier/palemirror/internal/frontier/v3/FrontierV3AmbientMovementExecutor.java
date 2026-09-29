@@ -9,6 +9,7 @@ import io.farfrontier.palemirror.frontier.v3.process.AmbientActorProcess;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeasePrepared;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseRestartAbsenceObserved;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseReleased;
+import io.farfrontier.palemirror.frontier.v3.model.ResidentMealHotReturned;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseTransition;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientActorLease;
@@ -221,6 +222,14 @@ final class FrontierV3AmbientMovementExecutor {
                         new ResidentMealHotArrived(actorId, lease.revision(), observedBody(body)));
                 FrontierV3DiagnosticTrace.record(level.getServer(), "resident-meal:" + actorId.value(),
                         "resident_meal_hot_arrived", actorId, result);
+                return result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted;
+            }
+            if (meal.phase() == ResidentMeal.Phase.RETURN && observedBody(body).equals(lease.goalBody())) {
+                body.getNavigation().stop();
+                var result = submit(runtime, "ambient-meal-cleared", actorId.value(),
+                        new ResidentMealHotReturned(actorId, lease.revision(), observedBody(body)));
+                FrontierV3DiagnosticTrace.record(level.getServer(), "resident-meal:" + actorId.value(),
+                        "resident_meal_hot_cleared", actorId, result);
                 return result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted;
             }
             return FrontierV3ResidentMealPhysicalEffect.tick(level, runtime, state, actorId, body, lease);

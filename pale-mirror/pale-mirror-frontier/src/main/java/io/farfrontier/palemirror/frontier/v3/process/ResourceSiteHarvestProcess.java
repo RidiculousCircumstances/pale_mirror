@@ -1,7 +1,6 @@
 package io.farfrontier.palemirror.frontier.v3.process;
 
 import io.farfrontier.palemirror.frontier.v3.model.*;
-
 import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
@@ -673,6 +672,9 @@ public final class ResourceSiteHarvestProcess {
         if (goal.layoutRevision() != advanced.layoutRevision()
                 || goal.nextWorkSlot() != advanced.nextWorkSlot() || goal.kind() != advanced.kind())
             throw new IllegalArgumentException("COLD field goal has a stale work target");
+        if (goal.kind() == ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE
+                && !ServiceAccessCoordinator.depotAvailableForHarvest(state, job))
+            throw new IllegalArgumentException("COLD field depot approach lacks its service turn");
         List<SurfaceAnchor> known = ResourceSiteHarvestKnownNavigation.path(state, job);
         BodyPosition next = known.get(Math.min(1, known.size() - 1)).standingBody();
         if (!next.equals(advanced.nextBody()))

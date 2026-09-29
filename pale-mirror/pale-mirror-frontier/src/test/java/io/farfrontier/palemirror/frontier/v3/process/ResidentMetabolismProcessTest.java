@@ -11,6 +11,23 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ResidentMetabolismProcessTest {
+    @Test void freshSettlementRetainsDistinctBoundedPersonalHungerRates() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:resident-personal-baselines"), 419L));
+        FrontierRuleset.ResidentLife rules = state.bootstrap().ruleset().residentLife();
+        var rates = state.bootstrap().settlements().getFirst().residents().stream()
+                .map(resident -> state.humanPopulation().resident(resident.id()))
+                .map(profile -> {
+                    assertEquals(ResidentCharacteristics.initial(rules, profile.id()), profile.characteristics());
+                    return profile.characteristics().baseMetabolismPermille();
+                }).toList();
+        assertTrue(rates.stream().distinct().count() > 1, "neighbors must not all become hungry on one tick");
+        assertTrue(rates.stream().allMatch(rate -> Math.abs(rate - rules.metabolismDefaultPermille())
+                <= rules.metabolismBaselineSpreadPermille()));
+        FrontierWorldState restored = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+        assertEquals(state.humanPopulation().residents(), restored.humanPopulation().residents());
+    }
+
     @Test void oldRateFractionAndExactNeedWakeSurviveChangeModifierRemovalAndRestart() {
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:resident-metabolism"), 419L));
@@ -23,26 +40,30 @@ class ResidentMetabolismProcessTest {
                 FrontierWorldRuntimeDefinition.payloadCodecs().encode(faster)));
         var planned = ResidentMetabolismProcess.plan(initial, faster);
         assertEquals(3, planned.size());
-        assertEquals(ResidentNeedProcess.review(first, 15_000L),
+        long oldProgress = 6_000L * base.effectiveMetabolismPermille(0L);
+        long expectedFirstDue = 6_000L + Math.floorDiv(24_000_000L - oldProgress + 1_999L, 2_000L);
+        assertEquals(ResidentNeedProcess.review(first, expectedFirstDue),
                 ((ScheduleEffect.Rescheduled) planned.get(1).payload()).replacement());
         FrontierWorldState changed = ResidentMetabolismProcess.reduce(initial, first, faster);
-        assertEquals(6_000_000L, changed.humanPopulation().nutrition(first).fractionalProgress());
+        assertEquals(oldProgress, changed.humanPopulation().nutrition(first).fractionalProgress());
         assertEquals(6_000L, changed.humanPopulation().nutrition(first).lastEvaluatedTick());
-        assertEquals(base, changed.humanPopulation().resident(second).characteristics());
+        assertEquals(initial.humanPopulation().resident(second).characteristics(),
+                changed.humanPopulation().resident(second).characteristics());
 
         SubjectId source = new SubjectId("condition:resident-metabolism-test");
         ResidentCharacteristics withModifier = faster.next().withModifier(
                 new ResidentCharacteristics.MetabolismModifier(source, -500));
         ResidentMetabolismChanged modifier = new ResidentMetabolismChanged(first, 10_000L, faster.next(), withModifier);
         FrontierWorldState modified = ResidentMetabolismProcess.reduce(changed, first, modifier);
-        assertEquals(14_000_000L, modified.humanPopulation().nutrition(first).fractionalProgress());
+        assertEquals(oldProgress + 8_000_000L, modified.humanPopulation().nutrition(first).fractionalProgress());
         assertEquals(1_500, modified.humanPopulation().resident(first).characteristics().effectiveMetabolismPermille(10_000L));
         ResidentMetabolismChanged removed = new ResidentMetabolismChanged(first, 11_000L,
                 withModifier, withModifier.withoutModifier(source));
         FrontierWorldState restored = ResidentMetabolismProcess.reduce(modified, first, removed);
-        assertEquals(15_500_000L, restored.humanPopulation().nutrition(first).fractionalProgress());
-        assertEquals(15_250L, restored.humanPopulation().nutrition(first)
-                .nextThresholdTick(initial.bootstrap().ruleset().residentLife(), 2_000));
+        assertEquals(oldProgress + 9_500_000L, restored.humanPopulation().nutrition(first).fractionalProgress());
+        assertEquals(11_000L + Math.floorDiv(24_000_000L - (oldProgress + 9_500_000L) + 1_999L, 2_000L),
+                restored.humanPopulation().nutrition(first)
+                        .nextThresholdTick(initial.bootstrap().ruleset().residentLife(), 2_000));
         FrontierWorldState reloaded = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(restored));
         assertEquals(restored.humanPopulation().resident(first).characteristics(),
                 reloaded.humanPopulation().resident(first).characteristics());

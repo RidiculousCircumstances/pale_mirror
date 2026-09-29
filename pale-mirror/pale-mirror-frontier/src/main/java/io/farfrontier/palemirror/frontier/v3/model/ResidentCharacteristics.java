@@ -50,6 +50,23 @@ public record ResidentCharacteristics(int version, int baseMetabolismPermille,
         return new ResidentCharacteristics(VERSION, rules.metabolismDefaultPermille(), Map.of());
     }
 
+    /** A stable, modest personal baseline; loading or revisiting a chunk never rerolls hunger. */
+    public static ResidentCharacteristics initial(FrontierRuleset.ResidentLife rules, SubjectId residentId) {
+        Objects.requireNonNull(rules, "resident characteristic rules");
+        Objects.requireNonNull(residentId, "resident characteristic identity");
+        int hash = residentId.value().hashCode();
+        hash ^= hash >>> 16;
+        hash *= 0x7feb352d;
+        hash ^= hash >>> 15;
+        hash *= 0x846ca68b;
+        hash ^= hash >>> 16;
+        int spread = rules.metabolismBaselineSpreadPermille();
+        int variation = Math.floorMod(hash, 2 * spread + 1) - spread;
+        int baseline = Math.clamp(rules.metabolismDefaultPermille() + variation,
+                rules.metabolismMinPermille(), rules.metabolismMaxPermille());
+        return new ResidentCharacteristics(VERSION, baseline, Map.of());
+    }
+
     public int effectiveMetabolismPermille(long tick) {
         if (tick < 0) throw new IllegalArgumentException("characteristic instant must be non-negative");
         long total = baseMetabolismPermille;

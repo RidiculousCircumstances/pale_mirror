@@ -120,6 +120,10 @@ public final class BakeryProcess {
             return Optional.of("SCENE_ACTOR_AUTHORITY");
         ProductionStationSpec station = station(state, job);
         SubjectId depot = FrontierWorldState.depotId(job.settlementId());
+        BakeryWorkState.Phase phase = job.bakeryWork().orElseThrow().phase();
+        if ((phase == BakeryWorkState.Phase.DEPOT_PICKUP || phase == BakeryWorkState.Phase.DEPOT_DELIVERY)
+                && !ServiceAccessCoordinator.depotAvailableForWork(state, depot, job.id(), job.workerId()))
+            return Optional.of("DEPOT_SERVICE_WAIT");
         if (ReferenceContainerCustody.hasLiveCustody(state, depot)) return Optional.of("DEPOT_PHYSICAL_AUTHORITY");
         if (ReferenceContainerCustody.blocksCanonicalUse(state, depot)) return Optional.of("DEPOT_CONFLICT");
         if (ReferenceContainerCustody.hasLiveCustody(state, station.containerId()))
@@ -153,8 +157,16 @@ public final class BakeryProcess {
             boolean openScene = state.sceneLeases().values().stream().anyMatch(lease ->
                     lease.status() != SceneLeaseStatus.CLOSED && FrontierSceneBehaviors.isProductionWork(lease)
                     && FrontierSceneBehaviors.productionWork(lease).jobId().equals(job.id()));
-            return openScene ? Optional.empty() : Optional.of(new BakeryColdStep(job.id(), work.phase(),
-                    BakeryColdStep.Action.FINALIZE, state.actorLocations().get(job.workerId()).supportingSurface()));
+            if (openScene) return Optional.empty();
+            ActorLocation worker = state.actorLocations().get(job.workerId());
+            if (worker == null || worker.condition().status() != ActorLifeStatus.ALIVE) return Optional.empty();
+            try {
+                List<SurfaceAnchor> clearingRoute = BakeryKnownNavigation.path(state, job);
+                if (clearingRoute.size() > 1) return Optional.of(new BakeryColdStep(job.id(), work.phase(),
+                        BakeryColdStep.Action.MOVE, clearingRoute.get(1)));
+                return Optional.of(new BakeryColdStep(job.id(), work.phase(), BakeryColdStep.Action.FINALIZE,
+                        state.actorLocations().get(job.workerId()).supportingSurface()));
+            } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { return Optional.empty(); }
         }
         if (coldBlocker(state, job, checkOutputCapacity).isPresent()) return Optional.empty();
         List<SurfaceAnchor> route;
@@ -213,7 +225,8 @@ public final class BakeryProcess {
         }
         ActorContainerItemOrder order = itemOrder(state, job, step.action());
         inventory = ActorItemCustody.transferCold(state, order);
-        if (step.action() == BakeryColdStep.Action.DELIVER) return finish(state, job, inventory);
+        if (step.action() == BakeryColdStep.Action.DELIVER)
+            return replace(state, job.withBakeryWork(work.advance(BakeryWorkState.Phase.DELIVERED)), inventory);
         BakeryWorkState.Phase next = switch (step.action()) {
             case PICKUP -> BakeryWorkState.Phase.STATION_LOAD;
             case LOAD -> BakeryWorkState.Phase.PROCESSING;

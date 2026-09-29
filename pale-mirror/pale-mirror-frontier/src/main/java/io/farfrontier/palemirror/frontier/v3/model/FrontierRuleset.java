@@ -60,7 +60,7 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
                                int hungryThreshold, int starvingThreshold,
                                int breadReliefUnits, int maxHungerUnits,
                                int metabolismDefaultPermille, int metabolismMinPermille,
-                               int metabolismMaxPermille) {
+                               int metabolismMaxPermille, int metabolismBaselineSpreadPermille) {
         public ResidentLife(int dayTicks, int workTicks, long hungerUnitTicks,
                             int hungryThreshold, int starvingThreshold,
                             int breadReliefUnits, int maxHungerUnits) {
@@ -68,7 +68,17 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
                     breadReliefUnits, maxHungerUnits,
                     ResidentCharacteristics.DEFAULT_METABOLISM_PERMILLE,
                     ResidentCharacteristics.MIN_METABOLISM_PERMILLE,
-                    ResidentCharacteristics.MAX_METABOLISM_PERMILLE);
+                    ResidentCharacteristics.MAX_METABOLISM_PERMILLE, 100);
+        }
+
+        public ResidentLife(int dayTicks, int workTicks, long hungerUnitTicks,
+                            int hungryThreshold, int starvingThreshold,
+                            int breadReliefUnits, int maxHungerUnits,
+                            int metabolismDefaultPermille, int metabolismMinPermille,
+                            int metabolismMaxPermille) {
+            this(dayTicks, workTicks, hungerUnitTicks, hungryThreshold, starvingThreshold,
+                    breadReliefUnits, maxHungerUnits, metabolismDefaultPermille,
+                    metabolismMinPermille, metabolismMaxPermille, 100);
         }
 
         public ResidentLife {
@@ -79,7 +89,9 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
                     || metabolismMinPermille < ResidentCharacteristics.MIN_METABOLISM_PERMILLE
                     || metabolismDefaultPermille < metabolismMinPermille
                     || metabolismDefaultPermille > metabolismMaxPermille
-                    || metabolismMaxPermille > ResidentCharacteristics.MAX_METABOLISM_PERMILLE) {
+                    || metabolismMaxPermille > ResidentCharacteristics.MAX_METABOLISM_PERMILLE
+                    || metabolismBaselineSpreadPermille < 0
+                    || metabolismBaselineSpreadPermille > 1_000) {
                 throw new IllegalArgumentException("resident life policy has invalid schedule or hunger bounds");
             }
         }
@@ -91,7 +103,8 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
         private String canonicalText() {
             return dayTicks + "," + workTicks + "," + hungerUnitTicks + "," + hungryThreshold
                     + "," + starvingThreshold + "," + breadReliefUnits + "," + maxHungerUnits
-                    + "," + metabolismDefaultPermille + "," + metabolismMinPermille + "," + metabolismMaxPermille;
+                    + "," + metabolismDefaultPermille + "," + metabolismMinPermille + "," + metabolismMaxPermille
+                    + "," + metabolismBaselineSpreadPermille;
         }
     }
 

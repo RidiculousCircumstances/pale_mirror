@@ -169,11 +169,13 @@ final class HumanPopulationPayloadCodecs {
                     ResidentMealHotReturned returned = (ResidentMealHotReturned) payload;
                     FrontierWorldPayloadCodecs.writeSubject(output, returned.residentId());
                     output.writeLong(returned.ambientRevision());
+                    FrontierWorldPayloadCodecs.writePosition(output, returned.observedBody().supportingSurface().support());
                 });
             }
             @Override public FrontierPayload decode(byte[] bytes) {
                 return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new ResidentMealHotReturned(
-                        FrontierWorldPayloadCodecs.readSubject(input).value(), input.readLong()));
+                        FrontierWorldPayloadCodecs.readSubject(input).value(), input.readLong(),
+                        BodyPosition.above(new SurfaceAnchor(FrontierWorldPayloadCodecs.readPosition(input)))));
             }
         };
     }

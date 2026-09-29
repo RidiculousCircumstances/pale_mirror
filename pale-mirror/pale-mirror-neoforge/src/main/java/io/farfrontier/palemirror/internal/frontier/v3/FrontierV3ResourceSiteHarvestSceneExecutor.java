@@ -19,6 +19,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestRouteClear
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestHotGoalArrived;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestHotTransitObserved;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestGoal;
+import io.farfrontier.palemirror.frontier.v3.model.ServiceAccessCoordinator;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentActivityCoordinator;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestSceneCause;
@@ -273,6 +274,12 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 && ResourceSiteHarvestGoal.current(state, job).legalStations().stream().anyMatch(station ->
                         FrontierV3SurfaceObservation.at(worker, station))) {
             beginImmediateColdRelease(level, runtime, state, lease);
+            return;
+        }
+        ResourceSiteHarvestGoal serviceGoal = ResourceSiteHarvestGoal.current(state, job);
+        if (serviceGoal.kind() == ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE
+                && !ServiceAccessCoordinator.depotAvailableForHarvest(state, job)) {
+            FrontierV3GoalNavigation.stop(worker);
             return;
         }
         if (!job.progress().complete() && !job.returningForBatch() && !job.progress().hasPendingCrop()

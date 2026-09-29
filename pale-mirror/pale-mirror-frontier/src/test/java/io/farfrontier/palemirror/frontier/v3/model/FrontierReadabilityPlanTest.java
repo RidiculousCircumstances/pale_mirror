@@ -259,7 +259,7 @@ class FrontierReadabilityPlanTest {
         java.util.List<SubjectId> recipients = state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(settlement.id())).map(ResidentProfile::id).sorted().toList();
         HumanPopulation needs = state.humanPopulation();
-        for (SubjectId resident : recipients) needs = needs.accrueHunger(resident, 24_000L);
+        for (SubjectId resident : recipients) needs = needs.accrueHunger(resident, 27_000L);
         FrontierWorldState hungry = state.withHumanPopulation(needs);
         SubjectId depotId = FrontierWorldState.depotId(settlement.id());
         int slot = hungry.inventory().availableSlots(depotId).getFirst();
@@ -286,7 +286,7 @@ class FrontierReadabilityPlanTest {
         java.util.List<SubjectId> recipients = state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(settlement.id())).map(ResidentProfile::id).sorted().toList();
         HumanPopulation needs = state.humanPopulation();
-        for (SubjectId resident : recipients) needs = needs.accrueHunger(resident, 24_000L);
+        for (SubjectId resident : recipients) needs = needs.accrueHunger(resident, 27_000L);
         FrontierWorldState hungry = state.withHumanPopulation(needs);
         SubjectId account = new SubjectId("custody:container-1-depot");
         SubjectId wheat = new SubjectId("lot:bootstrap-1-wheat");

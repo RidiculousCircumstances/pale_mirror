@@ -58,6 +58,7 @@ class ResidentLifeStateCodecTest {
         SubjectId resident = settlement.residents().getFirst().id();
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
         ResidentMeal meal = new ResidentMeal(resident, settlement.id(), depot,
+                base.actorLocations().get(resident).supportingSurface(),
                 ReferenceContainerCustody.scopeId(depot), new SubjectId("custody:resident-meal-test"),
                 new SubjectId("lot:bread-test"), new SubjectId("claim:meal-test"),
                 Optional.empty(), ResidentMeal.Phase.MOVE, 24_000L, Optional.empty());

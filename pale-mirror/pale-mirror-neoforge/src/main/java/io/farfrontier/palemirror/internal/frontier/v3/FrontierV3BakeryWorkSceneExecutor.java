@@ -24,7 +24,8 @@ final class FrontierV3BakeryWorkSceneExecutor {
         Entity entity = level.getEntity(lease.members().getFirst().entityId());
         if (!(entity instanceof Villager baker) || !baker.isAlive()
                 || !FrontierV3SceneExecutor.recognizes(runtime, baker)) return;
-        if (!FrontierV3SemanticMovement.arrived(level, baker, BakeryWorkGoal.current(state, job).station())) return;
+        if (job.bakeryWork().orElseThrow().phase() == BakeryWorkState.Phase.DELIVERED
+                || !FrontierV3SemanticMovement.arrived(level, baker, BakeryWorkGoal.current(state, job).station())) return;
         FrontierV3BakeryPhysicalEffect.tick(level, runtime, state, lease, job, baker);
     }
 
@@ -35,11 +36,6 @@ final class FrontierV3BakeryWorkSceneExecutor {
                     .map(value -> value.reason() == BakeryWorkBlock.Reason.SOURCE_CHANGED).orElse(false)
                 && state.inventory().fungibleResources().claims().values().stream()
                     .noneMatch(claim -> claim.claimantId().equals(job.id()))) return;
-        if (job.bakeryWork().orElseThrow().phase() == BakeryWorkState.Phase.DELIVERED) {
-            FrontierV3CommandSubmission.submit(runtime, "bakery-delivered-draining", lease.id().value(),
-                    new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
-            return;
-        }
         if (state.structureConditions().get(job.facilityId()) != StructureCondition.INTACT) {
             FrontierV3CommandSubmission.submit(runtime, "bakery-facility-draining", lease.id().value(),
                     new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
@@ -48,6 +44,13 @@ final class FrontierV3BakeryWorkSceneExecutor {
         Entity entity = level.getEntity(lease.members().getFirst().entityId());
         if (!(entity instanceof Mob worker) || !worker.isAlive() || !FrontierV3SceneExecutor.recognizes(runtime, worker)) return;
         BakeryWorkGoal goal = BakeryWorkGoal.current(state, job);
+        if ((goal.phase() == BakeryWorkState.Phase.DEPOT_PICKUP
+                || goal.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY)
+                && !ServiceAccessCoordinator.depotAvailableForWork(state,
+                        FrontierWorldState.depotId(job.settlementId()), job.id(), job.workerId())) {
+            FrontierV3GoalNavigation.stop(worker);
+            return;
+        }
         if (job.bakeryWork().orElseThrow().pendingPhysicalStep().isEmpty()
                 && !state.inventory().fungibleResources().accounts().containsKey(
                         job.bakeryWork().orElseThrow().actorAccountId())
@@ -65,6 +68,11 @@ final class FrontierV3BakeryWorkSceneExecutor {
                 FrontierV3CommandSubmission.submit(runtime, "bakery-goal-arrived", lease.id().value(),
                         new BakeryHotGoalArrived(job.id(), lease.id(), goal.phase(),
                                 FrontierV3SurfaceObservation.observedAt(worker, goal.station())));
+                return;
+            }
+            if (job.bakeryWork().orElseThrow().phase() == BakeryWorkState.Phase.DELIVERED) {
+                FrontierV3CommandSubmission.submit(runtime, "bakery-delivered-draining", lease.id().value(),
+                        new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
                 return;
             }
             BakeryWorkState work = job.bakeryWork().orElseThrow();

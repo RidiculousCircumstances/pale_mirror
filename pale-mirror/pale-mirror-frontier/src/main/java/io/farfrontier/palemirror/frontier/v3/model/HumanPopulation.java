@@ -143,7 +143,8 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
                         -((long) (18 + (ordinal % 43)) * 24_000L * 360L), skills(resident.role(), ordinal));
                 // The first named crafter is the settlement's baker and bread-works
                 // founder; other crafters keep their non-food industrial affinity.
-                profile = profile.withCharacteristics(ResidentCharacteristics.initial(bootstrap.ruleset().residentLife()));
+                profile = profile.withCharacteristics(ResidentCharacteristics.initial(
+                        bootstrap.ruleset().residentLife(), resident.id()));
                 residents.put(resident.id(), ordinal == 2 && resident.role() == ResidentRole.CRAFTER
                         ? profile.withProfession(ResidentProfession.BAKER) : profile);
             }

@@ -474,7 +474,9 @@ class FrontierV3ServerRuntimeTest {
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
                 FrontierV3ServerRuntime.start(configuration, store, 10_000);
         SubjectId settlementId = new SubjectId("settlement:1");
-        for (int tick = 0; tick < 12_000; tick++) {
+        // The ordinary bakery now clears the depot before closing its job; that
+        // can admit the route near tick 12,000, before its finite COLD travel.
+        for (int tick = 0; tick < 14_000; tick++) {
             boolean delivered = runtime.decodedState().orElseThrow().contracts().values().stream()
                     .anyMatch(contract -> contract.settlementId().equals(settlementId) && contract.status() == ContractStatus.DELIVERED);
             if (delivered) break;

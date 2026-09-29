@@ -46,25 +46,34 @@ class BakeryColdVerticalTest {
         state = state.withChanges(FrontierWorldStateUpdate.begin()
                 .inventory(state.inventory().withFungibleResources(new FungibleResourceLedger(
                         lots, prior.claims(), accounts, prior.bindings())))
-                .humanPopulation(state.humanPopulation().accrueHunger(resident, 24_000L)));
+                .humanPopulation(state.humanPopulation().accrueHunger(resident, 27_000L)));
+        SubjectId otherResident = state.bootstrap().settlements().stream()
+                .filter(value -> value.id().equals(job.settlementId())).findFirst().orElseThrow()
+                .residents().stream().map(value -> value.id()).filter(id -> !id.equals(resident))
+                .findFirst().orElseThrow();
+        assertFalse(ServiceAccessCoordinator.depotAvailableForMeal(state, depot, otherResident));
+        assertTrue(ServiceAccessCoordinator.depotAvailableForMeal(state, depot, resident),
+                "the retained baker may safely yield the same service turn to their own meal");
         assertEquals(ResidentWorkYield.Status.READY, ResidentWorkYield.assess(state,
                 HumanAssignmentProjection.compile(state).assignment(resident)).status());
-        ResidentMealStarted meal = ResidentMealProcess.selectSourceAtYield(state, resident, 24_000L).orElseThrow();
+        ResidentMealStarted meal = ResidentMealProcess.selectSourceAtYield(state, resident, 27_000L).orElseThrow();
         assertEquals(Optional.of(job.id()), meal.meal().retainedWorkOwner());
         state = ResidentMealProcess.reduceStarted(state, resident, meal);
+        assertFalse(ServiceAccessCoordinator.depotAvailableForWork(state, depot, job.id(), resident));
         assertTrue(FrontierProductionWorkSceneSupport.candidate(state, job).isEmpty());
-        var held = ProductionProcess.planCompletion(state, ProductionProcess.complete(job, 24_001L));
+        var held = ProductionProcess.planCompletion(state, ProductionProcess.complete(job, 27_001L));
         assertEquals(1, held.size());
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class,
                 held.getFirst().payload());
         for (int turn = 0; turn < 200 && state.humanPopulation().meals().containsKey(resident); turn++) {
-            ResidentMealColdStep step = ResidentMealProcess.planColdStep(state, resident, 24_002L + turn).orElseThrow();
+            ResidentMealColdStep step = ResidentMealProcess.planColdStep(state, resident, 27_002L + turn).orElseThrow();
             state = ResidentMealProcess.reduceColdStep(state, resident, step);
         }
         assertFalse(state.humanPopulation().meals().containsKey(resident));
+        assertTrue(ServiceAccessCoordinator.depotAvailableForWork(state, depot, job.id(), resident));
         assertEquals(job, state.productionJobs().get(job.id()));
         assertEquals(3, state.inventory().fungibleResources().totalQuantity(job.settlementId(), "minecraft:bread"));
-        assertTrue(ProductionProcess.planCompletion(state, ProductionProcess.complete(job, 24_300L))
+        assertTrue(ProductionProcess.planCompletion(state, ProductionProcess.complete(job, 27_300L))
                 .stream().anyMatch(event -> event.payload() instanceof BakeryColdStep));
     }
 
@@ -88,6 +97,13 @@ class BakeryColdVerticalTest {
                     .map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
                     .map(BakeryColdStep.class::cast).findFirst().orElseThrow();
             state = ProductionProcess.reduceBakeryColdStep(state, task.ownerId(), step);
+            if (step.action() == BakeryColdStep.Action.PICKUP) {
+                SubjectId other = state.bootstrap().settlements().getFirst().residents().stream()
+                        .map(Resident::id).filter(id -> !id.equals(job.workerId())).findFirst().orElseThrow();
+                assertFalse(ServiceAccessCoordinator.depotAvailableForMeal(state,
+                        FrontierWorldState.depotId(task.ownerId()), other),
+                        "pickup changes the work phase before the same baker has cleared the depot");
+            }
         }
         assertEquals(BakeryWorkState.Phase.DEPOT_DELIVERY,
                 state.productionJobs().get(job.id()).bakeryWork().orElseThrow().phase());
@@ -133,6 +149,24 @@ class BakeryColdVerticalTest {
                 .map(BakeryColdStep.class::cast).findFirst().orElseThrow();
         assertEquals(BakeryColdStep.Action.DELIVER, deliver.action());
         FrontierWorldState completed = ProductionProcess.reduceBakeryColdStep(withSpace, task.ownerId(), deliver);
+        assertEquals(BakeryWorkState.Phase.DELIVERED,
+                completed.productionJobs().get(job.id()).bakeryWork().orElseThrow().phase());
+        SubjectId waitingResident = completed.bootstrap().settlements().stream()
+                .filter(settlement -> settlement.id().equals(job.settlementId())).findFirst().orElseThrow()
+                .residents().stream().map(Resident::id).filter(id -> !id.equals(job.workerId()))
+                .findFirst().orElseThrow();
+        boolean releasedBeforeFinalization = false;
+        for (int step = 0; completed.productionJobs().containsKey(job.id()) && step < 300; step++) {
+            BakeryColdStep clearing = ProductionProcess.planCompletion(completed,
+                            ProductionProcess.complete(job, retry.dueAt().ticks() + 20L * (step + 1)))
+                    .stream().map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
+                    .map(BakeryColdStep.class::cast).findFirst().orElseThrow();
+            completed = ProductionProcess.reduceBakeryColdStep(completed, task.ownerId(), clearing);
+            if (completed.productionJobs().containsKey(job.id()))
+                releasedBeforeFinalization |= ServiceAccessCoordinator.depotAvailableForMeal(completed,
+                        FrontierWorldState.depotId(job.settlementId()), waitingResident);
+        }
+        assertTrue(releasedBeforeFinalization, "a delivered baker may continue to the workshop without monopolizing an empty depot");
         assertFalse(completed.productionJobs().containsKey(job.id()));
         assertEquals(StrategicTaskStatus.COMPLETED, completed.strategicPlans().tasks().get(task.id()).status());
     }

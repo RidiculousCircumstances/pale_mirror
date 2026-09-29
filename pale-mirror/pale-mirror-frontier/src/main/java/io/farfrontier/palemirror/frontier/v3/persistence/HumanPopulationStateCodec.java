@@ -244,6 +244,7 @@ final class HumanPopulationStateCodec {
         FrontierWorldStateCodec.writeString(output, meal.residentId().value());
         FrontierWorldStateCodec.writeString(output, meal.settlementId().value());
         FrontierWorldStateCodec.writeString(output, meal.depotId().value());
+        FrontierWorldStateCodec.writePosition(output, meal.clearingSurface().support());
         FrontierWorldStateCodec.writeString(output, meal.sourceAccountId().value());
         FrontierWorldStateCodec.writeString(output, meal.actorAccountId().value());
         FrontierWorldStateCodec.writeString(output, meal.lotId().value());
@@ -266,6 +267,7 @@ final class HumanPopulationStateCodec {
         SubjectId resident = new SubjectId(FrontierWorldStateCodec.readString(input));
         SubjectId settlement = new SubjectId(FrontierWorldStateCodec.readString(input));
         SubjectId depot = new SubjectId(FrontierWorldStateCodec.readString(input));
+        SurfaceAnchor clearing = new SurfaceAnchor(FrontierWorldStateCodec.readPosition(input));
         SubjectId source = new SubjectId(FrontierWorldStateCodec.readString(input));
         SubjectId actor = new SubjectId(FrontierWorldStateCodec.readString(input));
         SubjectId lot = new SubjectId(FrontierWorldStateCodec.readString(input));
@@ -283,7 +285,7 @@ final class HumanPopulationStateCodec {
         if (input.readBoolean()) pending = java.util.Optional.of(new ResidentMealPhysicalStep(
                 FrontierWireTags.require(ResidentMeal.Phase.class, input.readUnsignedByte()),
                 input.readByte(), input.readUnsignedByte(), input.readLong(), input.readLong(), input.readLong()));
-        return new ResidentMeal(resident, settlement, depot, source, actor, lot,
+        return new ResidentMeal(resident, settlement, depot, clearing, source, actor, lot,
                 claim, retained, FrontierWireTags.require(ResidentMeal.Phase.class, phase), started, wait, pending);
     }
 

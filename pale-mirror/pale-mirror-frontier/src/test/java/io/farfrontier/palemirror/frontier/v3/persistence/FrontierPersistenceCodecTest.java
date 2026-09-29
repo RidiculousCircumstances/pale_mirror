@@ -26,9 +26,9 @@ class FrontierPersistenceCodecTest {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:footprint-version"), 91L));
         var codec = new FrontierWorldStateCodec();
         var encoded = codec.encode(state);
-        assertEquals(212, Byte.toUnsignedInt(encoded[4]));
+        assertEquals(213, Byte.toUnsignedInt(encoded[4]));
         assertArrayEquals(encoded, codec.encode(codec.decode(encoded)));
-        for (int legacy = 177; legacy < 212; legacy++) {
+        for (int legacy = 177; legacy < 213; legacy++) {
             var old = encoded.clone(); old[4] = (byte) legacy;
             var before = old.clone();
             org.junit.jupiter.api.Assertions.assertTrue(assertThrows(IllegalArgumentException.class,

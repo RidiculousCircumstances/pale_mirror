@@ -18,6 +18,7 @@ class ResidentMealKnownNavigationTest {
         SubjectId resident = settlement.residents().getFirst().id();
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
         ResidentMeal meal = new ResidentMeal(resident, settlement.id(), depot,
+                state.actorLocations().get(resident).supportingSurface(),
                 ReferenceContainerCustody.scopeId(depot), new SubjectId("custody:resident-meal-six"),
                 new SubjectId("lot:resident-meal-six"), new SubjectId("claim:resident-meal-six"),
                 Optional.empty(), ResidentMeal.Phase.MOVE, 6_000L, Optional.empty());
@@ -35,6 +36,7 @@ class ResidentMealKnownNavigationTest {
         SubjectId resident = settlement.residents().getFirst().id();
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
         ResidentMeal meal = new ResidentMeal(resident, settlement.id(), depot,
+                state.actorLocations().get(resident).supportingSurface(),
                 ReferenceContainerCustody.scopeId(depot), new SubjectId("custody:resident-meal-route"),
                 new SubjectId("lot:resident-meal-route"), new SubjectId("claim:resident-meal-route"),
                 Optional.empty(), ResidentMeal.Phase.MOVE, 24_000L, Optional.empty());
@@ -45,6 +47,17 @@ class ResidentMealKnownNavigationTest {
         assertEquals(state.actorLocations().get(resident).supportingSurface(), fromIdle.getFirst());
         assertEquals(service, fromIdle.getLast());
         assertTrue(fromIdle.size() > 1);
+        ResidentMeal returning = new ResidentMeal(resident, settlement.id(), depot,
+                state.actorLocations().get(resident).supportingSurface(),
+                meal.sourceAccountId(), meal.actorAccountId(), meal.lotId(), meal.claimId(),
+                meal.retainedWorkOwner(), ResidentMeal.Phase.RETURN, meal.startedAtTick(), Optional.empty());
+        var serviceActors = new java.util.LinkedHashMap<>(state.actorLocations());
+        serviceActors.put(resident, ActorLocation.standingOn(service));
+        List<SurfaceAnchor> exit = ResidentMealKnownNavigation.returnPath(
+                state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(serviceActors)), returning);
+        assertEquals(service, exit.getFirst());
+        assertTrue(exit.contains(SettlementDepotServicePort.forDepot(depotStructure).exteriorApproach()));
+        assertEquals(returning.clearingSurface(), exit.getLast());
         SettlementStructure workshop = settlement.structures().stream()
                 .filter(value -> value.kind() == StructureKind.WORKSHOP).findFirst().orElseThrow();
         SurfaceAnchor work = SettlementWorkshopServicePort.forWorkshop(workshop).workStation();

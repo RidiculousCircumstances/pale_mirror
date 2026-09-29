@@ -137,11 +137,11 @@ public final class FrontierV3ResourceSiteGameTests {
         helper.succeed();
     }
 
-    @GameTest(batch = "pm-frontier-v3-resource-site-owned", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 20)
+    @GameTest(batch = "pm-frontier-v3-resource-site-owned", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 120)
     public static void ownedFieldWritesAllSlotsAndRecoversItsPendingProvenance(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); ResourceSite site = field(fixtureOrigin(helper));
         prepareGrayboxBaseline(level, site);
-        helper.runAfterDelay(10, () -> {
+        whenFieldLit(helper, site, 100, () -> {
             FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.fixture();
             PhysicalIntentId intent = new PhysicalIntentId("intent:site-prepare-resource-site-game-test");
             helper.assertValueEqual(FrontierV3ResourceSiteExecutor.reconcileAfterRestart(level, ledger, site, intent, 3),
@@ -151,8 +151,15 @@ public final class FrontierV3ResourceSiteGameTests {
             CompoundTag pending = ledger.save(new CompoundTag(), level.registryAccess()); ledger = FrontierV3ResourceSiteLedger.load(pending, level.registryAccess());
             helper.assertTrue(ledger.claim(site.id()).status() == FrontierV3ResourceSiteLedger.Status.PENDING && FrontierV3ResourceSiteExecutor.baseline(level, site),
                     "a restart retains pending ownership without treating the neutral graybox footing as a completed field");
-            helper.assertTrue(FrontierV3ResourceSiteExecutor.placeWholeField(level, site),
-                    "one executor pass writes every prevalidated soil and crop slot: " + firstFieldMismatch(level, site));
+            boolean placed = FrontierV3ResourceSiteExecutor.placeWholeField(level, site);
+            if (!placed) {
+                BlockPosition mismatch = site.cropSlots().stream()
+                        .filter(crop -> !level.getBlockState(minecraft(crop)).equals(Blocks.WHEAT.defaultBlockState()))
+                        .findFirst().orElse(site.cropSlots().getLast());
+                helper.fail("one executor pass writes every prevalidated soil and crop slot: " + firstFieldMismatch(level, site)
+                        + ", crop light=" + level.getMaxLocalRawBrightness(minecraft(mismatch))
+                        + ", east lamp=" + level.getBlockState(minecraft(mismatch).east()));
+            }
             ledger.activate(site.id()); CompoundTag active = ledger.save(new CompoundTag(), level.registryAccess()); ledger = FrontierV3ResourceSiteLedger.load(active, level.registryAccess());
             helper.assertTrue(FrontierV3ResourceSiteExecutor.matches(level, site, 0) && ledger.claim(site.id()).status() == FrontierV3ResourceSiteLedger.Status.ACTIVE,
                     "the exact 64 farmland, 64 wheat and four source-water cells plus active provenance survive a SavedData reload");
@@ -296,6 +303,22 @@ public final class FrontierV3ResourceSiteGameTests {
         site.cropSlots().stream().filter(crop -> crop.x() == maxX).forEach(crop -> level.setBlock(minecraft(crop).east(), Blocks.GLOWSTONE.defaultBlockState(), 3));
     }
     private static BlockPos minecraft(BlockPosition position) { return new BlockPos(position.x(), position.y(), position.z()); }
+    /** The enclosed GameTest cell must finish propagating its border lamps before wheat is placed. */
+    private static void whenFieldLit(GameTestHelper helper, ResourceSite site, int remainingTicks, Runnable action) {
+        ServerLevel level = helper.getLevel();
+        BlockPosition dark = site.cropSlots().stream()
+                .filter(crop -> !CropBlock.hasSufficientLight(level, minecraft(crop)))
+                .findFirst().orElse(null);
+        if (dark == null) {
+            action.run();
+        } else if (remainingTicks == 0) {
+            helper.fail("field fixture never reached Minecraft crop-survival light at " + dark
+                    + ": light=" + level.getMaxLocalRawBrightness(minecraft(dark))
+                    + ", east lamp=" + level.getBlockState(minecraft(dark).east()));
+        } else {
+            helper.runAfterDelay(1, () -> whenFieldLit(helper, site, remainingTicks - 1, action));
+        }
+    }
     private static String firstBaselineMismatch(ServerLevel level, ResourceSite site) {
         return site.cropSlots().stream().filter(position -> !level.getBlockState(minecraft(position)).isAir())
                 .findFirst().map(position -> "crop " + position + "=" + level.getBlockState(minecraft(position)))

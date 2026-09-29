@@ -23,6 +23,40 @@ public final class ResidentMealKnownNavigation {
         return pathFrom(state, meal, actor.supportingSurface());
     }
 
+    /** The same retained body walks away from the shared socket before the next user enters. */
+    public static List<SurfaceAnchor> returnPath(FrontierWorldState state, ResidentMeal meal) {
+        Objects.requireNonNull(state, "meal clearing state");
+        Objects.requireNonNull(meal, "meal clearing owner");
+        ActorLocation actor = state.actorLocations().get(meal.residentId());
+        if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE)
+            throw new IllegalArgumentException("meal clearing has no living resident body");
+        SurfaceAnchor start = actor.supportingSurface();
+        if (start.equals(meal.clearingSurface())) return List.of(start);
+        Set<BlockPosition> occupied = new HashSet<>();
+        for (Settlement candidate : state.bootstrap().settlements())
+            occupied.addAll(FrontierSettlementActorSlots.intactStructureOccupancy(
+                    state.bootstrap().terrain(), candidate.structures()));
+        occupied.addAll(FrontierGrayboxPlan.intactOrganOccupancy(state.bootstrap().hive().organs()));
+        clear(occupied, start);
+        Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), meal.settlementId());
+        SettlementStructure depot = settlement.structures().stream()
+                .filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
+        SettlementDepotServicePort port = SettlementDepotServicePort.forDepot(depot);
+        clear(occupied, port.serviceSurface());
+        clear(occupied, port.exteriorApproach());
+        state.actorLocations().forEach((id, location) -> {
+            if (!id.equals(meal.residentId()) && location.condition().status() == ActorLifeStatus.ALIVE)
+                occupied.add(location.supportingSurface().support().offset(0, 1, 0));
+        });
+        Map<TerrainColumn, SurfaceAnchor> known = SettlementPedestrianGround.localSupports(
+                state.bootstrap(), meal.settlementId());
+        MovementOrder order = new MovementOrder(meal.residentId(), meal.residentId(),
+                FrontierWireTags.tag(meal.phase()), 1L, List.of(meal.clearingSurface()),
+                TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
+        return KnownPedestrianNavigation.route(state.bootstrap(), start, order, occupied,
+                (x, z) -> SettlementPedestrianGround.surveyedSupport(state.bootstrap(), known, x, z));
+    }
+
     /** A HOT release can resume from its last witnessed body without replaying an old path. */
     public static List<SurfaceAnchor> pathFrom(FrontierWorldState state, ResidentMeal meal, SurfaceAnchor start) {
         Objects.requireNonNull(state, "meal navigation state");

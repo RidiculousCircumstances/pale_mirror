@@ -11,7 +11,7 @@ class FrontierV3TestPilotScenarioTest {
     @Test
     void operationVisitHonorsItsDeclaredAnchorAndRejectsUnknownOnes() {
         var action = JsonParser.parseString("""
-                {"type":"visit_operation","operationId":"operation:supply-1-15",
+                {"type":"visit_operation","operationId":"operation:supply-1-18",
                 "dimension":"pale_mirror:frontier_graybox","offset":{"x":10,"y":0,"z":-10},
                 "settleMs":500,"timeoutMs":30000}
                 """).getAsJsonObject();

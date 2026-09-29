@@ -13,7 +13,8 @@ import java.util.WeakHashMap;
 
 /** HOT presentation follows the same known route as the retained COLD meal owner. */
 final class FrontierV3ResidentMealNavigation {
-    private record Route(long leaseRevision, long mealStart, List<SurfaceAnchor> waypoints) { }
+    private record Route(long leaseRevision, long mealStart, ResidentMeal.Phase phase,
+                         List<SurfaceAnchor> waypoints) { }
 
     private static final Map<Mob, Route> ROUTES = new WeakHashMap<>();
     private static final Map<Mob, String> BLOCKED = new WeakHashMap<>();
@@ -23,17 +24,21 @@ final class FrontierV3ResidentMealNavigation {
 
     static void pursue(ServerLevel level, FrontierWorldState state, Mob body,
                        AmbientActorLease lease, ResidentMeal meal) {
-        if (meal == null || meal.phase() != ResidentMeal.Phase.MOVE) {
+        if (meal == null || meal.phase() != ResidentMeal.Phase.MOVE
+                && meal.phase() != ResidentMeal.Phase.RETURN) {
             ROUTES.remove(body);
             BLOCKED.remove(body);
             FrontierV3GoalNavigation.stop(body);
             return;
         }
         Route route = ROUTES.get(body);
-        if (route == null || route.leaseRevision() != lease.revision() || route.mealStart() != meal.startedAtTick()) {
+        if (route == null || route.leaseRevision() != lease.revision()
+                || route.mealStart() != meal.startedAtTick() || route.phase() != meal.phase()) {
             try {
-                route = new Route(lease.revision(), meal.startedAtTick(),
-                        ResidentMealKnownNavigation.path(state, meal));
+                route = new Route(lease.revision(), meal.startedAtTick(), meal.phase(),
+                        meal.phase() == ResidentMeal.Phase.MOVE
+                                ? ResidentMealKnownNavigation.path(state, meal)
+                                : ResidentMealKnownNavigation.returnPath(state, meal));
             } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
                 blocked(body, meal, "known_route:" + unavailable.getMessage());
                 FrontierV3GoalNavigation.stop(body);

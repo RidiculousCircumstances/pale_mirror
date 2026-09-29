@@ -34,6 +34,7 @@ public final class BakeryKnownNavigation {
                 .findFirst().orElseThrow();
         SettlementDepotServicePort depotPort = SettlementDepotServicePort.forDepot(depot);
         SettlementWorkshopServicePort workshopPort = SettlementWorkshopServicePort.forWorkshop(facility);
+        boolean clearing = work.phase() == BakeryWorkState.Phase.DELIVERED;
         boolean toDepot = work.phase() == BakeryWorkState.Phase.DEPOT_PICKUP
                 || work.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY;
         SurfaceAnchor goal = BakeryWorkGoal.current(state, job).station();
@@ -41,7 +42,7 @@ public final class BakeryKnownNavigation {
         boolean atWorkshop = start.equals(workshopPort.workStation()) || start.equals(workshopPort.inputStation())
                 || start.equals(workshopPort.interiorSurface()) || start.equals(workshopPort.throatSurface())
                 || start.equals(workshopPort.approachSurface());
-        if (!toDepot && atWorkshop) return workshopIngress(workshopPort, start);
+        if (!toDepot && !clearing && atWorkshop) return workshopIngress(workshopPort, start);
         List<SurfaceAnchor> prefix = atWorkshop ? workshopExit(workshopPort, start)
                 : start.equals(depotPort.serviceSurface()) ? List.of(start, depotPort.exteriorApproach()) : List.of(start);
         SurfaceAnchor outdoorStart = prefix.getLast();
@@ -72,7 +73,7 @@ public final class BakeryKnownNavigation {
         List<SurfaceAnchor> result = new ArrayList<>(prefix);
         result.addAll(route.subList(1, route.size()));
         if (toDepot) result.add(depotPort.serviceSurface());
-        else result.addAll(List.of(workshopPort.approachSurface(), workshopPort.throatSurface(), workshopPort.interiorSurface(),
+        else if (!clearing) result.addAll(List.of(workshopPort.approachSurface(), workshopPort.throatSurface(), workshopPort.interiorSurface(),
                 workshopPort.inputStation(), workshopPort.workStation()));
         return List.copyOf(result);
     }

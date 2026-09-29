@@ -100,7 +100,7 @@ public record ResourceSiteHarvestGoal(SubjectId jobId, SubjectId siteId, Subject
     }
 
     /** The current bootstrap's exact container-to-structure service binding. */
-    static SettlementDepotServicePort depotPort(FrontierWorldState state, ResourceSiteHarvestJob job) {
+    public static SettlementDepotServicePort depotPort(FrontierWorldState state, ResourceSiteHarvestJob job) {
         ResourceSite site = Objects.requireNonNull(state.resourceSite(job.siteId()), "field goal site descriptor");
         Settlement settlement = state.bootstrap().settlements().stream()
                 .filter(value -> value.id().equals(site.settlementId())).findFirst()

@@ -332,7 +332,10 @@ public final class FrontierWorldProcessCatalog {
         }
         for (Settlement settlement : bootstrap.settlements()) {
             for (Resident resident : settlement.residents()) {
-                actions.add(ResidentNeedProcess.firstReviewAfter(resident.id(), 0L, bootstrap.ruleset().residentLife()));
+                int metabolism = ResidentCharacteristics.initial(bootstrap.ruleset().residentLife(),
+                        resident.id()).effectiveMetabolismPermille(0L);
+                actions.add(ResidentNeedProcess.review(resident.id(), ResidentNutrition.nourishedAtTick(0L)
+                        .nextThresholdTick(bootstrap.ruleset().residentLife(), metabolism)));
                 actions.add(ResidentActivityProcess.review(resident.id(), 1L));
             }
         }

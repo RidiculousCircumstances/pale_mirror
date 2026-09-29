@@ -26,8 +26,12 @@ class FrontierExecutionMetricsTest {
         FrontierEngine<FrontierWorldProjection> measured = FrontierEngines.create(baseline.withExecutionMetrics(metrics));
         FrontierEngine<FrontierWorldProjection> control = FrontierEngines.create(baseline);
 
-        measured.advanceTo(new SimInstant(24_000L), new WorkBudget(128, 512));
-        control.advanceTo(new SimInstant(24_000L), new WorkBudget(128, 512));
+        var resident = baseline.initialState().humanPopulation().resident(
+                baseline.initialState().bootstrap().settlements().getFirst().residents().getFirst().id());
+        long due = ResidentNeedProcess.firstReviewAfter(resident, 0L,
+                baseline.initialState().bootstrap().ruleset().residentLife()).dueAt().ticks();
+        measured.advanceTo(new SimInstant(due), new WorkBudget(128, 512));
+        control.advanceTo(new SimInstant(due), new WorkBudget(128, 512));
 
         assertArrayEquals(control.checkpoint().canonicalState(), measured.checkpoint().canonicalState());
         assertTrue(metrics.stages.contains(FrontierExecutionMetrics.Stage.SCHEDULE_ALLOCATION));
@@ -40,7 +44,8 @@ class FrontierExecutionMetricsTest {
 
     private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> withExactReview(
             FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base) {
-        var resident = base.initialState().bootstrap().settlements().getFirst().residents().getFirst().id();
+        var resident = base.initialState().humanPopulation().resident(
+                base.initialState().bootstrap().settlements().getFirst().residents().getFirst().id());
         return new FrontierEngineConfiguration<>(base.worldId(), base.initialState(), base.initialInstant(),
                 base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(),
                 base.projectionMapper(), base.limits(), List.of(ResidentNeedProcess.firstReviewAfter(

@@ -268,6 +268,9 @@ final class ResourceSiteHarvestPlanning {
                     : coldTerminal(state, action, job, returned);
         }
         ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state, job);
+        if (goal.kind() == ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE
+                && !ServiceAccessCoordinator.depotAvailableForHarvest(state, job))
+            return List.of(reschedule(action, coldProgress(job, nextDue)));
         ActorLocation worker = state.actorLocations().get(job.workerId());
         if (worker == null || worker.condition().status() != ActorLifeStatus.ALIVE)
             throw new IllegalArgumentException("COLD field goal has no living retained worker");
