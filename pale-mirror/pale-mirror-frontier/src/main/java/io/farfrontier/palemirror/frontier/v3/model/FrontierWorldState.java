@@ -611,22 +611,18 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 .map(ResourceSiteHarvestJob.class::cast)
                 .anyMatch(job -> job.outputSlot().equals(slot) || job.batchSuccessorSlot().filter(slot::equals).isPresent());
     }
+    /** Derived from durable jobs: no parallel storage ledger can drift from its owner. */
+    public Set<Integer> reservedContainerSlots(SubjectId containerId) {
+        return HarvestContainerReservations.slots(resourceSites, containerId);
+    }
+    public boolean canReceiveFungible(SubjectId containerId, String itemKind, int quantity) {
+        return inventory.canReceiveFungible(containerId, itemKind, quantity, reservedContainerSlots(containerId));
+    }
+    public boolean canReceiveFungibleCargo(SubjectId cargoId, SubjectId containerId) {
+        return inventory.canReceiveFungibleCargo(cargoId, containerId, reservedContainerSlots(containerId));
+    }
     private static void validateHarvestOutputReservations(ExactInventory inventory, ResourceSiteState sites) {
-        java.util.Set<InventoryCustody.ContainerSlot> reserved = new java.util.HashSet<>();
-        for (ResourceSiteLifecycle lifecycle : sites.sites().values()) {
-            if (lifecycle.activeWork().orElse(null) instanceof ResourceSiteHarvestJob job) {
-                java.util.List<InventoryCustody.ContainerSlot> slots = job.batchSuccessorSlot().isPresent()
-                        ? java.util.List.of(job.outputSlot(), job.batchSuccessorSlot().orElseThrow())
-                        : java.util.List.of(job.outputSlot());
-                for (InventoryCustody.ContainerSlot slot : slots) {
-                    if (!reserved.add(slot) || !inventory.slotVacant(slot)
-                            || ReferenceContainerCustody.expectedFungibleSlot(inventory, slot.containerId(),
-                            slot.slot()).isPresent()) {
-                        throw new IllegalArgumentException("active harvest output slot lacks exclusive container capacity");
-                    }
-                }
-            }
-        }
+        HarvestContainerReservations.validate(inventory, sites);
     }
     private static void validateHarvestResourceAccounts(ExactInventory inventory, ResourceSiteState sites) {
         java.util.Set<SubjectId> declared = new java.util.HashSet<>();
@@ -643,12 +639,12 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         }
     }
     public boolean containerSlotAvailable(InventoryCustody.ContainerSlot slot) {
-        return inventory.slotVacant(slot) && ReferenceContainerCustody.expectedFungibleSlot(inventory,
-                slot.containerId(), slot.slot()).isEmpty()
-                && !productionHoldReserves(slot) && !harvestOutputReserves(slot);
+        return inventory.availableSlots(slot.containerId(), reservedContainerSlots(slot.containerId())).contains(slot.slot())
+                && ReferenceContainerCustody.expectedFungibleSlot(this, slot.containerId(), slot.slot()).isEmpty()
+                && !productionHoldReserves(slot);
     }
     public java.util.OptionalInt firstFreeContainerSlot(SubjectId containerId) {
-        for (int slot : inventory.availableSlots(containerId)) {
+        for (int slot : inventory.availableSlots(containerId, reservedContainerSlots(containerId))) {
             if (containerSlotAvailable(new InventoryCustody.ContainerSlot(containerId, slot))) return java.util.OptionalInt.of(slot);
         }
         return java.util.OptionalInt.empty();

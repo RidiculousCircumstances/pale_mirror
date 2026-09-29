@@ -11,7 +11,7 @@ public final class ProductionOutputCapacity {
     /** Do not admit another bread batch when its destination cannot hold it now. */
     public static boolean canAdmitBreadBatch(FrontierWorldState state, SubjectId settlementId) {
         Objects.requireNonNull(state, "production output state");
-        return state.inventory().canReceiveFungible(FrontierWorldState.depotId(
+        return state.canReceiveFungible(FrontierWorldState.depotId(
                 Objects.requireNonNull(settlementId, "settlement id")), "minecraft:bread", 64);
     }
 
@@ -22,6 +22,6 @@ public final class ProductionOutputCapacity {
         SubjectId depot = FrontierWorldState.depotId(job.settlementId());
         return job.inputHold() instanceof ProductionInputHold.Materialized
                 ? state.firstFreeContainerSlot(depot).isEmpty()
-                : !state.inventory().canReceiveFungible(depot, job.outputItemKind(), job.outputCount());
+                : !state.canReceiveFungible(depot, job.outputItemKind(), job.outputCount());
     }
 }

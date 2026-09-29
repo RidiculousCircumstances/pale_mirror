@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.Set;
 import java.util.UUID;
 
 /** Immutable exact custody ledger. Any dangling, duplicate or mixed custody is rejected. */
@@ -152,15 +153,36 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
 
     /** Any candidate slot may be used if the remaining total capacity still fits COLD stock. */
     public List<Integer> availableSlots(SubjectId containerId) {
+        return availableSlots(containerId, Set.of());
+    }
+
+    /** Capacity and physical addresses are both fenced by outstanding work reservations. */
+    public List<Integer> availableSlots(SubjectId containerId, Set<Integer> reservedSlots) {
         ContainerRecord container = containers.get(Objects.requireNonNull(containerId, "container id"));
         if (container == null) throw new IllegalArgumentException("unknown container: " + containerId.value());
         ContainerSlotBudget budget = slotBudget(containerId);
-        if (budget.requiredSlots() >= container.slotCount()) return List.of();
+        if (!validReservations(container, budget, reservedSlots)
+                || budget.requiredSlots() + reservedSlots.size() >= container.slotCount()) return List.of();
         var available = new java.util.ArrayList<Integer>();
         for (int slot = 0; slot < container.slotCount(); slot++) {
-            if (!budget.occupied().contains(slot) && !budget.bound().contains(slot)) available.add(slot);
+            if (!budget.occupied().contains(slot) && !budget.bound().contains(slot)
+                    && !reservedSlots.contains(slot)) available.add(slot);
         }
         return List.copyOf(available);
+    }
+
+    public boolean canReserveSlots(SubjectId containerId, Set<Integer> reservedSlots) {
+        ContainerRecord container = containers.get(Objects.requireNonNull(containerId, "container id"));
+        if (container == null) throw new IllegalArgumentException("unknown container: " + containerId.value());
+        ContainerSlotBudget budget = slotBudget(containerId);
+        return validReservations(container, budget, reservedSlots)
+                && budget.requiredSlots() + reservedSlots.size() <= container.slotCount();
+    }
+
+    private static boolean validReservations(ContainerRecord container, ContainerSlotBudget budget, Set<Integer> reservedSlots) {
+        Objects.requireNonNull(reservedSlots, "container reservations");
+        return reservedSlots.stream().allMatch(slot -> slot != null && slot >= 0 && slot < container.slotCount()
+                && !budget.occupied().contains(slot) && !budget.bound().contains(slot));
     }
 
     private record ContainerSlotBudget(java.util.Set<Integer> occupied, java.util.Set<Integer> bound, long packedStacks) {
@@ -194,6 +216,10 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
 
     /** Capacity admission for an arrived fungible shipment, including partially filled stacks. */
     public boolean canReceiveFungibleCargo(SubjectId cargoId, SubjectId targetContainerId) {
+        return canReceiveFungibleCargo(cargoId, targetContainerId, Set.of());
+    }
+
+    public boolean canReceiveFungibleCargo(SubjectId cargoId, SubjectId targetContainerId, Set<Integer> reservedSlots) {
         CargoBatch batch = cargo.get(Objects.requireNonNull(cargoId, "fungible cargo id"));
         ContainerRecord target = containers.get(Objects.requireNonNull(targetContainerId, "target container id"));
         if (batch == null || !batch.fungibleContents() || target == null) {
@@ -207,17 +233,23 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
                 fungibleResources.lots().get(lotId).itemKind(), quantity.longValue(), Math::addExact));
         long before = slotBudget(targetContainerId).requiredSlots();
         long after = slotBudget(targetContainerId, incomingByKind).requiredSlots();
-        return after <= Math.max(target.slotCount(), before);
+        return validReservations(target, slotBudget(targetContainerId), reservedSlots)
+                && after + reservedSlots.size() <= Math.max(target.slotCount(), before + reservedSlots.size());
     }
 
     /** Pure capacity admission for a fungible actor batch entering one owned container. */
     public boolean canReceiveFungible(SubjectId targetContainerId, String itemKind, int quantity) {
+        return canReceiveFungible(targetContainerId, itemKind, quantity, Set.of());
+    }
+
+    public boolean canReceiveFungible(SubjectId targetContainerId, String itemKind, int quantity, Set<Integer> reservedSlots) {
         ContainerRecord target = containers.get(Objects.requireNonNull(targetContainerId, "target container id"));
         Objects.requireNonNull(itemKind, "item kind");
         if (target == null || quantity <= 0) throw new IllegalArgumentException("invalid fungible container admission");
         long before = slotBudget(targetContainerId).requiredSlots();
         long after = slotBudget(targetContainerId, Map.of(itemKind, (long) quantity)).requiredSlots();
-        return after <= Math.max(target.slotCount(), before);
+        return validReservations(target, slotBudget(targetContainerId), reservedSlots)
+                && after + reservedSlots.size() <= Math.max(target.slotCount(), before + reservedSlots.size());
     }
 
     /** Restored old overcommit may be inspected and reduced, but no transition may make it worse. */

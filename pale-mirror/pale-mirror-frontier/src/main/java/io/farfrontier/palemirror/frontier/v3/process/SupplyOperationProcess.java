@@ -325,7 +325,7 @@ public final class SupplyOperationProcess {
         if (cargo == null) throw new IllegalStateException("arrived operation has no cargo");
         // A full receiver is a local logistics wait, not a malformed world transition.
         // Retain the arrived operation and its cargo until consumption frees capacity.
-        if (cargo.fungibleContents() && !state.inventory().canReceiveFungibleCargo(cargo.id(), receiver)) {
+        if (cargo.fungibleContents() && !state.canReceiveFungibleCargo(cargo.id(), receiver)) {
             return List.of(schedule(operationProgress(operation, Math.addExact(now, 100L))));
         }
         if (state.inventory().surfaces().get(receiver).status() == ContainerSurfaceStatus.ACTIVE) {

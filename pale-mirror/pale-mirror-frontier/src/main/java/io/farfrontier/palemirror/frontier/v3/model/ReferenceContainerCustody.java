@@ -204,17 +204,15 @@ public final class ReferenceContainerCustody {
      * slot is already canonical; once binding exists, only that exact transient address counts.
      */
     public static Optional<ProjectedFungibleSlot> expectedFungibleSlot(FrontierWorldState state, SubjectId containerId, int slot) {
-        return expectedFungibleSlot(state.inventory(), containerId, slot);
+        ContainerRecord container = state.inventory().containers().get(Objects.requireNonNull(containerId, "container id"));
+        if (container == null || slot < 0 || slot >= container.slotCount())
+            throw new IllegalArgumentException("fungible reference slot is invalid");
+        return Optional.ofNullable(expectedFungibleSlots(state.inventory(), containerId,
+                state.reservedContainerSlots(containerId)).get(slot));
     }
 
-    /** The reservation owner can inspect an inventory's current projected slots during state construction. */
-    static Optional<ProjectedFungibleSlot> expectedFungibleSlot(ExactInventory inventory, SubjectId containerId, int slot) {
-        ContainerRecord container = inventory.containers().get(Objects.requireNonNull(containerId, "container id"));
-        if (container == null || slot < 0 || slot >= container.slotCount()) throw new IllegalArgumentException("fungible reference slot is invalid");
-        return Optional.ofNullable(expectedFungibleSlots(inventory, containerId).get(slot));
-    }
-
-    private static Map<Integer, ProjectedFungibleSlot> expectedFungibleSlots(ExactInventory inventory, SubjectId containerId) {
+    private static Map<Integer, ProjectedFungibleSlot> expectedFungibleSlots(ExactInventory inventory, SubjectId containerId,
+                                                                              java.util.Set<Integer> reservedSlots) {
         ContainerRecord container = inventory.containers().get(containerId);
         if (container == null) throw new IllegalArgumentException("reference container is not declared");
         Map<Integer, ProjectedFungibleSlot> slots = new LinkedHashMap<>();
@@ -251,7 +249,9 @@ public final class ReferenceContainerCustody {
         for (Map.Entry<String, Integer> entry : quantities.entrySet()) {
             int remaining = entry.getValue();
             while (remaining > 0) {
-                while (inventory.itemAt(containerId, next).isPresent()) next++;
+                while (inventory.itemAt(containerId, next).isPresent() || reservedSlots.contains(next)) next++;
+                if (next >= container.slotCount())
+                    throw new IllegalArgumentException("projected fungible stock exceeds unreserved container capacity");
                 int quantity = Math.min(64, remaining);
                 slots.put(next++, new ProjectedFungibleSlot(entry.getKey(), quantity));
                 remaining -= quantity;
