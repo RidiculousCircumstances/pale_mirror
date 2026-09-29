@@ -181,15 +181,23 @@ class ResidentMealProcessTest {
         ResidentMealHotEffectObserved consumed = new ResidentMealHotEffectObserved(resident,
                 ResidentMeal.Phase.CONSUME, 1L, service.standingBody(), List.of(), List.of());
         var hotEvents = ResidentMealProcess.planHotObserved(state, consumed, 48_002L);
-        assertEquals(2, hotEvents.size());
+        assertEquals(3, hotEvents.size());
         var hotNeed = assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class,
                 hotEvents.get(1).payload());
         assertEquals(ResidentNeedProcess.review(resident, 72_000L).id(), hotNeed.scheduleId());
         assertEquals(ResidentNeedProcess.review(resident, 72_000L), hotNeed.replacement());
+        var hotProgress = assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class,
+                hotEvents.get(2).payload());
+        assertEquals(ResidentMealProcess.progress(meal, 48_001L).id(), hotProgress.scheduleId());
+        assertEquals(ResidentMealProcess.progress(meal, 48_003L), hotProgress.replacement());
         state = ResidentMealProcess.reduceHotObserved(state, resident, consumed, 48_002L);
         assertEquals(63, state.inventory().fungibleResources().totalQuantity(settlement.id(), "minecraft:bread"));
         assertEquals(ResidentNutritionStatus.HUNGRY, state.humanPopulation().nutrition(resident).status());
         FrontierWorldState terminal = state;
+        assertThrows(IllegalArgumentException.class, () -> ResidentMealProcess.planProgress(terminal,
+                ResidentMealProcess.progress(meal, 48_001L)), "the retained old due tick would evaluate hunger backwards");
+        assertInstanceOf(ResidentMealHotReturned.class,
+                ResidentMealProcess.planProgress(terminal, hotProgress.replacement()).getFirst().payload());
         assertThrows(IllegalArgumentException.class, () -> ResidentMealProcess.reduceHotObserved(terminal, resident, consumed, 48_002L));
         state = ResidentActivityProcess.reduceMealReturned(state, resident,
                 new ResidentMealHotReturned(resident, 1L), 48_003L);

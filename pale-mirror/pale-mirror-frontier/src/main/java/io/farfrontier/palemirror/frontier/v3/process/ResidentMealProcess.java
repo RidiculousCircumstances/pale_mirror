@@ -230,14 +230,22 @@ public final class ResidentMealProcess {
                 .inventory(state.inventory().withFungibleResources(ledger)).humanPopulation(people));
     }
 
-    /** The physical consumption receipt and its exact need-clock replacement form one command transaction. */
+    /** A witnessed consumption and both affected resident clocks form one command transaction. */
     public static List<ProposedEvent> planHotObserved(FrontierWorldState state,
                                                        ResidentMealHotEffectObserved observed, long atTick) {
+        ResidentMeal meal = state.humanPopulation().meals().get(observed.residentId());
         reduceHotObserved(state, observed.residentId(), observed, atTick);
         if (observed.phase() != ResidentMeal.Phase.CONSUME)
             return List.of(new ProposedEvent(observed.residentId(), observed));
+        ScheduledAction nextProgress = progress(meal, Math.addExact(atTick, 1L));
         return List.of(new ProposedEvent(observed.residentId(), observed),
-                ResidentNeedProcess.requeueAfterConfirmedBread(state, observed.residentId(), atTick));
+                ResidentNeedProcess.requeueAfterConfirmedBread(state, observed.residentId(), atTick),
+                // The HOT receipt advances nutrition at the command's canonical instant.
+                // Its retained COLD progress action may still be due at an earlier tick;
+                // returning to activity from that historical due instant would evaluate
+                // hunger backwards and quarantine the entire runtime.
+                new ProposedEvent(observed.residentId(), new ScheduleEffect.Rescheduled(
+                        nextProgress.id(), nextProgress)));
     }
 
     private static ResidentMeal hotMeal(FrontierWorldState state, SubjectId subject,

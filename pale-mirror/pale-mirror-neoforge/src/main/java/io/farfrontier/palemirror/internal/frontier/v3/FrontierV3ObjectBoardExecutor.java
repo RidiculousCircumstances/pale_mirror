@@ -7,6 +7,8 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierObjectBoard;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierReadabilityPlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.HiveOrgan;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSitePhase;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldPhysicalSurface;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
@@ -116,7 +118,32 @@ final class FrontierV3ObjectBoardExecutor {
             // over missing or foreign geometry.
             return project(level, ledger, blockedHiveBoard(board));
         }
+        if (state.resourceSiteDescriptors().containsKey(board.ownerId())
+                && state.resourceSites().site(board.ownerId()).phase() == ResourceSitePhase.READY) {
+            var claim = FrontierV3ResourceSiteLedger.get(level).fieldClaim(board.ownerId());
+            if (claim == null || claim instanceof FrontierV3ResourceSiteLedger.FieldInitialization) {
+                return project(level, ledger, fieldProjectionBoard(board, "FIELD MATERIALIZING"));
+            }
+            var owner = (FrontierV3ResourceSiteLedger.FieldOwnership) claim;
+            if (owner.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE) {
+                return project(level, ledger, fieldProjectionBoard(board, "FIELD PHYSICAL CONFLICT"));
+            }
+            var cycle = state.resourceSites().cycle(board.ownerId());
+            if (!owner.witness().matchesCycle(cycle) || cycle.layout().cells().stream().anyMatch(cell -> {
+                var physical = owner.witness().cell(cell.id());
+                return physical.pending().isPresent() || physical.foreign().isPresent()
+                        || !physical.committed().equals(ResourceFieldPhysicalSurface.Condition.of(cycle.cell(cell.id())));
+            })) {
+                return project(level, ledger, fieldProjectionBoard(board, "CROPS UPDATING"));
+            }
+        }
         return project(level, ledger, board);
+    }
+
+    static FrontierObjectBoard fieldProjectionBoard(FrontierObjectBoard board, String status) {
+        String settlement = board.text().split("\\n", -1)[0];
+        return new FrontierObjectBoard(board.ownerId(), board.position(), FrontierObjectBoard.Tone.WARNING,
+                board.scope(), settlement + "\nWHEAT FIELD\n" + status);
     }
 
     private static boolean isHiveOrgan(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId owner) {

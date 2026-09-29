@@ -61,6 +61,24 @@ public final class FrontierV3ObjectBoardGameTests {
     }
 
     @GameTest(batch = "pm-frontier-v3-object-boards", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void readyFieldBoardDoesNotAdvertiseUnmaterializedCrops(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel(); BlockPos position = interior(helper);
+        FrontierObjectBoard ready = board(position, "site:board-materializing-field", FrontierObjectBoard.Tone.SETTLEMENT,
+                "Clearwater\nWHEAT FIELD\nREADY TO HARVEST");
+        FrontierObjectBoard pending = FrontierV3ObjectBoardExecutor.fieldProjectionBoard(ready, "FIELD MATERIALIZING");
+        FrontierV3ObjectBoardLedger ledger = FrontierV3ObjectBoardLedger.get(level);
+        helper.assertValueEqual(FrontierV3ObjectBoardExecutor.project(level, ledger, pending), FrontierV3ObjectBoardExecutor.ProjectionResult.APPLIED,
+                "the incomplete physical field has one truthful owned board");
+        Display.TextDisplay display = display(level, position);
+        helper.assertValueEqual(display.getCustomName().getString(), pending.text(),
+                "the board must not claim that missing crops are ready");
+        helper.assertValueEqual(FrontierV3ObjectBoardExecutor.project(level, ledger, ready), FrontierV3ObjectBoardExecutor.ProjectionResult.UPDATED,
+                "physical completion restores the canonical ready message in place");
+        helper.assertTrue(display(level, position) == display, "projection status does not duplicate the board");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-object-boards", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void movedBoardBecomesConflictInsteadOfBeingSilentlyRestored(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); BlockPos position = interior(helper);
         FrontierObjectBoard board = board(position, "organ:board-ganglion", FrontierObjectBoard.Tone.HIVE, "HIVE\nGANGLION\nACTIVE");
