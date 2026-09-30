@@ -52,6 +52,35 @@ class FrontierV3SceneDeparturePersistenceTest {
         return chunk;
     }
 
+    private static CompoundTag storedChunkWithWheat(int quantity) {
+        CompoundTag chunk = storedChunk(9);
+        CompoundTag body = chunk.getList("Entities", net.minecraft.nbt.Tag.TAG_COMPOUND).getCompound(0);
+        var hands = new ListTag();
+        hands.add(new CompoundTag());
+        var wheat = new CompoundTag(); wheat.putString("id", "minecraft:wheat"); wheat.putInt("count", quantity);
+        hands.add(wheat);
+        body.put("HandItems", hands);
+        return chunk;
+    }
+
+    @Test void savedWheatHandMustMatchTheUnloadReceiptBeforeRelease() {
+        var base = receipt(9);
+        var withWheat = new FrontierV3SceneDeparture(base.carrier(), base.leaseId(), base.sceneRevision(),
+                base.observed(), base.canonicalHealthAtCapture(),
+                java.util.Optional.of(new FrontierV3SceneDeparture.HandStack("minecraft:wheat", 4)));
+        assertEquals(withWheat, FrontierV3SceneDeparture.load(withWheat.save()));
+        var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
+        assertTrue(ledger.recordDeparture(withWheat));
+        var wrong = new FrontierV3SceneDeparturePersistence.Batch();
+        wrong.observe(new ChunkPos(0, 0), storedChunkWithWheat(3), CompletableFuture.completedFuture(null));
+        assertTrue(wrong.complete(true, () -> CompletableFuture.completedFuture(null), ledger)
+                .orElseThrow().departures().isEmpty());
+        var correct = new FrontierV3SceneDeparturePersistence.Batch();
+        correct.observe(new ChunkPos(0, 0), storedChunkWithWheat(4), CompletableFuture.completedFuture(null));
+        assertEquals(java.util.List.of(withWheat), correct.complete(true,
+                () -> CompletableFuture.completedFuture(null), ledger).orElseThrow().departures());
+    }
+
     @Test void unloadReceiptWaitsForExactWriteAndSuccessfulSync() {
         var ledger = FrontierV3AmbientCarrierLedger.emptyForTest(); var receipt = receipt(9);
         var batch = new FrontierV3SceneDeparturePersistence.Batch();

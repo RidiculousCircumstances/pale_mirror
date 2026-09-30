@@ -217,21 +217,33 @@ final class FrontierV3SceneReleaseExecutor {
             var cause = FrontierSceneBehaviors.resourceSiteHarvest(lease);
             var job = io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSiteHarvestSceneSupport.require(state, cause);
             Entity carrier = level.getEntity(lease.members().getFirst().entityId());
-            if (!(carrier instanceof Mob worker) || !owned(carrier, state, lease, lease.members().getFirst())) {
+            FrontierV3SceneDeparture.HandStack hand;
+            if (carrier instanceof Mob worker && owned(carrier, state, lease, lease.members().getFirst())) {
+                var held = worker.getOffhandItem();
+                if (held.isEmpty() || !net.minecraft.world.item.ItemStack.isSameItemSameComponents(held,
+                        new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.WHEAT, held.getCount()))) {
+                    FrontierV3ResourceSiteHarvestSceneExecutor.releaseCustodyConflict(level, runtime, state, lease,
+                            "bound-hand-release-physical-foreign"); return;
+                }
+                hand = new FrontierV3SceneDeparture.HandStack("minecraft:wheat", held.getCount());
+            } else if (carrier == null && departedMembers.contains(lease.members().getFirst())) {
+                var departure = FrontierV3SceneDepartureObserver.validDeparture(state, lease,
+                        lease.members().getFirst(), actorLedger).orElse(null);
+                if (departure == null || departure.offhand().isEmpty()
+                        || !departure.offhand().orElseThrow().itemKind().equals("minecraft:wheat")) {
+                    FrontierV3ResourceSiteHarvestSceneExecutor.releaseCustodyConflict(level, runtime, state, lease,
+                            "bound-hand-release-saved-hand-unavailable"); return;
+                }
+                hand = departure.offhand().orElseThrow();
+            } else {
                 FrontierV3ResourceSiteHarvestSceneExecutor.releaseCustodyConflict(level, runtime, state, lease,
                         "bound-hand-release-body-unavailable"); return;
-            }
-            var held = worker.getOffhandItem();
-            if (held.isEmpty() || !net.minecraft.world.item.ItemStack.isSameItemSameComponents(held,
-                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.WHEAT, held.getCount()))) {
-                FrontierV3ResourceSiteHarvestSceneExecutor.releaseCustodyConflict(level, runtime, state, lease,
-                        "bound-hand-release-physical-foreign"); return;
             }
             harvestHandRelease = new io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestHandRelease(
                     job.siteId(), job.id(), job.actorAccountId(), lease.revision(),
                     new io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalObservation.Stack(
                             new io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress.ActorHand(
-                                    job.workerId(), lease.members().getFirst().entityId()), "minecraft:wheat", held.getCount()),
+                                    job.workerId(), lease.members().getFirst().entityId()), hand.itemKind(), hand.quantity()),
                     new SceneLeaseReleased(lease.id(), positions));
             try {
                 io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess.reduceHandRelease(

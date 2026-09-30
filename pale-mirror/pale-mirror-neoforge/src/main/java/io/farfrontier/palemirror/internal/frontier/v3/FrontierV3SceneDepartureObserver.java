@@ -35,10 +35,19 @@ final class FrontierV3SceneDepartureObserver {
         var inactive = new FrontierV3ActorCarrierComposition.Declaration(binding.live().actorId(), binding.live().kind(),
                 binding.live().owner(), binding.live().entityId(), FrontierV3ActorCarrierComposition.Representation.INACTIVE_CARRIER,
                 revision, binding.live().epoch());
+        java.util.Optional<FrontierV3SceneDeparture.HandStack> offhand = java.util.Optional.empty();
+        if (FrontierSceneBehaviors.isResourceSiteHarvest(binding.lease())
+                && FrontierSceneLeaseStateSupport.hasBoundActorHand(state, binding.lease())) {
+            var held = body.getOffhandItem();
+            if (!held.isEmpty() && net.minecraft.world.item.ItemStack.isSameItemSameComponents(held,
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.WHEAT, held.getCount()))) {
+                offhand = java.util.Optional.of(new FrontierV3SceneDeparture.HandStack("minecraft:wheat", held.getCount()));
+            }
+        }
         var receipt = new FrontierV3SceneDeparture(new FrontierV3AmbientCarrierLedger.Carrier(inactive, revision,
                 ambient == null ? 0L : ambient.revision()), binding.lease().id(), binding.lease().revision(),
                 new SceneMemberPosition(binding.member().actorId(), observedBody,
-                        new FixedScalar(Math.round((double) body.getHealth() * FixedScalar.SCALE))), actor.condition().health());
+                        new FixedScalar(Math.round((double) body.getHealth() * FixedScalar.SCALE))), actor.condition().health(), offhand);
         return FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId()).recordDeparture(receipt);
     }
 
@@ -51,6 +60,14 @@ final class FrontierV3SceneDepartureObserver {
         var binding = binding(state, entity);
         if (binding != null && FrontierV3ActorCarrierComposition.owns(entity, binding.live())) {
             var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
+            var departure = ledger.departure(binding.member().actorId()).orElse(null);
+            if (departure != null && departure.offhand().isPresent()) {
+                var held = body.getOffhandItem();
+                var expected = departure.offhand().orElseThrow();
+                if (held.isEmpty() || !net.minecraft.world.item.ItemStack.isSameItemSameComponents(held,
+                        new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.WHEAT, held.getCount()))
+                        || !expected.itemKind().equals("minecraft:wheat") || expected.quantity() != held.getCount()) return;
+            }
             BodyPosition observedBody;
             if (FrontierSceneBehaviors.isResourceSiteHarvest(binding.lease())) {
                 var supported = FrontierV3SupportedBodyCapture.observe(level, body);

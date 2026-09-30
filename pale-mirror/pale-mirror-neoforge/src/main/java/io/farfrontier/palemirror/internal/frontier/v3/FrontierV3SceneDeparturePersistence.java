@@ -145,7 +145,15 @@ final class FrontierV3SceneDeparturePersistence {
     /** Only bounded primitive evidence is retained; arbitrary entity NBT is never cached. */
     record SavedBody(UUID id, String type, String actor, String kind, String owner, String representation,
                      long revision, long epoch, String lease, long sceneRevision,
-                     BodyPosition body, FixedScalar health) {
+                     BodyPosition body, FixedScalar health,
+                     Optional<FrontierV3SceneDeparture.HandStack> offhand) {
+        SavedBody(UUID id, String type, String actor, String kind, String owner, String representation,
+                  long revision, long epoch, String lease, long sceneRevision,
+                  BodyPosition body, FixedScalar health) {
+            this(id, type, actor, kind, owner, representation, revision, epoch, lease, sceneRevision,
+                    body, health, Optional.empty());
+        }
+
         static Optional<SavedBody> from(CompoundTag entity) {
             if (!entity.hasUUID("UUID") || !entity.contains("id", Tag.TAG_STRING)
                     || !entity.contains("NeoForgeData", Tag.TAG_COMPOUND)
@@ -168,12 +176,25 @@ final class FrontierV3SceneDeparturePersistence {
             float health = entity.getFloat("Health");
             if (!Double.isFinite(x) || !Double.isFinite(y) || !Double.isFinite(z)
                     || !Float.isFinite(health) || health <= 0.0F) return Optional.empty();
+            Optional<FrontierV3SceneDeparture.HandStack> offhand = Optional.empty();
+            if (entity.contains("HandItems", Tag.TAG_LIST)) {
+                ListTag hands = entity.getList("HandItems", Tag.TAG_COMPOUND);
+                if (hands.size() != 2) return Optional.empty();
+                CompoundTag held = hands.getCompound(1);
+                if (held.contains("id", Tag.TAG_STRING) && held.contains("count", Tag.TAG_INT)
+                        && !held.contains("components")) {
+                    try {
+                        offhand = Optional.of(new FrontierV3SceneDeparture.HandStack(
+                                held.getString("id"), held.getInt("count")));
+                    } catch (IllegalArgumentException invalidHand) { return Optional.empty(); }
+                }
+            }
             return Optional.of(new SavedBody(entity.getUUID("UUID"), type, actor, kind, owner, representation,
                     tag.getLong(FrontierV3ActorCarrierComposition.REVISION_KEY),
                     tag.getLong(FrontierV3ActorCarrierComposition.EPOCH_KEY), lease,
                     tag.getLong(FrontierV3SceneExecutor.REVISION_KEY),
                     new BodyPosition((int) Math.floor(x), (int) Math.floor(y), (int) Math.floor(z)),
-                    new FixedScalar(Math.round((double) health * FixedScalar.SCALE))));
+                    new FixedScalar(Math.round((double) health * FixedScalar.SCALE)), offhand));
         }
 
         boolean matches(FrontierV3SceneDeparture receipt) {
@@ -185,7 +206,8 @@ final class FrontierV3SceneDeparturePersistence {
                     && sceneRevision == receipt.sceneRevision()
                     && type.equals(declaration.kind() == FrontierV3ActorCarrierComposition.ActorKind.RESIDENT
                         ? "minecraft:villager" : "minecraft:zombie")
-                    && body.equals(receipt.observed().body()) && health.equals(receipt.observed().health());
+                    && body.equals(receipt.observed().body()) && health.equals(receipt.observed().health())
+                    && (receipt.offhand().isEmpty() || receipt.offhand().equals(offhand));
         }
     }
 

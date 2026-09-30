@@ -8,15 +8,30 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 
 import java.util.Objects;
+import java.util.Optional;
 
 /** Final observed body departure, not a periodic sample and not itself a COLD authority grant. */
 record FrontierV3SceneDeparture(FrontierV3AmbientCarrierLedger.Carrier carrier, SceneLeaseId leaseId, long sceneRevision,
-                                SceneMemberPosition observed, FixedScalar canonicalHealthAtCapture) {
+                                SceneMemberPosition observed, FixedScalar canonicalHealthAtCapture,
+                                Optional<HandStack> offhand) {
+    record HandStack(String itemKind, int quantity) {
+        HandStack {
+            if (itemKind == null || !itemKind.matches("[a-z][a-z0-9_-]{0,31}:[a-z0-9][a-z0-9_./-]{0,127}")
+                    || quantity < 1 || quantity > 64) throw new IllegalArgumentException("invalid saved scene hand");
+        }
+    }
+
+    FrontierV3SceneDeparture(FrontierV3AmbientCarrierLedger.Carrier carrier, SceneLeaseId leaseId, long sceneRevision,
+                             SceneMemberPosition observed, FixedScalar canonicalHealthAtCapture) {
+        this(carrier, leaseId, sceneRevision, observed, canonicalHealthAtCapture, Optional.empty());
+    }
+
     FrontierV3SceneDeparture {
         Objects.requireNonNull(carrier);
         Objects.requireNonNull(leaseId);
         Objects.requireNonNull(observed);
         Objects.requireNonNull(canonicalHealthAtCapture);
+        Objects.requireNonNull(offhand);
         if (carrier.identity().owner() != FrontierV3ActorCarrierComposition.Owner.SCENE_LEASE
                 || sceneRevision < 0 || carrier.physicalRevision() != Math.max(1L, sceneRevision)
                 || !carrier.identity().actorId().equals(observed.actorId())
@@ -35,6 +50,12 @@ record FrontierV3SceneDeparture(FrontierV3AmbientCarrierLedger.Carrier carrier, 
         tag.putInt("z", observed.body().z());
         tag.putLong("health", observed.health().raw());
         tag.putLong("canonicalHealth", canonicalHealthAtCapture.raw());
+        offhand.ifPresent(hand -> {
+            CompoundTag held = new CompoundTag();
+            held.putString("itemKind", hand.itemKind());
+            held.putInt("quantity", hand.quantity());
+            tag.put("offhand", held);
+        });
         return tag;
     }
 
@@ -46,8 +67,17 @@ record FrontierV3SceneDeparture(FrontierV3AmbientCarrierLedger.Carrier carrier, 
             throw new IllegalStateException("incomplete scene departure evidence");
         }
         var carrier = FrontierV3AmbientCarrierLedger.Carrier.load(tag.getCompound("carrier"));
+        if (tag.contains("offhand") && !tag.contains("offhand", Tag.TAG_COMPOUND))
+            throw new IllegalStateException("invalid scene departure hand evidence");
+        Optional<HandStack> hand = Optional.empty();
+        if (tag.contains("offhand", Tag.TAG_COMPOUND)) {
+            CompoundTag held = tag.getCompound("offhand");
+            if (!held.contains("itemKind", Tag.TAG_STRING) || !held.contains("quantity", Tag.TAG_INT))
+                throw new IllegalStateException("incomplete scene departure hand evidence");
+            hand = Optional.of(new HandStack(held.getString("itemKind"), held.getInt("quantity")));
+        }
         return new FrontierV3SceneDeparture(carrier, new SceneLeaseId(tag.getString("lease")), tag.getLong("sceneRevision"),
                 new SceneMemberPosition(carrier.identity().actorId(), new BodyPosition(tag.getInt("x"), tag.getInt("y"), tag.getInt("z")),
-                        new FixedScalar(tag.getLong("health"))), new FixedScalar(tag.getLong("canonicalHealth")));
+                        new FixedScalar(tag.getLong("health"))), new FixedScalar(tag.getLong("canonicalHealth")), hand);
     }
 }
