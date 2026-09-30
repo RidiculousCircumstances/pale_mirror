@@ -232,3 +232,18 @@ gate separately, calibrate queue/write/TPS on one preserved/fresh-world diagnost
 run, then one coherent HOT/COLD/restart
 and player-visible depot visit on the exact candidate. Do not infer F0.6R3
 completion from this checkpoint.
+
+## Post-meal owner-exclusion checkpoint, 2026-09-30
+
+Source `cd8be538` (local only) closes a reachable owner overlap: after bread
+consumption, the old meal is gone but the resident still has an active
+post-service movement order. Work admissions, field/workshop scene candidates,
+medical/migration selection and meal-start validation now respect that movement
+owner. A retained baker can release the depot's physical access turn on first
+exit while still being unavailable to bakery work until arrival. Focused
+actor-movement, resident-meal and bakery vertical tests plus Frontier/NeoForge
+compilation passed. The previously failing architecture-debt `guardrails`
+check now passes after a behavior-preserving simplification of the runtime
+composition overloads; its ceiling was not raised. This remains source-level
+evidence, not a live TPS or player-visible result. Next is a single fresh-world
+diagnostic host-budget/queue run followed by the exact HOT/COLD/restart visit.
