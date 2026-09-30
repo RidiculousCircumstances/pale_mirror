@@ -40,9 +40,27 @@ class ScheduledActionQueueTest {
         assertEquals(2, checks.get(), "one exact depot change rechecks its waiter");
         assertEquals(List.of(ready), queue.selectDue(new SimInstant(1_220), new WorkBudget(2, 2), eligible, keys).admitted());
         assertEquals(3, checks.get(), "bounded audit rechecks a missed wake without a WAL retry");
+        assertEquals(0L, queue.auditReadyWithoutWake(), "still-blocked audit is not a missed wake");
         queue.cancel(waiting.id());
         queue.wake(Set.of(depot));
         assertEquals(List.of(ready), queue.snapshot());
+    }
+
+    @Test
+    void auditReportsAnEligibleWaiterWhoseOwnerSignalWasMissed() {
+        ScheduledActionQueue queue = new ScheduledActionQueue();
+        ScheduledAction waiter = action("schedule:audit-ready", 1L, 0, "resident:a", 1);
+        SubjectId source = new SubjectId("container:audit-source");
+        java.util.concurrent.atomic.AtomicBoolean available = new java.util.concurrent.atomic.AtomicBoolean();
+        queue.schedule(waiter);
+        var eligible = (java.util.function.Predicate<ScheduledAction>) action -> available.get();
+        var keys = (java.util.function.Function<ScheduledAction, Set<SubjectId>>) action -> Set.of(source);
+        assertTrue(queue.selectDue(new SimInstant(1L), new WorkBudget(1, 1), eligible, keys).admitted().isEmpty());
+        available.set(true);
+        assertTrue(queue.selectDue(new SimInstant(1_200L), new WorkBudget(1, 1), eligible, keys).admitted().isEmpty());
+        assertEquals(List.of(waiter), queue.selectDue(new SimInstant(1_201L),
+                new WorkBudget(1, 1), eligible, keys).admitted());
+        assertEquals(1L, queue.auditReadyWithoutWake());
     }
 
     @Test

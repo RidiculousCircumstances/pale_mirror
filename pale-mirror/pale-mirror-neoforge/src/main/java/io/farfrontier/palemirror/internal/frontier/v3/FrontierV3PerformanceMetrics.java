@@ -24,6 +24,7 @@ final class FrontierV3PerformanceMetrics implements FrontierExecutionMetrics {
     private final Map<Key, Timing> stages = new TreeMap<>();
     private final Map<QueueKey, Queue> queues = new TreeMap<>();
     private long droppedAttributions;
+    private long auditReadyWithoutWake;
 
     @Override
     public Span begin(Stage stage, String kind, String owner) {
@@ -52,12 +53,18 @@ final class FrontierV3PerformanceMetrics implements FrontierExecutionMetrics {
     }
 
     @Override
+    public void observeWakeAudit(long count) {
+        if (count < 0L) throw new IllegalArgumentException("wake audit count cannot be negative");
+        auditReadyWithoutWake = count;
+    }
+
+    @Override
     public Snapshot snapshot() {
         List<StageSample> stageSamples = new ArrayList<>(stages.size());
         stages.forEach((key, value) -> stageSamples.add(value.snapshot(key)));
         List<QueueSample> queueSamples = new ArrayList<>(queues.size());
         queues.forEach((key, value) -> queueSamples.add(value.snapshot(key)));
-        return new Snapshot(stageSamples, queueSamples, droppedAttributions);
+        return new Snapshot(stageSamples, queueSamples, droppedAttributions, auditReadyWithoutWake);
     }
 
     private Timing timing(Key requested) {

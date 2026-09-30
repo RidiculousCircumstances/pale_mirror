@@ -41,13 +41,19 @@ public interface FrontierExecutionMetrics {
         }
     }
 
-    record Snapshot(List<StageSample> stages, List<QueueSample> queues, long droppedAttributions) {
+    record Snapshot(List<StageSample> stages, List<QueueSample> queues, long droppedAttributions,
+                    long auditReadyWithoutWake) {
         public Snapshot {
             stages = List.copyOf(stages); queues = List.copyOf(queues);
-            if (droppedAttributions < 0L) throw new IllegalArgumentException("dropped attributions cannot be negative");
+            if (droppedAttributions < 0L || auditReadyWithoutWake < 0L)
+                throw new IllegalArgumentException("diagnostic counters cannot be negative");
         }
 
-        public static Snapshot empty() { return new Snapshot(List.of(), List.of(), 0L); }
+        public Snapshot(List<StageSample> stages, List<QueueSample> queues, long droppedAttributions) {
+            this(stages, queues, droppedAttributions, 0L);
+        }
+
+        public static Snapshot empty() { return new Snapshot(List.of(), List.of(), 0L, 0L); }
     }
 
     Span begin(Stage stage, String kind, String owner);
@@ -60,6 +66,9 @@ public interface FrontierExecutionMetrics {
                               Optional<ScheduledAction> deferred) {
         observeQueue(instant, queueDepth, deferred);
     }
+
+    /** Audit-only evidence that an eligible owner wait lacked a matching invalidation. */
+    default void observeWakeAudit(long auditReadyWithoutWake) { }
 
     Snapshot snapshot();
 
@@ -106,6 +115,12 @@ public interface FrontierExecutionMetrics {
         } catch (RuntimeException ignored) {
             // Diagnostic state is non-canonical and cannot change the work outcome.
         }
+    }
+
+    static void safelyObserveWakeAudit(FrontierExecutionMetrics metrics, long auditReadyWithoutWake) {
+        Objects.requireNonNull(metrics, "execution metrics");
+        try { metrics.observeWakeAudit(auditReadyWithoutWake); }
+        catch (RuntimeException ignored) { /* Diagnostic state cannot alter canonical work. */ }
     }
 
     private static String requireLabel(String value, String role) {

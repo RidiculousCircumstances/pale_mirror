@@ -463,6 +463,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
     private void observeQueue(SimInstant observedAt, int queueDepth, int parkedDepth,
                               Optional<ScheduledAction> deferred) {
         FrontierExecutionMetrics.safelyObserveQueue(executionMetrics, observedAt, queueDepth, parkedDepth, deferred);
+        FrontierExecutionMetrics.safelyObserveWakeAudit(executionMetrics, schedules.auditReadyWithoutWake());
     }
 
     private byte[] currentEncodedState() {

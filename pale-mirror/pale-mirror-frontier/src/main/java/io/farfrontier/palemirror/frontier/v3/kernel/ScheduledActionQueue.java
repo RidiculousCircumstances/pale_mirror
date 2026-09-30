@@ -32,6 +32,7 @@ public final class ScheduledActionQueue {
     private final Map<ScheduleId, Parked> parked = new HashMap<>();
     private final Map<SubjectId, Set<ScheduleId>> parkedByKey = new HashMap<>();
     private final NavigableMap<Long, Set<ScheduleId>> auditAt = new TreeMap<>();
+    private long auditReadyWithoutWake;
 
     private record Parked(ScheduledAction action, Set<SubjectId> keys, long auditTick) { }
 
@@ -69,11 +70,14 @@ public final class ScheduledActionQueue {
     public boolean isEligibleHead(ScheduledAction action, SimInstant instant,
                                   Predicate<ScheduledAction> eligible,
                                   Function<ScheduledAction, Set<SubjectId>> holdWakeKeys) {
-        auditExpired(instant.ticks());
+        Set<ScheduleId> audited = auditExpired(instant.ticks());
         for (Iterator<ScheduledAction> iterator = runnable.iterator(); iterator.hasNext();) {
             ScheduledAction candidate = iterator.next();
             if (candidate.dueAt().compareTo(instant) > 0) return false;
-            if (eligible.test(candidate)) return action.equals(candidate);
+            if (eligible.test(candidate)) {
+                countMissedWake(audited, candidate);
+                return action.equals(candidate);
+            }
             Set<SubjectId> keys = holdWakeKeys.apply(candidate);
             if (!keys.isEmpty()) {
                 iterator.remove();
@@ -116,7 +120,7 @@ public final class ScheduledActionQueue {
         Objects.requireNonNull(budget, "budget");
         Objects.requireNonNull(eligible, "eligible");
         Objects.requireNonNull(holdWakeKeys, "hold wake keys");
-        auditExpired(instant.ticks());
+        Set<ScheduleId> audited = auditExpired(instant.ticks());
         List<ScheduledAction> executed = new ArrayList<>();
         int weight = 0;
         for (Iterator<ScheduledAction> iterator = runnable.iterator(); iterator.hasNext();) {
@@ -132,6 +136,7 @@ public final class ScheduledActionQueue {
                 }
                 continue;
             }
+            countMissedWake(audited, next);
             if (executed.size() == budget.maxActions() || next.weight() > budget.maxWeight() - weight) {
                 return new ScheduledWork(executed, next);
             }
@@ -164,11 +169,21 @@ public final class ScheduledActionQueue {
         auditAt.computeIfAbsent(audit, ignored -> new HashSet<>()).add(action.id());
     }
 
-    private void auditExpired(long now) {
+    private Set<ScheduleId> auditExpired(long now) {
+        if (auditAt.isEmpty() || auditAt.firstKey() > now) return Set.of();
+        Set<ScheduleId> audited = new HashSet<>();
         while (!auditAt.isEmpty() && auditAt.firstKey() <= now) {
             Set<ScheduleId> ids = Set.copyOf(auditAt.firstEntry().getValue());
-            ids.forEach(this::unpark);
+            ids.forEach(id -> {
+                unpark(id);
+                audited.add(id);
+            });
         }
+        return audited;
+    }
+
+    private void countMissedWake(Set<ScheduleId> audited, ScheduledAction action) {
+        if (audited.contains(action.id()) && auditReadyWithoutWake < Long.MAX_VALUE) auditReadyWithoutWake++;
     }
 
     private void unpark(ScheduleId id) {
@@ -213,6 +228,9 @@ public final class ScheduledActionQueue {
 
     /** Diagnostic only: parked actions remain canonical members but are not runnable work. */
     public int parkedCount() { return parked.size(); }
+
+    /** Lower bound: an audit found an eligible wait that no owner signal had woken. */
+    public long auditReadyWithoutWake() { return auditReadyWithoutWake; }
 
     /** First queued due instant strictly after the caller's canonical instant. */
     public Optional<SimInstant> nextDueAfter(SimInstant instant) {
