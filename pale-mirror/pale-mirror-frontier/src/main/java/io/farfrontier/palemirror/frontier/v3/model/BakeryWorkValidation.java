@@ -23,9 +23,21 @@ final class BakeryWorkValidation {
 
     private static void validateExact(ExactInventory inventory, ProductionJob job,
                                       ProductionStationSpec station, BakeryWorkState work) {
+        if (work.phase() == BakeryWorkState.Phase.DELIVERED) {
+            // Delivery releases the product to ordinary stock. The job remains only to
+            // bring its worker home; another resident may take or consume the bread.
+            ExactItemStack output = inventory.items().get(job.outputItemId());
+            if (inventory.items().containsKey(job.consumedItemId())
+                    || output != null && (!output.itemKind().equals("minecraft:bread")
+                        || output.custody() instanceof InventoryCustody.Actor actor
+                        && actor.actorId().equals(job.workerId())
+                        || output.custody() instanceof InventoryCustody.ContainerSlot slot
+                        && slot.containerId().equals(station.containerId())))
+                throw new IllegalArgumentException("delivered bakery job still holds exact input or output");
+            return;
+        }
         boolean outputPhase = work.phase() == BakeryWorkState.Phase.STATION_UNLOAD
-                || work.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY
-                || work.phase() == BakeryWorkState.Phase.DELIVERED;
+                || work.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY;
         SubjectId id = outputPhase ? job.outputItemId() : job.consumedItemId();
         ExactItemStack stack = inventory.items().get(id);
         if (work.phase() == BakeryWorkState.Phase.DEPOT_PICKUP
@@ -48,13 +60,7 @@ final class BakeryWorkValidation {
             case STATION_LOAD, DEPOT_DELIVERY -> new InventoryCustody.Actor(job.workerId());
             case PROCESSING -> new InventoryCustody.ContainerSlot(station.containerId(), station.inputSlot());
             case STATION_UNLOAD -> new InventoryCustody.ContainerSlot(station.containerId(), station.outputSlot());
-            case DELIVERED -> {
-                ExactItemStack output = inventory.items().get(job.outputItemId());
-                if (output == null || !(output.custody() instanceof InventoryCustody.ContainerSlot slot)
-                        || !slot.containerId().equals(FrontierWorldState.depotId(job.settlementId())))
-                    throw new IllegalArgumentException("delivered bakery output has no exact depot custody");
-                yield output.custody();
-            }
+            case DELIVERED -> throw new IllegalStateException("delivered bakery resources are public stock");
         };
         if (stack == null || !stack.custody().equals(expected) || !stack.economicOwnerId().equals(job.settlementId())
                 || !stack.itemKind().equals(outputPhase ? "minecraft:bread" : "minecraft:wheat")
@@ -74,28 +80,40 @@ final class BakeryWorkValidation {
             claimId = bound.claimId(); input = bound.inputLots();
         } else throw new IllegalArgumentException("bakery resource job has no declared input allocation");
         FungibleResourceLedger ledger = inventory.fungibleResources();
+        if (work.phase() == BakeryWorkState.Phase.DELIVERED) {
+            // The delivery receipt ended the job's resource custody, not its return
+            // route. Its output lot can subsequently be split, moved or consumed.
+            CustodyAccount actor = ledger.accounts().get(work.actorAccountId());
+            CustodyAccount stationAccount = ledger.accounts().get(work.stationAccountId());
+            ResourceLot output = ledger.lots().get(job.outputItemId());
+            if (ledger.claims().containsKey(claimId)
+                    || output != null && !output.itemKind().equals("minecraft:bread")
+                    || actor != null && actor.lotQuantities().containsKey(job.outputItemId())
+                    || stationAccount != null && stationAccount.lotQuantities().containsKey(job.outputItemId()))
+                throw new IllegalArgumentException("delivered bakery job still holds its input claim or output");
+            return;
+        }
         boolean outputPhase = work.phase() == BakeryWorkState.Phase.STATION_UNLOAD
-                || work.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY
-                || work.phase() == BakeryWorkState.Phase.DELIVERED;
+                || work.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY;
         SubjectId currentId = switch (work.phase()) {
             case DEPOT_PICKUP -> work.sourceAccountId();
             case STATION_LOAD, DEPOT_DELIVERY -> work.actorAccountId();
             case PROCESSING, STATION_UNLOAD -> work.stationAccountId();
-            case DELIVERED -> work.destinationAccountId();
+            case DELIVERED -> throw new IllegalStateException("delivered bakery resources are public stock");
         };
         CustodyAccount account = ledger.accounts().get(currentId);
         ResourceCustody custody = switch (work.phase()) {
             case DEPOT_PICKUP -> new ResourceCustody.Container(FrontierWorldState.depotId(settlement.id()));
             case STATION_LOAD, DEPOT_DELIVERY -> new ResourceCustody.Actor(job.workerId());
             case PROCESSING, STATION_UNLOAD -> new ResourceCustody.Container(station.containerId());
-            case DELIVERED -> new ResourceCustody.Container(FrontierWorldState.depotId(settlement.id()));
+            case DELIVERED -> throw new IllegalStateException("delivered bakery resources are public stock");
         };
         Map<SubjectId, Integer> expectedLots = outputPhase ? Map.of(job.outputItemId(), job.outputCount()) : input;
         Map<SubjectId, Integer> expectedClaim = outputPhase ? Map.of() : Map.of(claimId, job.outputCount());
         if (account == null || !account.custody().equals(custody)
                 || expectedLots.entrySet().stream().anyMatch(entry -> account.lotQuantities().getOrDefault(entry.getKey(), 0) < entry.getValue())
                 || expectedClaim.entrySet().stream().anyMatch(entry -> account.claimQuantities().getOrDefault(entry.getKey(), 0) < entry.getValue())
-                || (work.phase() != BakeryWorkState.Phase.DEPOT_PICKUP && work.phase() != BakeryWorkState.Phase.DELIVERED
+                || (work.phase() != BakeryWorkState.Phase.DEPOT_PICKUP
                     && (!account.lotQuantities().equals(expectedLots) || !account.claimQuantities().equals(expectedClaim)))
                 || outputPhase == ledger.claims().containsKey(claimId))
             throw new IllegalArgumentException("bakery resource has no sole phase-correct account and claim");

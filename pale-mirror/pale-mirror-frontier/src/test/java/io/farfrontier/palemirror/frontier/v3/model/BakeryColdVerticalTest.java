@@ -156,19 +156,49 @@ class BakeryColdVerticalTest {
                 .residents().stream().map(Resident::id).filter(id -> !id.equals(job.workerId()))
                 .findFirst().orElseThrow();
         boolean releasedBeforeFinalization = false;
+        boolean breadEatenBeforeFinalization = false;
         for (int step = 0; completed.productionJobs().containsKey(job.id()) && step < 300; step++) {
             BakeryColdStep clearing = ProductionProcess.planCompletion(completed,
                             ProductionProcess.complete(job, retry.dueAt().ticks() + 20L * (step + 1)))
                     .stream().map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
                     .map(BakeryColdStep.class::cast).findFirst().orElseThrow();
             completed = ProductionProcess.reduceBakeryColdStep(completed, task.ownerId(), clearing);
-            if (completed.productionJobs().containsKey(job.id()))
-                releasedBeforeFinalization |= ServiceAccessCoordinator.depotAvailableForMeal(completed,
+            if (completed.productionJobs().containsKey(job.id())) {
+                boolean released = ServiceAccessCoordinator.depotAvailableForMeal(completed,
                         FrontierWorldState.depotId(job.settlementId()), waitingResident);
+                releasedBeforeFinalization |= released;
+                if (released && !breadEatenBeforeFinalization) {
+                    completed = completed.withHumanPopulation(completed.humanPopulation()
+                            .accrueHunger(waitingResident, 27_000L));
+                    ResidentMealStarted meal = ResidentMealProcess.selectSourceAtYield(completed,
+                            waitingResident, 27_000L).orElseThrow();
+                    assertEquals(job.outputItemId(), meal.meal().lotId());
+                    completed = ResidentMealProcess.reduceStarted(completed, waitingResident, meal);
+                    for (int mealStep = 0; mealStep < 200
+                            && completed.humanPopulation().meals().get(waitingResident).phase() != ResidentMeal.Phase.RETURN; mealStep++) {
+                        Optional<ResidentMealColdStep> planned = ResidentMealProcess.planColdStep(completed,
+                                waitingResident, 27_001L + mealStep);
+                        assertTrue(planned.isPresent(), "meal cannot advance in "
+                                + completed.humanPopulation().meals().get(waitingResident).phase()
+                                + " at step " + mealStep);
+                        ResidentMealColdStep progress = planned.orElseThrow();
+                        completed = ResidentMealProcess.reduceColdStep(completed, waitingResident, progress);
+                    }
+                    assertEquals(ResidentMeal.Phase.RETURN,
+                            completed.humanPopulation().meals().get(waitingResident).phase());
+                    assertEquals(63, completed.inventory().fungibleResources()
+                            .totalQuantity(job.settlementId(), "minecraft:bread"));
+                    assertEquals(BakeryWorkState.Phase.DELIVERED,
+                            completed.productionJobs().get(job.id()).bakeryWork().orElseThrow().phase());
+                    breadEatenBeforeFinalization = true;
+                }
+            }
         }
         assertTrue(releasedBeforeFinalization, "a delivered baker may continue to the workshop without monopolizing an empty depot");
+        assertTrue(breadEatenBeforeFinalization, "delivered bread must become available while the baker returns");
         assertFalse(completed.productionJobs().containsKey(job.id()));
         assertEquals(StrategicTaskStatus.COMPLETED, completed.strategicPlans().tasks().get(task.id()).status());
+        assertEquals(completed, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(completed)));
     }
 
     @Test
