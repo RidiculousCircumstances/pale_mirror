@@ -195,6 +195,9 @@ a substitute for closing the remaining causal owner inventory. Queue metrics
 now separate parked and unparked depth. Focused queue, resident activity/meal,
 engine checkpoint/recovery tests and NeoForge compilation passed. No live TPS
 or product result is claimed; the current server still runs the prior build.
+Follow-up source `4e62ed91` reports an `auditReadyWithoutWake` lower-bound
+counter in the performance diagnostic when an eligible waiter reappears only
+at the bounded audit. Focused queue, recovery and diagnostic JSON tests passed.
 Next implementation must close post-consumption movement ownership and route
 invalidation before a candidate deployment, then calibrate the host budget on
 one fresh disposable diagnostic world.
