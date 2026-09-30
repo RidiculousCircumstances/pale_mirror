@@ -55,6 +55,12 @@ public interface FrontierExecutionMetrics {
     /** Reports the current exact queue size and, when present, the first due action denied by budget. */
     void observeQueue(SimInstant instant, int queueDepth, Optional<ScheduledAction> deferred);
 
+    /** Separates retained owner waits from runnable debt without changing canonical ordering. */
+    default void observeQueue(SimInstant instant, int queueDepth, int parkedDepth,
+                              Optional<ScheduledAction> deferred) {
+        observeQueue(instant, queueDepth, deferred);
+    }
+
     Snapshot snapshot();
 
     static FrontierExecutionMetrics noOp() { return NoOp.INSTANCE; }
@@ -87,6 +93,16 @@ public interface FrontierExecutionMetrics {
         Objects.requireNonNull(metrics, "execution metrics");
         try {
             metrics.observeQueue(instant, queueDepth, deferred);
+        } catch (RuntimeException ignored) {
+            // Diagnostic state is non-canonical and cannot change the work outcome.
+        }
+    }
+
+    static void safelyObserveQueue(FrontierExecutionMetrics metrics, SimInstant instant, int queueDepth,
+                                   int parkedDepth, Optional<ScheduledAction> deferred) {
+        Objects.requireNonNull(metrics, "execution metrics");
+        try {
+            metrics.observeQueue(instant, queueDepth, parkedDepth, deferred);
         } catch (RuntimeException ignored) {
             // Diagnostic state is non-canonical and cannot change the work outcome.
         }

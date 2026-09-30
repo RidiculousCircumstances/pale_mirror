@@ -411,6 +411,110 @@ public final class FrontierWorldProcessCatalog {
         return planner.held(state, action);
     }
 
+    /** Park only waits whose source/service owner has an exact wake address. */
+    public static Set<io.farfrontier.palemirror.frontier.v3.api.SubjectId> holdWakeKeys(
+            FrontierWorldState state, ScheduledAction action) {
+        if (!action.kind().equals(ResidentActivityProcess.REVIEW)
+                && !action.kind().equals(ResidentMealProcess.PROGRESS)) return Set.of();
+        ResidentProfile resident = state.humanPopulation().resident(action.subject());
+        if (resident == null) return Set.of(action.subject());
+        if (action.kind().equals(ResidentActivityProcess.REVIEW)) {
+            if (state.humanPopulation().meals().containsKey(action.subject())) return Set.of(action.subject());
+            // A safe-checkpoint wait depends on its work owner, not just food.
+            // Keep that rare action directly runnable until work-owner invalidation is indexed.
+            if (ResidentMealOpportunity.find(state, action.subject()).isPresent()) return Set.of();
+        } else {
+            ResidentMeal meal = state.humanPopulation().meals().get(action.subject());
+            if (meal == null) return Set.of(action.subject());
+            // Only the side-pocket wait is depot-addressed. Route/physical/HOT
+            // holds have different causal owners and remain directly checked.
+            if (meal.pendingPhysicalStep().isPresent()
+                    || !FrontierSceneAdmission.available(state, List.of(meal.residentId()))
+                    || state.sceneLeases().values().stream()
+                        .anyMatch(lease -> lease.retainsMemberCustody(meal.residentId()))
+                    || meal.phase() != ResidentMeal.Phase.MOVE || meal.coldTravel().isPresent()
+                    || ServiceAccessCoordinator.depotAvailableForMeal(state, meal.depotId(), meal.residentId()))
+                return Set.of();
+        }
+        return Set.of(action.subject(), FrontierWorldState.depotId(resident.settlementId()));
+    }
+
+    /** Derived invalidation; canonical facts and due order stay in the WAL-backed queue. */
+    public static Set<io.farfrontier.palemirror.frontier.v3.api.SubjectId> wakeKeys(
+            FrontierWorldState previous, FrontierWorldState next, FrontierEvent event) {
+        java.util.HashSet<io.farfrontier.palemirror.frontier.v3.api.SubjectId> keys = new java.util.HashSet<>();
+        var resident = next.humanPopulation().resident(event.subject());
+        if (resident == null) resident = previous.humanPopulation().resident(event.subject());
+        if (resident != null) keys.add(resident.id());
+
+        boolean accessChanged = previous.actorLocations() != next.actorLocations()
+                || previous.ambientLeases() != next.ambientLeases()
+                || previous.humanPopulation().meals() != next.humanPopulation().meals()
+                || previous.productionJobs() != next.productionJobs()
+                || previous.resourceSites() != next.resourceSites();
+        boolean stockChanged = previous.inventory().fungibleResources() != next.inventory().fungibleResources();
+        boolean custodyChanged = previous.replicaCustody() != next.replicaCustody();
+        boolean sceneChanged = previous.sceneLeases() != next.sceneLeases();
+        if (!accessChanged && !stockChanged && !custodyChanged && !sceneChanged)
+            return Set.copyOf(keys);
+        if (sceneChanged) {
+            for (var entry : previous.sceneLeases().entrySet()) {
+                SceneLease updated = next.sceneLeases().get(entry.getKey());
+                if (entry.getValue().equals(updated)) continue;
+                addResidentDepotKeys(previous, entry.getValue(), keys);
+                if (updated != null) addResidentDepotKeys(next, updated, keys);
+            }
+            for (var entry : next.sceneLeases().entrySet()) {
+                if (!previous.sceneLeases().containsKey(entry.getKey()))
+                    addResidentDepotKeys(next, entry.getValue(), keys);
+            }
+        }
+        io.farfrontier.palemirror.frontier.v3.api.SubjectId siteId = null;
+        if (accessChanged) {
+            if (next.resourceSites().sites().containsKey(event.subject())) siteId = event.subject();
+            else {
+                for (ResourceSiteLifecycle lifecycle : next.resourceSites().sites().values()) {
+                    if (lifecycle.activeWork().filter(work -> work.id().equals(event.subject())).isPresent()) {
+                        siteId = lifecycle.siteId();
+                        break;
+                    }
+                }
+            }
+        }
+        ResourceSite affectedSite = siteId == null ? null
+                : FrontierResourceSitePlan.compile(next.bootstrap()).get(siteId);
+        for (Settlement settlement : next.bootstrap().settlements()) {
+            var depot = FrontierWorldState.depotId(settlement.id());
+            boolean localAccess = accessChanged && (event.subject().equals(settlement.id())
+                    || resident != null && resident.settlementId().equals(settlement.id())
+                    || previous.productionJobs().containsKey(event.subject())
+                        && previous.productionJobs().get(event.subject()).settlementId().equals(settlement.id())
+                    || next.productionJobs().containsKey(event.subject())
+                        && next.productionJobs().get(event.subject()).settlementId().equals(settlement.id())
+                    || affectedSite != null && affectedSite.settlementId().equals(settlement.id()));
+            boolean localStock = stockChanged && !java.util.Objects.equals(
+                    FungibleResourceCustodySupport.accountAtContainer(previous, depot),
+                    FungibleResourceCustodySupport.accountAtContainer(next, depot));
+            boolean localCustody = custodyChanged && (ReferenceContainerCustody.blocksCanonicalUse(previous, depot)
+                    != ReferenceContainerCustody.blocksCanonicalUse(next, depot)
+                    || ReferenceContainerCustody.hasLiveCustody(previous, depot)
+                    != ReferenceContainerCustody.hasLiveCustody(next, depot));
+            if (localAccess || localStock || localCustody) keys.add(depot);
+        }
+        return Set.copyOf(keys);
+    }
+
+    private static void addResidentDepotKeys(FrontierWorldState state, SceneLease lease,
+                                             Set<io.farfrontier.palemirror.frontier.v3.api.SubjectId> keys) {
+        for (SceneMember member : lease.members()) {
+            ResidentProfile resident = state.humanPopulation().resident(member.actorId());
+            if (resident != null) {
+                keys.add(resident.id());
+                keys.add(FrontierWorldState.depotId(resident.settlementId()));
+            }
+        }
+    }
+
     private static DeterministicProcessDescriptor descriptor(String id, Set<String> commands, Set<String> schedules,
                                                               Set<String> events, Set<String> emissions, Set<String> codecs) {
         return new DeterministicProcessDescriptor(id, commands, schedules, events, emissions, codecs);

@@ -1,6 +1,12 @@
 package io.farfrontier.palemirror.frontier.v3.process;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
+import io.farfrontier.palemirror.frontier.v3.api.CommandId;
+import io.farfrontier.palemirror.frontier.v3.api.EventId;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
+import io.farfrontier.palemirror.frontier.v3.api.Revision;
+import io.farfrontier.palemirror.frontier.v3.api.TransactionId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
@@ -14,6 +20,36 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ResidentActivityProcessTest {
+    @Test void depotStockChangeWakesOnlyItsSettlementWaiters() {
+        FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:resident-depot-addressed-wake"), 421L));
+        Settlement first = initial.bootstrap().settlements().getFirst();
+        Settlement second = initial.bootstrap().settlements().get(1);
+        SubjectId depot = FrontierWorldState.depotId(first.id());
+        SubjectId account = ReferenceContainerCustody.scopeId(depot);
+        ResourceLot contribution = new ResourceLot(new SubjectId("lot:addressed-wake-bread"), first.id(),
+                ResidentMeal.BREAD_KIND, 1, "player-gift", List.of());
+        FrontierWorldState restocked = initial.withInventory(initial.inventory().withFungibleResources(
+                initial.inventory().fungibleResources().transformCold(account,
+                        Map.of(new SubjectId("lot:bootstrap-1-wheat"), 1), Map.of(), contribution)));
+        java.util.UUID player = new java.util.UUID(0L, 1L);
+        var observed = new FungibleStockContributionObserved(account, depot, 1L, player,
+                new java.util.UUID(0L, 2L), contribution,
+                List.of(new FungiblePhysicalObservation.Stack(
+                        new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, 0)),
+                        ResidentMeal.BREAD_KIND, 1)));
+        FrontierEvent event = new FrontierEvent(FrontierEvent.SCHEMA_VERSION,
+                new EventId("event:addressed-wake"), new TransactionId("transaction:addressed-wake"),
+                initial.bootstrap().worldId(), new Revision(1L), new SimInstant(24_000L),
+                FrontierExecutionSubjects.PHYSICAL_EXECUTOR,
+                CauseChain.root(new CommandId("command:addressed-wake")), observed);
+        var keys = FrontierWorldRuntimeDefinition.wakeKeys(initial, restocked, event);
+        assertTrue(keys.contains(depot));
+        assertFalse(keys.contains(FrontierWorldState.depotId(second.id())));
+        assertEquals(java.util.Set.of(first.residents().getFirst().id(), depot),
+                FrontierWorldRuntimeDefinition.holdWakeKeys(initial,
+                        ResidentActivityProcess.review(first.residents().getFirst().id(), 24_000L)));
+    }
     @Test void exactHungryResidentStartsOneMealAndOneProgressActionAtDayBoundary() {
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:resident-activity-clock"), 421L));
@@ -37,6 +73,13 @@ class ResidentActivityProcessTest {
         assertEquals(36_000L, next.dueAt().ticks());
         FrontierWorldState eating = ResidentMealProcess.reduceStarted(state, resident, started);
         assertEquals(started.meal(), eating.humanPopulation().meals().get(resident));
+        FrontierEvent startEvent = new FrontierEvent(FrontierEvent.SCHEMA_VERSION,
+                new EventId("event:meal-start-wake"), new TransactionId("transaction:meal-start-wake"),
+                state.bootstrap().worldId(), new Revision(1L), new SimInstant(24_000L), resident,
+                CauseChain.root(new CommandId("command:meal-start-wake")), started);
+        assertTrue(FrontierWorldRuntimeDefinition.wakeKeys(state, eating, startEvent)
+                .contains(FrontierWorldState.depotId(settlement.id())),
+                "meal occupancy change must recheck the next resident waiting for this depot");
         assertEquals(2, FrontierWorldRuntimeDefinition.planScheduled(eating, progress).size());
     }
 

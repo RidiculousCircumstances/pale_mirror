@@ -58,6 +58,13 @@ final class FrontierWorldConfigurationFactory {
             @Override public boolean held(FrontierWorldState state, ScheduledAction action) {
                 return FrontierWorldRuntimeDefinition.scheduledHeld(state, action);
             }
+            @Override public java.util.Set<SubjectId> holdWakeKeys(FrontierWorldState state, ScheduledAction action) {
+                return FrontierWorldRuntimeDefinition.holdWakeKeys(state, action);
+            }
+            @Override public java.util.Set<SubjectId> wakeKeys(FrontierWorldState previous,
+                                                                 FrontierWorldState next, FrontierEvent event) {
+                return FrontierWorldRuntimeDefinition.wakeKeys(previous, next, event);
+            }
             @Override public List<ScheduledAction> retiredBy(FrontierWorldState previous, FrontierWorldState next,
                                                                FrontierEvent event, Supplier<List<ScheduledAction>> pending) {
                 return FrontierWorldRuntimeDefinition.retiredSchedules(previous, next, event, pending);

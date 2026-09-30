@@ -2,8 +2,11 @@ package io.farfrontier.palemirror.frontier.v3.kernel;
 
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * Pure policy for a due action. A no-op must still be represented by an accepted event. The
@@ -22,6 +25,12 @@ public interface ScheduledActionPlanner<S> {
 
     /** Canonical owner-declared hold; excludes work before budget admission without changing its deadline. */
     default boolean held(S state, ScheduledAction action) { return false; }
+
+    /** Nonempty keys allow a held action to leave the runnable index until one owner changes. */
+    default Set<SubjectId> holdWakeKeys(S state, ScheduledAction action) { return Set.of(); }
+
+    /** Derived wake signals from an accepted domain transition; they are not new canonical events. */
+    default Set<SubjectId> wakeKeys(S previous, S next, FrontierEvent event) { return Set.of(); }
 
     /**
      * Exact pending actions retired by the owning domain transition. The kernel records

@@ -26,6 +26,7 @@ import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -592,6 +593,45 @@ class InMemoryFrontierEngineTest {
         assertRejected(recovered.submit(command("command:checkpoint-two", new Revision(2L), 3)), RejectionCode.DUPLICATE_COMMAND);
         assertThrows(IllegalArgumentException.class, () -> FrontierEngines.recover(configuration,
                 new RecoveryImage(new WorldId("frontier:other"), Optional.empty(), List.of())));
+    }
+
+    @Test
+    void parkedDueActionWakesFromAcceptedOwnerChangeAndMatchesFreshRecovery() {
+        ScheduledAction waiting = scheduled("schedule:addressed-wait", SUBJECT.value(), 1L, 1);
+        StateCodec<Counter> codec = new StateCodec<>() {
+            @Override public byte[] encode(Counter state) { return ByteBuffer.allocate(4).putInt(state.value()).array(); }
+            @Override public Counter decode(byte[] bytes) { return new Counter(ByteBuffer.wrap(bytes).getInt()); }
+        };
+        ScheduledActionPlanner<Counter> planner = new ScheduledActionPlanner<>() {
+            @Override public List<ProposedEvent> plan(Counter state, ScheduledAction action) {
+                return List.of(new ProposedEvent(action.subject(), new Delta(10)));
+            }
+            @Override public boolean held(Counter state, ScheduledAction action) { return state.value() == 0; }
+            @Override public Set<SubjectId> holdWakeKeys(Counter state, ScheduledAction action) { return Set.of(SUBJECT); }
+            @Override public Set<SubjectId> wakeKeys(Counter previous, Counter next, FrontierEvent event) {
+                return previous.value() == next.value() ? Set.of() : Set.of(SUBJECT);
+            }
+        };
+        var configuration = new FrontierEngineConfiguration<>(WORLD, new Counter(0), SimInstant.ZERO,
+                (state, command) -> new CommandPlan.Accepted(List.of(new ProposedEvent(SUBJECT, command.payload()))),
+                planner, (state, event) -> reduce(state, event, false), codec,
+                (state, world, revision, instant, query) -> new CounterProjection(world, revision, instant, state.value()),
+                new EngineLimits(8, 100L, 8), List.of(waiting), TransactionCommitter.noOp());
+        var uninterrupted = FrontierEngines.create(configuration);
+        uninterrupted.advanceTo(new SimInstant(1L), new WorkBudget(1, 1));
+        assertEquals(List.of(waiting), uninterrupted.checkpoint().schedules());
+        assertEquals(Revision.ZERO, uninterrupted.checkpoint().revision());
+        var recovered = FrontierEngines.recover(configuration, new RecoveryImage(WORLD,
+                Optional.of(new SnapshotRecord(uninterrupted.checkpoint(), 1L)), List.of()));
+        CommandId id = new CommandId("command:addressed-source-arrived");
+        FrontierCommand sourceChange = new FrontierCommand(1, id, WORLD, Revision.ZERO,
+                new SimInstant(1L), SUBJECT, CauseChain.root(id), new Delta(1));
+        assertInstanceOf(CommandResult.Accepted.class, uninterrupted.submit(sourceChange));
+        assertInstanceOf(CommandResult.Accepted.class, recovered.submit(sourceChange));
+        uninterrupted.advanceTo(new SimInstant(2L), new WorkBudget(1, 1));
+        recovered.advanceTo(new SimInstant(2L), new WorkBudget(1, 1));
+        assertEquals(11, uninterrupted.projection(ProjectionQuery.summary()).value());
+        assertEquals(uninterrupted.checkpoint(), recovered.checkpoint());
     }
 
     private static InMemoryFrontierEngine<Counter, CounterProjection> engine(

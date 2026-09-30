@@ -20,6 +20,7 @@ import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.api.RejectionCode;
 import io.farfrontier.palemirror.frontier.v3.api.Revision;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.TransactionId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.persistence.Durability;
@@ -30,6 +31,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.HashSet;
 import java.util.function.Consumer;
 
 /**
@@ -224,17 +227,20 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         }
         ScheduledWork work;
         try (FrontierExecutionMetrics.Span ignored = measure(FrontierExecutionMetrics.Stage.SCHEDULE_ALLOCATION, "due-actions", worldId.value())) {
-            work = schedules.selectDue(target, budget, action -> !scheduledPlanner.held(state, action));
+            work = schedules.selectDue(target, budget, action -> !scheduledPlanner.held(state, action),
+                    action -> safeHoldWakeKeys(state, action));
         } catch (RuntimeException error) {
             quarantine(CauseChain.root(new CommandId("scheduler:allocation")),
                     KernelQuarantineReporter.Boundary.DUE_TRANSACTION, error);
             return advanceResult(List.of(), Optional.empty());
         }
-        observeQueue(target, schedules.size(), work.blockedActionOptional());
+        observeQueue(target, schedules.size(), schedules.parkedCount(), work.blockedActionOptional());
         List<TransactionId> completed = new ArrayList<>();
         for (ScheduledAction action : work.admitted()) {
             try {
-                if (!schedules.isEligibleHead(action, candidate -> !scheduledPlanner.held(state, candidate))) {
+                if (!schedules.isEligibleHead(action, target,
+                        candidate -> !scheduledPlanner.held(state, candidate),
+                        candidate -> safeHoldWakeKeys(state, candidate))) {
                     continue;
                 }
                 if (transactions.size() == limits.maxTransactions()) {
@@ -271,7 +277,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         }
         instant = target;
         pruneReceipts();
-        observeQueue(target, schedules.size(), work.blockedActionOptional());
+        observeQueue(target, schedules.size(), schedules.parkedCount(), work.blockedActionOptional());
         return advanceResult(completed, work.blockedActionOptional());
     }
 
@@ -360,6 +366,8 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         Revision nextRevision = revision.next();
         TransactionId transactionId = new TransactionId("transaction:revision-" + nextRevision.value());
         List<FrontierEvent> events = new ArrayList<>(proposed.size());
+        Set<SubjectId> wakeKeys = new HashSet<>();
+        boolean wakeAll = false;
         S nextState = state;
         ScheduledActionQueue.Mutation nextSchedules = schedules.beginMutation();
         for (int index = 0; index < proposed.size(); index++) {
@@ -382,6 +390,10 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                 }
             }
             events.add(event);
+            if (nextState != beforeEvent && !wakeAll) {
+                try { wakeKeys.addAll(Set.copyOf(scheduledPlanner.wakeKeys(beforeEvent, nextState, event))); }
+                catch (RuntimeException invalidDerivedIndex) { wakeAll = true; }
+            }
             if (nextState != beforeEvent) {
                 var retirements = scheduledPlanner.retiredBy(beforeEvent, nextState, event, nextSchedules::snapshot);
                 List<ScheduledAction> pending = retirements.isEmpty() ? List.of() : nextSchedules.snapshot();
@@ -433,6 +445,8 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         encodedState = encoded;
         revision = nextRevision;
         nextSchedules.commit();
+        if (wakeAll) schedules.wakeAll();
+        else schedules.wake(wakeKeys);
         transactions.add(transaction);
         return transactionId;
     }
@@ -441,8 +455,14 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         return FrontierExecutionMetrics.safelyBegin(executionMetrics, stage, kind, owner);
     }
 
-    private void observeQueue(SimInstant observedAt, int queueDepth, Optional<ScheduledAction> deferred) {
-        FrontierExecutionMetrics.safelyObserveQueue(executionMetrics, observedAt, queueDepth, deferred);
+    private Set<SubjectId> safeHoldWakeKeys(S source, ScheduledAction action) {
+        try { return Set.copyOf(Objects.requireNonNull(scheduledPlanner.holdWakeKeys(source, action), "hold wake keys")); }
+        catch (RuntimeException invalidDerivedIndex) { return Set.of(); }
+    }
+
+    private void observeQueue(SimInstant observedAt, int queueDepth, int parkedDepth,
+                              Optional<ScheduledAction> deferred) {
+        FrontierExecutionMetrics.safelyObserveQueue(executionMetrics, observedAt, queueDepth, parkedDepth, deferred);
     }
 
     private byte[] currentEncodedState() {

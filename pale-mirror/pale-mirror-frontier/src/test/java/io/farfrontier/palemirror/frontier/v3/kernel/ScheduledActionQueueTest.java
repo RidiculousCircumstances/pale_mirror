@@ -6,6 +6,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -13,6 +15,53 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ScheduledActionQueueTest {
+    @Test
+    void parkedWaitersAreNotReevaluatedEachTickAndWakeInTheirOriginalDueOrder() {
+        ScheduledActionQueue queue = new ScheduledActionQueue();
+        ScheduledAction waiting = action("schedule:waiting", 1L, 0, "resident:a", 1);
+        ScheduledAction ready = action("schedule:ready", 2L, 0, "resident:b", 1);
+        SubjectId depot = new SubjectId("container:depot-a");
+        queue.schedule(waiting);
+        queue.schedule(ready);
+        AtomicInteger checks = new AtomicInteger();
+        java.util.function.Predicate<ScheduledAction> eligible = action -> {
+            if (action.equals(waiting)) { checks.incrementAndGet(); return false; }
+            return true;
+        };
+        var keys = (java.util.function.Function<ScheduledAction, Set<SubjectId>>) action ->
+                action.equals(waiting) ? Set.of(waiting.subject(), depot) : Set.of();
+        assertEquals(List.of(ready), queue.selectDue(new SimInstant(2), new WorkBudget(2, 2), eligible, keys).admitted());
+        assertEquals(List.of(ready), queue.selectDue(new SimInstant(20), new WorkBudget(2, 2), eligible, keys).admitted());
+        assertEquals(1, checks.get(), "unchanged held resident must not be re-planned each tick");
+        assertEquals(List.of(waiting, ready), queue.snapshot(), "parking does not change canonical membership");
+
+        queue.wake(Set.of(depot));
+        assertEquals(List.of(ready), queue.selectDue(new SimInstant(20), new WorkBudget(2, 2), eligible, keys).admitted());
+        assertEquals(2, checks.get(), "one exact depot change rechecks its waiter");
+        assertEquals(List.of(ready), queue.selectDue(new SimInstant(1_220), new WorkBudget(2, 2), eligible, keys).admitted());
+        assertEquals(3, checks.get(), "bounded audit rechecks a missed wake without a WAL retry");
+        queue.cancel(waiting.id());
+        queue.wake(Set.of(depot));
+        assertEquals(List.of(ready), queue.snapshot());
+    }
+
+    @Test
+    void addressedWakeReadmitsAnEarlierDueActionAheadOfAnAlreadySelectedLaterOne() {
+        ScheduledActionQueue queue = new ScheduledActionQueue();
+        ScheduledAction first = action("schedule:first", 1L, 0, "resident:a", 1);
+        ScheduledAction later = action("schedule:later", 2L, 0, "resident:b", 1);
+        queue.schedule(first); queue.schedule(later);
+        SubjectId source = new SubjectId("container:depot-a");
+        java.util.concurrent.atomic.AtomicBoolean available = new java.util.concurrent.atomic.AtomicBoolean();
+        var eligible = (java.util.function.Predicate<ScheduledAction>) action -> !action.equals(first) || available.get();
+        var keys = (java.util.function.Function<ScheduledAction, Set<SubjectId>>) action ->
+                action.equals(first) ? Set.of(source) : Set.of();
+        assertEquals(List.of(later), queue.selectDue(new SimInstant(2), new WorkBudget(2, 2), eligible, keys).admitted());
+        available.set(true);
+        queue.wake(Set.of(source));
+        assertFalse(queue.isEligibleHead(later, new SimInstant(2), eligible, keys));
+        assertEquals(List.of(first, later), queue.selectDue(new SimInstant(2), new WorkBudget(2, 2), eligible, keys).admitted());
+    }
     @Test
     void equalDueActionsUseStablePrioritySubjectAndIdOrder() {
         ScheduledActionQueue queue = new ScheduledActionQueue();

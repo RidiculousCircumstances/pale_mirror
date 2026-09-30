@@ -41,6 +41,17 @@ final class FrontierV3PerformanceMetrics implements FrontierExecutionMetrics {
     }
 
     @Override
+    public void observeQueue(SimInstant instant, int queueDepth, int parkedDepth,
+                             Optional<ScheduledAction> deferred) {
+        if (parkedDepth < 0 || parkedDepth > queueDepth)
+            throw new IllegalArgumentException("parked depth exceeds canonical queue depth");
+        observeQueue(instant, queueDepth, deferred);
+        queue(new QueueKey("held-waiters", "world")).record(parkedDepth, 0L);
+        queue(new QueueKey("unparked-depth", "world")).record(queueDepth - parkedDepth,
+                deferred.map(action -> Math.max(0L, instant.ticks() - action.dueAt().ticks())).orElse(0L));
+    }
+
+    @Override
     public Snapshot snapshot() {
         List<StageSample> stageSamples = new ArrayList<>(stages.size());
         stages.forEach((key, value) -> stageSamples.add(value.snapshot(key)));

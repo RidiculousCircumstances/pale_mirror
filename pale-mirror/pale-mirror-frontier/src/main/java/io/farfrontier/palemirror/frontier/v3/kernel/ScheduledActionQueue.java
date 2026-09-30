@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.frontier.v3.kernel;
 
 import io.farfrontier.palemirror.frontier.v3.api.ScheduleId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -9,17 +10,30 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.NavigableMap;
 import java.util.NavigableSet;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.TreeMap;
+import java.util.Iterator;
+import java.util.HashSet;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 /** Engine-owned schedule index. Its only mutation path is explicit schedule or cancellation events. */
 public final class ScheduledActionQueue {
+    private static final long HOLD_AUDIT_TICKS = 1_200L;
     private final NavigableSet<ScheduledAction> ordered = new TreeSet<>();
+    /** Reconstructible execution index; parked actions remain in the canonical ordered queue. */
+    private final NavigableSet<ScheduledAction> runnable = new TreeSet<>();
     private final Map<ScheduleId, ScheduledAction> byId = new HashMap<>();
+    private final Map<ScheduleId, Parked> parked = new HashMap<>();
+    private final Map<SubjectId, Set<ScheduleId>> parkedByKey = new HashMap<>();
+    private final NavigableMap<Long, Set<ScheduleId>> auditAt = new TreeMap<>();
+
+    private record Parked(ScheduledAction action, Set<SubjectId> keys, long auditTick) { }
 
     public void schedule(ScheduledAction action) {
         Objects.requireNonNull(action, "action");
@@ -30,11 +44,15 @@ public final class ScheduledActionQueue {
             byId.remove(action.id());
             throw new IllegalStateException("scheduled action ordering collision: " + action.id().value());
         }
+        runnable.add(action);
     }
 
     public boolean cancel(ScheduleId id) {
         ScheduledAction action = byId.remove(Objects.requireNonNull(id, "schedule id"));
-        return action != null && ordered.remove(action);
+        if (action == null) return false;
+        runnable.remove(action);
+        forgetParked(action.id());
+        return ordered.remove(action);
     }
 
     public boolean isHead(ScheduledAction action) {
@@ -44,6 +62,23 @@ public final class ScheduledActionQueue {
     public boolean isEligibleHead(ScheduledAction action, Predicate<ScheduledAction> eligible) {
         for (ScheduledAction candidate : ordered) {
             if (eligible.test(candidate)) return action.equals(candidate);
+        }
+        return false;
+    }
+
+    public boolean isEligibleHead(ScheduledAction action, SimInstant instant,
+                                  Predicate<ScheduledAction> eligible,
+                                  Function<ScheduledAction, Set<SubjectId>> holdWakeKeys) {
+        auditExpired(instant.ticks());
+        for (Iterator<ScheduledAction> iterator = runnable.iterator(); iterator.hasNext();) {
+            ScheduledAction candidate = iterator.next();
+            if (candidate.dueAt().compareTo(instant) > 0) return false;
+            if (eligible.test(candidate)) return action.equals(candidate);
+            Set<SubjectId> keys = holdWakeKeys.apply(candidate);
+            if (!keys.isEmpty()) {
+                iterator.remove();
+                park(candidate, keys, instant.ticks());
+            }
         }
         return false;
     }
@@ -72,15 +107,31 @@ public final class ScheduledActionQueue {
     }
 
     public ScheduledWork selectDue(SimInstant instant, WorkBudget budget, Predicate<ScheduledAction> eligible) {
+        return selectDue(instant, budget, eligible, ignored -> Set.of());
+    }
+
+    public ScheduledWork selectDue(SimInstant instant, WorkBudget budget, Predicate<ScheduledAction> eligible,
+                                   Function<ScheduledAction, Set<SubjectId>> holdWakeKeys) {
         Objects.requireNonNull(instant, "instant");
         Objects.requireNonNull(budget, "budget");
+        Objects.requireNonNull(eligible, "eligible");
+        Objects.requireNonNull(holdWakeKeys, "hold wake keys");
+        auditExpired(instant.ticks());
         List<ScheduledAction> executed = new ArrayList<>();
         int weight = 0;
-        for (ScheduledAction next : ordered) {
+        for (Iterator<ScheduledAction> iterator = runnable.iterator(); iterator.hasNext();) {
+            ScheduledAction next = iterator.next();
             if (next.dueAt().compareTo(instant) > 0) {
                 break;
             }
-            if (!eligible.test(next)) continue;
+            if (!eligible.test(next)) {
+                Set<SubjectId> keys = holdWakeKeys.apply(next);
+                if (!keys.isEmpty()) {
+                    iterator.remove();
+                    park(next, keys, instant.ticks());
+                }
+                continue;
+            }
             if (executed.size() == budget.maxActions() || next.weight() > budget.maxWeight() - weight) {
                 return new ScheduledWork(executed, next);
             }
@@ -88,6 +139,55 @@ public final class ScheduledActionQueue {
             weight = Math.addExact(weight, next.weight());
         }
         return new ScheduledWork(executed, null);
+    }
+
+    /** A committed owner transition re-admits only matching waiters, in original due order. */
+    public void wake(Set<SubjectId> keys) {
+        Set<ScheduleId> ids = new HashSet<>();
+        for (SubjectId key : keys) ids.addAll(parkedByKey.getOrDefault(key, Set.of()));
+        ids.forEach(this::unpark);
+    }
+
+    /** A derived-index failure falls back to ordinary eligibility checks, never lost work. */
+    public void wakeAll() {
+        Set<ScheduleId> ids = Set.copyOf(parked.keySet());
+        ids.forEach(this::unpark);
+    }
+
+    private void park(ScheduledAction action, Set<SubjectId> keys, long now) {
+        Set<SubjectId> exact = Set.copyOf(keys);
+        if (exact.isEmpty() || parked.containsKey(action.id()))
+            throw new IllegalArgumentException("held action needs new exact wake keys");
+        long audit = now > Long.MAX_VALUE - HOLD_AUDIT_TICKS ? Long.MAX_VALUE : now + HOLD_AUDIT_TICKS;
+        parked.put(action.id(), new Parked(action, exact, audit));
+        for (SubjectId key : exact) parkedByKey.computeIfAbsent(key, ignored -> new HashSet<>()).add(action.id());
+        auditAt.computeIfAbsent(audit, ignored -> new HashSet<>()).add(action.id());
+    }
+
+    private void auditExpired(long now) {
+        while (!auditAt.isEmpty() && auditAt.firstKey() <= now) {
+            Set<ScheduleId> ids = Set.copyOf(auditAt.firstEntry().getValue());
+            ids.forEach(this::unpark);
+        }
+    }
+
+    private void unpark(ScheduleId id) {
+        Parked entry = forgetParked(id);
+        if (entry != null && byId.get(id) == entry.action()) runnable.add(entry.action());
+    }
+
+    private Parked forgetParked(ScheduleId id) {
+        Parked entry = parked.remove(id);
+        if (entry == null) return null;
+        for (SubjectId key : entry.keys()) {
+            Set<ScheduleId> ids = parkedByKey.get(key);
+            ids.remove(id);
+            if (ids.isEmpty()) parkedByKey.remove(key);
+        }
+        Set<ScheduleId> auditIds = auditAt.get(entry.auditTick());
+        auditIds.remove(id);
+        if (auditIds.isEmpty()) auditAt.remove(entry.auditTick());
+        return entry;
     }
 
     /** Acknowledges the current head after its immutable completion event has committed. */
@@ -99,6 +199,8 @@ public final class ScheduledActionQueue {
         }
         ordered.pollFirst();
         byId.remove(action.id());
+        runnable.remove(action);
+        forgetParked(action.id());
     }
 
     public List<ScheduledAction> snapshot() {
@@ -108,6 +210,9 @@ public final class ScheduledActionQueue {
     public int size() {
         return ordered.size();
     }
+
+    /** Diagnostic only: parked actions remain canonical members but are not runnable work. */
+    public int parkedCount() { return parked.size(); }
 
     /** First queued due instant strictly after the caller's canonical instant. */
     public Optional<SimInstant> nextDueAfter(SimInstant instant) {

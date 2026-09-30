@@ -49,6 +49,13 @@ public final class FrontierWorldRuntimeDefinition {
     public static boolean scheduledHeld(FrontierWorldState state, ScheduledAction action) {
         return FrontierWorldProcessCatalog.scheduledHeld(PROCESS_REGISTRY, state, action);
     }
+    public static java.util.Set<SubjectId> holdWakeKeys(FrontierWorldState state, ScheduledAction action) {
+        return FrontierWorldProcessCatalog.holdWakeKeys(state, action);
+    }
+    public static java.util.Set<SubjectId> wakeKeys(FrontierWorldState previous, FrontierWorldState next,
+                                                    io.farfrontier.palemirror.frontier.v3.api.FrontierEvent event) {
+        return FrontierWorldProcessCatalog.wakeKeys(previous, next, event);
+    }
 
     public static List<ScheduledAction> retiredSchedules(FrontierWorldState previous, FrontierWorldState next,
             io.farfrontier.palemirror.frontier.v3.api.FrontierEvent event,
