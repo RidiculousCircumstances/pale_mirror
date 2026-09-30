@@ -45,12 +45,12 @@ public final class BakeryKnownNavigation {
         SurfaceAnchor outdoorGoal = toDepot ? depotPort.exteriorApproach() : workshopPort.exteriorApproach();
         MovementOrder outdoor = new MovementOrder(job.id(), job.workerId(), work.phase().wireTag(), 1,
                 List.of(outdoorGoal), TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
-        KnownSettlementPedestrianRoute routeKnowledge = KnownSettlementPedestrianRoute.forSettlement(
+        KnownPedestrianRouteKnowledge routeKnowledge = KnownPedestrianRouteKnowledge.forSettlement(
                 state, job.settlementId(), List.of(
-                        new KnownSettlementPedestrianRoute.Passage(depot.id(),
-                                KnownSettlementPedestrianRoute.Passage.Kind.DEPOT_ACCESS),
-                        new KnownSettlementPedestrianRoute.Passage(facility.id(),
-                                KnownSettlementPedestrianRoute.Passage.Kind.WORKSHOP_EXTERIOR)));
+                        new KnownPedestrianRouteKnowledge.Passage(depot,
+                                KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS),
+                        new KnownPedestrianRouteKnowledge.Passage(facility,
+                                KnownPedestrianRouteKnowledge.Passage.Reach.EXTERIOR)));
         List<SurfaceAnchor> route = routeKnowledge.path(outdoorStart, outdoor);
         List<SurfaceAnchor> result = new ArrayList<>(prefix);
         result.addAll(route.subList(1, route.size()));

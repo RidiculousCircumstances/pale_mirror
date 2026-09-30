@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class KnownSettlementPedestrianRouteTest {
+class KnownPedestrianRouteKnowledgeTest {
     @Test void crowdCannotTurnAServiceExitIntoPermanentKnownTerrain() {
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:known-pedestrian-crowd"), 20260918065L));
@@ -46,9 +46,9 @@ class KnownSettlementPedestrianRouteTest {
         }
         FrontierWorldState crowded = atService.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
         assertEquals(baseline, KnownServiceExitNavigation.path(crowded, settlement.id(), depotId, order));
-        assertEquals(baseline, KnownSettlementPedestrianRoute.path(crowded, settlement.id(),
-                port.serviceSurface(), order, List.of(new KnownSettlementPedestrianRoute.Passage(depot.id(),
-                        KnownSettlementPedestrianRoute.Passage.Kind.DEPOT_ACCESS))));
+        assertEquals(baseline, KnownPedestrianRouteKnowledge.path(crowded, settlement.id(),
+                port.serviceSurface(), order, List.of(new KnownPedestrianRouteKnowledge.Passage(depot,
+                        KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS))));
         ActorMovement movement = new ActorMovement(order, 27_000L,
                 new ActorMovementContext.ServiceExit(settlement.id(), depotId));
         FrontierWorldState moving = crowded.withChanges(FrontierWorldStateUpdate.begin()
@@ -70,7 +70,7 @@ class KnownSettlementPedestrianRouteTest {
                 () -> KnownServiceExitNavigation.path(physicallyBlocked, settlement.id(), depotId, order));
     }
 
-    @Test void facilityPassageMustNameTheDeclaredKindAndLocalOwner() {
+    @Test void facilityPassageMustNameTheExactDeclaredFacility() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:known-pedestrian-passage"), 421L));
         Settlement settlement = state.bootstrap().settlements().getFirst();
@@ -80,8 +80,62 @@ class KnownSettlementPedestrianRouteTest {
         SurfaceAnchor body = state.actorLocations().get(resident).supportingSurface();
         MovementOrder order = new MovementOrder(resident, resident, 0L, 1L, List.of(body),
                 TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
-        assertThrows(IllegalArgumentException.class, () -> KnownSettlementPedestrianRoute.path(state,
-                settlement.id(), body, order, List.of(new KnownSettlementPedestrianRoute.Passage(depot.id(),
-                        KnownSettlementPedestrianRoute.Passage.Kind.WORKSHOP_EXTERIOR))));
+        SettlementStructure forged = new SettlementStructure(depot.id(), depot.settlementId(),
+                StructureKind.WORKSHOP, depot.anchor(), depot.facing());
+        assertThrows(IllegalArgumentException.class, () -> KnownPedestrianRouteKnowledge.path(state,
+                settlement.id(), body, order, List.of(new KnownPedestrianRouteKnowledge.Passage(forged,
+                        KnownPedestrianRouteKnowledge.Passage.Reach.EXTERIOR))));
+    }
+
+    @Test void existingFacilityPortsShareTheSamePassageContract() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:known-pedestrian-port-reuse"), 421L));
+        Settlement settlement = state.bootstrap().settlements().getFirst();
+        SubjectId resident = settlement.residents().getFirst().id();
+        for (StructureKind kind : List.of(StructureKind.HALL, StructureKind.DEPOT,
+                StructureKind.WORKSHOP, StructureKind.INFIRMARY)) {
+            SettlementStructure facility = settlement.structures().stream()
+                    .filter(structure -> structure.kind() == kind).findFirst().orElseThrow();
+            var route = KnownPedestrianRouteKnowledge.forSettlement(state, settlement.id(),
+                    List.of(new KnownPedestrianRouteKnowledge.Passage(facility,
+                            KnownPedestrianRouteKnowledge.Passage.Reach.EXTERIOR)));
+            SurfaceAnchor exterior = FrontierTraversalPlan.facilityPort(facility).orElseThrow()
+                    .exteriorApproach().getFirst();
+            assertEquals(SettlementPedestrianGround.surveyedSupport(state.bootstrap(),
+                    SettlementPedestrianGround.localSupports(state.bootstrap(), settlement.id()),
+                    exterior.x(), exterior.z()), route.supportAt(exterior.x(), exterior.z()));
+            MovementOrder order = new MovementOrder(resident, resident, 0L, 1L, List.of(exterior),
+                    TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
+            assertEquals(List.of(exterior), route.path(exterior, order));
+        }
+    }
+
+    @Test void fieldOverlayUsesTheSameChangedServiceCellBarrier() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:known-pedestrian-field-overlay"), 421L));
+        ResourceSite site = state.resourceSite(new SubjectId("site:1-wheat-field"));
+        Settlement settlement = state.bootstrap().settlements().stream()
+                .filter(candidate -> candidate.id().equals(site.settlementId())).findFirst().orElseThrow();
+        SettlementStructure depot = settlement.structures().stream()
+                .filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
+        SettlementDepotServicePort port = SettlementDepotServicePort.forDepot(depot);
+        SurfaceAnchor start = port.exteriorApproach();
+        SubjectId resident = settlement.residents().getFirst().id();
+        MovementOrder order = new MovementOrder(resident, resident, 0L, 1L,
+                List.of(port.serviceSurface()), TraversalCapability.PEDESTRIAN,
+                MovementOrder.ArrivalPolicy.EXACT_STATION);
+        ResourceFieldCycle cycle = state.resourceSites().cycle(site.id());
+        ResourceFieldCycle foreign = state.resourceSites().cycles().entrySet().stream()
+                .filter(entry -> !entry.getKey().equals(site.id())).findFirst().orElseThrow().getValue();
+        assertThrows(IllegalArgumentException.class,
+                () -> KnownPedestrianRouteKnowledge.forField(state, site, foreign, port, start));
+        assertEquals(List.of(start, port.serviceSurface()),
+                KnownPedestrianRouteKnowledge.forField(state, site, cycle, port, start).path(start, order));
+        FrontierWorldState changed = state.recordPhysicalDelta(new PhysicalDelta(
+                port.serviceSurface().support().offset(0, 1, 0), PhysicalDeltaKind.UNKNOWN_SCAR,
+                Optional.empty(), Optional.empty(), "test:changed-field-service"));
+        assertThrows(KnownPedestrianNavigation.RouteUnavailable.class,
+                () -> KnownPedestrianRouteKnowledge.forField(changed, site,
+                        changed.resourceSites().cycle(site.id()), port, start).path(start, order));
     }
 }

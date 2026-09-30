@@ -50,19 +50,19 @@ public final class ResidentMealKnownNavigation {
 
         List<SurfaceAnchor> prefix = workshopExit(settlement, start);
         SurfaceAnchor outdoorStart = prefix.getLast();
-        List<KnownSettlementPedestrianRoute.Passage> passages = new ArrayList<>();
-        passages.add(new KnownSettlementPedestrianRoute.Passage(depot.id(),
-                KnownSettlementPedestrianRoute.Passage.Kind.DEPOT_ACCESS));
+        List<KnownPedestrianRouteKnowledge.Passage> passages = new ArrayList<>();
+        passages.add(new KnownPedestrianRouteKnowledge.Passage(depot,
+                KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS));
         if (prefix.size() > 1) {
             SettlementStructure workshop = settlement.structures().stream()
                     .filter(structure -> structure.kind() == StructureKind.WORKSHOP)
                     .filter(structure -> SettlementWorkshopServicePort.forWorkshop(structure)
                             .exteriorApproach().equals(outdoorStart))
                     .findFirst().orElseThrow(() -> new IllegalArgumentException("meal start has no declared workshop exit"));
-            passages.add(new KnownSettlementPedestrianRoute.Passage(workshop.id(),
-                    KnownSettlementPedestrianRoute.Passage.Kind.WORKSHOP_EXTERIOR));
+            passages.add(new KnownPedestrianRouteKnowledge.Passage(workshop,
+                    KnownPedestrianRouteKnowledge.Passage.Reach.EXTERIOR));
         }
-        KnownSettlementPedestrianRoute routeKnowledge = KnownSettlementPedestrianRoute.forSettlement(
+        KnownPedestrianRouteKnowledge routeKnowledge = KnownPedestrianRouteKnowledge.forSettlement(
                 state, meal.settlementId(), passages);
         // A distant applicant is not an occupant and does not own the service
         // turn. Route it to a side pocket first, then reconsider the short
@@ -118,7 +118,7 @@ public final class ResidentMealKnownNavigation {
 
     private static List<SurfaceAnchor> waitingSurfaces(FrontierWorldState state, ResidentMeal meal,
                                                        SettlementDepotServicePort port,
-                                                       KnownSettlementPedestrianRoute routeKnowledge) {
+                                                       KnownPedestrianRouteKnowledge routeKnowledge) {
         SurfaceAnchor apron = port.facing().step(port.exteriorApproach(), -1);
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), meal.settlementId());
         int ordinal = 0;
@@ -161,8 +161,8 @@ public final class ResidentMealKnownNavigation {
                 FrontierWireTags.tag(meal.phase()), 1L,
                 List.of(SettlementDepotServicePort.forDepot(depot).serviceSurface()),
                 TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
-        return KnownSettlementPedestrianRoute.path(state, meal.settlementId(), start, order,
-                List.of(new KnownSettlementPedestrianRoute.Passage(depot.id(),
-                        KnownSettlementPedestrianRoute.Passage.Kind.DEPOT_ACCESS)));
+        return KnownPedestrianRouteKnowledge.path(state, meal.settlementId(), start, order,
+                List.of(new KnownPedestrianRouteKnowledge.Passage(depot,
+                        KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS)));
     }
 }

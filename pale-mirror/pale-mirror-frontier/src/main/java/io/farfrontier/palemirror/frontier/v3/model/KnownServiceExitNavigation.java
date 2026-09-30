@@ -36,8 +36,8 @@ public final class KnownServiceExitNavigation {
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), settlementId);
         SettlementStructure depot = settlement.structures().stream()
                 .filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
-        return KnownSettlementPedestrianRoute.path(state, settlementId, start, order,
-                List.of(new KnownSettlementPedestrianRoute.Passage(depot.id(),
-                        KnownSettlementPedestrianRoute.Passage.Kind.DEPOT_ACCESS)));
+        return KnownPedestrianRouteKnowledge.path(state, settlementId, start, order,
+                List.of(new KnownPedestrianRouteKnowledge.Passage(depot,
+                        KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS)));
     }
 }

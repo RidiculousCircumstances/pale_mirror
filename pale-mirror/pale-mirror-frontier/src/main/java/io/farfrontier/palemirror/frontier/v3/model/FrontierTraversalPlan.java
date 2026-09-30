@@ -6,6 +6,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 /** Immutable provider-neutral traversal/port projection consumed by Foundry and physical providers. */
 public record FrontierTraversalPlan(Map<TraversalTopologyId, TraversalTopology> topologies,
@@ -39,13 +40,7 @@ public record FrontierTraversalPlan(Map<TraversalTopologyId, TraversalTopology> 
                     settlement, state.bootstrap().ruleset().facilityCapacity().intactHousingBeds());
             put(topologies, residentIngress.topology().id(), residentIngress.topology());
             for (SettlementStructure structure : settlement.structures()) {
-                FacilityTraversalPort port = switch (structure.kind()) {
-                    case HALL -> SettlementAccessPort.forHall(structure).topologyPort();
-                    case DEPOT -> SettlementDepotServicePort.forDepot(structure).topologyPort();
-                    case WORKSHOP -> SettlementWorkshopServicePort.forWorkshop(structure).topologyPort();
-                    case INFIRMARY -> SettlementInfirmaryTreatmentPort.forInfirmary(structure).topologyPort();
-                    default -> null;
-                };
+                FacilityTraversalPort port = facilityPort(structure).orElse(null);
                 if (port == null) continue;
                 TraversalTopologyId publicTopologyId = structure.kind() == StructureKind.HALL ? supply.id() : circulation.id();
                 facilities.put(port.facilityId(), new FacilityBinding(settlement.id(), port, publicTopologyId));
@@ -55,6 +50,18 @@ public record FrontierTraversalPlan(Map<TraversalTopologyId, TraversalTopology> 
             }
         }
         return new FrontierTraversalPlan(topologies, facilities);
+    }
+
+    /** The structure plan's one typed pedestrian entrance, shared by topology and route knowledge. */
+    public static Optional<FacilityTraversalPort> facilityPort(SettlementStructure structure) {
+        Objects.requireNonNull(structure, "facility port structure");
+        return Optional.ofNullable(switch (structure.kind()) {
+            case HALL -> SettlementAccessPort.forHall(structure).topologyPort();
+            case DEPOT -> SettlementDepotServicePort.forDepot(structure).topologyPort();
+            case WORKSHOP -> SettlementWorkshopServicePort.forWorkshop(structure).topologyPort();
+            case INFIRMARY -> SettlementInfirmaryTreatmentPort.forInfirmary(structure).topologyPort();
+            default -> null;
+        });
     }
 
     /** The named public topology a port must join, never a runtime nearest-route search. */

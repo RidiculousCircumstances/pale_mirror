@@ -45,7 +45,8 @@ public final class ResourceSiteHarvestKnownNavigation {
         SurfaceAnchor start = actor.supportingSurface();
         SettlementDepotServicePort port = ResourceSiteHarvestGoal.depotPort(state, job);
         try {
-            return ResourceSiteHarvestKnownGeometry.route(state, site, cycle, goal, start, port);
+            return KnownPedestrianRouteKnowledge.forField(state, site, cycle, port, start)
+                    .path(start, goal.movementOrder());
         } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
             throw new KnowledgeUnavailable("field goal has no path in retained known geometry: "
                     + goal.kind() + ": " + unavailable.getMessage(), unavailable);
