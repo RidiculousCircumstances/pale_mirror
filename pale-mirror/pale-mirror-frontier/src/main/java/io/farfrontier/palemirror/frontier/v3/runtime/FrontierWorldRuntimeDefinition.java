@@ -25,25 +25,17 @@ public final class FrontierWorldRuntimeDefinition {
     private static final DeterministicProcessRegistry PROCESS_REGISTRY = processRegistry();
     private FrontierWorldRuntimeDefinition() { }
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(WorldId worldId, long seed) {
-        return configuration(worldId, seed, FrontierRulesets.production(), true);
+        return configuration(FrontierBootstrapper.create(worldId, seed, FrontierRulesets.production()));
     }
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(WorldId worldId, long seed, FrontierRuleset ruleset) {
-        return configuration(worldId, seed, ruleset, true);
+        return configuration(FrontierBootstrapper.create(worldId, seed, ruleset));
     }
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(WorldId worldId, long seed, boolean autonomousInterception) {
-        return configuration(worldId, seed, FrontierRulesets.production(), autonomousInterception);
-    }
-    private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(WorldId worldId, long seed,
-                                                                                                           FrontierRuleset ruleset, boolean autonomousInterception) {
-        return configuration(FrontierBootstrapper.create(worldId, seed, ruleset), autonomousInterception);
+        return FrontierWorldConfigurationFactory.create(FrontierBootstrapper.create(worldId, seed), autonomousInterception);
     }
     /** Explicit fresh-world manifest; its field geometry is persisted and pinned at recovery. */
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(FrontierBootstrap bootstrap) {
-        return configuration(bootstrap, true);
-    }
-    private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration(FrontierBootstrap bootstrap,
-                                                                                                           boolean autonomousInterception) {
-        return FrontierWorldConfigurationFactory.create(bootstrap, autonomousInterception);
+        return FrontierWorldConfigurationFactory.create(bootstrap, true);
     }
     public static PayloadCodecs payloadCodecs() { return PAYLOAD_CODECS; }
     public static boolean scheduledHeld(FrontierWorldState state, ScheduledAction action) {

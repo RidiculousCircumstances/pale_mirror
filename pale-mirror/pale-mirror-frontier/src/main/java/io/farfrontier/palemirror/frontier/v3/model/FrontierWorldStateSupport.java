@@ -128,7 +128,8 @@ public final class FrontierWorldStateSupport {
 
     /** New owners cannot borrow a person during retained self-care; existing work keeps its claim. */
     public static boolean availableForNewAssignment(FrontierWorldState state, ResidentProfile resident) {
-        return workCapable(state, resident) && !state.humanPopulation().meals().containsKey(resident.id());
+        return workCapable(state, resident) && !state.humanPopulation().meals().containsKey(resident.id())
+                && !state.actorMovements().containsKey(resident.id());
     }
 
     static boolean retainsParticipantClaim(FrontierWorldState state, RouteOperation operation) {

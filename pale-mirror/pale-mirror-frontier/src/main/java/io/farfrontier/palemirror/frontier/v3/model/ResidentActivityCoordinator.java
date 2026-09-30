@@ -12,7 +12,8 @@ public final class ResidentActivityCoordinator {
                                                io.farfrontier.palemirror.frontier.v3.api.SubjectId residentId,
                                                long dueAt) {
         ResidentProfile resident = state.humanPopulation().resident(residentId);
-        if (resident == null || state.humanPopulation().meals().containsKey(residentId)) return false;
+        if (resident == null || state.humanPopulation().meals().containsKey(residentId)
+                || state.actorMovements().containsKey(residentId)) return false;
         long assessedAt = Math.max(dueAt, state.humanPopulation().nutrition(residentId).lastEvaluatedTick());
         return state.humanPopulation().schedule(resident.settlementId()).windowAt(assessedAt)
                 == SettlementDailySchedule.Window.WORK
@@ -42,6 +43,7 @@ public final class ResidentActivityCoordinator {
         if (resident == null) return false;
         long assessedAt = Math.max(canonicalTick, state.humanPopulation().nutrition(residentId).lastEvaluatedTick());
         return state.humanPopulation().meals().containsKey(residentId)
+                || state.actorMovements().containsKey(residentId)
                 || state.humanPopulation().schedule(resident.settlementId()).windowAt(assessedAt)
                     == SettlementDailySchedule.Window.FREE
                 || assess(state, residentId, assessedAt).kind() == ResidentActivityChoice.Kind.EAT;
@@ -51,6 +53,7 @@ public final class ResidentActivityCoordinator {
     public static boolean ordinaryWorkPermitted(FrontierWorldState state,
                                                 io.farfrontier.palemirror.frontier.v3.api.SubjectId residentId,
                                                 long dueAt) {
+        if (state.actorMovements().containsKey(residentId)) return false;
         long assessedAt = Math.max(dueAt, state.humanPopulation().nutrition(residentId).lastEvaluatedTick());
         return assess(state, residentId, assessedAt).kind() == ResidentActivityChoice.Kind.WORK;
     }

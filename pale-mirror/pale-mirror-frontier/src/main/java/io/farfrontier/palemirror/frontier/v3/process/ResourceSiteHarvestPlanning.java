@@ -356,6 +356,7 @@ final class ResourceSiteHarvestPlanning {
                 && state.resourceSites().site(job.siteId()).phase() == ResourceSitePhase.HARVESTING
                 && (state.resourceSites().hasPendingWorldChange(job.siteId())
                     || state.humanPopulation().meals().containsKey(job.workerId())
+                    || state.actorMovements().containsKey(job.workerId())
                     || FrontierResourceSiteHarvestSceneSupport.hasNonClosedScene(state, job)
                     || !FrontierSceneAdmission.available(state, List.of(job.workerId()))
                     || pendingPlayerBreakAtNextCell(state, job)

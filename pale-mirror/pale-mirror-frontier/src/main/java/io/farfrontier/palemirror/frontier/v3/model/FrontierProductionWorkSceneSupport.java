@@ -19,6 +19,7 @@ public final class FrontierProductionWorkSceneSupport {
     public static Optional<Candidate> candidate(FrontierWorldState state, ProductionJob job) {
         if (hasScene(state, job.id()) || !hasPhysicalInput(state, job)
                 || state.humanPopulation().meals().containsKey(job.workerId())
+                || state.actorMovements().containsKey(job.workerId())
                 || job.bakeryWork().isPresent() && job.bakeryWork().orElseThrow().phase() == BakeryWorkState.Phase.DELIVERED
                 || job.bakeryWork().isEmpty() && job.workProgress().terminalEffectEligible()) return Optional.empty();
         SubjectId depot = FrontierWorldState.depotId(job.settlementId());

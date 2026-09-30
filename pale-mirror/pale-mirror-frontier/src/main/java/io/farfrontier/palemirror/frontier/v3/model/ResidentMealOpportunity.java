@@ -21,6 +21,7 @@ public final class ResidentMealOpportunity {
     public static Optional<Source> find(FrontierWorldState state, SubjectId residentId) {
         ResidentProfile resident = state.humanPopulation().resident(residentId);
         if (resident == null || state.humanPopulation().meals().containsKey(residentId)
+                || state.actorMovements().containsKey(residentId)
                 || state.humanPopulation().migration(residentId) != null) return Optional.empty();
         ActorLocation body = state.actorLocations().get(residentId);
         if (body == null || body.condition().status() != ActorLifeStatus.ALIVE) return Optional.empty();

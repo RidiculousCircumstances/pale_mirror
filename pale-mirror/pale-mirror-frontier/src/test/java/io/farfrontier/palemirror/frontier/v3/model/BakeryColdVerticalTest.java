@@ -84,6 +84,10 @@ class BakeryColdVerticalTest {
         }
         assertFalse(state.humanPopulation().meals().containsKey(resident));
         assertTrue(state.actorMovements().containsKey(resident));
+        assertFalse(ResidentActivityCoordinator.ordinaryWorkPermitted(state, resident, mealTick));
+        assertFalse(ServiceAccessCoordinator.depotAvailableForWork(state, depot, job.id(), resident));
+        assertTrue(FrontierProductionWorkSceneSupport.candidate(state, job).isEmpty());
+        boolean releasedBeforeArrival = false;
         for (int turn = 0; state.actorMovements().containsKey(resident) && turn < 32; turn++) {
             var movement = state.actorMovements().get(resident);
             mealTick = movement.coldTravel().map(io.farfrontier.palemirror.frontier.v3.model.navigation.TimedKnownRoute::arrivalTick)
@@ -92,8 +96,15 @@ class BakeryColdVerticalTest {
                     ActorMovementProcess.plan(state, ActorMovementProcess.progress(movement, mealTick), mealTick)
                             .getFirst().payload());
             state = ActorMovementProcess.reduceColdAdvanced(state, resident, advanced);
+            if (state.actorMovements().containsKey(resident)
+                    && ServiceAccessCoordinator.depotAvailableForMeal(state, depot, otherResident)) {
+                releasedBeforeArrival = true;
+                assertFalse(ResidentActivityCoordinator.ordinaryWorkPermitted(state, resident, mealTick));
+                assertTrue(FrontierProductionWorkSceneSupport.candidate(state, job).isEmpty());
+            }
         }
         assertFalse(state.actorMovements().containsKey(resident));
+        assertTrue(releasedBeforeArrival, "the depot turn ends before the movement order reaches home");
         assertTrue(ServiceAccessCoordinator.depotAvailableForWork(state, depot, job.id(), resident));
         assertEquals(job, state.productionJobs().get(job.id()));
         assertEquals(3, state.inventory().fungibleResources().totalQuantity(job.settlementId(), "minecraft:bread"));

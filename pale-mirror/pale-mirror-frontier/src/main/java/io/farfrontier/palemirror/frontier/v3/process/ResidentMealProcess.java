@@ -140,6 +140,7 @@ public final class ResidentMealProcess {
         if (!subject.equals(meal.residentId()) || resident == null
                 || !resident.settlementId().equals(meal.settlementId())
                 || state.humanPopulation().meals().containsKey(subject)
+                || state.actorMovements().containsKey(subject)
                 || !ServiceAccessCoordinator.depotMayStartMeal(state, meal.depotId(), subject)
                 || !ServiceAccessCoordinator.mealClearingSurface(state, subject).equals(Optional.of(meal.clearingSurface()))
                 || state.humanPopulation().migration(subject) != null

@@ -107,7 +107,8 @@ public final class PopulationMigrationProcess {
         if (destination.isEmpty()) return Optional.empty();
         Optional<ResidentProfile> resident = state.humanPopulation().residents().values().stream().filter(value -> value.settlementId().equals(source.id()))
                 .filter(value -> !state.humanPopulation().migrations().containsKey(value.id()))
-                .filter(value -> !state.humanPopulation().meals().containsKey(value.id()))
+                .filter(value -> !state.humanPopulation().meals().containsKey(value.id())
+                        && !state.actorMovements().containsKey(value.id()))
                 .filter(value -> !FrontierWorldStateSupport.activeEmploymentClaim(state, value.id()))
                 .filter(value -> state.actorLocations().get(value.id()).condition().status() == ActorLifeStatus.ALIVE).filter(value -> coldAvailable(state, value.id()))
                 .sorted(Comparator.comparing(ResidentProfile::id)).findFirst();

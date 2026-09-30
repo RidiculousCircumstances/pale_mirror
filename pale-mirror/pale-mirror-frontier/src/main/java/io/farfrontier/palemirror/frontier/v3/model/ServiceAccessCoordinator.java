@@ -157,6 +157,8 @@ public final class ServiceAccessCoordinator {
         List<Applicant> applicants = new ArrayList<>();
         for (ProductionJob job : state.productionJobs().values()) {
             if (job.bakeryWork().isEmpty() || !job.settlementId().equals(port.settlementId())) continue;
+            if (state.humanPopulation().meals().containsKey(job.workerId())
+                    || state.actorMovements().containsKey(job.workerId())) continue;
             BakeryWorkState.Phase phase = job.bakeryWork().orElseThrow().phase();
             SurfaceAnchor body = currentSurface(state, job.workerId());
             boolean atPort = atPort(port, body);
@@ -166,6 +168,8 @@ public final class ServiceAccessCoordinator {
         }
         for (ResourceSiteLifecycle site : state.resourceSites().sites().values()) {
             if (!(site.activeWork().orElse(null) instanceof ResourceSiteHarvestJob job)) continue;
+            if (state.humanPopulation().meals().containsKey(job.workerId())
+                    || state.actorMovements().containsKey(job.workerId())) continue;
             ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state, job);
             if (!ResourceSiteHarvestGoal.depotPort(state, job).settlementId().equals(port.settlementId())) continue;
             SurfaceAnchor body = currentSurface(state, job.workerId());

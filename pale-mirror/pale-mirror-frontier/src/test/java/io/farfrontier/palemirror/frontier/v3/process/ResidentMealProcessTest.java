@@ -538,7 +538,7 @@ class ResidentMealProcessTest {
         assertThrows(IllegalArgumentException.class, () -> ResidentMealProcess.reduceHotObserved(terminal, resident, consumed, 48_002L));
         assertEquals(AmbientGoalKind.ACTOR_MOVEMENT, state.ambientLeases().get(resident).goal());
         assertFalse(state.inventory().fungibleResources().claims().containsKey(meal.claimId()));
-        assertEquals(ResidentActivityChoice.Kind.EAT,
+        assertEquals(ResidentActivityChoice.Kind.IDLE,
                 ResidentActivityCoordinator.assess(state, resident, 48_003L).kind());
     }
 

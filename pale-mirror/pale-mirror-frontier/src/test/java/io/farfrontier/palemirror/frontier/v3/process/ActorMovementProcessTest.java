@@ -16,6 +16,28 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ActorMovementProcessTest {
+    @Test void separateMovementKeepsTheActorUnavailableToWorkAndAnotherMealUntilArrival() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:actor-movement-exclusive"), 421L));
+        Settlement settlement = state.bootstrap().settlements().getFirst();
+        SubjectId actorId = settlement.residents().getFirst().id();
+        ResidentProfile resident = state.humanPopulation().resident(actorId);
+        SurfaceAnchor destination = ServiceAccessCoordinator.mealClearingSurface(state, actorId).orElseThrow();
+        MovementOrder order = new MovementOrder(actorId, actorId, 0L, 1L, List.of(destination),
+                TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
+        ActorMovement movement = new ActorMovement(order, 27_000L,
+                new ActorMovementContext.ServiceExit(settlement.id(), FrontierWorldState.depotId(settlement.id())));
+        assertTrue(FrontierWorldStateSupport.availableForNewAssignment(state, resident));
+        state = state.withChanges(FrontierWorldStateUpdate.begin().actorMovements(Map.of(actorId, movement)));
+        assertFalse(FrontierWorldStateSupport.availableForNewAssignment(state, resident));
+        assertFalse(ResidentActivityCoordinator.mayStartOrdinaryWork(state, actorId, 27_001L));
+        assertFalse(ResidentActivityCoordinator.ordinaryWorkPermitted(state, actorId, 27_001L));
+        assertTrue(ResidentActivityCoordinator.requestsYield(state, actorId, 27_001L));
+        assertTrue(ResidentMealOpportunity.find(state, actorId).isEmpty());
+        state = state.withChanges(FrontierWorldStateUpdate.begin().actorMovements(Map.of()));
+        assertTrue(FrontierWorldStateSupport.availableForNewAssignment(state, resident));
+    }
+
     @Test void changedKnownRouteAtomicallyCheckpointsTheSameActorBeforeHotOrRestartCanSeeIt() {
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:actor-movement-obstruction"), 421L));
