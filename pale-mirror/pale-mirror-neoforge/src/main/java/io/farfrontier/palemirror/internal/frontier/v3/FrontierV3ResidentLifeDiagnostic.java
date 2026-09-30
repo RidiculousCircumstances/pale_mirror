@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess;
+import io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess;
 
 import java.util.Map;
 
@@ -56,6 +57,10 @@ final class FrontierV3ResidentLifeDiagnostic {
         var mealAction = checkpoint.schedules().stream()
                 .filter(action -> action.subject().equals(subject) && action.kind().equals(ResidentMealProcess.PROGRESS))
                 .findFirst();
+        var movement = state.actorMovements().get(subject);
+        var movementAction = checkpoint.schedules().stream()
+                .filter(action -> action.subject().equals(subject) && action.kind().equals(ActorMovementProcess.PROGRESS))
+                .findFirst();
         return FrontierV3DiagnosticJson.base("resident_life", id, checkpoint)
                 + ",\"status\":\"ok\",\"settlement\":\"" + quote(resident.settlementId().value())
                 + "\",\"life\":\"" + (body == null ? "MISSING" : body.condition().status().name())
@@ -86,6 +91,13 @@ final class FrontierV3ResidentLifeDiagnostic {
                 + ",\"mealAtWaitingPocket\":" + (meal != null && ResidentMealKnownNavigation.atWaitingPocket(state, meal))
                 + ",\"mealServiceAvailable\":" + (meal != null && ServiceAccessCoordinator.depotAvailableForMeal(
                     state, meal.depotId(), meal.residentId()))
+                + ",\"movementOrderPresent\":" + (movement != null)
+                + ",\"movementActionDueAt\":" + (movementAction.isPresent()
+                    ? movementAction.orElseThrow().dueAt().ticks() : "null")
+                + ",\"movementTravelArrivalAt\":" + (movement == null ? "null" : movement.coldTravel()
+                    .map(route -> Long.toString(route.arrivalTick())).orElse("null"))
+                + ",\"movementActionHeld\":" + movementAction.map(action -> ActorMovementProcess.held(state, action))
+                    .orElse(false)
                 + ",\"depotBread\":" + bread + ",\"depotBreadClaimed\":" + claimed + "}";
     }
 
