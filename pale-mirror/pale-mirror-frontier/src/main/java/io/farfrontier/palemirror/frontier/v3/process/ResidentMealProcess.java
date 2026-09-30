@@ -59,7 +59,15 @@ public final class ResidentMealProcess {
             case TAKE -> ReferenceContainerCustody.hasLiveCustody(state, meal.depotId());
             case CONSUME -> state.inventory().fungibleResources().bindings().values().stream()
                     .anyMatch(binding -> binding.accountId().equals(meal.actorAccountId()));
-            case MOVE, RETURN -> planColdStep(state, meal.residentId(), action.dueAt().ticks()).isEmpty();
+            case MOVE, RETURN -> {
+                if (meal.coldTravel().isPresent()) {
+                    TimedKnownRoute travel = meal.coldTravel().orElseThrow();
+                    yield firstKnownBarrier(state, travel) < 0 && !travel.arrivedBy(action.dueAt().ticks());
+                }
+                yield meal.phase() == ResidentMeal.Phase.MOVE
+                        && !ServiceAccessCoordinator.depotAvailableForMeal(state, meal.depotId(), meal.residentId())
+                        && ResidentMealKnownNavigation.atWaitingPocket(state, meal);
+            }
         };
     }
 
@@ -77,12 +85,11 @@ public final class ResidentMealProcess {
             return List.of(new ProposedEvent(meal.residentId(), new ScheduleEffect.Consumed(action.id())));
         long now = Math.max(action.dueAt().ticks(), currentTick);
         Optional<ResidentMealColdStep> step = planColdStep(state, meal.residentId(), now);
-        // A changing availability boundary is rechecked by the engine's held
-        // predicate; keep the same due owner instead of adding 200 ticks of
-        // artificial latency after the service becomes free.
+        // A waiting side pocket is held by its addressed service wake. A genuinely
+        // unavailable known route is retried at a bounded cadence, not every tick.
         if (step.isEmpty()) return List.of(new ProposedEvent(meal.residentId(),
                 new ScheduleEffect.Rescheduled(action.id(), progress(meal,
-                        Math.addExact(now, 1L)))));
+                        Math.addExact(now, COLD_TICKS_PER_EDGE)))));
         List<ProposedEvent> events = new java.util.ArrayList<>();
         events.add(new ProposedEvent(meal.residentId(), step.orElseThrow()));
         long nextDue = nextColdDue(state, meal, now);

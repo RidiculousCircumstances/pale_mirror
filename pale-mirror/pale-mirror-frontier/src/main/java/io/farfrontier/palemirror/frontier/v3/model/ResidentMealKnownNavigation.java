@@ -103,6 +103,25 @@ public final class ResidentMealKnownNavigation {
     }
 
     /** Side pockets keep simultaneous approaches off the single-file exit route. */
+    public static boolean atWaitingPocket(FrontierWorldState state, ResidentMeal meal) {
+        ActorLocation actor = state.actorLocations().get(meal.residentId());
+        if (actor == null) return false;
+        Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), meal.settlementId());
+        SettlementStructure depot = settlement.structures().stream()
+                .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
+        SettlementDepotServicePort port = SettlementDepotServicePort.forDepot(depot);
+        SurfaceAnchor apron = port.facing().step(port.exteriorApproach(), -1);
+        SurfaceAnchor current = actor.supportingSurface();
+        if (port.accessBoundary().occupied(actor.body())) return false;
+        for (int distance = 1; distance <= Math.max(4, (settlement.residents().size() + 1) / 2); distance++) {
+            for (SurfaceAnchor side : List.of(port.facing().stepLeft(apron, distance),
+                    port.facing().stepRight(apron, distance))) {
+                if (current.x() == side.x() && current.z() == side.z()) return true;
+            }
+        }
+        return false;
+    }
+
     private static List<SurfaceAnchor> waitingSurfaces(FrontierWorldState state, ResidentMeal meal,
                                                        SettlementDepotServicePort port,
                                                        Map<TerrainColumn, SurfaceAnchor> known) {
