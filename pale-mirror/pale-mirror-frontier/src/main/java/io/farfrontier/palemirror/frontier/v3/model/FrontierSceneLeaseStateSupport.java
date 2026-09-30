@@ -182,11 +182,21 @@ public final class FrontierSceneLeaseStateSupport {
                 .anyMatch(hand -> members.contains(hand.actorId()));
     }
 
-    /** A PREPARED lease has not transferred authority to its provisional Minecraft bodies. */
+    /** An unstarted lease has not transferred authority to a Minecraft body. */
     public static FrontierWorldState abortPrepared(FrontierWorldState state, SceneLeaseId leaseId) {
         SceneLease current = state.sceneLeases().get(leaseId);
-        if (current == null || current.status() != SceneLeaseStatus.PREPARED) {
-            throw new IllegalArgumentException("only a prepared scene lease can be aborted before materialization");
+        if (current == null || current.status() != SceneLeaseStatus.PREPARED
+                && (current.status() != SceneLeaseStatus.UNKNOWN_AFTER_RESTART || current.recoveryEvidence().isPresent())) {
+            throw new IllegalArgumentException("only an unstarted scene lease can be aborted before materialization");
+        }
+        for (SceneMember member : current.members()) {
+            FencedRecoveryBinding binding = state.fencedRecovery().current().get(bodyRecoveryBindingId(member.actorId()));
+            if (binding == null || binding.phase() != FencedRecoveryPhase.PREPARED
+                    || binding.asset() != FencedRecoveryAsset.BODY
+                    || !binding.ownerId().equals(recoveryOwner(current))
+                    || binding.ownerRevision() != current.revision()) {
+                throw new IllegalArgumentException("scene preparation abort lacks exact unstarted body authority");
+            }
         }
         Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases());
         leases.put(leaseId, current.withStatus(SceneLeaseStatus.CLOSED));

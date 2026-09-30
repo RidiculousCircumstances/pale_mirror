@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSiteHarvestSc
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCycle;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldWorkAccessObserved;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestCropPrepared;
@@ -67,7 +68,11 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 level, runtime, io.farfrontier.palemirror.frontier.v3.model.SceneCauseKind.RESOURCE_SITE_HARVEST, FrontierResourceSiteHarvestSceneSupport.candidates(state).stream()
                         .filter(value -> !ResidentActivityCoordinator.requestsYield(state, value.workerId(),
                                 runtime.checkpointImage().orElseThrow().instant().ticks()))
-                        .filter(value -> fieldPresentationCurrent(level, state, value)).toList(),
+                        .filter(value -> fieldPresentationCurrent(level, state, value))
+                        .filter(value -> !FrontierV3HarvestSceneStandingAdmission.obstructedBodyFreeColumn(level,
+                                FrontierV3AmbientActorExecutor.entityId(state, value.workerId()),
+                                BodyPosition.above(new io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor(
+                                        value.memberPositions().get(value.workerId()))))).toList(),
                 FrontierResourceSiteHarvestSceneSupport.Candidate::cropSlot, FrontierResourceSiteHarvestSceneSupport.Candidate::jobId);
         if (candidate.isEmpty()) return false;
         FrontierResourceSiteHarvestSceneSupport.Candidate work = candidate.orElseThrow();
@@ -168,7 +173,13 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 }
                 FrontierV3SceneExecutor.release(level, runtime, lease, releaseBinding(runtime, state, lease));
             }
-            case UNKNOWN_AFTER_RESTART -> FrontierV3SceneExecutor.reclaim(level, runtime, state, lease);
+            case UNKNOWN_AFTER_RESTART -> {
+                // Restart changes the lease status, not the fact that body admission never
+                // started. Inspect the naturally loaded exact column before generic reclaim
+                // can mistake a solid feet cell for a missing farmer.
+                if (!FrontierV3HarvestSceneStandingAdmission.abortObstructedBodyFreePreparation(level, runtime, state, lease))
+                    FrontierV3SceneExecutor.reclaim(level, runtime, state, lease);
+            }
             case CONFLICT, CLOSED -> { }
         }
     }
@@ -177,7 +188,14 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                                     FrontierWorldState state, SceneLease lease) {
         FrontierV3SceneExecutor.BodyMaterialization result = FrontierV3ActorCarrierFactory.materializeSceneBodies(FrontierV3ActorCarrierComposition.InventoryEntry.RESOURCE_HARVEST, level, state, lease);
         if (result == FrontierV3SceneExecutor.BodyMaterialization.CONFLICT) { conflict(level, runtime, lease, "prepared-body-conflict"); return; }
-        if (result != FrontierV3SceneExecutor.BodyMaterialization.COMPLETE) return;
+        if (result != FrontierV3SceneExecutor.BodyMaterialization.COMPLETE) {
+            // A PREPARED scene has no physical authority yet. If its exact retained body cell
+            // has become solid while no body exists, waiting here would also suspend the only
+            // COLD continuation forever. Revoke just this body-free preparation; COLD can
+            // advance from its retained position through the known route on the next turn.
+            FrontierV3HarvestSceneStandingAdmission.abortObstructedBodyFreePreparation(level, runtime, state, lease);
+            return;
+        }
         // addFreshEntity publishes into Minecraft's UUID index after this executor turn.  A
         // same-tick getEntity check is therefore not an absence proof and used to convert a
         // normal admission race into a false field conflict.  PREPARED establishes the exact

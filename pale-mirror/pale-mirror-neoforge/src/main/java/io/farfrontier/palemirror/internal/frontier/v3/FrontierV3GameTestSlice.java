@@ -40,7 +40,8 @@ public final class FrontierV3GameTestSlice {
             case "scene-departure" -> batchName.equals("pm-frontier-v3-scene-departure") || batchName.equals("pm-frontier-v3-scene-deaths");
             case "scene-restart-reclaim" -> batchName.equals("pm-frontier-v3-scene-restart-reclaim");
             case "first-admission" -> batchName.equals("pm-frontier-v3-scene-first-admission");
-            case "harvest-support" -> batchName.equals("pm-frontier-v3-scene-harvest-support");
+            case "harvest-support" -> batchName.equals("pm-frontier-v3-scene-harvest-support")
+                    || batchName.equals("pm-frontier-v3-resource-site-harvest-standing");
             case "ambient-restart-absence" -> batchName.equals("pm-frontier-v3-ambient-restart-absence");
             case "ambient-prepared-recovery" -> batchName.equals("pm-frontier-v3-ambient-prepared-recovery");
             case "village-observer" -> batchName.equals("pm-village-observer");

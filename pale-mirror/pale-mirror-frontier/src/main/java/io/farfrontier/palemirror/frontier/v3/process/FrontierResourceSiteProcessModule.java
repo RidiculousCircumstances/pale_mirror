@@ -206,6 +206,16 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
         }
     }
     @Override public CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
+        if (command.payload() instanceof ResourceSiteHarvestScenePreparationAborted aborted) {
+            ResourceSite site = state.resourceSite(aborted.siteId());
+            if (site == null) return FrontierWorldCommandPlanner.rejected("field scene preparation abort has no declared site");
+            try {
+                reduceHarvestScenePreparationAborted(state, site.settlementId(), aborted);
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(site.settlementId(), aborted)));
+            } catch (IllegalArgumentException invalid) {
+                return FrontierWorldCommandPlanner.rejected("invalid field scene preparation abort: " + invalid.getMessage());
+            }
+        }
         if (command.payload() instanceof ResourceSiteHarvestHandRelease released) {
             SceneLease lease = state.sceneLeases().get(released.sceneRelease().leaseId());
             if (lease == null) return FrontierWorldCommandPlanner.rejected("harvest hand release has no scene lease");
@@ -498,6 +508,7 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
             case ResourceSiteHarvestHandRelease released -> ResourceSiteHarvestProcess.reduceHandRelease(state, event.subject(), released);
             case ResourceSiteHarvestSceneLeasePrepared prepared -> reduceHarvestScenePrepared(state, event.subject(), event, prepared);
             case ResourceSiteHarvestSceneLeaseHandoff handoff -> reduceHarvestSceneHandoff(state, event.subject(), event, handoff);
+            case ResourceSiteHarvestScenePreparationAborted aborted -> reduceHarvestScenePreparationAborted(state, event.subject(), aborted);
             case ResourceSiteConflictObserved conflict -> ResourceSiteProcess.reduceConflict(state, event.subject(), conflict);
             case ResourceFieldCellObserved observed -> ResourceSiteProcess.reduceCellObserved(state, event.subject(), observed);
             case ResourceFieldWorkAccessObserved observed -> ResourceSiteProcess.reduceWorkAccessObserved(state, event.subject(), observed);
@@ -530,5 +541,26 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
         }
         FrontierWorldState rebased = ResourceSiteHarvestProcess.rebaseForAmbientHandoff(state, subject, handoff);
         return rebased.handoffAmbientScene(new SceneLeaseHandoff(lease, handoff.ambientMembers()));
+    }
+
+    private static FrontierWorldState reduceHarvestScenePreparationAborted(FrontierWorldState state,
+            SubjectId subject, ResourceSiteHarvestScenePreparationAborted aborted) {
+        SceneLease lease = state.sceneLeases().get(aborted.leaseId());
+        ResourceSite site = state.resourceSite(aborted.siteId());
+        if (lease == null || lease.status() != SceneLeaseStatus.PREPARED
+                && (lease.status() != SceneLeaseStatus.UNKNOWN_AFTER_RESTART || lease.recoveryEvidence().isPresent())
+                || !FrontierSceneBehaviors.isResourceSiteHarvest(lease)
+                || site == null || !subject.equals(site.settlementId())
+                || !FrontierSceneBehaviors.resourceSiteHarvest(lease).siteId().equals(aborted.siteId())
+                || !FrontierSceneBehaviors.resourceSiteHarvest(lease).jobId().equals(aborted.jobId())
+                || lease.ambientHandoffActorIds().size() != 0
+                || lease.members().size() != 1
+                || state.resourceSites().site(aborted.siteId()).activeWork()
+                        .filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
+                        .filter(job -> job.id().equals(aborted.jobId())
+                                && lease.members().getFirst().actorId().equals(job.workerId())).isEmpty()) {
+            throw new IllegalArgumentException("field preparation abort lacks one exact body-free job scene");
+        }
+        return FrontierSceneLeaseStateSupport.abortPrepared(state, aborted.leaseId());
     }
 }

@@ -1,15 +1,24 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
+import io.farfrontier.palemirror.frontier.v3.api.CommandId;
+import io.farfrontier.palemirror.frontier.v3.api.CauseChain;
+import io.farfrontier.palemirror.frontier.v3.api.EventId;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierEvent;
+import io.farfrontier.palemirror.frontier.v3.api.Revision;
+import io.farfrontier.palemirror.frontier.v3.api.TransactionId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
+import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess;
 import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestRetargeting;
+import io.farfrontier.palemirror.frontier.v3.process.FrontierWorldProcessCatalog;
 import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteProcess;
 import io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess;
 import io.farfrontier.palemirror.frontier.v3.process.StrategicObjectiveProcess;
@@ -222,6 +231,64 @@ class ResourceSiteHarvestProcessTest {
                 .filter(ScheduleEffect.Rescheduled.class::isInstance)
                 .map(ScheduleEffect.Rescheduled.class::cast).findFirst().orElseThrow().replacement();
         assertEquals(releasedAt + 20L, next.dueAt().ticks());
+    }
+
+    @Test void bodyFreeObstructedPreparationRetiresWithoutLosingTheExactFarmerOrColdContinuation() {
+        ColdHarvest start = coldHarvestAfterSteps(125L, 0);
+        FrontierWorldState state = start.state();
+        ResourceSite site = state.resourceSite(start.site());
+        BlockPosition crop = site.cropSlots().getFirst();
+        // The persisted feet cell has become the farmland support cell after projection.
+        BodyPosition staleBody = new BodyPosition(crop.x(), crop.y() - 1, crop.z());
+        var actors = new java.util.LinkedHashMap<>(state.actorLocations());
+        actors.put(start.job().workerId(), actors.get(start.job().workerId()).withBody(staleBody));
+        state = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
+        SceneLease lease = newHarvestLease(state, start.site(), start.job(), "obstructed-preparation")
+                .withAmbientHandoff(java.util.Set.of());
+        state = state.prepareSceneLease(lease);
+        ScheduledAction due = ResourceSiteHarvestProcess.coldProgress(start.job(), 22_301L);
+        assertTrue(ResourceSiteHarvestProcess.coldProgressHeld(state, due));
+
+        var aborted = new ResourceSiteHarvestScenePreparationAborted(lease.id(), start.site(), start.job().id());
+        assertEquals(aborted, FrontierWorldRuntimeDefinition.payloadCodecs().decode(aborted.type(),
+                FrontierWorldRuntimeDefinition.payloadCodecs().encode(aborted)));
+        CommandId commandId = new CommandId("command:field-preparation-aborted");
+        FrontierCommand command = new FrontierCommand(FrontierCommand.SCHEMA_VERSION, commandId,
+                state.bootstrap().worldId(), Revision.ZERO, new SimInstant(22_300L),
+                start.job().workerId(), CauseChain.root(commandId), aborted);
+        assertInstanceOf(CommandPlan.Rejected.class, FrontierWorldProcessCatalog.planCommand("resource-sites", state,
+                new FrontierCommand(FrontierCommand.SCHEMA_VERSION, commandId, state.bootstrap().worldId(),
+                        Revision.ZERO, new SimInstant(22_300L), start.job().workerId(), CauseChain.root(commandId),
+                        new ResourceSiteHarvestScenePreparationAborted(lease.id(), start.site(),
+                                new SubjectId("job:site-harvest-foreign")))));
+        ProposedEvent planned = assertInstanceOf(CommandPlan.Accepted.class,
+                FrontierWorldProcessCatalog.planCommand("resource-sites", state, command)).events().getFirst();
+        FrontierEvent event = new FrontierEvent(FrontierEvent.SCHEMA_VERSION, new EventId("event:field-preparation-aborted"),
+                new TransactionId("transaction:field-preparation-aborted"), state.bootstrap().worldId(),
+                Revision.ZERO, new SimInstant(22_300L), planned.subject(), CauseChain.root(commandId), planned.payload());
+        FrontierWorldState resumed = FrontierWorldProcessCatalog.reduce("resource-sites", state, event);
+        assertEquals(SceneLeaseStatus.CLOSED, resumed.sceneLeases().get(lease.id()).status());
+        assertEquals(staleBody, resumed.actorLocations().get(start.job().workerId()).body());
+        assertFalse(ResourceSiteHarvestProcess.coldProgressHeld(resumed, due));
+        assertTrue(ResourceSiteHarvestProcess.planColdProgress(resumed, due).stream()
+                .anyMatch(step -> step.payload() instanceof ResourceSiteHarvestColdGoalAdvanced));
+
+        FrontierWorldState restarted = state.transitionSceneLease(lease.id(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART);
+        ProposedEvent restartPlan = assertInstanceOf(CommandPlan.Accepted.class,
+                FrontierWorldProcessCatalog.planCommand("resource-sites", restarted, command)).events().getFirst();
+        FrontierEvent restartEvent = new FrontierEvent(FrontierEvent.SCHEMA_VERSION,
+                new EventId("event:field-preparation-restart-aborted"),
+                new TransactionId("transaction:field-preparation-restart-aborted"), restarted.bootstrap().worldId(),
+                Revision.ZERO, new SimInstant(22_301L), restartPlan.subject(), CauseChain.root(commandId), restartPlan.payload());
+        FrontierWorldState restartResumed = FrontierWorldProcessCatalog.reduce("resource-sites", restarted, restartEvent);
+        assertEquals(SceneLeaseStatus.CLOSED, restartResumed.sceneLeases().get(lease.id()).status());
+        assertFalse(ResourceSiteHarvestProcess.coldProgressHeld(restartResumed, due));
+
+        FrontierWorldState attempted = state.transitionSceneLease(lease.id(), SceneLeaseStatus.HOT)
+                .transitionSceneLease(lease.id(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART);
+        assertInstanceOf(CommandPlan.Rejected.class,
+                FrontierWorldProcessCatalog.planCommand("resource-sites", attempted, command),
+                "an attempted physical admission cannot be retired as a body-free preparation");
     }
     @Test void releasedHotPathFailureResumesOnlyThroughTheNextKnownColdStep() {
         ColdHarvest start = coldHarvestAfterSteps(125L, 0);

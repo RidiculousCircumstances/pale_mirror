@@ -13,6 +13,7 @@ import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWireTags;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestSceneCause;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestSceneLeasePrepared;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestScenePreparationAborted;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestSceneLeaseHandoff;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestHandProjected;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestHandRelease;
@@ -41,7 +42,25 @@ final class ResourceSiteHarvestScenePayloadCodecs {
     private static final int TYPED_BODY_LEASE_MARKER = 0xfffc;
     private ResourceSiteHarvestScenePayloadCodecs() { }
 
-    static PayloadCodecs codecs() { return new PayloadCodecs(List.of(new PreparedCodec(), new HandoffCodec(), new HandProjectedCodec(), new HandReleaseCodec())); }
+    static PayloadCodecs codecs() { return new PayloadCodecs(List.of(new PreparedCodec(), new HandoffCodec(), new PreparationAbortedCodec(), new HandProjectedCodec(), new HandReleaseCodec())); }
+
+    private static final class PreparationAbortedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.resource_site_harvest_scene_preparation_aborted"; }
+        @Override public byte[] encode(FrontierPayload payload) {
+            ResourceSiteHarvestScenePreparationAborted aborted = (ResourceSiteHarvestScenePreparationAborted) payload;
+            return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+                FrontierWorldPayloadCodecs.writeString(output, aborted.leaseId().value());
+                FrontierWorldPayloadCodecs.writeSubject(output, aborted.siteId());
+                FrontierWorldPayloadCodecs.writeSubject(output, aborted.jobId());
+            });
+        }
+        @Override public FrontierPayload decode(byte[] bytes) {
+            return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new ResourceSiteHarvestScenePreparationAborted(
+                    new SceneLeaseId(FrontierWorldPayloadCodecs.readString(input)),
+                    FrontierWorldPayloadCodecs.readSubject(input).value(),
+                    FrontierWorldPayloadCodecs.readSubject(input).value()));
+        }
+    }
 
     private static final class HandReleaseCodec implements PayloadCodec {
         @Override public String type() { return "frontier.resource_site_harvest_hand_release"; }

@@ -110,6 +110,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.resource_site_harvest_hot_transit_observed",
             "frontier.resource_site_harvest_batch_prepared", "frontier.resource_site_harvest_batch_delivered",
             "frontier.resource_site_harvest_scene_lease_prepared",
+            "frontier.resource_site_harvest_scene_preparation_aborted",
             "frontier.resource_site_harvest_scene_lease_handoff",
             "frontier.resource_site_conflict_observed", "frontier.resource_field_cell_observed", "frontier.resource_field_work_access_observed",
             "frontier.resource_field_world_change_held", "frontier.resource_field_world_change_acknowledged",
@@ -592,6 +593,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.resource_site_harvest_batch_prepared", "frontier.resource_site_harvest_batch_delivered",
             "frontier.resource_site_harvest_hot_traversal_advanced", "frontier.resource_site_harvest_hot_goal_arrived", "frontier.resource_site_harvest_hot_transit_observed",
             "frontier.resource_site_harvest_scene_lease_prepared",
+            "frontier.resource_site_harvest_scene_preparation_aborted",
             "frontier.resource_site_harvest_scene_lease_handoff"); }
     private static Set<String> hiveCommands() { return types("frontier.hot_scout_operation_observed", "frontier.scout_patrol_advanced", "frontier.scout_patrol_lease_recovered",
             "frontier.hive_mobilization_release_started", "frontier.hive_mobilization_cocoon_released", "frontier.hive_mobilization_assembly_advanced", "frontier.hive_mobilization_return_advanced",
@@ -761,6 +763,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.resource_site_harvest_hand_projected",
                     "frontier.resource_site_harvest_hand_release",
                     "frontier.resource_site_harvest_hot_traversal_advanced", "frontier.resource_site_harvest_hot_goal_arrived", "frontier.resource_site_harvest_hot_transit_observed", "frontier.resource_site_harvest_scene_lease_prepared",
+                    "frontier.resource_site_harvest_scene_preparation_aborted",
                     "frontier.resource_site_harvest_scene_lease_handoff",
                     "frontier.resource_site_conflict_observed", "frontier.resource_field_cell_observed", "frontier.resource_field_work_access_observed",
                     "frontier.resource_field_world_change_held", "frontier.resource_field_world_change_acknowledged",

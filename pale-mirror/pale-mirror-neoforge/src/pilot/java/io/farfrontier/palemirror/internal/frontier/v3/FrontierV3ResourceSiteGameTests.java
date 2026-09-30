@@ -121,6 +121,15 @@ public final class FrontierV3ResourceSiteGameTests {
                 "only harvest resolves the real pass-through crop cell above its retained farmland floor");
         helper.assertValueEqual(FrontierV3ResourceSiteHarvestSceneExecutor.harvestStandingPosition(level, floor), floor.above(),
                 "the registered harvest provider admits its exact crop-foot station without changing generic standing");
+        java.util.UUID absentFarmer = new java.util.UUID(0L, 781L);
+        helper.assertTrue(FrontierV3HarvestSceneStandingAdmission.obstructedBodyFreeColumn(level,
+                        absentFarmer, new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(
+                                floor.getX(), floor.getY(), floor.getZ())),
+                "a body-free scene must not claim the stone below projected farmland as its exact support");
+        helper.assertFalse(FrontierV3HarvestSceneStandingAdmission.obstructedBodyFreeColumn(level,
+                        absentFarmer, new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(
+                                floor.getX(), floor.getY() + 1, floor.getZ())),
+                "the same farmer may be admitted at the valid crop-foot station");
         BlockPos approachFloor = floor.offset(3, 0, 0);
         level.setBlock(approachFloor, Blocks.STONE.defaultBlockState(), 3);
         level.setBlock(approachFloor.above(), Blocks.AIR.defaultBlockState(), 3);
