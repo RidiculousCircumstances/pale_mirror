@@ -201,3 +201,34 @@ at the bounded audit. Focused queue, recovery and diagnostic JSON tests passed.
 Next implementation must close post-consumption movement ownership and route
 invalidation before a candidate deployment, then calibrate the host budget on
 one fresh disposable diagnostic world.
+
+## Post-consumption movement source checkpoint, 2026-09-30
+
+Source `064a2ad3` (local only, not deployed) closes the meal/movement ownership
+split for the first depot provider. Confirmed bread consumption atomically
+retires the meal, creates a separately scheduled `ActorMovement` with a
+producer-declared typed `ServiceExit(settlement,depot)` context and retains the
+same exact resident/body. The movement owner saves a bounded timed COLD route
+under snapshot schema 215, checkpoints the first service-boundary exit,
+hands off the as-of body to one ambient HOT lease, resumes from a witnessed HOT
+release, and wakes resident activity only at movement arrival. The physical
+service turn is based on the actual body, not the former meal phase. A known
+physical delta intersecting the retained route atomically checkpoints its
+as-of body and wakes its exact action; an engine command regression confirms
+the cross-owner event contract. Old `CONSUME -> RETURN` creation is disabled;
+fresh worlds are required for the changed schema, while legacy wire IDs remain
+reserved.
+
+Focused actor-movement/meal/depot/bakery/catalog and NeoForge directed-goal
+tests pass, as do Frontier and NeoForge compilation, large-file and Java-style
+checks. This is source-level and modeled recovery evidence, not a native HOT
+visual or TPS claim. The aggregate `guardrails` command remains blocked by a
+pre-existing architecture-debt ceiling mismatch in the untouched
+`FrontierWorldRuntimeDefinition.java` (87 lines in both HEAD-before and current
+source versus 80 configured); do not raise the ceiling to mask it. No new
+server artifact/world was installed and no player acceptance was performed.
+Next: audit competing due-event journey boundaries, resolve that pre-existing
+gate separately, calibrate queue/write/TPS on one preserved/fresh-world diagnostic
+run, then one coherent HOT/COLD/restart
+and player-visible depot visit on the exact candidate. Do not infer F0.6R3
+completion from this checkpoint.
