@@ -15,7 +15,8 @@ public final class AmbientLeaseStateProcess {
     public static FrontierWorldState prepare(FrontierWorldState state, AmbientActorLease lease) {
         Objects.requireNonNull(lease, "ambient lease"); ActorLocation actor = state.actorLocations().get(lease.actorId());
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE || lease.status() != AmbientLeaseStatus.PREPARED
-                || !actor.body().equals(lease.handoffBody())) throw new IllegalArgumentException("ambient lease must prepare one living actor at its canonical handoff body");
+                || !ResidentMealProcess.bodyAt(state, lease.actorId(), lease.handoffInstant().ticks()).equals(lease.handoffBody()))
+            throw new IllegalArgumentException("ambient lease must prepare one living actor at its canonical as-of handoff body");
         if (!HivePhysiologySupport.permitsAmbientLease(state, lease.actorId())) {
             throw new IllegalArgumentException("cocoon-retained bioform may not prepare an ambient lease");
         }
@@ -42,7 +43,14 @@ public final class AmbientLeaseStateProcess {
         long expectedRevision = previous == null ? 1L : Math.addExact(previous.revision(), 1L);
         if (lease.revision() != expectedRevision) throw new IllegalArgumentException("ambient lease revision is not the actor's next revision");
         Map<SubjectId, AmbientActorLease> next = new LinkedHashMap<>(state.ambientLeases()); next.put(lease.actorId(), lease);
-        return copy(state, state.actorLocations(), next);
+        ResidentMeal meal = state.humanPopulation().meals().get(lease.actorId());
+        if (meal == null || meal.coldTravel().isEmpty()) return copy(state, state.actorLocations(), next);
+        if (meal.coldTravel().orElseThrow().authorityEpoch() != lease.revision())
+            throw new IllegalArgumentException("meal travel cannot hand off across a foreign authority epoch");
+        Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
+        actors.put(lease.actorId(), actor.withBody(lease.handoffBody()));
+        return copy(state, actors, next,
+                state.humanPopulation().advanceMeal(meal, meal.withoutColdTravel()));
     }
 
     public static FrontierWorldState transition(FrontierWorldState state, SubjectId actorId, AmbientLeaseStatus nextStatus) {

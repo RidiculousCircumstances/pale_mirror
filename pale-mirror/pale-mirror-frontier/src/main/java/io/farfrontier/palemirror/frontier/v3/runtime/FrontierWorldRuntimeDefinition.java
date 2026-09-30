@@ -67,7 +67,12 @@ public final class FrontierWorldRuntimeDefinition {
     }
     public static List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planScheduled(FrontierWorldState state, ScheduledAction action,
                                                                                                       boolean autonomousInterception) {
-        return FrontierWorldProcessCatalog.planScheduled(PROCESS_REGISTRY, state, action, autonomousInterception);
+        return planScheduled(state, action, autonomousInterception, action.dueAt());
+    }
+    public static List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> planScheduled(FrontierWorldState state, ScheduledAction action,
+                                                                                                      boolean autonomousInterception,
+                                                                                                      io.farfrontier.palemirror.frontier.v3.api.SimInstant currentInstant) {
+        return FrontierWorldProcessCatalog.planScheduled(PROCESS_REGISTRY, state, action, autonomousInterception, currentInstant);
     }
     public static FrontierWorldState reduce(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierEvent event) {
         return FrontierWorldEventReducer.reduce(state, event, PROCESS_REGISTRY);

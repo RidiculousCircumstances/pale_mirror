@@ -46,7 +46,7 @@ class ResourceSiteHarvestProcessTest {
                 "an empty food depot must not prevent the food-producing farmer from beginning the real job");
     }
 
-    @Test void oneDepotMealPermitDoesNotPreventAnotherFarmerFromStartingHarvest() {
+    @Test void travellingMealDoesNotHideAvailableBreadFromAnotherHungryFarmer() {
         FrontierWorldState state = ready(initial());
         SubjectId site = new SubjectId("site:1-wheat-field");
         SubjectId settlement = new SubjectId("settlement:1");
@@ -74,10 +74,12 @@ class ResourceSiteHarvestProcessTest {
                 .filter(value -> value.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE).findFirst().orElseThrow();
         ScheduledAction due = ResourceSiteHarvestProcess.start(task, 27_085L);
         var planned = ResourceSiteHarvestProcess.plan(state, due);
-        var started = planned.stream().map(ProposedEvent::payload).filter(ResourceSiteHarvestStarted.class::isInstance)
-                .map(ResourceSiteHarvestStarted.class::cast).findFirst().orElseThrow();
-        assertNotEquals(farmer.id(), started.job().workerId(),
-                "the eating farmer keeps its own body while another hungry farmer may work");
+        assertTrue(planned.stream().map(ProposedEvent::payload)
+                .noneMatch(ResourceSiteHarvestStarted.class::isInstance),
+                "a second hungry farmer with available bread should eat before taking a new job");
+        assertTrue(planned.stream().map(ProposedEvent::payload)
+                .anyMatch(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class::isInstance),
+                "the field task remains pending until an eligible farmer can take it");
         assertEquals(StrategicTaskStatus.PENDING, state.strategicPlans().tasks().get(task.id()).status());
     }
 

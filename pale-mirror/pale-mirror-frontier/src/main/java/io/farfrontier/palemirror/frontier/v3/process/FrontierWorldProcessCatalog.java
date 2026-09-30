@@ -27,6 +27,11 @@ public final class FrontierWorldProcessCatalog {
     @FunctionalInterface
     private interface ScheduledPlanner {
         List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, boolean autonomousInterception);
+        default List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action,
+                                         boolean autonomousInterception,
+                                         io.farfrontier.palemirror.frontier.v3.api.SimInstant currentInstant) {
+            return plan(state, action, autonomousInterception);
+        }
         default boolean held(FrontierWorldState state, ScheduledAction action) { return false; }
     }
 
@@ -182,8 +187,34 @@ public final class FrontierWorldProcessCatalog {
             Map.entry(DefenderEquipmentProcess.REVIEW_ACTION, (state, action, autonomous) -> DefenderEquipmentProcess.plan(state, action)),
             Map.entry(DefenderEquipmentReturnProcess.REVIEW_ACTION, (state, action, autonomous) -> DefenderEquipmentReturnProcess.plan(state, action)),
             Map.entry(ResidentNeedProcess.REVIEW, (state, action, autonomous) -> ResidentNeedProcess.plan(state, action)),
-            Map.entry(ResidentActivityProcess.REVIEW, (state, action, autonomous) -> ResidentActivityProcess.plan(state, action)),
-            Map.entry(ResidentMealProcess.PROGRESS, (state, action, autonomous) -> ResidentMealProcess.planProgress(state, action)),
+            Map.entry(ResidentActivityProcess.REVIEW, new ScheduledPlanner() {
+                @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action,
+                                                          boolean autonomous) {
+                    return ResidentActivityProcess.plan(state, action);
+                }
+                @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action,
+                                                          boolean autonomous,
+                                                          io.farfrontier.palemirror.frontier.v3.api.SimInstant currentInstant) {
+                    return ResidentActivityProcess.plan(state, action, currentInstant.ticks());
+                }
+                @Override public boolean held(FrontierWorldState state, ScheduledAction action) {
+                    return ResidentActivityProcess.held(state, action);
+                }
+            }),
+            Map.entry(ResidentMealProcess.PROGRESS, new ScheduledPlanner() {
+                @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action,
+                                                          boolean autonomous) {
+                    return ResidentMealProcess.planProgress(state, action);
+                }
+                @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action,
+                                                          boolean autonomous,
+                                                          io.farfrontier.palemirror.frontier.v3.api.SimInstant currentInstant) {
+                    return ResidentMealProcess.planProgress(state, action, currentInstant.ticks());
+                }
+                @Override public boolean held(FrontierWorldState state, ScheduledAction action) {
+                    return ResidentMealProcess.held(state, action);
+                }
+            }),
             Map.entry("frontier.company.foundation.review", (state, action, autonomous) -> CompanyFoundationProcess.plan(state, action)),
             Map.entry("frontier.market.clear", (state, action, autonomous) -> MarketClearingProcess.plan(state, action)),
             Map.entry("frontier.resource_site.growth", new ScheduledPlanner() {
@@ -357,10 +388,16 @@ public final class FrontierWorldProcessCatalog {
 
     public static List<ProposedEvent> planScheduled(DeterministicProcessRegistry registry, FrontierWorldState state,
                                                      ScheduledAction action, boolean autonomousInterception) {
+        return planScheduled(registry, state, action, autonomousInterception, action.dueAt());
+    }
+
+    public static List<ProposedEvent> planScheduled(DeterministicProcessRegistry registry, FrontierWorldState state,
+                                                     ScheduledAction action, boolean autonomousInterception,
+                                                     io.farfrontier.palemirror.frontier.v3.api.SimInstant currentInstant) {
         String processId = registry.requireScheduledOwner(action.kind());
         ScheduledPlanner planner = SCHEDULED_PLANNERS.get(action.kind());
         if (planner == null) throw new IllegalStateException("registered scheduled kind has no planner: " + action.kind());
-        List<ProposedEvent> planned = planner.plan(state, action, autonomousInterception);
+        List<ProposedEvent> planned = planner.plan(state, action, autonomousInterception, currentInstant);
         List<ProposedEvent> result = planned.isEmpty()
                 ? List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id())))
                 : planned;
@@ -488,6 +525,8 @@ public final class FrontierWorldProcessCatalog {
             case "physical-observation" -> types(
                     "frontier.physical_custody_checkpointed", "frontier.physical_custody_released",
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
+                    // A witnessed block change checkpoints only a resident whose retained COLD route crosses it.
+                    "frontier.resident_meal_cold_step",
                     "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
                     "frontier.resource_deposited", "frontier.fungible_stack_layout_observed", "frontier.fungible_resource_handoff_observed", "frontier.fungible_stock_departure_observed", "frontier.fungible_stock_contribution_observed",
                     "frontier.fungible_stack_bindings_released", "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed",

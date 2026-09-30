@@ -1,6 +1,8 @@
 package io.farfrontier.palemirror.frontier.v3.persistence;
 
 import io.farfrontier.palemirror.frontier.v3.model.*;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.TimedKnownRoute;
 
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
@@ -261,6 +263,14 @@ final class HumanPopulationStateCodec {
             output.writeByte(step.sourceCount()); output.writeLong(step.sourceEpoch());
             output.writeLong(step.destinationEpoch()); output.writeLong(step.ambientRevision());
         }
+        output.writeBoolean(meal.coldTravel().isPresent());
+        if (meal.coldTravel().isPresent()) {
+            TimedKnownRoute travel = meal.coldTravel().orElseThrow();
+            output.writeLong(travel.departedAtTick()); output.writeLong(travel.ticksPerEdge());
+            output.writeLong(travel.authorityEpoch());
+            FrontierWorldStateCodec.writeCount(output, travel.route().size());
+            for (SurfaceAnchor surface : travel.route()) FrontierWorldStateCodec.writePosition(output, surface.support());
+        }
     }
 
     static ResidentMeal readMeal(DataInputStream input) throws IOException {
@@ -285,8 +295,20 @@ final class HumanPopulationStateCodec {
         if (input.readBoolean()) pending = java.util.Optional.of(new ResidentMealPhysicalStep(
                 FrontierWireTags.require(ResidentMeal.Phase.class, input.readUnsignedByte()),
                 input.readByte(), input.readUnsignedByte(), input.readLong(), input.readLong(), input.readLong()));
-        return new ResidentMeal(resident, settlement, depot, clearing, source, actor, lot,
+        ResidentMeal meal = new ResidentMeal(resident, settlement, depot, clearing, source, actor, lot,
                 claim, retained, FrontierWireTags.require(ResidentMeal.Phase.class, phase), started, wait, pending);
+        if (!input.readBoolean()) return meal;
+        long departedAt = input.readLong(), ticksPerEdge = input.readLong(), epoch = input.readLong();
+        int length = FrontierWorldStateCodec.readCount(input);
+        if (length < 1 || length > TimedKnownRoute.MAX_SURFACES)
+            throw new IllegalArgumentException("meal COLD route length is invalid");
+        java.util.ArrayList<SurfaceAnchor> route = new java.util.ArrayList<>(length);
+        for (int index = 0; index < length; index++)
+            route.add(new SurfaceAnchor(FrontierWorldStateCodec.readPosition(input)));
+        MovementOrder order = new MovementOrder(resident, resident, FrontierWireTags.tag(meal.phase()), 1L,
+                java.util.List.of(route.getLast()), TraversalCapability.PEDESTRIAN,
+                MovementOrder.ArrivalPolicy.EXACT_STATION);
+        return meal.withColdTravel(new TimedKnownRoute(order, route, departedAt, ticksPerEdge, epoch));
     }
 
     private static java.util.List<SubjectId> legacyRecipients(Map<SubjectId, ResidentProfile> residents, SubjectId settlement, int required) {

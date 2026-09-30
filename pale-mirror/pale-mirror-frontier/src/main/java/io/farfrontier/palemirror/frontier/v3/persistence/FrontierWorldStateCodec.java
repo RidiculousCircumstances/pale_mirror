@@ -34,7 +34,8 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     // Version 212 changes the stock-exit WAL payload to include atomic meal-claim forfeiture.
     // Earlier worlds are disposable and cannot replay that event under the new grammar.
     // Version 213 retains each meal's exact clearance target before depot access is released.
-    static final int VERSION = 213; private static final int MAX_ENTRIES = 65_535;
+    // Version 214 retains each active meal's timed COLD route and rejects old disposable worlds.
+    static final int VERSION = 214; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }

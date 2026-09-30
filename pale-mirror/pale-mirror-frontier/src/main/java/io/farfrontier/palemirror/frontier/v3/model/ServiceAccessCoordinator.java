@@ -13,7 +13,7 @@ import java.util.Optional;
  * Read-only admission policy for a shared physical service boundary. The depot is
  * the first provider; each contender keeps its own exact meal or work owner. This
  * projection owns no second job, item ledger or due-time queue. Waiting processes
- * retain their normal schedule and retry at their own tick.
+ * retain their normal schedule until the physical access boundary changes.
  */
 public final class ServiceAccessCoordinator {
     private ServiceAccessCoordinator() { }
@@ -36,10 +36,23 @@ public final class ServiceAccessCoordinator {
         var first = state.humanPopulation().meals().values().stream()
                 .filter(meal -> meal.depotId().equals(depotId) && mealOccupiesAccess(state, meal))
                 .min(Comparator.comparingLong(ResidentMeal::startedAtTick).thenComparing(ResidentMeal::residentId));
-        return first.map(meal -> meal.residentId().equals(residentId)).orElse(true)
-                // A retained work applicant keeps service priority, but it does not
-                // prevent a different resident from travelling to a waiting pocket.
-                && workApplicants(state, depotId).stream().allMatch(applicant -> applicant.workerId().equals(residentId));
+        // A committed final entrance leg is the sole contender for the
+        // single-file throat until it arrives or is explicitly invalidated.
+        // Long approaches to independent side pockets retain no permit.
+        var entering = first.isPresent() ? Optional.<ResidentMeal>empty()
+                : state.humanPopulation().meals().values().stream()
+                    .filter(meal -> meal.depotId().equals(depotId)
+                            && meal.phase() == ResidentMeal.Phase.MOVE
+                            && meal.coldTravel().map(travel -> travel.route().getLast()
+                                .equals(port(state, depotId).serviceSurface())).orElse(false))
+                    .min(Comparator.comparingLong(ResidentMeal::startedAtTick)
+                            .thenComparing(ResidentMeal::residentId));
+        return first.or(() -> entering).map(meal -> meal.residentId().equals(residentId)).orElse(true)
+                // A distant work applicant may travel concurrently. Only its actual
+                // body at the shared port owns the physical turn.
+                && workApplicants(state, depotId).stream()
+                    .filter(Applicant::alreadyAtPort)
+                    .allMatch(applicant -> applicant.workerId().equals(residentId));
     }
 
     /** A work owner may approach during meal travel, never while a meal body occupies the port. */
@@ -54,8 +67,12 @@ public final class ServiceAccessCoordinator {
                 meal.depotId().equals(depotId) && mealOccupiesAccess(state, meal)
                     && port(state, depotId).accessBoundary().occupied(
                         state.actorLocations().get(meal.residentId()).body()));
+        boolean mealEnteringPort = state.humanPopulation().meals().values().stream().anyMatch(meal ->
+                meal.depotId().equals(depotId) && meal.phase() == ResidentMeal.Phase.MOVE
+                    && meal.coldTravel().map(travel -> travel.route().getLast()
+                        .equals(port(state, depotId).serviceSurface())).orElse(false));
         boolean workerEating = state.humanPopulation().meals().containsKey(workerId);
-        return applicant.filter(first -> !mealAtPort && !workerEating)
+        return applicant.filter(first -> !mealAtPort && !mealEnteringPort && !workerEating)
                 .map(first -> first.jobId().equals(jobId) && first.workerId().equals(workerId))
                 .orElse(false);
     }
@@ -66,8 +83,9 @@ public final class ServiceAccessCoordinator {
     }
 
     private static boolean mealOccupiesAccess(FrontierWorldState state, ResidentMeal meal) {
-        if (meal.phase() != ResidentMeal.Phase.RETURN) return true;
         ActorLocation actor = state.actorLocations().get(meal.residentId());
+        // Starting a meal reserves bread, not the depot's sole service socket.
+        // Otherwise the entire approach and return journey serializes all meals.
         return actor == null || !port(state, meal.depotId()).accessBoundary().cleared(actor.body());
     }
 

@@ -4,7 +4,11 @@ import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 
 /** Keeps ordinary player turns and explicitly requested operator advancement on distinct bounds. */
 final class FrontierV3RuntimeBudgets {
-    private static final WorkBudget ORDINARY_TICK = new WorkBudget(1, 512);
+    // One action could not serve a 366-resident cohort even after no-op waits
+    // were held: bounded COLD progress and independent need thresholds compete
+    // in the same deterministic due order. This is a service ceiling, not a
+    // promise to perform four transactions on every ordinary tick.
+    private static final WorkBudget ORDINARY_TICK = new WorkBudget(4, 512);
     // A queued operator turn must not turn one coincident recurring-duty wave into a seconds-long
     // server-thread batch. The lifecycle may advance several otherwise-idle canonical turns in
     // one slice, but each turn commits at most this many durable due actions in their normal

@@ -23,7 +23,8 @@ final class FrontierAmbientProcessModule implements FrontierWorldProcessModule {
         if (command.payload() instanceof AmbientActorDied death) return AmbientActorProcess.plan(state, death);
         if (command.payload() instanceof AmbientActorObserved observation) return AmbientActorProcess.plan(state, observation);
         if (command.payload() instanceof AmbientLeasePrepared || command.payload() instanceof AmbientLeaseTransition
-                || command.payload() instanceof AmbientLeaseReleased || command.payload() instanceof AmbientLeaseRestartAbsenceObserved) return AmbientActorProcess.planLease(state, command.payload());
+                || command.payload() instanceof AmbientLeaseReleased || command.payload() instanceof AmbientLeaseRestartAbsenceObserved)
+            return AmbientActorProcess.planLease(state, command.payload(), command.submittedAt().ticks());
         return FrontierWorldCommandPlanner.rejected("ambient process does not admit command: " + command.payload().type());
     }
 

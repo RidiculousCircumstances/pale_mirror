@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.kernel;
 
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
+import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 
 import java.util.List;
 
@@ -13,6 +14,11 @@ import java.util.List;
 @FunctionalInterface
 public interface ScheduledActionPlanner<S> {
     List<ProposedEvent> plan(S state, ScheduledAction action);
+
+    /** A held action may become runnable after its original due instant. */
+    default List<ProposedEvent> plan(S state, ScheduledAction action, SimInstant currentInstant) {
+        return plan(state, action);
+    }
 
     /** Canonical owner-declared hold; excludes work before budget admission without changing its deadline. */
     default boolean held(S state, ScheduledAction action) { return false; }

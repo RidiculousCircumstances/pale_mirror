@@ -244,7 +244,8 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                 }
                 List<ProposedEvent> planned;
                 try (FrontierExecutionMetrics.Span ignored = measure(FrontierExecutionMetrics.Stage.SCHEDULE_PLAN, action.kind(), action.subject().value())) {
-                    planned = List.copyOf(scheduledPlanner.plan(state, action));
+                    planned = List.copyOf(scheduledPlanner.plan(state, action,
+                            laterOf(instant, action.dueAt())));
                 }
                 if (planned.isEmpty()) {
                     throw new IllegalStateException("due action emitted no completion event: " + action.id().value());

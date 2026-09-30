@@ -51,7 +51,8 @@ class BakeryColdVerticalTest {
                 .filter(value -> value.id().equals(job.settlementId())).findFirst().orElseThrow()
                 .residents().stream().map(value -> value.id()).filter(id -> !id.equals(resident))
                 .findFirst().orElseThrow();
-        assertFalse(ServiceAccessCoordinator.depotAvailableForMeal(state, depot, otherResident));
+        assertTrue(ServiceAccessCoordinator.depotAvailableForMeal(state, depot, otherResident),
+                "a baker travelling to the depot does not occupy its physical service throat");
         assertTrue(ServiceAccessCoordinator.depotAvailableForMeal(state, depot, resident),
                 "the retained baker may safely yield the same service turn to their own meal");
         assertEquals(ResidentWorkYield.Status.READY, ResidentWorkYield.assess(state,
@@ -65,9 +66,20 @@ class BakeryColdVerticalTest {
         assertEquals(1, held.size());
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class,
                 held.getFirst().payload());
-        for (int turn = 0; turn < 200 && state.humanPopulation().meals().containsKey(resident); turn++) {
-            ResidentMealColdStep step = ResidentMealProcess.planColdStep(state, resident, 27_002L + turn).orElseThrow();
+        long mealTick = 27_002L;
+        for (int turn = 0; turn < 24 && state.humanPopulation().meals().containsKey(resident); turn++) {
+            var currentMeal = state.humanPopulation().meals().get(resident);
+            if (currentMeal.coldTravel().isPresent())
+                mealTick = Math.max(mealTick, currentMeal.coldTravel().orElseThrow().arrivalTick());
+            FrontierWorldState beforeMealStep = state;
+            long atMealTick = mealTick;
+            ResidentMealColdStep step = ResidentMealProcess.planColdStep(state, resident, mealTick)
+                    .orElseThrow(() -> new AssertionError("meal=" + beforeMealStep.humanPopulation().meals().get(resident)
+                            + " body=" + beforeMealStep.actorLocations().get(resident).body()
+                            + " at=" + atMealTick + " depotAvailable="
+                            + ServiceAccessCoordinator.depotAvailableForMeal(beforeMealStep, depot, resident)));
             state = ResidentMealProcess.reduceColdStep(state, resident, step);
+            mealTick++;
         }
         assertFalse(state.humanPopulation().meals().containsKey(resident));
         assertTrue(ServiceAccessCoordinator.depotAvailableForWork(state, depot, job.id(), resident));
@@ -174,15 +186,20 @@ class BakeryColdVerticalTest {
                             waitingResident, 27_000L).orElseThrow();
                     assertEquals(job.outputItemId(), meal.meal().lotId());
                     completed = ResidentMealProcess.reduceStarted(completed, waitingResident, meal);
-                    for (int mealStep = 0; mealStep < 200
+                    long mealTick = 27_001L;
+                    for (int mealStep = 0; mealStep < 24
                             && completed.humanPopulation().meals().get(waitingResident).phase() != ResidentMeal.Phase.RETURN; mealStep++) {
+                        var currentMeal = completed.humanPopulation().meals().get(waitingResident);
+                        if (currentMeal.coldTravel().isPresent())
+                            mealTick = Math.max(mealTick, currentMeal.coldTravel().orElseThrow().arrivalTick());
                         Optional<ResidentMealColdStep> planned = ResidentMealProcess.planColdStep(completed,
-                                waitingResident, 27_001L + mealStep);
+                                waitingResident, mealTick);
                         assertTrue(planned.isPresent(), "meal cannot advance in "
                                 + completed.humanPopulation().meals().get(waitingResident).phase()
                                 + " at step " + mealStep);
                         ResidentMealColdStep progress = planned.orElseThrow();
                         completed = ResidentMealProcess.reduceColdStep(completed, waitingResident, progress);
+                        mealTick++;
                     }
                     assertEquals(ResidentMeal.Phase.RETURN,
                             completed.humanPopulation().meals().get(waitingResident).phase());

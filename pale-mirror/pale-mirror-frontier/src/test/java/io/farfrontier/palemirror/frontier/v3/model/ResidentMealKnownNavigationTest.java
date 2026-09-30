@@ -49,8 +49,14 @@ class ResidentMealKnownNavigationTest {
                 Optional.empty(), ResidentMeal.Phase.MOVE, 6_000L, Optional.empty());
         List<SurfaceAnchor> route = ResidentMealKnownNavigation.path(state, meal);
         assertEquals(state.actorLocations().get(resident).supportingSurface(), route.getFirst());
-        assertEquals(SettlementDepotServicePort.forDepot(settlement.structures().stream()
-                .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow()).serviceSurface(), route.getLast());
+        SettlementDepotServicePort port = SettlementDepotServicePort.forDepot(settlement.structures().stream()
+                .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow());
+        assertTrue(port.accessBoundary().cleared(route.getLast().standingBody()));
+        var waitingActors = new java.util.LinkedHashMap<>(state.actorLocations());
+        waitingActors.put(resident, ActorLocation.standingOn(route.getLast()));
+        List<SurfaceAnchor> shortEntry = ResidentMealKnownNavigation.path(
+                state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(waitingActors)), meal);
+        assertEquals(port.serviceSurface(), shortEntry.getLast());
         assertTrue(route.size() > 1);
     }
 
@@ -70,7 +76,8 @@ class ResidentMealKnownNavigationTest {
         SurfaceAnchor service = SettlementDepotServicePort.forDepot(depotStructure).serviceSurface();
         List<SurfaceAnchor> fromIdle = ResidentMealKnownNavigation.path(state, meal);
         assertEquals(state.actorLocations().get(resident).supportingSurface(), fromIdle.getFirst());
-        assertEquals(service, fromIdle.getLast());
+        assertTrue(SettlementDepotServicePort.forDepot(depotStructure).accessBoundary()
+                .cleared(fromIdle.getLast().standingBody()));
         assertTrue(fromIdle.size() > 1);
         ResidentMeal returning = new ResidentMeal(resident, settlement.id(), depot,
                 state.actorLocations().get(resident).supportingSurface(),
@@ -88,7 +95,8 @@ class ResidentMealKnownNavigationTest {
         SurfaceAnchor work = SettlementWorkshopServicePort.forWorkshop(workshop).workStation();
         List<SurfaceAnchor> fromWorkshop = ResidentMealKnownNavigation.pathFrom(state, meal, work);
         assertEquals(work, fromWorkshop.getFirst());
-        assertEquals(service, fromWorkshop.getLast());
+        assertTrue(SettlementDepotServicePort.forDepot(depotStructure).accessBoundary()
+                .cleared(fromWorkshop.getLast().standingBody()));
         assertTrue(fromWorkshop.size() > 1);
     }
 }

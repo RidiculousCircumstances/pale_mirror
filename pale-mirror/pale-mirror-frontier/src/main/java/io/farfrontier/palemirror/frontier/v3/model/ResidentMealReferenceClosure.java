@@ -14,6 +14,16 @@ public final class ResidentMealReferenceClosure {
             ActorLocation actor = state.actorLocations().get(meal.residentId());
             if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE)
                 throw new IllegalArgumentException("retained meal has no living resident body");
+            if (meal.coldTravel().isPresent()) {
+                var travel = meal.coldTravel().orElseThrow();
+                AmbientActorLease previous = state.ambientLeases().get(meal.residentId());
+                long expectedEpoch = previous == null ? 1L : Math.addExact(previous.revision(), 1L);
+                if (!actor.supportingSurface().equals(travel.route().getFirst())
+                        || travel.departedAtTick() < meal.startedAtTick()
+                        || travel.authorityEpoch() != expectedEpoch
+                        || previous != null && previous.status() != AmbientLeaseStatus.CLOSED)
+                    throw new IllegalArgumentException("retained meal route lacks its exact COLD checkpoint or authority epoch");
+            }
             if (!assignments.assignment(meal.residentId()).ownerId().equals(meal.retainedWorkOwner()))
                 throw new IllegalArgumentException("retained meal lost or replaced its exact work owner");
             ClaimAllocation claim = ledger.claims().get(meal.claimId());

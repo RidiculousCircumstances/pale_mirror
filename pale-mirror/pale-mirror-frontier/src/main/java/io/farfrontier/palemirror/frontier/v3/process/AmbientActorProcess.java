@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
+import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -47,19 +48,42 @@ public final class AmbientActorProcess {
         return new CommandPlan.Accepted(List.of(new ProposedEvent(owner(state, transition.actorId()), transition)));
     }
     public static CommandPlan plan(FrontierWorldState state, AmbientLeaseReleased release) {
+        return plan(state, release, -1L);
+    }
+    public static CommandPlan plan(FrontierWorldState state, AmbientLeaseReleased release, long currentTick) {
         try { AmbientLeaseStateProcess.release(state, release); } catch (IllegalArgumentException invalid) { return rejected(invalid); }
-        return new CommandPlan.Accepted(List.of(new ProposedEvent(owner(state, release.actorId()), release)));
+        java.util.ArrayList<ProposedEvent> events = new java.util.ArrayList<>();
+        events.add(new ProposedEvent(owner(state, release.actorId()), release));
+        resumeMealAfterLease(state, release.actorId(), currentTick, events);
+        return new CommandPlan.Accepted(List.copyOf(events));
     }
     public static CommandPlan plan(FrontierWorldState state, AmbientLeaseRestartAbsenceObserved absence) {
-        try { AmbientLeaseStateProcess.resolveRestartAbsence(state, absence); } catch (IllegalArgumentException invalid) { return rejected(invalid); }
-        return new CommandPlan.Accepted(List.of(new ProposedEvent(owner(state, absence.actorId()), absence)));
+        return plan(state, absence, -1L);
     }
-    public static CommandPlan planLease(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierPayload payload) {
+    public static CommandPlan plan(FrontierWorldState state, AmbientLeaseRestartAbsenceObserved absence, long currentTick) {
+        try { AmbientLeaseStateProcess.resolveRestartAbsence(state, absence); } catch (IllegalArgumentException invalid) { return rejected(invalid); }
+        java.util.ArrayList<ProposedEvent> events = new java.util.ArrayList<>();
+        events.add(new ProposedEvent(owner(state, absence.actorId()), absence));
+        resumeMealAfterLease(state, absence.actorId(), currentTick, events);
+        return new CommandPlan.Accepted(List.copyOf(events));
+    }
+    private static void resumeMealAfterLease(FrontierWorldState state, SubjectId actorId, long currentTick,
+                                             java.util.List<ProposedEvent> events) {
+        ResidentMeal meal = state.humanPopulation().meals().get(actorId);
+        if (meal == null || currentTick < 0L) return;
+        events.add(new ProposedEvent(actorId, new ScheduleEffect.Rescheduled(
+                ResidentMealProcess.progress(meal, Math.addExact(meal.startedAtTick(), 1L)).id(),
+                ResidentMealProcess.progress(meal, Math.max(Math.addExact(currentTick, 1L),
+                        Math.addExact(meal.startedAtTick(), 1L))))));
+    }
+    public static CommandPlan planLease(FrontierWorldState state,
+                                        io.farfrontier.palemirror.frontier.v3.api.FrontierPayload payload,
+                                        long currentTick) {
         return switch (payload) {
             case AmbientLeasePrepared prepared -> plan(state, prepared);
             case AmbientLeaseTransition transition -> plan(state, transition);
-            case AmbientLeaseReleased release -> plan(state, release);
-            case AmbientLeaseRestartAbsenceObserved absence -> plan(state, absence);
+            case AmbientLeaseReleased release -> plan(state, release, currentTick);
+            case AmbientLeaseRestartAbsenceObserved absence -> plan(state, absence, currentTick);
             default -> throw new IllegalArgumentException("payload is not an ambient lease transition");
         };
     }
@@ -71,7 +95,8 @@ public final class AmbientActorProcess {
         AmbientActorLease previous = state.ambientLeases().get(actorId);
         long revision = previous == null ? 1L : Math.addExact(previous.revision(), 1L);
         AmbientGoal goal = goalFor(state, actorId, instant.ticks());
-        return new AmbientActorLease(actorId, actor.body(), instant, revision, AmbientLeaseStatus.PREPARED, goal.kind(), BodyPosition.above(new SurfaceAnchor(goal.position())));
+        return new AmbientActorLease(actorId, ResidentMealProcess.bodyAt(state, actorId, instant.ticks()), instant,
+                revision, AmbientLeaseStatus.PREPARED, goal.kind(), BodyPosition.above(new SurfaceAnchor(goal.position())));
     }
 
     public static FrontierWorldState reduce(FrontierWorldState state, SubjectId subject, AmbientActorDied death) {

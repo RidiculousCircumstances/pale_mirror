@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientActorDied;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientActorObserved;
 import io.farfrontier.palemirror.frontier.v3.process.AmbientActorProcess;
+import io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeasePrepared;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseRestartAbsenceObserved;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseReleased;
@@ -251,7 +252,8 @@ final class FrontierV3AmbientActorExecutor {
                 FrontierV3AmbientActorCaches.forgetObserved(runtime, actorId);
                 continue;
             }
-            boolean demanded = demand(level, location.supportingSurface().support());
+            boolean demanded = demand(level, ResidentMealProcess.bodyAt(state, actorId,
+                    runtime.canonicalState().orElseThrow().instant().ticks()).supportingSurface().support());
             if (!demanded) {
                 if (lease != null && lease.status() == AmbientLeaseStatus.HOT) {
                     Entity body = level.getEntity(entityId(state, actorId));

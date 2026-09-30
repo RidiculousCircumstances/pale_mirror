@@ -1,6 +1,8 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.TimedKnownRoute;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -12,7 +14,8 @@ public record ResidentMeal(SubjectId residentId, SubjectId settlementId, Subject
                            SubjectId lotId, SubjectId claimId,
                            Optional<SubjectId> retainedWorkOwner, Phase phase,
                            long startedAtTick, Optional<ResidentActivityChoice.Wait> waitReason,
-                           Optional<ResidentMealPhysicalStep> pendingPhysicalStep) {
+                           Optional<ResidentMealPhysicalStep> pendingPhysicalStep,
+                           Optional<TimedKnownRoute> coldTravel) {
     public static final String BREAD_KIND = "minecraft:bread";
     /** RETURN retains the meal journey; service access may be released before it finishes. */
     public enum Phase { MOVE, TAKE, CONSUME, RETURN }
@@ -30,8 +33,18 @@ public record ResidentMeal(SubjectId residentId, SubjectId settlementId, Subject
         Objects.requireNonNull(phase, "meal phase");
         waitReason = Objects.requireNonNull(waitReason, "meal wait reason");
         pendingPhysicalStep = Objects.requireNonNull(pendingPhysicalStep, "meal physical step");
+        coldTravel = Objects.requireNonNull(coldTravel, "meal COLD travel");
         if (pendingPhysicalStep.isPresent() && pendingPhysicalStep.orElseThrow().phase() != phase)
             throw new IllegalArgumentException("meal physical fence differs from current phase");
+        if (coldTravel.isPresent() && (phase != Phase.MOVE && phase != Phase.RETURN
+                || !coldTravel.orElseThrow().order().actorId().equals(residentId)
+                || !coldTravel.orElseThrow().order().ownerId().equals(residentId)
+                || coldTravel.orElseThrow().order().goalOrdinal() != FrontierWireTags.tag(phase)
+                || coldTravel.orElseThrow().order().goalRevision() != 1L
+                || coldTravel.orElseThrow().order().capability() != TraversalCapability.PEDESTRIAN
+                || coldTravel.orElseThrow().order().arrivalPolicy() != MovementOrder.ArrivalPolicy.EXACT_STATION
+                || pendingPhysicalStep.isPresent()))
+            throw new IllegalArgumentException("meal travel must retain the exact moving resident and phase");
         if (!residentId.value().startsWith("resident:") || !settlementId.value().startsWith("settlement:")
                 || !FrontierWorldState.depotId(settlementId).equals(depotId)
                 || !sourceAccountId.equals(ReferenceContainerCustody.scopeId(depotId))
@@ -47,14 +60,24 @@ public record ResidentMeal(SubjectId residentId, SubjectId settlementId, Subject
                         SubjectId claimId, Optional<SubjectId> retainedWorkOwner, Phase phase,
                         long startedAtTick, Optional<ResidentActivityChoice.Wait> waitReason) {
         this(residentId, settlementId, depotId, clearingSurface, sourceAccountId, actorAccountId, lotId,
-                claimId, retainedWorkOwner, phase, startedAtTick, waitReason, Optional.empty());
+                claimId, retainedWorkOwner, phase, startedAtTick, waitReason, Optional.empty(), Optional.empty());
+    }
+
+    public ResidentMeal(SubjectId residentId, SubjectId settlementId, SubjectId depotId,
+                        SurfaceAnchor clearingSurface, SubjectId sourceAccountId, SubjectId actorAccountId,
+                        SubjectId lotId, SubjectId claimId, Optional<SubjectId> retainedWorkOwner,
+                        Phase phase, long startedAtTick, Optional<ResidentActivityChoice.Wait> waitReason,
+                        Optional<ResidentMealPhysicalStep> pendingPhysicalStep) {
+        this(residentId, settlementId, depotId, clearingSurface, sourceAccountId, actorAccountId,
+                lotId, claimId, retainedWorkOwner, phase, startedAtTick, waitReason,
+                pendingPhysicalStep, Optional.empty());
     }
 
     public ResidentMeal prepare(ResidentMealPhysicalStep step) {
         if (pendingPhysicalStep.isPresent() || step.phase() != phase)
             throw new IllegalArgumentException("meal cannot prepare a second or foreign physical effect");
         return new ResidentMeal(residentId, settlementId, depotId, clearingSurface, sourceAccountId, actorAccountId,
-                lotId, claimId, retainedWorkOwner, phase, startedAtTick, waitReason, Optional.of(step));
+                lotId, claimId, retainedWorkOwner, phase, startedAtTick, waitReason, Optional.of(step), coldTravel);
     }
 
     public ResidentMeal advance(Phase next) {
@@ -66,17 +89,31 @@ public record ResidentMeal(SubjectId residentId, SubjectId settlementId, Subject
         };
         if (!legal) throw new IllegalArgumentException("meal phase cannot skip a physical custody receipt");
         return new ResidentMeal(residentId, settlementId, depotId, clearingSurface, sourceAccountId, actorAccountId,
-                lotId, claimId, retainedWorkOwner, next, startedAtTick, Optional.empty(), Optional.empty());
+                lotId, claimId, retainedWorkOwner, next, startedAtTick, Optional.empty(), Optional.empty(), Optional.empty());
     }
 
     public ResidentMeal waitFor(ResidentActivityChoice.Wait reason) {
         return new ResidentMeal(residentId, settlementId, depotId, clearingSurface, sourceAccountId, actorAccountId,
-                lotId, claimId, retainedWorkOwner, phase, startedAtTick, Optional.of(reason), pendingPhysicalStep);
+                lotId, claimId, retainedWorkOwner, phase, startedAtTick, Optional.of(reason), pendingPhysicalStep, coldTravel);
     }
 
     public ResidentMeal clearWait() {
         return waitReason.isEmpty() ? this : new ResidentMeal(residentId, settlementId, depotId, clearingSurface,
                 sourceAccountId, actorAccountId, lotId, claimId, retainedWorkOwner, phase,
-                startedAtTick, Optional.empty(), pendingPhysicalStep);
+                startedAtTick, Optional.empty(), pendingPhysicalStep, coldTravel);
+    }
+
+    public ResidentMeal withColdTravel(TimedKnownRoute travel) {
+        if (coldTravel.isPresent()) throw new IllegalArgumentException("meal already has COLD travel");
+        return new ResidentMeal(residentId, settlementId, depotId, clearingSurface, sourceAccountId, actorAccountId,
+                lotId, claimId, retainedWorkOwner, phase, startedAtTick, waitReason, pendingPhysicalStep,
+                Optional.of(travel));
+    }
+
+    public ResidentMeal withoutColdTravel() {
+        if (coldTravel.isEmpty()) return this;
+        return new ResidentMeal(residentId, settlementId, depotId, clearingSurface, sourceAccountId, actorAccountId,
+                lotId, claimId, retainedWorkOwner, phase, startedAtTick, waitReason, pendingPhysicalStep,
+                Optional.empty());
     }
 }

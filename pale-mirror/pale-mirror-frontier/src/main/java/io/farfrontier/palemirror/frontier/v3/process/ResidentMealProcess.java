@@ -7,6 +7,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.model.*;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.TimedKnownRoute;
 
 import java.util.List;
 import java.util.LinkedHashMap;
@@ -16,7 +18,26 @@ import java.util.Optional;
 /** Exact one-bread source, custody and consumption owner; activity hand-off belongs elsewhere. */
 public final class ResidentMealProcess {
     public static final String PROGRESS = "frontier.resident.meal.progress";
+    private static final long COLD_TICKS_PER_EDGE = 20L;
     private ResidentMealProcess() { }
+
+    /** Read-only COLD projection; never grants a physical lease or consumes a meal effect. */
+    public static BodyPosition bodyAt(FrontierWorldState state, SubjectId residentId, long atTick) {
+        ResidentMeal meal = state.humanPopulation().meals().get(residentId);
+        if (meal != null && meal.coldTravel().isPresent()) {
+            TimedKnownRoute travel = meal.coldTravel().orElseThrow();
+            // A due but uncommitted arrival cannot be observed as an interaction.
+            // The last pre-arrival support is the maximal safe HOT handoff.
+            long safeTick = Math.min(atTick, travel.arrivalTick() - 1L);
+            int safeIndex = travel.indexAt(safeTick);
+            int barrier = firstKnownBarrier(state, travel);
+            if (barrier >= 0) safeIndex = Math.min(safeIndex, barrier - 1);
+            return BodyPosition.above(travel.route().get(safeIndex));
+        }
+        ActorLocation actor = state.actorLocations().get(residentId);
+        if (actor == null) throw new IllegalArgumentException("resident has no canonical body");
+        return actor.body();
+    }
 
     public static ScheduledAction progress(ResidentMeal meal, long dueAt) {
         if (dueAt <= meal.startedAtTick()) throw new IllegalArgumentException("meal progress precedes start");
@@ -25,27 +46,55 @@ public final class ResidentMealProcess {
                 new SimInstant(dueAt), 12, meal.residentId(), PROGRESS, 1);
     }
 
+    /** HOT or an unresolved physical hand owns the meal; no COLD retry is useful. */
+    public static boolean held(FrontierWorldState state, ScheduledAction action) {
+        if (!PROGRESS.equals(action.kind())) return false;
+        ResidentMeal meal = state.humanPopulation().meals().get(action.subject());
+        if (meal == null) return false;
+        if (meal.pendingPhysicalStep().isPresent()
+                || !FrontierSceneAdmission.available(state, List.of(meal.residentId()))
+                || state.sceneLeases().values().stream().anyMatch(lease -> lease.retainsMemberCustody(meal.residentId())))
+            return true;
+        return switch (meal.phase()) {
+            case TAKE -> ReferenceContainerCustody.hasLiveCustody(state, meal.depotId());
+            case CONSUME -> state.inventory().fungibleResources().bindings().values().stream()
+                    .anyMatch(binding -> binding.accountId().equals(meal.actorAccountId()));
+            case MOVE, RETURN -> planColdStep(state, meal.residentId(), action.dueAt().ticks()).isEmpty();
+        };
+    }
+
     /** One sparse due action; unavailable HOT custody or route retains the same activity. */
     public static List<ProposedEvent> planProgress(FrontierWorldState state, ScheduledAction action) {
+        return planProgress(state, action, action.dueAt().ticks());
+    }
+
+    public static List<ProposedEvent> planProgress(FrontierWorldState state, ScheduledAction action, long currentTick) {
         ResidentMeal meal = state.humanPopulation().meals().get(action.subject());
         if (meal == null || !action.equals(progress(meal, action.dueAt().ticks())))
             throw new IllegalArgumentException("meal progress lacks its retained exact activity");
         ActorLocation body = state.actorLocations().get(meal.residentId());
         if (body == null || body.condition().status() != ActorLifeStatus.ALIVE)
             return List.of(new ProposedEvent(meal.residentId(), new ScheduleEffect.Consumed(action.id())));
-        long nextDue = Math.addExact(action.dueAt().ticks(), 20L);
-        Optional<ResidentMealColdStep> step = planColdStep(state, meal.residentId(), action.dueAt().ticks());
+        long now = Math.max(action.dueAt().ticks(), currentTick);
+        Optional<ResidentMealColdStep> step = planColdStep(state, meal.residentId(), now);
+        // A changing availability boundary is rechecked by the engine's held
+        // predicate; keep the same due owner instead of adding 200 ticks of
+        // artificial latency after the service becomes free.
         if (step.isEmpty()) return List.of(new ProposedEvent(meal.residentId(),
-                new ScheduleEffect.Rescheduled(action.id(), progress(meal, nextDue))));
+                new ScheduleEffect.Rescheduled(action.id(), progress(meal,
+                        Math.addExact(now, 1L)))));
         List<ProposedEvent> events = new java.util.ArrayList<>();
         events.add(new ProposedEvent(meal.residentId(), step.orElseThrow()));
+        long nextDue = nextColdDue(state, meal, now);
+        boolean returnComplete = meal.phase() == ResidentMeal.Phase.RETURN
+                && meal.coldTravel().isEmpty() && step.orElseThrow().nextSurface().isEmpty()
+                && body.supportingSurface().equals(meal.clearingSurface());
         if (meal.phase() == ResidentMeal.Phase.CONSUME)
-            events.add(ResidentNeedProcess.requeueAfterConfirmedBread(state, meal.residentId(), action.dueAt().ticks()));
-        if (meal.phase() == ResidentMeal.Phase.RETURN && step.orElseThrow().nextSurface().isEmpty())
-            events.add(ResidentActivityProcess.wakeAfterMeal(meal.residentId(), action.dueAt().ticks()));
-        events.add(new ProposedEvent(meal.residentId(), meal.phase() == ResidentMeal.Phase.RETURN
-                && step.orElseThrow().nextSurface().isEmpty()
-                ? new ScheduleEffect.Consumed(action.id())
+            events.add(ResidentNeedProcess.requeueAfterConfirmedBread(state, meal.residentId(), now));
+        if (returnComplete)
+            events.add(ResidentActivityProcess.wakeAfterMeal(meal.residentId(), now));
+        events.add(new ProposedEvent(meal.residentId(), returnComplete
+                ? new ScheduleEffect.Cancelled(action.id())
                 : new ScheduleEffect.Rescheduled(action.id(), progress(meal, nextDue))));
         return List.copyOf(events);
     }
@@ -372,28 +421,110 @@ public final class ResidentMealProcess {
                     .anyMatch(binding -> binding.accountId().equals(meal.actorAccountId()))))
             return Optional.empty();
         if (meal.phase() == ResidentMeal.Phase.RETURN) {
+            if (meal.coldTravel().isPresent()) return arrivedTravelStep(state, meal, now);
             try {
-                List<SurfaceAnchor> route = ResidentMealKnownNavigation.returnPath(state, meal);
-                return Optional.of(route.size() > 1
-                        ? new ResidentMealColdStep(residentId, meal.phase(), now, Optional.of(route.get(1)))
-                        : new ResidentMealColdStep(residentId, meal.phase(), now));
+                ResidentMealKnownNavigation.returnPath(state, meal);
+                return Optional.of(new ResidentMealColdStep(residentId, meal.phase(), now));
             } catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
                 return Optional.empty();
             }
         }
         if (meal.phase() != ResidentMeal.Phase.MOVE)
             return Optional.of(new ResidentMealColdStep(residentId, meal.phase(), now));
+        if (meal.coldTravel().isPresent()) return arrivedTravelStep(state, meal, now);
         try {
             List<SurfaceAnchor> route = ResidentMealKnownNavigation.path(state, meal);
-            if (!ServiceAccessCoordinator.depotAvailableForMeal(state, meal.depotId(), residentId)
-                    && (route.size() == 1 || port(state, meal).accessBoundary()
-                        .occupied(route.get(1).standingBody()))) return Optional.empty();
-            return Optional.of(route.size() > 1
-                    ? new ResidentMealColdStep(residentId, meal.phase(), now, Optional.of(route.get(1)))
-                    : new ResidentMealColdStep(residentId, meal.phase(), now));
+            if (route.size() == 1 && !actor.supportingSurface().equals(serviceSurface(state, meal)))
+                return Optional.empty();
+            return Optional.of(new ResidentMealColdStep(residentId, meal.phase(), now));
         } catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
             return Optional.empty();
         }
+    }
+
+    private static Optional<ResidentMealColdStep> arrivedTravelStep(FrontierWorldState state, ResidentMeal meal, long now) {
+        TimedKnownRoute travel = meal.coldTravel().orElseThrow();
+        if (firstKnownBarrier(state, travel) >= 0)
+            return Optional.of(new ResidentMealColdStep(meal.residentId(), meal.phase(), now));
+        if (!travel.arrivedBy(now)) return Optional.empty();
+        if (meal.phase() == ResidentMeal.Phase.MOVE
+                && travel.route().getLast().equals(serviceSurface(state, meal))
+                && !ServiceAccessCoordinator.depotAvailableForMeal(state, meal.depotId(), meal.residentId()))
+            return Optional.of(new ResidentMealColdStep(meal.residentId(), meal.phase(), now));
+        return Optional.of(new ResidentMealColdStep(meal.residentId(), meal.phase(), now,
+                Optional.of(travel.route().getLast())));
+    }
+
+    private static int firstKnownBarrier(FrontierWorldState state, TimedKnownRoute travel) {
+        for (int index = 1; index < travel.route().size(); index++) {
+            SurfaceAnchor surface = travel.route().get(index);
+            BlockPosition support = surface.support();
+            if (state.physicalDeltas().containsKey(support)
+                    || state.physicalDeltas().containsKey(support.offset(0, 1, 0))
+                    || state.physicalDeltas().containsKey(support.offset(0, 2, 0))) return index;
+        }
+        return -1;
+    }
+
+    /** A newly observed change behind the as-of body must not rewind the resident. */
+    private static BodyPosition interruptionBodyAt(ResidentMeal meal, long atTick) {
+        TimedKnownRoute travel = meal.coldTravel().orElseThrow();
+        int index = travel.indexAt(Math.min(atTick, travel.arrivalTick() - 1L));
+        return BodyPosition.above(travel.route().get(index));
+    }
+
+    /** Exact route-owner match for a newly witnessed physical cell change. */
+    public static boolean travelIntersects(ResidentMeal meal, BlockPosition cell) {
+        if (meal.coldTravel().isEmpty()) return false;
+        List<SurfaceAnchor> route = meal.coldTravel().orElseThrow().route();
+        for (int index = 1; index < route.size(); index++) {
+            SurfaceAnchor surface = route.get(index);
+            BlockPosition support = surface.support();
+            if (cell.equals(support) || cell.equals(support.offset(0, 1, 0))
+                    || cell.equals(support.offset(0, 2, 0))) return true;
+        }
+        return false;
+    }
+
+    private static long nextColdDue(FrontierWorldState state, ResidentMeal meal, long now) {
+        if (meal.phase() != ResidentMeal.Phase.MOVE && meal.phase() != ResidentMeal.Phase.RETURN)
+            return Math.addExact(now, COLD_TICKS_PER_EDGE);
+        if (meal.coldTravel().isPresent()) {
+            TimedKnownRoute travel = meal.coldTravel().orElseThrow();
+            return firstKnownBarrier(state, travel) >= 0 ? Math.addExact(now, 1L)
+                    : Math.max(Math.addExact(now, 1L), travel.arrivalTick());
+        }
+        List<SurfaceAnchor> route = routeToBoundary(state, meal);
+        if (route.size() <= 1) return Math.addExact(now, COLD_TICKS_PER_EDGE);
+        return timedRoute(state, meal, route, now).arrivalTick();
+    }
+
+    private static TimedKnownRoute timedRoute(FrontierWorldState state, ResidentMeal meal,
+                                             List<SurfaceAnchor> route, long now) {
+        MovementOrder order = new MovementOrder(meal.residentId(), meal.residentId(),
+                FrontierWireTags.tag(meal.phase()), 1L, List.of(route.getLast()),
+                TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
+        AmbientActorLease previous = state.ambientLeases().get(meal.residentId());
+        long epoch = previous == null ? 1L : Math.addExact(previous.revision(), 1L);
+        return new TimedKnownRoute(order, route, now, COLD_TICKS_PER_EDGE, epoch);
+    }
+
+    /** Travel never coalesces across the single physical service entrance or its exit. */
+    private static List<SurfaceAnchor> routeToBoundary(FrontierWorldState state, ResidentMeal meal) {
+        List<SurfaceAnchor> route = meal.phase() == ResidentMeal.Phase.MOVE
+                ? ResidentMealKnownNavigation.path(state, meal)
+                : ResidentMealKnownNavigation.returnPath(state, meal);
+        ServiceAccessBoundary boundary = port(state, meal).accessBoundary();
+        if (meal.phase() == ResidentMeal.Phase.MOVE) {
+            for (int index = 1; index < route.size() - 1; index++)
+                if (index > 1 && boundary.occupied(route.get(index).standingBody()))
+                    return List.copyOf(route.subList(0, index));
+        } else if (boundary.occupied(route.getFirst().standingBody())) {
+            for (int index = 1; index < route.size() - 1; index++)
+                if (boundary.cleared(route.get(index).standingBody()))
+                    return List.copyOf(route.subList(0, index + 1));
+        }
+        return route;
     }
 
     public static SurfaceAnchor serviceSurface(FrontierWorldState state, ResidentMeal meal) {
@@ -424,10 +555,27 @@ public final class ResidentMealProcess {
                         .orElseThrow(() -> new IllegalArgumentException("meal has no current COLD route step"));
                 if (!step.equals(expected))
                     throw new IllegalArgumentException("meal COLD movement differs from its current known route");
+                if (meal.coldTravel().isEmpty()) {
+                    List<SurfaceAnchor> route = routeToBoundary(state, meal);
+                    if (route.size() > 1) {
+                        TimedKnownRoute travel = timedRoute(state, meal, route, step.atTick());
+                        yield state.withHumanPopulation(state.humanPopulation().advanceMeal(meal,
+                                meal.withColdTravel(travel)));
+                    }
+                }
+                if (meal.coldTravel().isPresent() && step.nextSurface().isEmpty()) {
+                    Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
+                    actors.put(subject, actor.withBody(interruptionBodyAt(meal, step.atTick())));
+                    yield state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors)
+                            .humanPopulation(state.humanPopulation().advanceMeal(meal,
+                                    meal.withoutColdTravel())));
+                }
                 if (step.nextSurface().isPresent()) {
                     Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
                     actors.put(subject, actor.withBody(BodyPosition.above(step.nextSurface().orElseThrow())));
-                    yield state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
+                    ResidentMeal arrived = meal.withoutColdTravel();
+                    yield state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors)
+                            .humanPopulation(state.humanPopulation().advanceMeal(meal, arrived)));
                 }
                 if (!actor.supportingSurface().equals(serviceSurface(state, meal)))
                     throw new IllegalArgumentException("meal arrival lacks its exact depot station body");
@@ -457,10 +605,27 @@ public final class ResidentMealProcess {
                         .orElseThrow(() -> new IllegalArgumentException("meal has no current COLD clearing step"));
                 if (!step.equals(expected))
                     throw new IllegalArgumentException("meal COLD clearance differs from its known route");
+                if (meal.coldTravel().isEmpty()) {
+                    List<SurfaceAnchor> route = routeToBoundary(state, meal);
+                    if (route.size() > 1) {
+                        TimedKnownRoute travel = timedRoute(state, meal, route, step.atTick());
+                        yield state.withHumanPopulation(state.humanPopulation().advanceMeal(meal,
+                                meal.withColdTravel(travel)));
+                    }
+                }
+                if (meal.coldTravel().isPresent() && step.nextSurface().isEmpty()) {
+                    Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
+                    actors.put(subject, actor.withBody(interruptionBodyAt(meal, step.atTick())));
+                    yield state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors)
+                            .humanPopulation(state.humanPopulation().advanceMeal(meal,
+                                    meal.withoutColdTravel())));
+                }
                 if (step.nextSurface().isPresent()) {
                     Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
                     actors.put(subject, actor.withBody(BodyPosition.above(step.nextSurface().orElseThrow())));
-                    yield state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
+                    ResidentMeal arrived = meal.withoutColdTravel();
+                    yield state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors)
+                            .humanPopulation(state.humanPopulation().advanceMeal(meal, arrived)));
                 }
                 if (!ServiceAccessCoordinator.cleared(state, meal, actor.body()))
                     throw new IllegalArgumentException("meal cannot release an occupied service throat");

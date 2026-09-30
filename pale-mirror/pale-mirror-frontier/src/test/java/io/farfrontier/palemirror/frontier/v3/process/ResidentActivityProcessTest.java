@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.process;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import io.farfrontier.palemirror.frontier.v3.model.*;
@@ -44,11 +45,42 @@ class ResidentActivityProcessTest {
                 new WorldId("frontier:resident-activity-no-bread"), 421L));
         SubjectId resident = state.bootstrap().settlements().getFirst().residents().getFirst().id();
         var action = ResidentActivityProcess.review(resident, 24_000L);
+        assertTrue(FrontierWorldRuntimeDefinition.scheduledHeld(state, action),
+                "an unchanged empty depot must not emit another resident retry transaction");
         var planned = FrontierWorldRuntimeDefinition.planScheduled(state, action);
         assertEquals(1, planned.size());
         var next = assertInstanceOf(ScheduleEffect.Rescheduled.class, planned.getFirst().payload()).replacement();
         assertEquals(action.id(), next.id());
-        assertEquals(24_200L, next.dueAt().ticks());
+        assertEquals(24_001L, next.dueAt().ticks(),
+                "a held waiter must not inherit an avoidable 200-tick delay after stock arrives");
+    }
+
+    @Test void retainedHungryWakeUsesCurrentInstantWhenBreadAppearsAfterItsOriginalDueTime() {
+        FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:resident-activity-late-bread"), 421L));
+        Settlement settlement = initial.bootstrap().settlements().getFirst();
+        SubjectId resident = settlement.residents().getFirst().id();
+        var action = ResidentActivityProcess.review(resident, 24_000L);
+        assertTrue(FrontierWorldRuntimeDefinition.scheduledHeld(initial, action));
+
+        SubjectId account = ReferenceContainerCustody.scopeId(FrontierWorldState.depotId(settlement.id()));
+        FungibleResourceLedger resources = initial.inventory().fungibleResources().transformCold(account,
+                Map.of(new SubjectId("lot:bootstrap-1-wheat"), 64), Map.of(),
+                new ResourceLot(new SubjectId("lot:late-bread"), settlement.id(),
+                        ResidentMeal.BREAD_KIND, 64, "test", List.of()));
+        FrontierWorldState restocked = initial.withInventory(initial.inventory().withFungibleResources(resources));
+        assertFalse(FrontierWorldRuntimeDefinition.scheduledHeld(restocked, action),
+                "stock change makes the same retained exact due action runnable");
+
+        var planned = FrontierWorldRuntimeDefinition.planScheduled(restocked, action, true, new SimInstant(50_000L));
+        ResidentMealStarted started = assertInstanceOf(ResidentMealStarted.class, planned.getFirst().payload());
+        assertEquals(50_000L, started.meal().startedAtTick(),
+                "a held wake must not create a meal before the bread actually existed");
+        var progress = assertInstanceOf(ScheduleEffect.Created.class, planned.get(1).payload()).action();
+        assertEquals(50_001L, progress.dueAt().ticks());
+        assertTrue(FrontierWorldRuntimeDefinition.scheduledHeld(
+                ResidentMealProcess.reduceStarted(restocked, resident, started), action),
+                "the activity review waits for its retained meal instead of generating retry WAL");
     }
 
     @Test void staleActivityReviewDoesNotEvaluateBeforeConfirmedNeedClock() {

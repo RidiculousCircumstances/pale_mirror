@@ -23,6 +23,7 @@ public final class FrontierWorldPhysicalObservationProcess {
         }
         List<ProposedEvent> events = new ArrayList<>();
         events.add(new ProposedEvent(FrontierExecutionSubjects.PHYSICAL_EXECUTOR, observed));
+        appendMealRouteWakeups(after, List.of(observed.delta()), submittedAt, events);
         appendProductionFacilityFailures(after, List.of(observed.delta()), events);
         if (isKnownRouteLoss(observed.delta()) && !hasActiveAffectedOperation(after, observed.delta())) {
             for (Settlement settlement : after.bootstrap().settlements()) {
@@ -49,6 +50,7 @@ public final class FrontierWorldPhysicalObservationProcess {
         }
         List<ProposedEvent> events = new ArrayList<>();
         events.add(new ProposedEvent(FrontierExecutionSubjects.PHYSICAL_EXECUTOR, observed));
+        appendMealRouteWakeups(after, observed.deltas(), submittedAt, events);
         appendProductionFacilityFailures(after, observed.deltas(), events);
         java.util.Optional<PhysicalDelta> genericRouteLoss = observed.deltas().stream()
                 .filter(FrontierWorldPhysicalObservationProcess::isKnownRouteLoss)
@@ -75,6 +77,24 @@ public final class FrontierWorldPhysicalObservationProcess {
         return delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS && delta.semanticTarget().filter(target -> target.kind() == PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK
                 && FrontierRouteNetwork.OWNER.equals(target.subjectId())).isPresent()
                 && delta.semanticPart().filter(part -> part == GrayboxSemanticPart.ROUTE_SURFACE || part == GrayboxSemanticPart.ROUTE_FOUNDATION).isPresent();
+    }
+
+    private static void appendMealRouteWakeups(FrontierWorldState state, List<PhysicalDelta> deltas,
+                                                long submittedAt, List<ProposedEvent> events) {
+        state.humanPopulation().meals().values().stream()
+                .filter(meal -> meal.coldTravel().isPresent())
+                .filter(meal -> deltas.stream().anyMatch(delta ->
+                        ResidentMealProcess.travelIntersects(meal, delta.position())))
+                .sorted(java.util.Comparator.comparing(ResidentMeal::residentId))
+                .forEach(meal -> {
+                    events.add(new ProposedEvent(meal.residentId(),
+                            new ResidentMealColdStep(meal.residentId(), meal.phase(), submittedAt)));
+                    events.add(new ProposedEvent(meal.residentId(),
+                            new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled(
+                                    ResidentMealProcess.progress(meal, Math.addExact(meal.startedAtTick(), 1L)).id(),
+                                    ResidentMealProcess.progress(meal, Math.max(Math.addExact(submittedAt, 1L),
+                                            Math.addExact(meal.startedAtTick(), 1L))))));
+                });
     }
 
     /**

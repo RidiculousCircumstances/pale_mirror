@@ -19,6 +19,153 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ResidentMealProcessTest {
+    private static long nextColdTick(FrontierWorldState state, SubjectId resident, long earliest) {
+        ResidentMeal meal = state.humanPopulation().meals().get(resident);
+        return meal.coldTravel().map(route -> Math.max(earliest, route.arrivalTick())).orElse(earliest);
+    }
+
+    @Test void timedColdMealTravelHandoffsTheAsOfBodyAndResumesAfterHotRelease() {
+        FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:resident-timed-handoff"), 421L));
+        Settlement settlement = initial.bootstrap().settlements().getFirst();
+        SubjectId resident = settlement.residents().getFirst().id();
+        SubjectId depot = FrontierWorldState.depotId(settlement.id());
+        var stock = initial.inventory().fungibleResources().transformCold(ReferenceContainerCustody.scopeId(depot),
+                Map.of(new SubjectId("lot:bootstrap-1-wheat"), 64), Map.of(),
+                new ResourceLot(new SubjectId("lot:timed-handoff-bread"), settlement.id(),
+                        ResidentMeal.BREAD_KIND, 64, "test", List.of()));
+        FrontierWorldState state = initial.withChanges(FrontierWorldStateUpdate.begin()
+                .inventory(initial.inventory().withFungibleResources(stock))
+                .humanPopulation(initial.humanPopulation().accrueHunger(resident, 27_000L)));
+        ResidentMealStarted started = ResidentMealProcess.selectSourceAtYield(state, resident, 27_000L).orElseThrow();
+        state = ResidentMealProcess.reduceStarted(state, resident, started);
+        BodyPosition departure = state.actorLocations().get(resident).body();
+        var events = ResidentMealProcess.planProgress(state, ResidentMealProcess.progress(started.meal(), 27_001L));
+        assertEquals(2, events.size(), "travel starts and replaces one due action, not one action per support");
+        state = ResidentMealProcess.reduceColdStep(state, resident, (ResidentMealColdStep) events.getFirst().payload());
+        state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+        var travel = state.humanPopulation().meals().get(resident).coldTravel().orElseThrow();
+        assertEquals(travel.arrivalTick(), ((io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled)
+                events.getLast().payload()).replacement().dueAt().ticks());
+        long middle = travel.departedAtTick() + travel.ticksPerEdge();
+        BodyPosition middleBody = ResidentMealProcess.bodyAt(state, resident, middle);
+        assertFalse(departure.equals(middleBody));
+        assertTrue(travel.route().size() > 2);
+        var changedCells = new LinkedHashMap<>(state.physicalDeltas());
+        PhysicalDelta obstruction = new PhysicalDelta(
+                travel.route().get(2).support(), PhysicalDeltaKind.UNKNOWN_SCAR,
+                java.util.Optional.empty(), java.util.Optional.empty(), "test:known-route-obstruction");
+        changedCells.put(obstruction.position(), obstruction);
+        var obstructionPlan = assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan.Accepted.class,
+                FrontierWorldPhysicalObservationProcess.plan(state, new PhysicalDeltaObserved(obstruction), middle));
+        var routeWake = assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class,
+                obstructionPlan.events().stream().map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                        .filter(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class::isInstance)
+                        .findFirst().orElseThrow());
+        assertEquals(middle + 1L, routeWake.replacement().dueAt().ticks());
+        ResidentMealColdStep immediateInterruption = assertInstanceOf(ResidentMealColdStep.class,
+                obstructionPlan.events().get(1).payload());
+        assertEquals(middle, immediateInterruption.atTick());
+        assertTrue(immediateInterruption.nextSurface().isEmpty());
+        FrontierWorldState obstructed = state.withChanges(FrontierWorldStateUpdate.begin()
+                .physicalDeltas(changedCells));
+        obstructed = ResidentMealProcess.reduceColdStep(obstructed, resident, immediateInterruption);
+        assertEquals(middleBody, obstructed.actorLocations().get(resident).body());
+        assertTrue(obstructed.humanPopulation().meals().get(resident).coldTravel().isEmpty());
+        var runtime = FrontierWorldRuntimeDefinition.configuration(state.bootstrap().worldId(), 421L);
+        var configuration = new io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<>(
+                state.bootstrap().worldId(), state, new SimInstant(middle), runtime.commandPlanner(),
+                runtime.scheduledPlanner(), runtime.reducer(), runtime.stateCodec(), runtime.projectionMapper(),
+                runtime.limits(), List.of(ResidentMealProcess.progress(state.humanPopulation().meals().get(resident),
+                        travel.arrivalTick())), runtime.transactionCommitter());
+        var engine = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.create(configuration);
+        var commandId = new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:timed-route-obstruction");
+        var accepted = engine.submit(new io.farfrontier.palemirror.frontier.v3.api.FrontierCommand(1,
+                commandId, state.bootstrap().worldId(), engine.checkpoint().revision(), new SimInstant(middle),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,
+                io.farfrontier.palemirror.frontier.v3.api.CauseChain.root(commandId),
+                new PhysicalDeltaObserved(obstruction)));
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class, accepted,
+                accepted::toString);
+        FrontierWorldState afterObservation = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertEquals(middleBody, afterObservation.actorLocations().get(resident).body());
+        assertTrue(afterObservation.humanPopulation().meals().get(resident).coldTravel().isEmpty());
+        PhysicalDelta changedBehind = new PhysicalDelta(travel.route().get(1).support(),
+                PhysicalDeltaKind.UNKNOWN_SCAR, java.util.Optional.empty(), java.util.Optional.empty(),
+                "test:passed-route-cell");
+        FrontierWorldState changedBehindState = state.recordPhysicalDelta(changedBehind);
+        var behindPlan = assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan.Accepted.class,
+                FrontierWorldPhysicalObservationProcess.plan(state, new PhysicalDeltaObserved(changedBehind), middle + 1L));
+        ResidentMealColdStep behindInterruption = assertInstanceOf(ResidentMealColdStep.class,
+                behindPlan.events().get(1).payload());
+        changedBehindState = ResidentMealProcess.reduceColdStep(changedBehindState, resident, behindInterruption);
+        assertEquals(middleBody, changedBehindState.actorLocations().get(resident).body(),
+                "a changed cell already passed must not rewind the as-of resident body");
+        assertEquals(departure, state.actorLocations().get(resident).body(),
+                "the intermediate support is derived, not independently WAL-written");
+        assertFalse(ResidentMealProcess.bodyAt(state, resident, travel.arrivalTick() + 100L)
+                .equals(travel.route().getLast().standingBody()),
+                "an uncommitted arrival cannot be materialized as a completed interaction");
+        AmbientActorLease lease = AmbientActorProcess.nextLease(state, resident, new SimInstant(middle));
+        assertEquals(middleBody, lease.handoffBody());
+        state = AmbientLeaseStateProcess.prepare(state, lease);
+        assertEquals(middleBody, state.actorLocations().get(resident).body());
+        assertTrue(state.humanPopulation().meals().get(resident).coldTravel().isEmpty());
+        state = AmbientLeaseStateProcess.transition(state, resident, AmbientLeaseStatus.HOT);
+        state = AmbientLeaseStateProcess.transition(state, resident, AmbientLeaseStatus.DRAINING);
+        AmbientLeaseReleased release = new AmbientLeaseReleased(resident, middleBody,
+                state.actorLocations().get(resident).condition().health());
+        var resumed = assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan.Accepted.class,
+                AmbientActorProcess.plan(state, release, middle + 1L));
+        assertEquals(2, resumed.events().size());
+        var wake = assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class,
+                resumed.events().getLast().payload());
+        assertEquals(middle + 2L, wake.replacement().dueAt().ticks());
+        state = AmbientLeaseStateProcess.release(state, release);
+        assertTrue(ResidentMealProcess.planColdStep(state, resident, middle + 2L).isPresent(),
+                "COLD must restart from the witnessed HOT release, not wait for the old route deadline");
+    }
+
+    @Test void severalHungryResidentsCompleteDistinctColdMealsUnderOrdinaryDueBudget() {
+        WorldId world = new WorldId("frontier:resident-meal-cohort-budget");
+        var base = FrontierWorldRuntimeDefinition.configuration(world, 421L);
+        FrontierWorldState initial = base.initialState();
+        Settlement settlement = initial.bootstrap().settlements().getFirst();
+        List<SubjectId> residents = settlement.residents().stream().limit(4).map(Resident::id).toList();
+        SubjectId depot = FrontierWorldState.depotId(settlement.id());
+        var stock = initial.inventory().fungibleResources().transformCold(ReferenceContainerCustody.scopeId(depot),
+                Map.of(new SubjectId("lot:bootstrap-1-wheat"), 64), Map.of(),
+                new ResourceLot(new SubjectId("lot:cohort-bread"), settlement.id(),
+                        ResidentMeal.BREAD_KIND, 64, "test", List.of()));
+        HumanPopulation people = initial.humanPopulation();
+        for (SubjectId resident : residents) people = people.accrueHunger(resident, 27_000L);
+        FrontierWorldState stocked = initial.withChanges(FrontierWorldStateUpdate.begin()
+                .inventory(initial.inventory().withFungibleResources(stock)).humanPopulation(people));
+        var scheduled = residents.stream().flatMap(resident -> java.util.stream.Stream.of(
+                ResidentActivityProcess.review(resident, 27_001L),
+                ResidentNeedProcess.review(resident, stocked.humanPopulation().nutrition(resident).nextThresholdTick(
+                        stocked.bootstrap().ruleset().residentLife(), stocked.humanPopulation().resident(resident)
+                                .characteristics().effectiveMetabolismPermille(27_000L))))).toList();
+        var configuration = new io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<>(
+                world, stocked, new SimInstant(27_000L), base.commandPlanner(), base.scheduledPlanner(),
+                base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(), scheduled,
+                base.transactionCommitter());
+        var engine = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.create(configuration);
+        for (long tick = 27_001L; tick <= 30_000L; tick++) {
+            var result = engine.advanceTo(new SimInstant(tick),
+                    new io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget(4, 512));
+            assertEquals(io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.ACTIVE,
+                    result.status().kind(), () -> result.status().failureDetail().orElse("quarantined"));
+        }
+        FrontierWorldState after = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        long fed = residents.stream().filter(resident -> after.humanPopulation().nutrition(resident)
+                .status() == ResidentNutritionStatus.NOURISHED).count();
+        assertTrue(fed >= 2, "a single resident must not monopolize every depot visit: "
+                + after.humanPopulation().meals());
+        assertTrue(after.inventory().fungibleResources().totalQuantity(settlement.id(), ResidentMeal.BREAD_KIND) <= 62,
+                "at least two distinct bread portions must be consumed");
+    }
+
     @Test void twoHungryResidentsCanTravelTogetherButOnlyOneMayEnterDepotService() {
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:resident-depot-service-queue"), 421L));
@@ -39,27 +186,43 @@ class ResidentMealProcessTest {
         ResidentMealStarted next = ResidentMealProcess.selectSourceAtYield(state, second, 27_000L).orElseThrow();
         state = ResidentMealProcess.reduceStarted(state, second, next);
         assertEquals(2, state.inventory().fungibleResources().claims().size());
-        assertFalse(ServiceAccessCoordinator.depotAvailableForMeal(state, depot, second));
+        assertTrue(ServiceAccessCoordinator.depotAvailableForMeal(state, depot, second),
+                "a travelling resident reserves bread but not the physical service turn");
         state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
         ServiceAccessBoundary boundary = SettlementDepotServicePort.forDepot(settlement.structures().stream()
                 .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow()).accessBoundary();
-        boolean secondApproached = false;
-        for (int turn = 0; turn < 300; turn++) {
-            ResidentMealColdStep approach = ResidentMealProcess.planColdStep(state, second, 27_001L + turn).orElse(null);
-            if (approach == null) break;
-            if (approach.nextSurface().isPresent()) {
-                assertTrue(boundary.cleared(approach.nextSurface().orElseThrow().standingBody()),
-                        "a waiting resident must not cross the physical depot boundary");
-                state = ResidentMealProcess.reduceColdStep(state, second, approach);
-                secondApproached = true;
-            } else break;
+        // Both residents can hold a timed journey before either consumes the
+        // shared depot turn. No per-support event is required for the approach.
+        state = ResidentMealProcess.reduceColdStep(state, first,
+                ResidentMealProcess.planColdStep(state, first, 27_001L).orElseThrow());
+        state = ResidentMealProcess.reduceColdStep(state, second,
+                ResidentMealProcess.planColdStep(state, second, 27_002L).orElseThrow());
+        assertTrue(state.humanPopulation().meals().get(first).coldTravel().isPresent());
+        assertTrue(state.humanPopulation().meals().get(second).coldTravel().isPresent());
+        long firstTick = 27_003L;
+        for (int turn = 0; turn < 16 && boundary.cleared(state.actorLocations().get(first).body()); turn++) {
+            firstTick = nextColdTick(state, first, firstTick);
+            ResidentMealColdStep step = ResidentMealProcess.planColdStep(state, first, firstTick).orElseThrow();
+            state = ResidentMealProcess.reduceColdStep(state, first, step);
+            firstTick++;
         }
-        assertTrue(secondApproached, "the second resident should approach while the first is still travelling");
+        assertFalse(boundary.cleared(state.actorLocations().get(first).body()));
+        assertFalse(ServiceAccessCoordinator.depotAvailableForMeal(state, depot, second));
+        long secondTick = nextColdTick(state, second, 27_003L);
+        ResidentMealColdStep approach = ResidentMealProcess.planColdStep(state, second, secondTick).orElseThrow();
+        assertTrue(approach.nextSurface().isPresent());
+        assertTrue(boundary.cleared(approach.nextSurface().orElseThrow().standingBody()),
+                "a waiting resident must not cross the physical depot boundary");
+        state = ResidentMealProcess.reduceColdStep(state, second, approach);
         assertEquals(ResidentMeal.Phase.MOVE, state.humanPopulation().meals().get(second).phase());
+        assertTrue(ResidentMealProcess.held(state,
+                ResidentMealProcess.progress(state.humanPopulation().meals().get(second), secondTick + 1L)),
+                "a side-pocket waiter must retain its due action without a periodic no-op WAL transaction");
         boolean releasedDuringReturn = false;
-        for (int turn = 0; state.humanPopulation().meals().containsKey(first) && turn < 300; turn++) {
+        for (int turn = 0; state.humanPopulation().meals().containsKey(first) && turn < 32; turn++) {
             FrontierWorldState current = state;
-            ResidentMealColdStep step = ResidentMealProcess.planColdStep(state, first, 27_001L + turn)
+            firstTick = nextColdTick(state, first, firstTick);
+            ResidentMealColdStep step = ResidentMealProcess.planColdStep(state, first, firstTick)
                     .orElseThrow(() -> new AssertionError("first body=" + current.actorLocations().get(first).body()
                             + " second body=" + current.actorLocations().get(second).body()
                             + " first phase=" + current.humanPopulation().meals().get(first).phase()
@@ -68,6 +231,7 @@ class ResidentMealProcessTest {
                             + " port=" + SettlementDepotServicePort.forDepot(settlement.structures().stream()
                                 .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow())));
             state = ResidentMealProcess.reduceColdStep(state, first, step);
+            firstTick++;
             if (state.humanPopulation().meals().containsKey(first)
                     && state.humanPopulation().meals().get(first).phase() == ResidentMeal.Phase.RETURN
                     && ServiceAccessCoordinator.depotAvailableForMeal(state, depot, second)) {
@@ -80,8 +244,9 @@ class ResidentMealProcessTest {
                 "the second resident's independent meal must survive the first return");
         assertTrue(ServiceAccessCoordinator.depotAvailableForMeal(state, depot, second));
         assertEquals(63, state.inventory().fungibleResources().totalQuantity(settlement.id(), ResidentMeal.BREAD_KIND));
-        for (int turn = 0; state.humanPopulation().meals().containsKey(second) && turn < 300; turn++) {
-            ResidentMealColdStep step = ResidentMealProcess.planColdStep(state, second, 28_000L + turn).orElseThrow();
+        for (int turn = 0; state.humanPopulation().meals().containsKey(second) && turn < 32; turn++) {
+            secondTick = nextColdTick(state, second, Math.max(secondTick + 1L, firstTick));
+            ResidentMealColdStep step = ResidentMealProcess.planColdStep(state, second, secondTick).orElseThrow();
             state = ResidentMealProcess.reduceColdStep(state, second, step);
         }
         assertFalse(state.humanPopulation().meals().containsKey(second));
@@ -251,6 +416,9 @@ class ResidentMealProcessTest {
         ResidentMealStarted started = ResidentMealProcess.selectSourceAtYield(state, resident, 48_000L).orElseThrow();
         state = ResidentActivityProcess.reduceMealStarted(state, resident, started);
         ResidentMeal meal = started.meal();
+        assertTrue(FrontierWorldRuntimeDefinition.scheduledHeld(state,
+                ResidentMealProcess.progress(meal, 48_001L)),
+                "the HOT executor owns this meal; its COLD timer must not append no-op retries");
         assertEquals(AmbientGoalKind.MEAL, state.ambientLeases().get(resident).goal());
         state = ResidentMealProcess.reduceHotArrived(state, resident,
                 new ResidentMealHotArrived(resident, 1L, service.standingBody()));
@@ -297,16 +465,12 @@ class ResidentMealProcessTest {
         ServiceAccessBoundary returnBoundary = SettlementDepotServicePort.forDepot(settlement.structures().stream()
                 .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow()).accessBoundary();
         FrontierWorldState insideReturn = resumedCold;
-        for (int edge = 0; edge < 32; edge++) {
-            ResidentMealColdStep step = ResidentMealProcess.planColdStep(insideReturn, resident, 48_003L + edge)
-                    .orElseThrow();
-            assertTrue(step.nextSurface().isPresent(), "the return route must leave the service station");
-            insideReturn = ResidentMealProcess.reduceColdStep(insideReturn, resident, step);
-            if (!insideReturn.actorLocations().get(resident).body().equals(service.standingBody())) break;
-        }
-        assertTrue(returnBoundary.occupied(insideReturn.actorLocations().get(resident).body()),
-                "the COLD return checkpoint should still be inside the depot access boundary");
-        assertFalse(insideReturn.actorLocations().get(resident).body().equals(service.standingBody()),
+        insideReturn = ResidentMealProcess.reduceColdStep(insideReturn, resident,
+                ResidentMealProcess.planColdStep(insideReturn, resident, 48_003L).orElseThrow());
+        assertTrue(insideReturn.humanPopulation().meals().get(resident).coldTravel().isPresent());
+        BodyPosition midReturn = ResidentMealProcess.bodyAt(insideReturn, resident, 48_040L);
+        assertTrue(returnBoundary.occupied(midReturn), "HOT handoff must retain the as-of return body");
+        assertFalse(midReturn.equals(service.standingBody()),
                 "HOT re-admission must exercise an intermediate return checkpoint");
         insideReturn = AmbientLeaseStateProcess.prepare(insideReturn,
                 AmbientActorProcess.nextLease(insideReturn, resident, new SimInstant(48_040L)));
@@ -328,10 +492,13 @@ class ResidentMealProcessTest {
                         meal.clearingSurface().standingBody()), 48_041L);
         assertFalse(insideReturn.humanPopulation().meals().containsKey(resident),
                 "COLD-to-HOT return must release service and complete the same meal");
-        for (int edge = 0; resumedCold.humanPopulation().meals().containsKey(resident) && edge < 256; edge++) {
-            ResidentMealColdStep clearing = ResidentMealProcess.planColdStep(resumedCold, resident, 48_003L + edge)
+        long returnTick = 48_003L;
+        for (int edge = 0; resumedCold.humanPopulation().meals().containsKey(resident) && edge < 32; edge++) {
+            returnTick = nextColdTick(resumedCold, resident, returnTick);
+            ResidentMealColdStep clearing = ResidentMealProcess.planColdStep(resumedCold, resident, returnTick)
                     .orElseThrow();
             resumedCold = ResidentMealProcess.reduceColdStep(resumedCold, resident, clearing);
+            returnTick++;
         }
         assertFalse(resumedCold.humanPopulation().meals().containsKey(resident),
                 "a saved HOT consumption must clear the depot once after returning to COLD");
@@ -441,10 +608,10 @@ class ResidentMealProcessTest {
             var returnEvents = ResidentMealProcess.planProgress(state, due);
             ResidentMealColdStep clearing = (ResidentMealColdStep) returnEvents.getFirst().payload();
             state = ResidentMealProcess.reduceColdStep(state, resident, clearing);
-            if (clearing.nextSurface().isEmpty()) {
+            if (!state.humanPopulation().meals().containsKey(resident)) {
                 assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class,
                         returnEvents.get(1).payload(), "meal completion must wake activity arbitration immediately");
-                assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Consumed.class,
+                assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Cancelled.class,
                         returnEvents.getLast().payload());
                 break;
             }

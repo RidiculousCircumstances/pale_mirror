@@ -14,7 +14,9 @@ import java.util.List;
 /** Exact-resident wake for schedule, need and safe-checkpoint arbitration. */
 public final class ResidentActivityProcess {
     public static final String REVIEW = "frontier.resident.activity.review";
-    private static final long PENDING_RETRY_TICKS = 200L;
+    // Unavailable owners are held without a WAL retry. A one-tick due fence
+    // lets the exact waiter run promptly after source/work state changes.
+    private static final long PENDING_RETRY_TICKS = 1L;
     private ResidentActivityProcess() { }
 
     public static ScheduledAction review(SubjectId residentId, long dueAt) {
@@ -23,6 +25,29 @@ public final class ResidentActivityProcess {
         return new ScheduledAction(new ScheduleId("schedule:resident-activity-"
                 + residentId.value().substring("resident:".length())), new SimInstant(dueAt),
                 11, residentId, REVIEW, 1);
+    }
+
+    /**
+     * A resident without an executable source has no activity transition to
+     * commit. Keep the exact due action in the engine queue until bread,
+     * service access or the work checkpoint changes canonical state. The
+     * independent need clock still integrates each hunger threshold.
+     */
+    public static boolean held(FrontierWorldState state, ScheduledAction action) {
+        if (!REVIEW.equals(action.kind())) return false;
+        SubjectId residentId = action.subject();
+        ResidentProfile resident = state.humanPopulation().resident(residentId);
+        ActorLocation actor = state.actorLocations().get(residentId);
+        if (resident == null || actor == null || actor.condition().status() != ActorLifeStatus.ALIVE)
+            return false;
+        if (state.humanPopulation().meals().containsKey(residentId)) return true;
+        long now = Math.max(action.dueAt().ticks(), state.humanPopulation().nutrition(residentId).lastEvaluatedTick());
+        ResidentNutrition nutrition = state.humanPopulation().nutrition(residentId).accrueThrough(now,
+                state.bootstrap().ruleset().residentLife(), resident.characteristics().effectiveMetabolismPermille(now));
+        if (nutrition.hungerDeficit() < state.bootstrap().ruleset().residentLife().hungryThreshold()) return false;
+        if (ResidentMealOpportunity.find(state, residentId).isEmpty()) return true;
+        return ResidentActivityCoordinator.assess(state, residentId, now).pending()
+                .filter(wait -> wait == ResidentActivityChoice.Wait.SAFE_CHECKPOINT).isPresent();
     }
 
     /** Activity ownership changes here; the meal owner only changes meal and bread state. */
@@ -53,6 +78,10 @@ public final class ResidentActivityProcess {
     }
 
     public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
+        return plan(state, action, action.dueAt().ticks());
+    }
+
+    public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, long currentTick) {
         if (!action.kind().equals(REVIEW) || !action.equals(review(action.subject(), action.dueAt().ticks())))
             throw new IllegalArgumentException("activity review has a foreign scheduled identity");
         ResidentProfile resident = state.humanPopulation().resident(action.subject());
@@ -62,7 +91,7 @@ public final class ResidentActivityProcess {
         // A HOT consumption can advance this resident's need clock after an older
         // activity review was queued. The review is still due, but assessing hunger
         // at its historical instant would run time backwards and quarantine the world.
-        long now = Math.max(action.dueAt().ticks(),
+        long now = Math.max(Math.max(action.dueAt().ticks(), currentTick),
                 state.humanPopulation().nutrition(action.subject()).lastEvaluatedTick());
         ResidentActivityChoice choice = ResidentActivityCoordinator.assess(state, action.subject(), now);
         List<ProposedEvent> events = new ArrayList<>();

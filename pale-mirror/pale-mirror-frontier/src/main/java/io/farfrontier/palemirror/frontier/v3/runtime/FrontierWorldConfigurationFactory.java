@@ -50,6 +50,11 @@ final class FrontierWorldConfigurationFactory {
             @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
                 return FrontierWorldRuntimeDefinition.planScheduled(state, action, autonomousInterception);
             }
+            @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action,
+                                                      SimInstant currentInstant) {
+                return FrontierWorldRuntimeDefinition.planScheduled(state, action, autonomousInterception,
+                        currentInstant);
+            }
             @Override public boolean held(FrontierWorldState state, ScheduledAction action) {
                 return FrontierWorldRuntimeDefinition.scheduledHeld(state, action);
             }

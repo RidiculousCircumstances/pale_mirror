@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 
@@ -20,7 +21,9 @@ final class FrontierV3ActorProbeSchedule {
     private FrontierV3ActorProbeSchedule() { }
 
     static List<SubjectId> next(FrontierV3ServerRuntime<?, ?> runtime, FrontierWorldState state, ServerLevel level, int maximum, int advance) {
-        return CURSORS.computeIfAbsent(runtime, ignored -> new Cursor(state)).nextDemanded(state, level, maximum, advance);
+        long instant = runtime.canonicalState().orElseThrow().instant().ticks();
+        return CURSORS.computeIfAbsent(runtime, ignored -> new Cursor(state))
+                .nextDemanded(state, level, instant, maximum, advance);
     }
 
     static void forget(FrontierV3ServerRuntime<?, ?> runtime) { CURSORS.remove(runtime); }
@@ -49,8 +52,8 @@ final class FrontierV3ActorProbeSchedule {
             return List.copyOf(slice);
         }
 
-        private List<SubjectId> nextDemanded(FrontierWorldState state, ServerLevel level, int maximum, int advance) {
-            List<SubjectId> demanded = demanded(state, level);
+        private List<SubjectId> nextDemanded(FrontierWorldState state, ServerLevel level, long instant, int maximum, int advance) {
+            List<SubjectId> demanded = demanded(state, level, instant);
             retainDemanded(demanded, state, level.getGameTime());
             demanded = retainedDemanded(demanded, state, level.getGameTime());
             if (demanded.isEmpty()) return next(maximum, advance);
@@ -63,7 +66,7 @@ final class FrontierV3ActorProbeSchedule {
             return List.copyOf(result);
         }
 
-        private List<SubjectId> demanded(FrontierWorldState state, ServerLevel level) {
+        private List<SubjectId> demanded(FrontierWorldState state, ServerLevel level, long instant) {
             LinkedHashSet<SubjectId> result = new LinkedHashSet<>();
             for (var player : level.players().stream().filter(value -> !value.isSpectator())
                     .sorted(Comparator.comparing(value -> value.getUUID().toString())).limit(256).toList()) {
@@ -74,7 +77,9 @@ final class FrontierV3ActorProbeSchedule {
                 // canonical actor inventory, and is deliberately not a loaded-entity scan.
                 for (SubjectId actor : actors) {
                     var location = state.actorLocations().get(actor);
-                    if (location != null && observer.closerThan(new BlockPos(location.body().x(), location.body().y(), location.body().z()),
+                    if (location == null) continue;
+                    var body = ResidentMealProcess.bodyAt(state, actor, instant);
+                    if (observer.closerThan(new BlockPos(body.x(), body.y(), body.z()),
                             FrontierV3SceneDemand.RADIUS_BLOCKS)) result.add(actor);
                 }
             }
