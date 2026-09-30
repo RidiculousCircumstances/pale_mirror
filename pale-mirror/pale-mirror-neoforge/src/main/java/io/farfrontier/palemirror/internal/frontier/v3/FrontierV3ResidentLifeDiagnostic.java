@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.*;
+import io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess;
 
 import java.util.Map;
 
@@ -52,6 +53,9 @@ final class FrontierV3ResidentLifeDiagnostic {
         var actualNeedDue = checkpoint.schedules().stream()
                 .filter(action -> action.subject().equals(subject) && action.kind().equals("frontier.resident.need.review"))
                 .mapToLong(action -> action.dueAt().ticks()).min();
+        var mealAction = checkpoint.schedules().stream()
+                .filter(action -> action.subject().equals(subject) && action.kind().equals(ResidentMealProcess.PROGRESS))
+                .findFirst();
         return FrontierV3DiagnosticJson.base("resident_life", id, checkpoint)
                 + ",\"status\":\"ok\",\"settlement\":\"" + quote(resident.settlementId().value())
                 + "\",\"life\":\"" + (body == null ? "MISSING" : body.condition().status().name())
@@ -75,7 +79,14 @@ final class FrontierV3ResidentLifeDiagnostic {
                 + "\",\"mealPhase\":\"" + (meal == null ? "NONE" : meal.phase().name())
                 + "\",\"mealWait\":\"" + (meal == null ? "" : meal.waitReason().map(Enum::name).orElse(""))
                 + "\",\"mealClaim\":\"" + (meal == null ? "" : quote(meal.claimId().value()))
-                + "\",\"depotBread\":" + bread + ",\"depotBreadClaimed\":" + claimed + "}";
+                + "\",\"mealActionDueAt\":" + (mealAction.isPresent() ? mealAction.orElseThrow().dueAt().ticks() : "null")
+                + ",\"mealActionHeld\":" + mealAction.map(action -> ResidentMealProcess.held(state, action)).orElse(false)
+                + ",\"mealTravelArrivalAt\":" + (meal == null ? "null" : meal.coldTravel()
+                    .map(route -> Long.toString(route.arrivalTick())).orElse("null"))
+                + ",\"mealAtWaitingPocket\":" + (meal != null && ResidentMealKnownNavigation.atWaitingPocket(state, meal))
+                + ",\"mealServiceAvailable\":" + (meal != null && ServiceAccessCoordinator.depotAvailableForMeal(
+                    state, meal.depotId(), meal.residentId()))
+                + ",\"depotBread\":" + bread + ",\"depotBreadClaimed\":" + claimed + "}";
     }
 
     private static String quote(String value) { return FrontierV3DiagnosticJson.quote(value); }

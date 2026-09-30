@@ -47,6 +47,12 @@ class ResidentMealProcessTest {
         var travel = state.humanPopulation().meals().get(resident).coldTravel().orElseThrow();
         assertEquals(travel.arrivalTick(), ((io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled)
                 events.getLast().payload()).replacement().dueAt().ticks());
+        var premature = ResidentMealProcess.progress(state.humanPopulation().meals().get(resident),
+                travel.departedAtTick() + 1L);
+        assertFalse(ResidentMealProcess.held(state, premature));
+        var corrected = assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class,
+                ResidentMealProcess.planProgress(state, premature).getFirst().payload());
+        assertEquals(travel.arrivalTick(), corrected.replacement().dueAt().ticks());
         long middle = travel.departedAtTick() + travel.ticksPerEdge();
         BodyPosition middleBody = ResidentMealProcess.bodyAt(state, resident, middle);
         assertFalse(departure.equals(middleBody));

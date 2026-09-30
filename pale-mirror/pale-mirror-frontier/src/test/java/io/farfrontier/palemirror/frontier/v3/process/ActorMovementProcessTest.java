@@ -102,6 +102,12 @@ class ActorMovementProcessTest {
         state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
         var route = state.actorMovements().get(actorId).coldTravel().orElseThrow();
         assertTrue(route.route().size() > 2);
+        var premature = ActorMovementProcess.progress(state.actorMovements().get(actorId),
+                route.departedAtTick() + 1L);
+        assertFalse(ActorMovementProcess.held(state, premature));
+        var corrected = assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class,
+                ActorMovementProcess.plan(state, premature, premature.dueAt().ticks()).getFirst().payload());
+        assertEquals(route.arrivalTick(), corrected.replacement().dueAt().ticks());
         long midpoint = route.departedAtTick() + route.ticksPerEdge();
         BodyPosition asOf = ActorMovementProcess.bodyAt(state, actorId, midpoint);
         assertNotEquals(station.standingBody(), asOf);

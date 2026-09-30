@@ -81,6 +81,9 @@ class FrontierV3DiagnosticJsonTest {
         assertEquals("IDLE", json.get("activity").getAsString(),
                 "hunger remains visible, but an unavailable meal is not an executable activity");
         assertEquals("NONE", json.get("mealPhase").getAsString());
+        assertTrue(json.get("mealActionDueAt").isJsonNull());
+        assertTrue(json.get("mealTravelArrivalAt").isJsonNull());
+        assertFalse(json.get("mealActionHeld").getAsBoolean());
         assertEquals(configuration.initialState(), state);
     }
 

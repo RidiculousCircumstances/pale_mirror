@@ -61,8 +61,9 @@ public final class ResidentMealProcess {
                     .anyMatch(binding -> binding.accountId().equals(meal.actorAccountId()));
             case MOVE, RETURN -> {
                 if (meal.coldTravel().isPresent()) {
-                    TimedKnownRoute travel = meal.coldTravel().orElseThrow();
-                    yield firstKnownBarrier(state, travel) < 0 && !travel.arrivedBy(action.dueAt().ticks());
+                    // A stale earlier due must be corrected by the planner, not
+                    // held forever against its own immutable due instant.
+                    yield false;
                 }
                 yield meal.phase() == ResidentMeal.Phase.MOVE
                         && !ServiceAccessCoordinator.depotAvailableForMeal(state, meal.depotId(), meal.residentId())
@@ -87,9 +88,13 @@ public final class ResidentMealProcess {
         Optional<ResidentMealColdStep> step = planColdStep(state, meal.residentId(), now);
         // A waiting side pocket is held by its addressed service wake. A genuinely
         // unavailable known route is retried at a bounded cadence, not every tick.
-        if (step.isEmpty()) return List.of(new ProposedEvent(meal.residentId(),
-                new ScheduleEffect.Rescheduled(action.id(), progress(meal,
-                        Math.addExact(now, COLD_TICKS_PER_EDGE)))));
+        if (step.isEmpty()) {
+            long retryAt = meal.coldTravel().filter(travel -> firstKnownBarrier(state, travel) < 0
+                            && !travel.arrivedBy(now))
+                    .map(TimedKnownRoute::arrivalTick).orElse(Math.addExact(now, COLD_TICKS_PER_EDGE));
+            return List.of(new ProposedEvent(meal.residentId(),
+                    new ScheduleEffect.Rescheduled(action.id(), progress(meal, retryAt))));
+        }
         List<ProposedEvent> events = new java.util.ArrayList<>();
         events.add(new ProposedEvent(meal.residentId(), step.orElseThrow()));
         long nextDue = nextColdDue(state, meal, now);

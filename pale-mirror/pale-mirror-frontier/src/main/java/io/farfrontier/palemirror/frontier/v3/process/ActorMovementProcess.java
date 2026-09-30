@@ -64,7 +64,10 @@ public final class ActorMovementProcess {
         // The queue may inspect every overdue action on each tick. A route search belongs to
         // the admitted action, never to this predicate; otherwise one hungry cohort repeatedly
         // recompiles all settlement occupancy before any movement can commit.
-        return movement.coldTravel().map(travel -> !travel.arrivedBy(action.dueAt().ticks())).orElse(false);
+        // Even an unexpectedly early retained due must reach the planner so it can be
+        // moved to the route's exact arrival tick. Holding it would compare against
+        // the same stale due forever, including after recovery.
+        return false;
     }
 
     public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, long currentTick) {
@@ -78,8 +81,11 @@ public final class ActorMovementProcess {
             if (held(state, action)) throw new IllegalArgumentException("movement has no current COLD boundary");
             // No known legal route is presently available. Retain the exact order and retry
             // without falsely completing or quarantining an otherwise healthy settlement.
+            long retryAt = movement.coldTravel().filter(travel -> firstKnownBarrier(state, travel) < 0
+                            && !travel.arrivedBy(now))
+                    .map(TimedKnownRoute::arrivalTick).orElse(Math.addExact(now, 20L));
             return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Rescheduled(action.id(),
-                    progress(movement, Math.addExact(now, 20L)))));
+                    progress(movement, retryAt))));
         }
         ActorMovementColdAdvanced step = candidate.orElseThrow();
         List<ProposedEvent> events = new ArrayList<>();
