@@ -8,9 +8,31 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResidentMealKnownNavigationTest {
+    @Test void admittedShortEntranceStillRespectsAChangedPhysicalServiceCell() {
+        FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:resident-meal-changed-service"), 421L));
+        Settlement settlement = initial.bootstrap().settlements().getFirst();
+        SubjectId resident = settlement.residents().getFirst().id();
+        SubjectId depot = FrontierWorldState.depotId(settlement.id());
+        SettlementDepotServicePort port = SettlementDepotServicePort.forDepot(settlement.structures().stream()
+                .filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().orElseThrow());
+        FrontierWorldState atEntrance = initial.withActorBody(resident, port.exteriorApproach().standingBody());
+        ResidentMeal meal = new ResidentMeal(resident, settlement.id(), depot, port.exteriorApproach(),
+                ReferenceContainerCustody.scopeId(depot), new SubjectId("custody:resident-meal-changed-service"),
+                new SubjectId("lot:meal-changed-service"), new SubjectId("claim:meal-changed-service"),
+                Optional.empty(), ResidentMeal.Phase.MOVE, 24_000L, Optional.empty());
+        assertEquals(port.serviceSurface(), ResidentMealKnownNavigation.path(atEntrance, meal).getLast());
+        FrontierWorldState blocked = atEntrance.recordPhysicalDelta(new PhysicalDelta(
+                port.serviceSurface().support(), PhysicalDeltaKind.UNKNOWN_SCAR,
+                Optional.empty(), Optional.empty(), "test:changed-depot-service"));
+        assertThrows(io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable.class,
+                () -> ResidentMealKnownNavigation.path(blocked, meal));
+    }
+
     @Test void residentReleasedAtDepotSideStationCanCompleteColdMealApproach() {
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:resident-meal-side-station"), 20260918065L));

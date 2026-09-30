@@ -1,14 +1,10 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
-import io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 
 /** Ephemeral COLD path to the current bakery handoff station; no route cursor is persisted. */
 public final class BakeryKnownNavigation {
@@ -47,34 +43,27 @@ public final class BakeryKnownNavigation {
                 : start.equals(depotPort.serviceSurface()) ? List.of(start, depotPort.exteriorApproach()) : List.of(start);
         SurfaceAnchor outdoorStart = prefix.getLast();
         SurfaceAnchor outdoorGoal = toDepot ? depotPort.exteriorApproach() : workshopPort.exteriorApproach();
-        Set<BlockPosition> occupied = new HashSet<>();
-        for (Settlement candidate : state.bootstrap().settlements())
-            occupied.addAll(FrontierSettlementActorSlots.intactStructureOccupancy(state.bootstrap().terrain(), candidate.structures()));
-        occupied.addAll(FrontierGrayboxPlan.intactOrganOccupancy(state.bootstrap().hive().organs()));
-        for (SurfaceAnchor allowed : List.of(depotPort.exteriorApproach(), depotPort.serviceSurface(),
-                workshopPort.exteriorApproach(), workshopPort.approachSurface(), workshopPort.throatSurface(),
-                workshopPort.interiorSurface(), workshopPort.inputStation(), workshopPort.workStation())) {
-            occupied.remove(allowed.support());
-            occupied.remove(allowed.support().offset(0, 1, 0));
-            occupied.remove(allowed.support().offset(0, 2, 0));
-        }
-        // Once the worker has exited the bakery, an outdoor search must not re-enter its
-        // doorway and then be sent back out by the semantic ingress/egress segment.
-        if (toDepot) occupied.add(workshopPort.approachSurface().support().offset(0, 1, 0));
-        state.actorLocations().forEach((id, location) -> {
-            if (!id.equals(job.workerId()) && location.condition().status() == ActorLifeStatus.ALIVE)
-                occupied.add(location.supportingSurface().support().offset(0, 1, 0));
-        });
-        Map<TerrainColumn, SurfaceAnchor> ground = SettlementPedestrianGround.localSupports(state.bootstrap(), job.settlementId());
         MovementOrder outdoor = new MovementOrder(job.id(), job.workerId(), work.phase().wireTag(), 1,
                 List.of(outdoorGoal), TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
-        List<SurfaceAnchor> route = KnownPedestrianNavigation.route(state.bootstrap(), outdoorStart, outdoor,
-                occupied, (x, z) -> SettlementPedestrianGround.surveyedSupport(state.bootstrap(), ground, x, z));
+        KnownSettlementPedestrianRoute routeKnowledge = KnownSettlementPedestrianRoute.forSettlement(
+                state, job.settlementId(), List.of(
+                        new KnownSettlementPedestrianRoute.Passage(depot.id(),
+                                KnownSettlementPedestrianRoute.Passage.Kind.DEPOT_ACCESS),
+                        new KnownSettlementPedestrianRoute.Passage(facility.id(),
+                                KnownSettlementPedestrianRoute.Passage.Kind.WORKSHOP_EXTERIOR)));
+        List<SurfaceAnchor> route = routeKnowledge.path(outdoorStart, outdoor);
         List<SurfaceAnchor> result = new ArrayList<>(prefix);
         result.addAll(route.subList(1, route.size()));
-        if (toDepot) result.add(depotPort.serviceSurface());
-        else if (!clearing) result.addAll(List.of(workshopPort.approachSurface(), workshopPort.throatSurface(), workshopPort.interiorSurface(),
-                workshopPort.inputStation(), workshopPort.workStation()));
+        if (toDepot) {
+            MovementOrder serviceOrder = new MovementOrder(job.id(), job.workerId(), work.phase().wireTag(), 1L,
+                    List.of(depotPort.serviceSurface()), TraversalCapability.PEDESTRIAN,
+                    MovementOrder.ArrivalPolicy.EXACT_STATION);
+            List<SurfaceAnchor> serviceLeg = routeKnowledge.path(depotPort.exteriorApproach(), serviceOrder);
+            result.addAll(serviceLeg.subList(1, serviceLeg.size()));
+        } else if (!clearing) {
+            result.addAll(List.of(workshopPort.approachSurface(), workshopPort.throatSurface(),
+                    workshopPort.interiorSurface(), workshopPort.inputStation(), workshopPort.workStation()));
+        }
         return List.copyOf(result);
     }
 

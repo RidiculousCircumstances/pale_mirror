@@ -4,11 +4,8 @@ import io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNav
 import io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 
 /** Ephemeral COLD route to a resident's declared depot service station. */
 public final class ResidentMealKnownNavigation {
@@ -47,53 +44,50 @@ public final class ResidentMealKnownNavigation {
             throw new IllegalArgumentException("meal navigation has a foreign depot identity");
         boolean admitted = ServiceAccessCoordinator.depotAvailableForMeal(state, meal.depotId(), meal.residentId());
         if (start.equals(port.serviceSurface())) return List.of(start);
-        if (admitted && start.equals(port.exteriorApproach())) return List.of(start, port.serviceSurface());
+        if (admitted && start.equals(port.exteriorApproach()))
+            return serviceLeg(state, meal, depot, port.exteriorApproach());
         if (!admitted && port.accessBoundary().occupied(start.standingBody())) return List.of(start);
 
         List<SurfaceAnchor> prefix = workshopExit(settlement, start);
         SurfaceAnchor outdoorStart = prefix.getLast();
-        Set<BlockPosition> occupied = new HashSet<>();
-        for (Settlement candidate : state.bootstrap().settlements())
-            occupied.addAll(FrontierSettlementActorSlots.intactStructureOccupancy(state.bootstrap().terrain(), candidate.structures()));
-        occupied.addAll(FrontierGrayboxPlan.intactOrganOccupancy(state.bootstrap().hive().organs()));
-        occupied.addAll(state.physicalDeltas().keySet());
-        clear(occupied, port.exteriorApproach());
-        // Every declared depot station is a walkable PUBLIC_ACCESS_SURFACE. The
-        // structure occupancy set also contains its supporting block, so clearing
-        // only the center service station strands a worker released at a side
-        // station one step from the chest.
-        port.ownedAccessSurfaces().forEach(surface -> clear(occupied, surface));
-        // Only a declared workshop exit may clear interior occupancy. An arbitrary
-        // start inside another structure is not permission to walk through its wall.
-        if (prefix.size() > 1) prefix.forEach(surface -> clear(occupied, surface));
-        state.actorLocations().forEach((id, location) -> {
-            if (!id.equals(meal.residentId()) && location.condition().status() == ActorLifeStatus.ALIVE)
-                occupied.add(location.supportingSurface().support().offset(0, 1, 0));
-        });
-        Map<TerrainColumn, SurfaceAnchor> known = SettlementPedestrianGround.localSupports(state.bootstrap(), meal.settlementId());
+        List<KnownSettlementPedestrianRoute.Passage> passages = new ArrayList<>();
+        passages.add(new KnownSettlementPedestrianRoute.Passage(depot.id(),
+                KnownSettlementPedestrianRoute.Passage.Kind.DEPOT_ACCESS));
+        if (prefix.size() > 1) {
+            SettlementStructure workshop = settlement.structures().stream()
+                    .filter(structure -> structure.kind() == StructureKind.WORKSHOP)
+                    .filter(structure -> SettlementWorkshopServicePort.forWorkshop(structure)
+                            .exteriorApproach().equals(outdoorStart))
+                    .findFirst().orElseThrow(() -> new IllegalArgumentException("meal start has no declared workshop exit"));
+            passages.add(new KnownSettlementPedestrianRoute.Passage(workshop.id(),
+                    KnownSettlementPedestrianRoute.Passage.Kind.WORKSHOP_EXTERIOR));
+        }
+        KnownSettlementPedestrianRoute routeKnowledge = KnownSettlementPedestrianRoute.forSettlement(
+                state, meal.settlementId(), passages);
         // A distant applicant is not an occupant and does not own the service
         // turn. Route it to a side pocket first, then reconsider the short
         // entrance from there. A legitimate pocket can be farther than three
         // blocks from the exterior station on irregular terrain.
         boolean directService = admitted && (Math.abs(start.x() - port.exteriorApproach().x())
                 + Math.abs(start.z() - port.exteriorApproach().z()) <= 3
-                || waitingSurfaces(state, meal, port, known).contains(start));
+                || waitingSurfaces(state, meal, port, routeKnowledge).contains(start));
         List<SurfaceAnchor> destinations = directService ? List.of(port.exteriorApproach())
-                : waitingSurfaces(state, meal, port, known);
+                : waitingSurfaces(state, meal, port, routeKnowledge);
         for (SurfaceAnchor destination : destinations) {
-            if (!directService && occupied.contains(destination.support().offset(0, 1, 0))) continue;
             if (start.equals(destination)) return List.of(start);
             MovementOrder outdoor = new MovementOrder(meal.residentId(), meal.residentId(),
                     FrontierWireTags.tag(meal.phase()), 1L, List.of(destination),
                     TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
             try {
-                List<SurfaceAnchor> route = KnownPedestrianNavigation.route(state.bootstrap(), outdoorStart, outdoor,
-                        occupied, (x, z) -> SettlementPedestrianGround.surveyedSupport(state.bootstrap(), known, x, z));
+                List<SurfaceAnchor> route = routeKnowledge.path(outdoorStart, outdoor);
                 if (!directService && route.stream().anyMatch(surface ->
                         port.accessBoundary().occupied(surface.standingBody()))) continue;
                 List<SurfaceAnchor> result = new ArrayList<>(prefix);
                 result.addAll(route.subList(1, route.size()));
-                if (directService) result.add(port.serviceSurface());
+                if (directService) {
+                    List<SurfaceAnchor> finalLeg = serviceLeg(state, meal, depot, port.exteriorApproach());
+                    result.addAll(finalLeg.subList(1, finalLeg.size()));
+                }
                 return List.copyOf(result);
             } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
                 if (directService) throw unavailable;
@@ -124,7 +118,7 @@ public final class ResidentMealKnownNavigation {
 
     private static List<SurfaceAnchor> waitingSurfaces(FrontierWorldState state, ResidentMeal meal,
                                                        SettlementDepotServicePort port,
-                                                       Map<TerrainColumn, SurfaceAnchor> known) {
+                                                       KnownSettlementPedestrianRoute routeKnowledge) {
         SurfaceAnchor apron = port.facing().step(port.exteriorApproach(), -1);
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), meal.settlementId());
         int ordinal = 0;
@@ -138,8 +132,7 @@ public final class ResidentMealKnownNavigation {
         for (int distance = 1; distance <= Math.max(4, (settlement.residents().size() + 1) / 2); distance++) {
             for (SurfaceAnchor side : List.of(port.facing().stepLeft(apron, distance),
                     port.facing().stepRight(apron, distance))) {
-                SurfaceAnchor supported = SettlementPedestrianGround.surveyedSupport(state.bootstrap(), known,
-                        side.x(), side.z());
+                SurfaceAnchor supported = routeKnowledge.supportAt(side.x(), side.z());
                 if (!port.accessBoundary().occupied(supported.standingBody())) candidates.add(supported);
             }
         }
@@ -162,9 +155,14 @@ public final class ResidentMealKnownNavigation {
         return List.of(start);
     }
 
-    private static void clear(Set<BlockPosition> occupied, SurfaceAnchor surface) {
-        occupied.remove(surface.support());
-        occupied.remove(surface.support().offset(0, 1, 0));
-        occupied.remove(surface.support().offset(0, 2, 0));
+    private static List<SurfaceAnchor> serviceLeg(FrontierWorldState state, ResidentMeal meal,
+                                                   SettlementStructure depot, SurfaceAnchor start) {
+        MovementOrder order = new MovementOrder(meal.residentId(), meal.residentId(),
+                FrontierWireTags.tag(meal.phase()), 1L,
+                List.of(SettlementDepotServicePort.forDepot(depot).serviceSurface()),
+                TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
+        return KnownSettlementPedestrianRoute.path(state, meal.settlementId(), start, order,
+                List.of(new KnownSettlementPedestrianRoute.Passage(depot.id(),
+                        KnownSettlementPedestrianRoute.Passage.Kind.DEPOT_ACCESS)));
     }
 }
