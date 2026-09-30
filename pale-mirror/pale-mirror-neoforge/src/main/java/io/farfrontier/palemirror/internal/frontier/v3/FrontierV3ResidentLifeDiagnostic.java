@@ -5,6 +5,9 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess;
 import io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation;
 
 import java.util.Map;
 
@@ -98,7 +101,25 @@ final class FrontierV3ResidentLifeDiagnostic {
                     .map(route -> Long.toString(route.arrivalTick())).orElse("null"))
                 + ",\"movementActionHeld\":" + movementAction.map(action -> ActorMovementProcess.held(state, action))
                     .orElse(false)
+                + ",\"movementGoal\":" + (movement == null ? "null" : "{\"x\":"
+                    + movement.order().legalStations().getFirst().x() + ",\"y\":"
+                    + movement.order().legalStations().getFirst().y() + ",\"z\":"
+                    + movement.order().legalStations().getFirst().z() + "}")
+                + ",\"movementKnownRoute\":\"" + quote(movementKnownRoute(state, movement)) + "\""
                 + ",\"depotBread\":" + bread + ",\"depotBreadClaimed\":" + claimed + "}";
+    }
+
+    /** Operator-only point query; never run a route search in the due-queue predicate. */
+    private static String movementKnownRoute(FrontierWorldState state, ActorMovement movement) {
+        if (movement == null) return "none";
+        if (movement.coldTravel().isPresent()) return "retained";
+        if (!(movement.context() instanceof ActorMovementContext.ServiceExit exit)) return "other_context";
+        try {
+            return "available:" + KnownServiceExitNavigation.path(state, exit.settlementId(),
+                    exit.depotId(), movement.order()).size();
+        } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
+            return "unavailable:" + unavailable.getMessage();
+        }
     }
 
     private static String quote(String value) { return FrontierV3DiagnosticJson.quote(value); }
