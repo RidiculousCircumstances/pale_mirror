@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientActorDied;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientActorObserved;
 import io.farfrontier.palemirror.frontier.v3.process.AmbientActorProcess;
+import io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeasePrepared;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseRestartAbsenceObserved;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseReleased;
@@ -240,8 +241,12 @@ final class FrontierV3AmbientMovementExecutor {
             if (meal == null) return false;
             if (meal.phase() == ResidentMeal.Phase.MOVE && observedBody(body).equals(lease.goalBody())) {
                 body.getNavigation().stop();
-                var result = submit(runtime, "ambient-meal-arrived", actorId.value(),
-                        new ResidentMealHotArrived(actorId, lease.revision(), observedBody(body)));
+                ResidentMealHotArrived arrival = new ResidentMealHotArrived(actorId, lease.revision(), observedBody(body));
+                // The HOT body may have reached the socket while another resident
+                // took the turn. Keep its exact meal and body; retry observation
+                // when that turn clears instead of quarantining the whole world.
+                if (!ResidentMealProcess.hotArrivalHasServiceTurn(state, actorId, arrival)) return false;
+                var result = submit(runtime, "ambient-meal-arrived", actorId.value(), arrival);
                 FrontierV3DiagnosticTrace.record(level.getServer(), "resident-meal:" + actorId.value(),
                         "resident_meal_hot_arrived", actorId, result);
                 return result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted;

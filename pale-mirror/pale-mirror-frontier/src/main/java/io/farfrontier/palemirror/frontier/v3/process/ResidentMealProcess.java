@@ -211,6 +211,19 @@ public final class ResidentMealProcess {
 
     public static FrontierWorldState reduceHotArrived(FrontierWorldState state, SubjectId subject,
                                                       ResidentMealHotArrived arrived) {
+        if (!hotArrivalHasServiceTurn(state, subject, arrived))
+            throw new IllegalArgumentException("HOT meal arrival has no current depot service turn");
+        ResidentMeal meal = state.humanPopulation().meals().get(arrived.residentId());
+        ActorLocation actor = state.actorLocations().get(subject);
+        Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
+        actors.put(subject, actor.withBody(arrived.observedBody()));
+        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors)
+                .humanPopulation(state.humanPopulation().advanceMeal(meal, meal.advance(ResidentMeal.Phase.TAKE))));
+    }
+
+    /** A valid HOT body may reach the station before its shared service turn is free. */
+    public static boolean hotArrivalHasServiceTurn(FrontierWorldState state, SubjectId subject,
+                                                   ResidentMealHotArrived arrived) {
         ResidentMeal meal = state.humanPopulation().meals().get(arrived.residentId());
         AmbientActorLease lease = state.ambientLeases().get(arrived.residentId());
         if (!subject.equals(arrived.residentId()) || meal == null || meal.phase() != ResidentMeal.Phase.MOVE
@@ -218,14 +231,9 @@ public final class ResidentMealProcess {
                 || lease.status() != AmbientLeaseStatus.HOT || lease.goal() != AmbientGoalKind.MEAL
                 || lease.revision() != arrived.ambientRevision()
                 || !lease.goalBody().equals(arrived.observedBody())
-                || !serviceSurface(state, meal).standingBody().equals(arrived.observedBody())
-                || !ServiceAccessCoordinator.depotAvailableForMeal(state, meal.depotId(), subject))
+                || !serviceSurface(state, meal).standingBody().equals(arrived.observedBody()))
             throw new IllegalArgumentException("HOT meal arrival lacks its exact retained resident and service station");
-        ActorLocation actor = state.actorLocations().get(subject);
-        Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
-        actors.put(subject, actor.withBody(arrived.observedBody()));
-        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors)
-                .humanPopulation(state.humanPopulation().advanceMeal(meal, meal.advance(ResidentMeal.Phase.TAKE))));
+        return ServiceAccessCoordinator.depotAvailableForMeal(state, meal.depotId(), subject);
     }
 
     public static FrontierWorldState reduceHotPrepared(FrontierWorldState state, SubjectId subject,
