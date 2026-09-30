@@ -89,11 +89,16 @@ public final class ResidentMealProcess {
         boolean returnComplete = meal.phase() == ResidentMeal.Phase.RETURN
                 && meal.coldTravel().isEmpty() && step.orElseThrow().nextSurface().isEmpty()
                 && body.supportingSurface().equals(meal.clearingSurface());
-        if (meal.phase() == ResidentMeal.Phase.CONSUME)
+        boolean consumed = meal.phase() == ResidentMeal.Phase.CONSUME;
+        if (consumed) {
             events.add(ResidentNeedProcess.requeueAfterConfirmedBread(state, meal.residentId(), now));
+            var movement = ActorMovementProcess.afterMeal(meal, now);
+            events.add(new ProposedEvent(meal.residentId(), new ScheduleEffect.Created(
+                    ActorMovementProcess.progress(movement, Math.addExact(now, 1L)))));
+        }
         if (returnComplete)
             events.add(ResidentActivityProcess.wakeAfterMeal(meal.residentId(), now));
-        events.add(new ProposedEvent(meal.residentId(), returnComplete
+        events.add(new ProposedEvent(meal.residentId(), returnComplete || consumed
                 ? new ScheduleEffect.Cancelled(action.id())
                 : new ScheduleEffect.Rescheduled(action.id(), progress(meal, nextDue))));
         return List.copyOf(events);
@@ -103,6 +108,7 @@ public final class ResidentMealProcess {
                                                                  SubjectId residentId, long now) {
         ResidentProfile resident = state.humanPopulation().resident(residentId);
         if (resident == null || state.humanPopulation().meals().containsKey(residentId)
+                || state.actorMovements().containsKey(residentId)
                 || state.actorLocations().get(residentId).condition().status() != ActorLifeStatus.ALIVE
                 || state.humanPopulation().migration(residentId) != null
                 || ResidentActivityCoordinator.assess(state, residentId, now).kind()
@@ -267,9 +273,14 @@ public final class ResidentMealProcess {
                 Map.of(meal.claimId(), 1), List.of());
         HumanPopulation people = state.humanPopulation().consumeResidentBread(subject, atTick,
                         state.bootstrap().ruleset().residentLife())
-                .advanceMeal(meal, meal.advance(ResidentMeal.Phase.RETURN));
+                .completeMeal(meal);
+        Map<SubjectId, io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement> movements =
+                new LinkedHashMap<>(state.actorMovements());
+        if (movements.putIfAbsent(subject, ActorMovementProcess.afterMeal(meal, atTick)) != null)
+            throw new IllegalArgumentException("resident meal competes with an existing movement order");
         FrontierWorldState next = state.withChanges(FrontierWorldStateUpdate.begin()
-                .inventory(state.inventory().withFungibleResources(ledger)).humanPopulation(people));
+                .inventory(state.inventory().withFungibleResources(ledger)).humanPopulation(people)
+                .actorMovements(movements));
         return ResidentActivityProcess.retargetHotResident(next, subject, atTick);
     }
 
@@ -280,15 +291,13 @@ public final class ResidentMealProcess {
         reduceHotObserved(state, observed.residentId(), observed, atTick);
         if (observed.phase() != ResidentMeal.Phase.CONSUME)
             return List.of(new ProposedEvent(observed.residentId(), observed));
-        ScheduledAction nextProgress = progress(meal, Math.addExact(atTick, 1L));
+        var movement = ActorMovementProcess.afterMeal(meal, atTick);
         return List.of(new ProposedEvent(observed.residentId(), observed),
                 ResidentNeedProcess.requeueAfterConfirmedBread(state, observed.residentId(), atTick),
-                // The HOT receipt advances nutrition at the command's canonical instant.
-                // Its retained COLD progress action may still be due at an earlier tick;
-                // returning to activity from that historical due instant would evaluate
-                // hunger backwards and quarantine the entire runtime.
-                new ProposedEvent(observed.residentId(), new ScheduleEffect.Rescheduled(
-                        nextProgress.id(), nextProgress)));
+                new ProposedEvent(observed.residentId(), new ScheduleEffect.Cancelled(
+                        progress(meal, Math.addExact(meal.startedAtTick(), 1L)).id())),
+                new ProposedEvent(observed.residentId(), new ScheduleEffect.Created(
+                        ActorMovementProcess.progress(movement, Math.addExact(atTick, 1L)))));
     }
 
     private static ResidentMeal hotMeal(FrontierWorldState state, SubjectId subject,
@@ -596,9 +605,14 @@ public final class ResidentMealProcess {
                                 Map.of(meal.claimId(), 1));
                 HumanPopulation people = state.humanPopulation().consumeResidentBread(subject, step.atTick(),
                         state.bootstrap().ruleset().residentLife())
-                        .advanceMeal(meal, meal.advance(ResidentMeal.Phase.RETURN));
+                        .completeMeal(meal);
+                Map<SubjectId, io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement> movements =
+                        new LinkedHashMap<>(state.actorMovements());
+                if (movements.putIfAbsent(subject, ActorMovementProcess.afterMeal(meal, step.atTick())) != null)
+                    throw new IllegalArgumentException("resident meal competes with an existing movement order");
                 yield state.withChanges(FrontierWorldStateUpdate.begin()
-                        .inventory(state.inventory().withFungibleResources(ledger)).humanPopulation(people));
+                        .inventory(state.inventory().withFungibleResources(ledger)).humanPopulation(people)
+                        .actorMovements(movements));
             }
             case RETURN -> {
                 ResidentMealColdStep expected = planColdStep(state, subject, step.atTick())

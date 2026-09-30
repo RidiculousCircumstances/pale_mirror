@@ -218,8 +218,9 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
                 provisions, nutrition, medicalOperations, schedules, next);
     }
     public HumanPopulation completeMeal(ResidentMeal expected) {
-        if (!expected.equals(meals.get(expected.residentId())) || expected.phase() != ResidentMeal.Phase.RETURN)
-            throw new IllegalArgumentException("meal completion lacks its exact return-stage predecessor");
+        if (!expected.equals(meals.get(expected.residentId()))
+                || expected.phase() != ResidentMeal.Phase.RETURN && expected.phase() != ResidentMeal.Phase.CONSUME)
+            throw new IllegalArgumentException("meal completion lacks its exact consumed predecessor");
         Map<SubjectId, ResidentMeal> next = new LinkedHashMap<>(meals); next.remove(expected.residentId());
         return new HumanPopulation(households, residents, birthJobs, health, quarantines, migrations,
                 provisions, nutrition, medicalOperations, schedules, next);

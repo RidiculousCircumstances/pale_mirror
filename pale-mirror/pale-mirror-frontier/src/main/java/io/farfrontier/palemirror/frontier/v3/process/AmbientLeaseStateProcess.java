@@ -15,7 +15,10 @@ public final class AmbientLeaseStateProcess {
     public static FrontierWorldState prepare(FrontierWorldState state, AmbientActorLease lease) {
         Objects.requireNonNull(lease, "ambient lease"); ActorLocation actor = state.actorLocations().get(lease.actorId());
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE || lease.status() != AmbientLeaseStatus.PREPARED
-                || !ResidentMealProcess.bodyAt(state, lease.actorId(), lease.handoffInstant().ticks()).equals(lease.handoffBody()))
+                || !(state.actorMovements().containsKey(lease.actorId())
+                        ? ActorMovementProcess.bodyAt(state, lease.actorId(), lease.handoffInstant().ticks())
+                        : ResidentMealProcess.bodyAt(state, lease.actorId(), lease.handoffInstant().ticks()))
+                        .equals(lease.handoffBody()))
             throw new IllegalArgumentException("ambient lease must prepare one living actor at its canonical as-of handoff body");
         if (!HivePhysiologySupport.permitsAmbientLease(state, lease.actorId())) {
             throw new IllegalArgumentException("cocoon-retained bioform may not prepare an ambient lease");
@@ -43,6 +46,18 @@ public final class AmbientLeaseStateProcess {
         long expectedRevision = previous == null ? 1L : Math.addExact(previous.revision(), 1L);
         if (lease.revision() != expectedRevision) throw new IllegalArgumentException("ambient lease revision is not the actor's next revision");
         Map<SubjectId, AmbientActorLease> next = new LinkedHashMap<>(state.ambientLeases()); next.put(lease.actorId(), lease);
+        var movement = state.actorMovements().get(lease.actorId());
+        if (movement != null && movement.coldTravel().isPresent()) {
+            if (movement.coldTravel().orElseThrow().authorityEpoch() != lease.revision())
+                throw new IllegalArgumentException("movement travel cannot hand off across a foreign authority epoch");
+            Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
+            actors.put(lease.actorId(), actor.withBody(lease.handoffBody()));
+            Map<SubjectId, io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement> movements =
+                    new LinkedHashMap<>(state.actorMovements());
+            movements.put(lease.actorId(), movement.withoutColdTravel());
+            return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors)
+                    .ambientLeases(next).actorMovements(movements));
+        }
         ResidentMeal meal = state.humanPopulation().meals().get(lease.actorId());
         if (meal == null || meal.coldTravel().isEmpty()) return copy(state, state.actorLocations(), next);
         if (meal.coldTravel().orElseThrow().authorityEpoch() != lease.revision())
@@ -128,6 +143,8 @@ public final class AmbientLeaseStateProcess {
                 .orElse(null);
         if (harvest != null) {
             if (current.goal() != AmbientGoalKind.PATROL && current.goal() != AmbientGoalKind.WORK
+                    && !(current.goal() == AmbientGoalKind.ACTOR_MOVEMENT
+                        && state.actorMovements().containsKey(release.actorId()))
                     && !(current.goal() == AmbientGoalKind.MEAL
                         && state.humanPopulation().meals().containsKey(release.actorId()))) {
                 throw new IllegalArgumentException("HOT field worker has a foreign ambient purpose");

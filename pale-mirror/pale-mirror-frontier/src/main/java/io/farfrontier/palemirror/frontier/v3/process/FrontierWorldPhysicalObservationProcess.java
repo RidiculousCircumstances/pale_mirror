@@ -24,6 +24,7 @@ public final class FrontierWorldPhysicalObservationProcess {
         List<ProposedEvent> events = new ArrayList<>();
         events.add(new ProposedEvent(FrontierExecutionSubjects.PHYSICAL_EXECUTOR, observed));
         appendMealRouteWakeups(after, List.of(observed.delta()), submittedAt, events);
+        appendActorMovementRouteWakeups(after, List.of(observed.delta()), submittedAt, events);
         appendProductionFacilityFailures(after, List.of(observed.delta()), events);
         if (isKnownRouteLoss(observed.delta()) && !hasActiveAffectedOperation(after, observed.delta())) {
             for (Settlement settlement : after.bootstrap().settlements()) {
@@ -51,6 +52,7 @@ public final class FrontierWorldPhysicalObservationProcess {
         List<ProposedEvent> events = new ArrayList<>();
         events.add(new ProposedEvent(FrontierExecutionSubjects.PHYSICAL_EXECUTOR, observed));
         appendMealRouteWakeups(after, observed.deltas(), submittedAt, events);
+        appendActorMovementRouteWakeups(after, observed.deltas(), submittedAt, events);
         appendProductionFacilityFailures(after, observed.deltas(), events);
         java.util.Optional<PhysicalDelta> genericRouteLoss = observed.deltas().stream()
                 .filter(FrontierWorldPhysicalObservationProcess::isKnownRouteLoss)
@@ -94,6 +96,26 @@ public final class FrontierWorldPhysicalObservationProcess {
                                     ResidentMealProcess.progress(meal, Math.addExact(meal.startedAtTick(), 1L)).id(),
                                     ResidentMealProcess.progress(meal, Math.max(Math.addExact(submittedAt, 1L),
                                             Math.addExact(meal.startedAtTick(), 1L))))));
+                });
+    }
+
+    private static void appendActorMovementRouteWakeups(FrontierWorldState state, List<PhysicalDelta> deltas,
+                                                         long submittedAt, List<ProposedEvent> events) {
+        state.actorMovements().values().stream()
+                .filter(movement -> movement.coldTravel().isPresent())
+                .filter(movement -> deltas.stream().anyMatch(delta ->
+                        ActorMovementProcess.travelIntersects(movement, delta.position())))
+                .sorted(java.util.Comparator.comparing(movement -> movement.order().actorId()))
+                .forEach(movement -> {
+                    var actor = movement.order().actorId();
+                    events.add(new ProposedEvent(actor,
+                            new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementColdAdvanced(
+                                    actor, movement.order().goalRevision(), submittedAt)));
+                    events.add(new ProposedEvent(actor,
+                            new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled(
+                                    ActorMovementProcess.progress(movement, Math.addExact(movement.issuedAtTick(), 1L)).id(),
+                                    ActorMovementProcess.progress(movement, Math.max(Math.addExact(submittedAt, 1L),
+                                            Math.addExact(movement.issuedAtTick(), 1L))))));
                 });
     }
 

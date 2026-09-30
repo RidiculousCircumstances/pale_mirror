@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -22,7 +23,8 @@ public final class FrontierWireTags {
             entry(AmbientGoalKind.class,
                     tag(0, AmbientGoalKind.WORK), tag(1, AmbientGoalKind.GUARD), tag(2, AmbientGoalKind.PATROL), tag(3, AmbientGoalKind.SCOUT_PATROL),
                     tag(4, AmbientGoalKind.TRANSIT), tag(5, AmbientGoalKind.OPERATION_ASSEMBLY), tag(6, AmbientGoalKind.ENGINEERING_ASSEMBLY),
-                    tag(7, AmbientGoalKind.HIVE_TASK_ASSEMBLY), tag(8, AmbientGoalKind.HIVE_TASK_RETURN), tag(9, AmbientGoalKind.MEAL)),
+                    tag(7, AmbientGoalKind.HIVE_TASK_ASSEMBLY), tag(8, AmbientGoalKind.HIVE_TASK_RETURN), tag(9, AmbientGoalKind.MEAL),
+                    tag(10, AmbientGoalKind.ACTOR_MOVEMENT)),
             entry(AmbientLeaseStatus.class,
                     tag(0, AmbientLeaseStatus.PREPARED), tag(1, AmbientLeaseStatus.HOT), tag(2, AmbientLeaseStatus.DRAINING), tag(3, AmbientLeaseStatus.CLOSED),
                     tag(4, AmbientLeaseStatus.UNKNOWN_AFTER_RESTART)),
@@ -281,6 +283,8 @@ public final class FrontierWireTags {
                     tag(0, TraversalAvailability.OPEN), tag(1, TraversalAvailability.BLOCKED), tag(2, TraversalAvailability.DAMAGED), tag(3, TraversalAvailability.UNKNOWN)),
             entry(TraversalCapability.class,
                     tag(0, TraversalCapability.PEDESTRIAN), tag(1, TraversalCapability.GROUND_BIOFORM), tag(2, TraversalCapability.RAIL_VEHICLE)),
+            entry(MovementOrder.ArrivalPolicy.class,
+                    tag(0, MovementOrder.ArrivalPolicy.EXACT_STATION), tag(1, MovementOrder.ArrivalPolicy.ANY_DECLARED_STATION)),
             entry(TraversalKind.class,
                     tag(0, TraversalKind.PEDESTRIAN), tag(1, TraversalKind.GROUND_BIOFORM), tag(2, TraversalKind.RAIL))
 );

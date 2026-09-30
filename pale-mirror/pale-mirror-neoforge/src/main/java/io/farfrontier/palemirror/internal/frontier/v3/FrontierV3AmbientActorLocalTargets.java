@@ -77,7 +77,7 @@ final class FrontierV3AmbientActorLocalTargets {
         // left their completed station.  The lease target, rather than the old hand-off body,
         // owns this post-work movement.
         return lease.goal() == AmbientGoalKind.TRANSIT || lease.goal() == AmbientGoalKind.WORK
-                || lease.goal() == AmbientGoalKind.MEAL
+                || lease.goal() == AmbientGoalKind.MEAL || lease.goal() == AmbientGoalKind.ACTOR_MOVEMENT
                 || lease.goal() == AmbientGoalKind.OPERATION_ASSEMBLY
                 || lease.goal() == AmbientGoalKind.ENGINEERING_ASSEMBLY || lease.goal() == AmbientGoalKind.HIVE_TASK_ASSEMBLY
                 || lease.goal() == AmbientGoalKind.SCOUT_PATROL;

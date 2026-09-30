@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
+import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement;
+
 import io.farfrontier.palemirror.frontier.v3.api.FixedRatio;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
@@ -49,7 +51,8 @@ public final class FrontierWorldStateUpdate {
         REPLICA_CUSTODY,
         DEFERRED_AFTERMATH,
         FENCED_RECOVERY,
-        DIAGNOSTIC_INCIDENTS
+        DIAGNOSTIC_INCIDENTS,
+        ACTOR_MOVEMENTS
     }
 
     private final EnumSet<Component> changed = EnumSet.noneOf(Component.class);
@@ -80,6 +83,7 @@ public final class FrontierWorldStateUpdate {
     private DeferredAftermathState deferredAftermath;
     private FencedRecoveryState fencedRecovery;
     private DiagnosticIncidentIndex diagnosticIncidents;
+    private Map<SubjectId, ActorMovement> actorMovements;
 
     private FrontierWorldStateUpdate() { }
 
@@ -168,6 +172,9 @@ public final class FrontierWorldStateUpdate {
     public FrontierWorldStateUpdate diagnosticIncidents(DiagnosticIncidentIndex next) {
         mark(Component.DIAGNOSTIC_INCIDENTS); diagnosticIncidents = require(next, "diagnostic incidents"); return this;
     }
+    public FrontierWorldStateUpdate actorMovements(Map<SubjectId, ActorMovement> next) {
+        mark(Component.ACTOR_MOVEMENTS); actorMovements = require(next, "actor movements"); return this;
+    }
 
     Map<SubjectId, ActorLocation> actorLocations(FrontierWorldState state) { return changed(Component.ACTOR_LOCATIONS, actorLocations, state.actorLocations()); }
     Map<SubjectId, StructureCondition> structureConditions(FrontierWorldState state) { return changed(Component.STRUCTURE_CONDITIONS, structureConditions, state.structureConditions()); }
@@ -196,6 +203,7 @@ public final class FrontierWorldStateUpdate {
     DeferredAftermathState deferredAftermath(FrontierWorldState state) { return changed(Component.DEFERRED_AFTERMATH, deferredAftermath, state.deferredAftermath()); }
     FencedRecoveryState fencedRecovery(FrontierWorldState state) { return changed(Component.FENCED_RECOVERY, fencedRecovery, state.fencedRecovery()); }
     DiagnosticIncidentIndex diagnosticIncidents(FrontierWorldState state) { return changed(Component.DIAGNOSTIC_INCIDENTS, diagnosticIncidents, state.diagnosticIncidents()); }
+    Map<SubjectId, ActorMovement> actorMovements(FrontierWorldState state) { return changed(Component.ACTOR_MOVEMENTS, actorMovements, state.actorMovements()); }
 
     private void mark(Component component) {
         if (!changed.add(component)) throw new IllegalStateException("state component is specified more than once: " + component);

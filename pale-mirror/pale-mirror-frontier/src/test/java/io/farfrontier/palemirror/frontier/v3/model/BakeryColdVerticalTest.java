@@ -7,6 +7,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.process.BakeryProcess;
+import io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess;
 import io.farfrontier.palemirror.frontier.v3.process.ProductionProcess;
 import io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess;
 import io.farfrontier.palemirror.frontier.v3.process.StrategicObjectiveProcess;
@@ -82,6 +83,17 @@ class BakeryColdVerticalTest {
             mealTick++;
         }
         assertFalse(state.humanPopulation().meals().containsKey(resident));
+        assertTrue(state.actorMovements().containsKey(resident));
+        for (int turn = 0; state.actorMovements().containsKey(resident) && turn < 32; turn++) {
+            var movement = state.actorMovements().get(resident);
+            mealTick = movement.coldTravel().map(io.farfrontier.palemirror.frontier.v3.model.navigation.TimedKnownRoute::arrivalTick)
+                    .orElse(Math.addExact(mealTick, 1L));
+            var advanced = assertInstanceOf(io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementColdAdvanced.class,
+                    ActorMovementProcess.plan(state, ActorMovementProcess.progress(movement, mealTick), mealTick)
+                            .getFirst().payload());
+            state = ActorMovementProcess.reduceColdAdvanced(state, resident, advanced);
+        }
+        assertFalse(state.actorMovements().containsKey(resident));
         assertTrue(ServiceAccessCoordinator.depotAvailableForWork(state, depot, job.id(), resident));
         assertEquals(job, state.productionJobs().get(job.id()));
         assertEquals(3, state.inventory().fungibleResources().totalQuantity(job.settlementId(), "minecraft:bread"));
@@ -188,7 +200,7 @@ class BakeryColdVerticalTest {
                     completed = ResidentMealProcess.reduceStarted(completed, waitingResident, meal);
                     long mealTick = 27_001L;
                     for (int mealStep = 0; mealStep < 24
-                            && completed.humanPopulation().meals().get(waitingResident).phase() != ResidentMeal.Phase.RETURN; mealStep++) {
+                            && completed.humanPopulation().meals().containsKey(waitingResident); mealStep++) {
                         var currentMeal = completed.humanPopulation().meals().get(waitingResident);
                         if (currentMeal.coldTravel().isPresent())
                             mealTick = Math.max(mealTick, currentMeal.coldTravel().orElseThrow().arrivalTick());
@@ -201,8 +213,8 @@ class BakeryColdVerticalTest {
                         completed = ResidentMealProcess.reduceColdStep(completed, waitingResident, progress);
                         mealTick++;
                     }
-                    assertEquals(ResidentMeal.Phase.RETURN,
-                            completed.humanPopulation().meals().get(waitingResident).phase());
+                    assertFalse(completed.humanPopulation().meals().containsKey(waitingResident));
+                    assertTrue(completed.actorMovements().containsKey(waitingResident));
                     assertEquals(63, completed.inventory().fungibleResources()
                             .totalQuantity(job.settlementId(), "minecraft:bread"));
                     assertEquals(BakeryWorkState.Phase.DELIVERED,

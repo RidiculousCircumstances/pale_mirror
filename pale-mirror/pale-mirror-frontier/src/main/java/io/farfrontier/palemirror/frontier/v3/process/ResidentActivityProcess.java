@@ -40,7 +40,8 @@ public final class ResidentActivityProcess {
         ActorLocation actor = state.actorLocations().get(residentId);
         if (resident == null || actor == null || actor.condition().status() != ActorLifeStatus.ALIVE)
             return false;
-        if (state.humanPopulation().meals().containsKey(residentId)) return true;
+        if (state.humanPopulation().meals().containsKey(residentId)
+                || state.actorMovements().containsKey(residentId)) return true;
         long now = Math.max(action.dueAt().ticks(), state.humanPopulation().nutrition(residentId).lastEvaluatedTick());
         ResidentNutrition nutrition = state.humanPopulation().nutrition(residentId).accrueThrough(now,
                 state.bootstrap().ruleset().residentLife(), resident.characteristics().effectiveMetabolismPermille(now));
@@ -96,7 +97,8 @@ public final class ResidentActivityProcess {
         ResidentActivityChoice choice = ResidentActivityCoordinator.assess(state, action.subject(), now);
         List<ProposedEvent> events = new ArrayList<>();
         if (choice.kind() == ResidentActivityChoice.Kind.EAT
-                && !state.humanPopulation().meals().containsKey(action.subject())) {
+                && !state.humanPopulation().meals().containsKey(action.subject())
+                && !state.actorMovements().containsKey(action.subject())) {
             ResidentMealProcess.selectSourceAtYield(state, action.subject(), now).ifPresent(started -> {
                 events.add(new ProposedEvent(action.subject(), started));
                 events.add(new ProposedEvent(action.subject(), new ScheduleEffect.Created(

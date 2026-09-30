@@ -45,6 +45,9 @@ class FrontierWorldProcessCatalogTest {
                 "frontier.resident_meal_hot_returned")) {
             assertEquals("population", registry.requireCommandOwner(type), type);
         }
+        assertEquals("actor-movement", registry.requireCommandOwner("frontier.actor_movement_hot_observed"));
+        assertEquals("actor-movement", registry.requireScheduledOwner(
+                io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess.PROGRESS));
     }
 
     @Test
@@ -259,6 +262,8 @@ class FrontierWorldProcessCatalogTest {
                 Map.entry("ambient-actors", new AmbientActorObserved(new SubjectId("actor:representative"), new BodyPosition(1, 64, 1), FixedScalar.ONE)),
                 Map.entry("logistics-scenes", new SceneLeaseTransition(new SceneLeaseId("scene:representative"), SceneLeaseStatus.HOT)),
                 Map.entry("population", ResidentMigrationDiagnosticProducer.QUARANTINE.create(new SubjectId("resident:representative"))),
+                Map.entry("actor-movement", new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementColdAdvanced(
+                        new SubjectId("resident:representative"), 1L, 2L)),
                 Map.entry("economy", new MarketDemandExpired(new SubjectId("demand:representative"))),
                 Map.entry("resource-sites", new ResourceSiteGrowthAdvanced(new SubjectId("site:representative"), 1L, 0)),
                 Map.entry("hive", new InfectionChanged(new InfectionCell(1, 1), new FixedRatio(FixedScalar.ONE))),

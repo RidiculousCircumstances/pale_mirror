@@ -78,7 +78,9 @@ final class FrontierV3ActorProbeSchedule {
                 for (SubjectId actor : actors) {
                     var location = state.actorLocations().get(actor);
                     if (location == null) continue;
-                    var body = ResidentMealProcess.bodyAt(state, actor, instant);
+                    var body = state.actorMovements().containsKey(actor)
+                            ? io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess.bodyAt(state, actor, instant)
+                            : ResidentMealProcess.bodyAt(state, actor, instant);
                     if (observer.closerThan(new BlockPos(body.x(), body.y(), body.z()),
                             FrontierV3SceneDemand.RADIUS_BLOCKS)) result.add(actor);
                 }

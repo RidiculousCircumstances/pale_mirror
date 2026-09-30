@@ -84,7 +84,7 @@ public record ResidentMeal(SubjectId residentId, SubjectId settlementId, Subject
         boolean legal = switch (phase) {
             case MOVE -> next == Phase.TAKE;
             case TAKE -> next == Phase.CONSUME;
-            case CONSUME -> next == Phase.RETURN;
+            case CONSUME -> false; // confirmed consumption retires the meal and issues an actor movement order
             case RETURN -> false;
         };
         if (!legal) throw new IllegalArgumentException("meal phase cannot skip a physical custody receipt");

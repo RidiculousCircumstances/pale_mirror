@@ -232,14 +232,26 @@ class ResidentMealProcessTest {
                                 .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow())));
             state = ResidentMealProcess.reduceColdStep(state, first, step);
             firstTick++;
-            if (state.humanPopulation().meals().containsKey(first)
-                    && state.humanPopulation().meals().get(first).phase() == ResidentMeal.Phase.RETURN
-                    && ServiceAccessCoordinator.depotAvailableForMeal(state, depot, second)) {
+        }
+        assertFalse(state.humanPopulation().meals().containsKey(first),
+                "confirmed consumption retires the meal without pretending that return travel is eating");
+        assertTrue(state.actorMovements().containsKey(first));
+        for (int turn = 0; state.actorMovements().containsKey(first) && turn < 32; turn++) {
+            var movement = state.actorMovements().get(first);
+            long due = movement.coldTravel().map(io.farfrontier.palemirror.frontier.v3.model.navigation.TimedKnownRoute::arrivalTick)
+                    .orElse(Math.addExact(firstTick, 1L));
+            var action = ActorMovementProcess.progress(movement, due);
+            var events = ActorMovementProcess.plan(state, action, due);
+            var advanced = assertInstanceOf(io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementColdAdvanced.class,
+                    events.getFirst().payload());
+            state = ActorMovementProcess.reduceColdAdvanced(state, first, advanced);
+            firstTick = due;
+            if (state.actorMovements().containsKey(first)
+                    && ServiceAccessCoordinator.depotAvailableForMeal(state, depot, second))
                 releasedDuringReturn = true;
-            }
         }
         assertTrue(releasedDuringReturn, "access must release before the first resident finishes returning home");
-        assertFalse(state.humanPopulation().meals().containsKey(first));
+        assertFalse(state.actorMovements().containsKey(first));
         assertTrue(state.humanPopulation().meals().containsKey(second),
                 "the second resident's independent meal must survive the first return");
         assertTrue(ServiceAccessCoordinator.depotAvailableForMeal(state, depot, second));
@@ -441,7 +453,7 @@ class ResidentMealProcessTest {
         ResidentMealHotEffectObserved consumed = new ResidentMealHotEffectObserved(resident,
                 ResidentMeal.Phase.CONSUME, 1L, service.standingBody(), List.of(), List.of());
         var hotEvents = ResidentMealProcess.planHotObserved(state, consumed, 48_002L);
-        assertEquals(3, hotEvents.size());
+        assertEquals(4, hotEvents.size());
         int rate = state.humanPopulation().resident(resident).characteristics().effectiveMetabolismPermille(48_002L);
         FrontierRuleset.ResidentLife rules = state.bootstrap().ruleset().residentLife();
         long oldNeedDue = state.humanPopulation().nutrition(resident).nextThresholdTick(rules, rate);
@@ -451,13 +463,18 @@ class ResidentMealProcessTest {
                 hotEvents.get(1).payload());
         assertEquals(ResidentNeedProcess.review(resident, oldNeedDue).id(), hotNeed.scheduleId());
         assertEquals(ResidentNeedProcess.review(resident, nextNeedDue), hotNeed.replacement());
-        var hotProgress = assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class,
+        var retiredMeal = assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Cancelled.class,
                 hotEvents.get(2).payload());
-        assertEquals(ResidentMealProcess.progress(meal, 48_001L).id(), hotProgress.scheduleId());
-        assertEquals(ResidentMealProcess.progress(meal, 48_003L), hotProgress.replacement());
+        assertEquals(ResidentMealProcess.progress(meal, 48_001L).id(), retiredMeal.scheduleId());
+        var issuedMovement = assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created.class,
+                hotEvents.get(3).payload());
+        assertEquals(ActorMovementProcess.progress(ActorMovementProcess.afterMeal(meal, 48_002L), 48_003L),
+                issuedMovement.action());
         state = ResidentMealProcess.reduceHotObserved(state, resident, consumed, 48_002L);
         assertEquals(63, state.inventory().fungibleResources().totalQuantity(settlement.id(), "minecraft:bread"));
         assertEquals(ResidentNutritionStatus.HUNGRY, state.humanPopulation().nutrition(resident).status());
+        assertFalse(state.humanPopulation().meals().containsKey(resident));
+        assertTrue(state.actorMovements().containsKey(resident));
         FrontierWorldState resumedCold = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
         resumedCold = AmbientLeaseStateProcess.transition(resumedCold, resident, AmbientLeaseStatus.DRAINING);
         resumedCold = AmbientLeaseStateProcess.release(resumedCold, new AmbientLeaseReleased(resident,
@@ -465,81 +482,62 @@ class ResidentMealProcessTest {
         ServiceAccessBoundary returnBoundary = SettlementDepotServicePort.forDepot(settlement.structures().stream()
                 .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow()).accessBoundary();
         FrontierWorldState insideReturn = resumedCold;
-        insideReturn = ResidentMealProcess.reduceColdStep(insideReturn, resident,
-                ResidentMealProcess.planColdStep(insideReturn, resident, 48_003L).orElseThrow());
-        assertTrue(insideReturn.humanPopulation().meals().get(resident).coldTravel().isPresent());
-        BodyPosition midReturn = ResidentMealProcess.bodyAt(insideReturn, resident, 48_040L);
+        var firstMovement = insideReturn.actorMovements().get(resident);
+        insideReturn = ActorMovementProcess.reduceColdAdvanced(insideReturn, resident,
+                assertInstanceOf(io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementColdAdvanced.class,
+                        ActorMovementProcess.plan(insideReturn, ActorMovementProcess.progress(firstMovement, 48_003L),
+                                48_003L).getFirst().payload()));
+        assertTrue(insideReturn.actorMovements().get(resident).coldTravel().isPresent());
+        BodyPosition midReturn = ActorMovementProcess.bodyAt(insideReturn, resident, 48_040L);
         assertTrue(returnBoundary.occupied(midReturn), "HOT handoff must retain the as-of return body");
         assertFalse(midReturn.equals(service.standingBody()),
                 "HOT re-admission must exercise an intermediate return checkpoint");
         insideReturn = AmbientLeaseStateProcess.prepare(insideReturn,
                 AmbientActorProcess.nextLease(insideReturn, resident, new SimInstant(48_040L)));
+        assertTrue(insideReturn.actorMovements().get(resident).coldTravel().isEmpty());
         insideReturn = AmbientLeaseStateProcess.transition(insideReturn, resident, AmbientLeaseStatus.HOT);
         insideReturn = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(insideReturn));
         assertEquals(insideReturn.actorLocations().get(resident).body(),
                 insideReturn.ambientLeases().get(resident).handoffBody());
-        SurfaceAnchor reentryExit = ResidentMealKnownNavigation.returnPath(insideReturn,
-                insideReturn.humanPopulation().meals().get(resident)).stream()
+        var hotMovement = insideReturn.actorMovements().get(resident);
+        SurfaceAnchor reentryExit = KnownServiceExitNavigation.path(insideReturn, settlement.id(),
+                ((io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.ServiceExit)
+                        hotMovement.context()).depotId(), hotMovement.order()).stream()
                 .filter(surface -> returnBoundary.cleared(surface.standingBody())).findFirst().orElseThrow();
-        ResidentMealHotAccessCleared reentryClear = new ResidentMealHotAccessCleared(resident,
-                insideReturn.ambientLeases().get(resident).revision(), reentryExit.standingBody());
-        assertTrue(ServiceAccessCoordinator.witnessedMealExit(insideReturn,
-                insideReturn.humanPopulation().meals().get(resident), reentryExit.standingBody()));
-        insideReturn = ResidentMealProcess.reduceHotAccessCleared(insideReturn, resident, reentryClear);
+        var reentryClear = new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementHotObserved(resident,
+                hotMovement.order().goalRevision(), insideReturn.ambientLeases().get(resident).revision(),
+                reentryExit.standingBody());
+        assertTrue(ServiceAccessCoordinator.witnessedActorMovementExit(insideReturn,
+                hotMovement, reentryExit.standingBody()));
+        insideReturn = ActorMovementProcess.reduceHotObserved(insideReturn, resident, reentryClear, 48_041L);
         assertEquals(reentryExit.standingBody(), insideReturn.actorLocations().get(resident).body());
-        insideReturn = ResidentActivityProcess.reduceMealReturned(insideReturn, resident,
-                new ResidentMealHotReturned(resident, insideReturn.ambientLeases().get(resident).revision(),
-                        meal.clearingSurface().standingBody()), 48_041L);
-        assertFalse(insideReturn.humanPopulation().meals().containsKey(resident),
-                "COLD-to-HOT return must release service and complete the same meal");
+        assertTrue(insideReturn.actorMovements().containsKey(resident),
+                "exiting a service throat does not complete the distinct actor goal");
+        var hotArrival = new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementHotObserved(resident,
+                hotMovement.order().goalRevision(), insideReturn.ambientLeases().get(resident).revision(),
+                meal.clearingSurface().standingBody());
+        insideReturn = ActorMovementProcess.reduceHotObserved(insideReturn, resident, hotArrival, 48_042L);
+        assertFalse(insideReturn.actorMovements().containsKey(resident));
         long returnTick = 48_003L;
-        for (int edge = 0; resumedCold.humanPopulation().meals().containsKey(resident) && edge < 32; edge++) {
-            returnTick = nextColdTick(resumedCold, resident, returnTick);
-            ResidentMealColdStep clearing = ResidentMealProcess.planColdStep(resumedCold, resident, returnTick)
-                    .orElseThrow();
-            resumedCold = ResidentMealProcess.reduceColdStep(resumedCold, resident, clearing);
-            returnTick++;
+        for (int edge = 0; resumedCold.actorMovements().containsKey(resident) && edge < 32; edge++) {
+            var movement = resumedCold.actorMovements().get(resident);
+            returnTick = movement.coldTravel().map(io.farfrontier.palemirror.frontier.v3.model.navigation.TimedKnownRoute::arrivalTick)
+                    .orElse(Math.addExact(returnTick, 1L));
+            var advanced = assertInstanceOf(io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementColdAdvanced.class,
+                    ActorMovementProcess.plan(resumedCold, ActorMovementProcess.progress(movement, returnTick),
+                            returnTick).getFirst().payload());
+            resumedCold = ActorMovementProcess.reduceColdAdvanced(resumedCold, resident, advanced);
         }
-        assertFalse(resumedCold.humanPopulation().meals().containsKey(resident),
+        assertFalse(resumedCold.actorMovements().containsKey(resident),
                 "a saved HOT consumption must clear the depot once after returning to COLD");
         assertEquals(63, resumedCold.inventory().fungibleResources().totalQuantity(settlement.id(), "minecraft:bread"));
         FrontierWorldState terminal = state;
-        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class,
-                ResidentMealProcess.planProgress(terminal, hotProgress.replacement()).getFirst().payload(),
-                "HOT service clearance must wait for a physical arrival, not complete from a timer");
+        assertThrows(IllegalArgumentException.class, () -> ActorMovementProcess.plan(terminal,
+                ActorMovementProcess.progress(terminal.actorMovements().get(resident), 48_003L), 48_003L),
+                "HOT movement must retain its physical lease, not complete from a COLD timer");
         assertThrows(IllegalArgumentException.class, () -> ResidentMealProcess.reduceHotObserved(terminal, resident, consumed, 48_002L));
-        ResidentMealHotReturned cleared = new ResidentMealHotReturned(resident, 1L,
-                meal.clearingSurface().standingBody());
-        assertEquals(cleared, FrontierWorldRuntimeDefinition.payloadCodecs().decode(cleared.type(),
-                FrontierWorldRuntimeDefinition.payloadCodecs().encode(cleared)));
-        FrontierWorldState stillAtDepot = state;
-        assertThrows(IllegalArgumentException.class, () -> ResidentActivityProcess.reduceMealReturned(stillAtDepot,
-                resident, new ResidentMealHotReturned(resident, 1L, service.standingBody()), 48_003L),
-                "a meal cannot release service access while the body still blocks the depot");
-        ServiceAccessBoundary boundary = SettlementDepotServicePort.forDepot(settlement.structures().stream()
-                .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow()).accessBoundary();
-        SurfaceAnchor exit = ResidentMealKnownNavigation.returnPath(state, state.humanPopulation().meals().get(resident))
-                .stream().filter(surface -> boundary.cleared(surface.standingBody())).findFirst().orElseThrow();
-        ResidentMealHotAccessCleared accessCleared = new ResidentMealHotAccessCleared(resident, 1L, exit.standingBody());
-        assertEquals(accessCleared, FrontierWorldRuntimeDefinition.payloadCodecs().decode(accessCleared.type(),
-                FrontierWorldRuntimeDefinition.payloadCodecs().encode(accessCleared)));
-        state = ResidentMealProcess.reduceHotAccessCleared(state, resident, accessCleared);
-        assertEquals(ResidentMeal.Phase.RETURN, state.humanPopulation().meals().get(resident).phase());
-        assertEquals(exit.standingBody(), state.actorLocations().get(resident).body());
-        FrontierWorldState alreadyCleared = state;
-        assertThrows(IllegalArgumentException.class, () -> ResidentMealProcess.reduceHotAccessCleared(
-                alreadyCleared, resident, accessCleared), "one physical exit cannot be applied twice");
-        var returnedEvents = ResidentMealProcess.planHotReturned(state, cleared, 48_003L);
-        assertEquals(3, returnedEvents.size());
-        assertEquals(ResidentMealProcess.progress(meal, 48_003L).id(),
-                assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Cancelled.class,
-                        returnedEvents.getLast().payload()).scheduleId(),
-                "an asynchronous HOT clearance cancels its own continuation by identity, not by queue order");
-        state = ResidentActivityProcess.reduceMealReturned(state, resident,
-                cleared, 48_003L);
-        assertFalse(state.humanPopulation().meals().containsKey(resident));
+        assertEquals(AmbientGoalKind.ACTOR_MOVEMENT, state.ambientLeases().get(resident).goal());
         assertFalse(state.inventory().fungibleResources().claims().containsKey(meal.claimId()));
-        assertEquals(AmbientGoalKind.PATROL, state.ambientLeases().get(resident).goal());
         assertEquals(ResidentActivityChoice.Kind.EAT,
                 ResidentActivityCoordinator.assess(state, resident, 48_003L).kind());
     }
@@ -595,30 +593,35 @@ class ResidentMealProcessTest {
         assertEquals(ResidentNeedProcess.review(resident, oldNeedDue).id(), coldNeed.scheduleId());
         assertEquals(ResidentNeedProcess.review(resident, nextNeedDue), coldNeed.replacement());
         state = ResidentMealProcess.reduceColdStep(state, resident, consume);
-        due = ((io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled)
-                consumeEvents.getLast().payload()).replacement();
+        var movementDue = assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created.class,
+                consumeEvents.get(2).payload()).action();
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Cancelled.class,
+                consumeEvents.getLast().payload());
         assertEquals(63, state.inventory().fungibleResources().totalQuantity(settlement.id(), "minecraft:bread"));
         assertFalse(state.inventory().fungibleResources().claims().containsKey(meal.claimId()));
         assertFalse(state.inventory().fungibleResources().accounts().containsKey(meal.actorAccountId()));
         assertEquals(ResidentNutritionStatus.NOURISHED, state.humanPopulation().nutrition(resident).status());
+        assertFalse(state.humanPopulation().meals().containsKey(resident));
+        assertTrue(state.actorMovements().containsKey(resident));
         FrontierWorldState afterConsumption = state;
         assertThrows(IllegalArgumentException.class, () -> ResidentMealProcess.reduceColdStep(afterConsumption,
                 resident, consume));
-        for (int stepIndex = 0; stepIndex < 256; stepIndex++) {
-            var returnEvents = ResidentMealProcess.planProgress(state, due);
-            ResidentMealColdStep clearing = (ResidentMealColdStep) returnEvents.getFirst().payload();
-            state = ResidentMealProcess.reduceColdStep(state, resident, clearing);
-            if (!state.humanPopulation().meals().containsKey(resident)) {
+        for (int stepIndex = 0; stepIndex < 32; stepIndex++) {
+            var returnEvents = ActorMovementProcess.plan(state, movementDue, movementDue.dueAt().ticks());
+            var advancing = assertInstanceOf(io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementColdAdvanced.class,
+                    returnEvents.getFirst().payload());
+            state = ActorMovementProcess.reduceColdAdvanced(state, resident, advancing);
+            if (!state.actorMovements().containsKey(resident)) {
                 assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class,
-                        returnEvents.get(1).payload(), "meal completion must wake activity arbitration immediately");
+                        returnEvents.get(1).payload(), "movement arrival must wake activity arbitration immediately");
                 assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Cancelled.class,
                         returnEvents.getLast().payload());
                 break;
             }
-            due = ((io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled)
+            movementDue = ((io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled)
                     returnEvents.getLast().payload()).replacement();
         }
-        assertFalse(state.humanPopulation().meals().containsKey(resident));
+        assertFalse(state.actorMovements().containsKey(resident));
         assertEquals(63, state.inventory().fungibleResources().totalQuantity(settlement.id(), "minecraft:bread"));
     }
 

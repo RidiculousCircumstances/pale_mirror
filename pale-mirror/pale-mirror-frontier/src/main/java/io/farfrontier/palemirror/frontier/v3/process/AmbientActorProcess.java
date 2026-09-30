@@ -70,7 +70,15 @@ public final class AmbientActorProcess {
     private static void resumeMealAfterLease(FrontierWorldState state, SubjectId actorId, long currentTick,
                                              java.util.List<ProposedEvent> events) {
         ResidentMeal meal = state.humanPopulation().meals().get(actorId);
-        if (meal == null || currentTick < 0L) return;
+        if (currentTick < 0L) return;
+        var movement = state.actorMovements().get(actorId);
+        if (movement != null) {
+            events.add(new ProposedEvent(actorId, new ScheduleEffect.Rescheduled(
+                    ActorMovementProcess.progress(movement, Math.addExact(movement.issuedAtTick(), 1L)).id(),
+                    ActorMovementProcess.progress(movement, Math.max(Math.addExact(currentTick, 1L),
+                            Math.addExact(movement.issuedAtTick(), 1L))))));
+        }
+        if (meal == null) return;
         events.add(new ProposedEvent(actorId, new ScheduleEffect.Rescheduled(
                 ResidentMealProcess.progress(meal, Math.addExact(meal.startedAtTick(), 1L)).id(),
                 ResidentMealProcess.progress(meal, Math.max(Math.addExact(currentTick, 1L),
@@ -95,7 +103,9 @@ public final class AmbientActorProcess {
         AmbientActorLease previous = state.ambientLeases().get(actorId);
         long revision = previous == null ? 1L : Math.addExact(previous.revision(), 1L);
         AmbientGoal goal = goalFor(state, actorId, instant.ticks());
-        return new AmbientActorLease(actorId, ResidentMealProcess.bodyAt(state, actorId, instant.ticks()), instant,
+        return new AmbientActorLease(actorId, state.actorMovements().containsKey(actorId)
+                ? ActorMovementProcess.bodyAt(state, actorId, instant.ticks())
+                : ResidentMealProcess.bodyAt(state, actorId, instant.ticks()), instant,
                 revision, AmbientLeaseStatus.PREPARED, goal.kind(), BodyPosition.above(new SurfaceAnchor(goal.position())));
     }
 
@@ -213,6 +223,9 @@ public final class AmbientActorProcess {
         }
         ResidentProfile resident = state.humanPopulation().resident(actorId);
         if (resident != null) {
+            var movement = state.actorMovements().get(actorId);
+            if (movement != null) return new AmbientGoal(AmbientGoalKind.ACTOR_MOVEMENT,
+                    movement.order().legalStations().getFirst().support());
             ResidentMeal meal = state.humanPopulation().meals().get(actorId);
             if (meal != null) return new AmbientGoal(AmbientGoalKind.MEAL,
                     (meal.phase() == ResidentMeal.Phase.RETURN ? meal.clearingSurface()

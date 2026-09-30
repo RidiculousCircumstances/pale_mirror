@@ -10,6 +10,7 @@ import io.farfrontier.palemirror.frontier.v3.model.AmbientLeasePrepared;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseRestartAbsenceObserved;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseReleased;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentMealHotReturned;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementHotObserved;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentMealHotAccessCleared;
 import io.farfrontier.palemirror.frontier.v3.model.ServiceAccessCoordinator;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseStatus;
@@ -93,6 +94,11 @@ final class FrontierV3AmbientMovementExecutor {
     private FrontierV3AmbientMovementExecutor() { }
 
     static boolean pursueLocalGoal(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SubjectId actorId, Mob body, AmbientActorLease lease) {
+        if (lease.goal() == AmbientGoalKind.ACTOR_MOVEMENT) {
+            FrontierV3ActorMovementNavigation.pursue(level, state, body, lease,
+                    state.actorMovements().get(actorId));
+            return false;
+        }
         if (lease.goal() == AmbientGoalKind.MEAL) {
             FrontierV3ResidentMealNavigation.pursue(level, state, body, lease,
                     state.humanPopulation().meals().get(actorId));
@@ -215,6 +221,20 @@ final class FrontierV3AmbientMovementExecutor {
     }
     static boolean observeDirectedArrival(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
                                                    SubjectId actorId, Mob body, AmbientActorLease lease) {
+        if (lease.goal() == AmbientGoalKind.ACTOR_MOVEMENT) {
+            var movement = state.actorMovements().get(actorId);
+            if (movement == null) return false;
+            BodyPosition observed = observedBody(body);
+            boolean arrived = movement.order().arrivedAt(observed.supportingSurface());
+            boolean exited = ServiceAccessCoordinator.witnessedActorMovementExit(state, movement, observed);
+            if (!arrived && !exited) return false;
+            if (arrived) body.getNavigation().stop();
+            var result = submit(runtime, "ambient-actor-movement-observed", actorId.value(),
+                    new ActorMovementHotObserved(actorId, movement.order().goalRevision(), lease.revision(), observed));
+            FrontierV3DiagnosticTrace.record(level.getServer(), "actor-movement:" + actorId.value(),
+                    arrived ? "actor_movement_arrived" : "actor_movement_exited_service", actorId, result);
+            return result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted;
+        }
         if (lease.goal() == AmbientGoalKind.MEAL) {
             ResidentMeal meal = state.humanPopulation().meals().get(actorId);
             if (meal == null) return false;

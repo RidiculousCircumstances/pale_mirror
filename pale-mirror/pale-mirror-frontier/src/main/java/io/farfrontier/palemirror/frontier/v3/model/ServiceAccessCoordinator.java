@@ -20,6 +20,20 @@ public final class ServiceAccessCoordinator {
 
     private record Applicant(SubjectId jobId, SubjectId workerId, boolean alreadyAtPort) { }
 
+    public static ServiceAccessBoundary boundary(FrontierWorldState state, SubjectId depotId) {
+        return port(state, depotId).accessBoundary();
+    }
+
+    public static boolean witnessedActorMovementExit(FrontierWorldState state,
+                                                     io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement movement,
+                                                     BodyPosition observedBody) {
+        if (!(movement.context() instanceof io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.ServiceExit exit))
+            return false;
+        SubjectId depotId = exit.depotId();
+        ActorLocation actor = state.actorLocations().get(movement.order().actorId());
+        return actor != null && witnessedExit(boundary(state, depotId), actor.body(), observedBody);
+    }
+
     /** Travelling is not service: residents may approach concurrently with independent bread claims. */
     public static boolean depotMayStartMeal(FrontierWorldState state, SubjectId depotId, SubjectId residentId) {
         ActorLocation actor = state.actorLocations().get(residentId);
@@ -36,6 +50,11 @@ public final class ServiceAccessCoordinator {
         var first = state.humanPopulation().meals().values().stream()
                 .filter(meal -> meal.depotId().equals(depotId) && mealOccupiesAccess(state, meal))
                 .min(Comparator.comparingLong(ResidentMeal::startedAtTick).thenComparing(ResidentMeal::residentId));
+        boolean departing = state.actorMovements().values().stream().anyMatch(movement ->
+                movement.context() instanceof io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.ServiceExit exit
+                        && exit.depotId().equals(depotId)
+                        && boundary(state, depotId).occupied(currentBody(state, movement.order().actorId()))
+                        && !movement.order().actorId().equals(residentId));
         // A committed final entrance leg is the sole contender for the
         // single-file throat until it arrives or is explicitly invalidated.
         // Long approaches to independent side pockets retain no permit.
@@ -47,7 +66,7 @@ public final class ServiceAccessCoordinator {
                                 .equals(port(state, depotId).serviceSurface())).orElse(false))
                     .min(Comparator.comparingLong(ResidentMeal::startedAtTick)
                             .thenComparing(ResidentMeal::residentId));
-        return first.or(() -> entering).map(meal -> meal.residentId().equals(residentId)).orElse(true)
+        return !departing && first.or(() -> entering).map(meal -> meal.residentId().equals(residentId)).orElse(true)
                 // A distant work applicant may travel concurrently. Only its actual
                 // body at the shared port owns the physical turn.
                 && workApplicants(state, depotId).stream()
@@ -72,7 +91,11 @@ public final class ServiceAccessCoordinator {
                     && meal.coldTravel().map(travel -> travel.route().getLast()
                         .equals(port(state, depotId).serviceSurface())).orElse(false));
         boolean workerEating = state.humanPopulation().meals().containsKey(workerId);
-        return applicant.filter(first -> !mealAtPort && !mealEnteringPort && !workerEating)
+        boolean departing = state.actorMovements().values().stream().anyMatch(movement ->
+                movement.context() instanceof io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.ServiceExit exit
+                        && exit.depotId().equals(depotId)
+                        && boundary(state, depotId).occupied(currentBody(state, movement.order().actorId())));
+        return applicant.filter(first -> !mealAtPort && !mealEnteringPort && !departing && !workerEating)
                 .map(first -> first.jobId().equals(jobId) && first.workerId().equals(workerId))
                 .orElse(false);
     }
@@ -165,6 +188,12 @@ public final class ServiceAccessCoordinator {
         if (leased != null) return leased.supportingSurface();
         ActorLocation actor = state.actorLocations().get(workerId);
         return actor == null ? null : actor.supportingSurface();
+    }
+
+    private static BodyPosition currentBody(FrontierWorldState state, SubjectId actorId) {
+        ActorLocation actor = state.actorLocations().get(actorId);
+        if (actor == null) throw new IllegalArgumentException("service exit has no exact actor body");
+        return actor.body();
     }
 
     private static SettlementDepotServicePort port(FrontierWorldState state, SubjectId depotId) {

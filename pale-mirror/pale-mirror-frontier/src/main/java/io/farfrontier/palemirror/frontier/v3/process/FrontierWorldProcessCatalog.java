@@ -83,6 +83,8 @@ public final class FrontierWorldProcessCatalog {
             "frontier.resident_health_transition", "frontier.settlement_quarantine_transition",
             "frontier.medical_treatment_started", "frontier.medical_treatment_transition",
             "frontier.medical_treatment_scene_lease_prepared", "frontier.medical_treatment_scene_lease_handoff");
+    private static final Set<String> ACTOR_MOVEMENT = types(
+            "frontier.actor_movement_cold_advanced", "frontier.actor_movement_hot_observed");
     private static final Set<String> ECONOMY = types(
             "frontier.company_registered", "frontier.employment_contract_opened", "frontier.employment_contract_terminated",
             "frontier.market_demand_opened", "frontier.market_quote_published", "frontier.market_work_order_accepted",
@@ -143,7 +145,7 @@ public final class FrontierWorldProcessCatalog {
     private static final Set<String> STRATEGY = types(
             "frontier.settlement_infection_observed", "frontier.strategic_objective_selected",
             "frontier.strategic_task_planned", "frontier.strategic_task_transition");
-    private static final Set<String> ALL_WORLD = union(PHYSICAL, REPLICA_CUSTODY, AMBIENT, LOGISTICS, POPULATION, ECONOMY, RESOURCE_SITES,
+    private static final Set<String> ALL_WORLD = union(PHYSICAL, REPLICA_CUSTODY, AMBIENT, LOGISTICS, POPULATION, ACTOR_MOVEMENT, ECONOMY, RESOURCE_SITES,
             HIVE, INFRASTRUCTURE, SETTLEMENT_SERVICE_WORK, STRATEGY);
     private static final Map<String, FrontierWorldProcessModule> MODULES = Map.ofEntries(
             Map.entry("physical-observation", new FrontierPhysicalProcessModule()),
@@ -151,6 +153,7 @@ public final class FrontierWorldProcessCatalog {
             Map.entry("ambient-actors", new FrontierAmbientProcessModule()),
             Map.entry("logistics-scenes", new FrontierLogisticsProcessModule()),
             Map.entry("population", new FrontierPopulationProcessModule()),
+            Map.entry("actor-movement", new FrontierActorMovementProcessModule()),
             Map.entry("economy", new FrontierEconomyProcessModule()),
             Map.entry("resource-sites", new FrontierResourceSiteProcessModule()),
             Map.entry("hive", new FrontierHiveProcessModule()),
@@ -213,6 +216,20 @@ public final class FrontierWorldProcessCatalog {
                 }
                 @Override public boolean held(FrontierWorldState state, ScheduledAction action) {
                     return ResidentMealProcess.held(state, action);
+                }
+            }),
+            Map.entry(ActorMovementProcess.PROGRESS, new ScheduledPlanner() {
+                @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action,
+                                                          boolean autonomous) {
+                    return ActorMovementProcess.plan(state, action, action.dueAt().ticks());
+                }
+                @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action,
+                                                          boolean autonomous,
+                                                          io.farfrontier.palemirror.frontier.v3.api.SimInstant currentInstant) {
+                    return ActorMovementProcess.plan(state, action, currentInstant.ticks());
+                }
+                @Override public boolean held(FrontierWorldState state, ScheduledAction action) {
+                    return ActorMovementProcess.held(state, action);
                 }
             }),
             Map.entry("frontier.company.foundation.review", (state, action, autonomous) -> CompanyFoundationProcess.plan(state, action)),
@@ -292,6 +309,8 @@ public final class FrontierWorldProcessCatalog {
                 descriptor("ambient-actors", ambientCommands(), Set.of(), AMBIENT, emissions("ambient-actors"), AMBIENT),
                 descriptor("logistics-scenes", logisticsCommands(), logisticsSchedules(), LOGISTICS, emissions("logistics-scenes"), LOGISTICS),
                 descriptor("population", populationCommands(), populationSchedules(), POPULATION, emissions("population"), POPULATION),
+                descriptor("actor-movement", types("frontier.actor_movement_hot_observed"), types(ActorMovementProcess.PROGRESS),
+                        ACTOR_MOVEMENT, emissions("actor-movement"), ACTOR_MOVEMENT),
                 descriptor("economy", economyCommands(), economySchedules(), ECONOMY, emissions("economy"), ECONOMY),
                 descriptor("resource-sites", resourceCommands(), resourceSchedules(), RESOURCE_SITES, emissions("resource-sites"), RESOURCE_SITES),
                 descriptor("hive", hiveCommands(), hiveSchedules(), HIVE, emissions("hive"), HIVE),
@@ -419,7 +438,8 @@ public final class FrontierWorldProcessCatalog {
         ResidentProfile resident = state.humanPopulation().resident(action.subject());
         if (resident == null) return Set.of(action.subject());
         if (action.kind().equals(ResidentActivityProcess.REVIEW)) {
-            if (state.humanPopulation().meals().containsKey(action.subject())) return Set.of(action.subject());
+            if (state.humanPopulation().meals().containsKey(action.subject())
+                    || state.actorMovements().containsKey(action.subject())) return Set.of(action.subject());
             // A safe-checkpoint wait depends on its work owner, not just food.
             // Keep that rare action directly runnable until work-owner invalidation is indexed.
             if (ResidentMealOpportunity.find(state, action.subject()).isPresent()) return Set.of();
@@ -450,6 +470,7 @@ public final class FrontierWorldProcessCatalog {
         boolean accessChanged = previous.actorLocations() != next.actorLocations()
                 || previous.ambientLeases() != next.ambientLeases()
                 || previous.humanPopulation().meals() != next.humanPopulation().meals()
+                || previous.actorMovements() != next.actorMovements()
                 || previous.productionJobs() != next.productionJobs()
                 || previous.resourceSites() != next.resourceSites();
         boolean stockChanged = previous.inventory().fungibleResources() != next.inventory().fungibleResources();
@@ -631,6 +652,7 @@ public final class FrontierWorldProcessCatalog {
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
                     // A witnessed block change checkpoints only a resident whose retained COLD route crosses it.
                     "frontier.resident_meal_cold_step",
+                    "frontier.actor_movement_cold_advanced",
                     "frontier.physical_delta_observed", "frontier.physical_deltas_observed", "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged",
                     "frontier.resource_deposited", "frontier.fungible_stack_layout_observed", "frontier.fungible_resource_handoff_observed", "frontier.fungible_stock_departure_observed", "frontier.fungible_stock_contribution_observed",
                     "frontier.fungible_stack_bindings_released", "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed",
@@ -705,6 +727,8 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged", "frontier.resource_deposited",
                     "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed", "frontier.container_surface_transition",
                     "frontier.cargo_carrier_released");
+            case "actor-movement" -> types("frontier.actor_movement_cold_advanced", "frontier.actor_movement_hot_observed",
+                    "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled");
             case "economy" -> types(
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
                     "frontier.company_registered", "frontier.employment_contract_opened", "frontier.employment_contract_terminated", "frontier.market_demand_opened",

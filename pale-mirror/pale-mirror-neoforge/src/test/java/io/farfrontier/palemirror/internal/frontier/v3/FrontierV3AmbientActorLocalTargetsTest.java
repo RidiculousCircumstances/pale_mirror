@@ -51,6 +51,8 @@ class FrontierV3AmbientActorLocalTargetsTest {
                 AmbientLeaseStatus.HOT, AmbientGoalKind.WORK, farmAnchor);
 
         assertEquals(true, FrontierV3AmbientActorLocalTargets.directedGoal(lease));
+        assertEquals(true, FrontierV3AmbientActorLocalTargets.directedGoal(
+                lease.withGoal(AmbientGoalKind.ACTOR_MOVEMENT, farmAnchor)));
         assertEquals(farmAnchor.x() + 0.5D, FrontierV3AmbientActorLocalTargets.localTargetAt(state, farmer, finalCrop, lease, 0L).x);
         assertEquals(farmAnchor.z() + 0.5D, FrontierV3AmbientActorLocalTargets.localTargetAt(state, farmer, finalCrop, lease, 0L).z);
     }

@@ -34,8 +34,8 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     // Version 212 changes the stock-exit WAL payload to include atomic meal-claim forfeiture.
     // Earlier worlds are disposable and cannot replay that event under the new grammar.
     // Version 213 retains each meal's exact clearance target before depot access is released.
-    // Version 214 retains each active meal's timed COLD route and rejects old disposable worlds.
-    static final int VERSION = 214; private static final int MAX_ENTRIES = 65_535;
+    // Version 215 retains shared actor movement orders separately from activities.
+    static final int VERSION = 215; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }
@@ -82,6 +82,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 StrategicPlanStateCodec.write(output, state.strategicPlans());
                 HumanPopulationStateCodec.write(output, state.humanPopulation());
                 ResourceSiteStateCodec.write(output, state.resourceSites());
+                ActorMovementStateCodec.write(output, state.actorMovements());
             }
             return bytes.toByteArray();
         } catch (IOException impossible) { throw new IllegalStateException("in-memory Frontier v3 state encoding failed", impossible); }
@@ -124,14 +125,12 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             constructions = RouteConstructionStateSupport.hydrateWorkCells(bootstrap, topology, constructions);
             StrategicPlanState plans = StrategicPlanStateCodec.read(input, false, true, true, true, true, true, true, true, true, VERSION);
             HumanPopulation population = HumanPopulationStateCodec.read(input, true, true, true, true, true, true, true, true);
-            ResourceSiteState sites = ResourceSiteStateCodec.read(input);
+            ResourceSiteState sites = ResourceSiteStateCodec.read(input); var actorMovements = ActorMovementStateCodec.read(input);
             FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures, infection, inventory, jobs, serviceWorks, contracts, operations, history,
-                    intents, observations, scenes, colony, structureDamage, physicalDeltas, ambient, constructions, maintenances, topology, plans, population, companies, sites, replicaCustody, deferredAftermath, fencedRecovery, diagnosticIncidents);
-            if (input.available() != 0) throw new IllegalArgumentException("trailing Frontier v3 state bytes");
-            FrontierWorldProcessCatalog.requirePhysicalLifecycleState(state);
-            FrontierDomainRelationships.validate(state);
-            ResidentMealReferenceClosure.validate(state);
-            FrontierDurationProcessDriverRegistry.requireRetainedSceneLeases(state.sceneLeases().values());
+                    intents, observations, scenes, colony, structureDamage, physicalDeltas, ambient, constructions, maintenances,
+                    topology, plans, population, companies, sites, replicaCustody, deferredAftermath, fencedRecovery,
+                    diagnosticIncidents, actorMovements);
+            FrontierWorldStateCodecValidation.validate(input, state);
             return state;
         } catch (IOException error) { throw new IllegalArgumentException("truncated Frontier v3 state", error); }
     }
