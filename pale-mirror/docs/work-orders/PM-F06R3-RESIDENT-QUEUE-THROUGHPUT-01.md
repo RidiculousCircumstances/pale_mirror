@@ -181,3 +181,20 @@ release candidate or a failure points there.
    actually free. Compare the same resident IDs and bread claims before/after;
    inspect queue age and TPS. Stop after one informative terminal run, not a
    repetition campaign.
+
+## Addressed-wait source checkpoint, 2026-09-30
+
+Source `3979c2df` implements a reconstructible engine-side runnable index.
+Held activity reviews are parked by resident/depot when bread or a retained
+meal is their exact blocker; side-pocket meal waits are parked only while no
+HOT/scene/physical authority competes. Accepted state transitions wake the
+affected keys after durable commit, retaining the original due ordering.
+Unaddressable holds stay directly checked. A 1,200-tick derived-index audit
+and fail-open invalidation limit the consequence of a missed key; they are not
+a substitute for closing the remaining causal owner inventory. Queue metrics
+now separate parked and unparked depth. Focused queue, resident activity/meal,
+engine checkpoint/recovery tests and NeoForge compilation passed. No live TPS
+or product result is claimed; the current server still runs the prior build.
+Next implementation must close post-consumption movement ownership and route
+invalidation before a candidate deployment, then calibrate the host budget on
+one fresh disposable diagnostic world.
