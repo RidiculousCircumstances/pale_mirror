@@ -51,9 +51,7 @@ public final class ResourceSiteHarvestProcess {
 
     public static ScheduledAction coldProgress(ResourceSiteHarvestJob job, long dueAt) { return ResourceSiteHarvestPlanning.coldProgress(job, dueAt); }
 
-    public static void requireContinuationBinding(ResourceSiteHarvestJob job, ScheduledAction action) {
-        ResourceSiteHarvestPlanning.requireContinuationBinding(job, action);
-    }
+    public static void requireContinuationBinding(ResourceSiteHarvestJob job, ScheduledAction action) { ResourceSiteHarvestPlanning.requireContinuationBinding(job, action); }
 
     public static void requireDueContinuationBinding(ResourceSiteHarvestJob job, ScheduledAction action, long instant) {
         ResourceSiteHarvestPlanning.requireDueContinuationBinding(job, action, instant);
@@ -64,12 +62,13 @@ public final class ResourceSiteHarvestProcess {
     }
 
     public static List<ProposedEvent> planColdProgress(FrontierWorldState state, ScheduledAction action) {
-        return ResourceSiteHarvestPlanning.planColdProgress(state, action);
+        return planColdProgress(state, action, action.dueAt().ticks());
+    }
+    public static List<ProposedEvent> planColdProgress(FrontierWorldState state, ScheduledAction action, long currentTick) {
+        return ResourceSiteHarvestPlanning.planColdProgress(state, action, currentTick);
     }
 
-    public static boolean coldProgressHeld(FrontierWorldState state, ScheduledAction action) {
-        return ResourceSiteHarvestPlanning.coldProgressHeld(state, action);
-    }
+    public static boolean coldProgressHeld(FrontierWorldState state, ScheduledAction action) { return ResourceSiteHarvestPlanning.coldProgressHeld(state, action); }
 
     public static FrontierWorldState reduceStarted(FrontierWorldState state, SubjectId subject, ResourceSiteHarvestStarted started) {
         ResourceSiteHarvestJob job = started.job(); if (!subject.equals(job.siteId())) throw new IllegalArgumentException("resource-site harvest has a foreign event owner");
@@ -888,7 +887,7 @@ public final class ResourceSiteHarvestProcess {
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE)
             throw new IllegalArgumentException("field cadence has no living worker");
         return !ResourceSiteHarvestGoal.current(state, job).arrivedAt(actor.supportingSurface())
-                ? state.bootstrap().ruleset().cadence().resourceHarvestTraversalInterval()
+                ? state.bootstrap().ruleset().resourceHarvestColdTravelTicksPerEdge()
                 : state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval();
     }
 

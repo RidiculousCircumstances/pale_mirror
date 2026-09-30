@@ -93,7 +93,7 @@ final class ResourceSiteHarvestPlanning {
             }
         }
         PhysicalIntent intent = intent(site, job);
-        long firstColdStep = Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().resourceHarvestTraversalInterval());
+        long firstColdStep = Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().resourceHarvestColdTravelTicksPerEdge());
         return List.of(transition(task, StrategicTaskStatus.ACTIVE), new ProposedEvent(lifecycle.siteId(), new ResourceSiteHarvestStarted(job)),
                 new ProposedEvent(lifecycle.siteId(), new PhysicalIntentPrepared(intent)), schedule(coldProgress(job, firstColdStep)));
     }
@@ -195,7 +195,7 @@ final class ResourceSiteHarvestPlanning {
      * receipt is canonical and durable before a later natural physical projection; it never
      * reads or writes an unloaded Minecraft crop or depot surface.
      */
-    public static List<ProposedEvent> planColdProgress(FrontierWorldState state, ScheduledAction action) {
+    public static List<ProposedEvent> planColdProgress(FrontierWorldState state, ScheduledAction action, long currentTick) {
         ResourceSiteHarvestJob job = activeJobAtSite(state, action.subject());
         // A terminal receipt retires its recurrent continuation by stable schedule identity.
         // Recovery can still encounter that exact, already-retired action in a pre-transition
@@ -221,11 +221,15 @@ final class ResourceSiteHarvestPlanning {
             return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Consumed(action.id())));
         if (state.resourceSites().site(job.siteId()).phase() != ResourceSitePhase.HARVESTING)
             throw new IllegalArgumentException("resource-site harvest continuation has an active job outside HARVESTING or terminal CONFLICT");
+        long now = Math.max(action.dueAt().ticks(), currentTick);
         if (!state.humanPopulation().meals().containsKey(job.workerId())
-                && !ResidentActivityCoordinator.ordinaryWorkPermitted(state, job.workerId(), action.dueAt().ticks()))
+                && !ResidentActivityCoordinator.ordinaryWorkPermitted(state, job.workerId(), now))
             return List.of(reschedule(action, coldProgress(job, ResidentActivityCoordinator.nextOrdinaryWorkCheck(
-                    state, job.workerId(), action.dueAt().ticks()))));
-        long nextDue = Math.addExact(action.dueAt().ticks(), continuationInterval(state, job));
+                    state, job.workerId(), now))));
+        // A HOT scene held this same action while the body moved physically. Its
+        // overdue due instant is binding evidence, not permission to replay
+        // unobserved COLD travel or labor in a rapid catch-up burst.
+        long nextDue = Math.addExact(now, continuationInterval(state, job));
         if (coldProgressHeld(state, action)) {
             // The current engine action is also the HOT checkpoint's only binding.  Advancing its
         // due instant while another owner holds this step (a HOT scene or a pending player
@@ -263,9 +267,9 @@ final class ResourceSiteHarvestPlanning {
             ProposedEvent returned = new ProposedEvent(job.siteId(), new ResourceSiteHarvestReturned(job.id(), job.workerId(),
                     action.id(), action.dueAt().ticks()));
             return job.returningForBatch()
-                    ? List.of(returned, stockWake(state, job, job.deliveredYieldQuantity(), action.dueAt().ticks()),
+                    ? List.of(returned, stockWake(state, job, job.deliveredYieldQuantity(), now),
                             reschedule(action, coldProgress(job, nextDue)))
-                    : coldTerminal(state, action, job, returned);
+                    : coldTerminal(state, action, job, returned, now);
         }
         ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state, job);
         if (goal.kind() == ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE
@@ -276,7 +280,7 @@ final class ResourceSiteHarvestPlanning {
             throw new IllegalArgumentException("COLD field goal has no living retained worker");
         if (job.navigationBlock().isEmpty() && goal.arrivedAt(worker.supportingSurface())) {
             if (ResourceSiteHarvestGoal.actorAtWorkCell(state, job))
-                return coldCropReceipt(state, action, job);
+                return coldCropReceipt(state, action, job, now);
             if (goal.kind() == ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE && ResourceSiteHarvestGoal.actorAtDepot(state, job))
                 throw new IllegalStateException("depot arrival must have been handled above");
         }
@@ -322,7 +326,7 @@ final class ResourceSiteHarvestPlanning {
     }
 
     private static List<ProposedEvent> coldTerminal(FrontierWorldState state, ScheduledAction action,
-                                                    ResourceSiteHarvestJob returned, ProposedEvent terminalEvent) {
+                                                    ResourceSiteHarvestJob returned, ProposedEvent terminalEvent, long now) {
         PhysicalIntent terminalIntent = state.physicalIntents().get(returned.intentId());
         if (terminalIntent == null || (terminalIntent.status() != PhysicalIntentStatus.PREPARED
                 && terminalIntent.status() != PhysicalIntentStatus.RUNNING))
@@ -338,11 +342,11 @@ final class ResourceSiteHarvestPlanning {
         List<ProposedEvent> events = new java.util.ArrayList<>();
         events.add(terminalEvent);
         if (state.resourceSites().cycle(returned.siteId()).harvestedCount() > returned.deliveredYieldQuantity())
-            events.add(stockWake(state, returned, -1, action.dueAt().ticks()));
+            events.add(stockWake(state, returned, -1, now));
         events.add(transition(task, StrategicTaskStatus.COMPLETED));
         events.add(new ProposedEvent(returned.siteId(), new ScheduleEffect.Cancelled(action.id())));
         events.add(new ProposedEvent(returned.siteId(), new ScheduleEffect.Created(ResourceSiteProcess.nextGrowth(terminal,
-                Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().resourceGrowthStageInterval())))));
+                Math.addExact(now, state.bootstrap().ruleset().cadence().resourceGrowthStageInterval())))));
         return List.copyOf(events);
     }
 
@@ -401,7 +405,8 @@ final class ResourceSiteHarvestPlanning {
         return cycle.pendingPlayerBreaks().containsKey(nextCell);
     }
 
-    private static List<ProposedEvent> coldCropReceipt(FrontierWorldState state, ScheduledAction action, ResourceSiteHarvestJob job, ProposedEvent... prefix) {
+    private static List<ProposedEvent> coldCropReceipt(FrontierWorldState state, ScheduledAction action,
+                                                        ResourceSiteHarvestJob job, long now, ProposedEvent... prefix) {
         if (!ResourceSiteHarvestGoal.actorAtWorkCell(state, job))
             throw new IllegalArgumentException("resource-site COLD crop receipt requires its actual farmer at the current CellId station");
         ResourceFieldCycle field = state.resourceSites().cycle(job.siteId());
@@ -414,7 +419,7 @@ final class ResourceSiteHarvestPlanning {
         events.add(new ProposedEvent(job.siteId(), new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex())));
         events.add(new ProposedEvent(job.siteId(), new ResourceSiteHarvestProgressed(job.siteId(), field.epoch(), job.id(), progressed.completedCropSlots(),
                 field.layout().revision(), cellId, field.expectedWorkOutcome(cellId), action.id(), action.dueAt().ticks())));
-        events.add(reschedule(action, coldProgress(replacement, Math.addExact(action.dueAt().ticks(), continuationInterval(state, replacement)))));
+        events.add(reschedule(action, coldProgress(replacement, Math.addExact(now, continuationInterval(state, replacement)))));
         return List.copyOf(events);
     }
 }

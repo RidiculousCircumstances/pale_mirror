@@ -73,6 +73,18 @@ class FrontierRulesetTest {
     }
 
     @Test
+    void coldFieldTravelRateChangesThePersistedRulesetSelector() {
+        FrontierRuleset production = FrontierRulesets.production();
+        FrontierRuleset changed = new FrontierRuleset(production.id(), production.schemaVersion(),
+                production.cadence(), production.spatial(), production.rates(), production.facilityCapacity(),
+                production.combat(), production.hiveCommand(), production.residentLife(),
+                production.resourceHarvestColdTravelTicksPerEdge() + 1L);
+        assertEquals(1L, production.cadence().resourceHarvestTraversalInterval());
+        assertEquals(20L, production.resourceHarvestColdTravelTicksPerEdge());
+        assertNotEquals(production.contentSha256(), changed.contentSha256());
+    }
+
+    @Test
     void canonicalFacilityAndColdCombatReadTheSelectedRuleset() {
         FrontierRuleset production = FrontierRulesets.production();
         FrontierRuleset selected = new FrontierRuleset("frontier-v3-test-ruleset-r2", production.schemaVersion(), production.cadence(), production.spatial(),

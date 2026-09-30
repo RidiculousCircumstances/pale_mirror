@@ -17,12 +17,20 @@ import java.util.Objects;
  */
 public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spatial spatial, Rates rates,
                               FacilityCapacity facilityCapacity, Combat combat, HiveCommand hiveCommand,
-                              ResidentLife residentLife) {
+                              ResidentLife residentLife, long resourceHarvestColdTravelTicksPerEdge) {
     /** Retains exact historical R4-and-earlier digests while those selectors remain installed. */
     public FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spatial spatial, Rates rates,
                            FacilityCapacity facilityCapacity, Combat combat, HiveCommand hiveCommand) {
         this(id, schemaVersion, cadence, spatial, rates, facilityCapacity, combat, hiveCommand,
-                ResidentLife.initial());
+                ResidentLife.initial(), cadence.resourceHarvestTraversalInterval());
+    }
+
+    /** Historical selectors used one cadence for both visible checkpoints and COLD travel. */
+    public FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spatial spatial, Rates rates,
+                           FacilityCapacity facilityCapacity, Combat combat, HiveCommand hiveCommand,
+                           ResidentLife residentLife) {
+        this(id, schemaVersion, cadence, spatial, rates, facilityCapacity, combat, hiveCommand,
+                residentLife, cadence.resourceHarvestTraversalInterval());
     }
 
     public FrontierRuleset {
@@ -37,6 +45,8 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
         combat = Objects.requireNonNull(combat, "combat");
         hiveCommand = Objects.requireNonNull(hiveCommand, "hive command");
         residentLife = Objects.requireNonNull(residentLife, "resident life");
+        if (resourceHarvestColdTravelTicksPerEdge <= 0L)
+            throw new IllegalArgumentException("resource harvest cold travel ticks per edge must be positive");
     }
 
     /** SHA-256 of the complete stable selector and canonical field values. */
@@ -52,7 +62,8 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
     private String canonicalText() {
         return id + '|' + schemaVersion + '|' + cadence.canonicalText() + '|' + spatial.canonicalText() + '|' + rates.canonicalText()
                 + '|' + facilityCapacity.canonicalText() + '|' + combat.canonicalText() + '|' + hiveCommand.canonicalText()
-                + (schemaVersion >= 7 ? "|" + residentLife.canonicalText() : "");
+                + (schemaVersion >= 7 ? "|" + residentLife.canonicalText() : "")
+                + (schemaVersion >= 9 ? "|" + resourceHarvestColdTravelTicksPerEdge : "");
     }
 
     /** Balance and settlement policy for exact resident activities. No competing due-time queue. */

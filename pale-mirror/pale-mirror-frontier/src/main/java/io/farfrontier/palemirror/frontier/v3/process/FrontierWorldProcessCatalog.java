@@ -257,6 +257,10 @@ public final class FrontierWorldProcessCatalog {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, boolean autonomous) {
                     return ResourceSiteHarvestProcess.planColdProgress(state, action);
                 }
+                @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action,
+                                                          boolean autonomous, io.farfrontier.palemirror.frontier.v3.api.SimInstant currentInstant) {
+                    return ResourceSiteHarvestProcess.planColdProgress(state, action, currentInstant.ticks());
+                }
                 @Override public boolean held(FrontierWorldState state, ScheduledAction action) {
                     return ResourceSiteHarvestProcess.coldProgressHeld(state, action);
                 }

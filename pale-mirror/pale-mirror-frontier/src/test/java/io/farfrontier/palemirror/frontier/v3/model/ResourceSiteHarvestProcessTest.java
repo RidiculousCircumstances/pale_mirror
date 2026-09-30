@@ -206,6 +206,23 @@ class ResourceSiteHarvestProcessTest {
         assertEquals(0, current.progress().completedCropSlots());
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
     }
+    @Test void overdueHotHandoffCannotReplayFastColdFieldSteps() {
+        ColdHarvest start = coldHarvestAfterSteps(125L, 0);
+        ScheduledAction due = ResourceSiteHarvestProcess.coldProgress(start.job(), 22_301L);
+        long releasedAt = 22_700L;
+        assertEquals(1L, start.state().bootstrap().ruleset().cadence().resourceHarvestTraversalInterval());
+        assertEquals(20L, start.state().bootstrap().ruleset().resourceHarvestColdTravelTicksPerEdge());
+
+        var planned = ResourceSiteHarvestProcess.planColdProgress(start.state(), due, releasedAt);
+        assertEquals(1L, planned.stream().map(ProposedEvent::payload)
+                .filter(ResourceSiteHarvestColdGoalAdvanced.class::isInstance).count());
+        assertTrue(planned.stream().map(ProposedEvent::payload)
+                .noneMatch(ResourceSiteHarvestProgressed.class::isInstance));
+        ScheduledAction next = planned.stream().map(ProposedEvent::payload)
+                .filter(ScheduleEffect.Rescheduled.class::isInstance)
+                .map(ScheduleEffect.Rescheduled.class::cast).findFirst().orElseThrow().replacement();
+        assertEquals(releasedAt + 20L, next.dueAt().ticks());
+    }
     @Test void releasedHotPathFailureResumesOnlyThroughTheNextKnownColdStep() {
         ColdHarvest start = coldHarvestAfterSteps(125L, 0);
         ResourceSiteHarvestJob job = start.job();

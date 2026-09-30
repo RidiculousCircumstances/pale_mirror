@@ -11,18 +11,21 @@ public final class FrontierRulesets {
      * semantic checkpoint left a HOT farmer visibly pausing at every grid cell even though the
      * motion actuator was continuous.  Crop work remains a slower, distinct boundary.
      */
-    private static final FrontierRuleset PRODUCTION = ruleset("frontier-v3-production-r6", 8, 1L, 20L);
-    private static final FrontierRuleset PREVIOUS_PRODUCTION_R4 = ruleset("frontier-v3-production-r4", 6, 1L, 20L);
+    private static final FrontierRuleset PRODUCTION = ruleset("frontier-v3-production-r7", 9, 1L, 20L, 20L);
+    /** Existing worlds retain their exact selector and timing; they are never silently retuned. */
+    private static final FrontierRuleset PREVIOUS_PRODUCTION_R6 = ruleset("frontier-v3-production-r6", 8, 1L, 20L, 1L);
+    private static final FrontierRuleset PREVIOUS_PRODUCTION_R4 = ruleset("frontier-v3-production-r4", 6, 1L, 20L, 1L);
     /** Exact decoder for the accepted R3 world; it is never selected for a new world. */
-    private static final FrontierRuleset PREVIOUS_PRODUCTION_R3 = ruleset("frontier-v3-production-r3", 5, 5L, 20L);
+    private static final FrontierRuleset PREVIOUS_PRODUCTION_R3 = ruleset("frontier-v3-production-r3", 5, 5L, 20L, 5L);
     /** Exact decoder for the accepted R2 world; it is never selected for a new world. */
-    private static final FrontierRuleset PREVIOUS_PRODUCTION_R2 = ruleset("frontier-v3-production-r2", 4, 200L, 20L);
+    private static final FrontierRuleset PREVIOUS_PRODUCTION_R2 = ruleset("frontier-v3-production-r2", 4, 200L, 20L, 200L);
     /**
      * Explicit anchor for snapshots written before selector persistence existed. It is not a
      * current default: decoding old bytes is a named compatibility migration with fixed data.
      */
-    private static final FrontierRuleset LEGACY_PRE_RULESET_R79 = ruleset("frontier-v3-legacy-pre-ruleset-r79", 3, 200L, 100L);
+    private static final FrontierRuleset LEGACY_PRE_RULESET_R79 = ruleset("frontier-v3-legacy-pre-ruleset-r79", 3, 200L, 100L, 200L);
     private static final Map<String, FrontierRuleset> INSTALLED = Map.of(PRODUCTION.id(), PRODUCTION,
+            PREVIOUS_PRODUCTION_R6.id(), PREVIOUS_PRODUCTION_R6,
             PREVIOUS_PRODUCTION_R4.id(), PREVIOUS_PRODUCTION_R4,
             PREVIOUS_PRODUCTION_R3.id(), PREVIOUS_PRODUCTION_R3,
             PREVIOUS_PRODUCTION_R2.id(), PREVIOUS_PRODUCTION_R2,
@@ -46,7 +49,7 @@ public final class FrontierRulesets {
     }
 
     private static FrontierRuleset ruleset(String id, int schemaVersion, long resourceHarvestTraversalInterval,
-                                           long routePatrolStepInterval) {
+                                           long routePatrolStepInterval, long coldTravelTicksPerEdge) {
         return new FrontierRuleset(id, schemaVersion,
                 new FrontierRuleset.Cadence(1L, 3_000L, resourceHarvestTraversalInterval, 200L, 24_000L, 400L, 24_000L, 200L, 24_000L, 24_000L,
                         1_200L, 20L, 1_200L, 400L, 24_000L, 600L, 100L, 20L, 800L, 100L, 20L, 20L, 20L,
@@ -56,6 +59,7 @@ public final class FrontierRulesets {
                 new FrontierRuleset.Rates(new FixedScalar(125_000L), new FixedScalar(250_000L), FixedScalar.whole(100L), FixedScalar.whole(2L)),
                 new FrontierRuleset.FacilityCapacity(48, 16, 4, 8, 4, 2, 3, 1),
                 new FrontierRuleset.Combat(FixedScalar.whole(4), FixedScalar.whole(2), FixedScalar.whole(6), FixedScalar.whole(3), FixedScalar.ONE),
-                new FrontierRuleset.HiveCommand(6, 1, 2, 1, 200L, 100L));
+                new FrontierRuleset.HiveCommand(6, 1, 2, 1, 200L, 100L), FrontierRuleset.ResidentLife.initial(),
+                coldTravelTicksPerEdge);
     }
 }
