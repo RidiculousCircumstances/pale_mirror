@@ -20,30 +20,42 @@ public final class ServiceAccessCoordinator {
 
     private record Applicant(SubjectId jobId, SubjectId workerId, boolean alreadyAtPort) { }
 
-    /** A meal reserves the throat only until its body has actually cleared it. */
+    /** Travelling is not service: residents may approach concurrently with independent bread claims. */
+    public static boolean depotMayStartMeal(FrontierWorldState state, SubjectId depotId, SubjectId residentId) {
+        ActorLocation actor = state.actorLocations().get(residentId);
+        return actor != null && (port(state, depotId).accessBoundary().cleared(actor.body())
+                || depotAvailableForMeal(state, depotId, residentId));
+    }
+
+    /** One deterministic turn owns the physical throat; other retained meals wait outside it. */
     public static boolean depotAvailableForMeal(FrontierWorldState state, SubjectId depotId,
                                                 SubjectId residentId) {
         Objects.requireNonNull(state, "service access state");
         Objects.requireNonNull(depotId, "service access depot");
         Objects.requireNonNull(residentId, "service access resident");
-        return state.humanPopulation().meals().values().stream().noneMatch(meal -> meal.depotId().equals(depotId)
-                        && mealOccupiesAccess(state, meal))
-                // A safe-yielded baker or farmer retains the job but can eat with the
-                // same body; only another worker's depot turn excludes this resident.
+        var first = state.humanPopulation().meals().values().stream()
+                .filter(meal -> meal.depotId().equals(depotId) && mealOccupiesAccess(state, meal))
+                .min(Comparator.comparingLong(ResidentMeal::startedAtTick).thenComparing(ResidentMeal::residentId));
+        return first.map(meal -> meal.residentId().equals(residentId)).orElse(true)
+                // A retained work applicant keeps service priority, but it does not
+                // prevent a different resident from travelling to a waiting pocket.
                 && workApplicants(state, depotId).stream().allMatch(applicant -> applicant.workerId().equals(residentId));
     }
 
-    /** A work owner can approach only when no meal owns the throat and it is next in line. */
+    /** A work owner may approach during meal travel, never while a meal body occupies the port. */
     public static boolean depotAvailableForWork(FrontierWorldState state, SubjectId depotId, SubjectId jobId,
                                                 SubjectId workerId) {
         Objects.requireNonNull(state, "service access state");
         Objects.requireNonNull(depotId, "service access depot");
         Objects.requireNonNull(jobId, "service access job");
         Objects.requireNonNull(workerId, "service access worker");
-        if (state.humanPopulation().meals().values().stream().anyMatch(meal -> meal.depotId().equals(depotId)
-                && mealOccupiesAccess(state, meal)))
-            return false;
-        return workApplicants(state, depotId).stream().findFirst()
+        var applicant = workApplicants(state, depotId).stream().findFirst();
+        boolean mealAtPort = state.humanPopulation().meals().values().stream().anyMatch(meal ->
+                meal.depotId().equals(depotId) && mealOccupiesAccess(state, meal)
+                    && port(state, depotId).accessBoundary().occupied(
+                        state.actorLocations().get(meal.residentId()).body()));
+        boolean workerEating = state.humanPopulation().meals().containsKey(workerId);
+        return applicant.filter(first -> !mealAtPort && !workerEating)
                 .map(first -> first.jobId().equals(jobId) && first.workerId().equals(workerId))
                 .orElse(false);
     }

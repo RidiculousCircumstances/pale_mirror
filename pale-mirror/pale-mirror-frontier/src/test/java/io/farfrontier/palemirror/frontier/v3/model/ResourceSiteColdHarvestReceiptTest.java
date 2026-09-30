@@ -426,6 +426,28 @@ class ResourceSiteColdHarvestReceiptTest {
         assertEquals(state.inventory().fungibleResources(), beforeReceipt.inventory().fungibleResources(),
                 "the composed terminal lot stays owned while the same farmer may admit a successor");
 
+        // After the prior epoch, another idle farmer may outrank its retained worker.
+        // Planning and reduction must still agree on the lineage-owned successor.
+        ResidentProfile otherFarmer = state.humanPopulation().residents().values().stream()
+                .filter(resident -> resident.settlementId().equals(owner)
+                        && resident.profession() == ResidentProfession.AGRICULTURAL_WORKER
+                        && !resident.id().equals(complete.workerId()))
+                .findFirst().orElseThrow();
+        var profiles = new java.util.LinkedHashMap<>(state.humanPopulation().residents());
+        for (ResidentProfile profile : List.of(profiles.get(complete.workerId()), otherFarmer)) {
+            var capabilities = new java.util.LinkedHashMap<>(profile.capabilities());
+            capabilities.put(HumanCapability.AGRICULTURE,
+                    profile.id().equals(otherFarmer.id()) ? 100 : 0);
+            profiles.put(profile.id(), profile.withCapabilities(capabilities));
+        }
+        HumanPopulation population = state.humanPopulation();
+        state = state.withChanges(FrontierWorldStateUpdate.begin().humanPopulation(new HumanPopulation(
+                population.households(), profiles, population.birthJobs(), population.health(),
+                population.quarantines(), population.migrations(), population.provisions(),
+                population.nutrition(), population.medicalOperations(), population.schedules(), population.meals())));
+        assertEquals(otherFarmer.id(), FrontierWorldStateSupport.availableFieldResident(state, owner,
+                ResidentProfession.AGRICULTURAL_WORKER).orElseThrow().id());
+
         FrontierWorldState composed = state;
         assertThrows(IllegalArgumentException.class,
                 () -> composed.transitionPhysicalIntent(complete.predecessorIntentId(), PhysicalIntentStatus.RUNNING, java.util.Optional.empty()),

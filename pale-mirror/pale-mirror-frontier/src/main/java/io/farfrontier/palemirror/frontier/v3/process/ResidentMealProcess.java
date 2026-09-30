@@ -85,7 +85,7 @@ public final class ResidentMealProcess {
         if (!subject.equals(meal.residentId()) || resident == null
                 || !resident.settlementId().equals(meal.settlementId())
                 || state.humanPopulation().meals().containsKey(subject)
-                || !ServiceAccessCoordinator.depotAvailableForMeal(state, meal.depotId(), subject)
+                || !ServiceAccessCoordinator.depotMayStartMeal(state, meal.depotId(), subject)
                 || !ServiceAccessCoordinator.mealClearingSurface(state, subject).equals(Optional.of(meal.clearingSurface()))
                 || state.humanPopulation().migration(subject) != null
                 || state.actorLocations().get(subject).condition().status() != ActorLifeStatus.ALIVE
@@ -150,7 +150,8 @@ public final class ResidentMealProcess {
                 || lease.status() != AmbientLeaseStatus.HOT || lease.goal() != AmbientGoalKind.MEAL
                 || lease.revision() != arrived.ambientRevision()
                 || !lease.goalBody().equals(arrived.observedBody())
-                || !serviceSurface(state, meal).standingBody().equals(arrived.observedBody()))
+                || !serviceSurface(state, meal).standingBody().equals(arrived.observedBody())
+                || !ServiceAccessCoordinator.depotAvailableForMeal(state, meal.depotId(), subject))
             throw new IllegalArgumentException("HOT meal arrival lacks its exact retained resident and service station");
         ActorLocation actor = state.actorLocations().get(subject);
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
@@ -375,6 +376,9 @@ public final class ResidentMealProcess {
             return Optional.of(new ResidentMealColdStep(residentId, meal.phase(), now));
         try {
             List<SurfaceAnchor> route = ResidentMealKnownNavigation.path(state, meal);
+            if (!ServiceAccessCoordinator.depotAvailableForMeal(state, meal.depotId(), residentId)
+                    && (route.size() == 1 || port(state, meal).accessBoundary()
+                        .occupied(route.get(1).standingBody()))) return Optional.empty();
             return Optional.of(route.size() > 1
                     ? new ResidentMealColdStep(residentId, meal.phase(), now, Optional.of(route.get(1)))
                     : new ResidentMealColdStep(residentId, meal.phase(), now));

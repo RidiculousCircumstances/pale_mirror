@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ResidentMealProcessTest {
-    @Test void secondHungryResidentCanStartAfterFirstClearsAccessWhileReturnContinues() {
+    @Test void twoHungryResidentsCanTravelTogetherButOnlyOneMayEnterDepotService() {
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:resident-depot-service-queue"), 421L));
         Settlement settlement = initial.bootstrap().settlements().getFirst();
@@ -35,30 +35,56 @@ class ResidentMealProcessTest {
                         .accrueHunger(second, 27_000L)));
         ResidentMealStarted started = ResidentMealProcess.selectSourceAtYield(state, first, 27_000L).orElseThrow();
         state = ResidentMealProcess.reduceStarted(state, first, started);
-        assertTrue(ResidentMealProcess.selectSourceAtYield(state, second, 27_000L).isEmpty());
+        ResidentMealStarted next = ResidentMealProcess.selectSourceAtYield(state, second, 27_000L).orElseThrow();
+        state = ResidentMealProcess.reduceStarted(state, second, next);
+        assertEquals(2, state.inventory().fungibleResources().claims().size());
+        assertFalse(ServiceAccessCoordinator.depotAvailableForMeal(state, depot, second));
         state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+        ServiceAccessBoundary boundary = SettlementDepotServicePort.forDepot(settlement.structures().stream()
+                .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow()).accessBoundary();
+        boolean secondApproached = false;
+        for (int turn = 0; turn < 300; turn++) {
+            ResidentMealColdStep approach = ResidentMealProcess.planColdStep(state, second, 27_001L + turn).orElse(null);
+            if (approach == null) break;
+            if (approach.nextSurface().isPresent()) {
+                assertTrue(boundary.cleared(approach.nextSurface().orElseThrow().standingBody()),
+                        "a waiting resident must not cross the physical depot boundary");
+                state = ResidentMealProcess.reduceColdStep(state, second, approach);
+                secondApproached = true;
+            } else break;
+        }
+        assertTrue(secondApproached, "the second resident should approach while the first is still travelling");
+        assertEquals(ResidentMeal.Phase.MOVE, state.humanPopulation().meals().get(second).phase());
         boolean releasedDuringReturn = false;
-        boolean secondStartedBeforeFirstFinished = false;
         for (int turn = 0; state.humanPopulation().meals().containsKey(first) && turn < 300; turn++) {
-            ResidentMealColdStep step = ResidentMealProcess.planColdStep(state, first, 27_001L + turn).orElseThrow();
+            FrontierWorldState current = state;
+            ResidentMealColdStep step = ResidentMealProcess.planColdStep(state, first, 27_001L + turn)
+                    .orElseThrow(() -> new AssertionError("first body=" + current.actorLocations().get(first).body()
+                            + " second body=" + current.actorLocations().get(second).body()
+                            + " first phase=" + current.humanPopulation().meals().get(first).phase()
+                            + " first clear=" + current.humanPopulation().meals().get(first).clearingSurface()
+                            + " second clear=" + current.humanPopulation().meals().get(second).clearingSurface()
+                            + " port=" + SettlementDepotServicePort.forDepot(settlement.structures().stream()
+                                .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow())));
             state = ResidentMealProcess.reduceColdStep(state, first, step);
-            if (!secondStartedBeforeFirstFinished && state.humanPopulation().meals().containsKey(first)
+            if (state.humanPopulation().meals().containsKey(first)
                     && state.humanPopulation().meals().get(first).phase() == ResidentMeal.Phase.RETURN
-                    && ResidentMealProcess.selectSourceAtYield(state, second, 27_001L + turn).isPresent()) {
+                    && ServiceAccessCoordinator.depotAvailableForMeal(state, depot, second)) {
                 releasedDuringReturn = true;
-                ResidentMealStarted next = ResidentMealProcess.selectSourceAtYield(state, second,
-                        27_001L + turn).orElseThrow();
-                state = ResidentMealProcess.reduceStarted(state, second, next);
-                secondStartedBeforeFirstFinished = true;
-                state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
             }
         }
         assertTrue(releasedDuringReturn, "access must release before the first resident finishes returning home");
-        assertTrue(secondStartedBeforeFirstFinished);
         assertFalse(state.humanPopulation().meals().containsKey(first));
         assertTrue(state.humanPopulation().meals().containsKey(second),
                 "the second resident's independent meal must survive the first return");
+        assertTrue(ServiceAccessCoordinator.depotAvailableForMeal(state, depot, second));
         assertEquals(63, state.inventory().fungibleResources().totalQuantity(settlement.id(), ResidentMeal.BREAD_KIND));
+        for (int turn = 0; state.humanPopulation().meals().containsKey(second) && turn < 300; turn++) {
+            ResidentMealColdStep step = ResidentMealProcess.planColdStep(state, second, 28_000L + turn).orElseThrow();
+            state = ResidentMealProcess.reduceColdStep(state, second, step);
+        }
+        assertFalse(state.humanPopulation().meals().containsKey(second));
+        assertEquals(62, state.inventory().fungibleResources().totalQuantity(settlement.id(), ResidentMeal.BREAD_KIND));
     }
 
     @Test void postTakeNativeFixtureRetainsOneColdHandAndOnlyOneFutureAction() {

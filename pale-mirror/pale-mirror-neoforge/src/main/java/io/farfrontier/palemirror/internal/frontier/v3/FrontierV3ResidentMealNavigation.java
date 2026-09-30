@@ -13,7 +13,7 @@ import java.util.WeakHashMap;
 
 /** HOT presentation follows the same known route as the retained COLD meal owner. */
 final class FrontierV3ResidentMealNavigation {
-    private record Route(long leaseRevision, long mealStart, ResidentMeal.Phase phase,
+    private record Route(long leaseRevision, long mealStart, ResidentMeal.Phase phase, boolean admitted,
                          List<SurfaceAnchor> waypoints) { }
 
     private static final Map<Mob, Route> ROUTES = new WeakHashMap<>();
@@ -32,12 +32,15 @@ final class FrontierV3ResidentMealNavigation {
             return;
         }
         Route route = ROUTES.get(body);
+        boolean admitted = ServiceAccessCoordinator.depotAvailableForMeal(state, meal.depotId(), meal.residentId());
         if (route == null || route.leaseRevision() != lease.revision()
-                || route.mealStart() != meal.startedAtTick() || route.phase() != meal.phase()) {
+                || route.mealStart() != meal.startedAtTick() || route.phase() != meal.phase()
+                || route.admitted() != admitted) {
             try {
-                route = new Route(lease.revision(), meal.startedAtTick(), meal.phase(),
+                route = new Route(lease.revision(), meal.startedAtTick(), meal.phase(), admitted,
                         meal.phase() == ResidentMeal.Phase.MOVE
-                                ? ResidentMealKnownNavigation.path(state, meal)
+                                ? ResidentMealKnownNavigation.pathFrom(state, meal,
+                                    FrontierV3SurfaceObservation.observedBody(body).supportingSurface())
                                 : ResidentMealKnownNavigation.returnPath(state, meal));
             } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
                 blocked(body, meal, "known_route:" + unavailable.getMessage());

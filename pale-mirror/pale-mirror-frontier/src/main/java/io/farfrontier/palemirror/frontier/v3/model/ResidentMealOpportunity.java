@@ -29,7 +29,7 @@ public final class ResidentMealOpportunity {
         var bread = FungibleResourceCustodySupport.selectAtContainer(state, depot,
                 resident.settlementId(), ResidentMeal.BREAD_KIND, 1).orElse(null);
         if (bread == null || bread.lotQuantities().size() != 1
-                || !ServiceAccessCoordinator.depotAvailableForMeal(state, depot, residentId))
+                || !ServiceAccessCoordinator.depotMayStartMeal(state, depot, residentId))
             return Optional.empty();
         return ServiceAccessCoordinator.mealClearingSurface(state, residentId)
                 .map(clearing -> new Source(depot, clearing, bread));

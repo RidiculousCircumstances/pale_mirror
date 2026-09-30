@@ -916,7 +916,7 @@ public final class ResourceSiteHarvestProcess {
         }
         if (state.structureConditions().get(site.facilityId()) != StructureCondition.INTACT) throw new IllegalArgumentException("resource-site harvest farm is unavailable");
         ResidentProfile worker = lifecycle.phase() == ResourceSitePhase.READY
-                ? FrontierWorldStateSupport.availableFieldResident(state, settlement.id(), ResidentProfession.AGRICULTURAL_WORKER).orElse(null)
+                ? ResourceSiteHarvestPlanning.successorFarmer(state, lifecycle, settlement.id())
                 : state.humanPopulation().resident(job.workerId());
         if (worker == null || !worker.id().equals(job.workerId()) || worker.profession() != ResidentProfession.AGRICULTURAL_WORKER) {
             throw new IllegalArgumentException("resource-site harvest worker is unavailable");

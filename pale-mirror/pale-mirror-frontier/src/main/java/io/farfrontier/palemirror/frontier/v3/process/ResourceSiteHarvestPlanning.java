@@ -104,7 +104,7 @@ final class ResourceSiteHarvestPlanning {
      * loss of that exact resident is a local blocked task, never permission to
      * select another currently eligible farmer.
      */
-    private static ResidentProfile successorFarmer(FrontierWorldState state, ResourceSiteLifecycle lifecycle, SubjectId settlementId) {
+    static ResidentProfile successorFarmer(FrontierWorldState state, ResourceSiteLifecycle lifecycle, SubjectId settlementId) {
         if (lifecycle.harvestLineage().isEmpty()) {
             return FrontierWorldStateSupport.availableFieldResident(state, settlementId, ResidentProfession.AGRICULTURAL_WORKER).orElse(null);
         }
