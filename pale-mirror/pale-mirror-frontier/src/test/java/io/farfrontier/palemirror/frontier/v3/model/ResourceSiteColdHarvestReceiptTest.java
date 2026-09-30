@@ -13,6 +13,7 @@ import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess;
 import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteProcess;
 import io.farfrontier.palemirror.frontier.v3.process.ProductionProcess;
 import io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess;
+import io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess;
 import io.farfrontier.palemirror.frontier.v3.process.StrategicObjectiveProcess;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import org.junit.jupiter.api.Test;
@@ -72,13 +73,33 @@ class ResourceSiteColdHarvestReceiptTest {
                         .map(ProposedEvent::payload).toList());
         assertTrue(FrontierResourceSiteHarvestSceneSupport.candidate(state, job).isEmpty());
         assertEquals(job, state.resourceSites().site(site).activeWork().orElseThrow());
-        for (int turn = 0; turn < 300 && state.humanPopulation().meals().containsKey(job.workerId()); turn++) {
-            ResidentMealColdStep step = ResidentMealProcess.planColdStep(state, job.workerId(), 24_001L + turn)
+        long mealTick = 24_001L;
+        for (int turn = 0; turn < 64 && state.humanPopulation().meals().containsKey(job.workerId()); turn++) {
+            ResidentMeal current = state.humanPopulation().meals().get(job.workerId());
+            mealTick = Math.max(mealTick, current.coldTravel()
+                    .map(io.farfrontier.palemirror.frontier.v3.model.navigation.TimedKnownRoute::arrivalTick)
+                    .orElse(mealTick));
+            ResidentMealColdStep step = ResidentMealProcess.planColdStep(state, job.workerId(), mealTick)
                     .orElseThrow();
             state = ResidentMealProcess.reduceColdStep(state, job.workerId(), step);
+            mealTick++;
         }
         assertFalse(state.humanPopulation().meals().containsKey(job.workerId()));
         assertEquals(job, state.resourceSites().site(site).activeWork().orElseThrow());
+        assertTrue(ResourceSiteHarvestProcess.coldProgressHeld(state, continuation),
+                "confirmed eating transfers the exact body to post-service movement before work resumes");
+        for (int turn = 0; turn < 32 && state.actorMovements().containsKey(job.workerId()); turn++) {
+            var movement = state.actorMovements().get(job.workerId());
+            long due = movement.coldTravel()
+                    .map(io.farfrontier.palemirror.frontier.v3.model.navigation.TimedKnownRoute::arrivalTick)
+                    .orElse(mealTick);
+            var advanced = (io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementColdAdvanced)
+                    ActorMovementProcess.plan(state, ActorMovementProcess.progress(movement, due), due)
+                            .getFirst().payload();
+            state = ActorMovementProcess.reduceColdAdvanced(state, job.workerId(), advanced);
+            mealTick = due + 1L;
+        }
+        assertFalse(state.actorMovements().containsKey(job.workerId()));
         assertFalse(ResourceSiteHarvestProcess.coldProgressHeld(state, continuation));
         assertTrue(ResourceSiteHarvestProcess.planColdProgress(state, continuation).stream()
                 .anyMatch(event -> event.payload() instanceof ResourceSiteHarvestColdGoalAdvanced),
@@ -173,6 +194,28 @@ class ResourceSiteColdHarvestReceiptTest {
         assertEquals(List.of(new ScheduleEffect.Rescheduled(pending.action().id(), pending.action())),
                 ResourceSiteHarvestProcess.planColdProgress(withPhysicalDepot, pending.action()).stream()
                         .map(ProposedEvent::payload).toList());
+        // An occupied service entrance retains this same action without a
+        // one-tick durable retry. The meal's eventual exit can then be admitted
+        // ahead of the farmer instead of being starved by its waiting job.
+        Settlement settlement = pending.state().bootstrap().settlements().stream()
+                .filter(value -> value.id().equals(new SubjectId("settlement:1"))).findFirst().orElseThrow();
+        SettlementDepotServicePort port = SettlementDepotServicePort.forDepot(settlement.structures().stream()
+                .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow());
+        SubjectId occupant = settlement.residents().stream().map(Resident::id)
+                .filter(value -> !value.equals(beforeReturn.workerId())).findFirst().orElseThrow();
+        ResidentMeal otherMeal = new ResidentMeal(occupant, settlement.id(), depot, port.exteriorApproach(),
+                ReferenceContainerCustody.scopeId(depot), new SubjectId("custody:resident-meal-harvest-wait"),
+                new SubjectId("lot:harvest-wait-bread"), new SubjectId("claim:harvest-wait-bread"),
+                java.util.Optional.empty(), ResidentMeal.Phase.MOVE, 24_000L, java.util.Optional.empty());
+        var occupiedBodies = new java.util.LinkedHashMap<>(pending.state().actorLocations());
+        occupiedBodies.put(occupant, occupiedBodies.get(occupant).withBody(port.serviceSurface().standingBody()));
+        FrontierWorldState occupiedDepot = pending.state().withChanges(FrontierWorldStateUpdate.begin()
+                .actorLocations(occupiedBodies).humanPopulation(pending.state().humanPopulation().withMeal(otherMeal)));
+        assertTrue(ResourceSiteHarvestProcess.coldProgressHeld(occupiedDepot, pending.action()));
+        assertEquals(List.of(new ScheduleEffect.Rescheduled(pending.action().id(), pending.action())),
+                ResourceSiteHarvestProcess.planColdProgress(occupiedDepot, pending.action()).stream()
+                        .map(ProposedEvent::payload).toList());
+        assertFalse(ResourceSiteHarvestProcess.coldProgressHeld(pending.state(), pending.action()));
         // One actual-body goal step reaches the authorized depot service station. It does
         // not pretend that the old corridor's final node is the only legal port.
         var approachEvents = ResourceSiteHarvestProcess.planColdProgress(pending.state(), pending.action());

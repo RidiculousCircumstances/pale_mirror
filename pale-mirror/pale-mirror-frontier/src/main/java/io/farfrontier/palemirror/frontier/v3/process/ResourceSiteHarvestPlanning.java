@@ -360,7 +360,16 @@ final class ResourceSiteHarvestPlanning {
                     || FrontierResourceSiteHarvestSceneSupport.hasNonClosedScene(state, job)
                     || !FrontierSceneAdmission.available(state, List.of(job.workerId()))
                     || pendingPlayerBreakAtNextCell(state, job)
-                    || loadedDepotCustodyBlocksDelivery(state, job));
+                    || loadedDepotCustodyBlocksDelivery(state, job)
+                    // A denied shared service turn is a wait, not a new COLD step.
+                    // Reissuing the same one-tick continuation can monopolize the
+                    // due queue ahead of the meal whose arrival would release it.
+                    || (ResourceSiteHarvestGoal.current(state, job).kind() == ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE
+                        && !ResourceSiteHarvestGoal.actorAtDepot(state, job)
+                        && !ServiceAccessCoordinator.depotAvailableForHarvest(state, job))
+                    || (ResourceSiteHarvestGoal.actorAtDepot(state, job) && job.returningForBatch()
+                        && !batchDeliveryCapacityAvailable(state, job))
+                    || job.navigationBlock().isPresent());
     }
 
     /** COLD may not transfer an actor part into a chest held by a live physical custodian. */
