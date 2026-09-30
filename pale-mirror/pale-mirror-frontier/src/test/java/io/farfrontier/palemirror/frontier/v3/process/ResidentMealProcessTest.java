@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.process;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
@@ -293,6 +294,40 @@ class ResidentMealProcessTest {
         resumedCold = AmbientLeaseStateProcess.transition(resumedCold, resident, AmbientLeaseStatus.DRAINING);
         resumedCold = AmbientLeaseStateProcess.release(resumedCold, new AmbientLeaseReleased(resident,
                 service.standingBody(), resumedCold.actorLocations().get(resident).condition().health()));
+        ServiceAccessBoundary returnBoundary = SettlementDepotServicePort.forDepot(settlement.structures().stream()
+                .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow()).accessBoundary();
+        FrontierWorldState insideReturn = resumedCold;
+        for (int edge = 0; edge < 32; edge++) {
+            ResidentMealColdStep step = ResidentMealProcess.planColdStep(insideReturn, resident, 48_003L + edge)
+                    .orElseThrow();
+            assertTrue(step.nextSurface().isPresent(), "the return route must leave the service station");
+            insideReturn = ResidentMealProcess.reduceColdStep(insideReturn, resident, step);
+            if (!insideReturn.actorLocations().get(resident).body().equals(service.standingBody())) break;
+        }
+        assertTrue(returnBoundary.occupied(insideReturn.actorLocations().get(resident).body()),
+                "the COLD return checkpoint should still be inside the depot access boundary");
+        assertFalse(insideReturn.actorLocations().get(resident).body().equals(service.standingBody()),
+                "HOT re-admission must exercise an intermediate return checkpoint");
+        insideReturn = AmbientLeaseStateProcess.prepare(insideReturn,
+                AmbientActorProcess.nextLease(insideReturn, resident, new SimInstant(48_040L)));
+        insideReturn = AmbientLeaseStateProcess.transition(insideReturn, resident, AmbientLeaseStatus.HOT);
+        insideReturn = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(insideReturn));
+        assertEquals(insideReturn.actorLocations().get(resident).body(),
+                insideReturn.ambientLeases().get(resident).handoffBody());
+        SurfaceAnchor reentryExit = ResidentMealKnownNavigation.returnPath(insideReturn,
+                insideReturn.humanPopulation().meals().get(resident)).stream()
+                .filter(surface -> returnBoundary.cleared(surface.standingBody())).findFirst().orElseThrow();
+        ResidentMealHotAccessCleared reentryClear = new ResidentMealHotAccessCleared(resident,
+                insideReturn.ambientLeases().get(resident).revision(), reentryExit.standingBody());
+        assertTrue(ServiceAccessCoordinator.witnessedMealExit(insideReturn,
+                insideReturn.humanPopulation().meals().get(resident), reentryExit.standingBody()));
+        insideReturn = ResidentMealProcess.reduceHotAccessCleared(insideReturn, resident, reentryClear);
+        assertEquals(reentryExit.standingBody(), insideReturn.actorLocations().get(resident).body());
+        insideReturn = ResidentActivityProcess.reduceMealReturned(insideReturn, resident,
+                new ResidentMealHotReturned(resident, insideReturn.ambientLeases().get(resident).revision(),
+                        meal.clearingSurface().standingBody()), 48_041L);
+        assertFalse(insideReturn.humanPopulation().meals().containsKey(resident),
+                "COLD-to-HOT return must release service and complete the same meal");
         for (int edge = 0; resumedCold.humanPopulation().meals().containsKey(resident) && edge < 256; edge++) {
             ResidentMealColdStep clearing = ResidentMealProcess.planColdStep(resumedCold, resident, 48_003L + edge)
                     .orElseThrow();

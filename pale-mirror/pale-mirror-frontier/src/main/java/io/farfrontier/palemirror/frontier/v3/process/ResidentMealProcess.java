@@ -246,16 +246,25 @@ public final class ResidentMealProcess {
                                        SubjectId residentId, long ambientRevision) {
         ResidentMeal meal = state.humanPopulation().meals().get(residentId);
         AmbientActorLease lease = state.ambientLeases().get(residentId);
+        ActorLocation actor = state.actorLocations().get(subject);
         if (!subject.equals(residentId) || meal == null || lease == null
                 || lease.status() != AmbientLeaseStatus.HOT || lease.goal() != AmbientGoalKind.MEAL
                 || lease.revision() != ambientRevision
                 || !lease.goalBody().equals((meal.phase() == ResidentMeal.Phase.RETURN
                         ? meal.clearingSurface() : serviceSurface(state, meal)).standingBody())
-                || !state.actorLocations().get(subject).body().equals(serviceSurface(state, meal).standingBody())
-                    && !(meal.phase() == ResidentMeal.Phase.RETURN
-                        && port(state, meal).accessBoundary().cleared(state.actorLocations().get(subject).body())))
+                || actor == null || !validHotMealBody(state, meal, lease, actor.body()))
             throw new IllegalArgumentException("HOT meal step lacks its exact resident, body or lease");
         return meal;
+    }
+
+    private static boolean validHotMealBody(FrontierWorldState state, ResidentMeal meal,
+                                            AmbientActorLease lease, BodyPosition body) {
+        if (body.equals(serviceSurface(state, meal).standingBody())) return true;
+        if (meal.phase() != ResidentMeal.Phase.RETURN) return false;
+        // COLD may have advanced the return route before this HOT lease was admitted.
+        // The exact admitted handoff is then an authoritative checkpoint inside the
+        // depot throat; a later witnessed exit checkpoints a cleared body instead.
+        return body.equals(lease.handoffBody()) || port(state, meal).accessBoundary().cleared(body);
     }
 
     private static SettlementDepotServicePort port(FrontierWorldState state, ResidentMeal meal) {
