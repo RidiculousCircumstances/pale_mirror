@@ -58,6 +58,22 @@ class BakeryColdVerticalTest {
                 "the retained baker may safely yield the same service turn to their own meal");
         assertEquals(ResidentWorkYield.Status.READY, ResidentWorkYield.assess(state,
                 HumanAssignmentProjection.compile(state).assignment(resident)).status());
+        FrontierWorldState overlap = state.withChanges(FrontierWorldStateUpdate.begin()
+                .humanPopulation(state.humanPopulation().accrueHunger(otherResident, 27_000L)));
+        ResidentMealStarted otherMeal = ResidentMealProcess.selectSourceAtYield(overlap, otherResident, 27_000L)
+                .orElseThrow();
+        overlap = ResidentMealProcess.reduceStarted(overlap, otherResident, otherMeal);
+        Settlement settlement = overlap.bootstrap().settlements().stream()
+                .filter(value -> value.id().equals(job.settlementId())).findFirst().orElseThrow();
+        SettlementDepotServicePort port = SettlementDepotServicePort.forDepot(settlement.structures().stream()
+                .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow());
+        var overlapLocations = new java.util.LinkedHashMap<>(overlap.actorLocations());
+        overlapLocations.put(otherResident, overlapLocations.get(otherResident).withBody(port.stations().getFirst().standingBody()));
+        overlapLocations.put(resident, overlapLocations.get(resident).withBody(port.stations().get(1).standingBody()));
+        overlap = overlap.withChanges(FrontierWorldStateUpdate.begin().actorLocations(overlapLocations));
+        assertTrue(ServiceAccessCoordinator.depotAvailableForMeal(overlap, depot, otherResident),
+                "an already-present meal must win over a worker also waiting in the throat");
+        assertFalse(ServiceAccessCoordinator.depotAvailableForWork(overlap, depot, job.id(), resident));
         ResidentMealStarted meal = ResidentMealProcess.selectSourceAtYield(state, resident, 27_000L).orElseThrow();
         assertEquals(Optional.of(job.id()), meal.meal().retainedWorkOwner());
         state = ResidentMealProcess.reduceStarted(state, resident, meal);

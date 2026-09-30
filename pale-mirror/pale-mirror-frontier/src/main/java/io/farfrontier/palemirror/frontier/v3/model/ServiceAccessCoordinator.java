@@ -66,12 +66,14 @@ public final class ServiceAccessCoordinator {
                                 .equals(port(state, depotId).serviceSurface())).orElse(false))
                     .min(Comparator.comparingLong(ResidentMeal::startedAtTick)
                             .thenComparing(ResidentMeal::residentId));
+        boolean residentOwnsOccupiedTurn = first.isPresent() && first.orElseThrow().residentId().equals(residentId);
         return !departing && first.or(() -> entering).map(meal -> meal.residentId().equals(residentId)).orElse(true)
-                // A distant work applicant may travel concurrently. Only its actual
-                // body at the shared port owns the physical turn.
-                && workApplicants(state, depotId).stream()
+                // If an old COLD state contains both a meal body and a worker at
+                // the port, the worker already yields to that meal above. Apply
+                // the same precedence here or neither contender can ever move.
+                && (residentOwnsOccupiedTurn || workApplicants(state, depotId).stream()
                     .filter(Applicant::alreadyAtPort)
-                    .allMatch(applicant -> applicant.workerId().equals(residentId));
+                    .allMatch(applicant -> applicant.workerId().equals(residentId)));
     }
 
     /** A work owner may approach during meal travel, never while a meal body occupies the port. */
