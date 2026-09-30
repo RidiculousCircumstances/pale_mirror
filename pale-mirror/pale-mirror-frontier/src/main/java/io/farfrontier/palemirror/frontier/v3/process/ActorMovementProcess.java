@@ -56,7 +56,15 @@ public final class ActorMovementProcess {
         if (!PROGRESS.equals(action.kind())) return false;
         ActorMovement movement = state.actorMovements().get(action.subject());
         if (movement == null) return false;
-        return coldStep(state, movement, action.dueAt().ticks()).isEmpty();
+        ActorLocation actor = state.actorLocations().get(action.subject());
+        if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE) return false;
+        if (!FrontierSceneAdmission.available(state, List.of(action.subject()))
+                || state.sceneLeases().values().stream().anyMatch(lease -> lease.retainsMemberCustody(action.subject())))
+            return true;
+        // The queue may inspect every overdue action on each tick. A route search belongs to
+        // the admitted action, never to this predicate; otherwise one hungry cohort repeatedly
+        // recompiles all settlement occupancy before any movement can commit.
+        return movement.coldTravel().map(travel -> !travel.arrivedBy(action.dueAt().ticks())).orElse(false);
     }
 
     public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, long currentTick) {
@@ -65,8 +73,15 @@ public final class ActorMovementProcess {
                 || !action.id().equals(progress(movement, action.dueAt().ticks()).id()))
             throw new IllegalArgumentException("movement progress lacks its exact retained order");
         long now = Math.max(currentTick, action.dueAt().ticks());
-        ActorMovementColdAdvanced step = coldStep(state, movement, now)
-                .orElseThrow(() -> new IllegalArgumentException("movement has no current COLD boundary"));
+        Optional<ActorMovementColdAdvanced> candidate = coldStep(state, movement, now);
+        if (candidate.isEmpty()) {
+            if (held(state, action)) throw new IllegalArgumentException("movement has no current COLD boundary");
+            // No known legal route is presently available. Retain the exact order and retry
+            // without falsely completing or quarantining an otherwise healthy settlement.
+            return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Rescheduled(action.id(),
+                    progress(movement, Math.addExact(now, 20L)))));
+        }
+        ActorMovementColdAdvanced step = candidate.orElseThrow();
         List<ProposedEvent> events = new ArrayList<>();
         events.add(new ProposedEvent(action.subject(), step));
         boolean dead = state.actorLocations().get(action.subject()).condition().status() != ActorLifeStatus.ALIVE;

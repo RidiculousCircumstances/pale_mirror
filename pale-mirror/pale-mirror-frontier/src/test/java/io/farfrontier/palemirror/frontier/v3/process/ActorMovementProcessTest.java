@@ -16,6 +16,34 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ActorMovementProcessTest {
+    @Test void unavailableKnownRouteIsCheckedOnlyWhenAdmittedAndKeepsTheExactOrder() {
+        FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:actor-movement-route-wait"), 421L));
+        Settlement settlement = initial.bootstrap().settlements().getFirst();
+        SubjectId actorId = settlement.residents().getFirst().id();
+        SettlementStructure depot = settlement.structures().stream()
+                .filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
+        FrontierWorldState state = initial.withActorBody(actorId,
+                SettlementDepotServicePort.forDepot(depot).serviceSurface().standingBody());
+        SurfaceAnchor destination = ServiceAccessCoordinator.mealClearingSurface(state, actorId).orElseThrow();
+        MovementOrder order = new MovementOrder(actorId, actorId, 0L, 1L, List.of(destination),
+                TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
+        ActorMovement movement = new ActorMovement(order, 27_000L,
+                new ActorMovementContext.ServiceExit(settlement.id(), FrontierWorldState.depotId(settlement.id())));
+        state = state.withChanges(FrontierWorldStateUpdate.begin().actorMovements(Map.of(actorId, movement)));
+        state = state.recordPhysicalDelta(new PhysicalDelta(destination.support(), PhysicalDeltaKind.UNKNOWN_SCAR,
+                Optional.empty(), Optional.empty(), "test:blocked-movement-destination"));
+        var action = ActorMovementProcess.progress(movement, 27_001L);
+        assertFalse(ActorMovementProcess.held(state, action));
+        var events = ActorMovementProcess.plan(state, action, 27_001L);
+        assertEquals(1, events.size());
+        var retry = assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class,
+                events.getFirst().payload());
+        assertEquals(action.id(), retry.scheduleId());
+        assertEquals(ActorMovementProcess.progress(movement, 27_021L), retry.replacement());
+        assertEquals(movement, state.actorMovements().get(actorId));
+    }
+
     @Test void separateMovementKeepsTheActorUnavailableToWorkAndAnotherMealUntilArrival() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:actor-movement-exclusive"), 421L));
