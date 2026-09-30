@@ -25,4 +25,7 @@ public record ResourceSiteHarvestNavigationBlock(SurfaceAnchor target, long layo
         if (layoutRevision < 1)
             throw new IllegalArgumentException("blocked farmer goal has invalid layout revision");
     }
+
+    /** A local path miss may be reconsidered without clearing a physical/support observation. */
+    public boolean reroutable() { return reason == Reason.PATH_UNAVAILABLE || reason == Reason.PATH_STALLED; }
 }

@@ -653,7 +653,6 @@ public final class ResourceSiteHarvestProcess {
             throw new IllegalArgumentException("interrupted HOT field goal has a stale or arrived target");
         return FrontierResourceSiteHarvestSceneSupport.observeTransit(state, job, observed.leaseId(), observed.observedWorker());
     }
-
     /** Retains actual COLD travel without promoting an intermediate support into a work cursor. */
     public static FrontierWorldState reduceColdGoalAdvanced(FrontierWorldState state, SubjectId subject,
                                                              ResourceSiteHarvestColdGoalAdvanced advanced) {
@@ -663,7 +662,7 @@ public final class ResourceSiteHarvestProcess {
                         () -> new IllegalArgumentException("COLD field goal has no active job"));
         if (lifecycle.phase() != ResourceSitePhase.HARVESTING || !subject.equals(job.siteId())
                 || !job.id().equals(advanced.jobId()) || !job.workerId().equals(advanced.workerId())
-                || job.navigationBlock().isPresent()
+                || job.navigationBlock().filter(block -> !block.reroutable()).isPresent()
                 || !advanced.coldScheduleId().equals(coldProgress(job, advanced.coldDueAt()).id())
                 || FrontierResourceSiteHarvestSceneSupport.hasNonClosedScene(state, job)
                 || !FrontierSceneAdmission.available(state, List.of(job.workerId())))
@@ -686,11 +685,12 @@ public final class ResourceSiteHarvestProcess {
             throw new IllegalArgumentException("COLD field goal has no forward travel or new arrival");
         java.util.Map<SubjectId, ActorLocation> actors = new java.util.LinkedHashMap<>(state.actorLocations());
         actors.put(job.workerId(), actor.withBody(next));
+        ResourceSiteLifecycle resumed = job.navigationBlock().isPresent()
+                ? lifecycle.clearHarvestRouteBlock(job, job.navigationBlock().orElseThrow()) : lifecycle;
+        ResourceSiteHarvestJob active = (ResourceSiteHarvestJob) resumed.activeWork().orElseThrow();
         return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors)
-                .resourceSites(arrived ? state.resourceSites().replace(lifecycle.arriveHarvestGoal(job, goal))
-                        : state.resourceSites()));
+                .resourceSites(state.resourceSites().replace(arrived ? resumed.arriveHarvestGoal(active, goal) : resumed)));
     }
-
     /** A COLD planner failure is retained as a typed local pause, never repeated as silent progress. */
     public static FrontierWorldState reduceColdGoalHeld(FrontierWorldState state, SubjectId subject,
                                                         ResourceSiteHarvestColdGoalHeld held) {

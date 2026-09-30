@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder;
+import io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess;
 import io.farfrontier.palemirror.PaleMirrorMod;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
@@ -35,7 +36,10 @@ final class FrontierV3ResidentMealNavigation {
         boolean admitted = ServiceAccessCoordinator.depotAvailableForMeal(state, meal.depotId(), meal.residentId());
         if (route == null || route.leaseRevision() != lease.revision()
                 || route.mealStart() != meal.startedAtTick() || route.phase() != meal.phase()
-                || route.admitted() != admitted) {
+                || route.admitted() != admitted
+                || completedWaitingLegRequiresReplan(route.waypoints(),
+                    FrontierV3SurfaceObservation.observedBody(body).supportingSurface(),
+                    ResidentMealProcess.serviceSurface(state, meal), admitted, meal.phase())) {
             try {
                 route = new Route(lease.revision(), meal.startedAtTick(), meal.phase(), admitted,
                         meal.phase() == ResidentMeal.Phase.MOVE
@@ -81,6 +85,14 @@ final class FrontierV3ResidentMealNavigation {
         if (result.status() == FrontierV3GoalNavigation.Status.BLOCKED)
             blocked(body, meal, "minecraft_path:" + result.reason());
         else BLOCKED.remove(body);
+    }
+
+    /** A HOT route to a side pocket is only an approach, never a completed meal trip. */
+    static boolean completedWaitingLegRequiresReplan(List<SurfaceAnchor> waypoints, SurfaceAnchor observed,
+                                                       SurfaceAnchor service, boolean admitted,
+                                                       ResidentMeal.Phase phase) {
+        return phase == ResidentMeal.Phase.MOVE && admitted && !waypoints.isEmpty()
+                && !waypoints.getLast().equals(service) && waypoints.getLast().equals(observed);
     }
 
     private static int nearestWaypoint(Mob body, List<SurfaceAnchor> route) {

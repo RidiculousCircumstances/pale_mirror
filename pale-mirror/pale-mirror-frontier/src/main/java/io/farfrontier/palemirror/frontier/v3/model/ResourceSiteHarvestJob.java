@@ -92,9 +92,7 @@ public record ResourceSiteHarvestJob(SubjectId id, SubjectId taskId, SubjectId s
     /** A route-inaccessible target remains pending while an alternate goal clears only its local route hold. */
     public ResourceSiteHarvestJob retargetTo(int nextSelectedCropSlotIndex) {
         if (returningForBatch || progress.complete() || progress.hasPendingCrop()
-                || navigationBlock.filter(block -> block.reason()
-                    != ResourceSiteHarvestNavigationBlock.Reason.PATH_UNAVAILABLE
-                    && block.reason() != ResourceSiteHarvestNavigationBlock.Reason.PATH_STALLED).isPresent())
+                || navigationBlock.filter(block -> !block.reroutable()).isPresent())
             throw new IllegalArgumentException("area work cannot retarget a different movement obligation");
         return copy(progress.withSelectedCropSlot(nextSelectedCropSlotIndex), deliveredYieldQuantity,
                 false, batchSuccessorSlot, lastConfirmedBatch, Optional.empty());

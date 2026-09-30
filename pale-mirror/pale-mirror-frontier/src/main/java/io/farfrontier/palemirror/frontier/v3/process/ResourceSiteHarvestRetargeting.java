@@ -17,7 +17,7 @@ public final class ResourceSiteHarvestRetargeting {
         ResourceFieldCycle cycle = state.resourceSites().cycle(job.siteId());
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId());
         return cycle.reachableWorkSlotAfter(job.progress().nextCropSlotIndex(), index -> {
-            ResourceSiteHarvestJob candidate = job.withProgress(job.progress().withSelectedCropSlot(index));
+            ResourceSiteHarvestJob candidate = job.retargetTo(index);
             FrontierWorldState projected = state.withResourceSites(state.resourceSites().replace(
                     lifecycle.retargetHarvestCell(job, index)));
             try {
@@ -40,9 +40,7 @@ public final class ResourceSiteHarvestRetargeting {
         if (lifecycle.phase() != ResourceSitePhase.HARVESTING || !job.id().equals(retargeted.jobId())
                 || !job.workerId().equals(retargeted.workerId()) || job.progress().complete()
                 || job.progress().hasPendingCrop() || job.returningForBatch()
-                || job.navigationBlock().filter(block -> block.reason()
-                    != ResourceSiteHarvestNavigationBlock.Reason.PATH_UNAVAILABLE
-                    && block.reason() != ResourceSiteHarvestNavigationBlock.Reason.PATH_STALLED).isPresent()
+                || job.navigationBlock().filter(block -> !block.reroutable()).isPresent()
                 || retargeted.layoutRevision() != cycle.layout().revision()
                 || retargeted.fromSlot() != job.progress().nextCropSlotIndex()
                 || state.resourceSites().hasPendingWorldChange(subject)
@@ -65,8 +63,7 @@ public final class ResourceSiteHarvestRetargeting {
             } catch (ResourceSiteHarvestKnownNavigation.KnowledgeUnavailable unavailable) {
                 currentUnavailable = true;
             }
-            if (job.navigationBlock().isPresent()
-                    || !FrontierSceneAdmission.available(state, List.of(job.workerId()))
+            if (!FrontierSceneAdmission.available(state, List.of(job.workerId()))
                     || !currentUnavailable
                     || !coldReachableWorkTarget(state, job).equals(OptionalInt.of(retargeted.toSlot())))
                 throw new IllegalArgumentException("COLD area work retarget lacks an exact known alternative");

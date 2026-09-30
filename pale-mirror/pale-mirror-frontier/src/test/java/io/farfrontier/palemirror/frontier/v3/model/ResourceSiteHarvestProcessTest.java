@@ -206,6 +206,57 @@ class ResourceSiteHarvestProcessTest {
         assertEquals(0, current.progress().completedCropSlots());
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
     }
+    @Test void releasedHotPathFailureResumesOnlyThroughTheNextKnownColdStep() {
+        ColdHarvest start = coldHarvestAfterSteps(125L, 0);
+        ResourceSiteHarvestJob job = start.job();
+        ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(start.state(), job);
+        var block = new ResourceSiteHarvestNavigationBlock(goal.representative(), goal.layoutRevision(),
+                ResourceSiteHarvestNavigationBlock.Reason.PATH_UNAVAILABLE);
+        FrontierWorldState held = start.state().withResourceSites(start.state().resourceSites().replace(
+                start.state().resourceSites().site(start.site()).blockHarvestRoute(job, block)));
+        ScheduledAction due = ResourceSiteHarvestProcess.coldProgress(job, 22_301L);
+        assertFalse(ResourceSiteHarvestProcess.coldProgressHeld(held, due));
+        BodyPosition before = held.actorLocations().get(job.workerId()).body();
+        var planned = ResourceSiteHarvestProcess.planColdProgress(held, due);
+        var step = planned.stream().map(ProposedEvent::payload)
+                .filter(ResourceSiteHarvestColdGoalAdvanced.class::isInstance)
+                .map(ResourceSiteHarvestColdGoalAdvanced.class::cast).findFirst().orElseThrow();
+        FrontierWorldState resumed = ResourceSiteHarvestProcess.reduceColdGoalAdvanced(held, start.site(), step);
+        ResourceSiteHarvestJob current = (ResourceSiteHarvestJob) resumed.resourceSites().site(start.site())
+                .activeWork().orElseThrow();
+        assertTrue(current.navigationBlock().isEmpty());
+        assertNotEquals(before, resumed.actorLocations().get(job.workerId()).body());
+        assertEquals(step.nextBody(), resumed.actorLocations().get(job.workerId()).body());
+        assertEquals(0, current.progress().completedCropSlots());
+
+        FrontierWorldState targetBlocked = held.recordPhysicalDelta(new PhysicalDelta(
+                goal.representative().support().offset(0, 2, 0), PhysicalDeltaKind.UNKNOWN_SCAR,
+                Optional.empty(), Optional.empty(), "test:farmer-target-head-block"));
+        var alternative = ResourceSiteHarvestProcess.planColdProgress(targetBlocked, due).stream()
+                .map(ProposedEvent::payload).filter(ResourceSiteHarvestTargetRetargeted.class::isInstance)
+                .map(ResourceSiteHarvestTargetRetargeted.class::cast).findFirst().orElseThrow();
+        FrontierWorldState retargeted = ResourceSiteHarvestRetargeting.reduceTargetRetargeted(
+                targetBlocked, start.site(), alternative);
+        ResourceSiteHarvestJob alternateJob = (ResourceSiteHarvestJob) retargeted.resourceSites()
+                .site(start.site()).activeWork().orElseThrow();
+        assertTrue(alternateJob.navigationBlock().isEmpty());
+        assertNotEquals(job.progress().nextCropSlotIndex(), alternateJob.progress().nextCropSlotIndex());
+        assertEquals(0, alternateJob.progress().completedCropSlots());
+
+        FrontierWorldState walled = held;
+        for (BlockPosition neighbour : List.of(before.supportingSurface().support().offset(1, 1, 0),
+                before.supportingSurface().support().offset(-1, 1, 0),
+                before.supportingSurface().support().offset(0, 1, 1),
+                before.supportingSurface().support().offset(0, 1, -1))) {
+            walled = walled.recordPhysicalDelta(new PhysicalDelta(neighbour, PhysicalDeltaKind.UNKNOWN_SCAR,
+                    Optional.empty(), Optional.empty(), "test:farmer-route-wall"));
+        }
+        var unavailable = ResourceSiteHarvestProcess.planColdProgress(walled, due);
+        assertTrue(unavailable.stream().map(ProposedEvent::payload)
+                .noneMatch(ResourceSiteHarvestColdGoalAdvanced.class::isInstance));
+        assertTrue(unavailable.stream().map(ProposedEvent::payload)
+                .noneMatch(ResourceSiteHarvestColdGoalHeld.class::isInstance));
+    }
     @Test void blockedFinalCellCanBeSkippedWithoutRequiringItsWorkStationAsATransitNode() {
         var fixture = FrontierResourceSiteHarvestFixture.createWithOneExtraCellAfterColdPart(
                 new WorldId("frontier:blocked-final-goal"), 125L);

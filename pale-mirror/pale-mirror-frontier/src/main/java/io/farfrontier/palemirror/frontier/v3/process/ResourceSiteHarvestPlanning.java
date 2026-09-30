@@ -234,9 +234,9 @@ final class ResourceSiteHarvestPlanning {
             return List.of(reschedule(action, action));
         }
         ResourceFieldCycle currentField = state.resourceSites().cycle(job.siteId());
-        if (job.navigationBlock().isPresent()) {
-            // A previously observed HOT blockage remains authoritative in COLD. In
-            // particular, do not retry a blocked-cell skip before its exact clearance.
+        if (job.navigationBlock().filter(block -> !block.reroutable()).isPresent()) {
+            // Physical/support holds need exact clearance. A local HOT path failure
+            // may be reconsidered by COLD only after the scene releases its worker.
             return List.of(reschedule(action, coldProgress(job, nextDue)));
         }
         if (!job.progress().complete() && !job.returningForBatch() && !job.progress().hasPendingCrop()) {
@@ -274,7 +274,7 @@ final class ResourceSiteHarvestPlanning {
         ActorLocation worker = state.actorLocations().get(job.workerId());
         if (worker == null || worker.condition().status() != ActorLifeStatus.ALIVE)
             throw new IllegalArgumentException("COLD field goal has no living retained worker");
-        if (goal.arrivedAt(worker.supportingSurface())) {
+        if (job.navigationBlock().isEmpty() && goal.arrivedAt(worker.supportingSurface())) {
             if (ResourceSiteHarvestGoal.actorAtWorkCell(state, job))
                 return coldCropReceipt(state, action, job);
             if (goal.kind() == ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE && ResourceSiteHarvestGoal.actorAtDepot(state, job))
@@ -295,6 +295,10 @@ final class ResourceSiteHarvestPlanning {
                             reschedule(action, coldProgress(job, nextDue)));
                 }
             }
+            // Preserve the exact prior HOT hold while no COLD alternative is known;
+            // a second hold event would be invalid and would hide the original cause.
+            if (job.navigationBlock().isPresent())
+                return List.of(reschedule(action, coldProgress(job, nextDue)));
             return coldGoalHold(state, job, action, nextDue, goal,
                     ResourceSiteHarvestNavigationBlock.Reason.KNOWN_GEOMETRY_UNAVAILABLE);
         }
@@ -369,7 +373,7 @@ final class ResourceSiteHarvestPlanning {
                         && !ServiceAccessCoordinator.depotAvailableForHarvest(state, job))
                     || (ResourceSiteHarvestGoal.actorAtDepot(state, job) && job.returningForBatch()
                         && !batchDeliveryCapacityAvailable(state, job))
-                    || job.navigationBlock().isPresent());
+                    || job.navigationBlock().filter(block -> !block.reroutable()).isPresent());
     }
 
     /** COLD may not transfer an actor part into a chest held by a live physical custodian. */
