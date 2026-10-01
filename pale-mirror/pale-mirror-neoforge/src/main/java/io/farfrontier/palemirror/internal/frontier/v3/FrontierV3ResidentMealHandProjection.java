@@ -16,7 +16,7 @@ final class FrontierV3ResidentMealHandProjection {
         ResidentMeal meal = state.humanPopulation().meals().get(actorId);
         if (meal == null) return true;
         if (meal.pendingPhysicalStep().isPresent()) return false;
-        if (meal.phase() != ResidentMeal.Phase.CONSUME) return body.getItemBySlot(EquipmentSlot.OFFHAND).isEmpty();
+        if (!meal.carriesFood()) return body.getItemBySlot(EquipmentSlot.OFFHAND).isEmpty();
         CustodyAccount account = state.inventory().fungibleResources().accounts().get(meal.actorAccountId());
         if (account == null || !account.custody().equals(new ResourceCustody.Actor(actorId))
                 || !account.lotQuantities().equals(meal.portion().lotQuantities())
@@ -36,6 +36,6 @@ final class FrontierV3ResidentMealHandProjection {
         if (meal.pendingPhysicalStep().isPresent())
             return meal.phase() == ResidentMeal.Phase.TAKE || meal.phase() == ResidentMeal.Phase.CONSUME
                     ? held.isEmpty() || food : false;
-        return meal.phase() == ResidentMeal.Phase.CONSUME ? food : held.isEmpty();
+        return meal.carriesFood() ? food : held.isEmpty();
     }
 }

@@ -21,14 +21,6 @@ public final class ActorMovementProcess {
     private static final long COLD_TICKS_PER_EDGE = 20L;
     private ActorMovementProcess() { }
 
-    public static ActorMovement afterMeal(ResidentMeal meal, long issuedAtTick) {
-        MovementOrder order = new MovementOrder(meal.residentId(), meal.residentId(), 0L,
-                Math.addExact(meal.startedAtTick(), 1L), List.of(meal.clearingSurface()),
-                TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
-        return new ActorMovement(order, issuedAtTick,
-                new ActorMovementContext.ServiceExit(meal.settlementId(), meal.depotId()));
-    }
-
     public static ScheduledAction progress(ActorMovement movement, long dueAt) {
         if (dueAt <= movement.issuedAtTick()) throw new IllegalArgumentException("movement progress precedes order");
         MovementOrder order = movement.order();

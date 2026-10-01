@@ -34,7 +34,7 @@ public final class ResidentMealReferenceClosure {
                 if (!currentClaim(ledger, meal, claim, source, new ResourceCustody.Container(meal.depotId()))
                         || held != null)
                     throw new IllegalArgumentException("approaching resident meal lacks exact depot bread claim");
-            } else if (meal.phase() == ResidentMeal.Phase.CONSUME) {
+            } else if (meal.carriesFood()) {
                 if (!currentClaim(ledger, meal, claim, held, new ResourceCustody.Actor(meal.residentId())))
                     throw new IllegalArgumentException("consuming resident meal lacks exact actor-held bread claim");
             } else if (claim != null || held != null) {

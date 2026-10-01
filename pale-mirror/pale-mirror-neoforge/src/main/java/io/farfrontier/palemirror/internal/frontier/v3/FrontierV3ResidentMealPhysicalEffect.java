@@ -26,8 +26,17 @@ final class FrontierV3ResidentMealPhysicalEffect {
         ResidentMeal meal = state.humanPopulation().meals().get(residentId);
         if (meal == null || lease.goal() != AmbientGoalKind.MEAL || lease.status() != AmbientLeaseStatus.HOT
                 || !(body instanceof Villager worker) || !body.getUUID().equals(
-                        SceneLease.deterministicEntityId(state.bootstrap().worldId(), residentId))
-                || !FrontierV3SurfaceObservation.at(body, ResidentMealProcess.serviceSurface(state, meal))) return false;
+                        SceneLease.deterministicEntityId(state.bootstrap().worldId(), residentId))) return false;
+        // A COLD-held portion acquires exact HOT hand custody before either walking or eating.
+        if (meal.carriesFood() && meal.pendingPhysicalStep().isEmpty()
+                && state.inventory().fungibleResources().bindings().values().stream()
+                    .noneMatch(binding -> binding.accountId().equals(meal.actorAccountId()))
+                && FrontierV3ResidentMealItems.matches(worker.getItemBySlot(EquipmentSlot.OFFHAND), meal.portion()))
+            return accepted(level, runtime, meal.residentId(), "resident-meal-hand-materialized",
+                    new ResidentMealHotHandMaterialized(meal.residentId(), lease.revision(),
+                            new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(
+                                    meal.residentId(), worker.getUUID()), meal.portion().itemKind(), meal.portion().quantity())));
+        if (!FrontierV3SurfaceObservation.at(body, ResidentMealProcess.goalSurface(state, meal))) return false;
         if (meal.phase() == ResidentMeal.Phase.TAKE) return take(level, runtime, state, meal, worker, lease);
         if (meal.phase() == ResidentMeal.Phase.CONSUME) return consume(level, runtime, state, meal, worker, lease);
         return false;
@@ -91,11 +100,6 @@ final class FrontierV3ResidentMealPhysicalEffect {
                 .filter(binding -> binding.accountId().equals(meal.actorAccountId())).toList();
         ItemStack actual = worker.getItemBySlot(EquipmentSlot.OFFHAND);
         boolean before = FrontierV3ResidentMealItems.matches(actual, meal.portion());
-        if (bindings.isEmpty() && meal.pendingPhysicalStep().isEmpty() && before)
-            return accepted(level, runtime, meal.residentId(), "resident-meal-hand-materialized",
-                    new ResidentMealHotHandMaterialized(meal.residentId(), lease.revision(),
-                            new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(
-                                    meal.residentId(), worker.getUUID()), meal.portion().itemKind(), meal.portion().quantity())));
         if (bindings.size() != 1 || bindings.getFirst().quantity() != meal.portion().quantity()
                 || !bindings.getFirst().lotQuantities().equals(meal.portion().lotQuantities())
                 || !(bindings.getFirst().address() instanceof PhysicalStackAddress.ActorHand hand)

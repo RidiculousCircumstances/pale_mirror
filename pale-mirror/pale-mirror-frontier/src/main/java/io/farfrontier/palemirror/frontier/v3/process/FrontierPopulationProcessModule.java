@@ -295,7 +295,7 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
             case ResidentMealColdStep step -> ResidentMealProcess.reduceColdStep(state, event.subject(), step);
             case ResidentMealHotArrived arrived -> ResidentMealProcess.reduceHotArrived(state, event.subject(), arrived);
             case ResidentMealHotEffectPrepared prepared -> ResidentMealProcess.reduceHotPrepared(state, event.subject(), prepared);
-            case ResidentMealHotEffectObserved observed -> ResidentMealProcess.reduceHotObserved(state, event.subject(), observed, event.instant().ticks());
+            case ResidentMealHotEffectObserved observed -> ResidentActivityProcess.reduceMealEffectObserved(state, event.subject(), observed, event.instant().ticks());
             case ResidentMealHotHandMaterialized observed -> ResidentMealProcess.reduceHotHandMaterialized(state, event.subject(), observed);
             case ResidentMealHotHandReleased observed -> ResidentMealProcess.reduceHotHandReleased(state, event.subject(), observed);
             case ResidentMealHotAccessCleared cleared -> ResidentMealProcess.reduceHotAccessCleared(state, event.subject(), cleared);

@@ -22,10 +22,14 @@ public final class ResidentMealKnownNavigation {
 
     /** The same retained body walks away from the shared socket before the next user enters. */
     public static List<SurfaceAnchor> returnPath(FrontierWorldState state, ResidentMeal meal) {
+        return clearancePathFrom(state, meal, state.actorLocations().get(meal.residentId()).supportingSurface());
+    }
+
+    public static List<SurfaceAnchor> clearancePathFrom(FrontierWorldState state, ResidentMeal meal, SurfaceAnchor start) {
         MovementOrder order = new MovementOrder(meal.residentId(), meal.residentId(),
                 FrontierWireTags.tag(meal.phase()), 1L, List.of(meal.clearingSurface()),
                 TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
-        return KnownServiceExitNavigation.path(state, meal.settlementId(), meal.depotId(), order);
+        return KnownServiceExitNavigation.pathFrom(state, meal.settlementId(), meal.depotId(), order, start);
     }
 
     /** A HOT release can resume from its last witnessed body without replaying an old path. */

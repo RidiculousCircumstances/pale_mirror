@@ -464,7 +464,7 @@ public final class FrontierV3FixtureCatalog {
             ResidentMealColdStep step = ResidentMealProcess.planColdStep(state, residentId, due).orElseThrow();
             state = ResidentMealProcess.reduceColdStep(state, residentId, step);
         }
-        if (state.humanPopulation().meals().get(residentId).phase() != ResidentMeal.Phase.CONSUME
+        if (state.humanPopulation().meals().get(residentId).phase() != ResidentMeal.Phase.CLEAR_ACCESS
                 || state.inventory().fungibleResources().accounts().get(started.meal().actorAccountId()) == null)
             throw new IllegalStateException("after-take fixture lacks its exact claimed actor-held bread");
         long instant = hungryAt + 2L;

@@ -243,8 +243,7 @@ public final class AmbientActorProcess {
                     movement.order().legalStations().getFirst().support());
             ResidentMeal meal = state.humanPopulation().meals().get(actorId);
             if (meal != null) return new AmbientGoal(AmbientGoalKind.MEAL,
-                    (meal.phase() == ResidentMeal.Phase.RETURN ? meal.clearingSurface()
-                            : ResidentMealProcess.serviceSurface(state, meal)).support());
+                    ResidentMealProcess.goalSurface(state, meal).support());
             ResidentActivityChoice choice = ResidentActivityCoordinator.assess(state, actorId, atTick);
             HumanAssignment assignment = HumanAssignmentProjection.compile(state).assignment(actorId);
             ResourceSiteHarvestJob harvest = assignment.kind() == HumanAssignmentKind.FIELD_HARVEST

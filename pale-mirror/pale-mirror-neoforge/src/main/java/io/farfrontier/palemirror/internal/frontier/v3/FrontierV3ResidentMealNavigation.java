@@ -25,7 +25,7 @@ final class FrontierV3ResidentMealNavigation {
     static void pursue(ServerLevel level, FrontierWorldState state, Mob body,
                        AmbientActorLease lease, ResidentMeal meal) {
         if (meal == null || meal.phase() != ResidentMeal.Phase.MOVE
-                && meal.phase() != ResidentMeal.Phase.RETURN) {
+                && !meal.movesToClearance()) {
             ROUTES.remove(body);
             BLOCKED.remove(body);
             FrontierV3GoalNavigation.stop(body);
@@ -44,7 +44,8 @@ final class FrontierV3ResidentMealNavigation {
                         meal.phase() == ResidentMeal.Phase.MOVE
                                 ? ResidentMealKnownNavigation.pathFrom(state, meal,
                                     FrontierV3SurfaceObservation.observedBody(body).supportingSurface())
-                                : ResidentMealKnownNavigation.returnPath(state, meal));
+                                : ResidentMealKnownNavigation.clearancePathFrom(state, meal,
+                                    FrontierV3SurfaceObservation.observedBody(body).supportingSurface()));
             } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
                 blocked(body, meal, "known_route:" + unavailable.getMessage());
                 FrontierV3GoalNavigation.stop(body);

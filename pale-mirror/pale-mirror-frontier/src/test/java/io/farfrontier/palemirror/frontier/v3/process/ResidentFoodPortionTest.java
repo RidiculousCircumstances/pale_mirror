@@ -59,9 +59,13 @@ class ResidentFoodPortionTest {
         assertEquals(FOOD, started.meal().portion().itemKind());
         assertEquals(Map.of(LOT_A, 3, LOT_B, 2), started.meal().portion().lotQuantities());
         state = ResidentMealProcess.reduceStarted(state, resident, started);
-        for (long tick = 96_001; state.humanPopulation().meals().containsKey(resident) && tick <= 96_003; tick++)
+        long tick = 96_001;
+        for (int step = 0; state.humanPopulation().meals().containsKey(resident) && step < 16; step++) {
+            tick = state.humanPopulation().meals().get(resident).coldTravel()
+                    .map(route -> route.arrivalTick() + 1L).orElse(tick + 1L);
             state = ResidentMealProcess.reduceColdStep(state, resident,
                     ResidentMealProcess.planColdStep(state, resident, tick).orElseThrow());
+        }
         assertFalse(state.humanPopulation().meals().containsKey(resident));
         assertEquals(500, state.humanPopulation().nutrition(resident).satietyUnits());
         assertEquals(0, state.inventory().fungibleResources().totalQuantity(started.meal().settlementId(), FOOD));
@@ -103,20 +107,27 @@ class ResidentFoodPortionTest {
         state = ResidentMealProcess.reduceHotPrepared(state, resident, prepared);
         var hand = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(resident,
                 SceneLease.deterministicEntityId(state.bootstrap().worldId(), resident)), FOOD, 9);
-        state = ResidentMealProcess.reduceHotObserved(state, resident, new ResidentMealHotEffectObserved(resident,
+        state = ResidentActivityProcess.reduceMealEffectObserved(state, resident, new ResidentMealHotEffectObserved(resident,
                 ResidentMeal.Phase.TAKE, 1, fixture.service().standingBody(),
                 List.of(new FungiblePhysicalObservation.Stack(slots.getLast().address(), FOOD, 2)), List.of(hand)), 96_001);
+        var eating = state.humanPopulation().meals().get(resident).clearingSurface().standingBody();
+        var atService = state;
+        assertThrows(IllegalArgumentException.class, () -> ResidentMealProcess.reduceHotPrepared(atService, resident,
+                new ResidentMealHotEffectPrepared(resident,
+                        new ResidentMealPhysicalStep(ResidentMeal.Phase.CONSUME, -1, 9, 1, 0, 1))));
+        state = ResidentMealProcess.reduceHotAccessCleared(state, resident,
+                roundtrip(new ResidentMealHotAccessCleared(resident, 1, eating)));
         state = ResidentMealProcess.reduceHotPrepared(state, resident, roundtrip(new ResidentMealHotEffectPrepared(resident,
                 new ResidentMealPhysicalStep(ResidentMeal.Phase.CONSUME, -1, 9, 1, 0, 1))));
         var consumed = new ResidentMealHotEffectObserved(resident, ResidentMeal.Phase.CONSUME, 1,
-                fixture.service().standingBody(), List.of(), List.of());
+                eating, List.of(), List.of());
         var events = ResidentMealProcess.planHotObserved(state, consumed, 96_002);
         assertTrue(events.stream().anyMatch(event -> event.payload().equals(consumed)));
         for (var event : events) {
             if (event.payload() instanceof ResidentStarvationIntegrated health)
                 state = ResidentStarvationProcess.reduce(state, resident, health);
             else if (event.payload() instanceof ResidentMealHotEffectObserved receipt)
-                state = ResidentMealProcess.reduceHotObserved(state, resident, receipt, 96_002);
+                state = ResidentActivityProcess.reduceMealEffectObserved(state, resident, receipt, 96_002);
         }
         assertEquals(900, state.humanPopulation().nutrition(resident).satietyUnits());
         assertEquals(2, state.inventory().fungibleResources().totalQuantity(started.meal().settlementId(), FOOD));

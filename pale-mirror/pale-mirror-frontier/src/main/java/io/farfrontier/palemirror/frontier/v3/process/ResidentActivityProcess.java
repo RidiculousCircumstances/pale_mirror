@@ -66,6 +66,12 @@ public final class ResidentActivityProcess {
         return retargetHotResident(next, subject, atTick);
     }
 
+    /** Meal receipts own food effects; activity orchestration alone retargets the retained HOT executor. */
+    public static FrontierWorldState reduceMealEffectObserved(FrontierWorldState state, SubjectId subject,
+            ResidentMealHotEffectObserved observed, long atTick) {
+        return retargetHotResident(ResidentMealProcess.reduceHotObserved(state, subject, observed, atTick), subject, atTick);
+    }
+
     /** A completed meal changes activity eligibility immediately, not at the next day boundary. */
     public static ProposedEvent wakeAfterMeal(SubjectId residentId, long atTick) {
         ScheduledAction next = review(residentId, Math.addExact(atTick, 1L));

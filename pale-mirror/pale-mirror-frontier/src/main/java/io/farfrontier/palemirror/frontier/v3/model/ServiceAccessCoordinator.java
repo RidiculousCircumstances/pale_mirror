@@ -127,7 +127,7 @@ public final class ServiceAccessCoordinator {
 
     /** The same physical boundary test is used before HOT submission and by its reducer. */
     public static boolean witnessedMealExit(FrontierWorldState state, ResidentMeal meal, BodyPosition observedBody) {
-        if (meal.phase() != ResidentMeal.Phase.RETURN || meal.pendingPhysicalStep().isPresent()) return false;
+        if (!meal.movesToClearance() || meal.pendingPhysicalStep().isPresent()) return false;
         ServiceAccessBoundary boundary = port(state, meal.depotId()).accessBoundary();
         ActorLocation actor = state.actorLocations().get(meal.residentId());
         if (actor == null || !boundary.occupied(actor.body()) || !boundary.cleared(observedBody)) return false;
@@ -240,34 +240,21 @@ public final class ServiceAccessCoordinator {
     public static Optional<SurfaceAnchor> mealClearingSurface(FrontierWorldState state, SubjectId residentId) {
         ResidentProfile resident = Objects.requireNonNull(state.humanPopulation().resident(residentId), "service resident");
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), resident.settlementId());
-        List<BlockPosition> homes = SettlementResidentIngressPlan.compile(state.bootstrap().bounds(),
-                state.bootstrap().terrain(), settlement,
-                state.bootstrap().ruleset().facilityCapacity().intactHousingBeds()).homeSlots();
-        SurfaceAnchor current = state.actorLocations().get(residentId).supportingSurface();
         SettlementDepotServicePort port = port(state, FrontierWorldState.depotId(settlement.id()));
-        if (homes.contains(current.support()) && outsideThroat(port, current)) return Optional.of(current);
-        for (int ordinal = 0; ordinal < settlement.residents().size() && ordinal < homes.size(); ordinal++) {
-            if (settlement.residents().get(ordinal).id().equals(residentId)) {
-                SurfaceAnchor personal = new SurfaceAnchor(homes.get(ordinal));
-                if (outsideThroat(port, personal) && unoccupied(state, residentId, personal))
-                    return Optional.of(personal);
-                break;
-            }
-        }
-        int first = Math.floorMod(residentId.value().hashCode(), homes.size());
-        for (int offset = 0; offset < homes.size(); offset++) {
-            SurfaceAnchor candidate = new SurfaceAnchor(homes.get((first + offset) % homes.size()));
-            if (!outsideThroat(port, candidate)) continue;
-            if (unoccupied(state, residentId, candidate)) return Optional.of(candidate);
-        }
-        return Optional.empty();
-    }
-
-    private static boolean unoccupied(FrontierWorldState state, SubjectId residentId, SurfaceAnchor candidate) {
-        return state.actorLocations().entrySet().stream()
+        SettlementStructure depot = settlement.structures().stream()
+                .filter(structure -> structure.id().equals(port.depotId())).findFirst().orElseThrow();
+        java.util.Set<SurfaceAnchor> excluded = new java.util.HashSet<>();
+        state.actorLocations().entrySet().stream()
                 .filter(entry -> !entry.getKey().equals(residentId))
                 .filter(entry -> entry.getValue().condition().status() == ActorLifeStatus.ALIVE)
-                .noneMatch(entry -> entry.getValue().supportingSurface().equals(candidate));
+                .map(entry -> entry.getValue().supportingSurface()).forEach(excluded::add);
+        state.humanPopulation().meals().values().stream()
+                .filter(meal -> !meal.residentId().equals(residentId))
+                .map(ResidentMeal::clearingSurface).forEach(excluded::add);
+        return ServiceClearanceTargets.select(SettlementServiceAccessPoints.forDepot(state, settlement, depot),
+                residentId, KnownPedestrianRouteKnowledge.forSettlement(state, settlement.id(), List.of(
+                        new KnownPedestrianRouteKnowledge.Passage(depot,
+                                KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS))), excluded);
     }
 
     /** Final return requires the exact target; access may already have been released. */

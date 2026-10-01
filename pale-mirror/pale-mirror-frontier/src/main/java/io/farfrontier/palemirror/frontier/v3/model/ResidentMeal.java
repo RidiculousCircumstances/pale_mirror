@@ -17,8 +17,12 @@ public record ResidentMeal(SubjectId residentId, SubjectId settlementId, Subject
                            Optional<ResidentMealPhysicalStep> pendingPhysicalStep,
                            Optional<TimedKnownRoute> coldTravel) {
     public static final String BREAD_KIND = "minecraft:bread";
-    /** RETURN retains the meal journey; service access may be released before it finishes. */
-    public enum Phase { MOVE, TAKE, CONSUME, RETURN }
+    /** CLEAR_ACCESS carries the retained portion outside the shared service passage before eating. */
+    public enum Phase { MOVE, TAKE, CONSUME, RETURN, CLEAR_ACCESS }
+
+    public boolean carriesFood() { return phase == Phase.CLEAR_ACCESS || phase == Phase.CONSUME; }
+
+    public boolean movesToClearance() { return phase == Phase.CLEAR_ACCESS || phase == Phase.RETURN; }
 
     public ResidentMeal {
         Objects.requireNonNull(residentId, "meal resident");
@@ -39,7 +43,7 @@ public record ResidentMeal(SubjectId residentId, SubjectId settlementId, Subject
         if (pendingPhysicalStep.isPresent() && phase == Phase.CONSUME
                 && pendingPhysicalStep.orElseThrow().consumptionQuantity() != portion.quantity())
             throw new IllegalArgumentException("consumption fence differs from retained portion");
-        if (coldTravel.isPresent() && (phase != Phase.MOVE && phase != Phase.RETURN
+        if (coldTravel.isPresent() && (phase != Phase.MOVE && !movesToClearancePhase(phase)
                 || !coldTravel.orElseThrow().order().actorId().equals(residentId)
                 || !coldTravel.orElseThrow().order().ownerId().equals(residentId)
                 || coldTravel.orElseThrow().order().goalOrdinal() != FrontierWireTags.tag(phase)
@@ -86,13 +90,18 @@ public record ResidentMeal(SubjectId residentId, SubjectId settlementId, Subject
     public ResidentMeal advance(Phase next) {
         boolean legal = switch (phase) {
             case MOVE -> next == Phase.TAKE;
-            case TAKE -> next == Phase.CONSUME;
-            case CONSUME -> false; // confirmed consumption retires the meal and issues an actor movement order
+            case TAKE -> next == Phase.CLEAR_ACCESS;
+            case CLEAR_ACCESS -> next == Phase.CONSUME;
+            case CONSUME -> false; // only confirmed consumption retires the meal
             case RETURN -> false;
         };
         if (!legal) throw new IllegalArgumentException("meal phase cannot skip a physical custody receipt");
         return new ResidentMeal(residentId, settlementId, depotId, clearingSurface, sourceAccountId, actorAccountId,
                 portion, claimId, retainedWorkOwner, next, startedAtTick, Optional.empty(), Optional.empty(), Optional.empty());
+    }
+
+    private static boolean movesToClearancePhase(Phase phase) {
+        return phase == Phase.CLEAR_ACCESS || phase == Phase.RETURN;
     }
 
     public ResidentMeal waitFor(ResidentActivityChoice.Wait reason) {

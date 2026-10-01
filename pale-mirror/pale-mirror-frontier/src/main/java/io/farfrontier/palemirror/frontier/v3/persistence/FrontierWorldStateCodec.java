@@ -38,8 +38,8 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     // Version 216 adds owner-authorized interruption and removes mandatory home-arrival gating.
     // Test worlds from the former execution grammar are rejected, never silently reinterpreted.
     // Version 217 replaces missed-meal deficit with bounded satiety; fresh test worlds only.
-    // Version 219 retains registered edible portions and complete multi-slot meal fences.
-    static final int VERSION = 219; private static final int MAX_ENTRIES = 65_535;
+    // Version 220 separates pre-consumption service clearance from confirmed eating.
+    static final int VERSION = 220; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }

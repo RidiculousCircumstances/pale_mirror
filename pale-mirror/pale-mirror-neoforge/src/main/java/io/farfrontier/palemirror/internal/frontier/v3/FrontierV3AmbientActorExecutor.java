@@ -791,7 +791,7 @@ final class FrontierV3AmbientActorExecutor {
         ResidentMeal retainedMeal = state.humanPopulation().meals().get(actorId);
         if (retainedMeal != null) {
             if (retainedMeal.pendingPhysicalStep().isPresent()) return Optional.empty();
-            if (retainedMeal.phase() == ResidentMeal.Phase.CONSUME) {
+            if (retainedMeal.carriesFood()) {
                 var bindings = state.inventory().fungibleResources().bindings().values().stream()
                         .filter(binding -> binding.accountId().equals(retainedMeal.actorAccountId())).toList();
                 if (!bindings.isEmpty()) {
