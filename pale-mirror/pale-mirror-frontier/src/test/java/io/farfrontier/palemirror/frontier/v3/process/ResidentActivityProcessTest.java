@@ -20,6 +20,30 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ResidentActivityProcessTest {
+    @Test void queueEligibilityDoesNotPlanGeometryOrAdmitAnUnsafeMeal() {
+        var initial = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:meal-eligibility-without-geometry"), 421L));
+        var settlement = initial.bootstrap().settlements().getFirst();
+        var resident = settlement.residents().getFirst().id();
+        var account = ReferenceContainerCustody.scopeId(FrontierWorldState.depotId(settlement.id()));
+        var resources = initial.inventory().fungibleResources().transformCold(account,
+                Map.of(new SubjectId("lot:bootstrap-1-wheat"), 1), Map.of(),
+                new ResourceLot(new SubjectId("lot:eligibility-bread"), settlement.id(),
+                        ResidentMeal.BREAD_KIND, 1, "test", List.of()));
+        var state = initial.withInventory(initial.inventory().withFungibleResources(resources));
+        var depot = settlement.structures().stream().filter(value -> value.kind() == StructureKind.DEPOT)
+                .findFirst().orElseThrow();
+        for (var surface : SettlementServiceAccessPoints.forDepot(state, settlement, depot).waitingSurfaces())
+            state = state.recordPhysicalDelta(new PhysicalDelta(surface.support(), PhysicalDeltaKind.UNKNOWN_SCAR,
+                    java.util.Optional.empty(), java.util.Optional.empty(), "test:blocked-clearance"));
+        assertTrue(ResidentMealOpportunity.candidate(state, resident, 24_000L).isPresent());
+        assertTrue(ResidentMealOpportunity.find(state, resident, 24_000L).isEmpty());
+        var action = ResidentActivityProcess.review(resident, 24_000L);
+        assertFalse(ResidentActivityProcess.held(state, action), "eligibility permits a cheap admission attempt");
+        assertTrue(ResidentActivityProcess.plan(state, action).stream()
+                .noneMatch(event -> event.payload() instanceof ResidentMealStarted),
+                "actual admission still proves a safe clearing destination");
+    }
     @Test void depotStockChangeWakesOnlyItsSettlementWaiters() {
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:resident-depot-addressed-wake"), 421L));

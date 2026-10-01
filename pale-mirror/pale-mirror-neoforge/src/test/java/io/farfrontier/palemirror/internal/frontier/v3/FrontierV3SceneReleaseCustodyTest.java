@@ -23,6 +23,9 @@ class FrontierV3SceneReleaseCustodyTest {
             var policy = FrontierV3SceneBehaviorRegistry.bodyReleasePolicy(kind);
             assertFalse(policy.retainsLiveBody(false));
             assertEquals(kind == SceneCauseKind.RESOURCE_SITE_HARVEST, policy.retainsLiveBody(true));
+            assertFalse(policy.retainsLiveBody(true, true),
+                    "releasing a bound hand must fence the exact body even while observed");
+            assertEquals(policy.retainsLiveBody(true), policy.retainsLiveBody(true, false));
         }
         assertThrows(IllegalArgumentException.class, () -> FrontierV3SceneBehaviorRegistry.bodyReleasePolicy(null));
     }

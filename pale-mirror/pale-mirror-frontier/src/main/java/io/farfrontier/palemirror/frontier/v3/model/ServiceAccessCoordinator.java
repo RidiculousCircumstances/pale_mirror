@@ -251,10 +251,11 @@ public final class ServiceAccessCoordinator {
         state.humanPopulation().meals().values().stream()
                 .filter(meal -> !meal.residentId().equals(residentId))
                 .map(ResidentMeal::clearingSurface).forEach(excluded::add);
-        return ServiceClearanceTargets.select(SettlementServiceAccessPoints.forDepot(state, settlement, depot),
-                residentId, KnownPedestrianRouteKnowledge.forSettlement(state, settlement.id(), List.of(
+        var knowledge = KnownPedestrianRouteKnowledge.forSettlement(state, settlement.id(), List.of(
                         new KnownPedestrianRouteKnowledge.Passage(depot,
-                                KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS))), excluded);
+                                KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS)));
+        return ServiceClearanceTargets.select(SettlementServiceAccessPoints.forDepot(settlement, depot, knowledge),
+                residentId, knowledge, excluded);
     }
 
     /** Final return requires the exact target; access may already have been released. */

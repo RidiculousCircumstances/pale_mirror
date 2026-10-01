@@ -127,7 +127,8 @@ final class FrontierV3SceneReleaseExecutor {
         var actorLedger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
         var releasePolicy = FrontierV3SceneBehaviorRegistry.bodyReleasePolicy(lease.cause().kind());
         boolean retainVisible = releasePolicy
-                .retainsLiveBody(demandExists(level, lease.handoffPosition()) || playerWithinSafeRadius(level, lease));
+                .retainsLiveBody(demandExists(level, lease.handoffPosition()) || playerWithinSafeRadius(level, lease),
+                        io.farfrontier.palemirror.frontier.v3.model.FrontierSceneLeaseStateSupport.hasBoundActorHand(state, lease));
         for (SceneMember member : lease.members()) {
             if (state.actorLocations().get(member.actorId()).condition().status() == io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.DEAD) continue;
             Entity entity = level.getEntity(member.entityId());

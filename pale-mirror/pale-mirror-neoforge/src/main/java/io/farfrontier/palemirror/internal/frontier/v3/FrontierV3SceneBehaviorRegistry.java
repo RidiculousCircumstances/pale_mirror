@@ -156,6 +156,11 @@ final class FrontierV3SceneBehaviorRegistry {
         private final ReleaseFailure failure;
         BodyReleasePolicy(ReleaseFailure failure) { this.failure = failure; }
         boolean retainsLiveBody(boolean observed) { return this == RETAIN_WHILE_OBSERVED && observed; }
+        boolean retainsLiveBody(boolean observed, boolean releasesBoundHand) {
+            // Releasing physical custody requires the existing durable inactive-carrier
+            // fence. A retained loaded body would otherwise keep an unbound old stack.
+            return retainsLiveBody(observed) && !releasesBoundHand;
+        }
         Optional<BodyPosition> captureReleasedBody(ServerLevel level, net.minecraft.world.entity.Mob body) {
             return this == RETAIN_WHILE_OBSERVED ? FrontierV3SupportedBodyCapture.observe(level, body)
                     : Optional.of(FrontierV3BodyObservation.position(body));

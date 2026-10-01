@@ -21,11 +21,29 @@ public final class ResidentMealOpportunity {
         }
     }
 
+    /** Cheap economic eligibility; geometry is planned only for an actual meal admission. */
+    public record Candidate(SubjectId depotId, FungibleResourceCustodySupport.LotSelection selection,
+                            FoodPortion portion) {
+        public Candidate {
+            Objects.requireNonNull(depotId, "meal candidate depot");
+            Objects.requireNonNull(selection, "meal candidate selection");
+            Objects.requireNonNull(portion, "meal candidate portion");
+            if (!selection.lotQuantities().equals(portion.lotQuantities()))
+                throw new IllegalArgumentException("meal candidate differs from its exact portion");
+        }
+    }
+
     public static Optional<Source> find(FrontierWorldState state, SubjectId residentId) {
         return find(state, residentId, state.humanPopulation().nutrition(residentId).lastEvaluatedTick());
     }
 
     public static Optional<Source> find(FrontierWorldState state, SubjectId residentId, long atTick) {
+        return candidate(state, residentId, atTick).flatMap(candidate ->
+                ServiceAccessCoordinator.mealClearingSurface(state, residentId).map(clearing ->
+                        new Source(candidate.depotId(), clearing, candidate.selection(), candidate.portion())));
+    }
+
+    public static Optional<Candidate> candidate(FrontierWorldState state, SubjectId residentId, long atTick) {
         ResidentProfile resident = state.humanPopulation().resident(residentId);
         if (resident == null || state.humanPopulation().meals().containsKey(residentId)
                 || state.actorMovements().containsKey(residentId)
@@ -35,9 +53,8 @@ public final class ResidentMealOpportunity {
         SubjectId depot = FrontierWorldState.depotId(resident.settlementId());
         if (ReferenceContainerCustody.blocksCanonicalUse(state, depot)) return Optional.empty();
         if (!ServiceAccessCoordinator.depotMayStartMeal(state, depot, residentId)) return Optional.empty();
-        SurfaceAnchor clearing = ServiceAccessCoordinator.mealClearingSurface(state, residentId).orElse(null);
         var account = FungibleResourceCustodySupport.accountAtContainer(state, depot).orElse(null);
-        if (clearing == null || account == null) return Optional.empty();
+        if (account == null) return Optional.empty();
         var rules = state.bootstrap().ruleset().residentLife();
         int wanted = state.humanPopulation().nutrition(residentId).accrueThrough(atTick, rules,
                 resident.characteristics().effectiveMetabolismPermille(atTick)).nutritionWanted(rules);
@@ -49,7 +66,7 @@ public final class ResidentMealOpportunity {
             if (quantity == 0) continue;
             var selection = FungibleResourceCustodySupport.selectAtContainer(state, depot,
                     resident.settlementId(), food.itemKind(), quantity).orElseThrow();
-            return Optional.of(new Source(depot, clearing, selection,
+            return Optional.of(new Candidate(depot, selection,
                     new FoodPortion(food.itemKind(), food.nutritionPerItem(), selection.lotQuantities())));
         }
         return Optional.empty();

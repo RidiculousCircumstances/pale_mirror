@@ -80,6 +80,18 @@ public final class ResidentActivityCoordinator {
     /** Derived assessment only; a work owner must acknowledge its yield before EAT starts. */
     public static ResidentActivityChoice assess(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId residentId,
                                                 long canonicalTick) {
+        return assess(state, residentId, canonicalTick, false);
+    }
+
+    /** Queue polling asks whether to try admission, not whether a route can be committed. */
+    public static ResidentActivityChoice assessEligibility(FrontierWorldState state,
+            io.farfrontier.palemirror.frontier.v3.api.SubjectId residentId, long canonicalTick) {
+        return assess(state, residentId, canonicalTick, true);
+    }
+
+    private static ResidentActivityChoice assess(FrontierWorldState state,
+            io.farfrontier.palemirror.frontier.v3.api.SubjectId residentId, long canonicalTick,
+            boolean eligibilityOnly) {
         Objects.requireNonNull(state, "activity state");
         ResidentProfile resident = state.humanPopulation().resident(residentId);
         if (resident == null) throw new IllegalArgumentException("activity has no exact resident");
@@ -96,7 +108,8 @@ public final class ResidentActivityCoordinator {
                         state.bootstrap().ruleset().residentLife(),
                         resident.characteristics().effectiveMetabolismPermille(assessedAt)).satietyUnits()
                     >= state.bootstrap().ruleset().residentLife().eatBelowUnits()
-                || ResidentMealOpportunity.find(state, residentId, assessedAt).isPresent()) return choice;
+                || (eligibilityOnly ? ResidentMealOpportunity.candidate(state, residentId, assessedAt).isPresent()
+                    : ResidentMealOpportunity.find(state, residentId, assessedAt).isPresent())) return choice;
         // No executable meal exists. Keep working in WORK, or obey FREE at a safe point;
         // the activity wake still retries food independently without losing the assignment.
         if (state.humanPopulation().schedule(resident.settlementId()).windowAt(assessedAt)

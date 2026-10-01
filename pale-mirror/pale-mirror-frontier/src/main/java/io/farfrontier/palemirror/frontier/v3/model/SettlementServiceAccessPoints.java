@@ -32,9 +32,13 @@ public final class SettlementServiceAccessPoints {
                 .map(structure -> forDepot(state, settlement, structure)).toList();
     }
     public static ServiceAccessPoint forDepot(FrontierWorldState state, Settlement settlement, SettlementStructure depot) {
-        SettlementDepotServicePort port = SettlementDepotServicePort.forDepot(depot);
         var knowledge = KnownPedestrianRouteKnowledge.forSettlement(state, settlement.id(), List.of(
                 new KnownPedestrianRouteKnowledge.Passage(depot, KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS)));
+        return forDepot(settlement, depot, knowledge);
+    }
+    static ServiceAccessPoint forDepot(Settlement settlement, SettlementStructure depot,
+                                       KnownPedestrianRouteKnowledge knowledge) {
+        SettlementDepotServicePort port = SettlementDepotServicePort.forDepot(depot);
         SurfaceAnchor apron = port.facing().step(port.exteriorApproach(), -1);
         List<SurfaceAnchor> waiting = new ArrayList<>();
         for (int distance = 1; distance <= Math.max(4, (settlement.residents().size() + 1) / 2); distance++) {

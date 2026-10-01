@@ -44,12 +44,12 @@ public final class ResidentActivityProcess {
         if (state.humanPopulation().meals().containsKey(residentId)) return true;
         if (state.actorMovements().containsKey(residentId))
             return !(interruption(state, residentId, now,
-                    ResidentActivityExecutionComposition.INTERRUPTION) instanceof ActivityInterruptionPlanner.Ready);
+                    ResidentActivityExecutionComposition.INTERRUPTION, true) instanceof ActivityInterruptionPlanner.Ready);
         ResidentNutrition nutrition = state.humanPopulation().nutrition(residentId).accrueThrough(now,
                 state.bootstrap().ruleset().residentLife(), resident.characteristics().effectiveMetabolismPermille(now));
         if (!nutrition.wantsFood(state.bootstrap().ruleset().residentLife())) return false;
-        if (ResidentMealOpportunity.find(state, residentId, now).isEmpty()) return true;
-        return ResidentActivityCoordinator.assess(state, residentId, now).pending()
+        if (ResidentMealOpportunity.candidate(state, residentId, now).isEmpty()) return true;
+        return ResidentActivityCoordinator.assessEligibility(state, residentId, now).pending()
                 .filter(wait -> wait == ResidentActivityChoice.Wait.SAFE_CHECKPOINT).isPresent();
     }
 
@@ -137,13 +137,21 @@ public final class ResidentActivityProcess {
 
     private static ActivityInterruptionPlanner.Assessment interruption(FrontierWorldState state,
             SubjectId residentId, long now, ActivityInterruptionPlanner planner) {
+        return interruption(state, residentId, now, planner, false);
+    }
+
+    private static ActivityInterruptionPlanner.Assessment interruption(FrontierWorldState state,
+            SubjectId residentId, long now, ActivityInterruptionPlanner planner, boolean eligibilityOnly) {
         var assessment = planner.assess(state, residentId, now);
         if (!(assessment instanceof ActivityInterruptionPlanner.Ready ready)) return assessment;
         ready.validate(state, residentId);
-        ResidentActivityChoice next = ResidentActivityCoordinator.assess(ready.following(), residentId, now);
+        ResidentActivityChoice next = eligibilityOnly
+                ? ResidentActivityCoordinator.assessEligibility(ready.following(), residentId, now)
+                : ResidentActivityCoordinator.assess(ready.following(), residentId, now);
         if (next.kind() == ResidentActivityChoice.Kind.WORK
                 || next.kind() == ResidentActivityChoice.Kind.EAT
-                    && ResidentMealOpportunity.find(ready.following(), residentId, now).isPresent()) return ready;
+                    && (eligibilityOnly ? ResidentMealOpportunity.candidate(ready.following(), residentId, now).isPresent()
+                        : ResidentMealOpportunity.find(ready.following(), residentId, now).isPresent())) return ready;
         // An optional idle journey continues unless a real higher-priority activity can replace it.
         return new ActivityInterruptionPlanner.Waiting(ActivityInterruptionPlanner.Reason.AUTHORITY_HANDOFF);
     }

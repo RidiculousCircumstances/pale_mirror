@@ -11,6 +11,10 @@ import java.util.Set;
 
 /** One read-only known-geometry policy for pedestrian routes and typed area overlays. */
 public final class KnownPedestrianRouteKnowledge {
+    // Bootstrap geometry is immutable. Keep one identity-keyed entry, not an unbounded
+    // world registry or a record-keyed map that hashes the entire bootstrap on each lookup.
+    private static FrontierBootstrap cachedBootstrap;
+    private static Set<BlockPosition> cachedStaticOccupancy = Set.of();
     private final FrontierBootstrap bootstrap;
     private final Set<BlockPosition> hard;
     private final BoundedPedestrianApproach.SurveyedSurface surveyed;
@@ -133,7 +137,16 @@ public final class KnownPedestrianRouteKnowledge {
         return surveyed.at(x, z);
     }
 
-    static Set<BlockPosition> staticOccupancy(FrontierBootstrap bootstrap) {
+    static synchronized Set<BlockPosition> staticOccupancy(FrontierBootstrap bootstrap) {
+        if (cachedBootstrap != bootstrap) {
+            cachedStaticOccupancy = Set.copyOf(compileStaticOccupancy(bootstrap));
+            cachedBootstrap = bootstrap;
+        }
+        // Passages and dynamic overlays mutate their own view, never the cached base.
+        return new HashSet<>(cachedStaticOccupancy);
+    }
+
+    private static Set<BlockPosition> compileStaticOccupancy(FrontierBootstrap bootstrap) {
         Set<BlockPosition> occupied = new HashSet<>();
         for (Settlement settlement : bootstrap.settlements())
             occupied.addAll(FrontierSettlementActorSlots.intactStructureOccupancy(

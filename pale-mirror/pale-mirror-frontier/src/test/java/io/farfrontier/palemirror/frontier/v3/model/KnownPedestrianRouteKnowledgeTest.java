@@ -21,6 +21,17 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class KnownPedestrianRouteKnowledgeTest {
+    @Test void mutableRouteOverlaysCannotPoisonCachedBootstrapOccupancy() {
+        var bootstrap = FrontierBootstrapper.create(new WorldId("frontier:occupancy-cache"), 421L);
+        var original = KnownPedestrianRouteKnowledge.staticOccupancy(bootstrap);
+        assertTrue(!original.isEmpty());
+        var changed = KnownPedestrianRouteKnowledge.staticOccupancy(bootstrap);
+        changed.clear();
+        assertEquals(original, KnownPedestrianRouteKnowledge.staticOccupancy(bootstrap));
+        var other = FrontierBootstrapper.create(new WorldId("frontier:other-occupancy-cache"), 422L);
+        KnownPedestrianRouteKnowledge.staticOccupancy(other).clear();
+        assertEquals(original, KnownPedestrianRouteKnowledge.staticOccupancy(bootstrap));
+    }
     @Test void clearwaterRoadHintsUseTheProjectedTopRatherThanTerrainUnderTheRoad() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:clearwater-road-support"), 20260918065L));
