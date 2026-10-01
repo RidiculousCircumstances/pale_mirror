@@ -28,16 +28,17 @@ final class FrontierV3HiveReturnMotion {
         HiveTaskAssembly.Member member = member(mobilization, actorId, lease);
         if (mobilization == null || member == null || member.arrived()
                 || !mobilization.returnAssembly().orElseThrow().safeAdvances().contains(actorId)) {
-            body.getNavigation().stop();
+            FrontierV3GoalNavigation.stop(body);
             return false;
         }
         BlockPos target = new BlockPos(lease.goalBody().x(), lease.goalBody().y(), lease.goalBody().z());
         if (!level.hasChunkAt(target)
                 || !FrontierV3StandingPosition.hasExactStandingColumn(level, lease.goalBody().supportingSurface().support())) {
-            body.getNavigation().stop();
+            FrontierV3GoalNavigation.stop(body);
             return false;
         }
-        FrontierV3ControlledMobMotion.moveToward(level, body, new Vec3(target.getX() + 0.5D, target.getY(), target.getZ() + 0.5D));
+        FrontierV3GoalNavigation.pursue(level, body, FrontierV3GoalNavigation.Goal.station(lease.goalBody().supportingSurface(),
+                new FrontierV3NavigationScope.ObservedWorld(state.bootstrap().bounds())));
         return false;
     }
 
@@ -48,7 +49,7 @@ final class FrontierV3HiveReturnMotion {
         if (mobilization == null || member == null || member.arrived()
                 || !FrontierV3SurfaceObservation.at(body, lease.goalBody().supportingSurface())
                 || !mobilization.returnAssembly().orElseThrow().safeAdvances().contains(actorId)) {
-            if (mobilization != null && member != null && !member.arrived()) body.getNavigation().stop();
+            // A non-arrival observation must not cancel the path it is observing.
             return false;
         }
         io.farfrontier.palemirror.frontier.v3.api.CommandResult result = FrontierV3AmbientActorExecutor.submit(runtime,

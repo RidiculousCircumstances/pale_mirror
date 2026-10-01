@@ -49,6 +49,9 @@ final class FrontierV3GoalNavigation {
             return new Goal(order.legalStations(), order.capability(), new FrontierV3NavigationScope.ObservedWorld(bounds),
                     Optional.of(order), routeHint);
         }
+        static Goal station(SurfaceAnchor station, FrontierV3NavigationScope scope) {
+            return new Goal(List.of(station), TraversalCapability.PEDESTRIAN, scope, Optional.empty(), List.of());
+        }
     }
     record Result(Status status, String reason, Optional<BlockReason> blockReason,
                   Optional<SurfaceAnchor> arrivedStation) {
@@ -62,6 +65,22 @@ final class FrontierV3GoalNavigation {
     }
 
     private FrontierV3GoalNavigation() { }
+
+    /** Physical tactical/presentation target, not a producer of canonical ownership or progress. */
+    static Result pursueLocalFeetTarget(ServerLevel level, Mob actor, net.minecraft.world.phys.Vec3 feet,
+                                        FrontierV3NavigationScope scope) {
+        // Feet can lie on a fractional collision top (farmland/slab). This conversion names
+        // the requested column; only the ordinary shared collision observation can award arrival.
+        SurfaceAnchor station = SurfaceAnchor.at((int) Math.floor(feet.x), (int) Math.ceil(feet.y) - 1,
+                (int) Math.floor(feet.z));
+        if (!Double.isFinite(feet.x) || !Double.isFinite(feet.y) || !Double.isFinite(feet.z)
+                || !scope.permits(station.support())) {
+            stop(actor);
+            return new Result(Status.BLOCKED, "physical-target-outside-task-scope",
+                    Optional.of(BlockReason.OFF_CONTRACT), Optional.empty());
+        }
+        return pursue(level, actor, Goal.station(station, scope));
+    }
 
     static Result pursue(ServerLevel level, Mob actor, Goal goal) {
         Objects.requireNonNull(level, "navigation level");

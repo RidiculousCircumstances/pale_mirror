@@ -367,7 +367,7 @@ final class FrontierV3AmbientActorExecutor {
             if (existing instanceof Mob body) {
                 if (!FrontierV3BakeryHandProjection.matchesAmbient(state, actorId, body)
                         || !FrontierV3ResidentMealHandProjection.matchesAmbient(state, actorId, body)) return Result.CONFLICT;
-                body.getNavigation().stop();
+                FrontierV3GoalNavigation.stop(body);
                 body.setNoAi(true);
             }
             return Result.CURRENT;
@@ -575,7 +575,7 @@ final class FrontierV3AmbientActorExecutor {
         if (retained == FrontierV3AmbientPendingAdmissions.RetainResult.LIMIT_REACHED) return JoinDisposition.NOT_MANAGED;
         if (retained == FrontierV3AmbientPendingAdmissions.RetainResult.DUPLICATE_UNINDEXED) return JoinDisposition.DUPLICATE_UNINDEXED;
         if (entity instanceof Mob body) {
-            body.getNavigation().stop();
+            FrontierV3GoalNavigation.stop(body);
             body.setNoAi(true);
         }
         if (FrontierV3AmbientCarrierRecognition.recognizes(runtime, entity)

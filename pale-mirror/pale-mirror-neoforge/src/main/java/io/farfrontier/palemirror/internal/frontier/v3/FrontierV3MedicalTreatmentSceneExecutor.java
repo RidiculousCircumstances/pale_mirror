@@ -152,7 +152,9 @@ final class FrontierV3MedicalTreatmentSceneExecutor {
             BodyPosition observed = FrontierV3BodyObservation.position(body);
             Vec3 target = targets.get(ObservedTraversalCursor.nextTargetIndex(observed, targetBodies, 0));
             if (body.distanceToSqr(target) > READY_DISTANCE_SQUARED) {
-                FrontierV3ControlledMobMotion.moveToward(level, body, target);
+                FrontierV3GoalNavigation.pursue(level, body, FrontierV3GoalNavigation.Goal.station(
+                        route.get(ObservedTraversalCursor.nextTargetIndex(observed, targetBodies, 0)),
+                        new FrontierV3NavigationScope.ObservedWorld(state.bootstrap().bounds())));
                 allPresent = false;
             }
         }

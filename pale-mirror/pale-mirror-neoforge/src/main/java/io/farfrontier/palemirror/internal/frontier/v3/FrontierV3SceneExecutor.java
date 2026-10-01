@@ -524,9 +524,10 @@ final class FrontierV3SceneExecutor {
             Optional<ActorDirective> directive = logisticsDirective(state, lease, actor.member().actorId());
             if (directive.isPresent() && !directive.orElseThrow().movement().permitsObservedSupport(supportPosition(actor.entity().blockPosition()))) continue;
             if (directive.isPresent()) {
-                FrontierV3ControlledMobMotion.moveWithinEnvelope(level, actor.entity(), localTarget(state, actor, bodies, lease),
-                        directive.orElseThrow().movement().envelope());
-            } else FrontierV3ControlledMobMotion.moveToward(level, actor.entity(), localTarget(state, actor, bodies, lease));
+                FrontierV3GoalNavigation.pursueLocalFeetTarget(level, actor.entity(), localTarget(state, actor, bodies, lease),
+                        new FrontierV3NavigationScope.Restricted(directive.orElseThrow().movement().envelope()));
+            } else FrontierV3GoalNavigation.pursueLocalFeetTarget(level, actor.entity(), localTarget(state, actor, bodies, lease),
+                    new FrontierV3NavigationScope.ObservedWorld(state.bootstrap().bounds()));
         }
     }
     /** Commits one reached physical grid step with the operation and its current HOT lease together. */

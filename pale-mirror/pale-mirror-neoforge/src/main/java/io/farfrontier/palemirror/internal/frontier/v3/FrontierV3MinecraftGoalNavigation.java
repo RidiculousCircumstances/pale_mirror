@@ -118,7 +118,7 @@ final class FrontierV3MinecraftGoalNavigation {
             return failureResult(failed, level.getGameTime());
         // The old custom actuator must not race the Minecraft path. This removes only an
         // ephemeral physical directive; it does not change the canonical work or route.
-        if (!FAILURES.containsKey(actor)) FrontierV3ControlledMobMotion.stop(actor);
+        if (!FAILURES.containsKey(actor)) FrontierV3ControlledMobMotion.retireLocalActuation(actor);
         actor.setNoAi(true);
         actor.setNoGravity(false);
         refreshPhysicalGroundContact(level, actor);
@@ -185,7 +185,10 @@ final class FrontierV3MinecraftGoalNavigation {
             return true;
         }
         if (actor.getNavigation().isDone() || actor.getNavigation().getPath() == null) {
-            stopPath(actor); // A completed/consumed short leg is not an off-contract path.
+            // Native node tolerance is looser than station arrival. Keep the physical bridge
+            // alive through the final jump/landing; post-tick pursuit may replan the same goal.
+            actor.getMoveControl().tick();
+            actor.getJumpControl().tick();
             return true;
         }
         Path path = actor.getNavigation().getPath();
@@ -231,6 +234,9 @@ final class FrontierV3MinecraftGoalNavigation {
         if (actor == null) return;
         stopPath(actor);
         FAILURES.remove(actor);
+        actor.getJumpControl().tick();
+        actor.setJumping(false);
+        actor.stopInPlace();
     }
 
     private static void stopPath(Mob actor) {

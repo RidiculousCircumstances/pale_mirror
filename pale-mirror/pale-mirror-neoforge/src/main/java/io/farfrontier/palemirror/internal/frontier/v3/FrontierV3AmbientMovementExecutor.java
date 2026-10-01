@@ -109,35 +109,34 @@ final class FrontierV3AmbientMovementExecutor {
             ResidentMigrationJourney journey = state.humanPopulation().migration(actorId);
             if (journey == null || journey.status() != ResidentMigrationStatus.EN_ROUTE || journey.arriving()
                     || !lease.goalBody().equals(BodyPosition.above(new SurfaceAnchor(journey.nextColdPosition())))) {
-                body.getNavigation().stop();
+                FrontierV3GoalNavigation.stop(body);
                 return false;
             }
         }
         if (lease.goal() == AmbientGoalKind.SCOUT_PATROL && !lease.goalBody().equals(state.actorLocations().get(actorId).body())) {
             BlockPos physicalTarget = minecraftBody(lease.goalBody());
             if (!level.hasChunkAt(physicalTarget) || !FrontierV3StandingPosition.hasExactStandingColumn(level, lease.goalBody().supportingSurface().support())) {
-                body.getNavigation().stop();
+                FrontierV3GoalNavigation.stop(body);
                 return false;
             }
-            FrontierV3ControlledMobMotion.moveToward(level, body, new Vec3(physicalTarget.getX() + 0.5D,
-                    physicalTarget.getY(), physicalTarget.getZ() + 0.5D));
+            pursueDeclaredGoal(level, state, body, lease);
             return false;
         }
         if (lease.goal() == AmbientGoalKind.HIVE_TASK_ASSEMBLY) {
             HiveTaskAssembly.Member member = hiveAssemblyMember(state, actorId, lease);
             HiveMobilization mobilization = assemblingMobilization(state, actorId);
             if (mobilization == null || member == null || member.arrived()) {
-                body.getNavigation().stop();
+                FrontierV3GoalNavigation.stop(body);
                 return false;
             }
             HiveTaskAssembly assembly = mobilization.assembly().orElseThrow();
             if (!assembly.safeAdvances().contains(actorId)) {
-                body.getNavigation().stop();
+                FrontierV3GoalNavigation.stop(body);
                 return false;
             }
             BlockPos physicalTarget = minecraftBody(lease.goalBody());
             if (!level.hasChunkAt(physicalTarget)) {
-                body.getNavigation().stop();
+                FrontierV3GoalNavigation.stop(body);
                 return false;
             }
             if (!FrontierV3StandingPosition.hasExactStandingColumn(level, lease.goalBody().supportingSurface().support())) {
@@ -147,11 +146,10 @@ final class FrontierV3AmbientMovementExecutor {
                                         member.cursor(), member.nextSurface())));
                 FrontierV3DiagnosticTrace.record(level.getServer(), "hive-assembly:" + mobilization.id().value(),
                         "hive_assembly_path_blocked", actorId, result);
-                body.getNavigation().stop();
+                FrontierV3GoalNavigation.stop(body);
                 return result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted;
             }
-            FrontierV3ControlledMobMotion.moveToward(level, body, new Vec3(physicalTarget.getX() + 0.5D,
-                    physicalTarget.getY(), physicalTarget.getZ() + 0.5D));
+            pursueDeclaredGoal(level, state, body, lease);
             return false;
         }
         if (lease.goal() == AmbientGoalKind.HIVE_TASK_RETURN) {
@@ -160,17 +158,17 @@ final class FrontierV3AmbientMovementExecutor {
         if (lease.goal() == AmbientGoalKind.OPERATION_ASSEMBLY) {
             OperationAssembly.Member member = assemblyMember(state, actorId, lease);
             if (member == null) {
-                body.getNavigation().stop();
+                FrontierV3GoalNavigation.stop(body);
                 return false;
             }
             RouteOperation operation = assemblingOperation(state, actorId);
             OperationAssembly assembly = operation.activeAssembly().orElseThrow();
             if (assembly.deferral().isPresent() && !assembly.deferral().orElseThrow().actorId().equals(actorId)) {
-                body.getNavigation().stop();
+                FrontierV3GoalNavigation.stop(body);
                 return false;
             }
             if (!assembly.safeAdvances().contains(actorId)) {
-                body.getNavigation().stop();
+                FrontierV3GoalNavigation.stop(body);
                 return false;
             }
             BlockPosition obstruction = assemblyObstruction(level, state, operation, lease.goalBody().supportingSurface().support());
@@ -181,44 +179,52 @@ final class FrontierV3AmbientMovementExecutor {
                     io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "ambient-operation-assembly-deferred", actorId.value(),
                             new OperationAssemblyDeferred(operation.id(), deferral));
                     FrontierV3DiagnosticTrace.record(level.getServer(), "operation-assembly:" + operation.id().value(), "operation_assembly_deferred", actorId, result);
-                    body.getNavigation().stop();
+                    FrontierV3GoalNavigation.stop(body);
                     return true;
                 }
-                body.getNavigation().stop();
+                FrontierV3GoalNavigation.stop(body);
                 return false;
             }
             BlockPos physicalTarget = minecraftBody(lease.goalBody());
             if (!level.hasChunkAt(physicalTarget) || !FrontierV3StandingPosition.hasExactStandingColumn(level, lease.goalBody().supportingSurface().support())) {
-                body.getNavigation().stop();
+                FrontierV3GoalNavigation.stop(body);
                 return false;
             }
-            FrontierV3ControlledMobMotion.moveToward(level, body, new Vec3(physicalTarget.getX() + 0.5D,
-                    physicalTarget.getY(), physicalTarget.getZ() + 0.5D));
+            pursueDeclaredGoal(level, state, body, lease);
             return false;
         }
         if (lease.goal() == AmbientGoalKind.ENGINEERING_ASSEMBLY) {
             EngineeringWorkAssembly.Member member = engineeringAssemblyMember(state, actorId, lease);
             if (member == null || member.arrived()) {
-                body.getNavigation().stop();
+                FrontierV3GoalNavigation.stop(body);
                 return false;
             }
             EngineeringWorkAssembly assembly = engineeringProject(state, actorId).assembly().orElseThrow();
             if (!assembly.safeAdvances().contains(actorId)) {
-                body.getNavigation().stop();
+                FrontierV3GoalNavigation.stop(body);
                 return false;
             }
             BlockPos physicalTarget = minecraftBody(lease.goalBody());
             if (!level.hasChunkAt(physicalTarget) || !FrontierV3StandingPosition.hasExactStandingColumn(level, lease.goalBody().supportingSurface().support())) {
-                body.getNavigation().stop();
+                FrontierV3GoalNavigation.stop(body);
                 return false;
             }
-            FrontierV3ControlledMobMotion.moveToward(level, body, new Vec3(physicalTarget.getX() + 0.5D,
-                    physicalTarget.getY(), physicalTarget.getZ() + 0.5D));
+            pursueDeclaredGoal(level, state, body, lease);
             return false;
         }
-        FrontierV3ControlledMobMotion.followContinuously(level, body,
-                FrontierV3AmbientActorLocalTargets.localTarget(state, actorId, lease, level.getGameTime()));
+        if (FrontierV3AmbientActorLocalTargets.directedGoal(lease)) {
+            pursueDeclaredGoal(level, state, body, lease);
+        } else {
+            // Idle presentation is not a second locomotion owner or permission to orbit.
+            FrontierV3ControlledMobMotion.retireLocalActuation(body);
+            FrontierV3GoalNavigation.stop(body);
+        }
         return false;
+    }
+
+    private static void pursueDeclaredGoal(ServerLevel level, FrontierWorldState state, Mob body, AmbientActorLease lease) {
+        FrontierV3GoalNavigation.pursue(level, body, FrontierV3GoalNavigation.Goal.station(lease.goalBody().supportingSurface(),
+                new FrontierV3NavigationScope.ObservedWorld(state.bootstrap().bounds())));
     }
     static boolean observeDirectedArrival(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
                                                    SubjectId actorId, Mob body, AmbientActorLease lease) {
@@ -230,7 +236,7 @@ final class FrontierV3AmbientMovementExecutor {
             boolean arrived = movement.order().arrivedAt(observed.supportingSurface());
             boolean exited = ServiceAccessCoordinator.witnessedActorMovementExit(state, movement, observed);
             if (!arrived && !exited) return false;
-            if (arrived) body.getNavigation().stop();
+            if (arrived) FrontierV3GoalNavigation.stop(body);
             var result = submit(runtime, "ambient-actor-movement-observed", actorId.value(),
                     new ActorMovementHotObserved(actorId, movement.order().goalRevision(), lease.revision(), observed));
             FrontierV3DiagnosticTrace.record(level.getServer(), "actor-movement:" + actorId.value(),
@@ -241,7 +247,7 @@ final class FrontierV3AmbientMovementExecutor {
             ResidentMeal meal = state.humanPopulation().meals().get(actorId);
             if (meal == null) return false;
             if (meal.phase() == ResidentMeal.Phase.MOVE && observedBody(body).equals(lease.goalBody())) {
-                body.getNavigation().stop();
+                FrontierV3GoalNavigation.stop(body);
                 ResidentMealHotArrived arrival = new ResidentMealHotArrived(actorId, lease.revision(), observedBody(body));
                 // The HOT body may have reached the socket while another resident
                 // took the turn. Keep its exact meal and body; retry observation
@@ -253,7 +259,7 @@ final class FrontierV3AmbientMovementExecutor {
                 return result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted;
             }
             if (meal.phase() == ResidentMeal.Phase.RETURN && observedBody(body).equals(lease.goalBody())) {
-                body.getNavigation().stop();
+                FrontierV3GoalNavigation.stop(body);
                 var result = submit(runtime, "ambient-meal-cleared", actorId.value(),
                         new ResidentMealHotReturned(actorId, lease.revision(), observedBody(body)));
                 FrontierV3DiagnosticTrace.record(level.getServer(), "resident-meal:" + actorId.value(),
@@ -294,7 +300,7 @@ final class FrontierV3AmbientMovementExecutor {
         if (member == null || member.arrived() || !observedBody(body).equals(lease.goalBody())) return false;
         RouteOperation operation = assemblingOperation(state, actorId); OperationAssembly assembly = operation.activeAssembly().orElseThrow();
         if (!assembly.safeAdvances().contains(actorId)) {
-            body.getNavigation().stop();
+            FrontierV3GoalNavigation.stop(body);
             return false;
         }
         io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "ambient-operation-assembly", actorId.value(),
@@ -323,7 +329,7 @@ final class FrontierV3AmbientMovementExecutor {
         if (mobilization == null || member == null || member.arrived() || !observedBody(body).equals(lease.goalBody())) return false;
         HiveTaskAssembly assembly = mobilization.assembly().orElseThrow();
         if (!assembly.safeAdvances().contains(actorId)) {
-            body.getNavigation().stop();
+            FrontierV3GoalNavigation.stop(body);
             return false;
         }
         io.farfrontier.palemirror.frontier.v3.api.CommandResult result = submit(runtime, "ambient-hive-assembly", actorId.value(),

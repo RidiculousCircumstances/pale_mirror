@@ -110,6 +110,44 @@ public final class FrontierV3RouteNavigationGameTests {
             }
         }
     }
+
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 100)
+    public static void repeatedRoutedGoalRefreshPreservesPathAndCompletesOneBlockAscent(GameTestHelper helper) {
+        floor(helper);
+        var level = helper.getLevel();
+        for (int x = 3; x <= 6; x++) for (int z = 1; z <= 6; z++) {
+            level.setBlock(helper.absolutePos(new BlockPos(x, 1, z)), Blocks.STONE.defaultBlockState(), 3);
+            level.setBlock(helper.absolutePos(new BlockPos(x, 2, z)), Blocks.AIR.defaultBlockState(), 3);
+            level.setBlock(helper.absolutePos(new BlockPos(x, 3, z)), Blocks.AIR.defaultBlockState(), 3);
+        }
+        Villager actor = helper.spawnWithNoFreeWill(EntityType.VILLAGER, new Vec3(1.5D, 1.0D, 2.5D));
+        List<SurfaceAnchor> hint = IntStream.rangeClosed(1, 6).mapToObj(x -> {
+            BlockPos support = helper.absolutePos(new BlockPos(x, x >= 3 ? 1 : 0, 2));
+            return SurfaceAnchor.at(support.getX(), support.getY(), support.getZ());
+        }).toList();
+        SurfaceAnchor target = hint.getLast();
+        var goal = FrontierV3GoalNavigation.Goal.routed(order(target), hint, bounds(helper));
+        helper.runAfterDelay(1, () -> {
+            FrontierV3GoalNavigation.pursue(level, actor, goal);
+            var originalPath = actor.getNavigation().getPath();
+            helper.assertTrue(originalPath != null, "the real +1 path must exist");
+            FrontierV3GoalNavigation.pursue(level, actor, goal);
+            helper.assertTrue(actor.getNavigation().getPath() == originalPath,
+                    "acquiring the native actuator must not delete the route leg and restart the same path");
+            for (int turn = 0; turn < 180 && !FrontierV3SemanticMovement.arrived(level, actor, target); turn++) {
+                var result = FrontierV3GoalNavigation.pursue(level, actor, goal);
+                helper.assertTrue(result.status() == FrontierV3GoalNavigation.Status.IN_PROGRESS,
+                        "same-goal refresh must not block the supported ascent: " + result);
+                FrontierV3GoalNavigation.advanceAtEntityBoundary(actor);
+                actor.aiStep();
+            }
+            helper.assertTrue(FrontierV3SemanticMovement.arrived(level, actor, target),
+                    "repeated production pursuit must complete the jump and land: " + actor.position());
+            FrontierV3GoalNavigation.stop(actor);
+            actor.discard(); helper.succeed();
+        });
+    }
     private static SurfaceAnchor anchor(GameTestHelper helper, int x, int z) {
         BlockPos support = helper.absolutePos(new BlockPos(x, 0, z));
         return SurfaceAnchor.at(support.getX(), support.getY(), support.getZ());

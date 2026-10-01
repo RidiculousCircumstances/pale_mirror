@@ -174,7 +174,8 @@ final class FrontierV3RoutePatrolSceneExecutor {
                 if (!clearNextBody(level, candidateBody, targetBody.supportingSurface(), lease)) {
                     block(level, runtime, lease, retained, RoutePatrolDiagnosticProducer.OCCUPIED_NEXT_BODY); return;
                 }
-                FrontierV3ControlledMobMotion.moveToward(level, candidateBody, point(targetBody.supportingSurface()));
+                FrontierV3GoalNavigation.pursue(level, candidateBody, FrontierV3GoalNavigation.Goal.station(targetBody.supportingSurface(),
+                        new FrontierV3NavigationScope.ObservedWorld(state.bootstrap().bounds())));
             }
         }
     }

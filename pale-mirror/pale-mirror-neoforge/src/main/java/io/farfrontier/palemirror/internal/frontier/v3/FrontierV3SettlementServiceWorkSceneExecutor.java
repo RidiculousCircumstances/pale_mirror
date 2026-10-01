@@ -138,8 +138,7 @@ final class FrontierV3SettlementServiceWorkSceneExecutor {
             } else if (!FrontierV3ProductionWorkSceneExecutor.clearNextBody(level, worker, next)) {
                 submit(runtime, "settlement-service-work-route-blocked", lease.id().value(),
                         new SettlementServiceWorkTraversalBlocked(work.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, current), cursor + 1));
-            } else FrontierV3ControlledMobMotion.moveWithinSemanticEnvelope(level, worker, FrontierV3SemanticMovement.point(level, next),
-                    io.farfrontier.palemirror.frontier.v3.model.LocalNavigationEnvelope.around(current.standingBody(), next.standingBody()));
+            } else FrontierV3ProductionWorkSceneExecutor.pursueRetainedTraversalEdge(level, worker, current, next);
             return;
         }
         if (work.phase() != SettlementServiceWorkPhase.WORKING) { conflict(level, runtime, lease, "unsupported-work-phase"); return; }

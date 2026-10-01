@@ -500,10 +500,12 @@ public final class FrontierV3LocalNavigationGameTests {
             // no body position, target, route, or collision result from the fixture.
             FrontierV3ProductionWorkSceneExecutor.pursueRetainedTraversalEdge(helper.getLevel(), worker, retainedCurrent, retainedNext);
             for (int turn = 0; turn < 40; turn++) {
-                FrontierV3ControlledMobMotion.advanceAtEntityBoundary(worker);
+                FrontierV3MobMotionLifecycle.advanceAtEntityBoundary(worker);
+                worker.aiStep();
                 FrontierV3ProductionWorkSceneExecutor.pursueRetainedTraversalEdge(helper.getLevel(), worker, retainedCurrent, retainedNext);
             }
-            FrontierV3ControlledMobMotion.advanceAtEntityBoundary(worker);
+            FrontierV3MobMotionLifecycle.advanceAtEntityBoundary(worker);
+            worker.aiStep();
             helper.assertTrue(FrontierV3SemanticMovement.arrived(helper.getLevel(), worker, retainedNext),
                     "a retained grade-one hand-off edge must physically advance without changing its cursor or route: actual="
                             + worker.position() + " trace=" + FrontierV3ControlledMobMotion.trace(worker));
@@ -632,22 +634,21 @@ public final class FrontierV3LocalNavigationGameTests {
 
         helper.runAfterDelay(1, () -> {
             try {
-                boolean yielded = false;
                 for (int turn = 0; turn < 32; turn++) {
-                    FrontierV3ControlledMobMotion.advance(worker);
                     FrontierV3ProductionWorkSceneExecutor.pursueRetainedTraversalEdge(helper.getLevel(), worker, current, next);
+                    FrontierV3MobMotionLifecycle.advanceAtEntityBoundary(worker);
+                    worker.aiStep();
                     BlockPosition support = support(worker.position());
                     helper.assertTrue(envelope.contains(support),
                             "a production yield must remain inside the two-support HOT envelope: " + worker.position());
-                    yielded |= worker.getBlockZ() != currentSupport.getZ();
+                    helper.assertTrue(!FrontierV3SemanticMovement.arrived(helper.getLevel(), worker, next),
+                            "an occupied exact station cannot award production arrival");
                 }
-                helper.assertTrue(yielded,
-                        "a live occupied direct body column must use bounded physical latitude rather than pin the exact worker: "
-                                + FrontierV3ControlledMobMotion.trace(worker));
                 blocker.discard();
                 for (int turn = 0; turn < 32; turn++) {
-                    FrontierV3ControlledMobMotion.advance(worker);
                     FrontierV3ProductionWorkSceneExecutor.pursueRetainedTraversalEdge(helper.getLevel(), worker, current, next);
+                    FrontierV3MobMotionLifecycle.advanceAtEntityBoundary(worker);
+                    worker.aiStep();
                 }
                 helper.assertTrue(FrontierV3SurfaceObservation.at(worker, next),
                         "only the original retained production checkpoint may complete the yielded edge: " + worker.position());

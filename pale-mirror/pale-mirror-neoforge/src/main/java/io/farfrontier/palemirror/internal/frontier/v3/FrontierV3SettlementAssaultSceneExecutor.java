@@ -278,8 +278,8 @@ final class FrontierV3SettlementAssaultSceneExecutor {
             conflict(level, runtime, lease, "hot-body-unavailable");
             return;
         }
-        for (Body actor : bodies) FrontierV3ControlledMobMotion.moveWithinWorldBounds(level, actor.mob(),
-                target(state, lease, actor, bodies), state.bootstrap().bounds());
+        for (Body actor : bodies) FrontierV3GoalNavigation.pursueLocalFeetTarget(level, actor.mob(),
+                target(state, lease, actor, bodies), new FrontierV3NavigationScope.ObservedWorld(state.bootstrap().bounds()));
         if (confirmedStrikeForThisLease(state, lease)) {
             // One HOT lease owns one exact COLD epoch.  Its durable receipt remains visible
             // across restart while ordinary demand loss decides when the completed lease drains;
@@ -332,7 +332,8 @@ final class FrontierV3SettlementAssaultSceneExecutor {
                 if (level.getBlockCollisions(mob, bounds).iterator().hasNext() || !level.getEntities(mob, bounds, value -> !members.contains(value.getUUID())).isEmpty()) {
                     marchIssue(level, runtime, lease, assault, member.actorId(), ExpeditionMarchIssueKind.OCCUPIED_NEXT_BODY); return;
                 }
-                FrontierV3ControlledMobMotion.moveToward(level, mob, FrontierV3SurfaceObservation.point(target.supportingSurface()));
+                FrontierV3GoalNavigation.pursue(level, mob, FrontierV3GoalNavigation.Goal.station(target.supportingSurface(),
+                        new FrontierV3NavigationScope.ObservedWorld(state.bootstrap().bounds())));
             }
         }
         if (arrived) {

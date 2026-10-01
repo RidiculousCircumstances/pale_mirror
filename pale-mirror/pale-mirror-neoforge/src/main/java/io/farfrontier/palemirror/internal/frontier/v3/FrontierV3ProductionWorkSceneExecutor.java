@@ -225,8 +225,8 @@ final class FrontierV3ProductionWorkSceneExecutor {
      * observation at that target can advance the durable traversal cursor.
      */
     static void pursueRetainedTraversalEdge(ServerLevel level, Mob worker, SurfaceAnchor current, SurfaceAnchor next) {
-        FrontierV3ControlledMobMotion.moveWithinSemanticEnvelope(level, worker, FrontierV3SemanticMovement.point(level, next),
-                LocalNavigationEnvelope.around(current.standingBody(), next.standingBody()));
+        FrontierV3GoalNavigation.pursue(level, worker, FrontierV3GoalNavigation.Goal.station(next,
+                new FrontierV3NavigationScope.Restricted(LocalNavigationEnvelope.around(current.standingBody(), next.standingBody()))));
     }
     /** Tests the exact retained target support and body against loaded physical collision without choosing an alternate edge. */
     static boolean clearNextBody(ServerLevel level, Mob worker, SurfaceAnchor surface) {

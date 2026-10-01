@@ -96,7 +96,8 @@ final class FrontierV3EngineeringWorkSceneExecutor {
                 conflict(level, runtime, lease, "hot-body-unavailable"); return;
             }
             BodyPosition slot = lease.memberPosition(member.actorId());
-            FrontierV3ControlledMobMotion.moveToward(level, mob, new Vec3(slot.x() + 0.5D, slot.y(), slot.z() + 0.5D));
+            FrontierV3GoalNavigation.pursue(level, mob, FrontierV3GoalNavigation.Goal.station(slot.supportingSurface(),
+                    new FrontierV3NavigationScope.ObservedWorld(state.bootstrap().bounds())));
             if (level.getGameTime() % 12L == 0L) mob.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
         }
 

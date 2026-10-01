@@ -395,6 +395,14 @@ final class FrontierV3ControlledMobMotion {
 
     static void stop(Mob actor) {
         FrontierV3GoalNavigation.stop(actor);
+        retireLocalActuation(actor);
+        actor.setDeltaMovement(Vec3.ZERO);
+        actor.stopInPlace();
+    }
+
+    /** Retires only this actuator; acquiring a native path must not retire its route owner. */
+    static void retireLocalActuation(Mob actor) {
+        boolean moving = PENDING.containsKey(actor) || CONTINUOUS.containsKey(actor);
         PENDING.remove(actor);
         CONTINUOUS.remove(actor);
         TENDING.remove(actor);
@@ -411,8 +419,10 @@ final class FrontierV3ControlledMobMotion {
         // velocity carry a newly leased worker across its retained support between the durable
         // hand-off and the next scene tick.  Stopping is the authority-transfer boundary: it
         // freezes motion, but never rewrites the observed physical position or canonical cursor.
-        actor.setDeltaMovement(Vec3.ZERO);
-        actor.stopInPlace();
+        if (moving) {
+            actor.setDeltaMovement(Vec3.ZERO);
+            actor.stopInPlace();
+        }
     }
 
     /**
