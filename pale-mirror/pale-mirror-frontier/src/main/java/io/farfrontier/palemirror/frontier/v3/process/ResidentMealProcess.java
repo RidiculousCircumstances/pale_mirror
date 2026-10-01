@@ -277,7 +277,9 @@ public final class ResidentMealProcess {
         ResidentMeal meal = hotMeal(state, subject, observed.residentId(), observed.ambientRevision());
         ResidentMealPhysicalStep step = meal.pendingPhysicalStep().orElseThrow(
                 () -> new IllegalArgumentException("HOT meal effect lacks its durable pre-effect fence"));
-        if (step.phase() != observed.phase() || !observed.observedBody().equals(goalSurface(state, meal).standingBody()))
+        if (step.phase() != observed.phase() || (step.phase() == ResidentMeal.Phase.CONSUME
+                ? !mayConsumeAt(state, meal, observed.observedBody())
+                : !observed.observedBody().equals(goalSurface(state, meal).standingBody())))
             throw new IllegalArgumentException("HOT meal receipt differs from its exact phase or resident body");
         if (step.phase() == ResidentMeal.Phase.TAKE) {
             PhysicalStackAddress.ActorHand hand = new PhysicalStackAddress.ActorHand(subject,
@@ -300,7 +302,10 @@ public final class ResidentMealProcess {
         HumanPopulation people = state.humanPopulation().consumeResidentFood(subject, atTick, meal.portion().nutritionUnits(),
                         state.bootstrap().ruleset().residentLife())
                 .completeMeal(meal);
-        return state.withChanges(FrontierWorldStateUpdate.begin()
+        FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), observed.observedBody().supportingSurface().support());
+        Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
+        actors.put(subject, actors.get(subject).withBody(observed.observedBody()));
+        return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors)
                 .inventory(state.inventory().withFungibleResources(ledger)).humanPopulation(people));
     }
 
@@ -337,6 +342,7 @@ public final class ResidentMealProcess {
     private static boolean validHotMealBody(FrontierWorldState state, ResidentMeal meal,
                                             AmbientActorLease lease, BodyPosition body) {
         if (body.equals(goalSurface(state, meal).standingBody())) return true;
+        if (meal.phase() == ResidentMeal.Phase.CONSUME) return mayConsumeAt(state, meal, body);
         if (!meal.movesToClearance()) return false;
         if (body.equals(serviceSurface(state, meal).standingBody())) return true;
         // COLD may have advanced the return route before this HOT lease was admitted.
@@ -349,6 +355,11 @@ public final class ResidentMealProcess {
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), meal.settlementId());
         return SettlementDepotServicePort.forDepot(settlement.structures().stream()
                 .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow());
+    }
+
+    /** Eating owns the food effect, not an exact navigation station after access was cleared. */
+    public static boolean mayConsumeAt(FrontierWorldState state, ResidentMeal meal, BodyPosition observedBody) {
+        return meal.phase() == ResidentMeal.Phase.CONSUME && port(state, meal).accessBoundary().cleared(observedBody);
     }
 
     /** Release the service turn at its witnessed boundary; begin eating only at the exact eating target. */

@@ -56,6 +56,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
     static boolean tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return false;
+        if (FrontierV3ResourceSiteHarvestReconciliation.reconcileOne(level, runtime, state)) return true;
         return FrontierV3SceneTurnScheduler.run(runtime, state, io.farfrontier.palemirror.frontier.v3.model.SceneCauseKind.RESOURCE_SITE_HARVEST,
                 lease -> execute(level, runtime, state, lease), () -> admit(level, runtime, state));
     }

@@ -190,6 +190,36 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
     }
 
     @GameTest(batch = "pm-frontier-v3-reference-projection", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    public static void initialChestWriteConfirmsCustodyInItsOwnLifecycleTurn(GameTestHelper helper) {
+        WorldId world = new WorldId("frontier:reference-same-turn-confirmation");
+        FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(world, 91L));
+        SubjectId depot = FrontierWorldState.depotId(initial.bootstrap().settlements().getFirst().id());
+        BlockPos local = helper.absolutePos(new BlockPos(2, 2, 2));
+        BlockPosition original = initial.inventory().surfaces().get(depot).position();
+        initial = FrontierWorldState.initial(FrontierV3CargoLoadingGameTests.translatedBootstrap(initial.bootstrap(),
+                local.getX() - original.x(), local.getY() - original.y(), local.getZ() - original.z()));
+        var runtime = runtime(world, initial);
+        helper.assertTrue(FrontierV3ReferenceContainerCustodyExecutor.prepareInitialProjection(runtime, initial, depot),
+                "initial projection has its durable before-write fence");
+        var prepared = runtime.decodedState().orElseThrow();
+        var chest = chest(helper, local, depot);
+        helper.assertTrue(FrontierV3ContainerSurfaceExecutor.replaceCanonicalSlots(chest, prepared, depot), "exact initial slots written");
+        FrontierV3ContainerSurfaceExecutor.activateAndConfirm(runtime, prepared.inventory().surfaces().get(depot), chest);
+        var confirmed = runtime.decodedState().orElseThrow();
+        helper.assertTrue(confirmed.inventory().surfaces().get(depot).status() == ContainerSurfaceStatus.ACTIVE
+                        && confirmed.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(depot)).status()
+                            == PhysicalCustodyLeaseStatus.ACQUIRED,
+                "the lifecycle turn itself confirms the real chest, without another player visit or polling turn");
+        var checkpoint = runtime.checkpointImage().orElseThrow();
+        runtime.shutdown();
+        var restored = recovered(world, checkpoint, initial.bootstrap());
+        helper.assertTrue(restored.decodedState().orElseThrow().replicaCustody().custodyByScope()
+                        .get(ReferenceContainerCustody.scopeId(depot)).status() == PhysicalCustodyLeaseStatus.ACQUIRED,
+                "restart cannot recover this completed initial write as PREPARING");
+        restored.shutdown(); helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-reference-projection", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
     public static void releasedProjectionRequiresFreshWriteFenceAndActualConfirmation(GameTestHelper helper) {
         WorldId world = new WorldId("frontier:reference-released-projection");
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(world, 91L));

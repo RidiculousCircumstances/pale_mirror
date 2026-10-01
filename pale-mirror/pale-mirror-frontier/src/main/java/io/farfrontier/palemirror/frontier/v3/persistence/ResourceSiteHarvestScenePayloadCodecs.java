@@ -17,6 +17,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestScenePrepa
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestSceneLeaseHandoff;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestHandProjected;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestHandRelease;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestSceneReconciled;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseReleased;
 import io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalObservation;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress;
@@ -42,7 +43,34 @@ final class ResourceSiteHarvestScenePayloadCodecs {
     private static final int TYPED_BODY_LEASE_MARKER = 0xfffc;
     private ResourceSiteHarvestScenePayloadCodecs() { }
 
-    static PayloadCodecs codecs() { return new PayloadCodecs(List.of(new PreparedCodec(), new HandoffCodec(), new PreparationAbortedCodec(), new HandProjectedCodec(), new HandReleaseCodec())); }
+    static PayloadCodecs codecs() { return new PayloadCodecs(List.of(new PreparedCodec(), new HandoffCodec(), new PreparationAbortedCodec(), new HandProjectedCodec(), new HandReleaseCodec(), new ReconciledCodec())); }
+
+    private static final class ReconciledCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.resource_site_harvest_scene_reconciled"; }
+        @Override public byte[] encode(FrontierPayload payload) {
+            var receipt = (ResourceSiteHarvestSceneReconciled) payload;
+            return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+                FrontierWorldPayloadCodecs.writeSubject(output, receipt.siteId());
+                FrontierWorldPayloadCodecs.writeSubject(output, receipt.jobId());
+                FrontierWorldPayloadCodecs.writeString(output, receipt.leaseId().value());
+                output.writeLong(receipt.leaseRevision()); output.writeLong(receipt.bodyEpoch());
+                writeBody(output, receipt.observedBody());
+                var address = (PhysicalStackAddress.ActorHand) receipt.observedHand().address();
+                FrontierWorldPayloadCodecs.writeSubject(output, address.actorId());
+                FrontierWorldPayloadCodecs.writeString(output, address.entityId().toString());
+                FrontierWorldPayloadCodecs.writeString(output, receipt.observedHand().itemKind());
+                output.writeInt(receipt.observedHand().quantity());
+            });
+        }
+        @Override public FrontierPayload decode(byte[] bytes) {
+            return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new ResourceSiteHarvestSceneReconciled(
+                    FrontierWorldPayloadCodecs.readSubject(input).value(), FrontierWorldPayloadCodecs.readSubject(input).value(),
+                    new SceneLeaseId(FrontierWorldPayloadCodecs.readString(input)), input.readLong(), input.readLong(), readBody(input),
+                    new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(
+                            FrontierWorldPayloadCodecs.readSubject(input).value(), UUID.fromString(FrontierWorldPayloadCodecs.readString(input))),
+                            FrontierWorldPayloadCodecs.readString(input), input.readInt())));
+        }
+    }
 
     private static final class PreparationAbortedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.resource_site_harvest_scene_preparation_aborted"; }

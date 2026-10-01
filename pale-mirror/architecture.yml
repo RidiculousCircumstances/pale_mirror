@@ -16,6 +16,8 @@ components:
     path: "pale-mirror-frontier/src/main/java/io/farfrontier/palemirror/frontier/v3"
     owns:
       - Frontier v3 canonical world, typed commands and events, deterministic schedules, exact actors/resources, autonomous human and hive processes, immutable projections and pure persistence codecs
+      - Meal consumption after service clearance is independent of an exact eating waypoint; the physical receipt checkpoints the supported observed body
+      - Resource-site owners may resume an inspected completed harvest scene only under the same exact job, worker, resource bindings and unreplaced recovery epoch; generic recovery does not infer family safety
     may_depend_on:
       - Java standard library
     must_not_depend_on:
@@ -31,6 +33,8 @@ components:
     path: "pale-mirror-neoforge/src/main/java/io/farfrontier/palemirror"
     owns:
       - SavedData persistence, Minecraft observation, materialization execution, scheduling, and commands
+      - Reference-container initial writes confirm their actual chest and custody in the same lifecycle turn and only begin in block-ticking chunks
+      - Field initialization and canonical projection are acknowledged by the field owner, not replayed as physical farmer work; actual physical-first work retains its cause and hand witness
     may_depend_on:
       - domain
       - Minecraft

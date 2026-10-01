@@ -36,9 +36,14 @@ final class FrontierV3ResidentMealPhysicalEffect {
                     new ResidentMealHotHandMaterialized(meal.residentId(), lease.revision(),
                             new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(
                                     meal.residentId(), worker.getUUID()), meal.portion().itemKind(), meal.portion().quantity())));
+        var observedBody = FrontierV3SupportedBodyCapture.observe(level, body);
+        if (observedBody.isEmpty()) return false;
+        if (meal.phase() == ResidentMeal.Phase.CONSUME) {
+            if (!ResidentMealProcess.mayConsumeAt(state, meal, observedBody.orElseThrow())) return false;
+            return consume(level, runtime, state, meal, worker, lease);
+        }
         if (!FrontierV3SurfaceObservation.at(body, ResidentMealProcess.goalSurface(state, meal))) return false;
         if (meal.phase() == ResidentMeal.Phase.TAKE) return take(level, runtime, state, meal, worker, lease);
-        if (meal.phase() == ResidentMeal.Phase.CONSUME) return consume(level, runtime, state, meal, worker, lease);
         return false;
     }
 
@@ -121,7 +126,7 @@ final class FrontierV3ResidentMealPhysicalEffect {
         } else if (!actual.isEmpty()) return false;
         return accepted(level, runtime, meal.residentId(), "resident-meal-consume-observed",
                 new ResidentMealHotEffectObserved(meal.residentId(), ResidentMeal.Phase.CONSUME,
-                        lease.revision(), lease.goalBody(), List.of(), List.of()));
+                        lease.revision(), FrontierV3SupportedBodyCapture.observe(level, worker).orElseThrow(), List.of(), List.of()));
     }
 
     private static boolean accepted(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,

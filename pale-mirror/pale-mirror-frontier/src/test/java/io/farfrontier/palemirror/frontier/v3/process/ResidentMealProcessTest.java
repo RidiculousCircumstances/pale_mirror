@@ -13,6 +13,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -509,8 +510,15 @@ class ResidentMealProcessTest {
                 new ResidentMealHotEffectPrepared(resident,
                         new ResidentMealPhysicalStep(ResidentMeal.Phase.CONSUME, -1, 1, 1L, 0L, 1L)));
         state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+        BodyPosition displaced = firstExit.standingBody();
+        assertNotEquals(meal.clearingSurface().standingBody(), displaced);
+        assertTrue(ResidentMealProcess.mayConsumeAt(state, state.humanPopulation().meals().get(resident), displaced));
+        FrontierWorldState beforeConsumption = state;
+        assertThrows(IllegalArgumentException.class, () -> ResidentMealProcess.reduceHotObserved(beforeConsumption,
+                resident, new ResidentMealHotEffectObserved(resident, ResidentMeal.Phase.CONSUME, 1L,
+                        service.standingBody(), List.of(), List.of()), 48_002L));
         ResidentMealHotEffectObserved consumed = new ResidentMealHotEffectObserved(resident,
-                ResidentMeal.Phase.CONSUME, 1L, meal.clearingSurface().standingBody(), List.of(), List.of());
+                ResidentMeal.Phase.CONSUME, 1L, displaced, List.of(), List.of());
         var plannedEvents = ResidentMealProcess.planHotObserved(state, consumed, 48_002L);
         var healthFact = assertInstanceOf(ResidentStarvationIntegrated.class, plannedEvents.getFirst().payload());
         assertEquals(100, healthFact.next().severityUnits());
@@ -534,6 +542,7 @@ class ResidentMealProcessTest {
         assertEquals(ResidentActivityProcess.review(resident, 48_003L), activityWake.replacement());
         state = ResidentStarvationProcess.reduce(state, resident, healthFact);
         state = ResidentActivityProcess.reduceMealEffectObserved(state, resident, consumed, 48_002L);
+        assertEquals(displaced, state.actorLocations().get(resident).body());
         assertEquals(100, state.humanPopulation().health(resident).starvation().severityUnits());
         assertEquals(63, state.inventory().fungibleResources().totalQuantity(settlement.id(), "minecraft:bread"));
         assertEquals(ResidentNutritionStatus.NOURISHED, state.humanPopulation().nutrition(resident).status());

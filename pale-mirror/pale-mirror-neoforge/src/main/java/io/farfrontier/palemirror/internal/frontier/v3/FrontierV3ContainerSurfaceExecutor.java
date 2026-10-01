@@ -71,7 +71,9 @@ final class FrontierV3ContainerSurfaceExecutor {
                 .filter(surface -> surface.status() == ContainerSurfaceStatus.UNMATERIALIZED
                         || surface.status() == ContainerSurfaceStatus.PREPARED)
                 .sorted(Comparator.comparing(ContainerSurface::containerId))
-                .filter(surface -> level.hasChunkAt(position(surface)))
+                .filter(surface -> level.hasChunkAt(position(surface))
+                        && (!ReferenceContainerCustody.isReferenceContainer(state, surface.containerId())
+                            || level.shouldTickBlocksAt(position(surface))))
                 .findFirst().ifPresent(surface -> executeLifecycle(level, runtime, state, surface));
         auditOneActiveSurface(level, runtime, state);
     }
@@ -101,7 +103,7 @@ final class FrontierV3ContainerSurfaceExecutor {
                 transition(runtime, surface.containerId(), ContainerSurfaceStatus.CONFLICT);
                 return;
             }
-            transition(runtime, surface.containerId(), ContainerSurfaceStatus.ACTIVE);
+            activateAndConfirm(runtime, surface, chest);
             return;
         }
         // PREPARED can survive a restart both before and after the physical chest write.  Its
@@ -121,14 +123,25 @@ final class FrontierV3ContainerSurfaceExecutor {
             // player/world evidence and is never overwritten.
             if (chest.isEmpty()) {
                 if (!restorePreparedOwnedEmptyChest(chest, state, surface.containerId())) reportConflict(runtime, surface.containerId());
-                else transition(runtime, surface.containerId(), ContainerSurfaceStatus.ACTIVE);
+                else activateAndConfirm(runtime, surface, chest);
             } else if (!matchesCanonicalSlotsOrPendingProductionOutput(chest, state, surface.containerId())) reportConflict(runtime, surface.containerId());
-            else transition(runtime, surface.containerId(), ContainerSurfaceStatus.ACTIVE);
+            else activateAndConfirm(runtime, surface, chest);
             return;
         }
         chest = claimFreshChest(level, target, surface.containerId());
         if (chest == null || !writeCanonicalSlots(chest, state, surface.containerId())) reportConflict(runtime, surface.containerId());
-        else transition(runtime, surface.containerId(), ContainerSurfaceStatus.ACTIVE);
+        else activateAndConfirm(runtime, surface, chest);
+    }
+
+    /** Retire our exact observed write fence before this same loaded chest can disappear. */
+    static void activateAndConfirm(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                          ContainerSurface surface, ChestBlockEntity chest) {
+        if (!transition(runtime, surface.containerId(), ContainerSurfaceStatus.ACTIVE)) return;
+        FrontierWorldState current = state(runtime);
+        if (current == null || !ReferenceContainerCustody.isReferenceContainer(current, surface.containerId())) return;
+        var lease = current.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(surface.containerId()));
+        if (lease != null && lease.status() == io.farfrontier.palemirror.frontier.v3.model.PhysicalCustodyLeaseStatus.PREPARING)
+            FrontierV3ReferenceContainerCustodyExecutor.reconcilePreparedProjection(runtime, current, lease, chest);
     }
 
     /** Bounded fair drift inspection for retained active surfaces; it does not mutate blocks. */

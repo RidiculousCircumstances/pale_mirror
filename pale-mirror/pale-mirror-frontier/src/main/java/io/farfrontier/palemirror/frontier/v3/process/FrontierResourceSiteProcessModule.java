@@ -225,6 +225,12 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
                         command.scheduleBinding().map(io.farfrontier.palemirror.frontier.v3.api.EngineScheduleBinding::action)));
             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
+        if (command.payload() instanceof ResourceSiteHarvestSceneReconciled reconciled) {
+            try {
+                ResourceSiteHarvestSceneReconciliation.reduce(state, reconciled.siteId(), reconciled);
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(reconciled.siteId(), reconciled)));
+            } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+        }
         if (command.payload() instanceof ResourceSiteHarvestHandProjected projected) {
             try {
                 ResourceSiteHarvestProcess.reduceHandProjected(state, projected.siteId(), projected);
@@ -504,6 +510,7 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
             case ResourceSiteHarvestHotTraversalAdvanced advanced -> ResourceSiteHarvestProcess.reduceHotTraversalAdvanced(state, event.subject(), advanced);
             case ResourceSiteHarvestHotGoalArrived arrived -> ResourceSiteHarvestProcess.reduceHotGoalArrived(state, event.subject(), arrived);
             case ResourceSiteHarvestProgressed progressed -> ResourceSiteHarvestProcess.reduceProgressed(state, event.subject(), progressed);
+            case ResourceSiteHarvestSceneReconciled reconciled -> ResourceSiteHarvestSceneReconciliation.reduce(state, event.subject(), reconciled);
             case ResourceSiteHarvestHandProjected projected -> ResourceSiteHarvestProcess.reduceHandProjected(state, event.subject(), projected);
             case ResourceSiteHarvestHandRelease released -> ResourceSiteHarvestProcess.reduceHandRelease(state, event.subject(), released);
             case ResourceSiteHarvestSceneLeasePrepared prepared -> reduceHarvestScenePrepared(state, event.subject(), event, prepared);

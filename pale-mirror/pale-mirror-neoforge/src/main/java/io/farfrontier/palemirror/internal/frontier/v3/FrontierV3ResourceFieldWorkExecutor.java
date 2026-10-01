@@ -163,7 +163,13 @@ final class FrontierV3ResourceFieldWorkExecutor {
         ResourceFieldCycle cycle = state.resourceSites().cycle(job.siteId());
         ResourceFieldLayout.CellId id = cycle.layout().cells().get(job.progress().lastCompletedCropSlotIndex()).id();
         FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(level);
-        if (!(ledger.fieldClaim(job.siteId()) instanceof FrontierV3ResourceSiteLedger.FieldOwnership owner)
+        var claim = ledger.fieldClaim(job.siteId());
+        // A COLD receipt is not a pending physical farmer effect. First-visibility
+        // initialization/projection belongs to the field owner, not to a returning farmer.
+        if (claim == null || claim instanceof FrontierV3ResourceSiteLedger.FieldInitialization initial
+                && initial.status() == FrontierV3ResourceSiteLedger.Status.PENDING)
+            return job.progress().complete() || job.returningForBatch() ? Disposition.READY : Disposition.PENDING;
+        if (!(claim instanceof FrontierV3ResourceSiteLedger.FieldOwnership owner)
                 || owner.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE
                 || !owner.witness().matchesCycle(cycle)) return Disposition.CONFLICT;
         FrontierV3ResourceFieldWitness witness = owner.witness();
@@ -175,10 +181,9 @@ final class FrontierV3ResourceFieldWorkExecutor {
             // A completed work/projection cause already observed this physical cell before
             // clearing its pending witness. Re-reading it on every return-route tick would
             // incorrectly require the field chunk to stay loaded all the way to the depot.
-            return witness.cell(id).committed().equals(ResourceFieldPhysicalSurface.Condition.of(cycle.cell(id)))
-                    ? Disposition.READY : Disposition.PENDING;
+            return Disposition.READY;
         }
-        if (pending.orElseThrow().canonicalSource().isPresent()) return Disposition.PENDING;
+        if (pending.orElseThrow().canonicalSource().isPresent()) return Disposition.READY;
         if (!FrontierV3ActorHandObservation.ownsCurrentHarvest(state, lease, job)
                 || !pending.orElseThrow().causationId().equals(cause(job, cycle, id))) return Disposition.CONFLICT;
         var field = FrontierV3ResourceFieldObservation.observe(level, cycle, witness, id,
