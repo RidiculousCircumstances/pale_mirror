@@ -21,7 +21,7 @@ public final class ResidentActivityCoordinator {
                         state.bootstrap().ruleset().residentLife(),
                         resident.characteristics().effectiveMetabolismPermille(assessedAt)).satietyUnits()
                     >= state.bootstrap().ruleset().residentLife().eatBelowUnits()
-                    || ResidentMealOpportunity.find(state, residentId).isEmpty());
+                    || ResidentMealOpportunity.find(state, residentId, assessedAt).isEmpty());
     }
 
     public static long nextOrdinaryWorkAdmission(FrontierWorldState state,
@@ -96,7 +96,7 @@ public final class ResidentActivityCoordinator {
                         state.bootstrap().ruleset().residentLife(),
                         resident.characteristics().effectiveMetabolismPermille(assessedAt)).satietyUnits()
                     >= state.bootstrap().ruleset().residentLife().eatBelowUnits()
-                || ResidentMealOpportunity.find(state, residentId).isPresent()) return choice;
+                || ResidentMealOpportunity.find(state, residentId, assessedAt).isPresent()) return choice;
         // No executable meal exists. Keep working in WORK, or obey FREE at a safe point;
         // the activity wake still retries food independently without losing the assignment.
         if (state.humanPopulation().schedule(resident.settlementId()).windowAt(assessedAt)

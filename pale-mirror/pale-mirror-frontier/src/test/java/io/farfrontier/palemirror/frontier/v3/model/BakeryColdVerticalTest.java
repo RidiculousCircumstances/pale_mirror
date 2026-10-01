@@ -223,7 +223,7 @@ class BakeryColdVerticalTest {
                             .accrueHunger(waitingResident, 27_000L));
                     ResidentMealStarted meal = ResidentMealProcess.selectSourceAtYield(completed,
                             waitingResident, 27_000L).orElseThrow();
-                    assertEquals(job.outputItemId(), meal.meal().lotId());
+                    assertEquals(java.util.Map.of(job.outputItemId(), 1), meal.meal().portion().lotQuantities());
                     completed = ResidentMealProcess.reduceStarted(completed, waitingResident, meal);
                     long mealTick = 27_001L;
                     for (int mealStep = 0; mealStep < 24

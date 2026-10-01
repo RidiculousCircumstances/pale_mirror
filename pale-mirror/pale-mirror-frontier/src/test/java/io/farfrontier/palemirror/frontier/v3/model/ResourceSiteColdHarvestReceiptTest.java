@@ -205,7 +205,7 @@ class ResourceSiteColdHarvestReceiptTest {
                 .filter(value -> !value.equals(beforeReturn.workerId())).findFirst().orElseThrow();
         ResidentMeal otherMeal = new ResidentMeal(occupant, settlement.id(), depot, port.exteriorApproach(),
                 ReferenceContainerCustody.scopeId(depot), new SubjectId("custody:resident-meal-harvest-wait"),
-                new SubjectId("lot:harvest-wait-bread"), new SubjectId("claim:harvest-wait-bread"),
+                new FoodPortion(FoodCatalog.BREAD, 1_000, java.util.Map.of(new SubjectId("lot:harvest-wait-bread"), 1)), new SubjectId("claim:harvest-wait-bread"),
                 java.util.Optional.empty(), ResidentMeal.Phase.MOVE, 24_000L, java.util.Optional.empty());
         var occupiedBodies = new java.util.LinkedHashMap<>(pending.state().actorLocations());
         occupiedBodies.put(occupant, occupiedBodies.get(occupant).withBody(port.serviceSurface().standingBody()));

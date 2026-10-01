@@ -70,6 +70,10 @@ final class FrontierV3ResidentLifeDiagnostic {
                 + "\",\"nutrition\":\"" + effective.status().name()
                 + "\",\"satietyUnits\":" + effective.satietyUnits()
                 + ",\"storedSatietyUnits\":" + stored.satietyUnits()
+                + ",\"starvationSeverityUnits\":" + (living
+                    ? io.farfrontier.palemirror.frontier.v3.process.ResidentStarvationProcess.evaluate(state, subject, now).severityUnits()
+                    : state.humanPopulation().health(subject).starvation().severityUnits())
+                + ",\"storedStarvationSeverityUnits\":" + state.humanPopulation().health(subject).starvation().severityUnits()
                 + ",\"lastEvaluatedTick\":" + stored.lastEvaluatedTick()
                 + ",\"fractionalSatietyProgress\":" + stored.fractionalProgress()
                 + ",\"metabolismBasePermille\":" + resident.characteristics().baseMetabolismPermille()
@@ -90,6 +94,10 @@ final class FrontierV3ResidentLifeDiagnostic {
                 + "\",\"mealClaim\":\"" + (meal == null ? "" : quote(meal.claimId().value()))
                 + "\",\"mealActionDueAt\":" + (mealAction.isPresent() ? mealAction.orElseThrow().dueAt().ticks() : "null")
                 + ",\"mealActionHeld\":" + mealAction.map(action -> ResidentMealProcess.held(state, action)).orElse(false)
+                + ",\"mealFood\":\"" + (meal == null ? "" : quote(meal.portion().itemKind())) + "\""
+                + ",\"mealQuantity\":" + (meal == null ? 0 : meal.portion().quantity())
+                + ",\"mealNutritionPerItem\":" + (meal == null ? 0 : meal.portion().nutritionPerItem())
+                + ",\"mealNutritionUnits\":" + (meal == null ? 0 : meal.portion().nutritionUnits())
                 + ",\"mealTravelArrivalAt\":" + (meal == null ? "null" : meal.coldTravel()
                     .map(route -> Long.toString(route.arrivalTick())).orElse("null"))
                 + ",\"mealAtWaitingPocket\":" + (meal != null && ResidentMealKnownNavigation.atWaitingPocket(state, meal))

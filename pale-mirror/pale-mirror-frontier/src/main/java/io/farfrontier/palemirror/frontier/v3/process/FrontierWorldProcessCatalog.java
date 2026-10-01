@@ -75,7 +75,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.resident_migration_resumed", "frontier.resident_birth_started", "frontier.resident_birth_cancelled",
             "frontier.settlement_provision_started", "frontier.settlement_provision_started_v2",
             "frontier.settlement_provision_consumed", "frontier.settlement_provision_resolved",
-            "frontier.resident_need_integrated", "frontier.resident_metabolism_changed",
+            "frontier.resident_starvation_integrated", "frontier.resident_need_integrated", "frontier.resident_metabolism_changed",
             "frontier.resident_meal_started",
             "frontier.resident_meal_cold_step", "frontier.resident_meal_hot_arrived",
             "frontier.resident_meal_hot_effect_prepared", "frontier.resident_meal_hot_effect_observed",
@@ -449,7 +449,7 @@ public final class FrontierWorldProcessCatalog {
                 return Set.of(action.subject(), FrontierWorldState.depotId(resident.settlementId()));
             // A safe-checkpoint wait depends on its work owner, not just food.
             // Keep that rare action directly runnable until work-owner invalidation is indexed.
-            if (ResidentMealOpportunity.find(state, action.subject()).isPresent()) return Set.of();
+            if (ResidentMealOpportunity.find(state, action.subject(), Math.max(action.dueAt().ticks(), state.humanPopulation().nutrition(action.subject()).lastEvaluatedTick())).isPresent()) return Set.of();
         } else {
             ResidentMeal meal = state.humanPopulation().meals().get(action.subject());
             if (meal == null) return Set.of(action.subject());
@@ -725,7 +725,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.resident_born", "frontier.resident_migrated", "frontier.resident_migration_started", "frontier.resident_migration_advanced",
                     "frontier.resident_transit_advanced", "frontier.resident_migration_blocked", "frontier.resident_migration_resumed", "frontier.resident_birth_started",
                     "frontier.resident_birth_cancelled", "frontier.settlement_provision_started", "frontier.settlement_provision_started_v2", "frontier.settlement_provision_consumed",
-                    "frontier.settlement_provision_resolved", "frontier.resident_need_integrated", "frontier.resident_metabolism_changed",
+                    "frontier.settlement_provision_resolved", "frontier.resident_starvation_integrated", "frontier.resident_need_integrated", "frontier.resident_metabolism_changed",
                     "frontier.resident_meal_started", "frontier.resident_meal_cold_step", "frontier.resident_meal_hot_arrived",
                     "frontier.resident_meal_hot_effect_prepared", "frontier.resident_meal_hot_effect_observed",
                     "frontier.resident_meal_hot_hand_materialized", "frontier.resident_meal_hot_hand_released",

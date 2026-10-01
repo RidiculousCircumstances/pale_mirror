@@ -23,7 +23,7 @@ class ResidentMealKnownNavigationTest {
         FrontierWorldState atEntrance = initial.withActorBody(resident, port.exteriorApproach().standingBody());
         ResidentMeal meal = new ResidentMeal(resident, settlement.id(), depot, port.exteriorApproach(),
                 ReferenceContainerCustody.scopeId(depot), new SubjectId("custody:resident-meal-changed-service"),
-                new SubjectId("lot:meal-changed-service"), new SubjectId("claim:meal-changed-service"),
+                new FoodPortion(FoodCatalog.BREAD, 1_000, java.util.Map.of(new SubjectId("lot:meal-changed-service"), 1)), new SubjectId("claim:meal-changed-service"),
                 Optional.empty(), ResidentMeal.Phase.MOVE, 24_000L, Optional.empty());
         assertEquals(port.serviceSurface(), ResidentMealKnownNavigation.path(atEntrance, meal).getLast());
         FrontierWorldState blocked = atEntrance.recordPhysicalDelta(new PhysicalDelta(
@@ -48,7 +48,7 @@ class ResidentMealKnownNavigationTest {
         FrontierWorldState state = initial.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
         ResidentMeal meal = new ResidentMeal(resident, settlement.id(), depot, side,
                 ReferenceContainerCustody.scopeId(depot), new SubjectId("custody:resident-meal-side"),
-                new SubjectId("lot:resident-meal-side"), new SubjectId("claim:resident-meal-side"),
+                new FoodPortion(FoodCatalog.BREAD, 1_000, java.util.Map.of(new SubjectId("lot:resident-meal-side"), 1)), new SubjectId("claim:resident-meal-side"),
                 Optional.empty(), ResidentMeal.Phase.MOVE, 22_639L, Optional.empty());
 
         List<SurfaceAnchor> route = ResidentMealKnownNavigation.path(state, meal);
@@ -67,7 +67,7 @@ class ResidentMealKnownNavigationTest {
         ResidentMeal meal = new ResidentMeal(resident, settlement.id(), depot,
                 state.actorLocations().get(resident).supportingSurface(),
                 ReferenceContainerCustody.scopeId(depot), new SubjectId("custody:resident-meal-six"),
-                new SubjectId("lot:resident-meal-six"), new SubjectId("claim:resident-meal-six"),
+                new FoodPortion(FoodCatalog.BREAD, 1_000, java.util.Map.of(new SubjectId("lot:resident-meal-six"), 1)), new SubjectId("claim:resident-meal-six"),
                 Optional.empty(), ResidentMeal.Phase.MOVE, 6_000L, Optional.empty());
         List<SurfaceAnchor> route = ResidentMealKnownNavigation.path(state, meal);
         assertEquals(state.actorLocations().get(resident).supportingSurface(), route.getFirst());
@@ -91,7 +91,7 @@ class ResidentMealKnownNavigationTest {
         ResidentMeal meal = new ResidentMeal(resident, settlement.id(), depot,
                 state.actorLocations().get(resident).supportingSurface(),
                 ReferenceContainerCustody.scopeId(depot), new SubjectId("custody:resident-meal-route"),
-                new SubjectId("lot:resident-meal-route"), new SubjectId("claim:resident-meal-route"),
+                new FoodPortion(FoodCatalog.BREAD, 1_000, java.util.Map.of(new SubjectId("lot:resident-meal-route"), 1)), new SubjectId("claim:resident-meal-route"),
                 Optional.empty(), ResidentMeal.Phase.MOVE, 24_000L, Optional.empty());
         SettlementStructure depotStructure = settlement.structures().stream()
                 .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
@@ -103,7 +103,7 @@ class ResidentMealKnownNavigationTest {
         assertTrue(fromIdle.size() > 1);
         ResidentMeal returning = new ResidentMeal(resident, settlement.id(), depot,
                 state.actorLocations().get(resident).supportingSurface(),
-                meal.sourceAccountId(), meal.actorAccountId(), meal.lotId(), meal.claimId(),
+                meal.sourceAccountId(), meal.actorAccountId(), meal.portion(), meal.claimId(),
                 meal.retainedWorkOwner(), ResidentMeal.Phase.RETURN, meal.startedAtTick(), Optional.empty());
         var serviceActors = new java.util.LinkedHashMap<>(state.actorLocations());
         serviceActors.put(resident, ActorLocation.standingOn(service));

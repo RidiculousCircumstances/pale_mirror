@@ -60,7 +60,7 @@ class ResidentLifeStateCodecTest {
         ResidentMeal meal = new ResidentMeal(resident, settlement.id(), depot,
                 base.actorLocations().get(resident).supportingSurface(),
                 ReferenceContainerCustody.scopeId(depot), new SubjectId("custody:resident-meal-test"),
-                new SubjectId("lot:bread-test"), new SubjectId("claim:meal-test"),
+                new FoodPortion(FoodCatalog.BREAD, 1_000, java.util.Map.of(new SubjectId("lot:bread-test"), 1)), new SubjectId("claim:meal-test"),
                 Optional.empty(), ResidentMeal.Phase.MOVE, 24_000L, Optional.empty());
         HumanPopulation population = base.humanPopulation().withMeal(meal);
         ResidentProfile profile = population.resident(resident);

@@ -283,7 +283,7 @@ class ResidentMealProcessTest {
         assertFalse(FrontierWorldStateSupport.availableForNewAssignment(state, state.humanPopulation().resident(resident)),
                 "a new work owner cannot recruit the resident while the meal owns their activity");
         assertEquals(1, state.inventory().fungibleResources().accounts().get(meal.actorAccountId())
-                .lotQuantities().get(meal.lotId()));
+                .lotQuantities().get(meal.portion().lotQuantities().keySet().iterator().next()));
         assertEquals(1, state.inventory().fungibleResources().claims().get(meal.claimId()).quantity());
         assertEquals(0, state.inventory().fungibleResources().bindings().values().stream()
                 .filter(binding -> binding.accountId().equals(meal.actorAccountId())).count());
@@ -418,6 +418,12 @@ class ResidentMealProcessTest {
         FrontierWorldState state = initial.withChanges(FrontierWorldStateUpdate.begin()
                 .actorLocations(actors).inventory(initial.inventory().withFungibleResources(bound))
                 .humanPopulation(initial.humanPopulation().accrueHunger(resident, 48_000L)));
+        var population = state.humanPopulation().withStarvation(resident, new ResidentStarvation(100, 0, 0));
+        var needs = new LinkedHashMap<>(population.nutrition());
+        needs.put(resident, new ResidentNutrition(ResidentNutritionStatus.STARVING, 0, 48_000, 0));
+        state = state.withHumanPopulation(new HumanPopulation(population.households(), population.residents(), population.birthJobs(),
+                population.health(), population.quarantines(), population.migrations(), population.provisions(), needs,
+                population.medicalOperations(), population.schedules(), population.meals()));
         PhysicalReplicaRecord replica = PhysicalReplicaRecord.expected(depot,
                 ReferenceContainerCustody.semanticKind(state, depot), 7L,
                 ReferenceContainerCustody.canonicalFingerprint(state, depot), ReferenceContainerCustody.provenance(depot));
@@ -458,7 +464,11 @@ class ResidentMealProcessTest {
         state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
         ResidentMealHotEffectObserved consumed = new ResidentMealHotEffectObserved(resident,
                 ResidentMeal.Phase.CONSUME, 1L, service.standingBody(), List.of(), List.of());
-        var hotEvents = ResidentMealProcess.planHotObserved(state, consumed, 48_002L);
+        var plannedEvents = ResidentMealProcess.planHotObserved(state, consumed, 48_002L);
+        var healthFact = assertInstanceOf(ResidentStarvationIntegrated.class, plannedEvents.getFirst().payload());
+        assertEquals(100, healthFact.next().severityUnits());
+        assertEquals(2, healthFact.next().exposureRemainder());
+        var hotEvents = plannedEvents.subList(1, plannedEvents.size());
         assertEquals(4, hotEvents.size());
         int rate = state.humanPopulation().resident(resident).characteristics().effectiveMetabolismPermille(48_002L);
         FrontierRuleset.ResidentLife rules = state.bootstrap().ruleset().residentLife();
@@ -476,7 +486,9 @@ class ResidentMealProcessTest {
                 hotEvents.get(3).payload());
         assertEquals(ActorMovementProcess.progress(ActorMovementProcess.afterMeal(meal, 48_002L), 48_003L),
                 issuedMovement.action());
+        state = ResidentStarvationProcess.reduce(state, resident, healthFact);
         state = ResidentMealProcess.reduceHotObserved(state, resident, consumed, 48_002L);
+        assertEquals(100, state.humanPopulation().health(resident).starvation().severityUnits());
         assertEquals(63, state.inventory().fungibleResources().totalQuantity(settlement.id(), "minecraft:bread"));
         assertEquals(ResidentNutritionStatus.NOURISHED, state.humanPopulation().nutrition(resident).status());
         assertFalse(state.humanPopulation().meals().containsKey(resident));

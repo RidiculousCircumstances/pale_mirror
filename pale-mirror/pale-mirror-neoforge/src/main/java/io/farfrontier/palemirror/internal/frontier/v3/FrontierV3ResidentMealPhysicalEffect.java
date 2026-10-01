@@ -12,7 +12,6 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 
 import java.util.List;
@@ -53,21 +52,21 @@ final class FrontierV3ResidentMealPhysicalEffect {
             order = ResidentMealProcess.takeOrder(state, meal);
             slices = MaterialSourceSelection.select(state.inventory().fungibleResources(), order);
         } catch (IllegalArgumentException changed) { return false; }
-        if (slices.size() != 1 || !(slices.getFirst().address() instanceof PhysicalStackAddress.ContainerSlot source)) return false;
+        if (slices.isEmpty() || slices.stream().anyMatch(slice -> !(slice.address() instanceof PhysicalStackAddress.ContainerSlot))) return false;
+        var sourceCounts = ResidentMealPhysicalStep.sourceCounts(slices);
         var transfer = new FrontierV3ActorItemTransfer.FungibleStep(order, chest, worker,
                 worker.getUUID(), slices, -1);
         ResidentMealPhysicalStep pending = meal.pendingPhysicalStep().orElse(null);
         if (pending == null) {
             if (!transfer.before()) return false;
             ResidentMealPhysicalStep step = new ResidentMealPhysicalStep(ResidentMeal.Phase.TAKE,
-                    source.slot().slot(), slices.getFirst().before(), slices.getFirst().epoch(),
+                    sourceCounts, 0, slices.getFirst().epoch(),
                     lease.revision(), lease.revision());
             return accepted(level, runtime, meal.residentId(), "resident-meal-take-prepare",
                     new ResidentMealHotEffectPrepared(meal.residentId(), step));
         }
         if (pending.phase() != ResidentMeal.Phase.TAKE || pending.ambientRevision() != lease.revision()
-                || pending.sourceSlot() != source.slot().slot()
-                || pending.sourceCount() != slices.getFirst().before()
+                || !pending.sourceCounts().equals(sourceCounts)
                 || pending.sourceEpoch() != slices.getFirst().epoch()) return false;
         if (!transfer.after()) {
             if (!transfer.before() || !transfer.apply() || !transfer.after()) return false;
@@ -75,7 +74,7 @@ final class FrontierV3ResidentMealPhysicalEffect {
         List<FungiblePhysicalObservation.Stack> remaining =
                 FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(chest, state, meal.depotId());
         var held = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(
-                meal.residentId(), worker.getUUID()), ResidentMeal.BREAD_KIND, 1);
+                meal.residentId(), worker.getUUID()), meal.portion().itemKind(), meal.portion().quantity());
         boolean applied = accepted(level, runtime, meal.residentId(), "resident-meal-take-observed",
                 new ResidentMealHotEffectObserved(meal.residentId(), ResidentMeal.Phase.TAKE,
                         lease.revision(), lease.goalBody(), remaining, List.of(held)));
@@ -91,15 +90,14 @@ final class FrontierV3ResidentMealPhysicalEffect {
         List<PhysicalStackBinding> bindings = ledger.bindings().values().stream()
                 .filter(binding -> binding.accountId().equals(meal.actorAccountId())).toList();
         ItemStack actual = worker.getItemBySlot(EquipmentSlot.OFFHAND);
-        boolean before = actual.getCount() == 1
-                && ItemStack.isSameItemSameComponents(actual, new ItemStack(Items.BREAD, 1));
+        boolean before = FrontierV3ResidentMealItems.matches(actual, meal.portion());
         if (bindings.isEmpty() && meal.pendingPhysicalStep().isEmpty() && before)
             return accepted(level, runtime, meal.residentId(), "resident-meal-hand-materialized",
                     new ResidentMealHotHandMaterialized(meal.residentId(), lease.revision(),
                             new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(
-                                    meal.residentId(), worker.getUUID()), ResidentMeal.BREAD_KIND, 1)));
-        if (bindings.size() != 1 || bindings.getFirst().quantity() != 1
-                || !bindings.getFirst().lotQuantities().equals(Map.of(meal.lotId(), 1))
+                                    meal.residentId(), worker.getUUID()), meal.portion().itemKind(), meal.portion().quantity())));
+        if (bindings.size() != 1 || bindings.getFirst().quantity() != meal.portion().quantity()
+                || !bindings.getFirst().lotQuantities().equals(meal.portion().lotQuantities())
                 || !(bindings.getFirst().address() instanceof PhysicalStackAddress.ActorHand hand)
                 || !hand.actorId().equals(meal.residentId()) || !hand.entityId().equals(worker.getUUID())) return false;
         ResidentMealPhysicalStep pending = meal.pendingPhysicalStep().orElse(null);
@@ -107,10 +105,11 @@ final class FrontierV3ResidentMealPhysicalEffect {
             if (!before) return false;
             return accepted(level, runtime, meal.residentId(), "resident-meal-consume-prepare",
                     new ResidentMealHotEffectPrepared(meal.residentId(), new ResidentMealPhysicalStep(
-                            ResidentMeal.Phase.CONSUME, -1, 1, bindings.getFirst().authorityEpoch(),
+                            ResidentMeal.Phase.CONSUME, -1, meal.portion().quantity(), bindings.getFirst().authorityEpoch(),
                             0L, lease.revision())));
         }
         if (pending.phase() != ResidentMeal.Phase.CONSUME || pending.ambientRevision() != lease.revision()
+                || pending.consumptionQuantity() != meal.portion().quantity()
                 || pending.sourceEpoch() != bindings.getFirst().authorityEpoch()) return false;
         if (before) {
             worker.setItemSlot(EquipmentSlot.OFFHAND, ItemStack.EMPTY);

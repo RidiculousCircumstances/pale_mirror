@@ -171,6 +171,14 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
     public Set<SubjectId> residentIds() { return residents.keySet(); }
     public ResidentProfile resident(SubjectId id) { return residents.get(id); }
     public ResidentHealth health(SubjectId id) { return health.get(id); }
+    public HumanPopulation withStarvation(SubjectId residentId, ResidentStarvation condition) {
+        ResidentHealth current = health.get(residentId);
+        if (current == null) throw new IllegalArgumentException("unknown starvation resident");
+        Map<SubjectId, ResidentHealth> next = new LinkedHashMap<>(health);
+        next.put(residentId, current.withStarvation(condition));
+        return new HumanPopulation(households, residents, birthJobs, next, quarantines, migrations,
+                provisions, nutrition, medicalOperations, schedules, meals);
+    }
     public ResidentNutrition nutrition(SubjectId id) {
         ResidentNutrition value = nutrition.get(Objects.requireNonNull(id, "resident nutrition resident"));
         if (value == null) throw new IllegalArgumentException("unknown resident nutrition subject");
@@ -340,7 +348,13 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
 
     public HumanPopulation consumeResidentBread(SubjectId residentId, long canonicalTick,
                                                 FrontierRuleset.ResidentLife rules) {
-        ResidentNutrition advanced = nutrition(residentId).consumeBreadAt(canonicalTick, rules,
+        return consumeResidentFood(residentId, canonicalTick, rules.breadNutritionUnits(), rules);
+    }
+
+    /** Food retirement owner supplies nutrition from its exact registered consumed portion. */
+    public HumanPopulation consumeResidentFood(SubjectId residentId, long canonicalTick, int nutritionUnits,
+                                                FrontierRuleset.ResidentLife rules) {
+        ResidentNutrition advanced = nutrition(residentId).consumeNutritionAt(canonicalTick, nutritionUnits, rules,
                 resident(residentId).characteristics().effectiveMetabolismPermille(canonicalTick));
         Map<SubjectId, ResidentNutrition> next = new LinkedHashMap<>(nutrition);
         next.put(residentId, advanced);

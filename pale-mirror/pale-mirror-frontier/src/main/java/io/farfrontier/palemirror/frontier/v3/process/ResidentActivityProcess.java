@@ -48,7 +48,7 @@ public final class ResidentActivityProcess {
         ResidentNutrition nutrition = state.humanPopulation().nutrition(residentId).accrueThrough(now,
                 state.bootstrap().ruleset().residentLife(), resident.characteristics().effectiveMetabolismPermille(now));
         if (!nutrition.wantsFood(state.bootstrap().ruleset().residentLife())) return false;
-        if (ResidentMealOpportunity.find(state, residentId).isEmpty()) return true;
+        if (ResidentMealOpportunity.find(state, residentId, now).isEmpty()) return true;
         return ResidentActivityCoordinator.assess(state, residentId, now).pending()
                 .filter(wait -> wait == ResidentActivityChoice.Wait.SAFE_CHECKPOINT).isPresent();
     }
@@ -137,7 +137,7 @@ public final class ResidentActivityProcess {
         ResidentActivityChoice next = ResidentActivityCoordinator.assess(ready.following(), residentId, now);
         if (next.kind() == ResidentActivityChoice.Kind.WORK
                 || next.kind() == ResidentActivityChoice.Kind.EAT
-                    && ResidentMealOpportunity.find(ready.following(), residentId).isPresent()) return ready;
+                    && ResidentMealOpportunity.find(ready.following(), residentId, now).isPresent()) return ready;
         // An optional idle journey continues unless a real higher-priority activity can replace it.
         return new ActivityInterruptionPlanner.Waiting(ActivityInterruptionPlanner.Reason.AUTHORITY_HANDOFF);
     }

@@ -38,6 +38,21 @@ public record ResidentNutrition(ResidentNutritionStatus status, int satietyUnits
         return Math.max(0, rules.mealTargetUnits() - satietyUnits);
     }
 
+    public long ticksUntilEmpty(FrontierRuleset.ResidentLife rules, int rate) {
+        validate(rules, rate);
+        return Math.ceilDiv(Math.subtractExact(Math.multiplyExact((long) satietyUnits,
+                Math.multiplyExact(rules.satietyUnitTicks(), 1_000L)), fractionalProgress), rate);
+    }
+
+    public long ticksUntilBelow(int thresholdUnits, FrontierRuleset.ResidentLife rules, int rate) {
+        validate(rules, rate);
+        if (thresholdUnits < 1 || thresholdUnits > rules.satietyCapacityUnits())
+            throw new IllegalArgumentException("nutrition threshold exceeds stomach capacity");
+        if (satietyUnits < thresholdUnits) return 0;
+        return Math.ceilDiv(Math.subtractExact(Math.multiplyExact((long) (satietyUnits - thresholdUnits + 1),
+                Math.multiplyExact(rules.satietyUnitTicks(), 1_000L)), fractionalProgress), rate);
+    }
+
     /** Historical provision owner is inactive; these transitions retain its isolated fixtures. */
     public ResidentNutrition fed(int cycle) {
         requireNextCycle(cycle);

@@ -29,12 +29,14 @@ public final class ResidentMetabolismProcess {
             throw new IllegalArgumentException("pending resident need threshold must resolve before a rate edit");
         FrontierWorldState changed = reduce(state, id, change);
         long nextDue = changed.humanPopulation().nutrition(id).nextThresholdTick(rules, newRate);
-        return List.of(new ProposedEvent(id, change),
+        var events = new java.util.ArrayList<>(ResidentPhysiologyComposition.BEFORE_NUTRITION.beforeRetirement(state, id, change.atTick()));
+        events.addAll(List.of(new ProposedEvent(id, change),
                 new ProposedEvent(id, new ScheduleEffect.Rescheduled(
                         ResidentNeedProcess.review(id, oldDue).id(), ResidentNeedProcess.review(id, nextDue))),
                 new ProposedEvent(id, new ScheduleEffect.Rescheduled(
                         ResidentActivityProcess.review(id, 1L).id(),
-                        ResidentActivityProcess.review(id, Math.addExact(change.atTick(), 1L)))));
+                        ResidentActivityProcess.review(id, Math.addExact(change.atTick(), 1L))))));
+        return List.copyOf(events);
     }
 
     public static FrontierWorldState reduce(FrontierWorldState state, SubjectId subject,

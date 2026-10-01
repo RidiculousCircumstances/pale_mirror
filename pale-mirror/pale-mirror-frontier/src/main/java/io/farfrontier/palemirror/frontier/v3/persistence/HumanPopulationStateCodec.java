@@ -34,6 +34,7 @@ final class HumanPopulationStateCodec {
         FrontierWorldStateCodec.writeCount(output, population.health().size());
         for (Map.Entry<SubjectId, ResidentHealth> entry : population.health().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
             FrontierWorldStateCodec.writeString(output, entry.getKey().value()); output.writeByte(entry.getValue().status().wireTag()); output.writeLong(entry.getValue().sinceTick());
+            HumanPopulationPayloadCodecs.writeStarvation(output, entry.getValue().starvation());
         }
         FrontierWorldStateCodec.writeCount(output, population.nutrition().size());
         for (Map.Entry<SubjectId, ResidentNutrition> entry : population.nutrition().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
@@ -125,7 +126,8 @@ final class HumanPopulationStateCodec {
         Map<SubjectId, ResidentHealth> health = new LinkedHashMap<>();
         for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) {
             SubjectId id = new SubjectId(FrontierWorldStateCodec.readString(input)); int status = input.readUnsignedByte();
-            if (status >= ResidentHealthStatus.values().length || health.put(id, new ResidentHealth(FrontierWireTags.require(ResidentHealthStatus.class, status), input.readLong())) != null) {
+            if (status >= ResidentHealthStatus.values().length || health.put(id, new ResidentHealth(FrontierWireTags.require(ResidentHealthStatus.class, status), input.readLong(),
+                    HumanPopulationPayloadCodecs.readStarvation(input))) != null) {
                 throw new IllegalArgumentException("invalid or duplicate resident health");
             }
         }
@@ -249,7 +251,7 @@ final class HumanPopulationStateCodec {
         FrontierWorldStateCodec.writePosition(output, meal.clearingSurface().support());
         FrontierWorldStateCodec.writeString(output, meal.sourceAccountId().value());
         FrontierWorldStateCodec.writeString(output, meal.actorAccountId().value());
-        FrontierWorldStateCodec.writeString(output, meal.lotId().value());
+        writeFoodPortion(output, meal.portion());
         FrontierWorldStateCodec.writeString(output, meal.claimId().value());
         output.writeBoolean(meal.retainedWorkOwner().isPresent());
         if (meal.retainedWorkOwner().isPresent()) FrontierWorldStateCodec.writeString(output, meal.retainedWorkOwner().orElseThrow().value());
@@ -259,9 +261,7 @@ final class HumanPopulationStateCodec {
         output.writeBoolean(meal.pendingPhysicalStep().isPresent());
         if (meal.pendingPhysicalStep().isPresent()) {
             ResidentMealPhysicalStep step = meal.pendingPhysicalStep().orElseThrow();
-            output.writeByte(FrontierWireTags.tag(step.phase())); output.writeByte(step.sourceSlot());
-            output.writeByte(step.sourceCount()); output.writeLong(step.sourceEpoch());
-            output.writeLong(step.destinationEpoch()); output.writeLong(step.ambientRevision());
+            writeMealPhysicalStep(output, step);
         }
         output.writeBoolean(meal.coldTravel().isPresent());
         if (meal.coldTravel().isPresent()) {
@@ -273,6 +273,46 @@ final class HumanPopulationStateCodec {
         }
     }
 
+    static void writeFoodPortion(DataOutputStream output, FoodPortion portion) throws IOException {
+        FrontierWorldStateCodec.writeString(output, portion.itemKind()); output.writeInt(portion.nutritionPerItem());
+        output.writeByte(portion.lotQuantities().size());
+        for (var entry : new java.util.TreeMap<>(portion.lotQuantities()).entrySet()) {
+            FrontierWorldStateCodec.writeString(output, entry.getKey().value()); output.writeByte(entry.getValue());
+        }
+    }
+
+    static FoodPortion readFoodPortion(DataInputStream input) throws IOException {
+        String kind = FrontierWorldStateCodec.readString(input); int nutrition = input.readInt();
+        int count = input.readUnsignedByte();
+        if (count < 1 || count > 64) throw new IllegalArgumentException("invalid portion lot count");
+        Map<SubjectId, Integer> lots = new LinkedHashMap<>();
+        for (int i = 0; i < count; i++)
+            if (lots.put(new SubjectId(FrontierWorldStateCodec.readString(input)), input.readUnsignedByte()) != null)
+                throw new IllegalArgumentException("duplicate portion lot");
+        return new FoodPortion(kind, nutrition, lots);
+    }
+
+    static void writeMealPhysicalStep(DataOutputStream output, ResidentMealPhysicalStep step) throws IOException {
+        output.writeByte(FrontierWireTags.tag(step.phase())); output.writeByte(step.sourceCounts().size());
+        for (var entry : new java.util.TreeMap<>(step.sourceCounts()).entrySet()) {
+            output.writeByte(entry.getKey()); output.writeByte(entry.getValue());
+        }
+        output.writeByte(step.consumptionQuantity()); output.writeLong(step.sourceEpoch());
+        output.writeLong(step.destinationEpoch()); output.writeLong(step.ambientRevision());
+    }
+
+    static ResidentMealPhysicalStep readMealPhysicalStep(DataInputStream input) throws IOException {
+        var phase = FrontierWireTags.require(ResidentMeal.Phase.class, input.readUnsignedByte());
+        int count = input.readUnsignedByte();
+        if (count > 27) throw new IllegalArgumentException("too many meal source slots");
+        Map<Integer, Integer> sources = new LinkedHashMap<>();
+        for (int i = 0; i < count; i++)
+            if (sources.put(input.readUnsignedByte(), input.readUnsignedByte()) != null)
+                throw new IllegalArgumentException("duplicate meal source slot");
+        return new ResidentMealPhysicalStep(phase, sources, input.readUnsignedByte(),
+                input.readLong(), input.readLong(), input.readLong());
+    }
+
     static ResidentMeal readMeal(DataInputStream input) throws IOException {
         SubjectId resident = new SubjectId(FrontierWorldStateCodec.readString(input));
         SubjectId settlement = new SubjectId(FrontierWorldStateCodec.readString(input));
@@ -280,7 +320,7 @@ final class HumanPopulationStateCodec {
         SurfaceAnchor clearing = new SurfaceAnchor(FrontierWorldStateCodec.readPosition(input));
         SubjectId source = new SubjectId(FrontierWorldStateCodec.readString(input));
         SubjectId actor = new SubjectId(FrontierWorldStateCodec.readString(input));
-        SubjectId lot = new SubjectId(FrontierWorldStateCodec.readString(input));
+        FoodPortion portion = readFoodPortion(input);
         SubjectId claim = new SubjectId(FrontierWorldStateCodec.readString(input));
         java.util.Optional<SubjectId> retained = input.readBoolean()
                 ? java.util.Optional.of(new SubjectId(FrontierWorldStateCodec.readString(input)))
@@ -292,10 +332,8 @@ final class HumanPopulationStateCodec {
             wait = java.util.Optional.of(FrontierWireTags.require(ResidentActivityChoice.Wait.class, tag));
         }
         java.util.Optional<ResidentMealPhysicalStep> pending = java.util.Optional.empty();
-        if (input.readBoolean()) pending = java.util.Optional.of(new ResidentMealPhysicalStep(
-                FrontierWireTags.require(ResidentMeal.Phase.class, input.readUnsignedByte()),
-                input.readByte(), input.readUnsignedByte(), input.readLong(), input.readLong(), input.readLong()));
-        ResidentMeal meal = new ResidentMeal(resident, settlement, depot, clearing, source, actor, lot,
+        if (input.readBoolean()) pending = java.util.Optional.of(readMealPhysicalStep(input));
+        ResidentMeal meal = new ResidentMeal(resident, settlement, depot, clearing, source, actor, portion,
                 claim, retained, FrontierWireTags.require(ResidentMeal.Phase.class, phase), started, wait, pending);
         if (!input.readBoolean()) return meal;
         long departedAt = input.readLong(), ticksPerEdge = input.readLong(), epoch = input.readLong();

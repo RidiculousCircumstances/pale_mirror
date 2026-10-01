@@ -11,6 +11,7 @@ public final class ResidentMealReferenceClosure {
         HumanAssignmentProjection assignments = state.humanPopulation().meals().isEmpty()
                 ? null : HumanAssignmentProjection.compile(state);
         for (ResidentMeal meal : state.humanPopulation().meals().values()) {
+            meal.portion().validate(state.bootstrap().ruleset().residentLife().foods());
             ActorLocation actor = state.actorLocations().get(meal.residentId());
             if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE)
                 throw new IllegalArgumentException("retained meal has no living resident body");
@@ -45,15 +46,18 @@ public final class ResidentMealReferenceClosure {
     private static boolean currentClaim(FungibleResourceLedger ledger, ResidentMeal meal,
                                         ClaimAllocation claim, CustodyAccount account,
                                         ResourceCustody expectedCustody) {
-        ResourceLot lot = ledger.lots().get(meal.lotId());
         return claim != null && claim.purpose() == ClaimPurpose.RESIDENT_MEAL
                 && claim.claimantId().equals(meal.residentId())
                 && claim.economicOwnerId().equals(meal.settlementId())
-                && claim.lotQuantities().equals(Map.of(meal.lotId(), 1))
-                && lot != null && lot.itemKind().equals(ResidentMeal.BREAD_KIND)
-                && lot.economicOwnerId().equals(meal.settlementId())
+                && claim.lotQuantities().equals(meal.portion().lotQuantities())
+                && meal.portion().lotQuantities().keySet().stream().allMatch(id -> {
+                    ResourceLot lot = ledger.lots().get(id);
+                    return lot != null && lot.itemKind().equals(meal.portion().itemKind())
+                            && lot.economicOwnerId().equals(meal.settlementId());
+                })
                 && account != null && account.custody().equals(expectedCustody)
-                && account.claimQuantities().getOrDefault(meal.claimId(), 0) == 1
-                && account.lotQuantities().getOrDefault(meal.lotId(), 0) >= 1;
+                && account.claimQuantities().getOrDefault(meal.claimId(), 0) == meal.portion().quantity()
+                && meal.portion().lotQuantities().entrySet().stream().allMatch(entry ->
+                    account.lotQuantities().getOrDefault(entry.getKey(), 0) >= entry.getValue());
     }
 }

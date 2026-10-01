@@ -237,6 +237,10 @@ public final class FrontierWorldStateSupport {
         }
         var rules = bootstrap.ruleset().residentLife();
         population.nutrition().forEach((resident, need) -> {
+            var condition = population.health(resident).starvation();
+            if (condition.exposureRemainder() >= rules.starvation().gainTicksPerUnit()
+                    || condition.recoveryRemainder() >= rules.starvation().recoveryTicksPerUnit())
+                throw new IllegalArgumentException("starvation remainder contradicts world rules");
             if (!need.equals(need.accrueThrough(need.lastEvaluatedTick(), rules,
                     population.resident(resident).characteristics().effectiveMetabolismPermille(need.lastEvaluatedTick()))))
                 throw new IllegalArgumentException("nutrition category or empty-stomach remainder contradicts world rules");

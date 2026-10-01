@@ -69,9 +69,26 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
     /** Balance and settlement policy for exact resident activities. No competing due-time queue. */
     public record ResidentLife(int dayTicks, int workTicks, long satietyUnitTicks,
                                int eatBelowUnits, int mealTargetUnits,
-                               int breadNutritionUnits, int satietyCapacityUnits,
+                               FoodCatalog foods, int satietyCapacityUnits,
                                int metabolismDefaultPermille, int metabolismMinPermille,
-                               int metabolismMaxPermille, int metabolismBaselineSpreadPermille) {
+                               int metabolismMaxPermille, int metabolismBaselineSpreadPermille,
+                               StarvationPolicy starvation) {
+        public ResidentLife(int dayTicks, int workTicks, long satietyUnitTicks,
+                            int eatBelowUnits, int mealTargetUnits, int breadNutritionUnits, int satietyCapacityUnits,
+                            int metabolismDefaultPermille, int metabolismMinPermille, int metabolismMaxPermille,
+                            int metabolismBaselineSpreadPermille, StarvationPolicy starvation) {
+            this(dayTicks, workTicks, satietyUnitTicks, eatBelowUnits, mealTargetUnits,
+                    FoodCatalog.bread(breadNutritionUnits), satietyCapacityUnits, metabolismDefaultPermille,
+                    metabolismMinPermille, metabolismMaxPermille, metabolismBaselineSpreadPermille, starvation);
+        }
+        public ResidentLife(int dayTicks, int workTicks, long satietyUnitTicks,
+                            int eatBelowUnits, int mealTargetUnits, int breadNutritionUnits, int satietyCapacityUnits,
+                            int metabolismDefaultPermille, int metabolismMinPermille, int metabolismMaxPermille,
+                            int metabolismBaselineSpreadPermille) {
+            this(dayTicks, workTicks, satietyUnitTicks, eatBelowUnits, mealTargetUnits, breadNutritionUnits,
+                    satietyCapacityUnits, metabolismDefaultPermille, metabolismMinPermille, metabolismMaxPermille,
+                    metabolismBaselineSpreadPermille, new StarvationPolicy(240L, 120L, eatBelowUnits));
+        }
         public ResidentLife(int dayTicks, int workTicks, long satietyUnitTicks,
                             int eatBelowUnits, int mealTargetUnits,
                             int breadNutritionUnits, int satietyCapacityUnits) {
@@ -93,11 +110,14 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
         }
 
         public ResidentLife {
+            Objects.requireNonNull(foods, "edible catalog");
+            Objects.requireNonNull(starvation, "starvation policy");
             if (dayTicks < 2 || workTicks < 1 || workTicks >= dayTicks || satietyUnitTicks < 1
                     || eatBelowUnits < 1 || mealTargetUnits <= eatBelowUnits
-                    || breadNutritionUnits < 1 || satietyCapacityUnits < mealTargetUnits
+                    || satietyCapacityUnits < mealTargetUnits
                     || satietyCapacityUnits > ResidentNutrition.MAX_SATIETY_UNITS
                     || satietyUnitTicks > Long.MAX_VALUE / (Math.max(1L, satietyCapacityUnits) * 1_000L)
+                    || starvation.recoverAtOrAboveUnits() > satietyCapacityUnits
                     || metabolismMinPermille < ResidentCharacteristics.MIN_METABOLISM_PERMILLE
                     || metabolismDefaultPermille < metabolismMinPermille
                     || metabolismDefaultPermille > metabolismMaxPermille
@@ -108,15 +128,28 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
             }
         }
 
+        /** Bread production/export balance, not the resident's generic consumption protocol. */
+        public int breadNutritionUnits() { return foods.require(FoodCatalog.BREAD).nutritionPerItem(); }
+
         public static ResidentLife initial() {
             return new ResidentLife(24_000, 12_000, 72L, 668, 900, 1_000, 1_000);
         }
 
         private String canonicalText() {
             return dayTicks + "," + workTicks + "," + satietyUnitTicks + "," + eatBelowUnits
-                    + "," + mealTargetUnits + "," + breadNutritionUnits + "," + satietyCapacityUnits
+                    + "," + mealTargetUnits + ",foods[" + foods.canonicalText() + "]," + satietyCapacityUnits
                     + "," + metabolismDefaultPermille + "," + metabolismMinPermille + "," + metabolismMaxPermille
-                    + "," + metabolismBaselineSpreadPermille;
+                    + "," + metabolismBaselineSpreadPermille + "," + starvation.gainTicksPerUnit()
+                    + "," + starvation.recoveryTicksPerUnit() + "," + starvation.recoverAtOrAboveUnits();
+        }
+    }
+
+    public record StarvationPolicy(long gainTicksPerUnit, long recoveryTicksPerUnit, int recoverAtOrAboveUnits) {
+        public StarvationPolicy {
+            if (gainTicksPerUnit < 1 || recoveryTicksPerUnit < 1 || recoverAtOrAboveUnits < 1
+                    || gainTicksPerUnit > Long.MAX_VALUE / ResidentStarvation.MAX_SEVERITY_UNITS
+                    || recoveryTicksPerUnit > Long.MAX_VALUE / ResidentStarvation.MAX_SEVERITY_UNITS)
+                throw new IllegalArgumentException("invalid starvation exposure/recovery policy");
         }
     }
 

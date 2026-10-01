@@ -53,7 +53,7 @@ class ResidentActivityCoordinatorTest {
         ResidentMeal meal = new ResidentMeal(RESIDENT, settlement, depot, SurfaceAnchor.at(0, 64, 0),
                 ReferenceContainerCustody.scopeId(depot),
                 new SubjectId("custody:resident-meal-one"),
-                new SubjectId("lot:bread-one"), new SubjectId("claim:meal-one"),
+                new FoodPortion(FoodCatalog.BREAD, 1_000, java.util.Map.of(new SubjectId("lot:bread-one"), 1)), new SubjectId("claim:meal-one"),
                 Optional.of(JOB), ResidentMeal.Phase.RETURN, 24_000L, Optional.empty());
         var activity = ResidentActivityCoordinator.choose(SettlementDailySchedule.initial(),
                 24_001L, ResidentNutrition.nourishedAt(1), ASSIGNED,

@@ -268,7 +268,7 @@ public final class FrontierWorldPhysicalObservationProcess {
             ResidentMeal meal = claim == null ? null : population.meals().get(claim.claimantId());
             if (claim == null || claim.purpose() != ClaimPurpose.RESIDENT_MEAL || meal == null
                     || !meal.claimId().equals(claimId) || !meal.sourceAccountId().equals(observed.sourceAccountId())
-                    || !meal.lotId().equals(claim.lotQuantities().keySet().iterator().next())
+                    || !meal.portion().lotQuantities().equals(claim.lotQuantities())
                     || ledger.accounts().containsKey(meal.actorAccountId()))
                 throw new IllegalArgumentException("stock exit cannot retire a foreign or physically held meal claim");
             population = population.abandonMealSource(meal);

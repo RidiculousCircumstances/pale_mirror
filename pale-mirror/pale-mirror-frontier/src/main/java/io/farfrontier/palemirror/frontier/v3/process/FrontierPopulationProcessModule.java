@@ -288,6 +288,7 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
             case SettlementProvisionStarted ignored -> throw new IllegalArgumentException("settlement provision start is retired by resident nutrition");
             case SettlementProvisionConsumed ignored -> throw new IllegalArgumentException("settlement provision consumption is retired by resident nutrition");
             case SettlementProvisionResolved ignored -> throw new IllegalArgumentException("settlement provision resolution is retired by resident nutrition");
+            case ResidentStarvationIntegrated integrated -> ResidentStarvationProcess.reduce(state, event.subject(), integrated);
             case ResidentNeedIntegrated integrated -> ResidentNeedProcess.reduce(state, event.subject(), integrated);
             case ResidentMetabolismChanged changed -> ResidentMetabolismProcess.reduce(state, event.subject(), changed);
             case ResidentMealStarted started -> ResidentActivityProcess.reduceMealStarted(state, event.subject(), started);

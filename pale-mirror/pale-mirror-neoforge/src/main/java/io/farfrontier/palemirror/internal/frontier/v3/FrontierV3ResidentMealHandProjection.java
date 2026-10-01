@@ -5,11 +5,10 @@ import io.farfrontier.palemirror.frontier.v3.model.*;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 
 import java.util.Map;
 
-/** The resident's self-care offhand is projected only from one unbound COLD bread account. */
+/** The resident's self-care offhand is projected only from one unbound COLD edible-portion account. */
 final class FrontierV3ResidentMealHandProjection {
     private FrontierV3ResidentMealHandProjection() { }
 
@@ -20,12 +19,12 @@ final class FrontierV3ResidentMealHandProjection {
         if (meal.phase() != ResidentMeal.Phase.CONSUME) return body.getItemBySlot(EquipmentSlot.OFFHAND).isEmpty();
         CustodyAccount account = state.inventory().fungibleResources().accounts().get(meal.actorAccountId());
         if (account == null || !account.custody().equals(new ResourceCustody.Actor(actorId))
-                || !account.lotQuantities().equals(Map.of(meal.lotId(), 1))
-                || !account.claimQuantities().equals(Map.of(meal.claimId(), 1))
+                || !account.lotQuantities().equals(meal.portion().lotQuantities())
+                || !account.claimQuantities().equals(Map.of(meal.claimId(), meal.portion().quantity()))
                 || state.inventory().fungibleResources().bindings().values().stream()
                     .anyMatch(binding -> binding.accountId().equals(meal.actorAccountId()))
                 || !body.getItemBySlot(EquipmentSlot.OFFHAND).isEmpty()) return false;
-        body.setItemSlot(EquipmentSlot.OFFHAND, new ItemStack(Items.BREAD, 1));
+        body.setItemSlot(EquipmentSlot.OFFHAND, FrontierV3ResidentMealItems.stack(meal.portion()));
         return true;
     }
 
@@ -33,11 +32,10 @@ final class FrontierV3ResidentMealHandProjection {
         ResidentMeal meal = state.humanPopulation().meals().get(actorId);
         if (meal == null) return true;
         ItemStack held = body.getItemBySlot(EquipmentSlot.OFFHAND);
-        boolean bread = held.getCount() == 1
-                && ItemStack.isSameItemSameComponents(held, new ItemStack(Items.BREAD, 1));
+        boolean food = FrontierV3ResidentMealItems.matches(held, meal.portion());
         if (meal.pendingPhysicalStep().isPresent())
             return meal.phase() == ResidentMeal.Phase.TAKE || meal.phase() == ResidentMeal.Phase.CONSUME
-                    ? held.isEmpty() || bread : false;
-        return meal.phase() == ResidentMeal.Phase.CONSUME ? bread : held.isEmpty();
+                    ? held.isEmpty() || food : false;
+        return meal.phase() == ResidentMeal.Phase.CONSUME ? food : held.isEmpty();
     }
 }

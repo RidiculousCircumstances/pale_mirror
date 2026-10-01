@@ -32,6 +32,12 @@ public final class ResidentNeedProcess {
     /** A witnessed meal changes the next threshold, including when its old due action is queued but not yet run. */
     public static ProposedEvent requeueAfterConfirmedBread(FrontierWorldState state, SubjectId residentId,
                                                             long consumedAtTick) {
+        return requeueAfterConfirmedFood(state, residentId, consumedAtTick,
+                state.bootstrap().ruleset().residentLife().breadNutritionUnits());
+    }
+
+    public static ProposedEvent requeueAfterConfirmedFood(FrontierWorldState state, SubjectId residentId,
+                                                         long consumedAtTick, int nutritionUnits) {
         ResidentProfile resident = state.humanPopulation().resident(residentId);
         if (resident == null || state.actorLocations().get(residentId) == null
                 || state.actorLocations().get(residentId).condition().status() != ActorLifeStatus.ALIVE)
@@ -40,7 +46,7 @@ public final class ResidentNeedProcess {
         ResidentNutrition before = state.humanPopulation().nutrition(residentId);
         int rate = resident.characteristics().effectiveMetabolismPermille(consumedAtTick);
         long oldDue = before.nextThresholdTick(rules, rate);
-        ResidentNutrition after = before.consumeBreadAt(consumedAtTick, rules, rate);
+        ResidentNutrition after = before.consumeNutritionAt(consumedAtTick, nutritionUnits, rules, rate);
         long nextDue = after.nextThresholdTick(rules, rate);
         return new ProposedEvent(residentId, new ScheduleEffect.Rescheduled(
                 review(residentId, oldDue).id(), review(residentId, nextDue)));
@@ -63,11 +69,13 @@ public final class ResidentNeedProcess {
         ResidentNutrition next = previous.accrueThrough(action.dueAt().ticks(), rules, rate);
         if (next.satietyUnits() >= previous.satietyUnits() && next.satietyUnits() > 0)
             throw new IllegalArgumentException("need review did not advance its exact threshold");
-        return List.of(new ProposedEvent(resident.id(), new ResidentNeedIntegrated(resident.id(),
+        var events = new java.util.ArrayList<>(ResidentPhysiologyComposition.BEFORE_NUTRITION.beforeRetirement(state, resident.id(), action.dueAt().ticks()));
+        events.addAll(List.of(new ProposedEvent(resident.id(), new ResidentNeedIntegrated(resident.id(),
                         action.dueAt().ticks(), previous.lastEvaluatedTick(), next.satietyUnits(),
                         next.fractionalProgress())),
                 new ProposedEvent(resident.id(), new ScheduleEffect.Created(
-                        review(resident.id(), next.nextThresholdTick(rules, rate)))));
+                        review(resident.id(), next.nextThresholdTick(rules, rate))))));
+        return List.copyOf(events);
     }
 
     public static FrontierWorldState reduce(FrontierWorldState state, SubjectId subject,

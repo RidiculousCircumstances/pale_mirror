@@ -796,11 +796,10 @@ final class FrontierV3AmbientActorExecutor {
                         .filter(binding -> binding.accountId().equals(retainedMeal.actorAccountId())).toList();
                 if (!bindings.isEmpty()) {
                     ItemStack held = body.getItemBySlot(EquipmentSlot.OFFHAND);
-                    if (bindings.size() != 1 || held.getCount() != 1
-                            || !ItemStack.isSameItemSameComponents(held, new ItemStack(Items.BREAD, 1))) return Optional.empty();
+                    if (bindings.size() != 1 || !FrontierV3ResidentMealItems.matches(held, retainedMeal.portion())) return Optional.empty();
                     var witness = new io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalObservation.Stack(
                             new io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress.ActorHand(actorId, body.getUUID()),
-                            ResidentMeal.BREAD_KIND, 1);
+                            retainedMeal.portion().itemKind(), retainedMeal.portion().quantity());
                     if (!(submit(runtime, "ambient-meal-hand-release", actorId.value(),
                             new ResidentMealHotHandReleased(actorId, lease.revision(), witness))
                             instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) return Optional.empty();
