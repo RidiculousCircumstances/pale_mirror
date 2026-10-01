@@ -116,7 +116,7 @@ class FrontierV3FixtureCatalogTest {
         ResidentNutrition need = engine.canonicalState().state().humanPopulation().nutrition(new SubjectId("resident:2-1"));
         assertEquals(ResidentNutritionStatus.HUNGRY, need.status(),
                 "revision=" + engine.canonicalState().revision().value() + " schedules=" + engine.checkpoint().schedules());
-        assertEquals(1, need.hungerDeficit());
+        assertEquals(configuration.initialState().bootstrap().ruleset().residentLife().eatBelowUnits() - 1, need.satietyUnits());
     }
 
     @Test

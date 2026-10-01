@@ -512,13 +512,16 @@ public final class FrontierV3FixtureCatalog {
         people = people.changeMetabolism(resident, prior, prior.withBaseMetabolism(4_000), at,
                 state.bootstrap().ruleset().residentLife());
         Map<SubjectId, ResidentNutrition> needs = new java.util.LinkedHashMap<>(people.nutrition());
-        long unit = Math.multiplyExact(state.bootstrap().ruleset().residentLife().hungerUnitTicks(), 1_000L);
+        long unit = Math.multiplyExact(state.bootstrap().ruleset().residentLife().satietyUnitTicks(), 1_000L);
         // Hold this exact retained final-cell continuation until the pilot has
         // observed the resident's meal and the work owner can resume it.
         long workDue = Math.addExact(at, 600L);
         long hungerDue = Math.addExact(at, 150L);
-        needs.put(resident, new ResidentNutrition(ResidentNutritionStatus.NOURISHED, 0, at,
-                Math.subtractExact(unit, Math.multiplyExact(150L, 4_000L))));
+        long depletion = Math.multiplyExact(150L, 4_000L);
+        long units = Math.ceilDiv(depletion, unit);
+        needs.put(resident, new ResidentNutrition(ResidentNutritionStatus.NOURISHED,
+                Math.toIntExact(state.bootstrap().ruleset().residentLife().eatBelowUnits() + units - 1), at,
+                Math.subtractExact(Math.multiplyExact(units, unit), depletion)));
         people = new HumanPopulation(people.households(), people.residents(), people.birthJobs(), people.health(),
                 people.quarantines(), people.migrations(), people.provisions(), needs, people.medicalOperations(),
                 people.schedules(), people.meals());

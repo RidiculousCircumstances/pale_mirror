@@ -442,7 +442,7 @@ class HiveRouteEngagementProcessTest {
                         + ", reserve=" + SettlementFoodPolicy.reserveRequirement(latest, settlement)
                         + ", hungry=" + sampled.humanPopulation().residents().values().stream()
                                 .filter(resident -> resident.settlementId().equals(settlement))
-                                .filter(resident -> sampled.humanPopulation().nutrition(resident.id()).hungerDeficit() > 0).count()
+                                .filter(resident -> sampled.humanPopulation().nutrition(resident.id()).wantsFood(sampled.bootstrap().ruleset().residentLife())).count()
                         + ", operations=" + latest.operations().keySet() + ", jobs=" + latest.productionJobs().values().stream()
                                 .map(job -> job.id().value() + ":" + job.workProgress()).toList());
             }

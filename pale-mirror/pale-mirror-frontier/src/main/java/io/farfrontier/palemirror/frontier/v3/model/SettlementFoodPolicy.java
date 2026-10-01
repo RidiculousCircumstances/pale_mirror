@@ -12,12 +12,14 @@ public final class SettlementFoodPolicy {
 
     private SettlementFoodPolicy() { }
 
-    /** Two ordinary meals per living resident, plus currently accrued unmet individual need. */
+    /** Two ordinary meals per living resident, plus the current target portion, never missed-meal debt. */
     public static int reserveRequirement(FrontierWorldState state, SubjectId settlementId) {
         return state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(settlementId))
                 .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE)
-                .mapToInt(resident -> Math.addExact(2, state.humanPopulation().nutrition(resident.id()).hungerDeficit()))
+                .mapToInt(resident -> Math.addExact(2, Math.ceilDiv(state.humanPopulation().nutrition(resident.id())
+                        .nutritionWanted(state.bootstrap().ruleset().residentLife()),
+                        state.bootstrap().ruleset().residentLife().breadNutritionUnits())))
                 .reduce(0, Math::addExact);
     }
 
@@ -26,7 +28,7 @@ public final class SettlementFoodPolicy {
         return state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(settlementId))
                 .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE)
-                .noneMatch(resident -> state.humanPopulation().nutrition(resident.id()).hungerDeficit() > 0)
+                .noneMatch(resident -> state.humanPopulation().nutrition(resident.id()).wantsFood(state.bootstrap().ruleset().residentLife()))
                 && breadStock(state, settlementId) > reserveRequirement(state, settlementId);
     }
 

@@ -19,8 +19,8 @@ public final class ResidentActivityCoordinator {
                 == SettlementDailySchedule.Window.WORK
                 && (state.humanPopulation().nutrition(residentId).accrueThrough(assessedAt,
                         state.bootstrap().ruleset().residentLife(),
-                        resident.characteristics().effectiveMetabolismPermille(assessedAt)).hungerDeficit()
-                    < state.bootstrap().ruleset().residentLife().hungryThreshold()
+                        resident.characteristics().effectiveMetabolismPermille(assessedAt)).satietyUnits()
+                    >= state.bootstrap().ruleset().residentLife().eatBelowUnits()
                     || ResidentMealOpportunity.find(state, residentId).isEmpty());
     }
 
@@ -94,8 +94,8 @@ public final class ResidentActivityCoordinator {
         if (state.humanPopulation().meals().containsKey(residentId)
                 || state.humanPopulation().nutrition(residentId).accrueThrough(assessedAt,
                         state.bootstrap().ruleset().residentLife(),
-                        resident.characteristics().effectiveMetabolismPermille(assessedAt)).hungerDeficit()
-                    < state.bootstrap().ruleset().residentLife().hungryThreshold()
+                        resident.characteristics().effectiveMetabolismPermille(assessedAt)).satietyUnits()
+                    >= state.bootstrap().ruleset().residentLife().eatBelowUnits()
                 || ResidentMealOpportunity.find(state, residentId).isPresent()) return choice;
         // No executable meal exists. Keep working in WORK, or obey FREE at a safe point;
         // the activity wake still retries food independently without losing the assignment.
@@ -159,7 +159,7 @@ public final class ResidentActivityCoordinator {
         }
         var need = nutrition.accrueThrough(canonicalTick, rules, metabolismPermille);
         boolean activeWork = assignment.active();
-        if (need.hungerDeficit() >= rules.hungryThreshold()) {
+        if (need.wantsFood(rules)) {
             if (!activeWork || safeToYield) return new ResidentActivityChoice(assignment.residentId(),
                     ResidentActivityChoice.Kind.EAT, assignment.ownerId(), Optional.empty());
             return new ResidentActivityChoice(assignment.residentId(), ResidentActivityChoice.Kind.WORK,

@@ -127,7 +127,7 @@ public final class ResidentMealProcess {
         HumanAssignment assignment = HumanAssignmentProjection.compile(state).assignment(residentId);
         if (state.humanPopulation().nutrition(residentId)
                 .accrueThrough(now, state.bootstrap().ruleset().residentLife(),
-                        resident.characteristics().effectiveMetabolismPermille(now)).hungerDeficit() < 1) return Optional.empty();
+                        resident.characteristics().effectiveMetabolismPermille(now)).satietyUnits() >= state.bootstrap().ruleset().residentLife().eatBelowUnits()) return Optional.empty();
         ResidentMealOpportunity.Source source = ResidentMealOpportunity.find(state, residentId).orElse(null);
         if (source == null) return Optional.empty();
         var selected = source.bread();
@@ -164,7 +164,7 @@ public final class ResidentMealProcess {
                 || meal.waitReason().isPresent()
                 || state.humanPopulation().nutrition(subject).accrueThrough(meal.startedAtTick(),
                         state.bootstrap().ruleset().residentLife(),
-                        resident.characteristics().effectiveMetabolismPermille(meal.startedAtTick())).hungerDeficit() < 1)
+                        resident.characteristics().effectiveMetabolismPermille(meal.startedAtTick())).satietyUnits() >= state.bootstrap().ruleset().residentLife().eatBelowUnits())
             throw new IllegalArgumentException("meal start requires one hungry safely yielded living resident");
         if (ReferenceContainerCustody.blocksCanonicalUse(state, meal.depotId()))
             throw new IllegalArgumentException("meal source depot is unavailable");

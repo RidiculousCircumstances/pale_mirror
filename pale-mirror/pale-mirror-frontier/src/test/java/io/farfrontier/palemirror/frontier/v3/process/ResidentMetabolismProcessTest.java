@@ -41,11 +41,14 @@ class ResidentMetabolismProcessTest {
         var planned = ResidentMetabolismProcess.plan(initial, faster);
         assertEquals(3, planned.size());
         long oldProgress = 6_000L * base.effectiveMetabolismPermille(0L);
-        long expectedFirstDue = 6_000L + Math.floorDiv(24_000_000L - oldProgress + 1_999L, 2_000L);
+        long unit = initial.bootstrap().ruleset().residentLife().satietyUnitTicks() * 1_000L;
+        long boundaryUnits = initial.bootstrap().ruleset().residentLife().satietyCapacityUnits()
+                - initial.bootstrap().ruleset().residentLife().eatBelowUnits() + 1L;
+        long expectedFirstDue = 6_000L + Math.ceilDiv(boundaryUnits * unit - oldProgress, 2_000L);
         assertEquals(ResidentNeedProcess.review(first, expectedFirstDue),
                 ((ScheduleEffect.Rescheduled) planned.get(1).payload()).replacement());
         FrontierWorldState changed = ResidentMetabolismProcess.reduce(initial, first, faster);
-        assertEquals(oldProgress, changed.humanPopulation().nutrition(first).fractionalProgress());
+        assertEquals(oldProgress % unit, changed.humanPopulation().nutrition(first).fractionalProgress());
         assertEquals(6_000L, changed.humanPopulation().nutrition(first).lastEvaluatedTick());
         assertEquals(initial.humanPopulation().resident(second).characteristics(),
                 changed.humanPopulation().resident(second).characteristics());
@@ -55,20 +58,21 @@ class ResidentMetabolismProcessTest {
                 new ResidentCharacteristics.MetabolismModifier(source, -500));
         ResidentMetabolismChanged modifier = new ResidentMetabolismChanged(first, 10_000L, faster.next(), withModifier);
         FrontierWorldState modified = ResidentMetabolismProcess.reduce(changed, first, modifier);
-        assertEquals(oldProgress + 8_000_000L, modified.humanPopulation().nutrition(first).fractionalProgress());
+        assertEquals((oldProgress + 8_000_000L) % unit, modified.humanPopulation().nutrition(first).fractionalProgress());
         assertEquals(1_500, modified.humanPopulation().resident(first).characteristics().effectiveMetabolismPermille(10_000L));
         ResidentMetabolismChanged removed = new ResidentMetabolismChanged(first, 11_000L,
                 withModifier, withModifier.withoutModifier(source));
         FrontierWorldState restored = ResidentMetabolismProcess.reduce(modified, first, removed);
-        assertEquals(oldProgress + 9_500_000L, restored.humanPopulation().nutrition(first).fractionalProgress());
-        assertEquals(11_000L + Math.floorDiv(24_000_000L - (oldProgress + 9_500_000L) + 1_999L, 2_000L),
+        assertEquals((oldProgress + 9_500_000L) % unit, restored.humanPopulation().nutrition(first).fractionalProgress());
+        assertEquals(11_000L + Math.ceilDiv(boundaryUnits * unit - (oldProgress + 9_500_000L), 2_000L),
                 restored.humanPopulation().nutrition(first)
                         .nextThresholdTick(initial.bootstrap().ruleset().residentLife(), 2_000));
         FrontierWorldState reloaded = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(restored));
         assertEquals(restored.humanPopulation().resident(first).characteristics(),
                 reloaded.humanPopulation().resident(first).characteristics());
         assertEquals(restored.humanPopulation().nutrition(first), reloaded.humanPopulation().nutrition(first));
-        assertEquals(0, reloaded.humanPopulation().nutrition(second).hungerDeficit());
+        assertEquals(initial.bootstrap().ruleset().residentLife().satietyCapacityUnits(),
+                reloaded.humanPopulation().nutrition(second).satietyUnits());
         assertThrows(IllegalArgumentException.class, () -> ResidentMetabolismProcess.reduce(restored, first, removed));
 
         ActorLocation body = restored.actorLocations().get(first);

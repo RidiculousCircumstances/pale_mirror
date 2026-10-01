@@ -5,14 +5,14 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.Objects;
 
-/** One due-time, fixed-point integration of one exact resident's hunger. */
+/** One due-time, fixed-point integration of one exact resident's bounded satiety. */
 public record ResidentNeedIntegrated(SubjectId residentId, long atTick,
-                                     long previousTick, int hungerDeficit,
+                                     long previousTick, int satietyUnits,
                                      long fractionalProgress) implements FrontierPayload {
     public ResidentNeedIntegrated {
         Objects.requireNonNull(residentId, "need resident");
         if (!residentId.value().startsWith("resident:") || previousTick < 0 || atTick <= previousTick
-                || hungerDeficit < 0 || hungerDeficit > ResidentNutrition.MAX_HUNGER_UNITS
+                || satietyUnits < 0 || satietyUnits > ResidentNutrition.MAX_SATIETY_UNITS
                 || fractionalProgress < 0)
             throw new IllegalArgumentException("resident need integration lacks one exact elapsed interval");
     }

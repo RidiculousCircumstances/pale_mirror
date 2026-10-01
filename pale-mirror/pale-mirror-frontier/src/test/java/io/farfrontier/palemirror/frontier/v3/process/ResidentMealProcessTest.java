@@ -299,7 +299,7 @@ class ResidentMealProcessTest {
         assertEquals(meal, recovered.humanPopulation().meals().get(resident));
     }
 
-    @Test void oneBreadDoesNotSendStillHungryResidentBackToWorkOrWaitForNextDay() {
+    @Test void longStarvationRequiresOneCurrentPortionNotRepaymentOfMissedMeals() {
         WorldId world = new WorldId("frontier:resident-meal-two-portions");
         var base = FrontierWorldRuntimeDefinition.configuration(world, 421L);
         FrontierWorldState initial = base.initialState();
@@ -316,27 +316,27 @@ class ResidentMealProcessTest {
                         "minecraft:bread", 64, "test", List.of()));
         FrontierWorldState stocked = initial.withChanges(FrontierWorldStateUpdate.begin()
                 .actorLocations(actors).inventory(initial.inventory().withFungibleResources(stock))
-                .humanPopulation(initial.humanPopulation().accrueHunger(resident, 48_000L)));
-        assertEquals(2, stocked.humanPopulation().nutrition(resident).hungerDeficit());
+                .humanPopulation(initial.humanPopulation().accrueHunger(resident, 96_000L)));
+        assertEquals(0, stocked.humanPopulation().nutrition(resident).satietyUnits());
         assertEquals(ResidentActivityChoice.Kind.EAT,
-                ResidentActivityCoordinator.assess(stocked, resident, 48_001L).kind());
-        assertTrue(ResidentMealProcess.selectSourceAtYield(stocked, resident, 48_001L).isPresent());
+                ResidentActivityCoordinator.assess(stocked, resident, 96_001L).kind());
+        assertTrue(ResidentMealProcess.selectSourceAtYield(stocked, resident, 96_001L).isPresent());
         var configuration = new io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<>(
-                world, stocked, new io.farfrontier.palemirror.frontier.v3.api.SimInstant(48_000L),
+                world, stocked, new io.farfrontier.palemirror.frontier.v3.api.SimInstant(96_000L),
                 base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(),
                 base.projectionMapper(), base.limits(), List.of(
-                        ResidentActivityProcess.review(resident, 48_001L),
+                        ResidentActivityProcess.review(resident, 96_001L),
                         ResidentNeedProcess.review(resident, stocked.humanPopulation().nutrition(resident)
                                 .nextThresholdTick(stocked.bootstrap().ruleset().residentLife(),
                                         stocked.humanPopulation().resident(resident).characteristics()
-                                                .effectiveMetabolismPermille(48_000L)))),
+                                                .effectiveMetabolismPermille(96_000L)))),
                 base.transactionCommitter());
         var engine = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.create(configuration);
-        for (long due = 48_001L; due <= 58_001L; due += 20L)
+        for (long due = 96_001L; due <= 100_001L; due += 20L)
             engine.advanceTo(new io.farfrontier.palemirror.frontier.v3.api.SimInstant(due),
                     new io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget(1_024, 4_096));
         FrontierWorldState after = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        assertEquals(62, after.inventory().fungibleResources().totalQuantity(settlement.id(), "minecraft:bread"),
+        assertEquals(63, after.inventory().fungibleResources().totalQuantity(settlement.id(), "minecraft:bread"),
                 "need=" + after.humanPopulation().nutrition(resident) + " meal=" + after.humanPopulation().meals()
                         + " schedules=" + engine.checkpoint().schedules());
         assertEquals(ResidentNutritionStatus.NOURISHED, after.humanPopulation().nutrition(resident).status());
@@ -478,7 +478,7 @@ class ResidentMealProcessTest {
                 issuedMovement.action());
         state = ResidentMealProcess.reduceHotObserved(state, resident, consumed, 48_002L);
         assertEquals(63, state.inventory().fungibleResources().totalQuantity(settlement.id(), "minecraft:bread"));
-        assertEquals(ResidentNutritionStatus.HUNGRY, state.humanPopulation().nutrition(resident).status());
+        assertEquals(ResidentNutritionStatus.NOURISHED, state.humanPopulation().nutrition(resident).status());
         assertFalse(state.humanPopulation().meals().containsKey(resident));
         assertTrue(state.actorMovements().containsKey(resident));
         FrontierWorldState resumedCold = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));

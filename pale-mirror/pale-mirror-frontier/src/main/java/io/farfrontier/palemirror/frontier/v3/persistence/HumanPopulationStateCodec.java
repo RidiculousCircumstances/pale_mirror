@@ -38,7 +38,7 @@ final class HumanPopulationStateCodec {
         FrontierWorldStateCodec.writeCount(output, population.nutrition().size());
         for (Map.Entry<SubjectId, ResidentNutrition> entry : population.nutrition().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
             FrontierWorldStateCodec.writeString(output, entry.getKey().value()); output.writeByte(entry.getValue().status().wireTag());
-            FrontierWorldStateCodec.writeCount(output, entry.getValue().hungerDeficit());
+            FrontierWorldStateCodec.writeCount(output, entry.getValue().satietyUnits());
             output.writeLong(entry.getValue().lastEvaluatedTick()); output.writeLong(entry.getValue().fractionalProgress());
         }
         FrontierWorldStateCodec.writeCount(output, population.quarantines().size());

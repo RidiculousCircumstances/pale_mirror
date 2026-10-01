@@ -67,36 +67,37 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
     }
 
     /** Balance and settlement policy for exact resident activities. No competing due-time queue. */
-    public record ResidentLife(int dayTicks, int workTicks, long hungerUnitTicks,
-                               int hungryThreshold, int starvingThreshold,
-                               int breadReliefUnits, int maxHungerUnits,
+    public record ResidentLife(int dayTicks, int workTicks, long satietyUnitTicks,
+                               int eatBelowUnits, int mealTargetUnits,
+                               int breadNutritionUnits, int satietyCapacityUnits,
                                int metabolismDefaultPermille, int metabolismMinPermille,
                                int metabolismMaxPermille, int metabolismBaselineSpreadPermille) {
-        public ResidentLife(int dayTicks, int workTicks, long hungerUnitTicks,
-                            int hungryThreshold, int starvingThreshold,
-                            int breadReliefUnits, int maxHungerUnits) {
-            this(dayTicks, workTicks, hungerUnitTicks, hungryThreshold, starvingThreshold,
-                    breadReliefUnits, maxHungerUnits,
+        public ResidentLife(int dayTicks, int workTicks, long satietyUnitTicks,
+                            int eatBelowUnits, int mealTargetUnits,
+                            int breadNutritionUnits, int satietyCapacityUnits) {
+            this(dayTicks, workTicks, satietyUnitTicks, eatBelowUnits, mealTargetUnits,
+                    breadNutritionUnits, satietyCapacityUnits,
                     ResidentCharacteristics.DEFAULT_METABOLISM_PERMILLE,
                     ResidentCharacteristics.MIN_METABOLISM_PERMILLE,
                     ResidentCharacteristics.MAX_METABOLISM_PERMILLE, 100);
         }
 
-        public ResidentLife(int dayTicks, int workTicks, long hungerUnitTicks,
-                            int hungryThreshold, int starvingThreshold,
-                            int breadReliefUnits, int maxHungerUnits,
+        public ResidentLife(int dayTicks, int workTicks, long satietyUnitTicks,
+                            int eatBelowUnits, int mealTargetUnits,
+                            int breadNutritionUnits, int satietyCapacityUnits,
                             int metabolismDefaultPermille, int metabolismMinPermille,
                             int metabolismMaxPermille) {
-            this(dayTicks, workTicks, hungerUnitTicks, hungryThreshold, starvingThreshold,
-                    breadReliefUnits, maxHungerUnits, metabolismDefaultPermille,
+            this(dayTicks, workTicks, satietyUnitTicks, eatBelowUnits, mealTargetUnits,
+                    breadNutritionUnits, satietyCapacityUnits, metabolismDefaultPermille,
                     metabolismMinPermille, metabolismMaxPermille, 100);
         }
 
         public ResidentLife {
-            if (dayTicks < 2 || workTicks < 1 || workTicks >= dayTicks || hungerUnitTicks < 1
-                    || hungryThreshold != 1 || starvingThreshold != ResidentNutrition.STARVING_AFTER_MISSED_CYCLES
-                    || breadReliefUnits < 1 || maxHungerUnits < starvingThreshold
-                    || maxHungerUnits > ResidentNutrition.MAX_HUNGER_UNITS
+            if (dayTicks < 2 || workTicks < 1 || workTicks >= dayTicks || satietyUnitTicks < 1
+                    || eatBelowUnits < 1 || mealTargetUnits <= eatBelowUnits
+                    || breadNutritionUnits < 1 || satietyCapacityUnits < mealTargetUnits
+                    || satietyCapacityUnits > ResidentNutrition.MAX_SATIETY_UNITS
+                    || satietyUnitTicks > Long.MAX_VALUE / (Math.max(1L, satietyCapacityUnits) * 1_000L)
                     || metabolismMinPermille < ResidentCharacteristics.MIN_METABOLISM_PERMILLE
                     || metabolismDefaultPermille < metabolismMinPermille
                     || metabolismDefaultPermille > metabolismMaxPermille
@@ -108,12 +109,12 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
         }
 
         public static ResidentLife initial() {
-            return new ResidentLife(24_000, 12_000, 24_000L, 1, 3, 1, 255);
+            return new ResidentLife(24_000, 12_000, 72L, 668, 900, 1_000, 1_000);
         }
 
         private String canonicalText() {
-            return dayTicks + "," + workTicks + "," + hungerUnitTicks + "," + hungryThreshold
-                    + "," + starvingThreshold + "," + breadReliefUnits + "," + maxHungerUnits
+            return dayTicks + "," + workTicks + "," + satietyUnitTicks + "," + eatBelowUnits
+                    + "," + mealTargetUnits + "," + breadNutritionUnits + "," + satietyCapacityUnits
                     + "," + metabolismDefaultPermille + "," + metabolismMinPermille + "," + metabolismMaxPermille
                     + "," + metabolismBaselineSpreadPermille;
         }

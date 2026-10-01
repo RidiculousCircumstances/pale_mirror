@@ -47,7 +47,7 @@ public final class ResidentActivityProcess {
                     ResidentActivityExecutionComposition.INTERRUPTION) instanceof ActivityInterruptionPlanner.Ready);
         ResidentNutrition nutrition = state.humanPopulation().nutrition(residentId).accrueThrough(now,
                 state.bootstrap().ruleset().residentLife(), resident.characteristics().effectiveMetabolismPermille(now));
-        if (nutrition.hungerDeficit() < state.bootstrap().ruleset().residentLife().hungryThreshold()) return false;
+        if (!nutrition.wantsFood(state.bootstrap().ruleset().residentLife())) return false;
         if (ResidentMealOpportunity.find(state, residentId).isEmpty()) return true;
         return ResidentActivityCoordinator.assess(state, residentId, now).pending()
                 .filter(wait -> wait == ResidentActivityChoice.Wait.SAFE_CHECKPOINT).isPresent();
@@ -153,7 +153,7 @@ public final class ResidentActivityProcess {
                 resident.characteristics().effectiveMetabolismPermille(now));
         long next = Math.min(window, hunger);
         if (!mealStarted && !mealAlreadyRetained
-                && (choice.pending().isPresent() || effective.hungerDeficit() >= rules.hungryThreshold()))
+                && (choice.pending().isPresent() || effective.wantsFood(rules)))
             next = Math.min(next, Math.addExact(now, PENDING_RETRY_TICKS));
         return next;
     }

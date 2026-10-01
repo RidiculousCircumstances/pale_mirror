@@ -22,7 +22,7 @@ final class HumanPopulationPayloadCodecs {
                     ResidentNeedIntegrated value = (ResidentNeedIntegrated) payload;
                     FrontierWorldPayloadCodecs.writeSubject(output, value.residentId());
                     output.writeLong(value.atTick()); output.writeLong(value.previousTick());
-                    output.writeInt(value.hungerDeficit()); output.writeLong(value.fractionalProgress());
+                    output.writeInt(value.satietyUnits()); output.writeLong(value.fractionalProgress());
                 });
             }
             @Override public FrontierPayload decode(byte[] bytes) {

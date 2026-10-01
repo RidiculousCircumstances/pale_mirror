@@ -434,7 +434,7 @@ public final class FrontierReadabilityPlan {
         int hungry = (int) state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(settlementId))
                 .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE)
-                .filter(resident -> state.humanPopulation().nutrition(resident.id()).hungerDeficit() > 0).count();
+                .filter(resident -> state.humanPopulation().nutrition(resident.id()).wantsFood(state.bootstrap().ruleset().residentLife())).count();
         if (available == 0) return "FOOD SHORTAGE · BREAD NEEDED";
         if (hungry > 0) return "RESIDENTS HUNGRY · " + hungry + " · BREAD " + available + " / " + reserve;
         return available < reserve ? "FOOD RESERVE LOW · " + available + " / " + reserve
@@ -446,7 +446,7 @@ public final class FrontierReadabilityPlan {
                 || SettlementFoodPolicy.breadStock(state, settlementId) < SettlementFoodPolicy.reserveRequirement(state, settlementId)
                 || state.humanPopulation().residents().values().stream()
                     .filter(resident -> resident.settlementId().equals(settlementId))
-                    .anyMatch(resident -> state.humanPopulation().nutrition(resident.id()).hungerDeficit() > 0);
+                    .anyMatch(resident -> state.humanPopulation().nutrition(resident.id()).wantsFood(state.bootstrap().ruleset().residentLife()));
     }
 
     /**

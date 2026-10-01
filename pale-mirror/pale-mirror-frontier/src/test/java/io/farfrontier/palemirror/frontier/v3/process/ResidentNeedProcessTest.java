@@ -47,7 +47,7 @@ class ResidentNeedProcessTest {
         assertEquals(integrated, FrontierWorldRuntimeDefinition.payloadCodecs().decode(integrated.type(),
                 FrontierWorldRuntimeDefinition.payloadCodecs().encode(integrated)));
         FrontierWorldState hungry = ResidentNeedProcess.reduce(initial, resident, integrated);
-        assertEquals(1, hungry.humanPopulation().nutrition(resident).hungerDeficit());
+        assertEquals(rules.eatBelowUnits() - 1, hungry.humanPopulation().nutrition(resident).satietyUnits());
         assertEquals(due.dueAt().ticks() / 24_000L,
                 hungry.humanPopulation().nutrition(resident).lastIntegratedDay());
         assertEquals(ResidentNeedProcess.review(resident,

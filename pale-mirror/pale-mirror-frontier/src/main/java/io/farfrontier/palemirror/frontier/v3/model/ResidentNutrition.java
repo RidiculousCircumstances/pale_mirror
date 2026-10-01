@@ -2,109 +2,115 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import java.util.Objects;
 
-/** Exact resident hunger, including fractional elapsed progress at the last canonical evaluation. */
-public record ResidentNutrition(ResidentNutritionStatus status, int hungerDeficit,
+/** Bounded stomach contents, never a debt of missed meals. Time is canonical simulation time. */
+public record ResidentNutrition(ResidentNutritionStatus status, int satietyUnits,
                                 long lastEvaluatedTick, long fractionalProgress) {
-    public static final int STARVING_AFTER_MISSED_CYCLES = 3;
+    public static final int MAX_SATIETY_UNITS = 1_000_000;
     public static final long HUNGER_UNIT_TICKS = 24_000L;
-    public static final int MAX_HUNGER_UNITS = 255;
+    public static final int STARVING_AFTER_MISSED_CYCLES = 3;
 
     public ResidentNutrition {
         Objects.requireNonNull(status, "resident nutrition status");
-        if (hungerDeficit < 0 || hungerDeficit > MAX_HUNGER_UNITS || lastEvaluatedTick < 0
-                || fractionalProgress < 0)
-            throw new IllegalArgumentException("invalid resident nutrition state");
-        if (status != statusFor(hungerDeficit)) throw new IllegalArgumentException("resident nutrition status disagrees with deficit");
-    }
-
-    /** Source-fixture compatibility, not a second retained day clock. */
-    public ResidentNutrition(ResidentNutritionStatus status, int deficit, int resolvedCycle) {
-        this(status, deficit, Math.multiplyExact((long) resolvedCycle, HUNGER_UNIT_TICKS), 0L);
+        if (satietyUnits < 0 || satietyUnits > MAX_SATIETY_UNITS || lastEvaluatedTick < 0 || fractionalProgress < 0
+                || (satietyUnits == 0) != (status == ResidentNutritionStatus.STARVING)
+                || satietyUnits == 0 && fractionalProgress != 0)
+            throw new IllegalArgumentException("invalid bounded resident nutrition state");
     }
 
     public static ResidentNutrition nourishedAt(int cycle) {
-        if (cycle < 0) throw new IllegalArgumentException("resident nutrition cycle must be non-negative");
-        return new ResidentNutrition(ResidentNutritionStatus.NOURISHED, 0,
-                Math.multiplyExact((long) cycle, HUNGER_UNIT_TICKS), 0L);
+        if (cycle < 0) throw new IllegalArgumentException("negative nutrition cycle");
+        return nourishedAtTick(Math.multiplyExact((long) cycle, HUNGER_UNIT_TICKS));
     }
 
     public static ResidentNutrition nourishedAtTick(long tick) {
-        return new ResidentNutrition(ResidentNutritionStatus.NOURISHED, 0, Math.max(0L, tick), 0L);
+        return nourishedAtTick(tick, FrontierRuleset.ResidentLife.initial());
     }
 
-    public int consecutiveMissedCycles() { return hungerDeficit; }
+    public static ResidentNutrition nourishedAtTick(long tick, FrontierRuleset.ResidentLife rules) {
+        if (tick < 0) throw new IllegalArgumentException("negative nutrition instant");
+        return at(rules.satietyCapacityUnits(), tick, 0L, rules);
+    }
+
     public int resolvedCycle() { return Math.toIntExact(lastEvaluatedTick / HUNGER_UNIT_TICKS); }
     public int lastIntegratedDay() { return resolvedCycle(); }
+    public boolean wantsFood(FrontierRuleset.ResidentLife rules) { return satietyUnits < rules.eatBelowUnits(); }
+    public int nutritionWanted(FrontierRuleset.ResidentLife rules) {
+        return Math.max(0, rules.mealTargetUnits() - satietyUnits);
+    }
 
-    /** Legacy-only provision seam until the resident activity is the sole owner. */
+    /** Historical provision owner is inactive; these transitions retain its isolated fixtures. */
     public ResidentNutrition fed(int cycle) {
         requireNextCycle(cycle);
         return nourishedAt(cycle);
     }
 
-    /** Legacy-only provision seam until the resident activity is the sole owner. */
     public ResidentNutrition missed(int cycle) {
         requireNextCycle(cycle);
-        int next = Math.min(MAX_HUNGER_UNITS, Math.addExact(hungerDeficit, 1));
-        return new ResidentNutrition(statusFor(next), next,
-                Math.multiplyExact((long) cycle, HUNGER_UNIT_TICKS), 0L);
+        var rules = FrontierRuleset.ResidentLife.initial();
+        int next = Math.max(0, satietyUnits - Math.ceilDiv(rules.satietyCapacityUnits(), STARVING_AFTER_MISSED_CYCLES));
+        return at(next, Math.multiplyExact((long) cycle, HUNGER_UNIT_TICKS), 0L, rules);
     }
 
-    public ResidentNutrition accrueThrough(long tick) {
-        return accrueThrough(tick, FrontierRuleset.ResidentLife.initial());
-    }
-
+    public ResidentNutrition accrueThrough(long tick) { return accrueThrough(tick, FrontierRuleset.ResidentLife.initial()); }
     public ResidentNutrition accrueThrough(long tick, FrontierRuleset.ResidentLife rules) {
         return accrueThrough(tick, rules, ResidentCharacteristics.DEFAULT_METABOLISM_PERMILLE);
     }
 
     public ResidentNutrition accrueThrough(long tick, FrontierRuleset.ResidentLife rules, int metabolismPermille) {
-        Objects.requireNonNull(rules, "resident need rules");
-        if (tick < lastEvaluatedTick || metabolismPermille < ResidentCharacteristics.MIN_METABOLISM_PERMILLE
-                || metabolismPermille > ResidentCharacteristics.MAX_METABOLISM_PERMILLE)
-            throw new IllegalArgumentException("invalid hunger evaluation tick or metabolism");
-        long threshold = Math.multiplyExact(rules.hungerUnitTicks(), 1_000L);
-        if (fractionalProgress >= threshold) throw new IllegalArgumentException("fraction exceeds the selected need rules");
-        long total = Math.addExact(fractionalProgress,
-                Math.multiplyExact(tick - lastEvaluatedTick, (long) metabolismPermille));
-        long accrued = total / threshold;
-        int next = (int) Math.min(rules.maxHungerUnits(), Math.addExact((long) hungerDeficit, accrued));
-        return new ResidentNutrition(statusFor(next), next, tick, total % threshold);
+        validate(rules, metabolismPermille);
+        if (tick < lastEvaluatedTick) throw new IllegalArgumentException("nutrition cannot move backwards");
+        long threshold = Math.multiplyExact(rules.satietyUnitTicks(), 1_000L);
+        long untilEmpty = Math.ceilDiv(Math.subtractExact(Math.multiplyExact((long) satietyUnits, threshold),
+                fractionalProgress), metabolismPermille);
+        if (tick - lastEvaluatedTick >= untilEmpty) return at(0, tick, 0L, rules);
+        long total = Math.addExact(fractionalProgress, Math.multiplyExact(tick - lastEvaluatedTick, (long) metabolismPermille));
+        long depleted = total / threshold;
+        int next = (int) Math.max(0L, satietyUnits - depleted);
+        // Empty stomach does not retain imaginary negative contents or a repayment remainder.
+        return at(next, tick, next == 0 ? 0L : total % threshold, rules);
     }
 
+    /** Next semantic boundary, not a scheduled action for every nutritional unit. */
     public long nextThresholdTick(FrontierRuleset.ResidentLife rules, int metabolismPermille) {
-        if (metabolismPermille < ResidentCharacteristics.MIN_METABOLISM_PERMILLE
-                || metabolismPermille > ResidentCharacteristics.MAX_METABOLISM_PERMILLE)
-            throw new IllegalArgumentException("invalid metabolism rate");
-        long remaining = Math.subtractExact(Math.multiplyExact(rules.hungerUnitTicks(), 1_000L), fractionalProgress);
-        if (remaining <= 0) throw new IllegalArgumentException("fraction exceeds the selected need rules");
-        long delta = Math.floorDiv(Math.addExact(remaining, metabolismPermille - 1L), metabolismPermille);
-        return Math.addExact(lastEvaluatedTick, delta);
+        validate(rules, metabolismPermille);
+        if (satietyUnits == 0) return Math.addExact(lastEvaluatedTick, rules.dayTicks());
+        int units = wantsFood(rules) ? satietyUnits : satietyUnits - rules.eatBelowUnits() + 1;
+        long remaining = Math.subtractExact(Math.multiplyExact((long) units,
+                Math.multiplyExact(rules.satietyUnitTicks(), 1_000L)), fractionalProgress);
+        return Math.addExact(lastEvaluatedTick, Math.ceilDiv(remaining, metabolismPermille));
     }
 
-    public ResidentNutrition consumeBreadAt(long tick) {
-        return consumeBreadAt(tick, FrontierRuleset.ResidentLife.initial());
-    }
-
+    public ResidentNutrition consumeBreadAt(long tick) { return consumeBreadAt(tick, FrontierRuleset.ResidentLife.initial()); }
     public ResidentNutrition consumeBreadAt(long tick, FrontierRuleset.ResidentLife rules) {
         return consumeBreadAt(tick, rules, ResidentCharacteristics.DEFAULT_METABOLISM_PERMILLE);
     }
-
     public ResidentNutrition consumeBreadAt(long tick, FrontierRuleset.ResidentLife rules, int metabolismPermille) {
+        return consumeNutritionAt(tick, rules.breadNutritionUnits(), rules, metabolismPermille);
+    }
+
+    /** Only the exact food-consumption owner may invoke this after retiring the resource. */
+    public ResidentNutrition consumeNutritionAt(long tick, int nutritionUnits,
+            FrontierRuleset.ResidentLife rules, int metabolismPermille) {
         ResidentNutrition current = accrueThrough(tick, rules, metabolismPermille);
-        if (current.hungerDeficit == 0)
-            throw new IllegalArgumentException("resident without hunger cannot consume a hunger allocation");
-        int next = Math.max(0, current.hungerDeficit - rules.breadReliefUnits());
-        return new ResidentNutrition(statusFor(next), next, tick, current.fractionalProgress);
+        if (nutritionUnits <= 0 || current.satietyUnits == rules.satietyCapacityUnits())
+            throw new IllegalArgumentException("consumption has no nutritional effect");
+        int next = (int) Math.min(rules.satietyCapacityUnits(), (long) current.satietyUnits + nutritionUnits);
+        return at(next, tick, current.fractionalProgress, rules);
     }
 
-    private static ResidentNutritionStatus statusFor(int deficit) {
-        return deficit == 0 ? ResidentNutritionStatus.NOURISHED
-                : deficit < STARVING_AFTER_MISSED_CYCLES ? ResidentNutritionStatus.HUNGRY
-                : ResidentNutritionStatus.STARVING;
+    private void validate(FrontierRuleset.ResidentLife rules, int rate) {
+        Objects.requireNonNull(rules, "nutrition rules");
+        if (satietyUnits > rules.satietyCapacityUnits() || fractionalProgress >= Math.multiplyExact(rules.satietyUnitTicks(), 1_000L)
+                || status != at(satietyUnits, lastEvaluatedTick, fractionalProgress, rules).status()
+                || rate < ResidentCharacteristics.MIN_METABOLISM_PERMILLE || rate > ResidentCharacteristics.MAX_METABOLISM_PERMILLE)
+            throw new IllegalArgumentException("nutrition disagrees with its capacity, fraction or metabolism");
     }
-
+    private static ResidentNutrition at(int units, long tick, long remainder, FrontierRuleset.ResidentLife rules) {
+        var status = units == 0 ? ResidentNutritionStatus.STARVING
+                : units < rules.eatBelowUnits() ? ResidentNutritionStatus.HUNGRY : ResidentNutritionStatus.NOURISHED;
+        return new ResidentNutrition(status, units, tick, remainder);
+    }
     private void requireNextCycle(int cycle) {
-        if (cycle <= resolvedCycle()) throw new IllegalArgumentException("resident nutrition may resolve one provisioning cycle only once");
+        if (cycle <= resolvedCycle()) throw new IllegalArgumentException("nutrition cycle already resolved");
     }
 }

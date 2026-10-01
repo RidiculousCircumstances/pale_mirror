@@ -25,7 +25,7 @@ public final class ResidentNeedProcess {
 
     public static ScheduledAction firstReviewAfter(ResidentProfile resident, long birthOrStartTick,
                                                     FrontierRuleset.ResidentLife rules) {
-        return review(resident.id(), ResidentNutrition.nourishedAtTick(birthOrStartTick)
+        return review(resident.id(), ResidentNutrition.nourishedAtTick(birthOrStartTick, rules)
                 .nextThresholdTick(rules, resident.characteristics().effectiveMetabolismPermille(birthOrStartTick)));
     }
 
@@ -61,10 +61,10 @@ public final class ResidentNeedProcess {
         if (action.dueAt().ticks() != previous.nextThresholdTick(rules, rate))
             throw new IllegalArgumentException("need review is not this resident's exact threshold");
         ResidentNutrition next = previous.accrueThrough(action.dueAt().ticks(), rules, rate);
-        if (next.hungerDeficit() <= previous.hungerDeficit() && next.hungerDeficit() < rules.maxHungerUnits())
+        if (next.satietyUnits() >= previous.satietyUnits() && next.satietyUnits() > 0)
             throw new IllegalArgumentException("need review did not advance its exact threshold");
         return List.of(new ProposedEvent(resident.id(), new ResidentNeedIntegrated(resident.id(),
-                        action.dueAt().ticks(), previous.lastEvaluatedTick(), next.hungerDeficit(),
+                        action.dueAt().ticks(), previous.lastEvaluatedTick(), next.satietyUnits(),
                         next.fractionalProgress())),
                 new ProposedEvent(resident.id(), new ScheduleEffect.Created(
                         review(resident.id(), next.nextThresholdTick(rules, rate)))));
@@ -79,7 +79,7 @@ public final class ResidentNeedProcess {
         ResidentNutrition next = previous.accrueThrough(integrated.atTick(), state.bootstrap().ruleset().residentLife(),
                 state.humanPopulation().resident(subject).characteristics().effectiveMetabolismPermille(integrated.atTick()));
         if (previous.lastEvaluatedTick() != integrated.previousTick()
-                || next.hungerDeficit() != integrated.hungerDeficit()
+                || next.satietyUnits() != integrated.satietyUnits()
                 || next.fractionalProgress() != integrated.fractionalProgress())
             throw new IllegalArgumentException("need integration differs from its deterministic predecessor");
         return state.withHumanPopulation(state.humanPopulation().accrueHunger(subject,

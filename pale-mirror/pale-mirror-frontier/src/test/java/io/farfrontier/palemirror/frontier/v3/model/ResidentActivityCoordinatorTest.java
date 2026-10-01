@@ -24,11 +24,11 @@ class ResidentActivityCoordinatorTest {
         assertEquals(12_000, policy.nextWindowBoundaryAfter(0));
         assertEquals(24_000, policy.nextWindowBoundaryAfter(12_000));
         var free = ResidentActivityCoordinator.choose(policy, 12_000,
-                ResidentNutrition.nourishedAt(0), ASSIGNED, true);
+                ResidentNutrition.nourishedAtTick(12_000), ASSIGNED, true);
         assertEquals(ResidentActivityChoice.Kind.IDLE, free.kind());
         assertEquals(Optional.of(JOB), free.retainedWorkOwner());
         var pending = ResidentActivityCoordinator.choose(policy, 12_000,
-                ResidentNutrition.nourishedAt(0), ASSIGNED, false);
+                ResidentNutrition.nourishedAtTick(12_000), ASSIGNED, false);
         assertEquals(ResidentActivityChoice.Kind.WORK, pending.kind());
         assertEquals(Optional.of(ResidentActivityChoice.Wait.SAFE_CHECKPOINT), pending.pending());
     }

@@ -68,14 +68,14 @@ final class FrontierV3ResidentLifeDiagnostic {
                 + ",\"status\":\"ok\",\"settlement\":\"" + quote(resident.settlementId().value())
                 + "\",\"life\":\"" + (body == null ? "MISSING" : body.condition().status().name())
                 + "\",\"nutrition\":\"" + effective.status().name()
-                + "\",\"hungerDeficit\":" + effective.hungerDeficit()
-                + ",\"storedHungerDeficit\":" + stored.hungerDeficit()
+                + "\",\"satietyUnits\":" + effective.satietyUnits()
+                + ",\"storedSatietyUnits\":" + stored.satietyUnits()
                 + ",\"lastEvaluatedTick\":" + stored.lastEvaluatedTick()
-                + ",\"fractionalHungerProgress\":" + stored.fractionalProgress()
+                + ",\"fractionalSatietyProgress\":" + stored.fractionalProgress()
                 + ",\"metabolismBasePermille\":" + resident.characteristics().baseMetabolismPermille()
                 + ",\"metabolismModifiers\":" + modifiers
                 + ",\"metabolismEffectivePermille\":" + metabolism
-                + ",\"nextHungerThresholdTick\":" + (living
+                + ",\"nextNutritionThresholdTick\":" + (living
                     ? Long.toString(effective.nextThresholdTick(state.bootstrap().ruleset().residentLife(), metabolism)) : "null")
                 + ",\"nextNeedActionAt\":" + (actualNeedDue.isPresent() ? Long.toString(actualNeedDue.getAsLong()) : "null")
                 + ",\"scheduleWindow\":\"" + schedule.windowAt(now).name()

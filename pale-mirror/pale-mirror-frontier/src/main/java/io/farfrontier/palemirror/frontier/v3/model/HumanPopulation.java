@@ -150,7 +150,7 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
             }
         }
         return new HumanPopulation(households, residents, Map.of(), healthy(residents), normalQuarantines(residents),
-                Map.of(), Map.of(), nourished(residents), Map.of(),
+                Map.of(), Map.of(), nourished(residents, bootstrap.ruleset().residentLife()), Map.of(),
                 initialSchedules(residents, bootstrap.ruleset().residentLife()), Map.of());
     }
 
@@ -479,8 +479,13 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
     }
 
     private static Map<SubjectId, ResidentNutrition> nourished(Map<SubjectId, ResidentProfile> residents) {
+        return nourished(residents, FrontierRuleset.ResidentLife.initial());
+    }
+
+    private static Map<SubjectId, ResidentNutrition> nourished(Map<SubjectId, ResidentProfile> residents,
+                                                            FrontierRuleset.ResidentLife rules) {
         Map<SubjectId, ResidentNutrition> values = new LinkedHashMap<>();
-        residents.values().forEach(resident -> values.put(resident.id(), ResidentNutrition.nourishedAt(0)));
+        residents.values().forEach(resident -> values.put(resident.id(), ResidentNutrition.nourishedAtTick(0, rules)));
         return values;
     }
 
@@ -493,7 +498,7 @@ public record HumanPopulation(Map<SubjectId, Household> households, Map<SubjectI
     private static Map<SubjectId, ResidentNutrition> withNourished(Map<SubjectId, ResidentNutrition> source, SubjectId id,
                                                                     long birthTick, FrontierRuleset.ResidentLife rules) {
         Map<SubjectId, ResidentNutrition> next = new LinkedHashMap<>(source);
-        if (next.putIfAbsent(id, ResidentNutrition.nourishedAtTick(birthTick)) != null)
+        if (next.putIfAbsent(id, ResidentNutrition.nourishedAtTick(birthTick, rules)) != null)
             throw new IllegalArgumentException("resident nutrition identity already exists");
         return next;
     }

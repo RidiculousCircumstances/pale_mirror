@@ -235,6 +235,12 @@ public final class FrontierWorldStateSupport {
         if (population.schedules().values().stream().anyMatch(schedule -> schedule.dayTicks() != bootstrap.ruleset().residentLife().dayTicks())) {
             throw new IllegalArgumentException("settlement schedules must use the world's canonical calendar day");
         }
+        var rules = bootstrap.ruleset().residentLife();
+        population.nutrition().forEach((resident, need) -> {
+            if (!need.equals(need.accrueThrough(need.lastEvaluatedTick(), rules,
+                    population.resident(resident).characteristics().effectiveMetabolismPermille(need.lastEvaluatedTick()))))
+                throw new IllegalArgumentException("nutrition category or empty-stomach remainder contradicts world rules");
+        });
     }
 
     static <K, V> Map<K, V> immutableMap(Map<K, V> input, String label) {

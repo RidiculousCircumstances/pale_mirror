@@ -784,10 +784,13 @@ final class FrontierDevelopmentScenarios {
         SubjectId resident = settlement.residents().getFirst().id();
         HumanPopulation population = state.humanPopulation();
         Map<SubjectId, ResidentNutrition> nutrition = new LinkedHashMap<>(population.nutrition());
-        long unit = Math.multiplyExact(state.bootstrap().ruleset().residentLife().hungerUnitTicks(), 1_000L);
+        long unit = Math.multiplyExact(state.bootstrap().ruleset().residentLife().satietyUnitTicks(), 1_000L);
         int rate = population.resident(resident).characteristics().effectiveMetabolismPermille(0L);
-        nutrition.put(resident, new ResidentNutrition(ResidentNutritionStatus.NOURISHED, 0, 0L,
-                unit - 1_000L * rate));
+        long depletion = Math.multiplyExact(1_000L, rate);
+        long units = Math.ceilDiv(depletion, unit);
+        nutrition.put(resident, new ResidentNutrition(ResidentNutritionStatus.NOURISHED,
+                Math.toIntExact(state.bootstrap().ruleset().residentLife().eatBelowUnits() + units - 1), 0L,
+                Math.subtractExact(Math.multiplyExact(units, unit), depletion)));
         state = state.withHumanPopulation(new HumanPopulation(population.households(), population.residents(),
                 population.birthJobs(), population.health(), population.quarantines(), population.migrations(),
                 population.provisions(), nutrition, population.medicalOperations(), population.schedules(), population.meals()));
