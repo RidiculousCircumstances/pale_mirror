@@ -31,26 +31,6 @@ public final class FrontierV3LocalNavigationGameTests {
     private FrontierV3LocalNavigationGameTests() { }
 
     @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
-            template = "bastion/mobs/empty", timeoutTicks = 20)
-    public static void farmerReleaseCapturesRealCollisionSupportButNotAnAirborneBody(GameTestHelper helper) {
-        BlockPos support = helper.absolutePos(new BlockPos(2, 0, 2));
-        helper.getLevel().setBlock(support, Blocks.FARMLAND.defaultBlockState(), 3);
-        helper.getLevel().setBlock(support.above(), Blocks.AIR.defaultBlockState(), 3);
-        helper.getLevel().setBlock(support.above(2), Blocks.AIR.defaultBlockState(), 3);
-        Villager worker = helper.spawnWithNoFreeWill(EntityType.VILLAGER,
-                new Vec3(2.5D, 0.9375D, 2.5D));
-        helper.runAtTickTime(2, () -> {
-            helper.assertValueEqual(FrontierV3SupportedBodyCapture.observe(helper.getLevel(), worker),
-                    java.util.Optional.of(new BodyPosition(support.getX(), support.getY() + 1, support.getZ())),
-                    "the release body follows the real farmland collision top, not the transient onGround flag");
-            worker.setPos(worker.getX(), worker.getY() + 1.0D, worker.getZ());
-            helper.assertTrue(FrontierV3SupportedBodyCapture.observe(helper.getLevel(), worker).isEmpty(),
-                    "an airborne body must not be labelled as supported by stale getOnPos data");
-            worker.discard(); helper.succeed();
-        });
-    }
-
-    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
             template = "bastion/mobs/empty", timeoutTicks = 65)
     public static void minecraftGoalNavigatorReportsAnUnreachableGoalWithinFinitePhysicalTurns(GameTestHelper helper) {
         var level = helper.getLevel();

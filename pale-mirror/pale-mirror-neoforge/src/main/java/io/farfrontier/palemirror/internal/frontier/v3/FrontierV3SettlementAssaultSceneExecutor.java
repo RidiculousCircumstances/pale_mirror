@@ -502,7 +502,7 @@ final class FrontierV3SettlementAssaultSceneExecutor {
                 .findFirst().orElseThrow().edgeAfterCursor(assault.march().cursor()).id();
     }
 
-    private static BodyPosition at(Entity entity) { return new BodyPosition(entity.getBlockX(), entity.getBlockY(), entity.getBlockZ()); }
+    private static BodyPosition at(Entity entity) { return FrontierV3BodyObservation.position(entity); }
     private static FixedScalar fixed(float health) { return new FixedScalar(Math.max(0L, Math.round(health * FixedScalar.SCALE))); }
     private static boolean isAssault(SceneLease lease) { return io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors.isSettlementAssault(lease); }
     private static CommandResult submit(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, String phase,

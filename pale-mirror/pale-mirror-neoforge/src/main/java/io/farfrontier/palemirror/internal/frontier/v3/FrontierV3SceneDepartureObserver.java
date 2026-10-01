@@ -29,7 +29,7 @@ final class FrontierV3SceneDepartureObserver {
             if (supported.isEmpty()) return false;
             observedBody = supported.orElseThrow();
         } else {
-            observedBody = new BodyPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ());
+            observedBody = FrontierV3BodyObservation.position(body);
         }
         long revision = Math.max(1L, binding.lease().revision());
         var inactive = new FrontierV3ActorCarrierComposition.Declaration(binding.live().actorId(), binding.live().kind(),
@@ -74,7 +74,7 @@ final class FrontierV3SceneDepartureObserver {
                 if (supported.isEmpty()) return;
                 observedBody = supported.orElseThrow();
             } else {
-                observedBody = new BodyPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ());
+                observedBody = FrontierV3BodyObservation.position(body);
             }
             resumeReturned(state, binding.lease(), binding.member(), binding.live(),
                     new SceneMemberPosition(binding.member().actorId(), observedBody,

@@ -25,7 +25,7 @@ final class FrontierV3AmbientActorCaches {
     static void rememberObserved(FrontierV3ServerRuntime<?, ?> runtime, SubjectId actorId, Mob body, int capacity) {
         Map<SubjectId, Observed> observations = OBSERVATIONS.computeIfAbsent(runtime, ignored -> new LinkedHashMap<>());
         if (observations.size() < capacity || observations.containsKey(actorId)) {
-            observations.put(actorId, new Observed(new BodyPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ()),
+            observations.put(actorId, new Observed(FrontierV3BodyObservation.position(body),
                     new FixedScalar(Math.round((double) body.getHealth() * FixedScalar.SCALE))));
         }
     }

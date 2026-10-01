@@ -93,7 +93,7 @@ final class FrontierV3ProductionWorkSceneExecutor {
         // An unstarted traversal may rebase to this observed body. Once work has progressed,
         // the same hand-off must match its retained station and preserve the topology/cursor;
         // the reducer rejects drift rather than restarting work or teleporting the worker.
-        SceneMemberPosition capture = new SceneMemberPosition(member.actorId(), new BodyPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ()),
+        SceneMemberPosition capture = new SceneMemberPosition(member.actorId(), FrontierV3BodyObservation.position(body),
                 new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(Math.round(body.getHealth() * io.farfrontier.palemirror.frontier.v3.api.FixedScalar.SCALE)));
         // Integer Minecraft cells are not themselves an observation of standing: a body in the
         // upper portion of that cell may still be rising, falling, or supported by a different

@@ -11,45 +11,33 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from continuity_ledger import (  # noqa: E402
     ContinuityLedgerError,
     MAX_LEDGER_LINES,
-    REQUIRED_HEADINGS,
     validate_ledger,
 )
 
 
 def valid_ledger() -> str:
-    sections = {
-        "# Continuity Ledger": (),
-        "## Goal (success criteria)": ("- Goal",),
-        "## Constraints/Assumptions": ("- Constraint",),
-        "## Key decisions": ("- Decision",),
-        "## State": (),
-        "### Done": ("- Done",),
-        "### Now": ("- Now",),
-        "### Next": ("- Next",),
-        "## Open questions": ("- None",),
-        "## Working set": ("- None",),
-    }
-    lines: list[str] = []
-    for heading in REQUIRED_HEADINGS:
-        lines.append(heading)
-        lines.extend(sections[heading])
-    return "\n".join(lines) + "\n"
+    return "# Continuity Ledger\n\nMain alone fixes physical observation; deployment pending.\n"
 
 
 class ContinuityLedgerTest(unittest.TestCase):
     def test_active_ledger_is_valid(self) -> None:
         validate_ledger()
 
-    def test_missing_heading_is_rejected(self) -> None:
+    def test_free_form_brief_without_prescribed_headings_is_valid(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             ledger = root / "CONTINUITY.md"
-            ledger.write_text(
-                valid_ledger().replace("### Next\n- Next\n", ""),
-                encoding="utf-8",
-            )
-            with self.assertRaisesRegex(ContinuityLedgerError, "missing heading"):
-                validate_ledger(ledger, repository_root=root)
+            ledger.write_text("Main alone; source verified; server deployment pending.\n", encoding="utf-8")
+            validate_ledger(ledger, repository_root=root)
+
+    def test_empty_or_heading_only_brief_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            ledger = root / "CONTINUITY.md"
+            for text in ("", " \n", "# Continuity Ledger\n\n## State\n"):
+                ledger.write_text(text, encoding="utf-8")
+                with self.assertRaisesRegex(ContinuityLedgerError, "no brief content"):
+                    validate_ledger(ledger, repository_root=root)
 
     def test_oversized_ledger_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -65,7 +53,7 @@ class ContinuityLedgerTest(unittest.TestCase):
             root = Path(temporary)
             ledger = root / "CONTINUITY.md"
             ledger.write_text(
-                valid_ledger().replace("- Constraint", "- docs/archive/missing.md"),
+                valid_ledger() + "- docs/archive/missing.md\n",
                 encoding="utf-8",
             )
             with self.assertRaisesRegex(ContinuityLedgerError, "archive"):

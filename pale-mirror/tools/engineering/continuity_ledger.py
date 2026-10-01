@@ -13,18 +13,6 @@ DEFAULT_LEDGER_PATH = REPOSITORY_ROOT / "CONTINUITY.md"
 # The ledger is compact by convention; 1000 lines is the hard cap at which it
 # must be archived rather than silently rejecting current engineering evidence.
 MAX_LEDGER_LINES = 1000
-REQUIRED_HEADINGS = (
-    "# Continuity Ledger",
-    "## Goal (success criteria)",
-    "## Constraints/Assumptions",
-    "## Key decisions",
-    "## State",
-    "### Done",
-    "### Now",
-    "### Next",
-    "## Open questions",
-    "## Working set",
-)
 ARCHIVE_REFERENCE_PATTERN = re.compile(r"docs/archive/[A-Za-z0-9_.-]+\.md")
 
 
@@ -47,16 +35,10 @@ def validate_ledger(
             f"continuity ledger has {len(lines)} lines; maximum is {MAX_LEDGER_LINES}"
         )
 
-    positions: list[int] = []
-    for heading in REQUIRED_HEADINGS:
-        try:
-            positions.append(lines.index(heading))
-        except ValueError as exc:
-            raise ContinuityLedgerError(
-                f"continuity ledger is missing heading: {heading}"
-            ) from exc
-    if positions != sorted(positions) or len(set(positions)) != len(positions):
-        raise ContinuityLedgerError("continuity ledger headings are out of order")
+    # AGENTS.md/protocol intentionally permit free-form factual briefs. A fixed
+    # heading schema is not authority and cannot validate semantic completeness.
+    if not any(line.strip() and not line.lstrip().startswith("#") for line in lines):
+        raise ContinuityLedgerError("continuity ledger has no brief content")
 
     text = "\n".join(lines)
     for archive_reference in ARCHIVE_REFERENCE_PATTERN.findall(text):

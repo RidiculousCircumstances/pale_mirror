@@ -158,7 +158,7 @@ final class FrontierV3SceneBehaviorRegistry {
         boolean retainsLiveBody(boolean observed) { return this == RETAIN_WHILE_OBSERVED && observed; }
         Optional<BodyPosition> captureReleasedBody(ServerLevel level, net.minecraft.world.entity.Mob body) {
             return this == RETAIN_WHILE_OBSERVED ? FrontierV3SupportedBodyCapture.observe(level, body)
-                    : Optional.of(new BodyPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ()));
+                    : Optional.of(FrontierV3BodyObservation.position(body));
         }
         boolean permitsBoundActorHand() { return this == RETAIN_WHILE_OBSERVED; }
         void conflict(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,

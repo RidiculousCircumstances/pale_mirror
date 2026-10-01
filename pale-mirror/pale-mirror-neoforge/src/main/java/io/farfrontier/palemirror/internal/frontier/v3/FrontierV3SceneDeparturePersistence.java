@@ -176,6 +176,8 @@ final class FrontierV3SceneDeparturePersistence {
             float health = entity.getFloat("Health");
             if (!Double.isFinite(x) || !Double.isFinite(y) || !Double.isFinite(z)
                     || !Float.isFinite(health) || health <= 0.0F) return Optional.empty();
+            var observedBody = FrontierV3BodyObservationSave.read(entity, x, y, z);
+            if (observedBody.isEmpty()) return Optional.empty();
             Optional<FrontierV3SceneDeparture.HandStack> offhand = Optional.empty();
             if (entity.contains("HandItems", Tag.TAG_LIST)) {
                 ListTag hands = entity.getList("HandItems", Tag.TAG_COMPOUND);
@@ -193,7 +195,7 @@ final class FrontierV3SceneDeparturePersistence {
                     tag.getLong(FrontierV3ActorCarrierComposition.REVISION_KEY),
                     tag.getLong(FrontierV3ActorCarrierComposition.EPOCH_KEY), lease,
                     tag.getLong(FrontierV3SceneExecutor.REVISION_KEY),
-                    new BodyPosition((int) Math.floor(x), (int) Math.floor(y), (int) Math.floor(z)),
+                    observedBody.orElseThrow(),
                     new FixedScalar(Math.round((double) health * FixedScalar.SCALE)), offhand));
         }
 

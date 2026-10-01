@@ -149,7 +149,7 @@ final class FrontierV3MedicalTreatmentSceneExecutor {
                 targets.add(new Vec3(standing.getX() + 0.5D, standing.getY(), standing.getZ() + 0.5D));
                 targetBodies.add(new BodyPosition(standing.getX(), standing.getY(), standing.getZ()));
             }
-            BodyPosition observed = new BodyPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ());
+            BodyPosition observed = FrontierV3BodyObservation.position(body);
             Vec3 target = targets.get(ObservedTraversalCursor.nextTargetIndex(observed, targetBodies, 0));
             if (body.distanceToSqr(target) > READY_DISTANCE_SQUARED) {
                 FrontierV3ControlledMobMotion.moveToward(level, body, target);
@@ -169,7 +169,7 @@ final class FrontierV3MedicalTreatmentSceneExecutor {
             if (ambient.status() != AmbientLeaseStatus.HOT) return;
             Entity entity = level.getEntity(member.entityId());
             if (!(entity instanceof Mob body) || !body.isAlive() || !FrontierV3AmbientActorExecutor.owned(body, member.actorId(), false)) return;
-            BodyPosition observed = new BodyPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ());
+            BodyPosition observed = FrontierV3BodyObservation.position(body);
             captures.add(new SceneMemberPosition(member.actorId(), observed,
                     new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(Math.round(body.getHealth() * io.farfrontier.palemirror.frontier.v3.api.FixedScalar.SCALE))));
         }

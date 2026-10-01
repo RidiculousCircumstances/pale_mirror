@@ -37,6 +37,10 @@ class FrontierV3SceneDeparturePersistenceTest {
         body.putFloat("Health", (float) health);
         var position = new ListTag(); position.add(DoubleTag.valueOf(12.5D)); position.add(DoubleTag.valueOf(65.0D));
         position.add(DoubleTag.valueOf(10.5D)); body.put("Pos", position);
+        body.put(FrontierV3BodyObservationSave.KEY, FrontierV3BodyObservationSave.encode(
+                new FrontierV3BodyObservation.Observation(new BodyPosition(12, 65, 10),
+                        java.util.Optional.of(io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor.at(12, 64, 10))),
+                12.5D, 65.0D, 10.5D));
         var owner = new CompoundTag();
         owner.putString(FrontierV3ActorCarrierComposition.ACTOR_KEY, ACTOR.value());
         owner.putString(FrontierV3ActorCarrierComposition.KIND_KEY, "RESIDENT");
@@ -61,6 +65,20 @@ class FrontierV3SceneDeparturePersistenceTest {
         hands.add(wheat);
         body.put("HandItems", hands);
         return chunk;
+    }
+
+    @Test void fractionalSavedFeetRequireTheExactSupportedObservationNotFlooringOrStaleEvidence() {
+        var chunk = storedChunk(9);
+        var entity = chunk.getList("Entities", net.minecraft.nbt.Tag.TAG_COMPOUND).getCompound(0);
+        entity.getList("Pos", net.minecraft.nbt.Tag.TAG_DOUBLE).set(1, DoubleTag.valueOf(64.9375D));
+        assertTrue(FrontierV3SceneDeparturePersistence.SavedBody.from(entity).isEmpty(), "stale pose witness rejected");
+        entity.put(FrontierV3BodyObservationSave.KEY, FrontierV3BodyObservationSave.encode(
+                new FrontierV3BodyObservation.Observation(new BodyPosition(12, 65, 10),
+                        java.util.Optional.of(io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor.at(12, 64, 10))),
+                12.5D, 64.9375D, 10.5D));
+        assertTrue(FrontierV3SceneDeparturePersistence.SavedBody.from(entity).orElseThrow().matches(receipt(9)));
+        entity.remove(FrontierV3BodyObservationSave.KEY);
+        assertTrue(FrontierV3SceneDeparturePersistence.SavedBody.from(entity).isEmpty(), "old unclassified save is not inferred");
     }
 
     @Test void savedWheatHandMustMatchTheUnloadReceiptBeforeRelease() {

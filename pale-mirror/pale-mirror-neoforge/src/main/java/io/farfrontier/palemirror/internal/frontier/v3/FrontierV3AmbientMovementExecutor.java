@@ -222,6 +222,7 @@ final class FrontierV3AmbientMovementExecutor {
     }
     static boolean observeDirectedArrival(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
                                                    SubjectId actorId, Mob body, AmbientActorLease lease) {
+        if (FrontierV3BodyObservation.capture(body).support().isEmpty()) return false;
         if (lease.goal() == AmbientGoalKind.ACTOR_MOVEMENT) {
             var movement = state.actorMovements().get(actorId);
             if (movement == null) return false;

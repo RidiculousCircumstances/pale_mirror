@@ -46,7 +46,7 @@ final class FrontierV3HiveReturnMotion {
         HiveMobilization mobilization = mobilization(state, actorId);
         HiveTaskAssembly.Member member = member(mobilization, actorId, lease);
         if (mobilization == null || member == null || member.arrived()
-                || !FrontierV3AmbientActorExecutor.observedBody(body).equals(lease.goalBody())
+                || !FrontierV3SurfaceObservation.at(body, lease.goalBody().supportingSurface())
                 || !mobilization.returnAssembly().orElseThrow().safeAdvances().contains(actorId)) {
             if (mobilization != null && member != null && !member.arrived()) body.getNavigation().stop();
             return false;

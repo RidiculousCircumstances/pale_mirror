@@ -41,7 +41,7 @@ final class FrontierV3AmbientDepartureObserver {
     }
 
     private static SceneMemberPosition observation(Mob body, SubjectId actor) {
-        return new SceneMemberPosition(actor, new BodyPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ()),
+        return new SceneMemberPosition(actor, FrontierV3BodyObservation.position(body),
                 new FixedScalar(Math.round((double) body.getHealth() * FixedScalar.SCALE)));
     }
 

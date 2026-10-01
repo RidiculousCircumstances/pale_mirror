@@ -196,7 +196,7 @@ final class FrontierV3SceneExecutor {
             if (ambient.status() != AmbientLeaseStatus.HOT) return;
             Entity body = level.getEntity(member.entityId());
             if (!(body instanceof Mob mob) || !mob.isAlive() || !FrontierV3AmbientActorExecutor.owned(body, member.actorId(), bioform(state, member.actorId()))) return;
-            captures.add(new SceneMemberPosition(member.actorId(), new BodyPosition(body.getBlockX(), body.getBlockY(), body.getBlockZ()), fixed(mob.getHealth())));
+            captures.add(new SceneMemberPosition(member.actorId(), FrontierV3BodyObservation.position(body), fixed(mob.getHealth())));
         }
         if (!captures.isEmpty()) {
             Map<SubjectId, BodyPosition> positions = new LinkedHashMap<>(lease.memberPositions());
@@ -679,7 +679,7 @@ final class FrontierV3SceneExecutor {
         SceneMember member = lease.members().stream().filter(candidate -> candidate.entityId().equals(entity.getUUID())).findFirst().orElseThrow();
         String cause = source == null ? "environment" : "entity:" + source.getUUID();
         CommandResult result = submit(runtime, "scene-death", lease.id().value() + "-" + member.actorId().value(),
-                new ActorDied(lease.id(), member.actorId(), new BodyPosition(entity.getBlockX(), entity.getBlockY(), entity.getBlockZ()), cause));
+                new ActorDied(lease.id(), member.actorId(), FrontierV3BodyObservation.position(entity), cause));
         if (!(result instanceof CommandResult.Accepted)) return false;
         if (entity.level() instanceof ServerLevel level) {
             FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId()).retireDeadActor(state(runtime), member.actorId());

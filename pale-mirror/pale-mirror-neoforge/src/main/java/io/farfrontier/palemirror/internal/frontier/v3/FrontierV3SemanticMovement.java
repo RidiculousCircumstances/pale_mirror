@@ -75,14 +75,14 @@ final class FrontierV3SemanticMovement {
     }
 
     private static SemanticTraversalArrival.Observation observe(ServerLevel level, Mob worker, SurfaceAnchor expected) {
-        BlockPos observedSupport = worker.getOnPos();
-        SurfaceAnchor actual = SurfaceAnchor.at(observedSupport.getX(), observedSupport.getY(), observedSupport.getZ());
-        boolean exactSupport = actual.equals(expected);
+        var observed = FrontierV3BodyObservation.capture(worker);
+        SurfaceAnchor actual = observed.position().supportingSurface();
+        boolean exactSupport = observed.support().filter(expected::equals).isPresent();
         // `getOnPos` is Minecraft's collision-authoritative named support.  The volatile
         // onGround flag is reset during ordinary entity/restart hand-off ordering, so treating
         // that flag as a second arrival datum would reject an already exact support fact.
         return new SemanticTraversalArrival.Observation(actual, medium(level, worker.blockPosition()),
-                exactSupport && hasSupport(level, observedSupport), exactSupport && clear(level, worker, expected));
+                exactSupport, exactSupport && clear(level, worker, expected));
     }
 
     private static SemanticTraversalArrival.Observation targetObservation(ServerLevel level, Mob worker, SurfaceAnchor surface) {

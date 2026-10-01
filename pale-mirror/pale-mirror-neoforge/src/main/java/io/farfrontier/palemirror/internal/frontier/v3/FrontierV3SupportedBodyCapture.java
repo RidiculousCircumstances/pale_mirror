@@ -1,7 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
-import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
 
@@ -23,14 +22,6 @@ final class FrontierV3SupportedBodyCapture {
         if (actor.level() != level || actor.getHealth() <= 0.0F
                 || !departing && actor.isRemoved())
             return Optional.empty();
-        BlockPos support = actor.getOnPos();
-        if (!level.hasChunkAt(support))
-            return Optional.empty();
-        var collision = level.getBlockState(support).getCollisionShape(level, support);
-        if (collision.isEmpty() || !level.getFluidState(support).isEmpty()
-                || !level.getFluidState(support.above()).isEmpty()
-                || Math.abs(actor.getBoundingBox().minY - (support.getY() + collision.max(net.minecraft.core.Direction.Axis.Y))) > 0.1D)
-            return Optional.empty();
-        return Optional.of(new BodyPosition(support.getX(), support.getY() + 1, support.getZ()));
+        return FrontierV3BodyObservation.capture(actor).supportedBody();
     }
 }

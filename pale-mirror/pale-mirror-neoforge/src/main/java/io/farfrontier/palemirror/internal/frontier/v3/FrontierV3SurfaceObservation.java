@@ -2,7 +2,6 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
 import io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor;
-import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.phys.Vec3;
 
@@ -22,8 +21,7 @@ final class FrontierV3SurfaceObservation {
     static boolean at(Mob body, SurfaceAnchor surface) {
         Objects.requireNonNull(body, "surface observation body");
         Objects.requireNonNull(surface, "surface observation surface");
-        BlockPos support = body.getOnPos();
-        return support.getX() == surface.x() && support.getY() == surface.y() && support.getZ() == surface.z();
+        return FrontierV3BodyObservation.capture(body).support().filter(surface::equals).isPresent();
     }
 
     /** Pure cell form for fixture setup only; live movement must use {@link #at(Mob, SurfaceAnchor)}. */
@@ -41,8 +39,7 @@ final class FrontierV3SurfaceObservation {
     }
 
     static BodyPosition observedBody(Mob body) {
-        BlockPos support = Objects.requireNonNull(body, "surface observation body").getOnPos();
-        return BodyPosition.above(SurfaceAnchor.at(support.getX(), support.getY(), support.getZ()));
+        return FrontierV3BodyObservation.position(body);
     }
 
     static Vec3 point(SurfaceAnchor surface) { return FrontierV3SemanticMovement.point(surface); }
