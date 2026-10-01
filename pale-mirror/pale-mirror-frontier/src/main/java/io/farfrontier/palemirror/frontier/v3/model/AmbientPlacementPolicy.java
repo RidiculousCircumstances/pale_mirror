@@ -54,7 +54,7 @@ public final class AmbientPlacementPolicy {
         if (resident == null) return exact(state, lease);
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), resident.settlementId());
         List<SurfaceAnchor> result = new ArrayList<>(exact(state, lease));
-        for (ServiceAccessPoint point : SettlementServiceAccessPoints.occupiedPoint(state, settlement.id(), lease.handoffBody()).stream().toList()) {
+        for (ServiceAccessPoint point : SettlementServiceAccessPoints.placementPoint(state, settlement.id(), lease.handoffBody()).stream().toList()) {
             SettlementStructure depot = settlement.structures().stream().filter(value -> value.id().equals(point.facilityId())).findFirst().orElseThrow();
             var knowledge = KnownPedestrianRouteKnowledge.forSettlement(state, settlement.id(), List.of(
                     new KnownPedestrianRouteKnowledge.Passage(depot, KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS)));
@@ -64,7 +64,7 @@ public final class AmbientPlacementPolicy {
                                 List.of(surface), TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
                         try {
                             knowledge.path(lease.handoffBody().supportingSurface(), order);
-                            result.add(surface);
+                            if (!result.contains(surface)) result.add(surface);
                         } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { /* Not in this connected placement zone. */ }
                     });
         }

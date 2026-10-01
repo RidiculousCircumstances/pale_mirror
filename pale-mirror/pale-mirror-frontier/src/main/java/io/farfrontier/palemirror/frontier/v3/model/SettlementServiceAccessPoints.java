@@ -26,6 +26,14 @@ public final class SettlementServiceAccessPoints {
                 .filter(structure -> SettlementDepotServicePort.forDepot(structure).accessBoundary().occupied(body))
                 .findFirst().map(structure -> forDepot(state, settlement, structure));
     }
+    /** Admission may resume at either the service boundary or one of its declared waiting spots. */
+    public static java.util.Optional<ServiceAccessPoint> placementPoint(FrontierWorldState state,
+            SubjectId settlementId, BodyPosition body) {
+        return forSettlement(state, settlementId).stream()
+                .filter(point -> point.boundary().occupied(body)
+                        || point.waitingSurfaces().contains(body.supportingSurface()))
+                .findFirst();
+    }
     public static List<ServiceAccessPoint> forSettlement(FrontierWorldState state, SubjectId settlementId) {
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), settlementId);
         return settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.DEPOT)

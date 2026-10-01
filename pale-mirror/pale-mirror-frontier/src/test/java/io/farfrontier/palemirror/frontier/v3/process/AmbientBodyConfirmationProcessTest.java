@@ -86,6 +86,31 @@ class AmbientBodyConfirmationProcessTest {
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan.Rejected.class,
                 AmbientActorProcess.plan(f.state(), new AmbientLeaseTransition(f.medic(), AmbientLeaseStatus.HOT)));
     }
+    @Test void returningToAnOccupiedWaitingSpotAllowsAnotherDeclaredConnectedSpot() {
+        Fixture f = fixture();
+        var lease = f.state().ambientLeases().get(f.medic());
+        var waiting = AmbientPlacementPolicy.candidates(f.state(), lease).stream()
+                .filter(surface -> f.port().accessBoundary().cleared(surface.standingBody())).findFirst().orElseThrow();
+        var hot = AmbientBodyConfirmationProcess.reduce(f.state(), confirmation(f.state(), f.medic(),
+                AmbientBodyConfirmed.Boundary.ADMISSION, waiting.standingBody()));
+        var draining = AmbientLeaseStateProcess.transition(hot, f.medic(), AmbientLeaseStatus.DRAINING);
+        var cold = AmbientLeaseStateProcess.release(draining, new AmbientLeaseReleased(f.medic(),
+                waiting.standingBody(), draining.actorLocations().get(f.medic()).condition().health()));
+        var prepared = AmbientLeaseStateProcess.prepare(cold,
+                AmbientActorProcess.nextLease(cold, f.medic(), new SimInstant(27_002L)));
+        var candidates = AmbientPlacementPolicy.candidates(prepared, prepared.ambientLeases().get(f.medic()));
+        assertEquals(waiting, candidates.getFirst());
+        var alternative = candidates.stream().filter(surface -> !surface.equals(waiting)).findFirst().orElseThrow();
+        var next = AmbientBodyConfirmationProcess.reduce(prepared, confirmation(prepared, f.medic(),
+                AmbientBodyConfirmed.Boundary.ADMISSION, alternative.standingBody()));
+        assertEquals(alternative.standingBody(), next.actorLocations().get(f.medic()).body());
+        assertEquals(ResidentMeal.Phase.MOVE, next.humanPopulation().meals().get(f.medic()).phase());
+        assertEquals(prepared.humanPopulation().meals().get(f.medic()).claimId(),
+                next.humanPopulation().meals().get(f.medic()).claimId());
+        assertEquals(prepared.inventory(), next.inventory(), "placement does not take or consume food");
+        assertEquals(next.ambientLeases(), new FrontierWorldStateCodec().decode(
+                new FrontierWorldStateCodec().encode(next)).ambientLeases());
+    }
     @Test void unauthorizedResidentAtStationGetsAnExitRatherThanASingletonWait() {
         Fixture f = fixture();
         FrontierWorldState state = f.state().withActorBody(f.security(), f.port().serviceSurface().standingBody());
