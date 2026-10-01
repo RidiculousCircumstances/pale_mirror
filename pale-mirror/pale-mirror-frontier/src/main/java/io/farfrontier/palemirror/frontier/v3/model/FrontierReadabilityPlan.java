@@ -341,6 +341,7 @@ public final class FrontierReadabilityPlan {
                         case CONTINUATION_UNAVAILABLE -> "NO SAFE ROUTE TO NEXT WORK GOAL";
                         case OFF_CONTRACT -> "FARMER OUTSIDE SAFE ROUTE";
                         case UNSUPPORTED_CAPABILITY -> "NO PEDESTRIAN NAVIGATOR";
+                        case SEARCH_BUDGET_EXHAUSTED -> "LOCAL PATH BUDGET EXCEEDED";
                         case KNOWN_GEOMETRY_UNAVAILABLE -> "AWAITING OBSERVED ROUTE";
                     }).orElse("HARVEST IN PROGRESS");
             case CONFLICT -> conflictFieldText(lifecycle);

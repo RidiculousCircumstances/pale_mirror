@@ -8,7 +8,7 @@ public record ResourceSiteHarvestNavigationBlock(SurfaceAnchor target, long layo
         TARGET_SUPPORT(1), TARGET_CLEARANCE(2), TARGET_MEDIUM(3),
         PATH_UNAVAILABLE(4), PATH_STALLED(5), TARGET_CHUNK_UNLOADED(6),
         CONTINUATION_UNAVAILABLE(7), OFF_CONTRACT(8), UNSUPPORTED_CAPABILITY(9),
-        KNOWN_GEOMETRY_UNAVAILABLE(10);
+        KNOWN_GEOMETRY_UNAVAILABLE(10), SEARCH_BUDGET_EXHAUSTED(11);
 
         private final int wireTag;
         Reason(int wireTag) { this.wireTag = wireTag; }

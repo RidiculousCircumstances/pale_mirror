@@ -15,7 +15,6 @@ final class FrontierV3ActorMovementNavigation {
     private record Route(long leaseRevision, long goalRevision, List<SurfaceAnchor> waypoints) { }
     private static final Map<Mob, Route> ROUTES = new WeakHashMap<>();
     private static final Map<Mob, String> BLOCKED = new WeakHashMap<>();
-    private static final int LOCAL_LEG = 4;
 
     private FrontierV3ActorMovementNavigation() { }
 
@@ -51,20 +50,9 @@ final class FrontierV3ActorMovementNavigation {
             FrontierV3GoalNavigation.stop(body);
             return;
         }
-        int nearest = nearestWaypoint(body, route.waypoints());
-        int targetIndex = Math.min(route.waypoints().size() - 1, (nearest / LOCAL_LEG + 1) * LOCAL_LEG);
-        SurfaceAnchor waypoint = route.waypoints().get(targetIndex);
-        if (!level.hasChunkAt(new net.minecraft.core.BlockPos(waypoint.x(), waypoint.y() + 1, waypoint.z()))) {
-            blocked(body, movement, "physical_waypoint:" + targetIndex + ":" + waypoint.support());
-            FrontierV3GoalNavigation.stop(body);
-            return;
-        }
         try {
-            LocalNavigationEnvelope envelope = LocalNavigationEnvelope.localLeg(route.waypoints().subList(
-                    Math.max(0, targetIndex - LOCAL_LEG), targetIndex + 1), waypoint);
-            MovementOrder order = ActorMovement.segmentOrder(movement.order(), waypoint);
             FrontierV3GoalNavigation.Result result = FrontierV3GoalNavigation.pursue(level, body,
-                    new FrontierV3GoalNavigation.Goal(order, envelope));
+                    FrontierV3GoalNavigation.Goal.routed(movement.order(), route.waypoints(), state.bootstrap().bounds()));
             if (result.status() == FrontierV3GoalNavigation.Status.BLOCKED)
                 blocked(body, movement, "minecraft_path:" + result.reason());
             else BLOCKED.remove(body);
@@ -72,20 +60,6 @@ final class FrontierV3ActorMovementNavigation {
             blocked(body, movement, "local_leg:" + unavailable.getMessage());
             FrontierV3GoalNavigation.stop(body);
         }
-    }
-
-    private static int nearestWaypoint(Mob body, List<SurfaceAnchor> route) {
-        net.minecraft.core.BlockPos observed = body.getOnPos();
-        int nearest = 0;
-        long distance = Long.MAX_VALUE;
-        for (int index = 0; index < route.size(); index++) {
-            SurfaceAnchor point = route.get(index);
-            long candidate = Math.abs((long) point.x() - observed.getX())
-                    + Math.abs((long) point.y() - observed.getY())
-                    + Math.abs((long) point.z() - observed.getZ());
-            if (candidate < distance) { nearest = index; distance = candidate; }
-        }
-        return nearest;
     }
 
     private static void blocked(Mob body, ActorMovement movement, String reason) {

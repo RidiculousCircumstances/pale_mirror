@@ -46,7 +46,6 @@ final class FrontierV3MinecraftGoalNavigation {
 
     private static final int RETRY_TICKS = 20;
     private static final int STALLED_TICKS = 80;
-    private static final int MAX_PATH_NODES = 54;
     private static final double SPEED = 0.70D;
     private static final Map<Mob, Control> ACTIVE = new WeakHashMap<>();
     private static final Map<Mob, Failure> FAILURES = new WeakHashMap<>();
@@ -54,10 +53,10 @@ final class FrontierV3MinecraftGoalNavigation {
     private FrontierV3MinecraftGoalNavigation() { }
 
     static Result pursue(ServerLevel level, Mob actor, List<SurfaceAnchor> legalStations,
-                         LocalNavigationEnvelope envelope, Optional<MovementOrder> order) {
+                         FrontierV3NavigationScope scope, Optional<MovementOrder> order) {
         Objects.requireNonNull(level); Objects.requireNonNull(actor);
         legalStations = List.copyOf(Objects.requireNonNull(legalStations));
-        Objects.requireNonNull(envelope);
+        Objects.requireNonNull(scope);
         Objects.requireNonNull(order);
         if (legalStations.isEmpty()) throw new IllegalArgumentException("physical goal has no legal station");
         if (actor.level() != level || actor.isRemoved() || !actor.isAlive())
@@ -76,27 +75,28 @@ final class FrontierV3MinecraftGoalNavigation {
                     Optional.of(observedStations.getFirst()));
         }
         BlockPosition support = new BlockPosition(actor.getOnPos().getX(), actor.getOnPos().getY(), actor.getOnPos().getZ());
-        if (!envelope.contains(support)
-                || legalStations.stream().anyMatch(station -> !envelope.contains(station.support()))) {
+        if (!scope.permits(support)
+                || legalStations.stream().anyMatch(station -> !scope.permits(station.support()))) {
             stop(actor);
-            return new Result(Status.BLOCKED, "outside-retained-envelope",
+            return new Result(Status.BLOCKED, "outside-task-scope",
                     Optional.of(FrontierV3GoalNavigation.BlockReason.OFF_CONTRACT));
         }
         Control current = ACTIVE.get(actor);
         Failure failed = FAILURES.get(actor);
-        if (failed != null && (!failed.legalStations().equals(legalStations) || !failed.envelope().equals(envelope)
+        if (failed != null && (!failed.legalStations().equals(legalStations) || !failed.scope().equals(scope)
                 || !failed.order().equals(order))) stop(actor);
-        if (current != null && current.legalStations().equals(legalStations) && current.envelope().equals(envelope)
+        if (current != null && current.legalStations().equals(legalStations) && current.scope().equals(scope)
                 && current.order().equals(order)) {
             Path activePath = actor.getNavigation().getPath();
             if (activePath != null && !actor.getNavigation().isDone()
-                    && !pathWithinEnvelope(level, activePath, envelope)) {
+                    && FrontierV3PhysicalPathPolicy.reject(level, activePath, scope).isPresent()) {
                 stop(actor);
-                return new Result(Status.BLOCKED, "minecraft-path-left-envelope",
-                        Optional.of(FrontierV3GoalNavigation.BlockReason.OFF_CONTRACT));
+                var rejected = FrontierV3PhysicalPathPolicy.reject(level, activePath, scope).orElseThrow();
+                return new Result(Status.BLOCKED, "minecraft-path-invalid:" + rejected.detail(),
+                        Optional.of(rejected.reason()));
             }
-            Control observed = current.observed(actor.position(), level.getGameTime());
-            if (observed != current) FAILURES.remove(actor);
+            Control observed = current.observed(activePath, actor.position(), level.getGameTime());
+            if (observed.lastProgressAt() > current.lastProgressAt()) FAILURES.remove(actor);
             current = observed;
             if (current.lastProgressAt() + STALLED_TICKS <= level.getGameTime()) {
                 stopPath(actor);
@@ -111,6 +111,11 @@ final class FrontierV3MinecraftGoalNavigation {
         } else if (current != null) {
             stopPath(actor);
         }
+        failed = FAILURES.get(actor);
+        refreshPhysicalGroundContact(level, actor);
+        if (failed != null && failed.groundedAtAttempt() == actor.onGround()
+                && level.getGameTime() - failed.lastAttemptAt() < RETRY_TICKS)
+            return failureResult(failed, level.getGameTime());
         // The old custom actuator must not race the Minecraft path. This removes only an
         // ephemeral physical directive; it does not change the canonical work or route.
         if (!FAILURES.containsKey(actor)) FrontierV3ControlledMobMotion.stop(actor);
@@ -121,6 +126,7 @@ final class FrontierV3MinecraftGoalNavigation {
         Path path = null;
         boolean unloaded = false;
         String rejection = "";
+        FrontierV3GoalNavigation.BlockReason rejectionReason = FrontierV3GoalNavigation.BlockReason.PATH_UNAVAILABLE;
         // A service region is one semantic goal. Minecraft may choose whichever declared
         // support has a reachable, envelope-contained pedestrian path; this does not select
         // another work item or change the canonical task.
@@ -128,9 +134,12 @@ final class FrontierV3MinecraftGoalNavigation {
             BlockPos feet = new BlockPos(station.x(), station.y() + 1, station.z());
             if (!level.hasChunkAt(feet)) { unloaded = true; continue; }
             Path candidate = actor.getNavigation().createPath(feet, 0);
-            if (candidate == null || !candidate.canReach()
-                    || !pathWithinEnvelope(level, candidate, envelope)) {
-                if (rejection.isEmpty()) rejection = FrontierV3PathExplanation.rejected(level, station, candidate, envelope);
+            var refused = FrontierV3PhysicalPathPolicy.reject(level, candidate, scope);
+            if (refused.isPresent()) {
+                if (rejection.isEmpty()) {
+                    rejection = FrontierV3PathExplanation.rejected(level, station, candidate, scope);
+                    rejectionReason = refused.orElseThrow().reason();
+                }
                 continue;
             }
             if (path == null || candidate.getNodeCount() < path.getNodeCount()) {
@@ -138,22 +147,24 @@ final class FrontierV3MinecraftGoalNavigation {
                 target = station;
             }
         }
-        if (path == null) return retry(actor, legalStations, envelope, order, level.getGameTime(),
+        if (path == null) return retry(actor, legalStations, scope, order, level.getGameTime(),
                 unloaded ? "target-chunk-unloaded" : "minecraft-path-unavailable[" + rejection + "]",
                 unloaded ? FrontierV3GoalNavigation.BlockReason.TARGET_CHUNK_UNLOADED
-                        : FrontierV3GoalNavigation.BlockReason.PATH_UNAVAILABLE);
+                        : rejectionReason);
         if (!actor.getNavigation().moveTo(path, SPEED))
-            return retry(actor, legalStations, envelope, order, level.getGameTime(),
+            return retry(actor, legalStations, scope, order, level.getGameTime(),
                     "minecraft-path-refused", FrontierV3GoalNavigation.BlockReason.PATH_UNAVAILABLE);
         // Finding another path is not progress. Keep the same no-motion deadline
         // across path recomputations; only a real body displacement can reset it.
         Control retained = current != null && current.legalStations().equals(legalStations)
-                && current.envelope().equals(envelope) && current.order().equals(order)
+                && current.scope().equals(scope) && current.order().equals(order)
                 ? current : null;
         ACTIVE.put(actor, retained == null
-                ? new Control(legalStations, target, envelope, order, level.getGameTime(), level.getGameTime(), actor.position())
-                : new Control(legalStations, target, envelope, order, level.getGameTime(), retained.lastProgressAt(),
-                        retained.lastProgressPosition()));
+                ? new Control(legalStations, target, scope, FrontierV3PhysicalPathPolicy.corridor(path, target), order,
+                    level.getGameTime(), level.getGameTime(), actor.position(), path, remainingDistance(path, actor.position()))
+                : new Control(legalStations, target, scope, FrontierV3PhysicalPathPolicy.corridor(path, target), order,
+                    level.getGameTime(), retained.lastProgressAt(),
+                        actor.position(), path, remainingDistance(path, actor.position())));
         return new Result(Status.IN_PROGRESS, "minecraft-path-started");
     }
 
@@ -177,9 +188,15 @@ final class FrontierV3MinecraftGoalNavigation {
             stopPath(actor); // A completed/consumed short leg is not an off-contract path.
             return true;
         }
-        if (!pathWithinEnvelope(level, actor.getNavigation().getPath(), control.envelope())) {
-            stop(actor);
+        Path path = actor.getNavigation().getPath();
+        if (FrontierV3PhysicalPathPolicy.reject(level, path, control.scope()).isPresent()) {
+            stopPath(actor);
             return true;
+        }
+        // Vanilla may replace its path. Validate the new candidate before updating local latitude.
+        if (!pathWithinEnvelope(level, path, control.corridor())) {
+            control = control.withCorridor(FrontierV3PhysicalPathPolicy.corridor(path, control.target()));
+            ACTIVE.put(actor, control);
         }
         if (FrontierV3SemanticMovement.arrived(level, actor, control.target())) {
             stop(actor);
@@ -199,6 +216,16 @@ final class FrontierV3MinecraftGoalNavigation {
     }
 
     static boolean controls(Mob actor) { return ACTIVE.containsKey(actor); }
+
+    static boolean canReach(ServerLevel level, Mob actor, List<SurfaceAnchor> stations, FrontierV3NavigationScope scope) {
+        if (actor.level() != level || !actor.isAlive() || actor.isRemoved()) return false;
+        for (SurfaceAnchor station : stations) {
+            BlockPos feet = new BlockPos(station.x(), station.y() + 1, station.z());
+            if (!scope.permits(station.support()) || !level.hasChunkAt(feet)) continue;
+            if (FrontierV3PhysicalPathPolicy.reject(level, actor.getNavigation().createPath(feet, 0), scope).isEmpty()) return true;
+        }
+        return false;
+    }
 
     static void stop(Mob actor) {
         if (actor == null) return;
@@ -220,20 +247,26 @@ final class FrontierV3MinecraftGoalNavigation {
         actor.setOnGround(!level.noCollision(actor, actor.getBoundingBox().move(0.0D, -0.01D, 0.0D)));
     }
 
-    private static Result retry(Mob actor, List<SurfaceAnchor> legalStations, LocalNavigationEnvelope envelope,
+    private static Result retry(Mob actor, List<SurfaceAnchor> legalStations, FrontierV3NavigationScope scope,
                                 Optional<MovementOrder> order, long tick,
                                 String reason, FrontierV3GoalNavigation.BlockReason blockReason) {
         Failure previous = FAILURES.get(actor);
-        Failure next = previous == null || !previous.legalStations().equals(legalStations) || !previous.envelope().equals(envelope)
+        Failure next = previous == null || !previous.legalStations().equals(legalStations) || !previous.scope().equals(scope)
                 || !previous.order().equals(order)
-                ? new Failure(legalStations, envelope, order, tick) : previous;
+                ? new Failure(legalStations, scope, order, tick, tick, reason, blockReason, actor.onGround())
+                : new Failure(legalStations, scope, order, previous.since(), tick, reason, blockReason, actor.onGround());
         FAILURES.put(actor, next);
-        return tick - next.since() >= RETRY_TICKS
-                ? new Result(Status.BLOCKED, reason, Optional.of(blockReason)) : new Result(Status.IN_PROGRESS, reason);
+        return failureResult(next, tick);
+    }
+
+    private static Result failureResult(Failure failure, long tick) {
+        return tick - failure.since() >= RETRY_TICKS
+                ? new Result(Status.BLOCKED, failure.reason(), Optional.of(failure.blockReason()))
+                : new Result(Status.IN_PROGRESS, failure.reason());
     }
 
     static boolean pathWithinEnvelope(ServerLevel level, Path path, LocalNavigationEnvelope envelope) {
-        if (path == null || path.getNodeCount() < 1 || path.getNodeCount() > MAX_PATH_NODES) return false;
+        if (path == null || path.getNodeCount() < 1 || path.getNodeCount() > FrontierV3PhysicalPathPolicy.MAX_PATH_NODES) return false;
         for (int index = path.getNextNodeIndex(); index < path.getNodeCount(); index++) {
             BlockPos feet = path.getNode(index).asBlockPos();
             BlockPos support = feet.below();
@@ -244,25 +277,48 @@ final class FrontierV3MinecraftGoalNavigation {
         return true;
     }
 
-    private record Control(List<SurfaceAnchor> legalStations, SurfaceAnchor target, LocalNavigationEnvelope envelope,
+    private record Control(List<SurfaceAnchor> legalStations, SurfaceAnchor target, FrontierV3NavigationScope scope,
+                           LocalNavigationEnvelope corridor,
                            Optional<MovementOrder> order, long refreshedAt,
-                           long lastProgressAt, Vec3 lastProgressPosition) {
-        private Control observed(Vec3 position, long tick) {
-            // Collision jitter and vertical bobbing are not progress. Retain the
-            // best planar approach to this exact station across path retries so
-            // oscillation against a newly materialized wall cannot renew the
-            // stall deadline forever.
-            if (goalDistance(lastProgressPosition, target) - goalDistance(position, target) >= 0.25D)
-                return new Control(legalStations, target, envelope, order, refreshedAt, tick, position);
+                           long lastProgressAt, Vec3 lastProgressPosition, Path progressPath, double bestRemaining) {
+        private Control observed(Path path, Vec3 position, long tick) {
+            if (path == null) return this;
+            double remaining = remainingDistance(path, position);
+            // A legal building detour can initially move AWAY from the final goal.
+            // Progress is actual planar displacement along the accepted path, not
+            // decreasing straight-line goal distance or mere path recomputation.
+            if (progressPath != path)
+                return new Control(legalStations, target, scope, corridor, order, refreshedAt,
+                        lastProgressAt, position, path, remaining);
+            double displacement = Math.hypot(position.x - lastProgressPosition.x, position.z - lastProgressPosition.z);
+            if (bestRemaining - remaining >= 0.25D && displacement >= 0.25D)
+                return new Control(legalStations, target, scope, corridor, order, refreshedAt, tick, position, path, remaining);
             return this;
         }
         private Control refreshed(long tick) {
-            return new Control(legalStations, target, envelope, order, tick, lastProgressAt, lastProgressPosition);
+            return new Control(legalStations, target, scope, corridor, order, tick, lastProgressAt,
+                    lastProgressPosition, progressPath, bestRemaining);
         }
+        private Control withCorridor(LocalNavigationEnvelope value) {
+            return new Control(legalStations, target, scope, value, order, refreshedAt, lastProgressAt,
+                    lastProgressPosition, progressPath, bestRemaining);
+        }
+    }
+    static double remainingDistance(Path path, Vec3 position) {
+        double distance = 0.0D;
+        double x = position.x, z = position.z;
+        for (int index = path.getNextNodeIndex(); index < path.getNodeCount(); index++) {
+            var node = path.getNode(index);
+            double nextX = node.x + 0.5D, nextZ = node.z + 0.5D;
+            distance += Math.hypot(nextX - x, nextZ - z);
+            x = nextX; z = nextZ;
+        }
+        return distance;
     }
     static double goalDistance(Vec3 position, SurfaceAnchor target) {
         return Math.hypot(position.x - (target.x() + 0.5D), position.z - (target.z() + 0.5D));
     }
-    private record Failure(List<SurfaceAnchor> legalStations, LocalNavigationEnvelope envelope,
-                           Optional<MovementOrder> order, long since) { }
+    private record Failure(List<SurfaceAnchor> legalStations, FrontierV3NavigationScope scope,
+                           Optional<MovementOrder> order, long since, long lastAttemptAt, String reason,
+                           FrontierV3GoalNavigation.BlockReason blockReason, boolean groundedAtAttempt) { }
 }

@@ -12,14 +12,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
 
-/** HOT presentation follows the same known route as the retained COLD meal owner. */
+/** Meal policy supplies a final service goal and known-route hint, never a physical corridor. */
 final class FrontierV3ResidentMealNavigation {
     private record Route(long leaseRevision, long mealStart, ResidentMeal.Phase phase, boolean admitted,
                          List<SurfaceAnchor> waypoints) { }
 
     private static final Map<Mob, Route> ROUTES = new WeakHashMap<>();
     private static final Map<Mob, String> BLOCKED = new WeakHashMap<>();
-    private static final int LOCAL_LEG = 4;
 
     private FrontierV3ResidentMealNavigation() { }
 
@@ -58,30 +57,11 @@ final class FrontierV3ResidentMealNavigation {
             FrontierV3GoalNavigation.stop(body);
             return;
         }
-        int nearest = nearestWaypoint(body, route.waypoints());
-        int targetIndex = Math.min(route.waypoints().size() - 1,
-                (nearest / LOCAL_LEG + 1) * LOCAL_LEG);
-        SurfaceAnchor waypoint = route.waypoints().get(targetIndex);
-        if (!level.hasChunkAt(new net.minecraft.core.BlockPos(
-                waypoint.x(), waypoint.y() + 1, waypoint.z()))) {
-            blocked(body, meal, "physical_waypoint:" + targetIndex + ":" + waypoint.support());
-            FrontierV3GoalNavigation.stop(body);
-            return;
-        }
-        LocalNavigationEnvelope envelope;
-        try {
-            envelope = LocalNavigationEnvelope.localLeg(route.waypoints().subList(
-                    Math.max(0, targetIndex - LOCAL_LEG), targetIndex + 1), waypoint);
-        } catch (IllegalArgumentException unavailable) {
-            blocked(body, meal, "local_leg:" + unavailable.getMessage());
-            FrontierV3GoalNavigation.stop(body);
-            return;
-        }
         MovementOrder order = new MovementOrder(meal.residentId(), meal.residentId(),
-                FrontierWireTags.tag(meal.phase()), targetIndex + 1L, List.of(waypoint),
+                FrontierWireTags.tag(meal.phase()), meal.startedAtTick() + 1L, List.of(route.waypoints().getLast()),
                 TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
         FrontierV3GoalNavigation.Result result = FrontierV3GoalNavigation.pursue(level, body,
-                new FrontierV3GoalNavigation.Goal(order, envelope));
+                FrontierV3GoalNavigation.Goal.routed(order, route.waypoints(), state.bootstrap().bounds()));
         if (result.status() == FrontierV3GoalNavigation.Status.BLOCKED)
             blocked(body, meal, "minecraft_path:" + result.reason());
         else BLOCKED.remove(body);
@@ -93,20 +73,6 @@ final class FrontierV3ResidentMealNavigation {
                                                        ResidentMeal.Phase phase) {
         return phase == ResidentMeal.Phase.MOVE && admitted && !waypoints.isEmpty()
                 && !waypoints.getLast().equals(service) && waypoints.getLast().equals(observed);
-    }
-
-    private static int nearestWaypoint(Mob body, List<SurfaceAnchor> route) {
-        net.minecraft.core.BlockPos observed = body.getOnPos();
-        int nearest = 0;
-        long distance = Long.MAX_VALUE;
-        for (int index = 0; index < route.size(); index++) {
-            SurfaceAnchor point = route.get(index);
-            long candidate = Math.abs((long) point.x() - observed.getX())
-                    + Math.abs((long) point.y() - observed.getY())
-                    + Math.abs((long) point.z() - observed.getZ());
-            if (candidate < distance) { nearest = index; distance = candidate; }
-        }
-        return nearest;
     }
 
     private static void blocked(Mob body, ResidentMeal meal, String reason) {

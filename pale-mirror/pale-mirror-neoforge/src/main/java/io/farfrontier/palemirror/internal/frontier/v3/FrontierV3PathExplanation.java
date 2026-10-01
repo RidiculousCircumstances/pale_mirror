@@ -1,7 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
-import io.farfrontier.palemirror.frontier.v3.model.LocalNavigationEnvelope;
 import io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
@@ -11,7 +10,7 @@ import net.minecraft.world.level.pathfinder.Path;
 final class FrontierV3PathExplanation {
     private FrontierV3PathExplanation() { }
 
-    static String rejected(ServerLevel level, SurfaceAnchor target, Path path, LocalNavigationEnvelope envelope) {
+    static String rejected(ServerLevel level, SurfaceAnchor target, Path path, FrontierV3NavigationScope scope) {
         var support = new net.minecraft.core.BlockPos(target.x(), target.y(), target.z());
         String prefix = "target=" + target.x() + "," + target.y() + "," + target.z()
                 + ";targetSupport=" + BuiltInRegistries.BLOCK.getKey(level.getBlockState(support).getBlock())
@@ -24,12 +23,12 @@ final class FrontierV3PathExplanation {
             var feet = path.getNode(index).asBlockPos();
             if (!level.hasChunkAt(feet)) return result + ";rejectedNode=" + index + ";unloaded=" + feet.toShortString();
             var nodeSupport = feet.below();
-            boolean contained = envelope.contains(new BlockPosition(nodeSupport.getX(), nodeSupport.getY(), nodeSupport.getZ()));
+            boolean contained = scope.permits(new BlockPosition(nodeSupport.getX(), nodeSupport.getY(), nodeSupport.getZ()));
             boolean dry = level.getFluidState(feet).isEmpty();
             if (!contained || !dry) return result + ";rejectedNode=" + index + ";feet=" + feet.toShortString()
-                    + ";insideEnvelope=" + contained + ";dry=" + dry + ";block="
+                    + ";insideTaskScope=" + contained + ";dry=" + dry + ";block="
                     + BuiltInRegistries.BLOCK.getKey(level.getBlockState(feet).getBlock());
         }
-        return result + ";remainingNodesInsideEnvelope=true";
+        return result + ";remainingNodesInsideTaskScope=true";
     }
 }

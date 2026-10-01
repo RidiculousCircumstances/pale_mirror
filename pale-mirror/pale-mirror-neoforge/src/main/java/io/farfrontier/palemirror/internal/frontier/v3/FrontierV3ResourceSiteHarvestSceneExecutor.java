@@ -387,12 +387,8 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                     && level.getGameTime() % 20 == 0
                     && tryRetargetWorkTarget(level, runtime, state, lease, job, worker)) return;
             ResourceSiteHarvestGoal currentGoal = ResourceSiteHarvestGoal.current(state, job);
-            io.farfrontier.palemirror.frontier.v3.model.LocalNavigationEnvelope envelope;
-            try {
-                envelope = hotGoalEnvelope(state, job, currentGoal);
-            } catch (IllegalArgumentException unavailable) { return; }
             var outcome = FrontierV3GoalNavigation.pursue(level, worker,
-                    new FrontierV3GoalNavigation.Goal(currentGoal.movementOrder(), envelope));
+                    hotGoal(state, job, currentGoal));
             if (outcome.status() == FrontierV3GoalNavigation.Status.ARRIVED)
                 acceptObservedSemanticGoal(level, runtime, state, lease, job, worker);
             return;
@@ -405,17 +401,8 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         var atGoal = semanticGoal.legalStations().stream()
                 .filter(station -> FrontierV3SemanticMovement.arrived(level, worker, station)).toList();
         if (atGoal.isEmpty()) {
-            io.farfrontier.palemirror.frontier.v3.model.LocalNavigationEnvelope envelope;
-            try {
-                envelope = hotGoalEnvelope(state, job, semanticGoal);
-            } catch (IllegalArgumentException tooWide) {
-                if (retainInterruptedTransit(level, runtime, state, lease, job, worker)) return;
-                holdSemanticGoal(level, runtime, state, lease, job, worker,
-                        FrontierV3GoalNavigation.BlockReason.PATH_UNAVAILABLE);
-                return;
-            }
             var motion = FrontierV3GoalNavigation.pursue(level, worker,
-                    new FrontierV3GoalNavigation.Goal(semanticGoal.movementOrder(), envelope));
+                    hotGoal(state, job, semanticGoal));
             if (motion.status() == FrontierV3GoalNavigation.Status.BLOCKED) {
                 // A finite physical failure needs a job-local typed disposition before
                 // COLD can resume.  The old route's waypoint must not be that target.
@@ -563,6 +550,8 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             case TARGET_CHUNK_UNLOADED -> ResourceSiteHarvestNavigationBlock.Reason.TARGET_CHUNK_UNLOADED;
             case OFF_CONTRACT -> ResourceSiteHarvestNavigationBlock.Reason.OFF_CONTRACT;
             case UNSUPPORTED_CAPABILITY -> ResourceSiteHarvestNavigationBlock.Reason.UNSUPPORTED_CAPABILITY;
+            case UNSUPPORTED_MEDIUM -> ResourceSiteHarvestNavigationBlock.Reason.TARGET_MEDIUM;
+            case SEARCH_BUDGET_EXHAUSTED -> ResourceSiteHarvestNavigationBlock.Reason.SEARCH_BUDGET_EXHAUSTED;
         };
         var block = new ResourceSiteHarvestNavigationBlock(goal.representative(), goal.layoutRevision(), cause);
         var action = binding.orElseThrow();
@@ -586,21 +575,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 FrontierWorldState candidateState = state.withResourceSites(state.resourceSites().replace(
                         state.resourceSites().site(job.siteId()).retargetHarvestCell(job, index)));
                 ResourceSiteHarvestGoal candidateGoal = ResourceSiteHarvestGoal.current(candidateState, candidate);
-                io.farfrontier.palemirror.frontier.v3.model.LocalNavigationEnvelope envelope;
-                try {
-                    envelope = hotGoalEnvelope(candidateState, candidate, candidateGoal);
-                } catch (IllegalArgumentException unavailable) {
-                    return false;
-                }
-                for (var station : candidateGoal.legalStations()) {
-                    var feet = new BlockPos(station.x(), station.y() + 1, station.z());
-                    if (!level.hasChunkAt(feet)) continue;
-                    var path = worker.getNavigation().createPath(feet, 0);
-                    if (path != null && path.canReach()
-                            && FrontierV3MinecraftGoalNavigation.pathWithinEnvelope(level, path, envelope))
-                        return true;
-                }
-                return false;
+                return FrontierV3GoalNavigation.canReach(level, worker, hotGoal(candidateState, candidate, candidateGoal));
         });
         if (alternate.isEmpty()) return false;
         var binding = FrontierV3TraversalScheduleGate.binding(runtime.checkpointImage().orElseThrow(), job.siteId());
@@ -616,22 +591,16 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         return true;
     }
 
-    private static io.farfrontier.palemirror.frontier.v3.model.LocalNavigationEnvelope hotGoalEnvelope(
+    private static FrontierV3GoalNavigation.Goal hotGoal(
             FrontierWorldState state, ResourceSiteHarvestJob job, ResourceSiteHarvestGoal goal) {
-        // HOT has physical collision evidence and may take a bounded local detour
-        // around an edited support. Starting from the canonical retained body
-        // keeps the envelope fixed while the Minecraft entity moves, so retries
-        // cannot continually reset their no-progress deadline.
+        // Known geometry is a route hint. Only the shared physical provider may
+        // authorize a different loaded-world path to this unchanged semantic goal.
         try {
-            return io.farfrontier.palemirror.frontier.v3.model.LocalNavigationEnvelope.between(
-                    state.actorLocations().get(job.workerId()).body(), goal.legalStations());
-        } catch (IllegalArgumentException tooWide) {
-            // A long thin known route can fit the strict bound when a rectangular
-            // latitude cannot. It remains physical-path evidence, not a second
-            // canonical movement authority or an asserted COLD observation.
-            return io.farfrontier.palemirror.frontier.v3.model.LocalNavigationEnvelope.along(
+            return FrontierV3GoalNavigation.Goal.routed(goal.movementOrder(),
                     io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestKnownNavigation.path(state, job),
-                    goal.legalStations());
+                    state.bootstrap().bounds());
+        } catch (io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestKnownNavigation.KnowledgeUnavailable gap) {
+            return FrontierV3GoalNavigation.Goal.routed(goal.movementOrder(), java.util.List.of(), state.bootstrap().bounds());
         }
     }
 

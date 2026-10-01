@@ -1,22 +1,16 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.model.*;
-import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder;
-import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.npc.Villager;
 
 import java.util.List;
-import java.util.Map;
-import java.util.WeakHashMap;
 
 /** HOT movement to the same semantic bakery goals as the COLD order; effects remain job-owned. */
 final class FrontierV3BakeryWorkSceneExecutor {
-    private static final int LOCAL_LEG = 8;
-    private static final Map<Mob, LegControl> LEGS = new WeakHashMap<>();
     private FrontierV3BakeryWorkSceneExecutor() { }
 
     static void drainPending(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
@@ -45,7 +39,6 @@ final class FrontierV3BakeryWorkSceneExecutor {
         if (!(entity instanceof Mob worker) || !worker.isAlive() || !FrontierV3SceneExecutor.recognizes(runtime, worker)) return;
         BakeryWorkGoal goal = BakeryWorkGoal.current(state, job);
         if (ServiceAccessCoordinator.witnessedBakeryExit(state, job, FrontierV3SurfaceObservation.observedBody(worker))) {
-            LEGS.remove(worker);
             FrontierV3CommandSubmission.submit(runtime, "bakery-access-cleared", lease.id().value(),
                     new BakeryHotAccessCleared(job.id(), lease.id(), FrontierV3SurfaceObservation.observedBody(worker)));
             return;
@@ -70,7 +63,6 @@ final class FrontierV3BakeryWorkSceneExecutor {
         }
         if (FrontierV3SemanticMovement.arrived(level, worker, goal.station())) {
             FrontierV3PhysicalWaitTrace.clear(worker);
-            LEGS.remove(worker);
             FrontierV3GoalNavigation.stop(worker);
             if (!lease.memberPosition(job.workerId()).equals(goal.station().standingBody())) {
                 FrontierV3CommandSubmission.submit(runtime, "bakery-goal-arrived", lease.id().value(),
@@ -105,21 +97,12 @@ final class FrontierV3BakeryWorkSceneExecutor {
             FrontierV3PhysicalWaitTrace.bakery(worker, state, job, "known-route:" + unavailable.getMessage());
             return; // The job remains retained; an unsupported path is not a fabricated arrival.
         }
-        LocalNavigationEnvelope envelope;
-        int targetIndex = waypointIndex(level, worker, known, lease.id(), goal.phase());
-        SurfaceAnchor waypoint = known.get(targetIndex);
-        try {
-            envelope = LocalNavigationEnvelope.localLeg(known.subList(Math.max(0, targetIndex - LOCAL_LEG), targetIndex + 1), waypoint);
-        } catch (IllegalArgumentException tooWide) {
-            FrontierV3PhysicalWaitTrace.bakery(worker, state, job, "local-envelope:" + tooWide.getMessage());
-            return;
-        }
         FrontierV3PhysicalWaitTrace.clear(worker);
-        MovementOrder leg = new MovementOrder(job.id(), job.workerId(), goal.phase().wireTag(),
-                targetIndex + 1L, List.of(waypoint), TraversalCapability.PEDESTRIAN,
+        MovementOrder order = new MovementOrder(job.id(), job.workerId(), goal.phase().wireTag(),
+                1L, List.of(goal.station()), TraversalCapability.PEDESTRIAN,
                 MovementOrder.ArrivalPolicy.EXACT_STATION);
         FrontierV3GoalNavigation.Result movement = FrontierV3GoalNavigation.pursue(level, worker,
-                new FrontierV3GoalNavigation.Goal(leg, envelope));
+                FrontierV3GoalNavigation.Goal.routed(order, known, state.bootstrap().bounds()));
         if (movement.status() == FrontierV3GoalNavigation.Status.BLOCKED
                 && movement.blockReason().orElseThrow() != FrontierV3GoalNavigation.BlockReason.TARGET_CHUNK_UNLOADED) {
             FrontierV3BakeryPhysicalEffect.block(level, runtime, lease, job,
@@ -132,32 +115,4 @@ final class FrontierV3BakeryWorkSceneExecutor {
         }
     }
 
-    /** Short physical legs retain the one semantic destination while Minecraft handles local avoidance. */
-    private static int waypointIndex(ServerLevel level, Mob worker, List<SurfaceAnchor> known,
-                                     SceneLeaseId leaseId, BakeryWorkState.Phase phase) {
-        LegControl retained = LEGS.get(worker);
-        if (retained != null && retained.leaseId().equals(leaseId) && retained.phase() == phase
-                && retained.targetIndex() < known.size()) {
-            int target = retained.targetIndex();
-            if (FrontierV3SemanticMovement.arrived(level, worker, known.get(target)))
-                target = Math.min(known.size() - 1, target + LOCAL_LEG);
-            LEGS.put(worker, new LegControl(leaseId, phase, target));
-            return target;
-        }
-        BlockPos observedSupport = worker.getOnPos();
-        int nearest = 0;
-        long distance = Long.MAX_VALUE;
-        for (int index = 0; index < known.size(); index++) {
-            SurfaceAnchor anchor = known.get(index);
-            long current = Math.abs((long) anchor.x() - observedSupport.getX())
-                    + Math.abs((long) anchor.y() - observedSupport.getY())
-                    + Math.abs((long) anchor.z() - observedSupport.getZ());
-            if (current < distance) { nearest = index; distance = current; }
-        }
-        int target = Math.min(known.size() - 1, (nearest / LOCAL_LEG + 1) * LOCAL_LEG);
-        LEGS.put(worker, new LegControl(leaseId, phase, target));
-        return target;
-    }
-
-    private record LegControl(SceneLeaseId leaseId, BakeryWorkState.Phase phase, int targetIndex) { }
 }
