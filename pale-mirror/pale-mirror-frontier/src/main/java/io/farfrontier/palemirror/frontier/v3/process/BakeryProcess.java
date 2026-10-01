@@ -115,8 +115,8 @@ public final class BakeryProcess {
         if (job.inputHold() instanceof ProductionInputHold.FungibleBound
                 && job.bakeryWork().orElseThrow().phase() == BakeryWorkState.Phase.DEPOT_PICKUP)
             return Optional.of("SOURCE_PHYSICAL_BINDING");
-        if (!FrontierSceneAdmission.available(state, List.of(job.workerId()))) return Optional.of("AMBIENT_ACTOR_AUTHORITY");
-        if (state.sceneLeases().values().stream().anyMatch(lease -> lease.retainsMemberCustody(job.workerId())))
+        if (!ActorExecutionCoordinator.ambientAvailable(state, List.of(job.workerId()))) return Optional.of("AMBIENT_ACTOR_AUTHORITY");
+        if (ActorExecutionCoordinator.sceneOwns(state, job.workerId()))
             return Optional.of("SCENE_ACTOR_AUTHORITY");
         ProductionStationSpec station = station(state, job);
         SubjectId depot = FrontierWorldState.depotId(job.settlementId());

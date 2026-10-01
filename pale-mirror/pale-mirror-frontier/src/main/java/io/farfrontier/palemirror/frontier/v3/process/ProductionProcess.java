@@ -95,6 +95,9 @@ public final class ProductionProcess {
         if (!ResidentActivityCoordinator.mayStartOrdinaryWork(state, availableBaker.orElseThrow().id(), action.dueAt().ticks()))
             return List.of(reschedule(action, start(task, ResidentActivityCoordinator.nextOrdinaryWorkAdmission(
                     state, availableBaker.orElseThrow().id(), action.dueAt().ticks()))));
+        if (!ActorExecutionCoordinator.ordinaryWorkAdmission(state, availableBaker.orElseThrow().id()).permitted())
+            return List.of(reschedule(action, start(task, Math.addExact(action.dueAt().ticks(),
+                    state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval()))));
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
         if (ReferenceContainerCustody.blocksCanonicalUse(state, depot)) {
             return blocked(task, settlement, workshop, depot, ProductionDiagnosticProducer.INPUT_UNAVAILABLE);
@@ -164,8 +167,7 @@ public final class ProductionProcess {
         }
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
         boolean physicalCustody = ReferenceContainerCustody.hasLiveCustody(state, depot);
-        if (job.workProgress().terminalEffectEligible() && (!FrontierSceneAdmission.available(state, List.of(job.workerId()))
-                || state.sceneLeases().values().stream().anyMatch(lease -> lease.retainsMemberCustody(job.workerId())))) {
+        if (job.workProgress().terminalEffectEligible() && !ActorExecutionCoordinator.coldAvailable(state, job.workerId())) {
             return List.of(reschedule(action, complete(job, Math.addExact(action.dueAt().ticks(), 20L))));
         }
         if (physicalCustody && !ReferenceContainerCustody.hasOperationalCustody(state, depot)) {
@@ -305,6 +307,7 @@ public final class ProductionProcess {
         SettlementStructure workshop = workshop(settlement);
         if (!workshop.id().equals(job.facilityId()) || state.structureConditions().get(workshop.id()) != StructureCondition.INTACT) throw new IllegalArgumentException("production start facility is unavailable");
         if (!baker(state, settlement).id().equals(job.workerId())) throw new IllegalArgumentException("production start worker is not the deterministic baker");
+        ActorExecutionCoordinator.requireOrdinaryWorkAdmission(state, job.workerId());
         validateMarketOrder(state, activeTask(state, job), job);
         return BakeryProcess.start(state, job, started.inputItemId());
     }
@@ -486,7 +489,7 @@ public final class ProductionProcess {
      */
     public static FrontierWorldState reduceColdWorkAdvanced(FrontierWorldState state, SubjectId subject, ProductionColdWorkAdvanced advanced) {
         ProductionJob job = state.productionJobs().get(advanced.jobId());
-        if (job == null || !subject.equals(job.settlementId()) || !FrontierSceneAdmission.available(state, List.of(job.workerId()))
+        if (job == null || !subject.equals(job.settlementId()) || !ActorExecutionCoordinator.coldAvailable(state, job.workerId())
                 || hasOpenWorkScene(state, job.id())) throw new IllegalArgumentException("production cold work has a physical owner");
         int last = job.workTraversal().linearCorridorSurfaces().size() - 1;
         if (advanced.nextCursor() < job.traversalCursor() || advanced.nextCursor() > last) {
@@ -542,7 +545,7 @@ public final class ProductionProcess {
     }
 
     private static List<ProposedEvent> planColdWorkAdvance(FrontierWorldState state, ProductionJob job, ScheduledAction action) {
-        if (!FrontierSceneAdmission.available(state, List.of(job.workerId())) || hasOpenWorkScene(state, job.id())) {
+        if (!ActorExecutionCoordinator.coldAvailable(state, job.workerId()) || hasOpenWorkScene(state, job.id())) {
             return List.of(reschedule(action, complete(job, Math.addExact(action.dueAt().ticks(), 20L))));
         }
         int last = job.workTraversal().linearCorridorSurfaces().size() - 1;

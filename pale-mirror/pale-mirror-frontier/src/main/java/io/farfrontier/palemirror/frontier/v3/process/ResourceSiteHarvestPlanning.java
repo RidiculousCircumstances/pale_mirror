@@ -63,8 +63,7 @@ final class ResourceSiteHarvestPlanning {
         // return goal through restart recovery. Starting a field job from that body would
         // give COLD and HOT different owners of the same actor.  Keep this durable task pending
         // and retry its stable start action only after that hand-off is conclusively closed.
-        if (!FrontierSceneAdmission.available(state, List.of(farmer.id()))
-                && !retainsExactAmbientHandoff(state, lifecycle, farmer)) {
+        if (!ActorExecutionCoordinator.ordinaryWorkAdmission(state, farmer.id()).permitted()) {
             long retryAt = Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval());
             return List.of(reschedule(action, start(task, retryAt)));
         }
@@ -126,31 +125,6 @@ final class ResourceSiteHarvestPlanning {
                         && resident.profession() == ResidentProfession.AGRICULTURAL_WORKER
                         && state.actorLocations().containsKey(resident.id())
                         && state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE);
-    }
-
-    /**
-     * A field start may transfer one exact idle PATROL body into its registered scene.  This is
-     * required for the first epoch as well as a retained successor: the candidate which names
-     * the scene cannot exist until the start declares the job, while waiting for a HOT ambient
-     * body to close leaves a READY field permanently self-blocked under player demand.  A later
-     * epoch may additionally retain its lifecycle-owned WORK hand-off.  No other ambient purpose
-     * is eligible, and the exact body/idle/no-scene checks keep this a transfer rather than a
-     * second authority over a visible actor.
-     */
-    private static boolean retainsExactAmbientHandoff(FrontierWorldState state, ResourceSiteLifecycle lifecycle,
-                                                      ResidentProfile farmer) {
-        boolean successor = lifecycle.harvestLineage().filter(lineage -> lineage.workerId().equals(farmer.id())).isPresent();
-        AmbientActorLease lease = state.ambientLeases().get(farmer.id());
-        var location = state.actorLocations().get(farmer.id());
-        // The first epoch admits only the idle PATROL at its own retained body.  WORK is a
-        // lifecycle-owned recovery hand-off and therefore remains valid only for the exact
-        // successor worker retained by the preceding epoch.
-        if (lease == null || location == null || lease.status() != AmbientLeaseStatus.HOT
-                || (lease.goal() != AmbientGoalKind.PATROL && (!successor || lease.goal() != AmbientGoalKind.WORK))
-                || !HumanAssignmentProjection.compile(state).idle(farmer.id())
-                || !location.body().equals(lease.handoffBody()) || !location.body().equals(lease.goalBody())) return false;
-        return state.sceneLeases().values().stream().noneMatch(scene -> scene.status() != SceneLeaseStatus.CLOSED
-                && scene.members().stream().anyMatch(member -> member.actorId().equals(farmer.id())));
     }
 
     /**
@@ -365,8 +339,7 @@ final class ResourceSiteHarvestPlanning {
                 && (state.resourceSites().hasPendingWorldChange(job.siteId())
                     || state.humanPopulation().meals().containsKey(job.workerId())
                     || state.actorMovements().containsKey(job.workerId())
-                    || FrontierResourceSiteHarvestSceneSupport.hasNonClosedScene(state, job)
-                    || !FrontierSceneAdmission.available(state, List.of(job.workerId()))
+                    || !ActorExecutionCoordinator.coldAvailable(state, job.workerId())
                     || pendingPlayerBreakAtNextCell(state, job)
                     || loadedDepotCustodyBlocksDelivery(state, job)
                     // A denied shared service turn is a wait, not a new COLD step.

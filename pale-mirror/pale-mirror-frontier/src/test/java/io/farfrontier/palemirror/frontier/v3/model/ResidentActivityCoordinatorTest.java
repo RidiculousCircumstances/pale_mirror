@@ -97,8 +97,8 @@ class ResidentActivityCoordinatorTest {
                 HumanAssignmentKind.TRANSIT)) {
             var unadapted = new HumanAssignment(resident, family,
                     Optional.of(new SubjectId("job:unadapted-" + family.name().toLowerCase(java.util.Locale.ROOT))));
-            assertEquals(ResidentWorkYield.Status.OWNER_SAFETY_HOLD,
-                    ResidentWorkYield.assess(state, unadapted).status(), family.name());
+            assertThrows(IllegalArgumentException.class,
+                    () -> ResidentWorkYield.assess(state, unadapted), family.name());
         }
     }
 }

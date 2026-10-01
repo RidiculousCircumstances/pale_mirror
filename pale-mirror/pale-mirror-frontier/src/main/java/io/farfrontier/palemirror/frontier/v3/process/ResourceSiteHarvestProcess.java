@@ -921,6 +921,7 @@ public final class ResourceSiteHarvestProcess {
             throw new IllegalArgumentException("resource-site harvest worker is unavailable");
         }
         if (lifecycle.phase() == ResourceSitePhase.READY) {
+            ActorExecutionCoordinator.requireOrdinaryWorkAdmission(state, job.workerId());
             if (state.inventory().fungibleResources().accounts().containsKey(job.actorAccountId())
                     || state.inventory().fungibleResources().accounts().values().stream().anyMatch(account ->
                     account.custody().equals(new ResourceCustody.Actor(job.workerId()))))

@@ -12,6 +12,22 @@ import java.util.Set;
 public final class FrontierResourceSiteHarvestSceneSupport {
     private FrontierResourceSiteHarvestSceneSupport() { }
 
+    /** Field owner proves its own safe stop; generic execution never reads crop stages. */
+    static ActivityExecutionCheckpoint executionCheckpoint(FrontierWorldState state, HumanAssignment assignment) {
+        if (assignment.kind() != HumanAssignmentKind.FIELD_HARVEST)
+            throw new IllegalArgumentException("field checkpoint requires a declared field assignment");
+        ResourceSiteHarvestJob job = state.resourceSites().sites().values().stream()
+                .map(ResourceSiteLifecycle::activeWork).flatMap(Optional::stream)
+                .filter(ResourceSiteHarvestJob.class::isInstance).map(ResourceSiteHarvestJob.class::cast)
+                .filter(value -> value.id().equals(assignment.ownerId().orElseThrow())).findFirst().orElseThrow(
+                        () -> new IllegalArgumentException("field checkpoint lost its exact job"));
+        if (!job.workerId().equals(assignment.residentId()))
+            throw new IllegalArgumentException("field checkpoint names a foreign worker");
+        return new ActivityExecutionCheckpoint(state, assignment,
+                job.progress().hasPendingCrop() || state.resourceSites().hasPendingWorldChange(job.siteId())
+                        ? ResidentWorkYield.Status.PENDING_PHYSICAL_EFFECT : ResidentWorkYield.Status.READY);
+    }
+
     /**
      * Complete, bounded and stable inventory of canonical candidates.
      *

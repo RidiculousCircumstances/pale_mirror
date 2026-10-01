@@ -14,11 +14,7 @@ public final class FrontierSceneAdmission {
 
     /** A scene must wait for every existing ambient executor to finish its own durable hand-off. */
     public static boolean available(FrontierWorldState state, Collection<SubjectId> actorIds) {
-        Objects.requireNonNull(state, "state"); Objects.requireNonNull(actorIds, "actor ids");
-        return actorIds.stream().allMatch(actorId -> {
-            AmbientActorLease lease = state.ambientLeases().get(Objects.requireNonNull(actorId, "actor id"));
-            return lease == null || lease.status() == AmbientLeaseStatus.CLOSED;
-        });
+        return ActorExecutionCoordinator.ambientAvailable(state, actorIds);
     }
 
     /**

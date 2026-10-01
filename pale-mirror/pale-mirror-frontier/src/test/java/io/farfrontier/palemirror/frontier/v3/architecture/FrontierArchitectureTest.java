@@ -13,6 +13,14 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 )
 final class FrontierArchitectureTest {
     @ArchTest
+    static final ArchRule execution_coordinator_does_not_inspect_family_work = noClasses()
+            .that().haveSimpleName("ActorExecutionCoordinator")
+            .should().dependOnClassesThat().haveNameMatching(
+                    ".*\\.(ProductionJob|BakeryWorkState|ResourceSiteHarvestJob|ResourceSiteHarvestProgress|"
+                            + "FrontierProductionWorkSceneSupport|FrontierResourceSiteHarvestSceneSupport)")
+            .because("family owners supply checkpoint Strategies; shared coordination cannot inspect their jobs");
+
+    @ArchTest
     static final ArchRule frontier_is_independent_of_minecraft_and_legacy_domain = noClasses()
             .should().dependOnClassesThat().resideInAnyPackage(
                     "net.minecraft..",

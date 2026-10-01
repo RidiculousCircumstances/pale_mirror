@@ -82,6 +82,7 @@ final class FrontierV3ResidentLifeDiagnostic {
                 + "\",\"nextScheduleBoundary\":" + schedule.nextWindowBoundaryAfter(now)
                 + ",\"assignment\":\"" + assignment.kind().name()
                 + "\",\"assignmentOwner\":\"" + quote(assignment.ownerId().map(SubjectId::value).orElse(""))
+                + "\",\"executionAdmission\":\"" + quote(ActorExecutionCoordinator.ordinaryWorkAdmission(state, subject).toString())
                 + "\",\"activity\":\"" + activity + "\",\"pending\":\"" + pending
                 + "\",\"workYield\":\"" + workYield + "\",\"activityError\":\"" + quote(activityError)
                 + "\",\"mealPhase\":\"" + (meal == null ? "NONE" : meal.phase().name())

@@ -24,13 +24,7 @@ public final class FrontierSceneLeaseStateSupport {
         Objects.requireNonNull(lease, "scene lease");
         if (state.sceneLeases().containsKey(lease.id())) throw new IllegalArgumentException("scene lease identity already exists: " + lease.id().value());
         if (lease.status() != SceneLeaseStatus.PREPARED) throw new IllegalArgumentException("new scene lease must be prepared");
-        if (lease.members().stream().anyMatch(member -> state.actorLocations().get(member.actorId()).condition().status() != ActorLifeStatus.ALIVE)) {
-            throw new IllegalArgumentException("scene lease cannot materialize a dead actor");
-        }
-        if (lease.members().stream().anyMatch(member -> !state.actorLocations().get(member.actorId()).body()
-                .equals(lease.memberPosition(member.actorId())))) {
-            throw new IllegalArgumentException("scene lease must retain every exact canonical member position");
-        }
+        ActorExecutionCoordinator.requireScenePreparation(state, lease);
         FrontierSceneBehaviors.validatePrepared(state, lease);
         Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases());
         int requiredCompaction = leases.size() - MAX_SCENE_LEASES + 1;
@@ -50,34 +44,7 @@ public final class FrontierSceneLeaseStateSupport {
     }
 
     static FrontierWorldState handoff(FrontierWorldState state, SceneLeaseHandoff handoff) {
-        Objects.requireNonNull(handoff, "scene hand-off");
-        Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
-        Map<SubjectId, AmbientActorLease> ambient = new LinkedHashMap<>(state.ambientLeases());
-        Set<SubjectId> captured = handoff.ambientMembers().stream().map(SceneMemberPosition::actorId).collect(java.util.stream.Collectors.toSet());
-        for (SceneMember member : handoff.lease().members()) {
-            AmbientActorLease current = ambient.get(member.actorId());
-            if (current == null || current.status() == AmbientLeaseStatus.CLOSED) {
-                if (captured.contains(member.actorId())) throw new IllegalArgumentException("scene hand-off captured an unleased actor");
-            } else if (current.status() != AmbientLeaseStatus.HOT || !captured.contains(member.actorId())) {
-                throw new IllegalArgumentException("scene hand-off requires every active ambient member to be HOT and captured");
-            }
-        }
-        for (SceneMemberPosition capture : handoff.ambientMembers()) {
-            AmbientActorLease current = ambient.get(capture.actorId()); ActorLocation actor = actors.get(capture.actorId());
-            if (current == null || current.status() != AmbientLeaseStatus.HOT || actor == null || actor.condition().status() != ActorLifeStatus.ALIVE) {
-                throw new IllegalArgumentException("scene hand-off capture lacks one living HOT ambient actor");
-            }
-            FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), capture.body().supportingSurface().support());
-            actors.put(capture.actorId(), new ActorLocation(capture.body(), actor.condition().withHealth(capture.health())));
-            ambient.put(capture.actorId(), current.withStatus(AmbientLeaseStatus.CLOSED));
-        }
-        // The observed body is the sole admissible replacement for the outgoing ambient
-        // position. Validate the incoming scene lease against that captured state, not against
-        // the predecessor's historical grid cell: otherwise a normal moving Villager can never
-        // enter any exact HOT scene without being despawned and recreated.
-        FrontierWorldState captureState = copy(state, actors, state.sceneLeases(), ambient, state.strategicPlans());
-        SceneLease lease = handoff.lease();
-        return copy(captureState, actors, withPreparedLease(captureState, lease), ambient, captureState.strategicPlans(), prepareRecovery(captureState.fencedRecovery(), lease));
+        return ActorExecutionCoordinator.transferToScene(state, handoff);
     }
 
     static FrontierWorldState transition(FrontierWorldState state, SceneLeaseId leaseId, SceneLeaseStatus nextStatus) {

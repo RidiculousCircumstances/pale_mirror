@@ -9,6 +9,18 @@ import java.util.Set;
 
 /** Exact candidate and validation boundary for one actor-owned workshop-work scene. */
 public final class FrontierProductionWorkSceneSupport {
+    /** Production owns station and transfer safety, not the common execution coordinator. */
+    static ActivityExecutionCheckpoint executionCheckpoint(FrontierWorldState state, HumanAssignment assignment) {
+        if (assignment.kind() != HumanAssignmentKind.PRODUCTION)
+            throw new IllegalArgumentException("production checkpoint requires a declared production assignment");
+        ProductionJob job = state.productionJobs().get(assignment.ownerId().orElseThrow());
+        if (job == null || !job.workerId().equals(assignment.residentId()))
+            throw new IllegalArgumentException("production checkpoint lost its exact worker/job");
+        ResidentWorkYield.Status status = job.bakeryWork().isEmpty() ? ResidentWorkYield.Status.OWNER_SAFETY_HOLD
+                : job.bakeryWork().orElseThrow().pendingPhysicalStep().isPresent()
+                    ? ResidentWorkYield.Status.PENDING_PHYSICAL_EFFECT : ResidentWorkYield.Status.READY;
+        return new ActivityExecutionCheckpoint(state, assignment, status);
+    }
     private FrontierProductionWorkSceneSupport() { }
 
     /** Stable canonical inventory; physical demand is selected only by the adapter. */

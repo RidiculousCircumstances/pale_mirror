@@ -192,11 +192,7 @@ public final class AmbientLeaseStateProcess {
     }
 
     public static FrontierWorldState retarget(FrontierWorldState state, SubjectId actorId, AmbientGoalKind goal, BodyPosition goalBody) {
-        AmbientActorLease current = state.ambientLeases().get(Objects.requireNonNull(actorId, "ambient actor id"));
-        if (current == null || current.status() != AmbientLeaseStatus.HOT) throw new IllegalArgumentException("only a HOT ambient lease may retarget");
-        FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), goalBody.supportingSurface().support());
-        Map<SubjectId, AmbientActorLease> leases = new LinkedHashMap<>(state.ambientLeases()); leases.put(actorId, current.withGoal(goal, goalBody));
-        return copy(state, state.actorLocations(), leases);
+        return ActorExecutionCoordinator.retargetAmbient(state, actorId, goal, goalBody);
     }
 
     private static FrontierWorldState copy(FrontierWorldState state, Map<SubjectId, ActorLocation> actors, Map<SubjectId, AmbientActorLease> leases) {

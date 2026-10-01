@@ -58,8 +58,7 @@ public final class ActorMovementProcess {
         if (movement == null) return false;
         ActorLocation actor = state.actorLocations().get(action.subject());
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE) return false;
-        if (!FrontierSceneAdmission.available(state, List.of(action.subject()))
-                || state.sceneLeases().values().stream().anyMatch(lease -> lease.retainsMemberCustody(action.subject())))
+        if (!ActorExecutionCoordinator.coldAvailable(state, action.subject()))
             return true;
         // The queue may inspect every overdue action on each tick. A route search belongs to
         // the admitted action, never to this predicate; otherwise one hungry cohort repeatedly
@@ -114,8 +113,7 @@ public final class ActorMovementProcess {
         if (actor == null) return Optional.empty();
         if (actor.condition().status() != ActorLifeStatus.ALIVE)
             return Optional.of(new ActorMovementColdAdvanced(actorId, movement.order().goalRevision(), now));
-        if (!FrontierSceneAdmission.available(state, List.of(actorId))
-                || state.sceneLeases().values().stream().anyMatch(lease -> lease.retainsMemberCustody(actorId)))
+        if (!ActorExecutionCoordinator.coldAvailable(state, actorId))
             return Optional.empty();
         if (movement.coldTravel().isPresent()) {
             TimedKnownRoute travel = movement.coldTravel().orElseThrow();

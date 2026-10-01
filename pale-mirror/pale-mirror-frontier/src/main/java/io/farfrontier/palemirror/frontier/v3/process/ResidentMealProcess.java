@@ -52,8 +52,7 @@ public final class ResidentMealProcess {
         ResidentMeal meal = state.humanPopulation().meals().get(action.subject());
         if (meal == null) return false;
         if (meal.pendingPhysicalStep().isPresent()
-                || !FrontierSceneAdmission.available(state, List.of(meal.residentId()))
-                || state.sceneLeases().values().stream().anyMatch(lease -> lease.retainsMemberCustody(meal.residentId())))
+                || !ActorExecutionCoordinator.coldAvailable(state, meal.residentId()))
             return true;
         return switch (meal.phase()) {
             case TAKE -> ReferenceContainerCustody.hasLiveCustody(state, meal.depotId());
@@ -441,8 +440,7 @@ public final class ResidentMealProcess {
         if (meal.pendingPhysicalStep().isPresent()) return Optional.empty();
         ActorLocation actor = state.actorLocations().get(residentId);
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE
-                || !FrontierSceneAdmission.available(state, List.of(residentId))
-                || state.sceneLeases().values().stream().anyMatch(lease -> lease.retainsMemberCustody(residentId)))
+                || !ActorExecutionCoordinator.coldAvailable(state, residentId))
             return Optional.empty();
         if ((meal.phase() == ResidentMeal.Phase.TAKE
                 && ReferenceContainerCustody.hasLiveCustody(state, meal.depotId()))
@@ -576,8 +574,7 @@ public final class ResidentMealProcess {
             throw new IllegalArgumentException("cold meal step has no exact retained predecessor");
         ActorLocation actor = state.actorLocations().get(subject);
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE
-                || !FrontierSceneAdmission.available(state, List.of(subject))
-                || state.sceneLeases().values().stream().anyMatch(lease -> lease.retainsMemberCustody(subject)))
+                || !ActorExecutionCoordinator.coldAvailable(state, subject))
             throw new IllegalArgumentException("cold meal step competes with a loaded or dead resident body");
         return switch (meal.phase()) {
             case MOVE -> {
