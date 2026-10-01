@@ -200,10 +200,15 @@ final class FrontierV3DiagnosticJson {
                                  java.util.List<FrontierV3ServerLifecycle.FastForwardRequestOutcome> requests, String selectedId) {
         String receipt = requests.isEmpty() ? "null" : fastForwardReceipt(requests.getLast());
         String subject = selectedStatus(checkpoint, state, selectedId);
+        var calendar = new io.farfrontier.palemirror.frontier.v3.time.SimulationCalendar(
+                state.bootstrap().ruleset().residentLife().dayTicks()).at(checkpoint.instant().ticks());
         return bounded("status", "", checkpoint, base("status", "", checkpoint) + ",\"status\":\"ok\",\"instant\":"
                 + checkpoint.instant().ticks() + ",\"residents\":" + state.humanPopulation().residents().size()
                 + ",\"sites\":" + state.resourceSites().sites().size() + ",\"activeScenes\":"
                 + state.sceneLeases().values().stream().filter(lease -> lease.status() != io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.CLOSED).count()
+                + ",\"calendar\":{\"dayIndex\":" + calendar.dayIndex() + ",\"tickOfDay\":" + calendar.tickOfDay()
+                + ",\"ticksPerDay\":" + calendar.ticksPerDay() + ",\"minecraftCycleTime\":"
+                + io.farfrontier.palemirror.internal.calendar.MinecraftCalendarPresentation.project(calendar) + "}"
                 + ",\"selectedSubject\":" + subject + ",\"lastFastForwardRequest\":" + receipt + "}");
     }
 

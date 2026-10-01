@@ -227,6 +227,7 @@ public final class FrontierV3ServerLifecycle {
                 int ambientUnknown = FrontierV3AmbientLeaseRestartSafety.quarantineActiveLeases(runtime);
                 int sceneUnknown = FrontierV3SceneLeaseRestartSafety.quarantineActiveLeases(runtime);
                 int mobilizationUnknown = FrontierV3HiveMobilizationRestartSafety.quarantineReleasingMobilizations(runtime);
+                FrontierV3CalendarBinding.attachActive(physicalWorld, runtime);
                 if (uninspectable > 0) {
                     PaleMirrorMod.LOGGER.error("Frontier v3 quarantined {} uninspectable running physical intent(s) after restart", uninspectable);
                 }
@@ -426,6 +427,7 @@ public final class FrontierV3ServerLifecycle {
             FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(server);
             if (runtime != null) releaseRuntime(server, runtime);
         } finally {
+            io.farfrontier.palemirror.internal.calendar.MinecraftCalendarPresentation.detach(server);
             FrontierV3DiagnosticTrace.forget(server);
             clearFastForwardState(server);
         }

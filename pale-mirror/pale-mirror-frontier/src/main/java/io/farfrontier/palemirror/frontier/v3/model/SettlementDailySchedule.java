@@ -44,19 +44,22 @@ public record SettlementDailySchedule(int dayTicks, List<Segment> segments) {
     }
 
     public Window windowAt(long canonicalTick) {
-        if (canonicalTick < 0) throw new IllegalArgumentException("schedule instant must be non-negative");
-        int offset = (int) (canonicalTick % dayTicks);
+        int offset = calendar().at(canonicalTick).tickOfDay();
         for (Segment segment : segments) if (offset < segment.endExclusive()) return segment.window();
         throw new IllegalStateException("validated schedule omitted its day tail");
     }
 
     public long nextWindowBoundaryAfter(long canonicalTick) {
-        if (canonicalTick < 0) throw new IllegalArgumentException("schedule instant must be non-negative");
-        long dayStart = Math.multiplyExact(canonicalTick / dayTicks, dayTicks);
-        int offset = (int) (canonicalTick % dayTicks);
+        var reading = calendar().at(canonicalTick);
+        long dayStart = reading.dayStart();
+        int offset = reading.tickOfDay();
         for (Segment segment : segments) if (offset < segment.endExclusive()) {
             return Math.addExact(dayStart, segment.endExclusive());
         }
         throw new IllegalStateException("validated schedule omitted its day tail");
+    }
+
+    public io.farfrontier.palemirror.frontier.v3.time.SimulationCalendar calendar() {
+        return new io.farfrontier.palemirror.frontier.v3.time.SimulationCalendar(dayTicks);
     }
 }

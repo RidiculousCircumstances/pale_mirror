@@ -3,6 +3,8 @@
   "package": "io.farfrontier.palemirror.internal.frontier.v3.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
+    "CalendarLevelDataMixin",
+    "CalendarServerLevelDataMixin",
     "FrontierV3GoalNavigationMobMixin",
     "FrontierV3GameTestSliceMixin",
     "FrontierV3ServerEntityTrackerMixin",

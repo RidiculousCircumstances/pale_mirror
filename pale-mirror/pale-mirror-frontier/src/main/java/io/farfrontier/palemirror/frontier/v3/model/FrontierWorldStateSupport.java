@@ -226,6 +226,17 @@ public final class FrontierWorldStateSupport {
         if (inventory.items().values().stream().anyMatch(item -> !owners.contains(item.economicOwnerId()))) throw new IllegalArgumentException("item claim owner must be a canonical frontier economy actor");
     }
 
+    static void validateSettlementPolicies(FrontierBootstrap bootstrap, HumanPopulation population) {
+        Set<SubjectId> expected = bootstrap.settlements().stream().map(Settlement::id)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        if (!population.quarantines().keySet().equals(expected)) {
+            throw new IllegalArgumentException("settlement quarantine index must own every and only canonical settlement");
+        }
+        if (population.schedules().values().stream().anyMatch(schedule -> schedule.dayTicks() != bootstrap.ruleset().residentLife().dayTicks())) {
+            throw new IllegalArgumentException("settlement schedules must use the world's canonical calendar day");
+        }
+    }
+
     static <K, V> Map<K, V> immutableMap(Map<K, V> input, String label) {
         return immutableMap(input, label, null);
     }

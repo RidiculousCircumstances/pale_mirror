@@ -132,6 +132,12 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
 
     FrontierExecutionMetrics executionMetrics() { return configuration.executionMetrics(); }
 
+    /** Last authoritative instant remains readable when execution is stopped or quarantined; no snapshot encoding. */
+    java.util.OptionalLong calendarInstant() {
+        return engine == null ? java.util.OptionalLong.empty()
+                : java.util.OptionalLong.of(engine.canonicalState().instant().ticks());
+    }
+
     /**
      * Returns an immutable image of the current canonical revision for a server-thread adapter.
      *
