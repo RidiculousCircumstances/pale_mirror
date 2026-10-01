@@ -54,6 +54,7 @@ final class FrontierV3BakeryWorkSceneExecutor {
                 || goal.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY)
                 && !ServiceAccessCoordinator.depotAvailableForWork(state,
                         FrontierWorldState.depotId(job.settlementId()), job.id(), job.workerId())) {
+            FrontierV3PhysicalWaitTrace.bakery(worker, state, job, "depot-service-unavailable");
             FrontierV3GoalNavigation.stop(worker);
             return;
         }
@@ -68,6 +69,7 @@ final class FrontierV3BakeryWorkSceneExecutor {
             return;
         }
         if (FrontierV3SemanticMovement.arrived(level, worker, goal.station())) {
+            FrontierV3PhysicalWaitTrace.clear(worker);
             LEGS.remove(worker);
             FrontierV3GoalNavigation.stop(worker);
             if (!lease.memberPosition(job.workerId()).equals(goal.station().standingBody())) {
@@ -100,6 +102,7 @@ final class FrontierV3BakeryWorkSceneExecutor {
         try {
             known = BakeryKnownNavigation.pathFrom(state, job, lease.memberPosition(job.workerId()).supportingSurface());
         } catch (IllegalArgumentException unavailable) {
+            FrontierV3PhysicalWaitTrace.bakery(worker, state, job, "known-route:" + unavailable.getMessage());
             return; // The job remains retained; an unsupported path is not a fabricated arrival.
         }
         LocalNavigationEnvelope envelope;
@@ -108,8 +111,10 @@ final class FrontierV3BakeryWorkSceneExecutor {
         try {
             envelope = LocalNavigationEnvelope.localLeg(known.subList(Math.max(0, targetIndex - LOCAL_LEG), targetIndex + 1), waypoint);
         } catch (IllegalArgumentException tooWide) {
+            FrontierV3PhysicalWaitTrace.bakery(worker, state, job, "local-envelope:" + tooWide.getMessage());
             return;
         }
+        FrontierV3PhysicalWaitTrace.clear(worker);
         MovementOrder leg = new MovementOrder(job.id(), job.workerId(), goal.phase().wireTag(),
                 targetIndex + 1L, List.of(waypoint), TraversalCapability.PEDESTRIAN,
                 MovementOrder.ArrivalPolicy.EXACT_STATION);

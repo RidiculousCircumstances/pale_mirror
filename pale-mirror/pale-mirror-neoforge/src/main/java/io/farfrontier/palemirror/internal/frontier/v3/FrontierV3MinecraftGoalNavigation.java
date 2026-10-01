@@ -120,6 +120,7 @@ final class FrontierV3MinecraftGoalNavigation {
         SurfaceAnchor target = null;
         Path path = null;
         boolean unloaded = false;
+        String rejection = "";
         // A service region is one semantic goal. Minecraft may choose whichever declared
         // support has a reachable, envelope-contained pedestrian path; this does not select
         // another work item or change the canonical task.
@@ -128,14 +129,17 @@ final class FrontierV3MinecraftGoalNavigation {
             if (!level.hasChunkAt(feet)) { unloaded = true; continue; }
             Path candidate = actor.getNavigation().createPath(feet, 0);
             if (candidate == null || !candidate.canReach()
-                    || !pathWithinEnvelope(level, candidate, envelope)) continue;
+                    || !pathWithinEnvelope(level, candidate, envelope)) {
+                if (rejection.isEmpty()) rejection = FrontierV3PathExplanation.rejected(level, station, candidate, envelope);
+                continue;
+            }
             if (path == null || candidate.getNodeCount() < path.getNodeCount()) {
                 path = candidate;
                 target = station;
             }
         }
         if (path == null) return retry(actor, legalStations, envelope, order, level.getGameTime(),
-                unloaded ? "target-chunk-unloaded" : "minecraft-path-unavailable",
+                unloaded ? "target-chunk-unloaded" : "minecraft-path-unavailable[" + rejection + "]",
                 unloaded ? FrontierV3GoalNavigation.BlockReason.TARGET_CHUNK_UNLOADED
                         : FrontierV3GoalNavigation.BlockReason.PATH_UNAVAILABLE);
         if (!actor.getNavigation().moveTo(path, SPEED))

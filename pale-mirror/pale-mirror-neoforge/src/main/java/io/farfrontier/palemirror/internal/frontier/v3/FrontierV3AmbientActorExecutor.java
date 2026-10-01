@@ -154,7 +154,7 @@ final class FrontierV3AmbientActorExecutor {
                 if (stale != null && owned(stale, actorId, bioform(state, actorId))) {
                     var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
                     if (!FrontierV3AmbientCarrierRecognition.retainedClosedRelease(state,
-                            FrontierV3AmbientCarrierRecognition.ManagedCarrier.from(stale), ledger)) continue;
+                            FrontierV3AmbientCarrierRecognition.ManagedCarrier.from(stale), ledger)) { FrontierV3PhysicalWaitTrace.actor(stale, state, actorId, "closed-ambient-release-unproven"); continue; }
                     ledger.persist(level, state.bootstrap().worldId());
                     stale.discard();
                 }
@@ -284,8 +284,8 @@ final class FrontierV3AmbientActorExecutor {
             if (closedReturn == FrontierV3SceneExecutor.ClosedSceneReturnRecovery.LIVE_BODY
                     || closedReturn == FrontierV3SceneExecutor.ClosedSceneReturnRecovery.PENDING
                     || closedReturn == FrontierV3SceneExecutor.ClosedSceneReturnRecovery.CONFLICT) {
-                // The retained scene path either owns the live UUID, is not yet safely observed,
-                // or has exposed local ambiguity.  Generic ambient admission must not invent a
+                FrontierV3PhysicalWaitTrace.actor(level.getEntity(entityId(state, actorId)), state, actorId, "closed-scene-return:" + closedReturn);
+                // Retained scene custody or local ambiguity cannot authorize a
                 // second authority in any of those cases.
                 continue;
             }
