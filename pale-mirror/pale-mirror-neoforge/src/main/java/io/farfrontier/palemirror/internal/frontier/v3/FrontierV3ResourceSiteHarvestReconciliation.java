@@ -43,7 +43,8 @@ final class FrontierV3ResourceSiteHarvestReconciliation {
                     observed.orElseThrow(), reviewed.stack().orElseThrow());
             try { ResourceSiteHarvestSceneReconciliation.reduce(state, job.siteId(), receipt); }
             catch (IllegalArgumentException unresolved) { continue; }
-            FrontierV3CommandSubmission.submit(runtime, "resource-site-harvest-scene-reconciled", lease.id().value(), receipt);
+            FrontierV3DiagnosticTrace.recordScene(level.getServer(), "resource_site_harvest_scene_reconciled", lease,
+                    FrontierV3CommandSubmission.submit(runtime, "resource-site-harvest-scene-reconciled", lease.id().value(), receipt));
             return true;
         }
         return false;
