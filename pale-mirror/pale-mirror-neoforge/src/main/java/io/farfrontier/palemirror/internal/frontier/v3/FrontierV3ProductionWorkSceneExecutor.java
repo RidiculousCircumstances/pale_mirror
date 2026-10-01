@@ -31,7 +31,7 @@ final class FrontierV3ProductionWorkSceneExecutor {
     private static boolean admit(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state) {
         Optional<FrontierProductionWorkSceneSupport.Candidate> candidate = FrontierV3SceneTurnScheduler.candidate(
                 runtime, SceneCauseKind.PRODUCTION_WORK, FrontierProductionWorkSceneSupport.candidates(state).stream()
-                .filter(value -> !ResidentActivityCoordinator.requestsYield(state, value.workerId(),
+                .filter(value -> !ResidentActivityCoordinator.shouldYieldAtOwnerCheckpoint(state, value.workerId(),
                         runtime.checkpointImage().orElseThrow().instant().ticks()))
                 // A current exact depot custody epoch is physical eligibility, not presentation
                 // demand.  It may therefore admit the same retained worker/workshop cycle while

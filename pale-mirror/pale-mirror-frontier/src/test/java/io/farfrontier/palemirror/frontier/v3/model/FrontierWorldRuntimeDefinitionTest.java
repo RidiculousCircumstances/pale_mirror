@@ -71,7 +71,9 @@ class FrontierWorldRuntimeDefinitionTest {
             FrontierWorldState state = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
             AmbientActorLease lease = AmbientActorProcess.nextLease(state, participant, engine.checkpoint().instant());
             assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class, submit(engine, world, "assembly-prepare-" + participant.value(), new AmbientLeasePrepared(lease)));
-            assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class, submit(engine, world, "assembly-hot-" + participant.value(), new AmbientLeaseTransition(participant, AmbientLeaseStatus.HOT)));
+            assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class,
+                    submit(engine, world, "assembly-hot-" + participant.value(), new AmbientBodyConfirmed(participant,
+                            lease.revision(), AmbientBodyConfirmed.Boundary.ADMISSION, lease.handoffBody(), lease.handoffBody())));
         }
         int sequence = 0;
         while (true) {
@@ -125,7 +127,7 @@ class FrontierWorldRuntimeDefinitionTest {
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class,
                 submit(engine, world, "assembly-deferral-prepare", new AmbientLeasePrepared(lease)));
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class,
-                submit(engine, world, "assembly-deferral-hot", new AmbientLeaseTransition(actor, AmbientLeaseStatus.HOT)));
+                submit(engine, world, "assembly-deferral-hot", new AmbientBodyConfirmed(actor, lease.revision(), AmbientBodyConfirmed.Boundary.ADMISSION, lease.handoffBody(), lease.handoffBody())));
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class,
                 submit(engine, world, "assembly-deferral", new OperationAssemblyDeferred(operation.id(), deferral)));
 

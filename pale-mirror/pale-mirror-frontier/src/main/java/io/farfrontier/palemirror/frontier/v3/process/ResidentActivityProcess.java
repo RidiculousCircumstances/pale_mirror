@@ -40,9 +40,11 @@ public final class ResidentActivityProcess {
         ActorLocation actor = state.actorLocations().get(residentId);
         if (resident == null || actor == null || actor.condition().status() != ActorLifeStatus.ALIVE)
             return false;
-        if (state.humanPopulation().meals().containsKey(residentId)
-                || state.actorMovements().containsKey(residentId)) return true;
         long now = Math.max(action.dueAt().ticks(), state.humanPopulation().nutrition(residentId).lastEvaluatedTick());
+        if (state.humanPopulation().meals().containsKey(residentId)) return true;
+        if (state.actorMovements().containsKey(residentId))
+            return !(interruption(state, residentId, now,
+                    ResidentActivityExecutionComposition.INTERRUPTION) instanceof ActivityInterruptionPlanner.Ready);
         ResidentNutrition nutrition = state.humanPopulation().nutrition(residentId).accrueThrough(now,
                 state.bootstrap().ruleset().residentLife(), resident.characteristics().effectiveMetabolismPermille(now));
         if (nutrition.hungerDeficit() < state.bootstrap().ruleset().residentLife().hungryThreshold()) return false;
@@ -83,6 +85,12 @@ public final class ResidentActivityProcess {
     }
 
     public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, long currentTick) {
+        return plan(state, action, currentTick, ResidentActivityExecutionComposition.INTERRUPTION);
+    }
+
+    /** Composition supplies the owner interruption port; selection never examines a service route. */
+    static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, long currentTick,
+                                   ActivityInterruptionPlanner interruptions) {
         if (!action.kind().equals(REVIEW) || !action.equals(review(action.subject(), action.dueAt().ticks())))
             throw new IllegalArgumentException("activity review has a foreign scheduled identity");
         ResidentProfile resident = state.humanPopulation().resident(action.subject());
@@ -94,22 +102,44 @@ public final class ResidentActivityProcess {
         // at its historical instant would run time backwards and quarantine the world.
         long now = Math.max(Math.max(action.dueAt().ticks(), currentTick),
                 state.humanPopulation().nutrition(action.subject()).lastEvaluatedTick());
-        ResidentActivityChoice choice = ResidentActivityCoordinator.assess(state, action.subject(), now);
         List<ProposedEvent> events = new ArrayList<>();
+        if (state.actorMovements().containsKey(action.subject())) {
+            var assessment = interruption(state, action.subject(), now, interruptions);
+            if (assessment instanceof ActivityInterruptionPlanner.Ready ready) {
+                events.addAll(ready.events());
+                state = ready.following();
+            }
+        }
+        FrontierWorldState selectedState = state;
+        ResidentActivityChoice choice = ResidentActivityCoordinator.assess(selectedState, action.subject(), now);
         if (choice.kind() == ResidentActivityChoice.Kind.EAT
                 && !state.humanPopulation().meals().containsKey(action.subject())
                 && !state.actorMovements().containsKey(action.subject())) {
-            ResidentMealProcess.selectSourceAtYield(state, action.subject(), now).ifPresent(started -> {
+            ResidentMealProcess.selectSourceAtYield(selectedState, action.subject(), now).ifPresent(started -> {
                 events.add(new ProposedEvent(action.subject(), started));
                 events.add(new ProposedEvent(action.subject(), new ScheduleEffect.Created(
                         ResidentMealProcess.progress(started.meal(), Math.addExact(now, 1L)))));
             });
         }
-        long next = nextReview(state, resident, now, choice, !events.isEmpty(),
+        boolean mealStarted = events.stream().anyMatch(event -> event.payload() instanceof ResidentMealStarted);
+        long next = nextReview(state, resident, now, choice, mealStarted,
                 state.humanPopulation().meals().containsKey(action.subject()));
         events.add(new ProposedEvent(action.subject(), new ScheduleEffect.Rescheduled(action.id(),
                 review(action.subject(), next))));
         return List.copyOf(events);
+    }
+
+    private static ActivityInterruptionPlanner.Assessment interruption(FrontierWorldState state,
+            SubjectId residentId, long now, ActivityInterruptionPlanner planner) {
+        var assessment = planner.assess(state, residentId, now);
+        if (!(assessment instanceof ActivityInterruptionPlanner.Ready ready)) return assessment;
+        ready.validate(state, residentId);
+        ResidentActivityChoice next = ResidentActivityCoordinator.assess(ready.following(), residentId, now);
+        if (next.kind() == ResidentActivityChoice.Kind.WORK
+                || next.kind() == ResidentActivityChoice.Kind.EAT
+                    && ResidentMealOpportunity.find(ready.following(), residentId).isPresent()) return ready;
+        // An optional idle journey continues unless a real higher-priority activity can replace it.
+        return new ActivityInterruptionPlanner.Waiting(ActivityInterruptionPlanner.Reason.AUTHORITY_HANDOFF);
     }
 
     private static long nextReview(FrontierWorldState state, ResidentProfile resident, long now,

@@ -30,6 +30,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class FrontierV3LocalNavigationGameTests {
     private FrontierV3LocalNavigationGameTests() { }
 
+
     @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
             template = "bastion/mobs/empty", timeoutTicks = 65)
     public static void minecraftGoalNavigatorReportsAnUnreachableGoalWithinFinitePhysicalTurns(GameTestHelper helper) {
@@ -677,20 +678,17 @@ public final class FrontierV3LocalNavigationGameTests {
         SurfaceAnchor current = SurfaceAnchor.at(currentSupport.getX(), currentSupport.getY(), currentSupport.getZ());
         SurfaceAnchor next = SurfaceAnchor.at(nextSupport.getX(), nextSupport.getY(), nextSupport.getZ());
 
-        for (int turn = 1; turn <= 32; turn++) {
-            helper.runAtTickTime(turn, () -> {
-                FrontierV3ControlledMobMotion.advance(worker);
-                if (!FrontierV3SemanticMovement.arrived(helper.getLevel(), worker, next)) {
+        helper.runAfterDelay(1, () -> {
+            for (int turn = 0; turn < 45; turn++) {
+                if (!FrontierV3SemanticMovement.arrived(helper.getLevel(), worker, next))
                     FrontierV3ProductionWorkSceneExecutor.pursueRetainedTraversalEdge(helper.getLevel(), worker, current, next);
-                }
-            });
-        }
-        helper.runAtTickTime(33, () -> {
-            FrontierV3ControlledMobMotion.advance(worker);
+                FrontierV3MobMotionLifecycle.advanceAtEntityBoundary(worker);
+                worker.aiStep();
+            }
             helper.assertTrue(FrontierV3SemanticMovement.arrived(helper.getLevel(), worker, next),
                     "a descending retained production edge must reach its named lower support without changing cursor authority: "
                             + worker.position() + " trace=" + FrontierV3ControlledMobMotion.trace(worker));
-            FrontierV3ControlledMobMotion.stop(worker); worker.discard(); helper.succeed();
+            FrontierV3GoalNavigation.stop(worker); worker.discard(); helper.succeed();
         });
     }
 

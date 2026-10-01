@@ -49,10 +49,12 @@ public final class ServiceAccessCoordinator {
         Objects.requireNonNull(residentId, "service access resident");
         var first = state.humanPopulation().meals().values().stream()
                 .filter(meal -> meal.depotId().equals(depotId) && mealOccupiesAccess(state, meal))
-                .min(Comparator.comparingLong(ResidentMeal::startedAtTick).thenComparing(ResidentMeal::residentId));
+                .min(Comparator.<ResidentMeal, Boolean>comparing(meal -> physicallyAdmitted(state, meal.residentId())).reversed()
+                        .thenComparingLong(ResidentMeal::startedAtTick).thenComparing(ResidentMeal::residentId));
         boolean departing = state.actorMovements().values().stream().anyMatch(movement ->
                 movement.context() instanceof io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.ServiceExit exit
                         && exit.depotId().equals(depotId)
+                        && !awaitingBody(state, movement.order().actorId())
                         && boundary(state, depotId).occupied(currentBody(state, movement.order().actorId()))
                         && !movement.order().actorId().equals(residentId));
         // A committed final entrance leg is the sole contender for the
@@ -96,6 +98,7 @@ public final class ServiceAccessCoordinator {
         boolean departing = state.actorMovements().values().stream().anyMatch(movement ->
                 movement.context() instanceof io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.ServiceExit exit
                         && exit.depotId().equals(depotId)
+                        && !awaitingBody(state, movement.order().actorId())
                         && boundary(state, depotId).occupied(currentBody(state, movement.order().actorId())));
         return applicant.filter(first -> !mealAtPort && !mealEnteringPort && !departing && !workerEating)
                 .map(first -> first.jobId().equals(jobId) && first.workerId().equals(workerId))
@@ -108,10 +111,18 @@ public final class ServiceAccessCoordinator {
     }
 
     private static boolean mealOccupiesAccess(FrontierWorldState state, ResidentMeal meal) {
+        AmbientActorLease lease = state.ambientLeases().get(meal.residentId());
+        // A frozen handoff location is not a live socket occupant. Admission confirms
+        // its actual body first; a blocked creation cannot hold a phantom service turn.
+        if (lease != null && lease.status() == AmbientLeaseStatus.PREPARED) return false;
         ActorLocation actor = state.actorLocations().get(meal.residentId());
         // Starting a meal reserves bread, not the depot's sole service socket.
         // Otherwise the entire approach and return journey serializes all meals.
         return actor == null || !port(state, meal.depotId()).accessBoundary().cleared(actor.body());
+    }
+    private static boolean physicallyAdmitted(FrontierWorldState state, SubjectId actorId) {
+        AmbientActorLease lease = state.ambientLeases().get(actorId);
+        return lease != null && (lease.status() == AmbientLeaseStatus.HOT || lease.status() == AmbientLeaseStatus.DRAINING);
     }
 
     /** The same physical boundary test is used before HOT submission and by its reducer. */
@@ -185,6 +196,7 @@ public final class ServiceAccessCoordinator {
     }
 
     private static SurfaceAnchor currentSurface(FrontierWorldState state, SubjectId workerId) {
+        if (awaitingBody(state, workerId)) return null;
         BodyPosition leased = state.sceneLeases().values().stream()
                 .filter(lease -> lease.status() != SceneLeaseStatus.CLOSED
                         && lease.retainsMemberCustody(workerId))
@@ -194,6 +206,12 @@ public final class ServiceAccessCoordinator {
         if (leased != null) return leased.supportingSurface();
         ActorLocation actor = state.actorLocations().get(workerId);
         return actor == null ? null : actor.supportingSurface();
+    }
+    private static boolean awaitingBody(FrontierWorldState state, SubjectId actorId) {
+        AmbientActorLease ambient = state.ambientLeases().get(actorId);
+        return ambient != null && ambient.status() == AmbientLeaseStatus.PREPARED
+                || state.sceneLeases().values().stream().anyMatch(lease -> lease.status() == SceneLeaseStatus.PREPARED
+                        && lease.retainsMemberCustody(actorId));
     }
 
     private static BodyPosition currentBody(FrontierWorldState state, SubjectId actorId) {

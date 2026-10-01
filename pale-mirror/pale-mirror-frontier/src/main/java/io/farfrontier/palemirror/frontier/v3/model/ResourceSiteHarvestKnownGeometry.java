@@ -19,6 +19,15 @@ public final class ResourceSiteHarvestKnownGeometry {
     }
 
     /** The real terrain support, except for declared settlement ground and field farmland. */
+    public static BoundedPedestrianApproach.SurveyedSurface surveyedSupports(FrontierWorldState state, ResourceSite site) {
+        BoundedPedestrianApproach.SurveyedSurface ground = KnownPedestrianGround.forSettlement(state, site.settlementId());
+        Map<Long, SurfaceAnchor> field = new HashMap<>();
+        for (BlockPosition crop : site.cropSlots())
+            field.put(column(crop.x(), crop.z()), new SurfaceAnchor(crop.offset(0, -1, 0)));
+        return (x, z) -> field.getOrDefault(column(x, z), ground.at(x, z));
+    }
+
+    /** Historical traversal decoding has no current road topology; active goals use the state overload. */
     public static BoundedPedestrianApproach.SurveyedSurface surveyedSupports(FrontierBootstrap bootstrap, ResourceSite site) {
         Objects.requireNonNull(bootstrap, "field navigation bootstrap");
         Objects.requireNonNull(site, "field navigation site");

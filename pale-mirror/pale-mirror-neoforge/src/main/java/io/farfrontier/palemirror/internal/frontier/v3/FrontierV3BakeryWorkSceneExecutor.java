@@ -51,10 +51,7 @@ final class FrontierV3BakeryWorkSceneExecutor {
             FrontierV3GoalNavigation.stop(worker);
             return;
         }
-        if (job.bakeryWork().orElseThrow().pendingPhysicalStep().isEmpty()
-                && !state.inventory().fungibleResources().accounts().containsKey(
-                        job.bakeryWork().orElseThrow().actorAccountId())
-                && ResidentActivityCoordinator.requestsYield(state, job.workerId(),
+        if (ResidentActivityCoordinator.shouldYieldAtOwnerCheckpoint(state, job.workerId(),
                         runtime.checkpointImage().orElseThrow().instant().ticks())
                 && FrontierV3SemanticMovement.arrived(level, worker, goal.station())) {
             FrontierV3CommandSubmission.submit(runtime, "bakery-resident-yield", lease.id().value(),

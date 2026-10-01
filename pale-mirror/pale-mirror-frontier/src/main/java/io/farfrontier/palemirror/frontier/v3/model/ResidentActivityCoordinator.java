@@ -50,6 +50,14 @@ public final class ResidentActivityCoordinator {
     }
 
     /** A work owner asks the same arbiter used by self-care before admitting its next safe step. */
+    public static boolean shouldYieldAtOwnerCheckpoint(FrontierWorldState state,
+            io.farfrontier.palemirror.frontier.v3.api.SubjectId residentId, long atTick) {
+        return requestsYield(state, residentId, atTick)
+                && ActivityExecutionCapabilities.assess(state,
+                    HumanAssignmentProjection.compile(state).assignment(residentId)).ready();
+    }
+
+    /** A work owner asks the same arbiter used by self-care before admitting its next safe step. */
     public static boolean ordinaryWorkPermitted(FrontierWorldState state,
                                                 io.farfrontier.palemirror.frontier.v3.api.SubjectId residentId,
                                                 long dueAt) {
@@ -144,8 +152,8 @@ public final class ResidentActivityCoordinator {
                 throw new IllegalArgumentException("retained meal cannot replace a foreign resident activity");
             if (!meal.retainedWorkOwner().equals(assignment.ownerId()))
                 throw new IllegalArgumentException("retained meal lost or replaced its exact work assignment");
-            // After confirmed consumption the deficit may be zero, but RETURN is still the
-            // same retained activity; work must not retake the body before it completes.
+            // An unconsumed retained meal owns execution; consumption retires it.
+            // Optional later movement is a separate, safely interruptible activity.
             return new ResidentActivityChoice(assignment.residentId(),
                     ResidentActivityChoice.Kind.EAT, meal.retainedWorkOwner(), Optional.empty());
         }

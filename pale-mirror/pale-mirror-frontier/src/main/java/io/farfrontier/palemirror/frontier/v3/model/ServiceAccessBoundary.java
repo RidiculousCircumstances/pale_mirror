@@ -17,4 +17,15 @@ public record ServiceAccessBoundary(Set<SurfaceAnchor> occupiedSurfaces) {
     public boolean cleared(BodyPosition body) {
         return body != null && !occupied(body);
     }
+
+    /** An unauthorized occupant may leave the throat, but may not re-enter it en route to waiting. */
+    public boolean allowsWaitingRoute(java.util.List<SurfaceAnchor> route) {
+        boolean outside = false;
+        for (SurfaceAnchor surface : route) {
+            boolean inside = occupied(surface.standingBody());
+            if (outside && inside) return false;
+            if (!inside) outside = true;
+        }
+        return outside;
+    }
 }

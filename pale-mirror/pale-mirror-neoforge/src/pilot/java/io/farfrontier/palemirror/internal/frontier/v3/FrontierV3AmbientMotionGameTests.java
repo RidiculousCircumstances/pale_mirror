@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierV3FixtureCatalog;
 
 import io.farfrontier.palemirror.PaleMirrorMod;
+import io.farfrontier.palemirror.frontier.v3.model.AmbientBodyConfirmed;
 import io.farfrontier.palemirror.internal.world.SourceGrayboxEntityAdmission;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
@@ -115,7 +116,7 @@ public final class FrontierV3AmbientMotionGameTests {
         helper.assertFalse(FrontierV3AmbientActorExecutor.recognizes(runtime, forged),
                 "a copied V3 tag without the canonical UUID is never an admissible carrier");
         FrontierV3CommandSubmission.submit(runtime, "ambient-prepared-game-test-hot", resident.value(),
-                new AmbientLeaseTransition(resident, AmbientLeaseStatus.HOT));
+                new AmbientBodyConfirmed(resident, lease.revision(), AmbientBodyConfirmed.Boundary.ADMISSION, lease.handoffBody(), lease.handoffBody()));
         helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state(runtime), resident,
                         bodyAt(origin)), FrontierV3AmbientActorExecutor.Result.CURRENT,
                 "the durable HOT acknowledgement retains the one existing UUID rather than duplicating it");
@@ -127,9 +128,12 @@ public final class FrontierV3AmbientMotionGameTests {
                         bodyAt(carpet.above())), FrontierV3AmbientActorExecutor.Result.APPLIED,
                 "an owned infection carpet is a physical surface, not a reason to strand the canonical actor");
         Villager carpetBody = (Villager) level.getEntity(FrontierV3AmbientActorExecutor.entityId(state(runtime), carpetResident));
-        helper.assertTrue(carpetBody != null && carpetBody.getY() >= carpet.getY() + 1.0D
+        SurfaceAnchor carpetSurface = SurfaceAnchor.at(carpet.getX(), carpet.getY(), carpet.getZ());
+        helper.assertTrue(carpetBody != null
+                        && FrontierV3BodyObservation.capture(carpetBody).support().filter(carpetSurface::equals).isPresent()
+                        && level.noCollision(carpetBody, carpetBody.getBoundingBox())
                         && level.getBlockState(carpet).is(Blocks.RED_CARPET),
-                "the exact body must stand above the carpet without replacing it: body="
+                "the exact body must stand on the actual carpet collision top without replacing it: body="
                         + (carpetBody == null ? "missing" : carpetBody.position()) + " carpet=" + carpet);
         helper.assertFalse(FrontierV3AmbientActorExecutor.observeLeave(runtime, body, false),
                 "an ordinary EntityLeave callback is too late to close a serialized HOT body into COLD");
@@ -252,7 +256,8 @@ public final class FrontierV3AmbientMotionGameTests {
         AmbientActorLease lease = new AmbientActorLease(resident, anchor, runtime.checkpointImage().orElseThrow().instant(), 1L,
                 AmbientLeaseStatus.PREPARED, AmbientGoalKind.WORK, anchor);
         FrontierV3CommandSubmission.submit(runtime, "ambient-restart-absence-prepare", resident.value(), new AmbientLeasePrepared(lease));
-        FrontierV3CommandSubmission.submit(runtime, "ambient-restart-absence-hot", resident.value(), new AmbientLeaseTransition(resident, AmbientLeaseStatus.HOT));
+        FrontierV3CommandSubmission.submit(runtime, "ambient-restart-absence-hot", resident.value(),
+                new AmbientBodyConfirmed(resident, lease.revision(), AmbientBodyConfirmed.Boundary.ADMISSION, lease.handoffBody(), lease.handoffBody()));
         helper.assertValueEqual(FrontierV3AmbientLeaseRestartSafety.quarantineActiveLeases(runtime), 1,
                 "an active body becomes explicitly unknown at restart");
         FrontierWorldState unknown = state(runtime);

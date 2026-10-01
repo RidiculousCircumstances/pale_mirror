@@ -7,6 +7,7 @@ import io.farfrontier.palemirror.frontier.v3.model.BodyPosition;
 import io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementColdAdvanced;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementHotObserved;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementInterrupted;
 
 import java.util.List;
 import java.util.Optional;
@@ -15,7 +16,24 @@ import java.util.Optional;
 final class ActorMovementPayloadCodecs {
     private ActorMovementPayloadCodecs() { }
 
-    static PayloadCodecs create() { return new PayloadCodecs(List.of(coldAdvanced(), hotObserved())); }
+    static PayloadCodecs create() { return new PayloadCodecs(List.of(coldAdvanced(), hotObserved(), interrupted())); }
+
+    private static PayloadCodec interrupted() { return new PayloadCodec() {
+        @Override public String type() { return "frontier.actor_movement_interrupted"; }
+        @Override public byte[] encode(FrontierPayload payload) {
+            return FrontierWorldPayloadCodecs.encodeProduction(out -> {
+                ActorMovementInterrupted value = (ActorMovementInterrupted) payload;
+                FrontierWorldPayloadCodecs.writeSubject(out, value.actorId());
+                out.writeLong(value.goalRevision()); out.writeLong(value.atTick());
+                FrontierWorldPayloadCodecs.writePosition(out, value.retainedBody().supportingSurface().support());
+            });
+        }
+        @Override public FrontierPayload decode(byte[] bytes) {
+            return FrontierWorldPayloadCodecs.decodeProduction(bytes, in -> new ActorMovementInterrupted(
+                    FrontierWorldPayloadCodecs.readSubject(in).value(), in.readLong(), in.readLong(),
+                    BodyPosition.above(new SurfaceAnchor(FrontierWorldPayloadCodecs.readPosition(in)))));
+        }
+    }; }
 
     private static PayloadCodec coldAdvanced() { return new PayloadCodec() {
         @Override public String type() { return "frontier.actor_movement_cold_advanced"; }

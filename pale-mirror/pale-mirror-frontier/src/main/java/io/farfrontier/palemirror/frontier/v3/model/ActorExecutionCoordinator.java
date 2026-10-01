@@ -107,11 +107,11 @@ public final class ActorExecutionCoordinator {
         SubjectId resident = assignment.residentId();
         AmbientActorLease ambient = state.ambientLeases().get(resident);
         boolean safeAmbient = ambient != null && ambient.status() == AmbientLeaseStatus.HOT
-                && ordinaryAmbientPurpose(ambient.goal());
+                && (ordinaryAmbientPurpose(ambient.goal())
+                    || ambient.goal() == AmbientGoalKind.ACTOR_MOVEMENT
+                        && !state.actorMovements().containsKey(resident));
         if ((!ambientAvailable(state, List.of(resident)) && !safeAmbient) || sceneOwns(state, resident))
             return new ResidentWorkYield(resident, assignment, ResidentWorkYield.Status.SCENE_OR_AMBIENT_AUTHORITY);
-        if (carriesResource(state, resident))
-            return new ResidentWorkYield(resident, assignment, ResidentWorkYield.Status.CARRYING_RESOURCE);
         return ActivityExecutionCapabilities.assess(state, assignment);
     }
 

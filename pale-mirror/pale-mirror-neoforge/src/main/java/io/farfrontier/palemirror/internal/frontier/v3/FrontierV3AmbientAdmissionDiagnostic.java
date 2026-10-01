@@ -59,5 +59,6 @@ record FrontierV3AmbientAdmissionDiagnostic(String status, UUID entityId, boolea
         return new FrontierV3AmbientAdmissionDiagnostic("ENTITY_STORAGE_PENDING", entityId, false, placement, null, null);
     }
     static FrontierV3AmbientAdmissionDiagnostic blocked(UUID entityId, BlockPosition placement) { return new FrontierV3AmbientAdmissionDiagnostic("BLOCKED", entityId, false, placement, null, null); }
+    static FrontierV3AmbientAdmissionDiagnostic occupied(UUID entityId, BlockPosition placement) { return new FrontierV3AmbientAdmissionDiagnostic("BODY_SPACE_OCCUPIED", entityId, false, placement, null, null); }
     static FrontierV3AmbientAdmissionDiagnostic ready(UUID entityId, BlockPosition placement) { return new FrontierV3AmbientAdmissionDiagnostic("READY", entityId, false, placement, null, null); }
 }

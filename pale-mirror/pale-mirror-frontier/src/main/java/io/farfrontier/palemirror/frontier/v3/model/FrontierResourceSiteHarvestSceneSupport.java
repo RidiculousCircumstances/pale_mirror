@@ -25,7 +25,9 @@ public final class FrontierResourceSiteHarvestSceneSupport {
             throw new IllegalArgumentException("field checkpoint names a foreign worker");
         return new ActivityExecutionCheckpoint(state, assignment,
                 job.progress().hasPendingCrop() || state.resourceSites().hasPendingWorldChange(job.siteId())
-                        ? ResidentWorkYield.Status.PENDING_PHYSICAL_EFFECT : ResidentWorkYield.Status.READY);
+                        ? ResidentWorkYield.Status.PENDING_PHYSICAL_EFFECT
+                        : state.inventory().fungibleResources().accounts().containsKey(job.actorAccountId())
+                            ? ResidentWorkYield.Status.CARRYING_RESOURCE : ResidentWorkYield.Status.READY);
     }
 
     /**

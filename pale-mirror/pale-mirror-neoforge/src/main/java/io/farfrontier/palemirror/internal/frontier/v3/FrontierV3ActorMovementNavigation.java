@@ -12,7 +12,8 @@ import java.util.WeakHashMap;
 
 /** Physical execution of the same actor goal that remains canonical through COLD/HOT. */
 final class FrontierV3ActorMovementNavigation {
-    private record Route(long leaseRevision, long goalRevision, List<SurfaceAnchor> waypoints) { }
+    private record Route(long leaseRevision, long goalRevision, RouteTopology topology,
+                         Map<BlockPosition, PhysicalDelta> physicalDeltas, List<SurfaceAnchor> waypoints) { }
     private static final Map<Mob, Route> ROUTES = new WeakHashMap<>();
     private static final Map<Mob, String> BLOCKED = new WeakHashMap<>();
 
@@ -28,13 +29,14 @@ final class FrontierV3ActorMovementNavigation {
         }
         Route route = ROUTES.get(body);
         if (route == null || route.leaseRevision() != lease.revision()
-                || route.goalRevision() != movement.order().goalRevision()) {
+                || route.goalRevision() != movement.order().goalRevision()
+                || route.topology() != state.routeTopology() || route.physicalDeltas() != state.physicalDeltas()) {
             try {
                 ActorMovementContext.ServiceExit serviceExit = (ActorMovementContext.ServiceExit) movement.context();
                 ResidentProfile resident = state.humanPopulation().resident(movement.order().actorId());
                 if (resident == null || !resident.settlementId().equals(serviceExit.settlementId()))
                     throw new IllegalArgumentException("movement actor lacks its declared service-exit owner");
-                route = new Route(lease.revision(), movement.order().goalRevision(),
+                route = new Route(lease.revision(), movement.order().goalRevision(), state.routeTopology(), state.physicalDeltas(),
                         KnownServiceExitNavigation.pathFrom(state, serviceExit.settlementId(),
                                 serviceExit.depotId(), movement.order(),
                                 FrontierV3SurfaceObservation.observedBody(body).supportingSurface()));

@@ -21,6 +21,19 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class KnownPedestrianRouteKnowledgeTest {
+    @Test void clearwaterRoadHintsUseTheProjectedTopRatherThanTerrainUnderTheRoad() {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:clearwater-road-support"), 20260918065L));
+        var knowledge = KnownPedestrianRouteKnowledge.forSettlement(state, new SubjectId("settlement:7"), List.of());
+        BlockPosition road = new BlockPosition(115, 64, 14);
+        assertTrue(FrontierRouteNetwork.footprint(state.bootstrap(), state.routeTopology()).surfaceCells().contains(road));
+        assertEquals(new SurfaceAnchor(road), knowledge.supportAt(road.x(), road.z()));
+        var recovered = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().decode(
+                new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().encode(state));
+        assertEquals(knowledge.supportAt(115, 14),
+                KnownPedestrianRouteKnowledge.forSettlement(recovered, new SubjectId("settlement:7"), List.of())
+                        .supportAt(115, 14));
+    }
     @Test void crowdCannotTurnAServiceExitIntoPermanentKnownTerrain() {
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:known-pedestrian-crowd"), 20260918065L));

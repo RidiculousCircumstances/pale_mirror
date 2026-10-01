@@ -44,7 +44,12 @@ public final class AmbientActorProcess {
         return new CommandPlan.Accepted(List.of(new ProposedEvent(owner(state, prepared.lease().actorId()), prepared)));
     }
     public static CommandPlan plan(FrontierWorldState state, AmbientLeaseTransition transition) {
-        try { AmbientLeaseStateProcess.transition(state, transition.actorId(), transition.status()); } catch (IllegalArgumentException invalid) { return rejected(invalid); }
+        try {
+            AmbientActorLease current = state.ambientLeases().get(transition.actorId());
+            if (current != null && current.status() == AmbientLeaseStatus.PREPARED && transition.status() == AmbientLeaseStatus.HOT)
+                throw new IllegalArgumentException("fresh HOT admission requires exact physical body confirmation");
+            AmbientLeaseStateProcess.transition(state, transition.actorId(), transition.status());
+        } catch (IllegalArgumentException invalid) { return rejected(invalid); }
         return new CommandPlan.Accepted(List.of(new ProposedEvent(owner(state, transition.actorId()), transition)));
     }
     public static CommandPlan plan(FrontierWorldState state, AmbientLeaseReleased release) {
@@ -88,6 +93,7 @@ public final class AmbientActorProcess {
                                         io.farfrontier.palemirror.frontier.v3.api.FrontierPayload payload,
                                         long currentTick) {
         return switch (payload) {
+            case AmbientBodyConfirmed confirmed -> plan(state, confirmed);
             case AmbientLeasePrepared prepared -> plan(state, prepared);
             case AmbientLeaseTransition transition -> plan(state, transition);
             case AmbientLeaseReleased release -> plan(state, release, currentTick);
@@ -147,12 +153,21 @@ public final class AmbientActorProcess {
     }
     public static FrontierWorldState reduceLease(FrontierWorldState state, SubjectId subject, SimInstant instant, io.farfrontier.palemirror.frontier.v3.api.FrontierPayload payload) {
         return switch (payload) {
+            case AmbientBodyConfirmed confirmed -> {
+                if (!subject.equals(owner(state, confirmed.actorId()))) throw new IllegalArgumentException("body confirmation lacks its canonical owner");
+                yield AmbientBodyConfirmationProcess.reduce(state, confirmed);
+            }
             case AmbientLeasePrepared prepared -> reduce(state, subject, instant, prepared);
             case AmbientLeaseTransition transition -> reduce(state, subject, transition);
             case AmbientLeaseReleased release -> reduce(state, subject, release);
             case AmbientLeaseRestartAbsenceObserved absence -> reduce(state, subject, absence);
             default -> throw new IllegalArgumentException("payload is not an ambient lease transition");
         };
+    }
+    public static CommandPlan plan(FrontierWorldState state, AmbientBodyConfirmed confirmed) {
+        try { AmbientBodyConfirmationProcess.reduce(state, confirmed); }
+        catch (IllegalArgumentException invalid) { return rejected(invalid); }
+        return new CommandPlan.Accepted(List.of(new ProposedEvent(owner(state, confirmed.actorId()), confirmed)));
     }
 
     private static void validate(FrontierWorldState state, AmbientActorDied death) {

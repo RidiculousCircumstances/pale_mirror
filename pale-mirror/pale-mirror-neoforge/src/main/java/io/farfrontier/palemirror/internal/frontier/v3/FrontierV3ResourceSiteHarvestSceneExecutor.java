@@ -66,7 +66,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         // made that exact mature/partial crop state current in the loaded world.
         Optional<FrontierResourceSiteHarvestSceneSupport.Candidate> candidate = FrontierV3SceneDemand.nextDemandedCandidate(
                 level, runtime, io.farfrontier.palemirror.frontier.v3.model.SceneCauseKind.RESOURCE_SITE_HARVEST, FrontierResourceSiteHarvestSceneSupport.candidates(state).stream()
-                        .filter(value -> !ResidentActivityCoordinator.requestsYield(state, value.workerId(),
+                        .filter(value -> !ResidentActivityCoordinator.shouldYieldAtOwnerCheckpoint(state, value.workerId(),
                                 runtime.checkpointImage().orElseThrow().instant().ticks()))
                         .filter(value -> fieldPresentationCurrent(level, state, value))
                         .filter(value -> !FrontierV3HarvestSceneStandingAdmission.obstructedBodyFreeColumn(level,
@@ -297,9 +297,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         // The scene owns its safe point: never interrupt a prepared crop or carried wheat.
         // Once the exact stationary worker is empty-handed, return the same body to the
         // resident coordinator before beginning another crop or route leg.
-        if (!job.progress().hasPendingCrop() && !state.resourceSites().hasPendingWorldChange(job.siteId())
-                && !state.inventory().fungibleResources().accounts().containsKey(job.actorAccountId())
-                && ResidentActivityCoordinator.requestsYield(state, job.workerId(),
+        if (ResidentActivityCoordinator.shouldYieldAtOwnerCheckpoint(state, job.workerId(),
                         runtime.checkpointImage().orElseThrow().instant().ticks())
                 && ResourceSiteHarvestGoal.current(state, job).legalStations().stream().anyMatch(station ->
                         FrontierV3SurfaceObservation.at(worker, station))) {

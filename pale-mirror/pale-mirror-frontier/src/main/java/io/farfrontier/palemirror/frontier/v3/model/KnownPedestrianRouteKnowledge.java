@@ -6,7 +6,6 @@ import io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder;
 
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -46,10 +45,8 @@ public final class KnownPedestrianRouteKnowledge {
         passages = List.copyOf(Objects.requireNonNull(passages, "pedestrian route passages"));
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), settlementId);
         Set<BlockPosition> hard = occupied(state, settlement, passages);
-        Map<TerrainColumn, SurfaceAnchor> known = SettlementPedestrianGround.localSupports(
-                state.bootstrap(), settlementId);
         return new KnownPedestrianRouteKnowledge(state.bootstrap(), hard,
-                (x, z) -> SettlementPedestrianGround.surveyedSupport(state.bootstrap(), known, x, z));
+                KnownPedestrianGround.forSettlement(state, settlementId));
     }
 
     private static Set<BlockPosition> occupied(FrontierWorldState state, Settlement settlement,
@@ -109,8 +106,7 @@ public final class KnownPedestrianRouteKnowledge {
             if (condition.workAccessBlocked())
                 hard.add(cell.workstation().support().offset(0, 2, 0));
         }
-        BoundedPedestrianApproach.SurveyedSurface surveyed = ResourceSiteHarvestKnownGeometry.surveyedSupports(
-                state.bootstrap(), site);
+        BoundedPedestrianApproach.SurveyedSurface surveyed = ResourceSiteHarvestKnownGeometry.surveyedSupports(state, site);
         SurfaceAnchor knownAtStart = surveyed.at(witnessedStart.x(), witnessedStart.z());
         if (!state.bootstrap().bounds().contains(witnessedStart.support())
                 || Math.abs(witnessedStart.y() - knownAtStart.y()) > 1

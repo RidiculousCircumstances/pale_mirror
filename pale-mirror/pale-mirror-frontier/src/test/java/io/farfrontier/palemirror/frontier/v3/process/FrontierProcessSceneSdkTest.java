@@ -375,7 +375,8 @@ class FrontierProcessSceneSdkTest {
         }
         @Override public TransitContext acquireHot(TransitContext context) {
             EngineContext engine = fork(context.engine()); AmbientActorLease lease = AmbientActorProcess.nextLease(state(engine), context.resident(), instant(engine));
-            engine = submit(engine, new AmbientLeasePrepared(lease)); return context.with(submit(engine, new AmbientLeaseTransition(context.resident(), AmbientLeaseStatus.HOT)));
+            engine = submit(engine, new AmbientLeasePrepared(lease)); return context.with(submit(engine,
+                    new AmbientBodyConfirmed(context.resident(), lease.revision(), AmbientBodyConfirmed.Boundary.ADMISSION, lease.handoffBody(), lease.handoffBody())));
         }
         @Override public TransitContext hotCheckpoint(TransitContext context) {
             EngineContext engine = fork(context.engine()); ResidentMigrationJourney journey = migration(engine, context.resident());

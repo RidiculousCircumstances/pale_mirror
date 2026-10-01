@@ -1,4 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
+
+import io.farfrontier.palemirror.frontier.v3.model.AmbientPlacementPolicy;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
@@ -23,7 +25,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneAdmission;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSettlementAssaultBattlefield;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
-import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
+import io.farfrontier.palemirror.frontier.v3.model.LocalNavigationEnvelope;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentMigrationJourney;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentMeal;
 import io.farfrontier.palemirror.frontier.v3.model.ResidentMealHotHandReleased;
@@ -68,14 +70,12 @@ import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import java.util.List;
 import java.util.Comparator;
@@ -221,8 +221,7 @@ final class FrontierV3AmbientActorExecutor {
                     } else if (lease.status() == AmbientLeaseStatus.PREPARED) {
                         Result result = materialize(level, runtime, state, actorId, lease.handoffBody(), preLeaseStanding.orElseThrow());
                         if (result == Result.APPLIED || result == Result.CURRENT || result == Result.PENDING) {
-                            if (result != Result.PENDING) submit(runtime, "ambient-pre-lease-hot", actorId.value(),
-                                    new AmbientLeaseTransition(actorId, AmbientLeaseStatus.HOT));
+                            if (result != Result.PENDING) FrontierV3AmbientHotAdmission.confirmForHandoff(level, runtime, actorId);
                             admitted++;
                         }
                     } else if (lease.status() == AmbientLeaseStatus.HOT) {
@@ -372,15 +371,19 @@ final class FrontierV3AmbientActorExecutor {
             }
             return Result.CURRENT;
         }
-        BlockPos position = standingPositionProvider.resolve(level, minecraftFloor(canonicalBody.supportingSurface().support()));
-        if (position == null || !position.equals(minecraftBody(canonicalBody)) || !level.hasChunkAt(position)) return Result.DEFERRED;
         long ambientRevision = state.ambientLeases().containsKey(actorId) ? state.ambientLeases().get(actorId).revision() : 1L;
         FrontierV3ActorCarrierComposition.Declaration declaration = carrierDeclaration(state, actorId,
                 FrontierV3ActorCarrierComposition.Owner.AMBIENT_LEASE, entityId,
                 FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, ambientRevision, custodyEpoch);
         Mob body = FrontierV3ActorCarrierFactory.create(FrontierV3ActorCarrierComposition.InventoryEntry.AMBIENT_BODY, level, declaration,
                 state.actorLocations().get(actorId).condition());
-        body.setPos(position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D); body.setPersistenceRequired();
+        var lease = state.ambientLeases().get(actorId);
+        var candidates = lease != null && lease.status() == AmbientLeaseStatus.PREPARED && canonicalBody.equals(lease.handoffBody())
+                ? AmbientPlacementPolicy.candidates(state, lease) : List.of(canonicalBody.supportingSurface());
+        var placement = FrontierV3BodyPlacement.select(level, body, candidates,
+                new FrontierV3NavigationScope.Restricted(LocalNavigationEnvelope.along(candidates, candidates)), standingPositionProvider::resolve);
+        if (placement.isEmpty()) return Result.DEFERRED;
+        body.setPersistenceRequired();
         body.getPersistentData().putLong(CUSTODY_EPOCH_KEY, custodyEpoch);
         body.setNoAi(true);
         if (body instanceof Zombie zombie) configureBioform(zombie, bioformProfile(state, actorId));
@@ -389,12 +392,8 @@ final class FrontierV3AmbientActorExecutor {
                 || !FrontierV3ResidentMealHandProjection.prepareAmbientNew(state, actorId, body)) return Result.CONFLICT;
         FrontierV3ScenePresentation.applyAmbientActorPresentation(body, state, actorId, bioform);
         body.getPersistentData().putString(ACTOR_KEY, actorId.value()); body.getPersistentData().putString(KIND_KEY, bioform ? "BIOFORM" : "RESIDENT");
-        if (!level.noCollision(body, body.getBoundingBox()) || admissionColumnOccupied(level, body, body.getBoundingBox())) return Result.DEFERRED;
+        if (!FrontierV3BodyPlacement.available(level, body, body.getBoundingBox())) return Result.DEFERRED;
         return admission.test(body) ? Result.APPLIED : Result.CONFLICT;
-    }
-    private static boolean admissionColumnOccupied(ServerLevel level, Mob candidate, AABB body) {
-        return !level.getEntities(candidate, body.inflate(0.001D), entity -> entity instanceof LivingEntity living
-                && living.isAlive() && !living.isSpectator()).isEmpty();
     }
     private static void hydrateExactHeldEquipment(Mob body, FrontierWorldState state, SubjectId actorId) {
         if (!body.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty()) return;
@@ -412,7 +411,7 @@ final class FrontierV3AmbientActorExecutor {
                                       FrontierV3SceneBehaviorRegistry.StandingPositionProvider standingPositionProvider) {
         Entity pending = FrontierV3AmbientPendingAdmissions.get(runtime, entityId(state, actorId));
         AmbientActorLease ambient = state.ambientLeases().get(actorId);
-        if (ambient == null) return Result.CONFLICT;
+        if (ambient == null || !state.bootstrap().bounds().contains(canonicalBody.supportingSurface().support())) return Result.CONFLICT;
         Entity existing = level.getEntity(entityId(state, actorId));
         FrontierV3AmbientCarrierLedger ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
         if (pending != null) {
@@ -433,9 +432,8 @@ final class FrontierV3AmbientActorExecutor {
         // An unacknowledged creation is not a new inactive-carrier admission.
         // Its missing body needs recovery, never another attempt at creation.
         if (ledger.pendingAdoption(actorId).isPresent() || ledger.pendingHandoff(actorId).isPresent()) return Result.CONFLICT;
-        BlockPos position = standingPositionProvider.resolve(level, minecraftFloor(canonicalBody.supportingSurface().support()));
-        if (position == null || !position.equals(minecraftBody(canonicalBody))
-                || !mayCreateFreshBody(level.hasChunkAt(position), level.areEntitiesLoaded(ChunkPos.asLong(position)), true)) return Result.DEFERRED;
+        BlockPos position = minecraftBody(canonicalBody);
+        if (!mayCreateFreshBody(level.hasChunkAt(position), level.areEntitiesLoaded(ChunkPos.asLong(position)), true)) return Result.DEFERRED;
         if (existing == null && carrier != FrontierV3AmbientCarrierLedger.Reconciliation.NO_FENCED_CARRIER
                 && carrier != FrontierV3AmbientCarrierLedger.Reconciliation.READY) return Result.CONFLICT;
         if (carrier != FrontierV3AmbientCarrierLedger.Reconciliation.READY) {
@@ -559,6 +557,8 @@ final class FrontierV3AmbientActorExecutor {
         if (!level.areEntitiesLoaded(ChunkPos.asLong(anchor))) return FrontierV3AmbientAdmissionDiagnostic.entityStoragePending(expectedId,
                 new BlockPosition(location.body().x(), location.body().y(), location.body().z()));
         if (!FrontierV3StandingPosition.hasExactStandingColumn(level, location.supportingSurface().support())) return FrontierV3AmbientAdmissionDiagnostic.blocked(expectedId, location.supportingSurface().support());
+        if (FrontierV3BodyPlacement.occupied(level, bioform(state, actorId) ? EntityType.ZOMBIE : EntityType.VILLAGER, location.supportingSurface()))
+            return FrontierV3AmbientAdmissionDiagnostic.occupied(expectedId, new BlockPosition(location.body().x(), location.body().y(), location.body().z()));
         return FrontierV3AmbientAdmissionDiagnostic.ready(expectedId, new BlockPosition(location.body().x(), location.body().y(), location.body().z()));
     }
     static JoinDisposition observeJoin(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity) {

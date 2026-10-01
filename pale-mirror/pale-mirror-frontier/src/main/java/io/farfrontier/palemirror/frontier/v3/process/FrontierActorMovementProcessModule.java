@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementColdAdvanced;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementHotObserved;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementInterrupted;
 
 /** Single canonical reducer for purpose-independent actor goal travel. */
 final class FrontierActorMovementProcessModule implements FrontierWorldProcessModule {
@@ -25,6 +26,9 @@ final class FrontierActorMovementProcessModule implements FrontierWorldProcessMo
             case ActorMovementColdAdvanced advanced -> ActorMovementProcess.reduceColdAdvanced(state, event.subject(), advanced);
             case ActorMovementHotObserved observed -> ActorMovementProcess.reduceHotObserved(state, event.subject(), observed,
                     event.instant().ticks());
+            case ActorMovementInterrupted interrupted -> ResidentActivityProcess.retargetHotResident(
+                    ActorMovementInterruptionPlanner.reduce(state, event.subject(), interrupted),
+                    event.subject(), event.instant().ticks());
             default -> throw new IllegalArgumentException("actor movement does not own event: " + event.payload().type());
         };
     }

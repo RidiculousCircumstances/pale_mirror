@@ -32,6 +32,16 @@ final class FrontierV3RouteNavigation {
             LEGS.put(actor, leg);
         }
         var result = FrontierV3MinecraftGoalNavigation.pursue(level, actor, leg.stations(), goal.scope(), goal.order());
+        if (result.status() == FrontierV3MinecraftGoalNavigation.Status.BLOCKED
+                && !leg.stations().equals(goal.legalStations())
+                && result.blockReason().filter(reason -> reason == FrontierV3GoalNavigation.BlockReason.PATH_UNAVAILABLE
+                    || reason == FrontierV3GoalNavigation.BlockReason.PATH_STALLED).isPresent()) {
+            // Hints are advisory. Recover once to the real goal under the identical hard scope;
+            // retain that choice so successive ticks cannot oscillate back to a buried hint.
+            leg = new Leg(goal, leg.startIndex(), goal.legalStations());
+            LEGS.put(actor, leg);
+            result = FrontierV3MinecraftGoalNavigation.pursue(level, actor, leg.stations(), goal.scope(), goal.order());
+        }
         if (result.status() != FrontierV3MinecraftGoalNavigation.Status.ARRIVED) return result;
         SurfaceAnchor arrived = result.arrivedStation().orElseThrow();
         if (goal.legalStations().contains(arrived)) { LEGS.remove(actor); return result; }

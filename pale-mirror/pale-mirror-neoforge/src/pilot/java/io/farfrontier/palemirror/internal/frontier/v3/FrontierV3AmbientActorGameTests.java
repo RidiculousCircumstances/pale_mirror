@@ -8,6 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientActorLease;
+import io.farfrontier.palemirror.frontier.v3.model.AmbientBodyConfirmed;
 import io.farfrontier.palemirror.frontier.v3.process.AmbientActorProcess;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeasePrepared;
 import io.farfrontier.palemirror.frontier.v3.model.AmbientLeaseRestartAbsenceObserved;
@@ -82,7 +83,8 @@ public final class FrontierV3AmbientActorGameTests {
         helper.runAfterDelay(1L, () -> {
             var body = (Villager) level.getEntity(FrontierV3AmbientActorExecutor.entityId(state(runtime), resident));
             helper.assertTrue(body != null, "body must be indexed");
-            FrontierV3CommandSubmission.submit(runtime, "ambient-unload-hot", resident.value(), new AmbientLeaseTransition(resident, AmbientLeaseStatus.HOT));
+            FrontierV3CommandSubmission.submit(runtime, "ambient-unload-hot", resident.value(),
+                    new AmbientBodyConfirmed(resident, lease.revision(), AmbientBodyConfirmed.Boundary.ADMISSION, lease.handoffBody(), lease.handoffBody()));
             body.setPos(lease.handoffBody().x() + 0.5D, lease.handoffBody().y(), lease.handoffBody().z() + 0.5D);
             body.setHealth(9.0F);
             var ledger = FrontierV3AmbientCarrierLedger.get(level, state(runtime).bootstrap().worldId());
@@ -718,7 +720,7 @@ public final class FrontierV3AmbientActorGameTests {
             var body = (Villager) level.getEntity(FrontierV3AmbientActorExecutor.entityId(state(runtime), resident));
             helper.assertTrue(body != null, "the body must be indexed before release");
             if (!prepared) FrontierV3CommandSubmission.submit(runtime, "reservation-carrier-hot", resident.value(),
-                    new AmbientLeaseTransition(resident, AmbientLeaseStatus.HOT));
+                    new AmbientBodyConfirmed(resident, lease.revision(), AmbientBodyConfirmed.Boundary.ADMISSION, lease.handoffBody(), lease.handoffBody()));
             // GameTest templates live millions of blocks outside the canonical world.
             // This component fixture supplies the retained in-world observation; it makes
             // no navigation or player-ingress claim.

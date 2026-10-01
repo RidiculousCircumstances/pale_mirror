@@ -36,6 +36,11 @@ final class FrontierV3BodyObservation {
 
     static BodyPosition position(Entity body) { return capture(body).position(); }
 
+    /** GroundPathNavigation requires current contact even for a newly created NoAI body. */
+    static void refreshGroundContact(ServerLevel level, net.minecraft.world.entity.Mob body) {
+        body.setOnGround(!level.noCollision(body, body.getBoundingBox().move(0.0D, -0.01D, 0.0D)));
+    }
+
     record Observation(BodyPosition position, Optional<SurfaceAnchor> support) {
         Observation {
             Objects.requireNonNull(position, "observed body position");

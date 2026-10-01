@@ -98,12 +98,31 @@ class FrontierV3ActorCarrierCompositionTest {
                             String bytes = classBytesWithName(path);
                             return bytes.contains("net/minecraft/world/entity/EntityType")
                                     && (bytes.contains("VILLAGER") || bytes.contains("ZOMBIE"))
+                                    && callsBodyConstruction(path)
                                     && !bytes.contains("net/neoforged/neoforge/gametest/GameTestHolder");
                         })
                         .map(path -> classes.relativize(path).toString().replace('/', '.').replace('\\', '.').replaceAll("\\.class$", ""))
                         .collect(Collectors.toUnmodifiableSet());
             }
         } catch (java.io.IOException | URISyntaxException failure) { throw new IllegalStateException(failure); }
+    }
+    private static boolean callsBodyConstruction(Path path) {
+        boolean[] found = { false };
+        try {
+            new org.objectweb.asm.ClassReader(Files.readAllBytes(path)).accept(new org.objectweb.asm.ClassVisitor(org.objectweb.asm.Opcodes.ASM9) {
+                @Override public org.objectweb.asm.MethodVisitor visitMethod(int access, String name, String descriptor,
+                                                                             String signature, String[] exceptions) {
+                    return new org.objectweb.asm.MethodVisitor(org.objectweb.asm.Opcodes.ASM9) {
+                        @Override public void visitMethodInsn(int opcode, String owner, String method, String descriptor, boolean isInterface) {
+                            if (owner.equals("net/minecraft/world/entity/EntityType") && method.equals("create")) found[0] = true;
+                            if (method.equals("<init>") && (owner.equals("net/minecraft/world/entity/npc/Villager")
+                                    || owner.equals("net/minecraft/world/entity/monster/Zombie"))) found[0] = true;
+                        }
+                    };
+                }
+            }, org.objectweb.asm.ClassReader.SKIP_DEBUG | org.objectweb.asm.ClassReader.SKIP_FRAMES);
+        } catch (java.io.IOException failure) { throw new IllegalStateException(failure); }
+        return found[0];
     }
     private static Set<String> factoryCallBoundaries() {
         try {

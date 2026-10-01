@@ -43,10 +43,9 @@ public final class ResidentMealKnownNavigation {
         if (!meal.depotId().equals(FrontierWorldState.depotId(settlement.id())))
             throw new IllegalArgumentException("meal navigation has a foreign depot identity");
         boolean admitted = ServiceAccessCoordinator.depotAvailableForMeal(state, meal.depotId(), meal.residentId());
-        if (start.equals(port.serviceSurface())) return List.of(start);
+        if (admitted && start.equals(port.serviceSurface())) return List.of(start);
         if (admitted && start.equals(port.exteriorApproach()))
             return serviceLeg(state, meal, depot, port.exteriorApproach());
-        if (!admitted && port.accessBoundary().occupied(start.standingBody())) return List.of(start);
 
         List<SurfaceAnchor> prefix = workshopExit(settlement, start);
         SurfaceAnchor outdoorStart = prefix.getLast();
@@ -80,8 +79,7 @@ public final class ResidentMealKnownNavigation {
                     TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
             try {
                 List<SurfaceAnchor> route = routeKnowledge.path(outdoorStart, outdoor);
-                if (!directService && route.stream().anyMatch(surface ->
-                        port.accessBoundary().occupied(surface.standingBody()))) continue;
+                if (!directService && !port.accessBoundary().allowsWaitingRoute(route)) continue;
                 List<SurfaceAnchor> result = new ArrayList<>(prefix);
                 result.addAll(route.subList(1, route.size()));
                 if (directService) {
@@ -119,7 +117,6 @@ public final class ResidentMealKnownNavigation {
     private static List<SurfaceAnchor> waitingSurfaces(FrontierWorldState state, ResidentMeal meal,
                                                        SettlementDepotServicePort port,
                                                        KnownPedestrianRouteKnowledge routeKnowledge) {
-        SurfaceAnchor apron = port.facing().step(port.exteriorApproach(), -1);
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), meal.settlementId());
         int ordinal = 0;
         for (int index = 0; index < settlement.residents().size(); index++) {
@@ -128,14 +125,8 @@ public final class ResidentMealKnownNavigation {
                 break;
             }
         }
-        List<SurfaceAnchor> candidates = new ArrayList<>();
-        for (int distance = 1; distance <= Math.max(4, (settlement.residents().size() + 1) / 2); distance++) {
-            for (SurfaceAnchor side : List.of(port.facing().stepLeft(apron, distance),
-                    port.facing().stepRight(apron, distance))) {
-                SurfaceAnchor supported = routeKnowledge.supportAt(side.x(), side.z());
-                if (!port.accessBoundary().occupied(supported.standingBody())) candidates.add(supported);
-            }
-        }
+        SettlementStructure depot = settlement.structures().stream().filter(value -> value.id().equals(port.depotId())).findFirst().orElseThrow();
+        List<SurfaceAnchor> candidates = SettlementServiceAccessPoints.forDepot(state, settlement, depot).waitingSurfaces();
         if (candidates.isEmpty()) return List.of();
         List<SurfaceAnchor> preferred = new ArrayList<>(candidates.size());
         for (int index = 0; index < candidates.size(); index++)

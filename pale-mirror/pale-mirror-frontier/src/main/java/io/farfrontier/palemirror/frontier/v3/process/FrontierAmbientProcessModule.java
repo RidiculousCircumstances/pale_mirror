@@ -22,14 +22,14 @@ final class FrontierAmbientProcessModule implements FrontierWorldProcessModule {
     @Override public CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
         if (command.payload() instanceof AmbientActorDied death) return AmbientActorProcess.plan(state, death);
         if (command.payload() instanceof AmbientActorObserved observation) return AmbientActorProcess.plan(state, observation);
-        if (command.payload() instanceof AmbientLeasePrepared || command.payload() instanceof AmbientLeaseTransition
+        if (command.payload() instanceof AmbientBodyConfirmed || command.payload() instanceof AmbientLeasePrepared || command.payload() instanceof AmbientLeaseTransition
                 || command.payload() instanceof AmbientLeaseReleased || command.payload() instanceof AmbientLeaseRestartAbsenceObserved)
             return AmbientActorProcess.planLease(state, command.payload(), command.submittedAt().ticks());
         return FrontierWorldCommandPlanner.rejected("ambient process does not admit command: " + command.payload().type());
     }
 
     @Override public FrontierWorldState reduce(FrontierWorldState state, FrontierEvent event) {
-        if (event.payload() instanceof AmbientLeasePrepared || event.payload() instanceof AmbientLeaseTransition
+        if (event.payload() instanceof AmbientBodyConfirmed || event.payload() instanceof AmbientLeasePrepared || event.payload() instanceof AmbientLeaseTransition
                 || event.payload() instanceof AmbientLeaseReleased || event.payload() instanceof AmbientLeaseRestartAbsenceObserved) {
             return AmbientActorProcess.reduceLease(state, event.subject(), event.instant(), event.payload());
         }

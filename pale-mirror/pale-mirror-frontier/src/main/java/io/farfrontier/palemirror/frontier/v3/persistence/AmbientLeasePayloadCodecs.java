@@ -15,6 +15,7 @@ import java.io.IOException;
 final class AmbientLeasePayloadCodecs {
     private AmbientLeasePayloadCodecs() { }
     static PayloadCodec prepared() { return new PreparedCodec(); }
+    static PayloadCodec bodyConfirmed() { return new BodyConfirmedCodec(); }
     static PayloadCodec transition() { return new TransitionCodec(); }
     static PayloadCodec released() { return new ReleasedCodec(); }
     static PayloadCodec restartAbsenceObserved() { return new RestartAbsenceObservedCodec(); }
@@ -23,6 +24,17 @@ final class AmbientLeasePayloadCodecs {
         @Override public String type() { return "frontier.ambient_lease_prepared"; }
         @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> writeLease(output, ((AmbientLeasePrepared) payload).lease())); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new AmbientLeasePrepared(readLease(input))); }
+    }
+    private static final class BodyConfirmedCodec implements PayloadCodec {
+        @Override public String type() { return "frontier.ambient_body_confirmed"; }
+        @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+            AmbientBodyConfirmed confirmed = (AmbientBodyConfirmed) payload;
+            FrontierWorldPayloadCodecs.writeSubject(output, confirmed.actorId()); output.writeLong(confirmed.leaseRevision());
+            output.writeByte(confirmed.boundary().wireTag()); writeBody(output, confirmed.previousBody()); writeBody(output, confirmed.observedBody());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input ->
+                new AmbientBodyConfirmed(FrontierWorldPayloadCodecs.readSubject(input).value(), input.readLong(),
+                        AmbientBodyConfirmed.Boundary.fromWireTag(input.readUnsignedByte()), readBody(input), readBody(input))); }
     }
     private static final class TransitionCodec implements PayloadCodec {
         @Override public String type() { return "frontier.ambient_lease_transition"; }

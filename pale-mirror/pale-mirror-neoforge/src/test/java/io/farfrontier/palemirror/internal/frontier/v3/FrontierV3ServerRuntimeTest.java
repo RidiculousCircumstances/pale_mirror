@@ -174,7 +174,7 @@ class FrontierV3ServerRuntimeTest {
         SubjectId participant = operation.participantIds().getFirst();
         submitAmbient(runtime, world, new AmbientLeasePrepared(AmbientActorProcess.nextLease(before, participant,
                 runtime.checkpointImage().orElseThrow().instant())), "command:ambient-scene-overlap-prepare");
-        submitAmbient(runtime, world, new AmbientLeaseTransition(participant, AmbientLeaseStatus.HOT), "command:ambient-scene-overlap-hot");
+        submitAmbient(runtime, world, admittedAmbientFixture(worldState(runtime), participant), "command:ambient-scene-overlap-hot");
         FrontierWorldState overlapped = worldState(runtime);
 
         assertFalse(FrontierSceneAdmission.available(overlapped, operation.participantIds()));
@@ -192,7 +192,7 @@ class FrontierV3ServerRuntimeTest {
         SubjectId participant = operation.participantIds().getFirst();
         submitAmbient(runtime, world, new AmbientLeasePrepared(AmbientActorProcess.nextLease(before, participant,
                 runtime.checkpointImage().orElseThrow().instant())), "command:ambient-scene-transfer-prepare");
-        submitAmbient(runtime, world, new AmbientLeaseTransition(participant, AmbientLeaseStatus.HOT), "command:ambient-scene-transfer-hot");
+        submitAmbient(runtime, world, admittedAmbientFixture(worldState(runtime), participant), "command:ambient-scene-transfer-hot");
         FrontierWorldState overlapped = worldState(runtime);
         CheckpointImage checkpoint = runtime.checkpointImage().orElseThrow();
         SceneLease lease = FrontierV3TestSceneLeases.exact(overlapped, checkpoint,
@@ -731,7 +731,7 @@ class FrontierV3ServerRuntimeTest {
         FrontierWorldState state = new FrontierWorldStateCodec().decode(before.canonicalState());
         AmbientActorLease lease = AmbientActorProcess.nextLease(state, resident, before.instant());
         submitAmbient(runtime, world, new AmbientLeasePrepared(lease), "command:ambient-recovery-prepare");
-        submitAmbient(runtime, world, new AmbientLeaseTransition(resident, AmbientLeaseStatus.HOT), "command:ambient-recovery-hot");
+        submitAmbient(runtime, world, admittedAmbientFixture(worldState(runtime), resident), "command:ambient-recovery-hot");
         runtime.shutdown();
 
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> recovered =
@@ -773,6 +773,12 @@ class FrontierV3ServerRuntimeTest {
         CommandId commandId = new CommandId(command);
         assertInstanceOf(CommandResult.Accepted.class, runtime.submit(new FrontierCommand(1, commandId, world, checkpoint.revision(), checkpoint.instant(),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), new SceneLeaseTransition(leaseId, status))).orElseThrow());
+    }
+    private static io.farfrontier.palemirror.frontier.v3.model.AmbientBodyConfirmed admittedAmbientFixture(FrontierWorldState state, SubjectId actor) {
+        AmbientActorLease lease = state.ambientLeases().get(actor);
+        return new io.farfrontier.palemirror.frontier.v3.model.AmbientBodyConfirmed(actor, lease.revision(),
+                io.farfrontier.palemirror.frontier.v3.model.AmbientBodyConfirmed.Boundary.ADMISSION,
+                lease.handoffBody(), lease.handoffBody());
     }
     private static void submitAmbient(FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime,
                                       WorldId world, FrontierPayload payload, String command) {

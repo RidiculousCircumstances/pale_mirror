@@ -97,6 +97,14 @@ public record ResidentMeal(SubjectId residentId, SubjectId settlementId, Subject
                 lotId, claimId, retainedWorkOwner, phase, startedAtTick, Optional.of(reason), pendingPhysicalStep, coldTravel);
     }
 
+    /** Admission beside an occupied station retains the same claim but requires a new approach. */
+    public ResidentMeal reapproach() {
+        if (phase != Phase.TAKE || pendingPhysicalStep.isPresent() || coldTravel.isPresent())
+            throw new IllegalArgumentException("only an unbegun take can resume its station approach");
+        return new ResidentMeal(residentId, settlementId, depotId, clearingSurface, sourceAccountId, actorAccountId,
+                lotId, claimId, retainedWorkOwner, Phase.MOVE, startedAtTick, Optional.empty(), Optional.empty(), Optional.empty());
+    }
+
     public ResidentMeal clearWait() {
         return waitReason.isEmpty() ? this : new ResidentMeal(residentId, settlementId, depotId, clearingSurface,
                 sourceAccountId, actorAccountId, lotId, claimId, retainedWorkOwner, phase,

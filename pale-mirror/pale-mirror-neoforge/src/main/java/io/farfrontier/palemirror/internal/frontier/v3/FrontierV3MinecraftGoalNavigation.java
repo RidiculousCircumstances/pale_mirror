@@ -112,7 +112,7 @@ final class FrontierV3MinecraftGoalNavigation {
             stopPath(actor);
         }
         failed = FAILURES.get(actor);
-        refreshPhysicalGroundContact(level, actor);
+        FrontierV3BodyObservation.refreshGroundContact(level, actor);
         if (failed != null && failed.groundedAtAttempt() == actor.onGround()
                 && level.getGameTime() - failed.lastAttemptAt() < RETRY_TICKS)
             return failureResult(failed, level.getGameTime());
@@ -121,7 +121,7 @@ final class FrontierV3MinecraftGoalNavigation {
         if (!FAILURES.containsKey(actor)) FrontierV3ControlledMobMotion.retireLocalActuation(actor);
         actor.setNoAi(true);
         actor.setNoGravity(false);
-        refreshPhysicalGroundContact(level, actor);
+        FrontierV3BodyObservation.refreshGroundContact(level, actor);
         SurfaceAnchor target = null;
         Path path = null;
         boolean unloaded = false;
@@ -211,7 +211,7 @@ final class FrontierV3MinecraftGoalNavigation {
         // The owned isEffectiveAi bridge enables LivingEntity.travel below, which
         // supplies its own gravity/collision. Applying the old NoAI gravity bridge
         // here as well would double-integrate each HOT pedestrian turn.
-        refreshPhysicalGroundContact(level, actor);
+        FrontierV3BodyObservation.refreshGroundContact(level, actor);
         actor.getNavigation().tick();
         actor.getMoveControl().tick();
         actor.getJumpControl().tick();
@@ -242,15 +242,6 @@ final class FrontierV3MinecraftGoalNavigation {
     private static void stopPath(Mob actor) {
         ACTIVE.remove(actor);
         actor.getNavigation().stop();
-    }
-
-    private static void refreshPhysicalGroundContact(ServerLevel level, Mob actor) {
-        // NoAI skips Mob.serverAiStep, including the ordinary path update. The existing
-        // gravity bridge moves through real collision but Entity.move does not consistently
-        // refresh this flag. GroundPathNavigation refuses to search while it is false.
-        // Reconstruct only the contact fact from the body's exact collision box; never
-        // manufacture a support, location, path node or semantic arrival.
-        actor.setOnGround(!level.noCollision(actor, actor.getBoundingBox().move(0.0D, -0.01D, 0.0D)));
     }
 
     private static Result retry(Mob actor, List<SurfaceAnchor> legalStations, FrontierV3NavigationScope scope,

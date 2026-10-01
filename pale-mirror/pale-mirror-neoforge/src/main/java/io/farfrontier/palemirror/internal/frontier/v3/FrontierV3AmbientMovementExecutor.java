@@ -101,8 +101,11 @@ final class FrontierV3AmbientMovementExecutor {
             return false;
         }
         if (lease.goal() == AmbientGoalKind.MEAL) {
+            ResidentMeal meal = state.humanPopulation().meals().get(actorId);
+            if (meal != null && meal.phase() == ResidentMeal.Phase.MOVE
+                    && FrontierV3AmbientServiceOccupancy.observe(level, runtime, state, actorId, body, lease)) return true;
             FrontierV3ResidentMealNavigation.pursue(level, state, body, lease,
-                    state.humanPopulation().meals().get(actorId));
+                    meal);
             return false;
         }
         if (lease.goal() == AmbientGoalKind.TRANSIT) {
@@ -217,6 +220,8 @@ final class FrontierV3AmbientMovementExecutor {
         } else {
             // Idle presentation is not a second locomotion owner or permission to orbit.
             FrontierV3ControlledMobMotion.retireLocalActuation(body);
+            if (FrontierV3AmbientServiceOccupancy.observe(level, runtime, state, actorId, body, lease)) return true;
+            if (FrontierV3ServicePointClearance.pursue(level, state, body, lease)) return false;
             FrontierV3GoalNavigation.stop(body);
         }
         return false;
@@ -247,12 +252,12 @@ final class FrontierV3AmbientMovementExecutor {
             ResidentMeal meal = state.humanPopulation().meals().get(actorId);
             if (meal == null) return false;
             if (meal.phase() == ResidentMeal.Phase.MOVE && observedBody(body).equals(lease.goalBody())) {
-                FrontierV3GoalNavigation.stop(body);
                 ResidentMealHotArrived arrival = new ResidentMealHotArrived(actorId, lease.revision(), observedBody(body));
                 // The HOT body may have reached the socket while another resident
                 // took the turn. Keep its exact meal and body; retry observation
                 // when that turn clears instead of quarantining the whole world.
                 if (!ResidentMealProcess.hotArrivalHasServiceTurn(state, actorId, arrival)) return false;
+                FrontierV3GoalNavigation.stop(body);
                 var result = submit(runtime, "ambient-meal-arrived", actorId.value(), arrival);
                 FrontierV3DiagnosticTrace.record(level.getServer(), "resident-meal:" + actorId.value(),
                         "resident_meal_hot_arrived", actorId, result);

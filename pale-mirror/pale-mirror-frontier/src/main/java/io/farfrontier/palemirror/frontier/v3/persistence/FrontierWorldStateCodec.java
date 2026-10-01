@@ -35,7 +35,9 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
     // Earlier worlds are disposable and cannot replay that event under the new grammar.
     // Version 213 retains each meal's exact clearance target before depot access is released.
     // Version 215 retains shared actor movement orders separately from activities.
-    static final int VERSION = 215; private static final int MAX_ENTRIES = 65_535;
+    // Version 216 adds owner-authorized interruption and removes mandatory home-arrival gating.
+    // Test worlds from the former execution grammar are rejected, never silently reinterpreted.
+    static final int VERSION = 216; private static final int MAX_ENTRIES = 65_535;
     private final FrontierBootstrap pinnedBootstrap;
     /** Generic codec for independent snapshots and cross-world test fixtures. */
     public FrontierWorldStateCodec() { this.pinnedBootstrap = null; }

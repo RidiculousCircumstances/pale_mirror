@@ -52,7 +52,7 @@ public final class DiagnosticProducerContract {
 
     private static final Set<String> ORDINARY = Set.of(
         "frontier.cargo_cleanup_saved",
-        "frontier.actor_died", "frontier.ambient_actor_died", "frontier.ambient_actor_observed", "frontier.ambient_lease_prepared",
+        "frontier.actor_died", "frontier.ambient_actor_died", "frontier.ambient_actor_observed", "frontier.ambient_body_confirmed", "frontier.ambient_lease_prepared",
         "frontier.ambient_lease_released", "frontier.ambient_lease_transition",
         "frontier.cargo_carrier_released", "frontier.cargo_delivered", "frontier.cargo_loaded", "frontier.company_registered",
         "frontier.container_surface_transition", "frontier.deferred_aftermath_prepared", "frontier.deferred_aftermath_resolved",
@@ -87,7 +87,7 @@ public final class DiagnosticProducerContract {
         "frontier.bakery_hot_effect_observed", "frontier.bakery_hot_work_tick", "frontier.bakery_hot_hand_release",
         "frontier.bakery_hot_hand_materialized", "frontier.bakery_hot_block_changed", "frontier.resident_birth_cancelled", "frontier.resident_birth_started", "frontier.resident_born",
         "frontier.resident_health_transition", "frontier.resident_need_integrated", "frontier.resident_metabolism_changed",
-        "frontier.actor_movement_cold_advanced", "frontier.actor_movement_hot_observed",
+        "frontier.actor_movement_cold_advanced", "frontier.actor_movement_hot_observed", "frontier.actor_movement_interrupted",
         "frontier.resident_meal_started", "frontier.resident_meal_cold_step", "frontier.resident_meal_hot_arrived",
         "frontier.resident_meal_hot_effect_prepared", "frontier.resident_meal_hot_effect_observed",
         "frontier.resident_meal_hot_hand_materialized", "frontier.resident_meal_hot_hand_released",

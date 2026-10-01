@@ -556,13 +556,7 @@ public final class ResidentMealProcess {
     }
 
     public static SurfaceAnchor serviceSurface(FrontierWorldState state, ResidentMeal meal) {
-        Settlement settlement = state.bootstrap().settlements().stream()
-                .filter(value -> value.id().equals(meal.settlementId())).findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("meal has no current settlement"));
-        SettlementStructure depot = settlement.structures().stream()
-                .filter(value -> value.kind() == StructureKind.DEPOT)
-                .findFirst().orElseThrow(() -> new IllegalArgumentException("meal has no current depot"));
-        return SettlementDepotServicePort.forDepot(depot).serviceSurface();
+        return SettlementServiceAccessPoints.depotPort(state, meal.settlementId()).serviceSurface();
     }
 
     /** Reducer for a witnessed COLD-only stage; no HOT source or hand may be spent here. */

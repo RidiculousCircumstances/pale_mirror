@@ -56,6 +56,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.fenced_recovery_revoked_to_cold", "frontier.fenced_recovery_ambiguous", "frontier.fenced_recovery_abandoned",
             "frontier.cargo_cleanup_saved");
     private static final Set<String> AMBIENT = types(
+            "frontier.ambient_body_confirmed",
             "frontier.ambient_actor_died", "frontier.ambient_actor_observed", "frontier.ambient_lease_prepared",
             "frontier.ambient_lease_released", "frontier.ambient_lease_transition", "frontier.ambient_lease_restart_absence_observed");
     private static final Set<String> LOGISTICS = types(
@@ -84,7 +85,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.medical_treatment_started", "frontier.medical_treatment_transition",
             "frontier.medical_treatment_scene_lease_prepared", "frontier.medical_treatment_scene_lease_handoff");
     private static final Set<String> ACTOR_MOVEMENT = types(
-            "frontier.actor_movement_cold_advanced", "frontier.actor_movement_hot_observed");
+            "frontier.actor_movement_cold_advanced", "frontier.actor_movement_hot_observed", "frontier.actor_movement_interrupted");
     private static final Set<String> ECONOMY = types(
             "frontier.company_registered", "frontier.employment_contract_opened", "frontier.employment_contract_terminated",
             "frontier.market_demand_opened", "frontier.market_quote_published", "frontier.market_work_order_accepted",
@@ -443,8 +444,9 @@ public final class FrontierWorldProcessCatalog {
         ResidentProfile resident = state.humanPopulation().resident(action.subject());
         if (resident == null) return Set.of(action.subject());
         if (action.kind().equals(ResidentActivityProcess.REVIEW)) {
-            if (state.humanPopulation().meals().containsKey(action.subject())
-                    || state.actorMovements().containsKey(action.subject())) return Set.of(action.subject());
+            if (state.humanPopulation().meals().containsKey(action.subject())) return Set.of(action.subject());
+            if (state.actorMovements().containsKey(action.subject()))
+                return Set.of(action.subject(), FrontierWorldState.depotId(resident.settlementId()));
             // A safe-checkpoint wait depends on its work owner, not just food.
             // Keep that rare action directly runnable until work-owner invalidation is indexed.
             if (ResidentMealOpportunity.find(state, action.subject()).isPresent()) return Set.of();
@@ -555,7 +557,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.cargo_carrier_released"); }
     private static Set<String> replicaCustodyCommands() { return REPLICA_CUSTODY; }
     private static Set<String> ambientCommands() { return types(
-            "frontier.ambient_actor_died", "frontier.ambient_actor_observed", "frontier.ambient_lease_prepared",
+            "frontier.ambient_actor_died", "frontier.ambient_actor_observed", "frontier.ambient_body_confirmed", "frontier.ambient_lease_prepared",
             "frontier.ambient_lease_released", "frontier.ambient_lease_transition", "frontier.ambient_lease_restart_absence_observed"); }
     private static Set<String> logisticsCommands() { return types(
             "frontier.operation_assembly_advanced", "frontier.operation_assembly_deferred",
@@ -684,7 +686,7 @@ public final class FrontierWorldProcessCatalog {
             case "replica-custody" -> union(REPLICA_CUSTODY, types("kernel.schedule_created"));
             case "ambient-actors" -> types(
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
-                    "frontier.ambient_actor_died", "frontier.ambient_actor_observed", "frontier.ambient_lease_prepared", "frontier.ambient_lease_released",
+                    "frontier.ambient_actor_died", "frontier.ambient_actor_observed", "frontier.ambient_body_confirmed", "frontier.ambient_lease_prepared", "frontier.ambient_lease_released",
                     "frontier.ambient_lease_transition", "frontier.ambient_lease_restart_absence_observed", "frontier.company_registered", "frontier.employment_contract_opened", "frontier.employment_contract_terminated",
                     "frontier.market_demand_opened", "frontier.market_quote_published", "frontier.market_work_order_accepted", "frontier.market_work_order_cancelled",
                     "frontier.market_demand_expired", "frontier.market_demand_cancelled", "frontier.production_started", "frontier.production_completed", "frontier.production_blocked");
@@ -719,6 +721,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.hive_mobilization_started", "frontier.hive_mobilization_departed");
             case "population" -> types(
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
+                    "frontier.actor_movement_interrupted",
                     "frontier.resident_born", "frontier.resident_migrated", "frontier.resident_migration_started", "frontier.resident_migration_advanced",
                     "frontier.resident_transit_advanced", "frontier.resident_migration_blocked", "frontier.resident_migration_resumed", "frontier.resident_birth_started",
                     "frontier.resident_birth_cancelled", "frontier.settlement_provision_started", "frontier.settlement_provision_started_v2", "frontier.settlement_provision_consumed",
@@ -733,7 +736,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged", "frontier.resource_deposited",
                     "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed", "frontier.container_surface_transition",
                     "frontier.cargo_carrier_released");
-            case "actor-movement" -> types("frontier.actor_movement_cold_advanced", "frontier.actor_movement_hot_observed",
+            case "actor-movement" -> types("frontier.actor_movement_cold_advanced", "frontier.actor_movement_hot_observed", "frontier.actor_movement_interrupted",
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled");
             case "economy" -> types(
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
