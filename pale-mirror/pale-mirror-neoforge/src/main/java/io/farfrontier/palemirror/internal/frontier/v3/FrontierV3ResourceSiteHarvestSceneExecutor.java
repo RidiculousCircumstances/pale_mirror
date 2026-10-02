@@ -919,6 +919,11 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
      */
     static Optional<ScheduledAction> releaseBinding(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                     FrontierWorldState state, SceneLease lease) {
+        return releaseBinding(runtime.checkpointImage().orElseThrow(), state, lease);
+    }
+
+    static Optional<ScheduledAction> releaseBinding(io.farfrontier.palemirror.frontier.v3.api.CheckpointImage checkpoint,
+                                                    FrontierWorldState state, SceneLease lease) {
         ResourceSiteHarvestSceneCause cause = FrontierSceneBehaviors.resourceSiteHarvest(lease);
         if (FrontierResourceSiteHarvestSceneSupport.isTerminalReceiptRelease(state, cause)) {
             // The terminal output receipt already consumed its sole continuation and created
@@ -927,7 +932,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             return Optional.empty();
         }
         var job = FrontierResourceSiteHarvestSceneSupport.require(state, cause);
-        return releaseBinding(runtime.checkpointImage().orElseThrow(), job.siteId(),
+        return releaseBinding(checkpoint, job.siteId(),
                 state.resourceSites().site(job.siteId()).phase());
     }
 

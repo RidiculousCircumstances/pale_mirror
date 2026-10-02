@@ -36,6 +36,7 @@ components:
       - SavedData persistence, Minecraft observation, materialization execution, scheduling, and commands
       - Reference-container initial writes confirm their actual chest and custody in the same lifecycle turn and only begin in block-ticking chunks
       - Field initialization and canonical projection are acknowledged by the field owner, not replayed as physical farmer work; actual physical-first work retains its cause and hand witness
+      - Registered scene behaviors own release continuation binding; generic stored-body recovery uses that same policy and never releases an active harvest without its retained engine action
     may_depend_on:
       - domain
       - Minecraft

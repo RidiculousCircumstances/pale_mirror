@@ -25,6 +25,36 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class FrontierV3ResourceSiteHarvestSceneExecutorTest {
     private static final SubjectId SITE = new SubjectId("site:test");
 
+    @Test void genericRecoveryReleaseUsesTheRegisteredHarvestContinuationAndRejectsMissingAuthority() {
+        var config = io.farfrontier.palemirror.frontier.v3.model.FrontierV3FixtureCatalog
+                .resourceSiteHarvestConfiguration(new WorldId("frontier:recovery-release-binding"), 421L);
+        var state = config.initialState();
+        var site = new SubjectId("site:1-wheat-field");
+        var job = (io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob)
+                state.resourceSites().site(site).activeWork().orElseThrow();
+        var worker = job.workerId();
+        var body = state.actorLocations().get(worker).body();
+        var lease = io.farfrontier.palemirror.frontier.v3.model.SceneLease.forCause(
+                new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:recovery-release-binding"),
+                config.worldId(), new io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestSceneCause(site, job.id()),
+                body.supportingSurface().support(), config.initialInstant(), 1L,
+                io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.DRAINING,
+                List.of(new io.farfrontier.palemirror.frontier.v3.model.SceneMember(worker,
+                        io.farfrontier.palemirror.frontier.v3.model.SceneLease.deterministicEntityId(config.worldId(), worker))),
+                java.util.Map.of(worker, body), java.util.Set.of(), java.util.Optional.empty());
+        var checkpoint = new CheckpointImage(config.worldId(), new Revision(1L), config.initialInstant(),
+                new byte[0], config.initialSchedules(), List.of());
+        var expected = FrontierV3ContinuationBinding.require(checkpoint, site, ResourceSiteHarvestProcess.COLD_PROGRESS_KIND);
+        assertEquals(java.util.Optional.of(expected),
+                FrontierV3SceneBehaviorRegistry.releaseBinding(checkpoint, state, lease),
+                "stored recovery must submit the same exact action as normal harvest release");
+        var missing = new CheckpointImage(config.worldId(), new Revision(1L), config.initialInstant(),
+                new byte[0], List.of(), List.of());
+        assertThrows(IllegalArgumentException.class,
+                () -> FrontierV3SceneBehaviorRegistry.releaseBinding(missing, state, lease),
+                "missing authority cannot fall back to an unbound release or a fabricated continuation");
+    }
+
     @Test
     void independentSceneFenceIncidentsCannotShareAnIdempotencyKey() {
         for (var fence : FrontierV3AmbientActorExecutor.SceneCarrierFenceResult.values()) {
